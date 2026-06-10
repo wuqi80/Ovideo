@@ -1,0 +1,513 @@
+// new_html/components/NotificationPanel.tsx
+//
+// 2026-05-20 (Task System Overhaul M1)：统一通知面板（铃铛 + 下拉列表）。
+// - 复用于 WorkflowLayout 顶栏 与 旧 WorkspaceApp Header
+// - 三段：运行中 + 最近完成 + 失败（带计数）
+// - 点击任务项跳转到 targetPage（按 episodeId/projectId 拼 URL）
+// - hover 显示 dismiss / cancel 按钮（按状态变化）
+// - 设计：精确仪表台 — 4 状态色窄域 + tabular-nums + stagger 入场
+
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import ReactDOM from 'react-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+    Bell, X, CheckCircle, AlertCircle, Loader2, Clock,
+    Image as ImageIcon, Video, Mic, Sparkles, FileText,
+    LayoutGrid, Palette, Wand2, RotateCw,
+} from 'lucide-react';
+import { useTaskManager } from '../contexts/TaskContext';
+import type { RegisteredTask, SourcePage, TaskKind } from '../types';
+
+// ===== 状态色板（窄域、克制） =====
+const STATUS_THEME = {
+    running:   { bg: 'bg-blue-500/15',    text: 'text-blue-200',    border: 'border-blue-400/40',    dot: 'bg-blue-400' },
+    pending:   { bg: 'bg-blue-500/10',    text: 'text-blue-300/80', border: 'border-blue-400/20',    dot: 'bg-blue-400' },
+    queued:    { bg: 'bg-amber-500/15',   text: 'text-amber-200',   border: 'border-amber-400/40',   dot: 'bg-amber-400' },
+    completed: { bg: 'bg-emerald-500/15', text: 'text-emerald-200', border: 'border-emerald-400/40', dot: 'bg-emerald-400' },
+    failed:    { bg: 'bg-rose-500/15',    text: 'text-rose-200',    border: 'border-rose-400/40',    dot: 'bg-rose-400' },
+    cancelled: { bg: 'bg-slate-500/15',   text: 'text-slate-300',   border: 'border-slate-400/30',   dot: 'bg-slate-400' },
+} as const;
+
+// ===== Kind → 图标 =====
+const KIND_ICON: Record<string, React.FC<{ size?: number; className?: string }>> = {
+    seedance: Video, 'seedance-fast': Video,
+    wan2: Video, 'wan2-fast': Video, kling: Video, vidu: Video, happyhorse: Video, sora2: Video, veo: Video,
+    'video-i2v': Video, 'video-comfy': Video,
+    'comfyui-image': ImageIcon, 'gemini-image': ImageIcon, 'doubao-image': ImageIcon,
+    nanobanana: ImageIcon, 'qwen-image': ImageIcon, 'qwen-lora': ImageIcon, kontext: ImageIcon,
+    matting: Wand2, 'angle-adjust': RotateCw,
+    'human-multi-angle': RotateCw, 'around-angle': RotateCw,
+    'image-fusion': Sparkles, 'panorama-360': Sparkles, 'panorama-fusion': Sparkles,
+    'auto-storyboard': LayoutGrid, 'multi-grid-storyboard': LayoutGrid,
+    'minimax-tts': Mic, 'gemini-tts': Mic, 'audio-mix': Mic,
+    'video-enhance': Sparkles, 'video-upscale': Sparkles,
+    'video-voice': Mic, 'video-edit': Video, 'video-crop': Video,
+    'prompt-rewrite': FileText, 'script-segment': FileText,
+    other: Sparkles,
+};
+
+function getKindIcon(kind: TaskKind): React.FC<{ size?: number; className?: string }> {
+    return KIND_ICON[kind] || KIND_ICON.other;
+}
+
+// ===== Kind label 中文 =====
+const KIND_LABEL: Record<string, string> = {
+    seedance: 'Seedance', 'seedance-fast': 'Seedance Fast',
+    wan2: 'Wan2', 'wan2-fast': 'Wan2 Fast',
+    kling: '合体 · Kling', vidu: '大乘 · Vidu', happyhorse: '炼虚 · HappyHorse',
+    sora2: 'Sora2', veo: 'Veo',
+    'video-i2v': '图生视频', 'video-comfy': 'ComfyUI 视频',
+    'comfyui-image': 'ComfyUI 图', 'gemini-image': 'Gemini 图', 'doubao-image': '豆包图',
+    nanobanana: 'Nanobanana', 'qwen-image': 'Qwen 图', 'qwen-lora': 'Qwen LoRA', kontext: 'Kontext',
+    matting: '抠图', 'angle-adjust': '角度调整',
+    'human-multi-angle': '多角度', 'around-angle': '环绕镜头',
+    'image-fusion': '图像融合', 'panorama-360': '全景 360', 'panorama-fusion': '全景融合',
+    'auto-storyboard': '自动分镜', 'multi-grid-storyboard': '九宫格',
+    'minimax-tts': 'MiniMax 配音', 'gemini-tts': 'Gemini 配音', 'audio-mix': '混音',
+    'video-enhance': '视频增强', 'video-upscale': '画质提升',
+    'video-voice': '配音', 'video-edit': '视频编辑', 'video-crop': '视频裁剪',
+    'prompt-rewrite': '提示词改写', 'script-segment': '剧本分镜',
+    other: '任务',
+};
+
+// ===== 相对时间（"3 分钟前"） =====
+function fmtRelative(ms: number): string {
+    const dt = Date.now() - ms;
+    if (dt < 0) return '刚刚';
+    if (dt < 60_000) return '刚刚';
+    if (dt < 3_600_000) return `${Math.floor(dt / 60_000)} 分钟前`;
+    if (dt < 86_400_000) return `${Math.floor(dt / 3_600_000)} 小时前`;
+    return `${Math.floor(dt / 86_400_000)} 天前`;
+}
+
+// ===== Page → URL 路径（点通知跳转用） =====
+function buildTargetUrl(task: RegisteredTask): string | null {
+    const { targetPage, episodeId, targetProjectId } = task;
+    if (!targetProjectId || !episodeId) {
+        // 缺 projectId/episodeId 时退回 episodes 落地页
+        return targetProjectId ? `/projects/${targetProjectId}/episodes` : null;
+    }
+    const base = `/projects/${targetProjectId}/ep/${episodeId}/workflow`;
+    const map: Record<SourcePage, string | null> = {
+        editor: `/projects/${targetProjectId}/ep/${episodeId}/workflow/script`,
+        script: `${base}/script`,
+        design: `${base}/design`,
+        materials: `${base}/materials`,
+        audio: `${base}/audio`,
+        storyboard: `${base}/storyboard`,
+        generation: `${base}/storyboard`,
+        video: `${base}/video`,
+        enhance: `${base}/enhance`,
+        postprocess: `${base}/postprocess`,
+        canvas: `/projects/${targetProjectId}/ep/${episodeId}/canvas`,
+        history: `${base}/history`,
+        global: null,
+    };
+    return map[targetPage] || null;
+}
+
+// ===== Status 文案 =====
+function statusLabel(t: RegisteredTask): string {
+    if (t.status === 'pending') return '待执行';
+    if (t.status === 'queued') return t.queuePosition ? `排队中 · 前面 ${t.queuePosition} 个` : '排队中';
+    if (t.status === 'running') {
+        if (t.progress != null) return `执行中 · ${Math.round(t.progress * 100)}%`;
+        return '执行中';
+    }
+    if (t.status === 'completed') return '已完成';
+    if (t.status === 'failed') return '失败';
+    if (t.status === 'cancelled') return '已取消';
+    return '';
+}
+
+// =========================================================================
+// 主组件
+// =========================================================================
+
+export interface NotificationPanelProps {
+    /** 控制 trigger 按钮的 className（铃铛位置不同时使用） */
+    triggerClassName?: string;
+    /** 紧凑模式：铃铛尺寸更小 */
+    compact?: boolean;
+}
+
+export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerClassName, compact }) => {
+    const {
+        registeredTasks,
+        unreadCount,
+        markAllRead,
+        removeTask,
+        cancelTask,
+    } = useTaskManager();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const [open, setOpen] = useState(false);
+    const panelRef = useRef<HTMLDivElement | null>(null);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+
+    const computeMenuPos = useCallback(() => {
+        const rect = triggerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        setMenuPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
+    }, []);
+
+    // ── 分组（运行中 / 完成 / 失败 / 取消） ──
+    const { running, completed, failed, totalActive } = useMemo(() => {
+        const running: RegisteredTask[] = [];
+        const completed: RegisteredTask[] = [];
+        const failed: RegisteredTask[] = [];
+        for (const t of registeredTasks) {
+            if (t.status === 'pending' || t.status === 'queued' || t.status === 'running') running.push(t);
+            else if (t.status === 'completed') completed.push(t);
+            else if (t.status === 'failed') failed.push(t);
+            // cancelled 暂不展示，以减少噪音
+        }
+        return {
+            running,
+            completed: completed.slice(0, 10),    // 最近 10 条
+            failed: failed.slice(0, 5),           // 最近 5 条
+            totalActive: running.length,
+        };
+    }, [registeredTasks]);
+
+    // ── Outside-click 关闭 ──
+    useEffect(() => {
+        if (!open) return;
+        function onDown(e: MouseEvent) {
+            if (panelRef.current?.contains(e.target as Node)) return;
+            if (triggerRef.current?.contains(e.target as Node)) return;
+            setOpen(false);
+        }
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [open]);
+
+    // ── Esc 关闭 ──
+    useEffect(() => {
+        if (!open) return;
+        function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false); }
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [open]);
+
+    // ── 跟随滚动 / 窗口尺寸变化重新定位（portal 是 fixed，需手动跟随 trigger）──
+    useEffect(() => {
+        if (!open) return;
+        const update = () => computeMenuPos();
+        window.addEventListener('resize', update);
+        window.addEventListener('scroll', update, true);
+        return () => {
+            window.removeEventListener('resize', update);
+            window.removeEventListener('scroll', update, true);
+        };
+    }, [open, computeMenuPos]);
+
+    const handleToggle = useCallback(() => {
+        setOpen(prev => {
+            const next = !prev;
+            if (next) {
+                computeMenuPos();
+                if (unreadCount > 0) markAllRead();
+            }
+            return next;
+        });
+    }, [unreadCount, markAllRead, computeMenuPos]);
+
+    const handleNavigate = useCallback((task: RegisteredTask) => {
+        const url = buildTargetUrl(task);
+        if (url && url !== location.pathname) navigate(url);
+        setOpen(false);
+    }, [navigate, location.pathname]);
+
+    const triggerCls = triggerClassName
+        || `relative inline-flex items-center justify-center ${compact ? 'p-1.5' : 'p-2'} rounded-md text-gray-500 hover:text-white hover:bg-gray-800/60 transition-all duration-200`;
+
+    return (
+        <div className="relative">
+            <button
+                ref={triggerRef}
+                onClick={handleToggle}
+                className={`group ${triggerCls}`}
+                title={totalActive > 0 ? `${totalActive} 个任务运行中` : '任务通知'}
+                aria-label={totalActive > 0 ? `${totalActive} 个任务运行中` : '任务通知'}
+                aria-haspopup="dialog"
+                aria-expanded={open}
+            >
+                {/* 铃铛旋转 hover */}
+                <Bell
+                    size={compact ? 14 : 16}
+                    className="transition-transform duration-150 group-hover:-rotate-12"
+                />
+                {/* Active 指示：脉冲光环（背景） */}
+                {totalActive > 0 && (
+                    <span className="absolute inset-0 rounded-md ring-1 ring-blue-400/30 animate-pulse motion-reduce:hidden pointer-events-none" />
+                )}
+                {/* 计数徽章 */}
+                {totalActive > 0 ? (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-blue-500/90 rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums">
+                        {totalActive > 99 ? '99+' : totalActive}
+                    </span>
+                ) : unreadCount > 0 ? (
+                    <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 ${failed.length > 0 ? 'bg-rose-500/90' : 'bg-emerald-500/90'} rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums`}>
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                ) : null}
+            </button>
+
+            {/* 下拉面板（portal 到 body，避免被页面 main/overlay 盖住）*/}
+            {open && menuPos && ReactDOM.createPortal(
+                <div
+                    ref={panelRef}
+                    role="dialog"
+                    aria-label="任务通知面板"
+                    className="fixed w-[400px] max-h-[70vh] overflow-hidden bg-slate-950 border border-slate-800 rounded-lg shadow-2xl shadow-black/40 z-[9000] flex flex-col"
+                    style={{ top: menuPos.top, right: menuPos.right, animationName: 'panelFadeIn', animationDuration: '160ms', animationTimingFunction: 'cubic-bezier(0.2, 0.9, 0.3, 1)' }}
+                >
+                    {/* Header */}
+                    <div className="flex items-center px-4 py-3 border-b border-slate-800">
+                        <span className="text-sm font-semibold text-slate-100">任务通知</span>
+                        <span className="ml-2 text-xs text-slate-500 tabular-nums">
+                            {totalActive > 0 ? `${totalActive} 个运行中` : '空闲'}
+                        </span>
+                        <span className="flex-1" />
+                        <button
+                            onClick={() => setOpen(false)}
+                            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                            aria-label="关闭"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
+                        {totalActive === 0 && completed.length === 0 && failed.length === 0 ? (
+                            <EmptyState />
+                        ) : (
+                            <>
+                                {running.length > 0 && (
+                                    <Section
+                                        title="正在运行"
+                                        count={running.length}
+                                        items={running}
+                                        onNavigate={handleNavigate}
+                                        onRemove={cancelTask}
+                                        removeLabel="取消"
+                                        removeIconKind="cancel"
+                                    />
+                                )}
+                                {completed.length > 0 && (
+                                    <Section
+                                        title="最近完成"
+                                        count={completed.length}
+                                        items={completed}
+                                        onNavigate={handleNavigate}
+                                        onRemove={removeTask}
+                                        removeLabel="关闭"
+                                        removeIconKind="dismiss"
+                                    />
+                                )}
+                                {failed.length > 0 && (
+                                    <Section
+                                        title="失败"
+                                        count={failed.length}
+                                        items={failed}
+                                        onNavigate={handleNavigate}
+                                        onRemove={removeTask}
+                                        removeLabel="关闭"
+                                        removeIconKind="dismiss"
+                                    />
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    {(running.length + completed.length + failed.length) > 0 && (
+                        <div className="px-4 py-2 border-t border-slate-800 text-xs text-slate-500 tabular-nums">
+                            共 {running.length + completed.length + failed.length} 项
+                        </div>
+                    )}
+                </div>,
+                document.body,
+            )}
+        </div>
+    );
+};
+
+// =========================================================================
+// 子组件
+// =========================================================================
+
+interface SectionProps {
+    title: string;
+    count: number;
+    items: RegisteredTask[];
+    onNavigate: (t: RegisteredTask) => void;
+    onRemove: (id: string) => void;
+    removeLabel: string;
+    removeIconKind: 'dismiss' | 'cancel';
+}
+
+const Section: React.FC<SectionProps> = ({ title, count, items, onNavigate, onRemove, removeLabel, removeIconKind }) => (
+    <div>
+        <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 bg-slate-900/40 border-b border-slate-800/60">
+            {title} <span className="ml-1 text-slate-600 tabular-nums">· {count}</span>
+        </div>
+        <ul role="list" className="divide-y divide-slate-800/50">
+            {items.map((t, i) => (
+                <li
+                    key={t.taskId}
+                    className="group"
+                    style={{
+                        animation: 'taskItemEnter 240ms cubic-bezier(0.2, 0.9, 0.3, 1) backwards',
+                        animationDelay: `${Math.min(i, 4) * 35}ms`,
+                    }}
+                >
+                    <TaskItem
+                        task={t}
+                        onNavigate={() => onNavigate(t)}
+                        onRemove={() => onRemove(t.taskId)}
+                        removeLabel={removeLabel}
+                        removeIconKind={removeIconKind}
+                    />
+                </li>
+            ))}
+        </ul>
+    </div>
+);
+
+interface TaskItemProps {
+    task: RegisteredTask;
+    onNavigate: () => void;
+    onRemove: () => void;
+    removeLabel: string;
+    removeIconKind: 'dismiss' | 'cancel';
+}
+
+const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeLabel, removeIconKind }) => {
+    const theme = STATUS_THEME[task.status] || STATUS_THEME.queued;
+    const KindIcon = getKindIcon(task.kind);
+    const kindLabel = KIND_LABEL[task.kind] || task.kind;
+    const statusText = statusLabel(task);
+
+    return (
+        <div
+            onClick={onNavigate}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => { if (e.key === 'Enter') onNavigate(); }}
+            className="flex items-start gap-3 px-4 py-3 hover:bg-slate-800/40 cursor-pointer transition-colors"
+        >
+            {/* Status icon */}
+            <div className="mt-0.5 shrink-0">
+                {task.status === 'running' && <Loader2 size={14} className="text-blue-400 animate-spin motion-reduce:animate-none" />}
+                {(task.status === 'pending' || task.status === 'queued') && <Clock size={14} className="text-amber-400" />}
+                {task.status === 'completed' && <CheckCircle size={14} className="text-emerald-400" />}
+                {task.status === 'failed' && <AlertCircle size={14} className="text-rose-400" />}
+                {task.status === 'cancelled' && <X size={14} className="text-slate-400" />}
+            </div>
+
+            <div className="flex-1 min-w-0">
+                {/* Title row */}
+                <div className="flex items-center gap-1.5">
+                    <KindIcon size={11} className="text-slate-500 shrink-0" />
+                    <span className="text-sm font-medium text-slate-100 truncate">{task.title}</span>
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] tabular-nums ${theme.bg} ${theme.text} ${theme.border} border`}>
+                        {kindLabel}
+                    </span>
+                </div>
+
+                {/* Status + progress */}
+                <div className="mt-1 flex items-center gap-2">
+                    <span className={`text-xs ${theme.text}`}>{statusText}</span>
+                    {task.error && (
+                        <span className="text-xs text-rose-300/80 truncate">· {task.error}</span>
+                    )}
+                </div>
+
+                {/* Progress bar */}
+                {task.status === 'running' && task.progress != null && (
+                    <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-blue-400/80 rounded-full transition-all duration-500"
+                            style={{ width: `${Math.min(100, Math.max(0, task.progress * 100))}%` }}
+                        />
+                    </div>
+                )}
+
+                {/* 2026-05-20 (Phase 8)：metadata 富展示 — 阶段名 / step / ETA / Worker 节点 */}
+                {task.metadata && (() => {
+                    const stage = task.metadata.stage as string | undefined;
+                    const step = task.metadata.step as number | undefined;
+                    const totalSteps = task.metadata.totalSteps as number | undefined;
+                    const eta = task.metadata.etaSeconds as number | undefined;
+                    const worker = task.metadata.workerNodeId as string | undefined;
+                    if (!stage && step == null && eta == null && !worker) return null;
+                    return (
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400/90">
+                            {stage && <span className="truncate max-w-[220px]">{stage}</span>}
+                            {step != null && totalSteps != null && (
+                                <span className="tabular-nums text-slate-500">{step}/{totalSteps} 步</span>
+                            )}
+                            {eta != null && eta > 0 && (
+                                <span className="tabular-nums text-slate-500">
+                                    剩 {eta < 60 ? `${eta}s` : `${Math.round(eta / 60)}m`}
+                                </span>
+                            )}
+                            {worker && <span className="text-slate-600 truncate max-w-[80px]">@{worker}</span>}
+                        </div>
+                    );
+                })()}
+
+                {/* Time + actions */}
+                <div className="mt-1 flex items-center text-[10px] text-slate-500">
+                    <span className="tabular-nums">{fmtRelative(task.completedAt || task.startedAt || task.createdAt)}</span>
+                    {/* 2026-06-05：去掉 pending 守卫——待执行/排队任务也要能取消（后端 cancelTask
+                        会把 pending/queued/processing 落为 cancelled，刷新不再出现）。 */}
+                    <button
+                        onClick={e => { e.stopPropagation(); onRemove(); }}
+                        className="ml-auto opacity-0 group-hover:opacity-100 px-1.5 py-0.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/60 rounded transition-all"
+                        aria-label={removeLabel}
+                    >
+                        {removeIconKind === 'cancel' ? '取消' : '关闭'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const EmptyState: React.FC = () => (
+    <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+        <div className="w-10 h-10 rounded-full bg-slate-800/60 flex items-center justify-center mb-3">
+            <Bell size={16} className="text-slate-500" />
+        </div>
+        <div className="text-sm text-slate-400 mb-1">还没有任务</div>
+        <div className="text-xs text-slate-600">提交生成任务后这里会显示进度</div>
+    </div>
+);
+
+// =========================================================================
+// 注入到全局 head 的 keyframes（仅一次）
+// =========================================================================
+
+if (typeof document !== 'undefined' && !document.getElementById('notification-panel-styles')) {
+    const style = document.createElement('style');
+    style.id = 'notification-panel-styles';
+    style.textContent = `
+@keyframes panelFadeIn {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes taskItemEnter {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    [style*="taskItemEnter"], [style*="panelFadeIn"] { animation: none !important; }
+}
+`;
+    document.head.appendChild(style);
+}

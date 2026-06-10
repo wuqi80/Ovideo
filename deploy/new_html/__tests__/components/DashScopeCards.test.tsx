@@ -1,0 +1,209 @@
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
+
+import { KlingCard, ViduCard, HappyHorseCard } from '../../components/video/DashScopeCards';
+import { makeDefaultDashScopeParams } from '../../services/videoService';
+
+/**
+ * 2026-05-24 — Task 3 of dashscope-cards-redesign plan.
+ *
+ * Plan literal used Chinese model aliases ('合体' / '大乘' / '炼虚') as input,
+ * but project convention (DashScopeVideoModel) is English: 'Kling' | 'Vidu' | 'HappyHorse'.
+ * Tests below use English identifiers per execution constraint
+ * "favor matching existing app conventions, not the plan literal".
+ *
+ * Source of truth for makeDefaultDashScopeParams is `services/videoService.ts`
+ * (legacy copy under `components/video/DashScopeCards.tsx` removed in Task 3 cleanup).
+ */
+
+const noopPick = () => {};
+const noopPreview = () => {};
+
+describe('KlingCard 多镜头模式', () => {
+    it('显示 5 个 mode toggle：T2V / I2V / Morph / Omni / Multi', () => {
+        const params = makeDefaultDashScopeParams('Kling');
+        render(
+            <KlingCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        expect(screen.getByRole('button', { name: /T2V/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /I2V/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Morph/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Omni/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Multi|多镜头/i })).toBeInTheDocument();
+    });
+
+    it('点击 Multi mode 后调用 onChange 设置 kling_multi_shot=true + shot_type 默认 intelligence', () => {
+        const params = makeDefaultDashScopeParams('Kling');
+        const onChange = vi.fn();
+        render(
+            <KlingCard
+                params={params}
+                onChange={onChange}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { name: /Multi|多镜头/i }));
+        expect(onChange).toHaveBeenCalled();
+        const lastCall = onChange.mock.calls.at(-1)![0];
+        expect(lastCall.kling_multi_shot).toBe(true);
+        expect(lastCall.kling_shot_type).toBe('intelligence');
+    });
+
+    it('Multi mode + shot_type=customize 时显示「+ 添加分镜」按钮', () => {
+        const params = {
+            ...makeDefaultDashScopeParams('Kling'),
+            kling_multi_shot: true,
+            kling_shot_type: 'customize' as const,
+            kling_multi_prompt: [],
+        };
+        render(
+            <KlingCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        expect(screen.getByText(/添加分镜/)).toBeInTheDocument();
+    });
+
+    it('Multi mode + 添加 1 个分镜后渲染 index=1 的输入', () => {
+        const params = {
+            ...makeDefaultDashScopeParams('Kling'),
+            kling_multi_shot: true,
+            kling_shot_type: 'customize' as const,
+            kling_multi_prompt: [{ index: 1, prompt: '雾岭镇黄昏', duration: 5 }],
+        };
+        render(
+            <KlingCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        expect(screen.getByDisplayValue('雾岭镇黄昏')).toBeInTheDocument();
+        expect(screen.getByText(/分镜 1/)).toBeInTheDocument();
+    });
+});
+
+// 2026-05-24 — Task 4: ViduCard + HappyHorseCard 参数补齐
+// Plan literal used Chinese model aliases ('大乘' / '炼虚'); per execution constraint
+// we use the project's English DashScopeVideoModel identifiers ('Vidu' / 'HappyHorse').
+
+describe('ViduCard 完整参数', () => {
+    it('显示 resolution 下拉（540P / 720P / 1080P）', () => {
+        const params = makeDefaultDashScopeParams('Vidu');
+        render(
+            <ViduCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        const sel = screen.getByLabelText(/分辨率/) as HTMLSelectElement;
+        expect(sel).toBeInTheDocument();
+        expect(Array.from(sel.options).map(o => o.value)).toEqual(
+            expect.arrayContaining(['540P', '720P', '1080P']),
+        );
+    });
+
+    it('显示 seed 输入', () => {
+        const params = makeDefaultDashScopeParams('Vidu');
+        render(
+            <ViduCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        expect(screen.getByLabelText(/种子|seed/i)).toBeInTheDocument();
+    });
+
+    it('audio 仅当 sub_model_vidu 以 q3 开头时可勾选', () => {
+        const params = { ...makeDefaultDashScopeParams('Vidu'), sub_model_vidu: 'q2' as const };
+        render(
+            <ViduCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        const audioCheckbox = screen.getByLabelText(/有声|audio/i) as HTMLInputElement;
+        expect(audioCheckbox.disabled).toBe(true);
+    });
+});
+
+describe('HappyHorseCard 完整参数', () => {
+    it('显示 resolution 下拉（720P / 1080P）', () => {
+        const params = makeDefaultDashScopeParams('HappyHorse');
+        render(
+            <HappyHorseCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        const sel = screen.getByLabelText(/分辨率/) as HTMLSelectElement;
+        expect(Array.from(sel.options).map(o => o.value).sort()).toEqual(['1080P', '720P']);
+    });
+
+    it('显示 ratio 下拉，包含 9 种比例', () => {
+        const params = makeDefaultDashScopeParams('HappyHorse');
+        render(
+            <HappyHorseCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        const sel = screen.getByLabelText(/比例/) as HTMLSelectElement;
+        const vals = Array.from(sel.options).map(o => o.value);
+        expect(vals).toEqual(expect.arrayContaining([
+            '16:9', '9:16', '3:4', '4:3', '4:5', '5:4', '1:1', '9:21', '21:9',
+        ]));
+        expect(vals.length).toBe(9);
+    });
+
+    it('显示 duration 输入（3-15 范围）', () => {
+        const params = makeDefaultDashScopeParams('HappyHorse');
+        render(
+            <HappyHorseCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        const inp = screen.getByLabelText(/时长/) as HTMLInputElement;
+        expect(inp.min).toBe('3');
+        expect(inp.max).toBe('15');
+    });
+
+    it('显示 watermark + seed', () => {
+        const params = makeDefaultDashScopeParams('HappyHorse');
+        render(
+            <HappyHorseCard
+                params={params}
+                onChange={vi.fn()}
+                onPickImage={noopPick}
+                onPreviewImage={noopPreview}
+            />,
+        );
+        expect(screen.getByLabelText(/水印|watermark/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/种子|seed/i)).toBeInTheDocument();
+    });
+});

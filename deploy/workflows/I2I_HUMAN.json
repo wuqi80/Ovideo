@@ -1,0 +1,25 @@
+{
+  "_comment": "I2I_HUMAN工作流 - 多角度人物生成，请用实际的ComfyUI工作流替换此模板。占位符: {image}, {seed}",
+  "1": {
+    "inputs": {
+      "image": "{image}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像 - 输入人物图片"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "HumanMultiAngle",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像 - 多角度输出"
+    }
+  }
+}

@@ -1,0 +1,200 @@
+import { describe, it, expect } from 'vitest';
+import {
+    parseScriptSegments,
+    parseVideoScriptBlocks,
+    parseStoryboardPromptExtractions,
+    stripDialogueMarkers,
+} from '../../utils/scriptPipelineParsers';
+
+describe('parseScriptSegments', () => {
+    it('splits on --- and reads 时长：N秒', () => {
+        const text = [
+            '1-1 日 外 浅浅家门口',
+            '浅浅：哟，陆帅哥来啦。',
+            '时长：5秒',
+            '---',
+            '1-2 日 内 浅浅家',
+            '陆一航：脱衣服吧，我赶时间。',
+            '时长：11秒',
+        ].join('\n');
+        const segs = parseScriptSegments(text);
+        expect(segs).toHaveLength(2);
+        expect(segs[0].order).toBe(0);
+        expect(segs[0].estimatedDurationSec).toBe(5);
+        expect(segs[0].sourceText).toContain('浅浅家门口');
+        expect(segs[0].sourceText).not.toContain('时长');
+        expect(segs[1].estimatedDurationSec).toBe(11);
+    });
+
+    it('sets estimatedDurationSec=null when 时长 missing', () => {
+        const segs = parseScriptSegments('某段原文没有时长\n---\n另一段\n时长：8秒');
+        expect(segs[0].estimatedDurationSec).toBeNull();
+        expect(segs[1].estimatedDurationSec).toBe(8);
+    });
+
+    it('falls back to blank-line blocks when no --- present', () => {
+        const text = '段一第一行\n时长：6秒\n\n段二第一行\n时长：7秒';
+        const segs = parseScriptSegments(text);
+        expect(segs).toHaveLength(2);
+        expect(segs[0].estimatedDurationSec).toBe(6);
+    });
+
+    it('does not crash on empty input', () => {
+        expect(parseScriptSegments('')).toEqual([]);
+    });
+
+    it('concatenated sourceText covers input body (minus 时长 lines)', () => {
+        const text = 'A行1\nA行2\n时长：5秒\n---\nB行1\n时长：9秒';
+        const segs = parseScriptSegments(text);
+        const joined = segs.map(s => s.sourceText).join('\n');
+        expect(joined).toContain('A行1');
+        expect(joined).toContain('A行2');
+        expect(joined).toContain('B行1');
+    });
+});
+
+describe('parseVideoScriptBlocks', () => {
+    const sample = [
+        '镜头1',
+        '时长（秒）：4',
+        '画面描述：三架战机编队。',
+        '镜头运动：远景，缓慢横移跟拍，俯视视角。',
+        '镜头2：',
+        '时长（秒）：3',
+        '画面描述：卫星端坐驾驶舱。',
+        '镜头 3',
+        '时长（秒）：2',
+        '画面描述：拇指按下通讯键。',
+        '【视觉风格】冷峻战争写实，胶片质感。',
+        '【正向稳定约束】无背景音乐，保持无字幕，竖屏主体居中。',
+    ].join('\n');
+
+    it('splits multiple 镜头N (with/without colon/space)', () => {
+        const blocks = parseVideoScriptBlocks(sample);
+        expect(blocks).toHaveLength(3);
+        expect(blocks[0].shotNo).toBe('镜头1');
+        expect(blocks[1].shotNo).toBe('镜头2');
+        expect(blocks[2].shotNo).toBe('镜头3');
+    });
+
+    it('keeps the full block text in rawBlock', () => {
+        const blocks = parseVideoScriptBlocks(sample);
+        expect(blocks[0].rawBlock).toContain('画面描述：三架战机编队');
+        expect(blocks[0].rawBlock).toContain('镜头运动：远景');
+    });
+
+    it('parses 时长（秒）：N', () => {
+        const blocks = parseVideoScriptBlocks(sample);
+        expect(blocks[0].durationSec).toBe(4);
+        expect(blocks[2].durationSec).toBe(2);
+    });
+
+    it('returns [] for empty', () => {
+        expect(parseVideoScriptBlocks('')).toEqual([]);
+    });
+});
+
+describe('parseStoryboardPromptExtractions', () => {
+    const shot = [
+        '镜头号：2',
+        '景别：近景',
+        '画面描述：卫星端坐驾驶舱内，眼神沉稳。',
+        '人物：卫星',
+        '场景：一号机驾驶舱',
+        '分镜生成提示词：近景，平视角度，卫星端坐驾驶舱，冷蓝调，胶片质感。',
+        '拍摄角度：平视视角',
+        '运镜方式：缓慢推近',
+        '台词：卫星（台词）：“一号机报告，”',
+        '时长：2秒',
+    ].join('\n');
+
+    it('parses a single 镜头号 block into a 1-element array', () => {
+        const list = parseStoryboardPromptExtractions(shot);
+        expect(list).toHaveLength(1);
+        const r = list[0];
+        expect(r.shotNo).toBe('镜头2');
+        expect(r.shotSize).toBe('近景');
+        expect(r.sceneDescription).toContain('眼神沉稳');
+        expect(r.characters).toEqual(['卫星']);
+        expect(r.scene).toBe('一号机驾驶舱');
+        expect(r.imagePrompt).toContain('冷蓝调');
+        expect(r.cameraAngle).toBe('平视视角');
+        expect(r.cameraMove).toBe('缓慢推近');
+        expect(r.dialogue).toContain('一号机报告');
+        expect(r.durationSec).toBe(2);
+    });
+
+    it('splits 人物 by 、，/ into an array', () => {
+        const list = parseStoryboardPromptExtractions(
+            '镜头号：1\n景别：中景\n画面描述：三人对峙。\n人物：陆一航、浅浅，赵峰\n场景：浅浅家\n分镜生成提示词：P\n台词：无\n时长：5秒'
+        );
+        expect(list[0].characters).toEqual(['陆一航', '浅浅', '赵峰']);
+        expect(list[0].scene).toBe('浅浅家');
+    });
+
+    it('converts 人物：无 / 场景：无 to [] and empty string', () => {
+        const list = parseStoryboardPromptExtractions(
+            '镜头号：1\n景别：远景\n画面描述：空镜。\n人物：无\n场景：无\n分镜生成提示词：P\n台词：无\n时长：3秒'
+        );
+        expect(list[0].characters).toEqual([]);
+        expect(list[0].scene).toBe('');
+    });
+
+    it('splits one video shot into multiple finer 镜头号 blocks', () => {
+        const multi = [
+            '镜头号：1', '景别：远景', '画面描述：A画面。',
+            '分镜生成提示词：PA', '拍摄角度：俯视视角', '运镜方式：横移', '台词：无', '时长：3秒',
+            '镜头号：2', '景别：近景', '画面描述：B画面。',
+            '分镜生成提示词：PB', '拍摄角度：平视视角', '运镜方式：推近', '台词：卫星（台词）：“走”', '时长：2秒',
+        ].join('\n');
+        const list = parseStoryboardPromptExtractions(multi);
+        expect(list).toHaveLength(2);
+        expect(list[0].shotNo).toBe('镜头1');
+        expect(list[0].imagePrompt).toBe('PA');
+        expect(list[1].shotNo).toBe('镜头2');
+        expect(list[1].dialogue).toContain('走');
+    });
+
+    it('converts 台词：无 to empty string', () => {
+        const list = parseStoryboardPromptExtractions('镜头号：1\n景别：远景\n分镜生成提示词：P\n台词：无\n时长：3秒');
+        expect(list).toHaveLength(1);
+        expect(list[0].dialogue).toBe('');
+    });
+
+    it('handles multi-line 画面描述', () => {
+        const list = parseStoryboardPromptExtractions(
+            '镜头号：1\n画面描述：第一行。\n第二行继续。\n景别：远景\n分镜生成提示词：P'
+        );
+        expect(list[0].sceneDescription).toContain('第一行');
+        expect(list[0].sceneDescription).toContain('第二行继续');
+    });
+
+    it('returns [] for empty', () => {
+        expect(parseStoryboardPromptExtractions('')).toEqual([]);
+    });
+
+    it('strips （台词）/（OS）/（OV） markers from extracted dialogue', () => {
+        const list = parseStoryboardPromptExtractions(
+            '镜头号：1\n景别：近景\n分镜生成提示词：P\n台词：浅浅（台词）：“哟，陆帅哥来啦。”\n时长：3秒'
+        );
+        expect(list[0].dialogue).toBe('浅浅：“哟，陆帅哥来啦。”');
+        expect(list[0].dialogue).not.toContain('（台词）');
+    });
+});
+
+describe('stripDialogueMarkers', () => {
+    it('removes （台词） and tightens spacing', () => {
+        expect(stripDialogueMarkers('浅浅（台词）：“快进来。”')).toBe('浅浅：“快进来。”');
+    });
+
+    it('removes （OS）/（OV）/（台词/OS/OV） and half-width forms', () => {
+        expect(stripDialogueMarkers('陆一航（OS）：真空？')).toBe('陆一航：真空？');
+        expect(stripDialogueMarkers('旁白(OV)：夜深了')).toBe('旁白：夜深了');
+        expect(stripDialogueMarkers('卫星（台词/OS/OV）：报告')).toBe('卫星：报告');
+    });
+
+    it('keeps plain dialogue unchanged', () => {
+        expect(stripDialogueMarkers('浅浅：哟')).toBe('浅浅：哟');
+        expect(stripDialogueMarkers('')).toBe('');
+    });
+});

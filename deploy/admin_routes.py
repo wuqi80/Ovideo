@@ -1,0 +1,1750 @@
+# -*- coding: utf-8 -*-
+"""
+Admin panel CRUD API — agents, workflows, API configs, settings, dashboard.
+"""
+from __future__ import annotations
+
+import json
+import logging
+from datetime import date, datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, ConfigDict, Field
+
+from dao_agent import AgentDAO
+from dao_api_config import ApiConfigDAO
+from dao_system_settings import SystemSettingsDAO
+from dao_task import TaskDAO
+from dao_workflow_template import WorkflowTemplateDAO
+from db_manager import get_db_manager
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================
+# 2026-05-26 Slice 4/5 收尾：管理员鉴权依赖
+# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md §Permission
+# ============================================
+async def require_admin(request: Request) -> str:
+    """
+    依赖：所有 /api/admin/* 接口必须由 users.role ∈ {'admin','super_admin'} 触发。
+    返回当前管理员 username（已校验）；失败抛 401/403。
+    """
+    auth = request.headers.get("Authorization") or ""
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未授权")
+    import jwt_auth
+    username = jwt_auth.verify_token(auth[7:])
+    if not username:
+        raise HTTPException(status_code=401, detail="Token 已失效或不存在")
+    # 取用户 role
+    try:
+        from dao_user import UserDAO
+        user = await UserDAO.get_user_by_username(username)
+    except Exception as e:
+        logger.error(f"require_admin: 查询用户失败 username={username} err={e}")
+        raise HTTPException(status_code=500, detail="鉴权查询失败")
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    # 兼容旧库未 ALTER：默认 'user'
+    role = (user.get('role') if isinstance(user, dict) else None) or 'user'
+    if role not in ('admin', 'super_admin'):
+        # 引导兜底：MY2_ADMIN_USERNAMES 环境变量（逗号分隔）允许在 role 列尚未配置时通过
+        # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
+        import os as _os
+        boot = (_os.environ.get('MY2_ADMIN_USERNAMES') or '').strip()
+        if boot:
+            allowed = {s.strip() for s in boot.split(',') if s.strip()}
+            if username in allowed:
+                return username
+        raise HTTPException(status_code=403, detail=f"需要管理员权限（当前角色：{role}）")
+    return username
+
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+# 注意：保留老 /admin/app.js 静态控制台的"无 JWT"行为兼容，
+# 不在 router 上挂全局 require_admin。
+# 仅对 2026-05-26 Slice 4/5 新增的 users/project-groups/credit-rules/
+# media-library/credit-accounts/credit-transactions/audit-logs 端点
+# 单独添加 Depends(require_admin)。
+
+
+async def _reload_api_env():
+    """保存 API 配置后实时刷新环境变量"""
+    try:
+        from cluster_main import load_api_configs_to_env
+        await load_api_configs_to_env()
+        logger.info("🔄 API 配置已实时刷新到环境变量")
+    except Exception as e:
+        logger.warning(f"⚠️ 实时刷新API配置失败: {e}")
+
+
+def _require_db() -> None:
+    if not get_db_manager():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable",
+        )
+
+
+def _sync_workflow_to_disk(workflow_key: str, workflow_json: dict):
+    """将工作流 JSON 写回 workflows/ 目录的磁盘文件"""
+    if not workflow_key:
+        return
+    wf_dir = Path(__file__).resolve().parent / "workflows"
+    wf_dir.mkdir(exist_ok=True)
+    file_path = wf_dir / f"{workflow_key}.json"
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(workflow_json, f, ensure_ascii=False, indent=2)
+        logger.info(f"✅ 工作流已写回磁盘: {file_path.name}")
+    except OSError as e:
+        logger.error(f"❌ 写回磁盘失败 {file_path}: {e}")
+
+
+def _reload_workflow_cache():
+    """重新加载所有工作流到内存缓存"""
+    try:
+        from workflow_handler import get_workflow_handler
+        handler = get_workflow_handler()
+        handler.load_workflows()
+        logger.info(f"🔄 工作流缓存已重载，共 {len(handler.workflows)} 个")
+    except Exception as e:
+        logger.warning(f"⚠️ 重载工作流缓存失败: {e}")
+
+
+def _delete_workflow_from_disk(workflow_key: str):
+    """从磁盘删除工作流 JSON 文件"""
+    if not workflow_key:
+        return
+    wf_dir = Path(__file__).resolve().parent / "workflows"
+    file_path = wf_dir / f"{workflow_key}.json"
+    if file_path.is_file():
+        try:
+            file_path.unlink()
+            logger.info(f"🗑️ 已删除磁盘工作流: {file_path.name}")
+        except OSError as e:
+            logger.warning(f"⚠️ 删除磁盘文件失败 {file_path}: {e}")
+
+
+def _jsonb_to_python(val: Any) -> Any:
+    if val is None:
+        return None
+    if isinstance(val, (dict, list)):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except json.JSONDecodeError:
+            return val
+    return val
+
+
+def _parse_comfyui_instances(val: Any) -> List[Dict[str, Any]]:
+    parsed = _jsonb_to_python(val)
+    if isinstance(parsed, list):
+        return [x for x in parsed if isinstance(x, dict)]
+    return []
+
+
+def _row_to_jsonable(row: Any) -> Dict[str, Any]:
+    if row is None:
+        return {}
+    d = dict(row)
+    out: Dict[str, Any] = {}
+    for k, v in d.items():
+        if isinstance(v, datetime):
+            out[k] = v.isoformat()
+        elif isinstance(v, date):
+            out[k] = v.isoformat()
+        elif isinstance(v, Decimal):
+            out[k] = float(v)
+        elif k in (
+            "workflow_json",
+            "placeholders",
+            "params",
+            "result",
+            "stats",
+            "system_info",
+            "comfyui_instances",
+            "request_template",
+            "headers",
+            "permissions",
+        ):
+            out[k] = _jsonb_to_python(v)
+        else:
+            out[k] = v
+    return out
+
+
+# 2026-05-26：admin 用户列表 / 详情的前端期望形状（camelCase + permissions 兜底 + stats stub）。
+# 历史 AdminPage 走的是 generateLocalUsers() 的本地兜底数据，从未真正消费后端原始 snake_case；
+# 把 AdminPage 提为独立 /admin 路由后第一次走 API，没人 normalize → 前端 `user.permissions.allowedModels` 崩溃。
+_DEFAULT_USER_PERMISSIONS = {
+    "allowedModels": [],
+    "priority": "normal",
+    "canExport": True,
+}
+
+
+def _normalize_admin_user(row: Any) -> Dict[str, Any]:
+    """把 users 表行转换为 AdminPage 期望的 UserAccount 形状。
+
+    Guarantees (即使数据库列缺失也兜底):
+      - id, username, email, role, isActive, isOnline, lastLogin (ms epoch | 0)
+      - permissions: { allowedModels: string[], priority: 'low'|'normal'|'high', canExport: bool }
+      - stats: { todayCount: 0, totalCount: 0, byModel: {} }  (聚合数据由前端用 logs 计算，这里只占位)
+    """
+    if row is None:
+        return {}
+    d = _row_to_jsonable(row)
+
+    raw_perm = d.get("permissions")
+    if not isinstance(raw_perm, dict):
+        raw_perm = {}
+    perm = {
+        "allowedModels": list(raw_perm.get("allowedModels") or raw_perm.get("allowed_models") or []),
+        "priority": raw_perm.get("priority") or "normal",
+        "canExport": bool(raw_perm.get("canExport") if raw_perm.get("canExport") is not None else raw_perm.get("can_export", True)),
+    }
+
+    last_login_iso = d.get("last_login_at") or d.get("lastLogin") or None
+    last_login_ms = 0
+    if isinstance(last_login_iso, str) and last_login_iso:
+        try:
+            last_login_ms = int(datetime.fromisoformat(last_login_iso).timestamp() * 1000)
+        except Exception:
+            last_login_ms = 0
+
+    is_active = d.get("is_active")
+    if is_active is None:
+        # 兼容 status='active'/'disabled' 的新模式
+        is_active = (str(d.get("status") or "").lower() != "disabled")
+
+    return {
+        "id": d.get("user_id") or d.get("id") or "",
+        "username": d.get("username") or "",
+        "email": d.get("email") or "",
+        "role": d.get("role") or "editor",
+        "isActive": bool(is_active),
+        # 后端目前没有真实在线状态；用最近登录 5 分钟内作为近似（生产环境可换成 session/SSE 心跳）
+        "isOnline": (last_login_ms > 0 and (datetime.utcnow().timestamp() * 1000 - last_login_ms) < 5 * 60 * 1000),
+        "lastLogin": last_login_ms,
+        "permissions": perm,
+        "stats": {"todayCount": 0, "totalCount": 0, "byModel": {}},
+        # 透传原始字段（前端可读 raw 字段做扩展，不强制依赖）
+        "user_id": d.get("user_id"),
+        "status": d.get("status"),
+        "avatar_url": d.get("avatar_url"),
+        "plan_tier": d.get("plan_tier"),
+        "storage_quota_gb": d.get("storage_quota_gb"),
+        "used_storage_bytes": d.get("used_storage_bytes"),
+        "created_at": d.get("created_at"),
+    }
+
+
+def _mask_api_config_row(row: Any) -> Dict[str, Any]:
+    d = _row_to_jsonable(row)
+    if "api_key_encrypted" in d:
+        d["api_key_encrypted"] = "***" if d["api_key_encrypted"] else ""
+    return d
+
+
+def _instance_healthy(inst: Dict[str, Any]) -> bool:
+    s = str(inst.get("status", "")).lower()
+    if s in ("error", "offline", "down", "failed", "unhealthy"):
+        return False
+    return True
+
+
+def _placeholders_from_workflow_config(cfg: Any) -> List[Dict[str, Any]]:
+    raw = list(getattr(cfg, "placeholders", None) or [])
+    defaults = getattr(cfg, "default_params", None) or {}
+    out: List[Dict[str, Any]] = []
+    for p in raw:
+        key = str(p)
+        out.append(
+            {
+                "key": key,
+                "label": key,
+                "type": "text",
+                "required": False,
+                "default": defaults.get(p, ""),
+            }
+        )
+    return out
+
+
+# --- Agents ---
+
+
+class AgentCreateBody(BaseModel):
+    name: str = Field(..., min_length=1)
+
+
+@router.post("/agents", status_code=status.HTTP_201_CREATED)
+async def admin_create_agent(body: AgentCreateBody):
+    _require_db()
+    token = AgentDAO.generate_token()
+    row = await AgentDAO.create(body.name.strip(), token)
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to create agent")
+    agent = _row_to_jsonable(row)
+    return {"success": True, "agent": agent, "token": token}
+
+
+@router.get("/agents")
+async def admin_list_agents():
+    _require_db()
+    rows = await AgentDAO.list_all()
+    return {"success": True, "agents": [_row_to_jsonable(r) for r in rows]}
+
+
+@router.get("/agents/{agent_id}")
+async def admin_get_agent(agent_id: str):
+    _require_db()
+    row = await AgentDAO.get_by_id(agent_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"success": True, "agent": _row_to_jsonable(row)}
+
+
+@router.put("/agents/{agent_id}/toggle")
+async def admin_toggle_agent(agent_id: str):
+    _require_db()
+    row = await AgentDAO.get_by_id(agent_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    current = bool(row.get("enabled", True))
+    updated = await AgentDAO.set_enabled(agent_id, not current)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Toggle failed")
+    return {"success": True, "agent": _row_to_jsonable(updated)}
+
+
+@router.delete("/agents/{agent_id}")
+async def admin_delete_agent(agent_id: str):
+    _require_db()
+    ok = await AgentDAO.delete(agent_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"success": True, "deleted": True}
+
+
+# --- Workflow templates (static paths before /{template_id}) ---
+
+
+@router.post("/workflows/parse-json")
+async def admin_parse_workflow_json(request: Request):
+    """
+    Parse ComfyUI workflow JSON from:
+    - `application/json`: `{"workflow_json": {...}}` or a workflow object at root
+    - `multipart/form-data`: field `file` — uploaded `.json` workflow file
+    """
+    workflow_dict: Optional[Dict[str, Any]] = None
+    content_type = (request.headers.get("content-type") or "").lower()
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None:
+            raise HTTPException(
+                status_code=400, detail="Missing form field 'file' for multipart upload"
+            )
+        read_fn = getattr(upload, "read", None)
+        if not callable(read_fn):
+            raise HTTPException(status_code=400, detail="Invalid upload")
+        raw = await read_fn()
+        try:
+            parsed = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError) as e:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid JSON in upload: {e}"
+            ) from e
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status_code=400, detail="Uploaded workflow root must be a JSON object"
+            )
+        workflow_dict = parsed
+    else:
+        try:
+            data = await request.json()
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail="Invalid JSON body") from e
+        if not isinstance(data, dict):
+            raise HTTPException(
+                status_code=400, detail="JSON body must be an object"
+            )
+        workflow_dict = data.get("workflow_json", data)
+
+    if not isinstance(workflow_dict, dict):
+        raise HTTPException(status_code=400, detail="workflow_json must be an object")
+
+    nodes = WorkflowTemplateDAO.parse_nodes(workflow_dict)
+    return {"success": True, "nodes": nodes}
+
+
+@router.get("/workflows/scan-disk")
+async def admin_scan_disk_workflows():
+    """Return all workflows defined in workflow_config.py with their on-disk status."""
+    from workflow_config import WORKFLOW_CONFIGS
+    wf_dir = Path(__file__).resolve().parent / "workflows"
+
+    _require_db()
+    db_templates = await WorkflowTemplateDAO.list_all()
+    db_names = {r.get("name", "") for r in db_templates}
+
+    items: List[Dict[str, Any]] = []
+    cat_map = {
+        "image_upload": "image", "qwen_image": "image", "qwen_lora_image": "image",
+        "I2I": "image", "kontext": "image",
+        "wan2": "video", "minimax": "video", "sora2": "video", "veo": "video",
+        "dashscope": "video", "morph": "video", "infinitetalk": "video",
+        "upscale": "upscale", "remove_watermark": "tool", "matting": "tool",
+        "panorama": "tool", "three_view": "tool", "storyboard": "tool",
+        "pose": "tool", "transfer": "tool", "fusion": "tool",
+    }
+
+    for key, cfg in WORKFLOW_CONFIGS.items():
+        name = getattr(cfg, "name", None) or str(key)
+        file_name = getattr(cfg, "file", None)
+        desc = getattr(cfg, "description", "") or ""
+        placeholders = getattr(cfg, "placeholders", []) or []
+        has_file = bool(file_name and (wf_dir / file_name).is_file())
+        is_api = file_name is None
+
+        category = "other"
+        key_lower = key.lower()
+        for prefix, cat in cat_map.items():
+            if prefix.lower() in key_lower:
+                category = cat
+                break
+
+        items.append({
+            "key": key,
+            "name": name,
+            "file": file_name,
+            "description": desc,
+            "placeholders": placeholders,
+            "category": category,
+            "has_file": has_file,
+            "is_api": is_api,
+            "imported": name in db_names,
+        })
+
+    return {"success": True, "workflows": items, "total": len(items)}
+
+
+@router.post("/workflows/import-existing")
+async def admin_import_workflows():
+    _require_db()
+    from workflow_config import WORKFLOW_CONFIGS
+
+    wf_dir = Path(__file__).resolve().parent / "workflows"
+    imported = 0
+    skipped = 0
+    errors: List[str] = []
+
+    for category_key, cfg in WORKFLOW_CONFIGS.items():
+        name = getattr(cfg, "name", None) or str(category_key)
+        existing = await WorkflowTemplateDAO.get_by_name(name)
+        if existing:
+            skipped += 1
+            continue
+        description = getattr(cfg, "description", "") or ""
+        ph_objs = _placeholders_from_workflow_config(cfg)
+        file_name = getattr(cfg, "file", None)
+        workflow_json: Dict[str, Any] = {}
+        if file_name:
+            path = wf_dir / file_name
+            if not path.is_file():
+                errors.append(f"{name}: missing file workflows/{file_name}")
+                continue
+            try:
+                workflow_json = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(workflow_json, dict):
+                    errors.append(f"{name}: workflow JSON root must be object")
+                    continue
+            except (OSError, json.JSONDecodeError) as e:
+                errors.append(f"{name}: read/parse error: {e}")
+                continue
+        row = await WorkflowTemplateDAO.create(
+            name=name,
+            category=str(category_key),
+            workflow_json=workflow_json,
+            placeholders=ph_objs,
+            description=description,
+            node_type="any",
+            estimated_time=30,
+            workflow_key=str(category_key),
+        )
+        if not row:
+            errors.append(f"{name}: database insert failed")
+            continue
+        imported += 1
+
+    return {"success": True, "imported": imported, "skipped": skipped, "errors": errors}
+
+
+class WorkflowCreateBody(BaseModel):
+    name: str = Field(..., min_length=1)
+    category: str = Field(..., min_length=1)
+    workflow_json: Dict[str, Any]
+    placeholders: Optional[List[Any]] = None
+    description: str = ""
+    node_type: str = "any"
+    estimated_time: int = 30
+    workflow_key: str = ""
+
+
+class WorkflowUpdateBody(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    workflow_json: Optional[Dict[str, Any]] = None
+    placeholders: Optional[List[Any]] = None
+    description: Optional[str] = None
+    node_type: Optional[str] = None
+    estimated_time: Optional[int] = None
+    enabled: Optional[bool] = None
+    workflow_key: Optional[str] = None
+
+
+@router.get("/workflows")
+async def admin_list_workflows():
+    _require_db()
+    rows = await WorkflowTemplateDAO.list_all()
+    return {"success": True, "workflows": [_row_to_jsonable(r) for r in rows]}
+
+
+@router.post("/workflows", status_code=status.HTTP_201_CREATED)
+async def admin_create_workflow(body: WorkflowCreateBody):
+    _require_db()
+    row = await WorkflowTemplateDAO.create(
+        name=body.name.strip(),
+        category=body.category.strip(),
+        workflow_json=body.workflow_json,
+        placeholders=body.placeholders,
+        description=body.description,
+        node_type=body.node_type,
+        estimated_time=body.estimated_time,
+        workflow_key=body.workflow_key.strip(),
+    )
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to create template")
+    wf_key = body.workflow_key.strip() or body.category.strip()
+    if wf_key and body.workflow_json:
+        _sync_workflow_to_disk(wf_key, body.workflow_json)
+        _reload_workflow_cache()
+    return {"success": True, "workflow": _row_to_jsonable(row)}
+
+
+@router.post("/workflows/reload")
+async def admin_reload_workflows():
+    """手动重载所有工作流到内存缓存"""
+    _reload_workflow_cache()
+    from workflow_handler import get_workflow_handler
+    handler = get_workflow_handler()
+    return {
+        "success": True,
+        "message": "Workflows reloaded",
+        "count": len(handler.workflows),
+        "names": sorted(handler.workflows.keys()),
+    }
+
+
+@router.get("/workflows/{template_id}")
+async def admin_get_workflow(template_id: str):
+    _require_db()
+    row = await WorkflowTemplateDAO.get_by_id(template_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"success": True, "workflow": _row_to_jsonable(row)}
+
+
+@router.put("/workflows/{template_id}")
+async def admin_update_workflow(template_id: str, body: WorkflowUpdateBody):
+    _require_db()
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        row = await WorkflowTemplateDAO.get_by_id(template_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Template not found")
+        return {"success": True, "workflow": _row_to_jsonable(row)}
+    updated = await WorkflowTemplateDAO.update(template_id, **data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Template not found")
+    wf_key = updated.get("workflow_key") or updated.get("category") or ""
+    if wf_key and "workflow_json" in data:
+        wf_json = updated.get("workflow_json")
+        if isinstance(wf_json, str):
+            wf_json = json.loads(wf_json)
+        _sync_workflow_to_disk(wf_key, wf_json)
+        _reload_workflow_cache()
+    return {"success": True, "workflow": _row_to_jsonable(updated)}
+
+
+@router.delete("/workflows/{template_id}")
+async def admin_delete_workflow(template_id: str):
+    _require_db()
+    row = await WorkflowTemplateDAO.get_by_id(template_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Template not found")
+    wf_key = row.get("workflow_key") or row.get("category") or ""
+    ok = await WorkflowTemplateDAO.delete(template_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if wf_key:
+        _delete_workflow_from_disk(wf_key)
+        _reload_workflow_cache()
+    return {"success": True, "deleted": True}
+
+
+# --- API configurations ---
+
+
+class ApiConfigCreateBody(BaseModel):
+    # 关闭 Pydantic v2 对 `model_` 前缀的保护：本表语义里 model_name
+    # 指 "LLM 模型名"（gpt-4 / claude-3.5 / ...），跟 Pydantic 的 model_*
+    # 内部方法不冲突；重命名会牵动 FE/BE/DB 三层，得不偿失。
+    model_config = ConfigDict(protected_namespaces=())
+
+    name: str = Field(..., min_length=1)
+    provider: str = Field(..., min_length=1)
+    endpoint: str = Field(..., min_length=1)
+    api_key: str = Field(..., min_length=1)
+    model_name: str = ""
+    proxy_mode: str = "direct"
+    custom_proxy: str = ""
+    # 2026-05-24：category 字段。前端 admin UI 按这个分类显示；
+    # 空字符串 = "未分类"（DB CHECK 约束允许 ''/text/image/video/audio）
+    category: str = ""
+
+
+class ApiConfigUpdateBody(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    name: Optional[str] = None
+    provider: Optional[str] = None
+    endpoint: Optional[str] = None
+    api_key: Optional[str] = None
+    model_name: Optional[str] = None
+    proxy_mode: Optional[str] = None
+    custom_proxy: Optional[str] = None
+    request_template: Optional[Dict[str, Any]] = None
+    headers: Optional[Dict[str, Any]] = None
+    enabled: Optional[bool] = None
+    category: Optional[str] = None
+
+
+@router.get("/api-configs")
+async def admin_list_api_configs():
+    _require_db()
+    rows = await ApiConfigDAO.list_all()
+    return {
+        "success": True,
+        "api_configs": [_mask_api_config_row(r) for r in rows],
+    }
+
+
+@router.post("/api-configs", status_code=status.HTTP_201_CREATED)
+async def admin_create_api_config(body: ApiConfigCreateBody):
+    _require_db()
+    row = await ApiConfigDAO.create(
+        name=body.name.strip(),
+        provider=body.provider.strip(),
+        endpoint=body.endpoint.strip(),
+        api_key=body.api_key,
+        model_name=body.model_name,
+        proxy_mode=body.proxy_mode,
+        custom_proxy=body.custom_proxy,
+        category=body.category,
+    )
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to create API config")
+    await _reload_api_env()
+    return {"success": True, "api_config": _mask_api_config_row(row)}
+
+
+@router.put("/api-configs/{config_id}")
+async def admin_update_api_config(config_id: str, body: ApiConfigUpdateBody):
+    _require_db()
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        row = await ApiConfigDAO.get_by_id(config_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Config not found")
+        return {"success": True, "api_config": _mask_api_config_row(row)}
+    updated = await ApiConfigDAO.update(config_id, **data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Config not found")
+    await _reload_api_env()
+    return {"success": True, "api_config": _mask_api_config_row(updated)}
+
+
+@router.delete("/api-configs/{config_id}")
+async def admin_delete_api_config(config_id: str):
+    _require_db()
+    ok = await ApiConfigDAO.delete(config_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Config not found")
+    await _reload_api_env()
+    return {"success": True, "deleted": True}
+
+
+PRESET_API_MODELS = [
+    {"name": "Gemini 2.5 Flash (文本)", "provider": "gemini-text", "model_name": "gemini-2.5-flash", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "text"},
+    {"name": "DeepSeek Reasoner", "provider": "deepseek", "model_name": "deepseek-reasoner", "endpoint": "https://api.deepseek.com", "proxy_mode": "direct", "category": "text"},
+    {"name": "Gemini 2.5 Flash (图像)", "provider": "gemini-image", "model_name": "gemini-2.5-flash-preview-native-audio-dialog", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "image"},
+    {"name": "Gemini 3 Pro (图像)", "provider": "gemini-image", "model_name": "gemini-3-pro-image-preview", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "image"},
+    {"name": "豆包 SeedDream", "provider": "doubao", "model_name": "doubao-seedream-4-0-250828", "endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations", "proxy_mode": "direct", "category": "image"},
+    {"name": "MiniMax Hailuo", "provider": "minimax", "model_name": "MiniMax-Hailuo-02", "endpoint": "https://api.minimaxi.com/v1", "proxy_mode": "direct", "category": "video"},
+    {"name": "Sora2", "provider": "sora2", "model_name": "sora-2", "endpoint": "https://api.laozhang.ai/v1", "proxy_mode": "direct", "category": "video"},
+    {"name": "Veo", "provider": "veo", "model_name": "veo-3.1", "endpoint": "https://api.laozhang.ai/v1", "proxy_mode": "direct", "category": "video"},
+    {"name": "大能 Wan2.6 (DashScope)", "provider": "dashscope", "model_name": "wan2.6-i2v", "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1", "proxy_mode": "direct", "category": "video"},
+    # 2026-05-24：阿里云百炼共享 API（Kling / Vidu / HappyHorse 同一 DASHSCOPE_API_KEY）
+    # 修真境界已用：练气(Wan2)/筑基(Veo)/金丹(MINI)/化神(Sora2)/飞升(Seedance2)/渡劫(Seedance2Fast)
+    # 本次新接入境界：合体(Kling, omni 全能多 mode) / 大乘(Vidu, 多版本) / 炼虚(HappyHorse, 多图参考)
+    {"name": "阿里云百炼共享 API · 合体 (Kling)", "provider": "dashscope", "model_name": "kling/kling-v3-video-generation", "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis", "proxy_mode": "direct", "category": "video"},
+    {"name": "阿里云百炼共享 API · 大乘 (Vidu)", "provider": "dashscope", "model_name": "vidu/viduq3-turbo_reference2video", "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis", "proxy_mode": "direct", "category": "video"},
+    {"name": "阿里云百炼共享 API · 炼虚 (HappyHorse)", "provider": "dashscope", "model_name": "happyhorse-1.0-r2v", "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis", "proxy_mode": "direct", "category": "video"},
+    {"name": "飞升 (Seedance 2.0)", "provider": "seedance", "model_name": "doubao-seedance-2-0-260128", "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks", "proxy_mode": "direct", "category": "video"},
+    {"name": "渡劫 (Seedance 2.0 Fast)", "provider": "seedance", "model_name": "doubao-seedance-2-0-fast-260128", "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks", "proxy_mode": "direct", "category": "video"},
+    {"name": "Gemini TTS (语音)", "provider": "gemini-tts", "model_name": "gemini-2.0-flash", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "audio"},
+]
+
+
+@router.post("/api-configs/import-presets")
+async def admin_import_preset_configs():
+    """一键导入全部预置模型模板"""
+    _require_db()
+    existing = await ApiConfigDAO.list_all()
+    existing_providers = {(r.get('provider', ''), r.get('model_name', '')) for r in existing}
+    imported = 0
+    skipped = 0
+    for preset in PRESET_API_MODELS:
+        key = (preset['provider'], preset['model_name'])
+        if key in existing_providers:
+            skipped += 1
+            continue
+        await ApiConfigDAO.create(
+            name=preset['name'],
+            provider=preset['provider'],
+            endpoint=preset['endpoint'],
+            api_key="",
+            model_name=preset['model_name'],
+            proxy_mode=preset['proxy_mode'],
+            category=preset.get('category', ''),
+        )
+        imported += 1
+    return {"success": True, "imported": imported, "skipped": skipped, "total": len(PRESET_API_MODELS)}
+
+
+@router.get("/api-configs/presets")
+async def admin_get_presets():
+    """返回预置模型列表（前端展示用）"""
+    return {"success": True, "presets": PRESET_API_MODELS}
+
+
+def _resolve_aiohttp_proxy(proxy_mode: str, custom_proxy: str) -> Optional[str]:
+    mode = (proxy_mode or "direct").lower().strip()
+    if mode == "direct":
+        return None
+    if mode == "custom" and custom_proxy.strip():
+        return custom_proxy.strip()
+    if mode == "system":
+        return None
+    return None
+
+
+async def _resolve_proxy_for_request(proxy_mode: str, custom_proxy: str) -> Optional[str]:
+    direct = _resolve_aiohttp_proxy(proxy_mode, custom_proxy)
+    if direct is not None or (proxy_mode or "").lower() != "system":
+        return direct
+    settings = await SystemSettingsDAO.get_proxy_settings()
+    for key in (
+        "proxy_https",
+        "proxy_http",
+        "https_proxy",
+        "http_proxy",
+        "all_proxy",
+    ):
+        val = settings.get(key) or settings.get(key.upper())
+        if val:
+            return val.strip()
+    return None
+
+
+@router.post("/api-configs/{config_id}/test")
+async def admin_test_api_config(config_id: str):
+    _require_db()
+    row = await ApiConfigDAO.get_by_id(config_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Config not found")
+    key = await ApiConfigDAO.get_decrypted_key(config_id)
+    if not key:
+        return {
+            "success": True,
+            "test": {
+                "ok": False,
+                "status_code": None,
+                "error": "No API key configured",
+                "url": None,
+            },
+        }
+
+    endpoint = (row.get("endpoint") or "").rstrip("/")
+    hdrs_raw = _jsonb_to_python(row.get("headers")) or {}
+    headers: Dict[str, str] = {}
+    if isinstance(hdrs_raw, dict):
+        headers = {str(k): str(v) for k, v in hdrs_raw.items()}
+    if "Authorization" not in headers and "authorization" not in headers:
+        headers["Authorization"] = f"Bearer {key}"
+
+    proxy = await _resolve_proxy_for_request(
+        str(row.get("proxy_mode") or "direct"),
+        str(row.get("custom_proxy") or ""),
+    )
+    timeout = aiohttp.ClientTimeout(total=20)
+    urls_to_try = [endpoint]
+    if endpoint:
+        if not endpoint.endswith("/models"):
+            urls_to_try.append(f"{endpoint}/models")
+            urls_to_try.append(f"{endpoint}/v1/models")
+
+    last_error: Optional[str] = None
+    last_status: Optional[int] = None
+    tried_url: Optional[str] = None
+
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for url in urls_to_try:
+                if not url:
+                    continue
+                tried_url = url
+                try:
+                    async with session.get(
+                        url, headers=headers, proxy=proxy, allow_redirects=True
+                    ) as resp:
+                        last_status = resp.status
+                        if resp.status < 500:
+                            return {
+                                "success": True,
+                                "test": {
+                                    "ok": True,
+                                    "status_code": resp.status,
+                                    "url": url,
+                                    "error": None,
+                                },
+                            }
+                        last_error = f"HTTP {resp.status}"
+                except aiohttp.ClientError as e:
+                    last_error = str(e)
+    except Exception as e:
+        logger.exception("api-config test failed")
+        return {
+            "success": True,
+            "test": {
+                "ok": False,
+                "status_code": last_status,
+                "error": str(e),
+                "url": tried_url,
+            },
+        }
+
+    return {
+        "success": True,
+        "test": {
+            "ok": False,
+            "status_code": last_status,
+            "error": last_error or "Request failed",
+            "url": tried_url,
+        },
+    }
+
+
+# --- System settings ---
+
+
+class SettingsUpdateBody(BaseModel):
+    settings: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/settings")
+async def admin_get_settings():
+    _require_db()
+    rows = await SystemSettingsDAO.get_all()
+    return {"success": True, "settings": [_row_to_jsonable(r) for r in rows]}
+
+
+@router.put("/settings")
+async def admin_put_settings(body: SettingsUpdateBody):
+    _require_db()
+    for key, value in body.settings.items():
+        skey = str(key)
+        sval = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+        await SystemSettingsDAO.set(skey, sval, "")
+    rows = await SystemSettingsDAO.get_all()
+    return {"success": True, "settings": [_row_to_jsonable(r) for r in rows]}
+
+
+# --- Dashboard ---
+
+
+@router.get("/dashboard")
+async def admin_dashboard():
+    _require_db()
+    agents = await AgentDAO.list_all()
+    agents_total = len(agents)
+    agents_online = sum(
+        1
+        for a in agents
+        if str(a.get("status", "")).lower() == "online"
+        and bool(a.get("enabled", True))
+    )
+
+    instances_total = 0
+    instances_healthy = 0
+    for a in agents:
+        if not bool(a.get("enabled", True)):
+            continue
+        for inst in _parse_comfyui_instances(a.get("comfyui_instances")):
+            instances_total += 1
+            if _instance_healthy(inst):
+                instances_healthy += 1
+
+    queue_stats = await TaskDAO.get_stats()
+    recent = await TaskDAO.get_recent(20)
+
+    return {
+        "success": True,
+        "dashboard": {
+            "agents_online": agents_online,
+            "agents_total": agents_total,
+            "instances_healthy": instances_healthy,
+            "instances_total": instances_total,
+            "queue_stats": queue_stats,
+            "recent_tasks": [_row_to_jsonable(t) for t in recent],
+        },
+    }
+
+
+@router.post("/tasks/cleanup")
+async def cleanup_stale_tasks(hours: int = 24):
+    """清理超时的僵尸任务（pending/queued/processing 超过指定小时数）"""
+    _require_db()
+    cleaned = await TaskDAO.cleanup_stale(hours)
+    return {"success": True, "cleaned": cleaned}
+
+
+# ============================================
+# 2026-05-26 Slice 2: 积分规则 CRUD
+# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
+# ============================================
+from dao_credit import CreditRuleDAO  # noqa: E402
+
+
+class CreditRuleCreateBody(BaseModel):
+    feature_key: str
+    feature_name: str
+    base_cost: int
+    billing_unit: str = 'task'
+    factors: List[Dict[str, Any]] = Field(default_factory=list)
+    min_cost: int = 0
+    max_cost: Optional[int] = None
+    enabled: bool = True
+    rule_version: Optional[str] = None
+    description: str = ''
+
+
+class CreditRuleUpdateBody(BaseModel):
+    feature_key: Optional[str] = None
+    feature_name: Optional[str] = None
+    base_cost: Optional[int] = None
+    billing_unit: Optional[str] = None
+    factors: Optional[List[Dict[str, Any]]] = None
+    min_cost: Optional[int] = None
+    max_cost: Optional[int] = None
+    enabled: Optional[bool] = None
+    rule_version: Optional[str] = None
+    description: Optional[str] = None
+
+
+@router.get("/credit-rules", dependencies=[Depends(require_admin)])
+async def admin_list_credit_rules():
+    _require_db()
+    rules = await CreditRuleDAO.list_all()
+    return {"success": True, "rules": rules}
+
+
+@router.post("/credit-rules", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
+async def admin_create_credit_rule(body: CreditRuleCreateBody, request: Request):
+    _require_db()
+    rule = await CreditRuleDAO.create(
+        feature_key=body.feature_key,
+        feature_name=body.feature_name,
+        base_cost=body.base_cost,
+        billing_unit=body.billing_unit,
+        factors=body.factors,
+        min_cost=body.min_cost,
+        max_cost=body.max_cost,
+        enabled=body.enabled,
+        rule_version=body.rule_version,
+        description=body.description,
+    )
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='credit_rule_create', target_type='credit_rule',
+        target_id=rule.get('rule_id') if isinstance(rule, dict) else None,
+        after=body.dict(),
+    )
+    return {"success": True, "rule": rule}
+
+
+@router.put("/credit-rules/{rule_id}", dependencies=[Depends(require_admin)])
+async def admin_update_credit_rule(rule_id: str, body: CreditRuleUpdateBody, request: Request):
+    _require_db()
+    before = await CreditRuleDAO.get(rule_id)
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    rule = await CreditRuleDAO.update(rule_id, fields)
+    if not rule:
+        raise HTTPException(status_code=404, detail="规则不存在")
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='credit_rule_update', target_type='credit_rule', target_id=rule_id,
+        before=before if isinstance(before, dict) else None,
+        after=fields,
+    )
+    return {"success": True, "rule": rule}
+
+
+@router.delete("/credit-rules/{rule_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_credit_rule(rule_id: str, request: Request):
+    _require_db()
+    before = await CreditRuleDAO.get(rule_id)
+    await CreditRuleDAO.delete(rule_id)
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='credit_rule_delete', target_type='credit_rule', target_id=rule_id,
+        before=before if isinstance(before, dict) else None,
+    )
+    return {"success": True}
+
+
+# ============================================
+# 2026-05-26 Slice 4: 用户管理 + 项目分组
+# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
+# ============================================
+from dao_user import UserDAO  # noqa: E402
+from dao_project_group import ProjectGroupDAO  # noqa: E402
+
+
+class AdminUserCreateBody(BaseModel):
+    username: str
+    password: str
+    email: Optional[str] = None
+    role: str = 'user'
+
+
+class AdminUserUpdateBody(BaseModel):
+    email: Optional[str] = None
+    role: Optional[str] = None
+    plan_tier: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class AdminDisableBody(BaseModel):
+    reason: Optional[str] = None
+
+
+class AdminResetPasswordBody(BaseModel):
+    new_password: str
+
+
+class AdminPermissionsBody(BaseModel):
+    permissions: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/users", dependencies=[Depends(require_admin)])
+async def admin_list_users(
+    keyword: Optional[str] = None,
+    role: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    _require_db()
+    limit = max(1, min(int(limit), 500))
+    offset = max(0, int(offset))
+    users = await UserDAO.admin_list_users(
+        keyword=keyword, role=role, status_filter=status_filter,
+        limit=limit, offset=offset,
+    )
+    total = await UserDAO.admin_count_users(
+        keyword=keyword, role=role, status_filter=status_filter,
+    )
+    # 2026-05-26：转换为前端 UserAccount 形状（permissions 兜底 + camelCase）
+    return {"success": True, "users": [_normalize_admin_user(u) for u in users], "total": total, "limit": limit, "offset": offset}
+
+
+@router.post("/users", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
+async def admin_create_user(body: AdminUserCreateBody, request: Request):
+    _require_db()
+    existing = await UserDAO.get_user_by_username(body.username)
+    if existing:
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    user = await UserDAO.create_user(
+        username=body.username, password=body.password, email=body.email,
+    )
+    if body.role and body.role != 'user':
+        await UserDAO.set_role(user['user_id'], body.role)
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='user_create', target_type='user',
+        target_id=user.get('user_id') if isinstance(user, dict) else None,
+        after={'username': body.username, 'email': body.email, 'role': body.role},
+    )
+    return {"success": True, "user": _row_to_jsonable(user)}
+
+
+@router.get("/users/{user_id}", dependencies=[Depends(require_admin)])
+async def admin_get_user(user_id: str):
+    _require_db()
+    user = await UserDAO.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    # 取流式更详细的视图
+    db = get_db_manager()
+    try:
+        row = await db.fetchrow(
+            """
+            SELECT user_id, username, email, avatar_url, role, status,
+                   disabled_reason, disabled_at, disabled_by, plan_tier,
+                   storage_quota_gb, used_storage_bytes, created_at, last_login_at,
+                   is_active, permissions
+            FROM users WHERE user_id = $1
+            """,
+            user_id,
+        )
+        if row:
+            user = dict(row)
+    except Exception:
+        pass
+    # 2026-05-26：与 admin_list_users 保持同一形状
+    return {"success": True, "user": _normalize_admin_user(user)}
+
+
+@router.put("/users/{user_id}", dependencies=[Depends(require_admin)])
+async def admin_update_user(user_id: str, body: AdminUserUpdateBody, request: Request):
+    _require_db()
+    user = await UserDAO.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if 'role' in fields:
+        await UserDAO.set_role(user_id, fields.pop('role'))
+    if fields:
+        await UserDAO.update_user_profile(user_id, **fields)
+    # 2026-05-26 Slice 5: 审计
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='user_update', target_type='user', target_id=user_id,
+        before=user, after=body.dict(exclude_none=True),
+    )
+    return {"success": True}
+
+
+@router.post("/users/{user_id}/disable", dependencies=[Depends(require_admin)])
+async def admin_disable_user(user_id: str, body: AdminDisableBody, request: Request):
+    _require_db()
+    user = await UserDAO.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    ok = await UserDAO.set_status(user_id, 'disabled', disabled_reason=body.reason or '管理员禁用')
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='user_disable', target_type='user', target_id=user_id,
+        before={'status': user.get('status') if isinstance(user, dict) else None},
+        after={'status': 'disabled', 'reason': body.reason},
+        notes=body.reason or '',
+    )
+    return {"success": ok}
+
+
+@router.post("/users/{user_id}/enable", dependencies=[Depends(require_admin)])
+async def admin_enable_user(user_id: str, request: Request):
+    _require_db()
+    user = await UserDAO.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    ok = await UserDAO.set_status(user_id, 'active')
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='user_enable', target_type='user', target_id=user_id,
+        before={'status': user.get('status') if isinstance(user, dict) else None},
+        after={'status': 'active'},
+    )
+    return {"success": ok}
+
+
+@router.post("/users/{user_id}/reset-password", dependencies=[Depends(require_admin)])
+async def admin_reset_password(user_id: str, body: AdminResetPasswordBody, request: Request):
+    _require_db()
+    if not body.new_password or len(body.new_password) < 4:
+        raise HTTPException(status_code=400, detail="new_password 太短")
+    ok = await UserDAO.reset_password(user_id, body.new_password)
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='user_reset_password', target_type='user', target_id=user_id,
+    )
+    return {"success": ok}
+
+
+@router.put("/users/{user_id}/permissions", dependencies=[Depends(require_admin)])
+async def admin_update_permissions(user_id: str, body: AdminPermissionsBody, request: Request):
+    _require_db()
+    ok = await UserDAO.update_user_permissions(user_id, body.permissions)
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='user_update_permissions', target_type='user', target_id=user_id,
+        after={'permissions': body.permissions},
+    )
+    return {"success": ok}
+
+
+# ============================================
+# 项目分组
+# ============================================
+class ProjectGroupCreateBody(BaseModel):
+    user_id: str
+    group_name: str
+    description: str = ''
+    color: Optional[str] = None
+    sort_order: int = 0
+
+
+class ProjectGroupUpdateBody(BaseModel):
+    group_name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class ProjectMoveBody(BaseModel):
+    group_id: Optional[str] = None  # None 移出分组
+
+
+@router.get("/project-groups", dependencies=[Depends(require_admin)])
+async def admin_list_project_groups(
+    user_id: Optional[str] = None,
+    org_id: Optional[str] = None,
+):
+    """2026-05-26 Slice 3 加 org_id 过滤。"""
+    _require_db()
+    if user_id:
+        groups = await ProjectGroupDAO.list_for_user(user_id)
+    else:
+        groups = await ProjectGroupDAO.list_all()
+    if org_id:
+        groups = [g for g in groups if (g.get('organization_id') if isinstance(g, dict) else None) == org_id]
+    return {"success": True, "groups": [_row_to_jsonable(g) for g in groups]}
+
+
+@router.post("/project-groups", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
+async def admin_create_project_group(body: ProjectGroupCreateBody, request: Request):
+    _require_db()
+    # 2026-05-26：归属用户必须存在（FK→users.user_id），否则 PostgreSQL 抛 FK violation。
+    # 早些版本没 catch → 500 裸抛，前端只能拿到无意义 stack。这里改成 400 + 中文提示。
+    target_user = await UserDAO.get_user_by_id(body.user_id)
+    if not target_user:
+        raise HTTPException(status_code=400, detail=f"归属用户不存在：{body.user_id}")
+    if not body.group_name or not body.group_name.strip():
+        raise HTTPException(status_code=400, detail="分组名称不能为空")
+    try:
+        group = await ProjectGroupDAO.create(
+            user_id=body.user_id, group_name=body.group_name.strip(),
+            description=body.description or '', color=body.color, sort_order=body.sort_order or 0,
+        )
+    except Exception as e:
+        msg = str(e)
+        if 'foreign key' in msg.lower() or 'violates' in msg.lower():
+            raise HTTPException(status_code=400, detail=f"创建分组失败（外键约束）：{msg}")
+        raise HTTPException(status_code=500, detail=f"创建分组失败：{msg}")
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='project_group_create', target_type='project_group',
+        target_id=group.get('group_id') if isinstance(group, dict) else None,
+        after=body.dict(),
+    )
+    return {"success": True, "group": _row_to_jsonable(group)}
+
+
+@router.put("/project-groups/{group_id}", dependencies=[Depends(require_admin)])
+async def admin_update_project_group(group_id: str, body: ProjectGroupUpdateBody, request: Request):
+    _require_db()
+    before = await ProjectGroupDAO.get(group_id)
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    group = await ProjectGroupDAO.update(group_id, fields)
+    if not group:
+        raise HTTPException(status_code=404, detail="分组不存在")
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='project_group_update', target_type='project_group', target_id=group_id,
+        before=_row_to_jsonable(before) if before else None,
+        after=fields,
+    )
+    return {"success": True, "group": _row_to_jsonable(group)}
+
+
+@router.delete("/project-groups/{group_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_project_group(group_id: str, request: Request):
+    _require_db()
+    before = await ProjectGroupDAO.get(group_id)
+    await ProjectGroupDAO.delete(group_id)
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='project_group_delete', target_type='project_group', target_id=group_id,
+        before=_row_to_jsonable(before) if before else None,
+    )
+    return {"success": True}
+
+
+@router.post("/projects/{project_id}/move", dependencies=[Depends(require_admin)])
+async def admin_move_project(project_id: str, body: ProjectMoveBody, request: Request):
+    _require_db()
+    await ProjectGroupDAO.move_project(project_id, body.group_id)
+    import admin_audit_service
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='project_move', target_type='project', target_id=project_id,
+        after={'group_id': body.group_id},
+    )
+    return {"success": True}
+
+
+# ============================================
+# 2026-05-26 Slice 5: 管理员素材库 / 积分账户 / 积分流水 / 审计日志
+# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/05-admin-media-credit-audit.md
+# ============================================
+from dao_media_library import MediaLibraryDAO  # noqa: E402
+from dao_credit import CreditAccountDAO, CreditTransactionDAO  # noqa: E402
+from dao_admin_audit import AdminAuditLogDAO  # noqa: E402
+import admin_audit_service  # noqa: E402
+import credit_service  # noqa: E402
+
+
+@router.get("/media-library/items", dependencies=[Depends(require_admin)])
+async def admin_list_media_items(
+    user_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    item_type: Optional[str] = None,
+    source: Optional[str] = None,
+    keyword: Optional[str] = None,
+    is_deleted: Optional[bool] = False,
+    limit: int = 50,
+    offset: int = 0,
+):
+    _require_db()
+    items = await MediaLibraryDAO.list_admin(
+        user_id=user_id,
+        project_id=project_id,
+        item_type=item_type,
+        source=source,
+        keyword=keyword,
+        is_deleted=is_deleted,
+        limit=limit,
+        offset=offset,
+    )
+    return {"success": True, "items": [_row_to_jsonable(it) for it in items]}
+
+
+class AdminMediaUpdateBody(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    permission_scope: Optional[str] = None
+    is_favorite: Optional[bool] = None
+
+
+@router.patch("/media-library/items/{library_item_id}", dependencies=[Depends(require_admin)])
+async def admin_update_media_item(
+    library_item_id: str,
+    body: AdminMediaUpdateBody,
+    request: Request,
+):
+    _require_db()
+    before = await MediaLibraryDAO.get(library_item_id)
+    if not before:
+        raise HTTPException(status_code=404, detail="素材不存在")
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if fields:
+        await MediaLibraryDAO.update(library_item_id, fields)
+    after = await MediaLibraryDAO.get(library_item_id)
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='media_update', target_type='media_library_item', target_id=library_item_id,
+        before=_row_to_jsonable(before), after=fields,
+    )
+    return {"success": True, "item": _row_to_jsonable(after)}
+
+
+@router.delete("/media-library/items/{library_item_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_media_item(
+    library_item_id: str,
+    request: Request,
+    reason: Optional[str] = None,
+):
+    _require_db()
+    item = await MediaLibraryDAO.get(library_item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="素材不存在")
+    admin_id = admin_audit_service.caller_admin_id(request)
+    reason = reason or '管理员删除'
+    await MediaLibraryDAO.soft_delete(library_item_id, deleted_by=admin_id, deleted_reason=reason)
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_id,
+        action='media_delete', target_type='media_library_item', target_id=library_item_id,
+        before=_row_to_jsonable(item),
+        after={'deleted_by': admin_id, 'deleted_reason': reason},
+        notes=reason,
+    )
+    return {"success": True}
+
+
+@router.get("/credit-accounts", dependencies=[Depends(require_admin)])
+async def admin_list_credit_accounts(limit: int = 50, offset: int = 0, search: Optional[str] = None):
+    _require_db()
+    rows = await CreditAccountDAO.list_all(limit=limit, offset=offset, search=search)
+    return {"success": True, "accounts": [_row_to_jsonable(r) for r in rows]}
+
+
+class AdminCreditAdjustBody(BaseModel):
+    delta: int  # 正/负，单位：积分（最小单位）
+    reason: str = ''
+    business_id: Optional[str] = None
+
+
+@router.post("/credit-accounts/{user_id}/adjust", dependencies=[Depends(require_admin)])
+async def admin_credit_adjust(user_id: str, body: AdminCreditAdjustBody, request: Request):
+    _require_db()
+    admin_id = admin_audit_service.caller_admin_id(request)
+    # user_id → account_id（自动创建账户）
+    account = await CreditAccountDAO.get_or_create(owner_type='user', owner_id=user_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="无法定位用户账户")
+    try:
+        result = await credit_service.admin_adjust(
+            account_id=account['account_id'],
+            amount=int(body.delta),
+            reason=body.reason or '',
+            operator=admin_id,
+            feature_key=body.business_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_id,
+        action='credit_adjust', target_type='credit_account', target_id=user_id,
+        after={'delta': body.delta, 'reason': body.reason, 'business_id': body.business_id, 'account_id': account['account_id']},
+        notes=body.reason or '',
+    )
+    return {"success": True, **(result or {})}
+
+
+@router.get("/credit-transactions", dependencies=[Depends(require_admin)])
+async def admin_list_credit_transactions(
+    user_id: Optional[str] = None,
+    tx_type: Optional[str] = None,
+    operated_by: Optional[str] = None,
+    business_type: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    _require_db()
+    rows = await CreditTransactionDAO.list_admin(
+        user_id=user_id,
+        tx_type=tx_type,
+        operated_by=operated_by,
+        business_type=business_type,
+        limit=limit,
+        offset=offset,
+    )
+    return {"success": True, "transactions": [_row_to_jsonable(r) for r in rows]}
+
+
+@router.get("/audit-logs", dependencies=[Depends(require_admin)])
+async def admin_list_audit_logs(
+    admin_user_id: Optional[str] = None,
+    action: Optional[str] = None,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+    from_dt: Optional[str] = None,
+    to_dt: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    _require_db()
+    rows = await AdminAuditLogDAO.list(
+        admin_user_id=admin_user_id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        from_dt=from_dt,
+        to_dt=to_dt,
+        limit=limit,
+        offset=offset,
+    )
+    return {"success": True, "logs": [_row_to_jsonable(r) for r in rows]}
+
+
+# ============================================
+# 2026-05-26 组织管理 MVP — Slice 2: Admin Org CRUD + Members
+# 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.1
+# ============================================
+from dao_organization import OrganizationDAO, OrganizationMemberDAO  # noqa: E402
+
+
+class OrganizationCreateBody(BaseModel):
+    name: str
+    owner_user_id: str
+    description: str = ''
+    color: Optional[str] = None
+
+
+class OrganizationUpdateBody(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None       # active | archived
+    color: Optional[str] = None
+    owner_user_id: Optional[str] = None
+
+
+class OrganizationMemberAddBody(BaseModel):
+    user_id: str
+    role: str = 'member'               # owner | admin | member
+
+
+class OrganizationMemberRoleBody(BaseModel):
+    role: str                          # owner | admin | member
+
+
+@router.get("/organizations", dependencies=[Depends(require_admin)])
+async def admin_list_organizations(
+    status: Optional[str] = None,
+    keyword: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    _require_db()
+    rows = await OrganizationDAO.list_all(
+        status=status, keyword=keyword, limit=limit, offset=offset,
+    )
+    total = await OrganizationDAO.count_all(status=status, keyword=keyword)
+    return {
+        "success": True,
+        "organizations": [_row_to_jsonable(r) for r in rows],
+        "total": total,
+    }
+
+
+@router.post("/organizations", status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(require_admin)])
+async def admin_create_organization(body: OrganizationCreateBody, request: Request):
+    _require_db()
+    if not body.name or not body.name.strip():
+        raise HTTPException(status_code=400, detail="组织名称不能为空")
+    target_user = await UserDAO.get_user_by_id(body.owner_user_id)
+    if not target_user:
+        raise HTTPException(status_code=400, detail=f"owner 用户不存在：{body.owner_user_id}")
+    try:
+        org = await OrganizationDAO.create(
+            name=body.name.strip(),
+            owner_user_id=body.owner_user_id,
+            description=body.description or '',
+            color=body.color,
+            created_by=admin_audit_service.caller_admin_id(request),
+        )
+    except Exception as e:
+        msg = str(e)
+        if 'foreign key' in msg.lower() or 'violates' in msg.lower():
+            raise HTTPException(status_code=400, detail=f"创建组织失败（外键约束）：{msg}")
+        logger.exception("admin_create_organization 失败")
+        raise HTTPException(status_code=500, detail=f"创建组织失败：{msg}")
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='organization_create', target_type='organization',
+        target_id=org.get('org_id') if isinstance(org, dict) else None,
+        after=body.dict(),
+    )
+    return {"success": True, "organization": _row_to_jsonable(org)}
+
+
+@router.get("/organizations/{org_id}", dependencies=[Depends(require_admin)])
+async def admin_get_organization(org_id: str):
+    _require_db()
+    org = await OrganizationDAO.get(org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="组织不存在")
+    members = await OrganizationMemberDAO.list_members(org_id)
+    return {
+        "success": True,
+        "organization": _row_to_jsonable(org),
+        "members": [_row_to_jsonable(m) for m in members],
+    }
+
+
+@router.put("/organizations/{org_id}", dependencies=[Depends(require_admin)])
+async def admin_update_organization(org_id: str, body: OrganizationUpdateBody, request: Request):
+    _require_db()
+    before = await OrganizationDAO.get(org_id)
+    if not before:
+        raise HTTPException(status_code=404, detail="组织不存在")
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if 'owner_user_id' in fields:
+        target = await UserDAO.get_user_by_id(fields['owner_user_id'])
+        if not target:
+            raise HTTPException(status_code=400, detail="新 owner 用户不存在")
+        # 自动把新 owner 加成员（role=owner）
+        await OrganizationMemberDAO.add_member(
+            org_id, fields['owner_user_id'], role='owner',
+            added_by=admin_audit_service.caller_admin_id(request),
+        )
+    try:
+        org = await OrganizationDAO.update(org_id, fields)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='organization_update', target_type='organization', target_id=org_id,
+        before=_row_to_jsonable(before), after=fields,
+    )
+    return {"success": True, "organization": _row_to_jsonable(org)}
+
+
+@router.delete("/organizations/{org_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_organization(org_id: str, request: Request):
+    _require_db()
+    before = await OrganizationDAO.get(org_id)
+    if not before:
+        raise HTTPException(status_code=404, detail="组织不存在")
+    await OrganizationDAO.delete(org_id)
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='organization_delete', target_type='organization', target_id=org_id,
+        before=_row_to_jsonable(before),
+    )
+    return {"success": True}
+
+
+@router.get("/organizations/{org_id}/members", dependencies=[Depends(require_admin)])
+async def admin_list_members(org_id: str):
+    _require_db()
+    org = await OrganizationDAO.get(org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="组织不存在")
+    members = await OrganizationMemberDAO.list_members(org_id)
+    return {"success": True, "members": [_row_to_jsonable(m) for m in members]}
+
+
+@router.post("/organizations/{org_id}/members", status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(require_admin)])
+async def admin_add_member(org_id: str, body: OrganizationMemberAddBody, request: Request):
+    _require_db()
+    org = await OrganizationDAO.get(org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="组织不存在")
+    user = await UserDAO.get_user_by_id(body.user_id)
+    if not user:
+        raise HTTPException(status_code=400, detail=f"用户不存在：{body.user_id}")
+    try:
+        member = await OrganizationMemberDAO.add_member(
+            org_id, body.user_id, role=body.role,
+            added_by=admin_audit_service.caller_admin_id(request),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='organization_member_add', target_type='organization', target_id=org_id,
+        after={'user_id': body.user_id, 'role': body.role},
+    )
+    return {"success": True, "member": _row_to_jsonable(member)}
+
+
+@router.delete("/organizations/{org_id}/members/{user_id}",
+               dependencies=[Depends(require_admin)])
+async def admin_remove_member(org_id: str, user_id: str, request: Request):
+    _require_db()
+    org = await OrganizationDAO.get(org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="组织不存在")
+    if org.get('owner_user_id') == user_id:
+        raise HTTPException(status_code=400, detail="不能删除 owner，请先转让 owner 角色")
+    await OrganizationMemberDAO.remove_member(org_id, user_id)
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='organization_member_remove', target_type='organization', target_id=org_id,
+        before={'user_id': user_id},
+    )
+    return {"success": True}
+
+
+@router.put("/organizations/{org_id}/members/{user_id}/role",
+            dependencies=[Depends(require_admin)])
+async def admin_set_member_role(org_id: str, user_id: str,
+                                body: OrganizationMemberRoleBody, request: Request):
+    _require_db()
+    org = await OrganizationDAO.get(org_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="组织不存在")
+    try:
+        member = await OrganizationMemberDAO.set_role(org_id, user_id, body.role)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not member:
+        raise HTTPException(status_code=404, detail="该用户不是组织成员")
+    await admin_audit_service.record(
+        request,
+        admin_user_id=admin_audit_service.caller_admin_id(request),
+        action='organization_member_set_role', target_type='organization', target_id=org_id,
+        after={'user_id': user_id, 'role': body.role},
+    )
+    return {"success": True, "member": _row_to_jsonable(member)}
+
+# 用户自服务端点 `/api/me/organizations` 见 cluster_main.py:list_my_organizations

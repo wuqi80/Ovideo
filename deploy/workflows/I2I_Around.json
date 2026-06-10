@@ -1,0 +1,31 @@
+{
+  "_comment": "I2I_Around工作流 - 全景角度生成，占位符: {prompt}, {image}, {seed}",
+  "placeholder_info": {
+    "prompt": "角度描述提示词",
+    "image": "输入图像文件名（ComfyUI input目录中的文件名）",
+    "seed": "随机种子（-1表示随机）"
+  },
+  "1": {
+    "inputs": {
+      "image": "{image}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像 - 输入图片"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "Around",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像 - 全景输出"
+    }
+  }
+}
+

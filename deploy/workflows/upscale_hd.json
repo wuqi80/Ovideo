@@ -1,0 +1,58 @@
+{
+  "1": {
+    "inputs": {
+      "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+      "seed": "{seed_0}",
+      "new_resolution": 1088,
+      "batch_size": 125,
+      "preserve_vram": 1,
+      "images": [
+        "10",
+        0
+      ],
+      "block_swap_config": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "SeedVR2",
+    "_meta": {
+      "title": "SeedVR2 Video Upscaler"
+    }
+  },
+  "9": {
+    "inputs": {
+      "blocks_to_swap": 20,
+      "use_non_blocking": true,
+      "offload_io_components": false,
+      "cache_model": false,
+      "enable_debug": false
+    },
+    "class_type": "SeedVR2BlockSwap",
+    "_meta": {
+      "title": "SeedVR2 BlockSwap Config"
+    }
+  },
+  "10": {
+    "inputs": {
+      "image": "{image}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "11": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  }
+}

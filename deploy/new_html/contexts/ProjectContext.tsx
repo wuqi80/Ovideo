@@ -1,0 +1,116 @@
+/**
+ * 项目上下文
+ * 在项目工作区内提供当前项目信息、成员列表和权限检查
+ */
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import type { ProjectInfo, ProjectMember, ProjectRole } from '../types';
+import { getHeaders } from '../services/apiService';
+
+const API_BASE = '';
+
+interface ProjectContextValue {
+    projectId: string;
+    project: ProjectInfo | null;
+    members: ProjectMember[];
+    myRole: ProjectRole | null;
+    loading: boolean;
+    error: string | null;
+    reload: () => Promise<void>;
+}
+
+const ProjectContext = createContext<ProjectContextValue>({
+    projectId: '',
+    project: null,
+    members: [],
+    myRole: null,
+    loading: true,
+    error: null,
+    reload: async () => {}
+});
+
+export const useProject = () => useContext(ProjectContext);
+
+export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { projectId } = useParams<{ projectId: string }>();
+    const [project, setProject] = useState<ProjectInfo | null>(null);
+    const [members, setMembers] = useState<ProjectMember[]>([]);
+    const [myRole, setMyRole] = useState<ProjectRole | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const currentUserId = localStorage.getItem('username') || '';
+
+    const loadProject = useCallback(async () => {
+        if (!projectId) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+                headers: getHeaders()
+            });
+            if (!res.ok) {
+                if (res.status === 403) throw new Error('无权访问此项目');
+                if (res.status === 404) throw new Error('项目不存在');
+                throw new Error(`加载项目失败 (${res.status})`);
+            }
+            const data = await res.json();
+            if (data.success) {
+                const p = data.project;
+                const tags = typeof p.tags === 'string' ? JSON.parse(p.tags) : (p.tags || []);
+                setProject({
+                    projectId: p.project_id,
+                    projectName: p.project_name,
+                    description: p.description || '',
+                    coverUrl: p.cover_url,
+                    tags,
+                    ownerId: p.user_id,
+                    ownerName: '',
+                    memberCount: data.members?.length || 0,
+                    isArchived: p.is_archived,
+                    createdAt: new Date(p.created_at).getTime(),
+                    updatedAt: new Date(p.updated_at).getTime(),
+                    lastAccessedAt: p.last_accessed_at ? new Date(p.last_accessed_at).getTime() : undefined
+                });
+
+                if (data.members) {
+                    const mapped: ProjectMember[] = data.members.map((m: any) => ({
+                        id: `${m.project_id}_${m.user_id}`,
+                        projectId: m.project_id,
+                        userId: m.user_id,
+                        username: m.username,
+                        avatarUrl: m.avatar_url,
+                        role: m.role,
+                        responsibility: m.responsibility,
+                        joinedAt: new Date(m.joined_at).getTime()
+                    }));
+                    setMembers(mapped);
+                    const me = mapped.find(m => m.userId === currentUserId);
+                    setMyRole(me?.role || null);
+                }
+            }
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [projectId, currentUserId]);
+
+    useEffect(() => {
+        loadProject();
+    }, [loadProject]);
+
+    return (
+        <ProjectContext.Provider value={{
+            projectId: projectId || '',
+            project,
+            members,
+            myRole,
+            loading,
+            error,
+            reload: loadProject
+        }}>
+            {children}
+        </ProjectContext.Provider>
+    );
+};

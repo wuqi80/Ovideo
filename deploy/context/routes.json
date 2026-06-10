@@ -1,0 +1,1278 @@
+[
+  {
+    "path": "/api/cluster/nodes",
+    "file": "deploy/new_html/components/AdminPage.tsx"
+  },
+  {
+    "path": "/api/logout",
+    "file": "deploy/new_html/components/Header.tsx"
+  },
+  {
+    "path": "${getApiBaseUrl()}/api/tasks?limit=100",
+    "file": "deploy/new_html/components/HistoryPage.tsx"
+  },
+  {
+    "path": "${getApiBaseUrl()}/api/tasks?status=processing,queued&limit=20",
+    "file": "deploy/new_html/components/HistoryPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects?include_archived=${showArchived}",
+    "file": "deploy/new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects",
+    "file": "deploy/new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "deploy/new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/archive",
+    "file": "deploy/new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/unarchive",
+    "file": "deploy/new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "deploy/new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}/clear-video-tasks",
+    "file": "deploy/new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "deploy/new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}/clear-video-tasks",
+    "file": "deploy/new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "deploy/new_html/contexts/ProjectContext.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "deploy/new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "deploy/new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}",
+    "file": "deploy/new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${editingId}",
+    "file": "deploy/new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/save",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/list",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/export-to-video",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/comfyui/upload",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/materials/process",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members/${memberUserId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members/${memberUserId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/tasks/active",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications/unread-count",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications?${params}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications/${notificationId}/read",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications/read-all",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards?project_id=${projectId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards/${boardId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards/${boardId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards/${boardId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/nodes",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/nodes/${nodeId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/nodes/${nodeId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/connections",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/connections/${connectionId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users/create",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users/${userId}/permissions",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users/${userId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/logs?limit=${limit}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/stats",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/assets${qs}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets/${assetId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets/${assetId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items${qs}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/storyboard-items/${itemId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/storyboard-items/${itemId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items/all${qs}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items/reorder",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/video-segments",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/video-segments",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/video-segments/${segmentId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/audio-tracks",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/audio-tracks",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio-tracks/${trackId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio/generate-speech",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio/generate-sfx",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio/generate-music",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/script",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/script",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts/${scriptId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts/${scriptId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/timeline-tracks",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/timeline-tracks",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/timeline-tracks/${trackId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/character-voices",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/character-voices",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/character-voices/${voiceId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/character-voices/${voiceId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items/batch",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/extract-to-assets",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets/${assetId}/share",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voice-design",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voice-clone",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voices/${voiceId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voices/${voiceId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/tts",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/tts/${taskId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/music",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/lyrics",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/files/upload",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/files/${fileId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/files/${fileId}",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/export-script",
+    "file": "deploy/new_html/services/apiService.ts"
+  },
+  {
+    "path": "/api/deepseek/chat",
+    "file": "deploy/new_html/services/deepseekService.ts"
+  },
+  {
+    "path": "/api/materials/doubao",
+    "file": "deploy/new_html/services/doubaoService.ts"
+  },
+  {
+    "path": "/api/entity-files?${params}",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/user-files?${params}",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/${fileId}/select",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/${fileId}",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/${fileId}/hard",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/hard-delete-batch",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/link",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/upload",
+    "file": "deploy/new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/gemini/image",
+    "file": "deploy/new_html/services/geminiImageService.ts"
+  },
+  {
+    "path": "/api/gemini/text",
+    "file": "deploy/new_html/services/geminiProxyService.ts"
+  },
+  {
+    "path": "/api/generate/angle-adjust",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/human-multi-angle",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/around-angle",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/image",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/comfyui-workflow",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/task/${taskId}",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/matting",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/image-fusion",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/panorama-360",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/panorama-fusion",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/auto-storyboard",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/multi-grid-storyboard",
+    "file": "deploy/new_html/services/geminiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/generate",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/generate",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/generate",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/task/${taskId}",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/tasks?limit=${limit}",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/task/${taskId}/delete",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/workspace/save-session",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/workspace/load-session${params}",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/video/crop",
+    "file": "deploy/new_html/services/videoService.ts"
+  },
+  {
+    "path": "${this.baseURL}/api/upload",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/comfyui/upload",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/generate",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/save-task",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/tasks",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/save-session",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/load-session",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/generate",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/task/${taskId}",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/upload/audio",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/video/crop",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/tasks?limit=${limit}",
+    "file": "deploy/static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/login",
+    "file": "deploy/static/js/auth.js"
+  },
+  {
+    "path": "${this.baseURL}/api/logout",
+    "file": "deploy/static/js/auth.js"
+  },
+  {
+    "path": "${this.baseURL}/api/user/info",
+    "file": "deploy/static/js/auth.js"
+  },
+  {
+    "path": "${API.baseURL}/api/task/${taskId}/delete",
+    "file": "deploy/static/js/ui.js"
+  },
+  {
+    "path": "${API.baseURL}/api/task/${taskId}/delete",
+    "file": "deploy/static/js/ui.js"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "deploy/static/js/workspace.js"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "deploy/static/js/workspace.js"
+  },
+  {
+    "path": "/api/projects/${projectId}/clear-video-tasks",
+    "file": "deploy/static/js/workspace.js"
+  },
+  {
+    "path": "${API.baseURL}/api/upload",
+    "file": "deploy/static/js/workspace.js"
+  },
+  {
+    "path": "${API.baseURL}/api/upload",
+    "file": "deploy/static/js/workspace.js"
+  },
+  {
+    "path": "/api/cluster/nodes",
+    "file": "new_html/components/AdminPage.tsx"
+  },
+  {
+    "path": "/api/logout",
+    "file": "new_html/components/Header.tsx"
+  },
+  {
+    "path": "${getApiBaseUrl()}/api/tasks?limit=100",
+    "file": "new_html/components/HistoryPage.tsx"
+  },
+  {
+    "path": "${getApiBaseUrl()}/api/tasks?status=processing,queued&limit=20",
+    "file": "new_html/components/HistoryPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects?include_archived=${showArchived}",
+    "file": "new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects",
+    "file": "new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/archive",
+    "file": "new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/unarchive",
+    "file": "new_html/components/ProjectHub.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}/clear-video-tasks",
+    "file": "new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "/api/projects/${projectId}/clear-video-tasks",
+    "file": "new_html/components/VideoPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "new_html/contexts/ProjectContext.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}",
+    "file": "new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${editingId}",
+    "file": "new_html/pages/EpisodeHubPage.tsx"
+  },
+  {
+    "path": "${API_BASE}/api/projects/save",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/list",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/export-to-video",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/comfyui/upload",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/materials/process",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members/${memberUserId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/members/${memberUserId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/tasks/active",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications/unread-count",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications?${params}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications/${notificationId}/read",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/notifications/read-all",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/episodes",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards?project_id=${projectId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards/${boardId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards/${boardId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/boards/${boardId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/nodes",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/nodes/${nodeId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/nodes/${nodeId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/connections",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/canvas/connections/${connectionId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users/create",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users/${userId}/permissions",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/users/${userId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/logs?limit=${limit}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/admin/stats",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/assets${qs}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets/${assetId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets/${assetId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items${qs}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/storyboard-items/${itemId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/storyboard-items/${itemId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items/all${qs}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items/reorder",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/video-segments",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/video-segments",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/video-segments/${segmentId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/audio-tracks",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/audio-tracks",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio-tracks/${trackId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio/generate-speech",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio/generate-sfx",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/audio/generate-music",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/script",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/script",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts/${scriptId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/scripts/${scriptId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/timeline-tracks",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/timeline-tracks",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/timeline-tracks/${trackId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/projects/${projectId}/character-voices",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/character-voices",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/character-voices/${voiceId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/character-voices/${voiceId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/storyboard-items/batch",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/extract-to-assets",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/assets/${assetId}/share",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voice-design",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voice-clone",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voices/${voiceId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/voices/${voiceId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/tts",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/tts/${taskId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/music",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/lyrics",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/files/upload",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/files/${fileId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/minimax/files/${fileId}",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/episodes/${episodeId}/export-script",
+    "file": "new_html/services/apiService.ts"
+  },
+  {
+    "path": "/api/deepseek/chat",
+    "file": "new_html/services/deepseekService.ts"
+  },
+  {
+    "path": "/api/materials/doubao",
+    "file": "new_html/services/doubaoService.ts"
+  },
+  {
+    "path": "/api/entity-files?${params}",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/user-files?${params}",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/${fileId}/select",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/${fileId}",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/${fileId}/hard",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/hard-delete-batch",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/link",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/entity-files/upload",
+    "file": "new_html/services/entityFileService.ts"
+  },
+  {
+    "path": "/api/gemini/image",
+    "file": "new_html/services/geminiImageService.ts"
+  },
+  {
+    "path": "/api/gemini/text",
+    "file": "new_html/services/geminiProxyService.ts"
+  },
+  {
+    "path": "/api/generate/angle-adjust",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/human-multi-angle",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/around-angle",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/image",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/comfyui-workflow",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/task/${taskId}",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/matting",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/image-fusion",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/panorama-360",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/panorama-fusion",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/auto-storyboard",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "/api/generate/multi-grid-storyboard",
+    "file": "new_html/services/geminiService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/generate",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/generate",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/generate",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/task/${taskId}",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/tasks?limit=${limit}",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/task/${taskId}/delete",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/workspace/save-session",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/workspace/load-session${params}",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE}/api/video/crop",
+    "file": "new_html/services/videoService.ts"
+  },
+  {
+    "path": "${API_BASE_URL}/api/login",
+    "file": "new_html1/services/api.ts"
+  },
+  {
+    "path": "${API_BASE_URL}/api/comfyui/upload",
+    "file": "new_html1/services/api.ts"
+  },
+  {
+    "path": "${API_BASE_URL}/api/generate",
+    "file": "new_html1/services/api.ts"
+  },
+  {
+    "path": "${API_BASE_URL}/api/task/${taskId}",
+    "file": "new_html1/services/api.ts"
+  },
+  {
+    "path": "${API_BASE_URL}/api/tasks?limit=${limit}",
+    "file": "new_html1/services/api.ts"
+  },
+  {
+    "path": "${this.baseURL}/api/upload",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/comfyui/upload",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/generate",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/save-task",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/tasks",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/save-session",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/workspace/load-session",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/generate",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/task/${taskId}",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/upload/audio",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/video/crop",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/tasks?limit=${limit}",
+    "file": "static/js/api.js"
+  },
+  {
+    "path": "${this.baseURL}/api/login",
+    "file": "static/js/auth.js"
+  },
+  {
+    "path": "${this.baseURL}/api/logout",
+    "file": "static/js/auth.js"
+  },
+  {
+    "path": "${this.baseURL}/api/user/info",
+    "file": "static/js/auth.js"
+  },
+  {
+    "path": "${API.baseURL}/api/task/${taskId}/delete",
+    "file": "static/js/ui.js"
+  },
+  {
+    "path": "${API.baseURL}/api/task/${taskId}/delete",
+    "file": "static/js/ui.js"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "static/js/workspace.js"
+  },
+  {
+    "path": "/api/projects/${projectId}",
+    "file": "static/js/workspace.js"
+  },
+  {
+    "path": "/api/projects/${projectId}/clear-video-tasks",
+    "file": "static/js/workspace.js"
+  },
+  {
+    "path": "${API.baseURL}/api/upload",
+    "file": "static/js/workspace.js"
+  },
+  {
+    "path": "${API.baseURL}/api/upload",
+    "file": "static/js/workspace.js"
+  }
+]

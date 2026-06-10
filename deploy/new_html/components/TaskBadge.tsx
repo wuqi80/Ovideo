@@ -1,0 +1,58 @@
+// new_html/components/TaskBadge.tsx
+//
+// 2026-05-20 (Task System Overhaul M1)：per-page 任务指示器。
+// 显示在 WorkflowLayout 侧栏导航项的右上角。
+// - 含 running 任务 → blue 脉冲圆点 + 数字
+// - 仅 queued / pending → amber 圆点 + 数字
+// - 0 个活跃任务 → 不渲染（不占空间）
+//
+// 设计：精确仪表台美学（参考 Linear / Things 3） — 克制 + 状态色窄域 + tabular-nums
+
+import React from 'react';
+import type { SourcePage } from '../types';
+import { useTaskManager } from '../contexts/TaskContext';
+
+export interface TaskBadgeProps {
+    page: SourcePage;
+    /** 是否禁用脉冲动画（accessibility 优先；默认遵循 prefers-reduced-motion） */
+    disablePulse?: boolean;
+    /** 仅显示数字而不显示圆点（紧凑模式） */
+    compact?: boolean;
+}
+
+export const TaskBadge: React.FC<TaskBadgeProps> = ({ page, disablePulse, compact }) => {
+    const { summaryByPage } = useTaskManager();
+    const summary = summaryByPage[page];
+
+    if (!summary) return null;
+    const total = summary.running + summary.queued + summary.pending;
+    if (total === 0) return null;
+
+    const hasRunning = summary.running > 0;
+    const dotColor = hasRunning ? 'bg-blue-400' : 'bg-amber-400';
+    const ringColor = hasRunning ? 'bg-blue-400/40' : 'bg-amber-400/40';
+    const textColor = hasRunning ? 'text-blue-300' : 'text-amber-300';
+    const shouldPulse = hasRunning && !disablePulse;
+
+    return (
+        <span
+            className="inline-flex items-center gap-1 ml-1 align-middle"
+            role="status"
+            aria-label={`${total} 个任务${hasRunning ? '运行中' : '排队中'}`}
+        >
+            {!compact && (
+                <span className="relative inline-flex w-2 h-2">
+                    {shouldPulse && (
+                        <span
+                            className={`absolute inset-0 rounded-full ${ringColor} animate-ping motion-reduce:hidden`}
+                        />
+                    )}
+                    <span className={`relative inline-block w-2 h-2 rounded-full ${dotColor}`} />
+                </span>
+            )}
+            <span className={`text-[10px] font-semibold tabular-nums leading-none ${textColor}`}>
+                {total}
+            </span>
+        </span>
+    );
+};

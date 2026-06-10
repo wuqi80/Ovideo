@@ -1,0 +1,19 @@
+{
+  "_comment": "360度全景生成工作流 - 占位符文件，具体实现由用户填写",
+  "_placeholders": {
+    "image": "{image}",
+    "prompt": "{prompt}",
+    "seed": "{seed}"
+  },
+  "placeholder_node": {
+    "inputs": {
+      "image": "{image}",
+      "prompt": "{prompt}",
+      "seed": "{seed}"
+    },
+    "class_type": "PlaceholderNode",
+    "_meta": {
+      "title": "360度全景生成 - 请替换为实际工作流"
+    }
+  }
+}

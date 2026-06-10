@@ -1,0 +1,976 @@
+/**
+ * MediaLibraryPage.tsx
+ * 2026-05-26 Slice 1 — 通用素材库页面（项目级）
+ *
+ * 路由: /projects/:projectId/media-library
+ *
+ * 布局:
+ *  - 顶部工具栏: 上传 / 批量下载 / 视图切换 / 筛选
+ *  - 左侧分类: 全部 / 我的 / 项目共享 / 视频 / 抽帧 / 收藏
+ *  - 主区: 网格 / 列表
+ *  - 右侧详情面板（选中时）
+ *
+ * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Upload, Download, Star, StarOff, Trash2, Eye, RefreshCw, Filter,
+  Grid as GridIcon, List as ListIcon, Image as ImageIcon, Film, Music, FileText,
+  Search, Folder, FolderPlus, FolderOpen, ChevronRight, ChevronDown, Pencil, X as XIcon,
+} from 'lucide-react';
+import {
+  listMediaItems,
+  uploadMediaItem,
+  updateMediaItem,
+  deleteMediaItem,
+  batchDownloadMediaItems,
+  listMediaFolders,
+  createMediaFolder,
+  updateMediaFolder,
+  deleteMediaFolder,
+  MediaLibraryItem,
+  MediaItemType,
+  PermissionScope,
+  MediaFolder,
+} from '../services/mediaLibraryService';
+import { buildFolderTree, flattenForSelect, type FolderNode } from '../utils/mediaFolderTree';
+import ShareResourceDialog from '../components/ShareResourceDialog';
+import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
+
+type CategoryKey = 'all' | 'mine' | 'shared' | 'image' | 'video' | 'audio' | 'frame' | 'favorite';
+
+const CATEGORIES: { key: CategoryKey; label: string; icon: React.ReactNode }[] = [
+  { key: 'all',      label: '全部素材',    icon: <Grid size={14} /> },
+  { key: 'mine',     label: '我的',         icon: <ImageIcon size={14} /> },
+  { key: 'shared',   label: '项目共享',     icon: <Eye size={14} /> },
+  { key: 'image',    label: '图片',         icon: <ImageIcon size={14} /> },
+  { key: 'video',    label: '视频',         icon: <Film size={14} /> },
+  { key: 'audio',    label: '音频',         icon: <Music size={14} /> },
+  { key: 'frame',    label: '抽帧素材',     icon: <Film size={14} /> },
+  { key: 'favorite', label: '收藏',         icon: <Star size={14} /> },
+];
+
+function Grid({ size = 14 }: { size?: number }) {
+  return <GridIcon size={size} />;
+}
+
+function formatBytes(n?: number) {
+  if (!n && n !== 0) return '-';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+const SCOPE_LABEL: Record<PermissionScope, string> = {
+  private: '私有',
+  project: '项目共享',
+  team: '团队共享',
+  public_link: '公开',
+};
+
+export const MediaLibraryPage: React.FC = () => {
+  const { projectId } = useParams<{ projectId: string }>();
+  const navigate = useNavigate();
+  const myUserId = localStorage.getItem('username') || '';
+
+  const [items, setItems] = useState<MediaLibraryItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [category, setCategory] = useState<CategoryKey>('all');
+  const [keyword, setKeyword] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // 2026-05-26 组织管理 MVP — Slice 4: 共享对话框
+  const [shareTarget, setShareTarget] = useState<MediaLibraryItem | null>(null);
+  // 2026-05-26 组织管理 MVP — Slice 5: 上传 visibility
+  const orgId = useCurrentOrgId();
+  const { isOrgWorkspace, currentName } = useWorkspace();
+  const [uploadVisibility, setUploadVisibility] = useState<'private' | 'org-default'>('private');
+  useEffect(() => {
+    setUploadVisibility(isOrgWorkspace ? 'org-default' : 'private');
+  }, [isOrgWorkspace]);
+
+  // ── 2026-05-30 文件夹（人物 / 场景 / 道具 …）──
+  // selectedFolderId: null = 全部, '__unfiled__' = 未归类, 其它 = 具体文件夹
+  const [folders, setFolders] = useState<MediaFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [uploadTargetFolderId, setUploadTargetFolderId] = useState<string>('');
+
+  // 切到某个真实文件夹时，上传目标默认跟随当前文件夹
+  useEffect(() => {
+    if (selectedFolderId && selectedFolderId !== '__unfiled__') setUploadTargetFolderId(selectedFolderId);
+    else setUploadTargetFolderId('');
+  }, [selectedFolderId]);
+
+  const folderTree = useMemo(() => buildFolderTree(folders), [folders]);
+  const folderOptions = useMemo(() => flattenForSelect(folderTree), [folderTree]);
+
+  const loadFolders = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const resp = await listMediaFolders(projectId);
+      setFolders(resp.folders || []);
+    } catch (e: any) {
+      // 文件夹加载失败不致命，仅记录
+      console.warn('加载素材文件夹失败:', e?.message || e);
+    }
+  }, [projectId]);
+
+  useEffect(() => { loadFolders(); }, [loadFolders]);
+
+  const selected = useMemo(
+    () => items.find(i => i.library_item_id === selectedId) || null,
+    [items, selectedId],
+  );
+
+  const reload = useCallback(async () => {
+    if (!projectId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const params: any = { project_id: projectId, limit: 200 };
+      switch (category) {
+        case 'mine':
+          params.permission_scope = 'private';
+          break;
+        case 'shared':
+          params.permission_scope = 'project';
+          break;
+        case 'image':
+          params.item_type = 'image';
+          break;
+        case 'video':
+          params.item_type = 'video';
+          break;
+        case 'audio':
+          params.item_type = 'audio';
+          break;
+        case 'frame':
+          params.source = 'video_reverse_frame';
+          break;
+        case 'favorite':
+          params.is_favorite = true;
+          break;
+      }
+      if (keyword.trim()) params.keyword = keyword.trim();
+      if (selectedFolderId) params.folder_id = selectedFolderId;
+      const resp = await listMediaItems(params);
+      setItems(resp.items || []);
+      setTotal(resp.total || 0);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, category, keyword, selectedFolderId]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const handleFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !projectId) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const uploadFolderId = uploadTargetFolderId || undefined;
+      for (const f of files) {
+        await uploadMediaItem(f, {
+          projectId,
+          permissionScope: 'project',  // 默认项目共享，方便组员看到
+          title: f.name,
+          visibility: uploadVisibility,
+          orgId: uploadVisibility === 'org-default' ? (orgId || undefined) : undefined,
+          folderId: uploadFolderId,
+        });
+      }
+      await reload();
+    } catch (err: any) {
+      setError(err?.message || String(err));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const toggleCheck = (id: string) => {
+    setChecked(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleBatchDownload = async () => {
+    if (!checked.size) return;
+    try {
+      const blob = await batchDownloadMediaItems(Array.from(checked));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `media_library_${projectId}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const handleToggleFavorite = async (item: MediaLibraryItem) => {
+    try {
+      const res = await updateMediaItem(item.library_item_id, { is_favorite: !item.is_favorite });
+      setItems(prev => prev.map(i => i.library_item_id === item.library_item_id ? res.item : i));
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const handleChangeScope = async (item: MediaLibraryItem, scope: PermissionScope) => {
+    try {
+      const res = await updateMediaItem(item.library_item_id, { permission_scope: scope });
+      setItems(prev => prev.map(i => i.library_item_id === item.library_item_id ? res.item : i));
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const handleDelete = async (item: MediaLibraryItem) => {
+    if (!confirm(`确定从素材库移除 "${item.title || item.file_name || item.library_item_id}" 吗？\n（文件本体不会被删除）`)) return;
+    try {
+      await deleteMediaItem(item.library_item_id);
+      setItems(prev => prev.filter(i => i.library_item_id !== item.library_item_id));
+      if (selectedId === item.library_item_id) setSelectedId(null);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  // ── 文件夹操作 ──
+  const handleCreateFolder = async (parentFolderId: string | null) => {
+    if (!projectId) return;
+    const name = window.prompt(parentFolderId ? '新建子文件夹名称（如：主角 / 反派）' : '新建文件夹名称（如：人物 / 场景 / 道具）');
+    if (!name || !name.trim()) return;
+    try {
+      await createMediaFolder({ project_id: projectId, name: name.trim(), parent_folder_id: parentFolderId });
+      await loadFolders();
+      if (parentFolderId) setExpandedFolders(prev => new Set(prev).add(parentFolderId));
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const handleRenameFolder = async (folder: MediaFolder) => {
+    const name = window.prompt('重命名文件夹', folder.name);
+    if (!name || !name.trim() || name.trim() === folder.name) return;
+    try {
+      await updateMediaFolder(folder.folder_id, { name: name.trim() });
+      await loadFolders();
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const handleDeleteFolder = async (folder: MediaFolder) => {
+    if (!confirm(`删除文件夹 "${folder.name}"？\n其子文件夹会一并删除；夹内素材不会删除，只会变为「未归类」。`)) return;
+    try {
+      await deleteMediaFolder(folder.folder_id);
+      if (selectedFolderId === folder.folder_id) setSelectedFolderId(null);
+      await loadFolders();
+      await reload();
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
+  };
+
+  const moveItemToFolder = async (libraryItemId: string, folderId: string | null) => {
+    try {
+      await updateMediaItem(libraryItemId, { folder_id: folderId });
+      // 当前正在按文件夹筛选时，被移走的素材应从列表消失
+      if (selectedFolderId && selectedFolderId !== folderId &&
+          !(selectedFolderId === '__unfiled__' && folderId === null)) {
+        setItems(prev => prev.filter(i => i.library_item_id !== libraryItemId));
+      } else {
+        setItems(prev => prev.map(i => i.library_item_id === libraryItemId ? { ...i, folder_id: folderId } : i));
+      }
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setDragOverFolder(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
+      {/* 顶部工具栏 */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900">
+        <button
+          onClick={() => navigate(`/projects/${projectId}/episodes`)}
+          className="text-sm text-zinc-400 hover:text-zinc-100"
+        >
+          ← 返回项目
+        </button>
+        <div className="text-sm font-medium ml-2">素材库</div>
+        <div className="text-xs text-zinc-500">项目 {projectId}</div>
+
+        <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-800">
+            <Search size={14} className="text-zinc-500" />
+            <input
+              value={keyword}
+              onChange={e => setKeyword(e.target.value)}
+              placeholder="搜索素材..."
+              className="bg-transparent outline-none text-sm w-44"
+            />
+          </div>
+
+          <button
+            onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
+            className="p-2 rounded bg-zinc-800 hover:bg-zinc-700"
+            title="切换视图"
+          >
+            {view === 'grid' ? <ListIcon size={14} /> : <GridIcon size={14} />}
+          </button>
+
+          <button
+            onClick={reload}
+            className="p-2 rounded bg-zinc-800 hover:bg-zinc-700"
+            disabled={loading}
+            title="刷新"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+
+          <button
+            onClick={handleBatchDownload}
+            disabled={!checked.size}
+            className="flex items-center gap-1 px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-sm"
+            title="批量下载"
+          >
+            <Download size={14} />
+            <span>批量下载{checked.size ? ` (${checked.size})` : ''}</span>
+          </button>
+
+          {/* 2026-05-26 Slice 5: 上传 visibility 下拉 */}
+          <select
+            value={uploadVisibility}
+            onChange={e => setUploadVisibility(e.target.value as any)}
+            disabled={!isOrgWorkspace}
+            className="px-2 py-1.5 rounded bg-zinc-800 text-xs border border-zinc-700 disabled:opacity-50"
+            title={isOrgWorkspace ? '新上传素材的可见性' : '切到组织 workspace 才能选「对组可见」'}
+          >
+            <option value="private">🔒 私有</option>
+            <option value="org-default" disabled={!isOrgWorkspace}>
+              🌐 {isOrgWorkspace ? `对组可见 (${currentName})` : '对组可见 — 需切组织'}
+            </option>
+          </select>
+
+          {/* 上传目标文件夹选择 */}
+          <select
+            value={uploadTargetFolderId}
+            onChange={e => setUploadTargetFolderId(e.target.value)}
+            className="px-2 py-1.5 rounded bg-zinc-800 text-xs border border-zinc-700 max-w-[150px]"
+            title="上传到哪个文件夹"
+          >
+            <option value="">📂 未归类（不放入文件夹）</option>
+            {folderOptions.map(o => (
+              <option key={o.folder_id} value={o.folder_id}>
+                {`${'\u3000'.repeat(o.depth)}${o.name}`}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleUploadClick}
+            disabled={uploading}
+            className="flex items-center gap-1 px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-sm font-medium"
+          >
+            <Upload size={14} />
+            <span>{uploading ? '上传中…' : '上传素材'}</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*,audio/*"
+            className="hidden"
+            onChange={handleFileChosen}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* 左侧分类 + 文件夹 */}
+        <aside className="w-56 border-r border-zinc-800 bg-zinc-900 p-2 flex flex-col gap-1 overflow-y-auto">
+          {CATEGORIES.map(c => (
+            <button
+              key={c.key}
+              onClick={() => { setCategory(c.key); setSelectedId(null); }}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
+                category === c.key
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100'
+              }`}
+            >
+              {c.icon}
+              <span>{c.label}</span>
+            </button>
+          ))}
+
+          {/* ── 文件夹分类（人物 / 场景 / 道具 …）── */}
+          <div className="mt-3 pt-2 border-t border-zinc-800">
+            <div className="flex items-center justify-between px-2 mb-1">
+              <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">文件夹</span>
+              <button
+                onClick={() => handleCreateFolder(null)}
+                className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400"
+                title="新建文件夹"
+              >
+                <FolderPlus size={14} />
+              </button>
+            </div>
+
+            {/* 全部 / 未归类 伪条目（也是拖拽目标：拖到「未归类」=移出文件夹） */}
+            <button
+              onClick={() => { setSelectedFolderId(null); setSelectedId(null); }}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
+                selectedFolderId === null ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Folder size={14} />
+              <span>全部文件夹</span>
+            </button>
+            <button
+              onClick={() => { setSelectedFolderId('__unfiled__'); setSelectedId(null); }}
+              onDragOver={e => { e.preventDefault(); setDragOverFolder('__unfiled__'); }}
+              onDragLeave={() => setDragOverFolder(prev => prev === '__unfiled__' ? null : prev)}
+              onDrop={e => {
+                e.preventDefault();
+                const id = e.dataTransfer.getData('text/library-item-id');
+                if (id) moveItemToFolder(id, null);
+              }}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
+                dragOverFolder === '__unfiled__' ? 'ring-1 ring-emerald-500 bg-emerald-950/30' :
+                selectedFolderId === '__unfiled__' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Folder size={14} className="opacity-50" />
+              <span>未归类</span>
+            </button>
+
+            {folderTree.length === 0 ? (
+              <div className="px-2 py-2 text-[11px] text-zinc-600">
+                还没有文件夹，点击 <FolderPlus size={11} className="inline" /> 新建
+              </div>
+            ) : (
+              <div className="mt-0.5">
+                {folderTree.map(node => (
+                  <FolderTreeNode
+                    key={node.folder_id}
+                    node={node}
+                    depth={0}
+                    selectedFolderId={selectedFolderId}
+                    expanded={expandedFolders}
+                    dragOverFolder={dragOverFolder}
+                    onToggleExpand={fid => setExpandedFolders(prev => {
+                      const next = new Set(prev);
+                      next.has(fid) ? next.delete(fid) : next.add(fid);
+                      return next;
+                    })}
+                    onSelect={fid => { setSelectedFolderId(fid); setSelectedId(null); }}
+                    onCreateChild={fid => handleCreateFolder(fid)}
+                    onRename={handleRenameFolder}
+                    onDelete={handleDeleteFolder}
+                    onDragOverFolder={setDragOverFolder}
+                    onDropItem={(itemId, fid) => moveItemToFolder(itemId, fid)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-auto pt-3 border-t border-zinc-800 text-xs text-zinc-500 px-2">
+            共 {total} 个素材
+          </div>
+        </aside>
+
+        {/* 主区 */}
+        <main className="flex-1 overflow-auto p-4">
+          {error && (
+            <div className="mb-3 p-2 text-xs text-red-300 bg-red-950/50 border border-red-900 rounded">
+              {error}
+            </div>
+          )}
+
+          {loading && !items.length && (
+            <div className="text-center text-sm text-zinc-500 py-12">加载中…</div>
+          )}
+
+          {!loading && !items.length && (
+            <div className="text-center text-sm text-zinc-500 py-16">
+              <ImageIcon size={32} className="mx-auto mb-3 text-zinc-700" />
+              <div>暂无素材</div>
+              <div className="text-xs mt-1">点击右上角"上传素材"开始</div>
+            </div>
+          )}
+
+          {view === 'grid' ? (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+              {items.map(item => (
+                <MediaCard
+                  key={item.library_item_id}
+                  item={item}
+                  selected={selectedId === item.library_item_id}
+                  checked={checked.has(item.library_item_id)}
+                  onSelect={() => setSelectedId(item.library_item_id)}
+                  onToggleCheck={() => toggleCheck(item.library_item_id)}
+                  onToggleFavorite={() => handleToggleFavorite(item)}
+                  myUserId={myUserId}
+                />
+              ))}
+            </div>
+          ) : (
+            <MediaList
+              items={items}
+              selectedId={selectedId}
+              checked={checked}
+              onSelect={id => setSelectedId(id)}
+              onToggleCheck={toggleCheck}
+              onToggleFavorite={handleToggleFavorite}
+              myUserId={myUserId}
+            />
+          )}
+        </main>
+
+        {/* 右侧详情 */}
+        {selected && (
+          <aside className="w-80 border-l border-zinc-800 bg-zinc-900 overflow-auto">
+            <MediaDetailPanel
+              item={selected}
+              onClose={() => setSelectedId(null)}
+              onChangeScope={scope => handleChangeScope(selected, scope)}
+              onToggleFavorite={() => handleToggleFavorite(selected)}
+              onDelete={() => handleDelete(selected)}
+              onShare={() => setShareTarget(selected)}
+              folderOptions={folderOptions}
+              onMoveToFolder={fid => moveItemToFolder(selected.library_item_id, fid)}
+              myUserId={myUserId}
+            />
+          </aside>
+        )}
+      </div>
+
+      {shareTarget && (
+        <ShareResourceDialog
+          resourceType="media"
+          resourceId={shareTarget.library_item_id}
+          resourceName={shareTarget.title || shareTarget.file_name}
+          onClose={() => setShareTarget(null)}
+          onChange={() => reload()}
+        />
+      )}
+    </div>
+  );
+};
+
+
+// ============================================
+// 子组件
+// ============================================
+
+interface FolderTreeNodeProps {
+  node: FolderNode;
+  depth: number;
+  selectedFolderId: string | null;
+  expanded: Set<string>;
+  dragOverFolder: string | null;
+  onToggleExpand: (folderId: string) => void;
+  onSelect: (folderId: string) => void;
+  onCreateChild: (folderId: string) => void;
+  onRename: (folder: MediaFolder) => void;
+  onDelete: (folder: MediaFolder) => void;
+  onDragOverFolder: (folderId: string | null) => void;
+  onDropItem: (itemId: string, folderId: string) => void;
+}
+
+const FolderTreeNode: React.FC<FolderTreeNodeProps> = ({
+  node, depth, selectedFolderId, expanded, dragOverFolder,
+  onToggleExpand, onSelect, onCreateChild, onRename, onDelete,
+  onDragOverFolder, onDropItem,
+}) => {
+  const hasChildren = node.children.length > 0;
+  const isOpen = expanded.has(node.folder_id);
+  const isSelected = selectedFolderId === node.folder_id;
+  const isDragOver = dragOverFolder === node.folder_id;
+
+  return (
+    <div>
+      <div
+        onClick={() => onSelect(node.folder_id)}
+        onDragOver={e => { e.preventDefault(); onDragOverFolder(node.folder_id); }}
+        onDragLeave={() => onDragOverFolder(null)}
+        onDrop={e => {
+          e.preventDefault();
+          const id = e.dataTransfer.getData('text/library-item-id');
+          if (id) onDropItem(id, node.folder_id);
+        }}
+        style={{ paddingLeft: 8 + depth * 14 }}
+        className={`group/folder flex items-center gap-1 pr-1 py-1.5 rounded text-sm cursor-pointer ${
+          isDragOver ? 'ring-1 ring-emerald-500 bg-emerald-950/30' :
+          isSelected ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60'
+        }`}
+      >
+        <button
+          onClick={e => { e.stopPropagation(); if (hasChildren) onToggleExpand(node.folder_id); }}
+          className={`shrink-0 ${hasChildren ? 'text-zinc-400' : 'text-transparent pointer-events-none'}`}
+        >
+          {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+        {isOpen && hasChildren ? <FolderOpen size={14} className="shrink-0" /> : <Folder size={14} className="shrink-0" />}
+        <span className="truncate flex-1" title={node.name}>{node.name}</span>
+
+        <div className="hidden group-hover/folder:flex items-center gap-0.5 shrink-0">
+          <button onClick={e => { e.stopPropagation(); onCreateChild(node.folder_id); }} className="p-0.5 hover:text-emerald-400" title="新建子文件夹">
+            <FolderPlus size={12} />
+          </button>
+          <button onClick={e => { e.stopPropagation(); onRename(node); }} className="p-0.5 hover:text-blue-400" title="重命名">
+            <Pencil size={12} />
+          </button>
+          <button onClick={e => { e.stopPropagation(); onDelete(node); }} className="p-0.5 hover:text-red-400" title="删除文件夹">
+            <XIcon size={12} />
+          </button>
+        </div>
+      </div>
+
+      {isOpen && hasChildren && (
+        <div>
+          {node.children.map(child => (
+            <FolderTreeNode
+              key={child.folder_id}
+              node={child}
+              depth={depth + 1}
+              selectedFolderId={selectedFolderId}
+              expanded={expanded}
+              dragOverFolder={dragOverFolder}
+              onToggleExpand={onToggleExpand}
+              onSelect={onSelect}
+              onCreateChild={onCreateChild}
+              onRename={onRename}
+              onDelete={onDelete}
+              onDragOverFolder={onDragOverFolder}
+              onDropItem={onDropItem}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface MediaCardProps {
+  item: MediaLibraryItem;
+  selected: boolean;
+  checked: boolean;
+  onSelect: () => void;
+  onToggleCheck: () => void;
+  onToggleFavorite: () => void;
+  myUserId: string;
+}
+
+const MediaCard: React.FC<MediaCardProps> = ({
+  item, selected, checked, onSelect, onToggleCheck, onToggleFavorite, myUserId,
+}) => {
+  const isMine = item.user_id === myUserId;
+  const thumb = item.thumbnail_url || (item.item_type === 'image' ? item.file_url : null);
+
+  return (
+    <div
+      onClick={onSelect}
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('text/library-item-id', item.library_item_id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      className={`relative group rounded overflow-hidden border bg-zinc-900 cursor-pointer ${
+        selected ? 'border-emerald-500' : 'border-zinc-800 hover:border-zinc-700'
+      }`}
+    >
+      <div className="aspect-square bg-zinc-950 flex items-center justify-center overflow-hidden">
+        {thumb ? (
+          <img src={thumb} alt={item.title || item.file_name} className="w-full h-full object-cover" />
+        ) : item.item_type === 'video' ? (
+          <Film size={32} className="text-zinc-600" />
+        ) : item.item_type === 'audio' ? (
+          <Music size={32} className="text-zinc-600" />
+        ) : (
+          <FileText size={32} className="text-zinc-600" />
+        )}
+      </div>
+
+      <div className="px-2 py-1.5">
+        <div className="text-xs text-zinc-300 truncate flex items-center gap-1" title={item.title || item.file_name}>
+          <span className="truncate">{item.title || item.file_name || item.library_item_id}</span>
+          {/* 2026-05-26 Slice 5: visibility badge */}
+          {item.visibility && item.visibility !== 'private' && (
+            <span className="shrink-0 text-[9px] px-1 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-800/50">
+              🌐
+            </span>
+          )}
+        </div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+          <span>{SCOPE_LABEL[item.permission_scope] || item.permission_scope}</span>
+          <span>·</span>
+          <span>{item.item_type}</span>
+          {item.use_count > 0 && (
+            <>
+              <span>·</span>
+              <span>{item.use_count} 次引用</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="absolute top-1.5 left-1.5 opacity-0 group-hover:opacity-100"
+        onClick={e => { e.stopPropagation(); onToggleCheck(); }}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() => {}}
+          className="w-4 h-4 accent-emerald-500"
+        />
+      </div>
+
+      <button
+        onClick={e => { e.stopPropagation(); onToggleFavorite(); }}
+        className="absolute top-1.5 right-1.5 p-1 rounded bg-black/50 opacity-0 group-hover:opacity-100 hover:bg-black/70"
+        title={item.is_favorite ? '取消收藏' : '收藏'}
+      >
+        {item.is_favorite
+          ? <Star size={12} className="text-yellow-400" fill="currentColor" />
+          : <StarOff size={12} className="text-zinc-300" />}
+      </button>
+
+      {!isMine && (
+        <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 text-[10px] bg-blue-900/70 text-blue-200 rounded">
+          共享
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+const MediaList: React.FC<{
+  items: MediaLibraryItem[];
+  selectedId: string | null;
+  checked: Set<string>;
+  onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
+  onToggleFavorite: (item: MediaLibraryItem) => void;
+  myUserId: string;
+}> = ({ items, selectedId, checked, onSelect, onToggleCheck, onToggleFavorite, myUserId }) => (
+  <table className="w-full text-sm">
+    <thead className="text-xs text-zinc-500">
+      <tr className="border-b border-zinc-800">
+        <th className="w-8"></th>
+        <th className="text-left py-2 pr-2">名称</th>
+        <th className="text-left py-2 pr-2">类型</th>
+        <th className="text-left py-2 pr-2">来源</th>
+        <th className="text-left py-2 pr-2">大小</th>
+        <th className="text-left py-2 pr-2">权限</th>
+        <th className="text-left py-2 pr-2">引用</th>
+        <th className="w-8"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {items.map(item => {
+        const isMine = item.user_id === myUserId;
+        return (
+          <tr
+            key={item.library_item_id}
+            onClick={() => onSelect(item.library_item_id)}
+            draggable
+            onDragStart={e => {
+              e.dataTransfer.setData('text/library-item-id', item.library_item_id);
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            className={`border-b border-zinc-900 cursor-pointer ${
+              selectedId === item.library_item_id ? 'bg-zinc-800/50' : 'hover:bg-zinc-800/30'
+            }`}
+          >
+            <td onClick={e => { e.stopPropagation(); onToggleCheck(item.library_item_id); }} className="py-2 pl-1">
+              <input type="checkbox" checked={checked.has(item.library_item_id)} onChange={() => {}} className="w-3 h-3 accent-emerald-500" />
+            </td>
+            <td className="py-2 pr-2 text-zinc-200 truncate max-w-[260px]">
+              {item.title || item.file_name}
+              {item.visibility && item.visibility !== 'private' && (
+                <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-800/50">🌐</span>
+              )}
+            </td>
+            <td className="py-2 pr-2 text-zinc-400">{item.item_type}</td>
+            <td className="py-2 pr-2 text-zinc-400">{item.source}</td>
+            <td className="py-2 pr-2 text-zinc-400">{formatBytes(item.file_size_bytes)}</td>
+            <td className="py-2 pr-2 text-zinc-400">{SCOPE_LABEL[item.permission_scope] || item.permission_scope}{!isMine && ' (他人)'}</td>
+            <td className="py-2 pr-2 text-zinc-400">{item.use_count}</td>
+            <td className="py-2 pr-1">
+              <button onClick={e => { e.stopPropagation(); onToggleFavorite(item); }}>
+                {item.is_favorite
+                  ? <Star size={12} className="text-yellow-400" fill="currentColor" />
+                  : <StarOff size={12} className="text-zinc-500" />}
+              </button>
+            </td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+);
+
+
+const MediaDetailPanel: React.FC<{
+  item: MediaLibraryItem;
+  onClose: () => void;
+  onChangeScope: (scope: PermissionScope) => void;
+  onToggleFavorite: () => void;
+  onDelete: () => void;
+  onShare?: () => void;
+  folderOptions?: { folder_id: string; name: string; depth: number }[];
+  onMoveToFolder?: (folderId: string | null) => void;
+  myUserId: string;
+}> = ({ item, onClose, onChangeScope, onToggleFavorite, onDelete, onShare, folderOptions = [], onMoveToFolder, myUserId }) => {
+  const isMine = item.user_id === myUserId;
+  const isImage = item.item_type === 'image' || item.file_type === 'image';
+  const isVideo = item.item_type === 'video' || item.file_type === 'video';
+  const isAudio = item.item_type === 'audio' || item.file_type === 'audio';
+
+  return (
+    <div className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-medium truncate">{item.title || item.file_name}</div>
+        <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-sm">×</button>
+      </div>
+
+      <div className="rounded overflow-hidden bg-zinc-950 border border-zinc-800">
+        {isImage && item.file_url && (
+          <img src={item.file_url} alt={item.title || ''} className="w-full max-h-72 object-contain" />
+        )}
+        {isVideo && item.file_url && (
+          <video src={item.file_url} controls className="w-full max-h-72" />
+        )}
+        {isAudio && item.file_url && (
+          <audio src={item.file_url} controls className="w-full p-3" />
+        )}
+        {!isImage && !isVideo && !isAudio && (
+          <div className="p-6 text-center text-xs text-zinc-500">
+            <FileText size={24} className="mx-auto mb-2 text-zinc-700" />
+            无可用预览
+          </div>
+        )}
+      </div>
+
+      <dl className="text-xs space-y-1.5 text-zinc-400">
+        <Detail k="素材 ID" v={item.library_item_id} mono />
+        <Detail k="文件 ID" v={item.file_id} mono />
+        <Detail k="类型" v={item.item_type} />
+        <Detail k="来源" v={item.source} />
+        <Detail k="大小" v={formatBytes(item.file_size_bytes)} />
+        {item.width && item.height && <Detail k="分辨率" v={`${item.width} × ${item.height}`} />}
+        {item.duration_seconds && <Detail k="时长" v={`${item.duration_seconds.toFixed(1)} 秒`} />}
+        <Detail k="上传者" v={item.user_id} mono />
+        <Detail k="引用次数" v={String(item.use_count)} />
+        <Detail k="权限" v={SCOPE_LABEL[item.permission_scope] || item.permission_scope} />
+        <Detail k="创建" v={new Date(item.created_at).toLocaleString('zh-CN')} />
+      </dl>
+
+      {item.file_url && (
+        <div className="pt-2 border-t border-zinc-800">
+          <div className="text-xs text-zinc-500 mb-1">引用代码</div>
+          <code className="block text-[10px] bg-zinc-950 p-2 rounded border border-zinc-800 break-all">
+            asset_id="{item.library_item_id}"
+          </code>
+        </div>
+      )}
+
+      <div className="pt-2 border-t border-zinc-800 space-y-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggleFavorite}
+            className="flex-1 px-2 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700"
+          >
+            {item.is_favorite ? '取消收藏' : '加入收藏'}
+          </button>
+          {isMine && onShare && (
+            <button
+              onClick={onShare}
+              className="px-2 py-1.5 text-xs rounded bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-200"
+              title="共享给组织或项目"
+            >
+              共享
+            </button>
+          )}
+          {isMine && (
+            <button
+              onClick={onDelete}
+              className="px-2 py-1.5 text-xs rounded bg-red-900/40 hover:bg-red-900/70 text-red-200"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+
+        {isMine && (
+          <div>
+            <div className="text-xs text-zinc-500 mb-1">权限范围</div>
+            <select
+              value={item.permission_scope}
+              onChange={e => onChangeScope(e.target.value as PermissionScope)}
+              className="w-full text-xs px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded"
+            >
+              <option value="private">私有</option>
+              <option value="project">项目共享</option>
+            </select>
+          </div>
+        )}
+
+        {onMoveToFolder && (
+          <div>
+            <div className="text-xs text-zinc-500 mb-1">所在文件夹</div>
+            <select
+              value={item.folder_id || ''}
+              onChange={e => onMoveToFolder(e.target.value || null)}
+              className="w-full text-xs px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded"
+            >
+              <option value="">未归类</option>
+              {folderOptions.map(o => (
+                <option key={o.folder_id} value={o.folder_id}>
+                  {`${'\u3000'.repeat(o.depth)}${o.name}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+const Detail: React.FC<{ k: string; v: string; mono?: boolean }> = ({ k, v, mono }) => (
+  <div className="flex items-start">
+    <dt className="w-20 shrink-0 text-zinc-500">{k}</dt>
+    <dd className={`flex-1 break-all ${mono ? 'font-mono text-[10px]' : ''}`}>{v}</dd>
+  </div>
+);
+
+export default MediaLibraryPage;

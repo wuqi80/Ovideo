@@ -1,0 +1,5 @@
+{
+  "name": "MESSIAH - Storyboard AI",
+  "description": "A professional AI storyboard and video generation workspace featuring a modular React architecture. It enables users to manage image-to-video tasks, drag-and-drop assets, and visualize generation results in real-time.",
+  "requestFramePermissions": []
+}

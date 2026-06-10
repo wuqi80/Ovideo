@@ -1,0 +1,3785 @@
+
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, ReferenceType, GeneratedImage, FileVersion } from '../types';
+import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
+import { generateFinalIllustration, generateWithComfyUIWorkflowQueued, generateHumanMultiAngleQueued, generateAroundAngleQueued, adjustImageAngleQueued, getComfyUIQueueStatus, generateMattingQueued, generateImageFusionQueued, generatePanorama360Queued, generatePanoramaFusionQueued, generateAutoStoryboardQueued, generateMultiGridStoryboard, waitForComfyUITaskAllImages } from '../services/geminiService';
+// 2026-05-21：分镜页 GPT Image 2 系列 + 化神参数面板
+import { generateGptImage, type GptImageQuality } from '../services/gptImageService';
+import {
+  GPT_IMAGE_RATIO_OPTIONS,
+  GPT_IMAGE_K_OPTIONS,
+  GPT_IMAGE_QUALITY_OPTIONS,
+  GEMINI_NANO2_RATIO_OPTIONS,
+  GEMINI_NANO2_SIZE_OPTIONS,
+  type GptImageRatio,
+  type GptImageK,
+} from '../utils/gptImageSizeMap';
+import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/geminiService';
+import type { TaskKind } from '../types';
+import { MattingModal } from './MattingModal';
+import { ImageFusionModal } from './ImageFusionModal';
+import { StoryboardToolModal } from './StoryboardToolModal';
+import MultiAngle3DController from './MultiAngle3DController';
+import { generateThumbnail } from '../utils/imageOptimization';
+import { loadShotImages, clearImageCache, getAuthenticatedImageUrl, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache } from '../services/imageLoaderService';
+import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../services/taskRecovery';
+import { usePersistedPageState } from '../hooks/usePersistedPageState';
+
+interface GenerationPageProps {
+  files: ProjectFile[];
+  selectedFileId: string | null;
+  episodeId?: string;
+  materialLibrary: MaterialLibrary;
+  onUpdateStoryboardItem: (shotId: string, updates: Partial<StoryboardItem> | ((item: StoryboardItem) => Partial<StoryboardItem>)) => void;
+  onSaveVersion: (name: string) => void;
+  onRestoreVersion: (version: FileVersion) => void;
+  onDeleteVersion: (versionId: string) => void;
+  onForceSave: () => void;
+  onExportNext: (data: any) => void;
+  onImportProject: () => void;
+}
+
+export const GenerationPage: React.FC<GenerationPageProps> = ({
+  files,
+  selectedFileId,
+  episodeId,
+  materialLibrary,
+  onUpdateStoryboardItem,
+  onSaveVersion,
+  onRestoreVersion,
+  onDeleteVersion,
+  onForceSave,
+  onExportNext,
+  onImportProject
+}) => {
+  const queryClient = useQueryClient();
+  const selectedFile = files.find(f => f.id === selectedFileId);
+  // 2026-05-20 (Bug #3)：当前选中镜头持久化（按 episodeId scope）。刷新或切走再回都保持选中。
+  const [selectedShotId, setSelectedShotId] = usePersistedPageState<string | null>({
+    page: 'GenerationPage:selectedShotId',
+    episodeId,
+    version: 1,
+    defaultValue: null,
+  });
+  
+  // Batch Selection — 多选 Set 不持久化（运行时态，刷新清空合理）
+  const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set());
+  
+  // Configuration State
+  const [prompt, setPrompt] = useState<string>('');
+  const [references, setReferences] = useState<GenerationReference[]>([]);
+
+  // 2026-05-20 (Task System Overhaul M3)：构造传给 generateXxxQueued 的 registryMeta，
+  // 让铃铛 / TaskBadge / 跨页通知能感知该镜头正在生成。
+  const buildRegistryMeta = useCallback((
+    shot: StoryboardItem | null | undefined,
+    kind: TaskKind,
+    titlePrefix: string,
+  ): ComfyUITaskRegistryMeta => {
+    const projectId = (() => {
+      try { return localStorage.getItem('current_project_id') || undefined; } catch { return undefined; }
+    })();
+    const shotLabel = shot?.shotId || (shot?.id ? `#${String(shot.id).slice(0, 6)}` : '?');
+    return {
+      title: `${titlePrefix} · 镜头 ${shotLabel}`,
+      kind,
+      targetPage: 'generation',
+      targetEntityType: 'storyboard_item',
+      targetEntityId: shot?.id,
+      targetItemId: shot?.id,
+      targetProjectId: projectId,
+      episodeId,
+      fileRole: 'generated_image',
+    };
+  }, [episodeId]);
+
+  // 追踪用户是否手动修改了prompt（textarea onBlur 用来决定是否写回 shot.imagePrompt）
+  const userEditedPromptRef = useRef<boolean>(false);
+
+  // 2026-05-24 (Bug 1)：移除 filledShotIdsRef "只填充一次" 的优化。
+  // 那个 guard 让 effect 在第二次切回某个 shot 时直接 return，
+  // 导致 prompt state 留在上一个 shot 的值（"点 shot2 再回 shot1 时 prompt 仍是 shot2 的"）。
+  // 改为：每次 selectedShotId 变化，effect 都从 shot.imagePrompt / shot.configuredReferences
+  // 重新加载。textarea 的 onBlur 已经把用户编辑写回 shot，所以切换前的编辑不会丢。
+  useEffect(() => {
+    if (!selectedShotId || !selectedFile?.storyboard) return;
+
+    const shot = selectedFile.storyboard.items.find(s => s.id === selectedShotId);
+    if (!shot) return;
+
+    console.log('🔄 切换到镜头，重新加载数据:', selectedShotId);
+
+    // 填充提示词
+    setPrompt(shot.imagePrompt || '');
+    userEditedPromptRef.current = false;
+
+    // 🔧 修复：优先使用已保存的 configuredReferences
+    if (shot.configuredReferences && shot.configuredReferences.length > 0) {
+      console.log('🔍 恢复已保存的参考图片:', shot.configuredReferences.length);
+      setReferences([...shot.configuredReferences]);
+    } else if (shot.materialSelections && Object.keys(shot.materialSelections).length > 0) {
+      // 没有保存的参考图，尝试从素材绑定自动填充
+      console.log('🔍 自动填充绑定素材');
+      
+      const newRefs: GenerationReference[] = [];
+      const validTags = [...(shot.characters || [])];
+      if (shot.scene) validTags.push(shot.scene);
+      
+      Object.entries(shot.materialSelections).forEach(([tagName, materialId]) => {
+        if (newRefs.length >= 6) return;
+        if (!validTags.includes(tagName)) return;
+        
+        const libraryItems = materialLibrary[tagName] || [];
+        const mat = libraryItems.find(m => m.id === materialId);
+        if (mat) {
+          let type: ReferenceType = 'prop';
+          if (shot.characters && shot.characters.includes(tagName)) type = 'character';
+          else if (shot.scene === tagName) type = 'scene';
+
+          newRefs.push({
+            id: uuidv4(),
+            url: mat.url,
+            type: type,
+            name: tagName
+          });
+        }
+      });
+
+      setReferences(newRefs);
+    } else {
+      setReferences([]);
+    }
+  }, [selectedShotId]); // 🔧 只依赖 selectedShotId
+
+  // 🆕 自动保存参考图片到 storyboard item
+  // 使用 ref 追踪状态，避免循环保存
+  const isInitialLoadRef = useRef<boolean>(true);
+  const pendingSaveRef = useRef<{ shotId: string; refs: GenerationReference[] } | null>(null);
+  const lastSavedRefsRef = useRef<string>(''); // 追踪上次保存的内容，避免重复保存
+  
+  // 🔧 修复：实际执行保存的函数
+  const doSave = useCallback((shotId: string, refs: GenerationReference[]) => {
+    // 生成内容签名，避免重复保存相同内容
+    const signature = JSON.stringify(refs.map(r => r.url).sort());
+    if (signature === lastSavedRefsRef.current) {
+      return; // 内容没变，跳过保存
+    }
+    lastSavedRefsRef.current = signature;
+    console.log('💾 自动保存参考图片到镜头:', shotId, '数量:', refs.length);
+    onUpdateStoryboardItem(shotId, { configuredReferences: refs });
+    pendingSaveRef.current = null;
+  }, [onUpdateStoryboardItem]);
+  
+  useEffect(() => {
+    // 跳过初次加载
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      return;
+    }
+    
+    // 如果没有选中镜头，不保存
+    if (!selectedShotId) return;
+    
+    // 记录待保存的数据
+    pendingSaveRef.current = { shotId: selectedShotId, refs: [...references] };
+    
+    // 延迟保存，避免频繁更新
+    const timeoutId = setTimeout(() => {
+      if (pendingSaveRef.current) {
+        doSave(pendingSaveRef.current.shotId, pendingSaveRef.current.refs);
+      }
+    }, 1000); // 增加延迟到1秒
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [references, selectedShotId, doSave]);
+  
+  // 切换镜头时重置
+  useEffect(() => {
+    isInitialLoadRef.current = true;
+    lastSavedRefsRef.current = ''; // 重置保存签名
+  }, [selectedShotId]);
+
+  // 🆕 自动为已有素材生成缩略图（只在首次加载时执行一次）
+  const [thumbnailProcessed, setThumbnailProcessed] = useState<Set<string>>(new Set());
+  
+  useEffect(() => {
+    if (!selectedFile?.storyboard?.items) return;
+    
+    // 检查所有镜头中是否有需要生成缩略图的图片
+    selectedFile.storyboard.items.forEach(shot => {
+      if (!shot.generatedImages) return;
+      
+      // 只处理未处理过的镜头
+      if (thumbnailProcessed.has(shot.id)) return;
+      
+      const imagesToProcess = shot.generatedImages.filter(img => !img.thumbnail);
+      
+      if (imagesToProcess.length > 0) {
+        console.log(`🔄 镜头 ${shot.id}: 为 ${imagesToProcess.length} 张图片生成缩略图...`);
+        
+        // 标记为已处理（避免重复生成）
+        setThumbnailProcessed(prev => new Set(prev).add(shot.id));
+        
+        Promise.all(
+          imagesToProcess.map(async (img) => {
+            try {
+              const thumbnail = await generateThumbnail(img.url, 1024, 0.8);
+              return { id: img.id, thumbnail };
+            } catch (error) {
+              console.error('生成缩略图失败:', error);
+              return null;
+            }
+          })
+        ).then(results => {
+          const updates = results.filter(r => r !== null) as { id: string; thumbnail: string }[];
+          
+          if (updates.length > 0) {
+            const updatedImages = shot.generatedImages!.map(img => {
+              const update = updates.find(u => u.id === img.id);
+              return update ? { ...img, thumbnail: update.thumbnail } : img;
+            });
+            
+            onUpdateStoryboardItem(shot.id, {
+              generatedImages: updatedImages
+            });
+            
+            console.log(`✅ 镜头 ${shot.id}: 已为 ${updates.length} 张图片生成缩略图并保存`);
+          }
+        });
+      } else {
+        // 没有需要处理的图片，也标记为已处理
+        setThumbnailProcessed(prev => new Set(prev).add(shot.id));
+      }
+    });
+  }, [selectedFile?.id, selectedFile?.storyboard?.items?.length]); // 只在文件或镜头数量变化时触发
+  
+  const [generatingShotIds, setGeneratingShotIds] = useState<Set<string>>(new Set());
+  const [batchProgress, setBatchProgress] = useState<{current: number, total: number} | null>(null);
+  const isGenerating = generatingShotIds.size > 0;
+  const isCurrentShotGenerating = selectedShotId ? generatingShotIds.has(selectedShotId) : false;
+
+  // Version Control State
+  const [showHistory, setShowHistory] = useState(false);
+  const [isNamingVersion, setIsNamingVersion] = useState(false);
+  const [versionName, setVersionName] = useState('');
+
+  // Image Preview State
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isLoadingFullImage, setIsLoadingFullImage] = useState(false);
+  // 🆕 图片预览导航状态 - 用于左右切换
+  const [previewShotId, setPreviewShotId] = useState<string | null>(null);
+  const [previewImageId, setPreviewImageId] = useState<string | null>(null);
+  // 🔧 使用模块级缓存，不再使用本地state（页面切换后不丢失）
+  
+  // Camera Angle Adjustment State
+  const [cameraModalImage, setCameraModalImage] = useState<string | null>(null);
+  const [isAngleAdjusting, setIsAngleAdjusting] = useState(false);
+  
+  // 🆕 Human Multi-Angle Generation State
+  const [humanMultiAngleModalImage, setHumanMultiAngleModalImage] = useState<string | null>(null);
+  const [isHumanMultiAngleGenerating, setIsHumanMultiAngleGenerating] = useState(false);
+  
+  // 🆕 Around Angle (全景) Generation State
+  const [aroundAngleModalImage, setAroundAngleModalImage] = useState<string | null>(null);
+  const [isAroundAngleGenerating, setIsAroundAngleGenerating] = useState(false);
+
+  // 🆕 抠图 (Matting) State
+  const [mattingModalImage, setMattingModalImage] = useState<string | null>(null);
+  const [isMattingProcessing, setIsMattingProcessing] = useState(false);
+
+  // 🆕 融合 (Image Fusion) State
+  const [showFusionModal, setShowFusionModal] = useState(false);
+  const [isFusionProcessing, setIsFusionProcessing] = useState(false);
+
+  // 🆕 分镜工具 (Storyboard Tool) State
+  const [showStoryboardToolModal, setShowStoryboardToolModal] = useState(false);
+  const [isStoryboardToolProcessing, setIsStoryboardToolProcessing] = useState(false);
+  
+  // 🆕 Image Editor State
+  const [imageEditorData, setImageEditorData] = useState<{
+    imageUrl: string;
+    referenceId: string;  // 用于更新原图
+  } | null>(null);
+  
+  // 空槽上传状态
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
+  const [uploadMenuPosition, setUploadMenuPosition] = useState<{x: number, y: number} | null>(null);
+
+  // Generation Model State
+  // 2026-05-21：扩 type — 加 qwenN_lora（修历史漏洞，UI 早就在用但 type 没声明）
+  // + gpt_image_vip（天劫一阶 / gpt-image-2-vip）+ gpt_image_official（天劫二阶 / gpt-image-2 Sora2）
+  type GenerationModel =
+    | 'nanobanana'
+    | 'qwen'
+    | 'qwen_lora'
+    | 'kontext'
+    | 'qwenN'
+    | 'qwenN_lora'
+    | 'gpt_image_vip'
+    | 'gpt_image_official';
+  // 2026-05-20 (Bug #3)：模型选择持久化 — 切页 / 刷新都不丢用户偏好。
+  const [globalModel, setGlobalModel] = usePersistedPageState<GenerationModel>({
+    page: 'GenerationPage:globalModel',
+    episodeId,
+    version: 1,
+    defaultValue: 'qwen',
+  });
+  const [shotModels, setShotModels] = usePersistedPageState<Record<string, GenerationModel>>({
+    page: 'GenerationPage:shotModels',
+    episodeId,
+    version: 1,
+    defaultValue: {},
+  });
+
+  // 2026-05-21：化神 / 天劫一阶 / 天劫二阶 共享的图像参数（持久化偏好）
+  // 化神(nanobanana / gemini-3.1-flash) → 用 imageRatio + imageGeminiK
+  // 天劫一阶(gpt_image_vip / gpt-image-2-vip) → 用 imageRatio + imageK
+  // 天劫二阶(gpt_image_official / gpt-image-2)  → 用 imageRatio + imageK + imageQuality
+  // 'auto' 含义：天劫系列由上游自选；化神不接受 auto 故 UI 不暴露 auto。
+  const [imageRatio, setImageRatio] = usePersistedPageState<GptImageRatio>({
+    page: 'GenerationPage:imageRatio',
+    episodeId,
+    version: 1,
+    defaultValue: 'auto',
+  });
+  const [imageK, setImageK] = usePersistedPageState<GptImageK>({
+    page: 'GenerationPage:imageK',
+    episodeId,
+    version: 1,
+    defaultValue: 'auto',
+  });
+  const [geminiNano2Ratio, setGeminiNano2Ratio] = usePersistedPageState<string>({
+    page: 'GenerationPage:geminiNano2Ratio',
+    episodeId,
+    version: 1,
+    defaultValue: '16:9',
+  });
+  const [geminiNano2Size, setGeminiNano2Size] = usePersistedPageState<'1K' | '2K' | '4K'>({
+    page: 'GenerationPage:geminiNano2Size',
+    episodeId,
+    version: 1,
+    defaultValue: '2K',
+  });
+  const [imageQuality, setImageQuality] = usePersistedPageState<GptImageQuality>({
+    page: 'GenerationPage:imageQuality',
+    episodeId,
+    version: 1,
+    defaultValue: 'auto',
+  });
+  
+  // 2026-05-24 (Bug 1)：filledShotIdsRef 也一并移除——effect 已改成每次切 shot 都重新加载
+
+  // Resizable Sidebar State — 持久化（用户的视觉偏好）
+  const [sidebarWidth, setSidebarWidth] = usePersistedPageState<number>({
+    page: 'GenerationPage:sidebarWidth',
+    episodeId: 'global', // 宽度是全局偏好，不按剧集隔离
+    version: 1,
+    defaultValue: 260,
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  const resize = useCallback((mouseMoveEvent: MouseEvent) => {
+    if (isResizing) {
+        const newWidth = mouseMoveEvent.clientX;
+        if (newWidth >= 200 && newWidth <= 600) {
+            setSidebarWidth(newWidth);
+        }
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", resize);
+    window.addEventListener("mouseup", stopResizing);
+    return () => {
+        window.removeEventListener("mousemove", resize);
+        window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [resize, stopResizing]);
+
+  // Initialize first shot
+  useEffect(() => {
+      if (selectedFile?.storyboard?.items.length && !selectedShotId) {
+          setSelectedShotId(selectedFile.storyboard.items[0].id);
+      }
+  }, [selectedFile, selectedShotId]);
+
+
+  // 任务恢复：页面加载时检查 localStorage 中未完成的任务，恢复轮询
+  useEffect(() => {
+    const recoverTasks = async () => {
+      const tasks = getRecoverableTasks();
+      if (tasks.length === 0) return;
+      console.log(`🔄 发现 ${tasks.length} 个未完成的生成任务，开始恢复...`);
+      for (const task of tasks) {
+        try {
+          setGeneratingShotIds(prev => new Set(prev).add(task.shotId));
+          const urls = await waitForComfyUITaskAllImages(task.taskId);
+          removeRunningTask(task.taskId);
+
+          const newImages: GeneratedImage[] = (urls as GeneratedImageResult[])
+            .filter((r) => r.url)
+            .map((r) => ({
+              id: r.fileId || uuidv4(),
+              url: r.url,
+              thumbnail: r.url,
+              timestamp: Date.now(),
+              fileId: r.fileId || undefined,
+            }));
+
+          if (newImages.length > 0) {
+            onUpdateStoryboardItem(task.shotId, {
+              generatedImages: newImages,
+              selectedImageId: newImages[0].id,
+              generatedImage: newImages[0].url,
+            });
+            window.dispatchEvent(new CustomEvent('generation-save-trigger'));
+            console.log(`✅ 恢复任务完成: ${task.shotId}, ${newImages.length} 张图片`);
+          }
+        } catch (e) {
+          console.error(`❌ 恢复任务失败: ${task.taskId}`, e);
+          removeRunningTask(task.taskId);
+        } finally {
+          setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(task.shotId); return next; });
+        }
+      }
+    };
+    recoverTasks();
+  }, []); // only on mount
+
+  const renderHistoryPanel = () => (
+    <div className="absolute top-[52px] right-0 bottom-0 w-80 bg-gray-900 border-l border-gray-800 z-40 flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
+        <div className="p-3 border-b border-gray-800 flex items-center justify-between bg-gray-850">
+            <h3 className="text-xs font-bold text-gray-300 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-400" />
+                内部历史版本存档
+            </h3>
+            <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-white">
+                <X className="w-4 h-4" />
+            </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+            {selectedFile?.versions && selectedFile.versions.length > 0 ? (
+                [...selectedFile.versions].reverse().map(ver => (
+                    <div key={ver.id} className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 hover:bg-gray-800 transition-colors group">
+                        <div className="flex justify-between items-start mb-2">
+                            <div>
+                                <div className="text-xs font-bold text-gray-200">{ver.name}</div>
+                                <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                                    {new Date(ver.timestamp).toLocaleString()}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => {
+                                    if(confirm(`确定要从内部存档 "${ver.name}" 恢复吗？\n当前未保存的修改将丢失。`)) {
+                                        onRestoreVersion(ver);
+                                        setShowHistory(false);
+                                    }
+                                }}
+                                className="flex-1 py-1.5 bg-indigo-900/50 hover:bg-indigo-600 border border-indigo-500/30 rounded text-[10px] text-indigo-200 hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:border-indigo-500"
+                            >
+                                <RefreshCw className="w-3 h-3" />
+                                恢复此版本
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if(confirm(`确定要删除版本 "${ver.name}" 吗？\n此操作不可撤销。`)) {
+                                        onDeleteVersion(ver.id);
+                                    }
+                                }}
+                                className="py-1.5 px-3 bg-red-900/50 hover:bg-red-600 border border-red-500/30 rounded text-[10px] text-red-200 hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:border-red-500"
+                                title="删除此版本"
+                            >
+                                <Trash2 className="w-3 h-3" />
+                            </button>
+                        </div>
+                    </div>
+                ))
+            ) : (
+                <div className="flex flex-col items-center justify-center py-10 text-gray-500 gap-2">
+                    <History className="w-8 h-8 opacity-20" />
+                    <div className="text-center text-xs">
+                        暂无内部存档记录<br/>
+                        请点击上方 <span className="text-indigo-400 font-bold">保存</span> 按钮创建存档
+                    </div>
+                </div>
+            )}
+        </div>
+    </div>
+  );
+
+  // Always show UI, even without data
+  const hasStoryboard = selectedFile && selectedFile.storyboard && selectedFile.storyboard.items.length > 0;
+  const selectedShot = hasStoryboard && selectedFile ? selectedFile.storyboard!.items.find(i => i.id === selectedShotId) : null;
+
+  // --- Selection Logic ---
+  const toggleShotSelection = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      setSelectedShotIds(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+      });
+  };
+
+  const toggleSelectAll = () => {
+      if (selectedShotIds.size === selectedFile.storyboard?.items.length) {
+          setSelectedShotIds(new Set());
+      } else {
+          setSelectedShotIds(new Set(selectedFile.storyboard?.items.map(i => i.id)));
+      }
+  };
+
+  // --- Reference Logic ---
+  const handleAddReference = (url: string, type: ReferenceType, name?: string) => {
+      if (references.length >= 6) {
+          alert("最多只能加载6张参考图片");
+          return;
+      }
+      const newRef = { id: uuidv4(), url, type, name };
+      console.log(`➕ 添加参考图片:`, { type, name, urlLength: url.length });
+      setReferences(prev => {
+          const updated = [...prev, newRef];
+          console.log(`📊 当前参考图片总数: ${updated.length}`);
+          return updated;
+      });
+  };
+
+  const handleAutoFill = () => {
+      if (!selectedShot || !selectedShot.materialSelections) return;
+      
+      console.log('🔍 手动自动填充开始');
+      console.log('当前绑定关系:', selectedShot.materialSelections);
+      console.log('当前镜头角色:', selectedShot.characters);
+      console.log('当前镜头场景:', selectedShot.scene);
+      
+      const newRefs: GenerationReference[] = [];
+      const usedIds = new Set(references.map(r => r.url)); // simple dedup by url
+
+      // 🔧 只填充当前镜头中实际存在的角色和场景的绑定素材
+      const validTags = [...(selectedShot.characters || [])];
+      if (selectedShot.scene) validTags.push(selectedShot.scene);
+
+      // Iterate through bound selections
+      Object.entries(selectedShot.materialSelections).forEach(([tagName, materialId]) => {
+          if (newRefs.length + references.length >= 6) return;
+          
+          // 🔧 检查tag是否在当前镜头中
+          if (!validTags.includes(tagName)) {
+              console.log(`  ⏭️ 跳过tag "${tagName}"（不在当前镜头的角色/场景中）`);
+              return;
+          }
+          
+          const libraryItems = materialLibrary[tagName] || [];
+          console.log(`🔍 处理tag "${tagName}", materialId: ${materialId}`);
+          
+          const mat = libraryItems.find(m => m.id === materialId);
+          console.log(`  找到的素材:`, mat);
+          
+          if (mat && !usedIds.has(mat.url)) {
+              // Guess type based on tag
+              let type: ReferenceType = 'prop';
+              if (selectedShot.characters && selectedShot.characters.includes(tagName)) type = 'character';
+              else if (selectedShot.scene === tagName) type = 'scene';
+
+              newRefs.push({
+                  id: uuidv4(),
+                  url: mat.url,
+                  type: type,
+                  name: tagName
+              });
+              usedIds.add(mat.url);
+              console.log(`  ✅ 添加到参考图片列表`);
+          } else if (!mat) {
+              console.log(`  ❌ 未找到ID为 ${materialId} 的素材`);
+          } else {
+              console.log(`  ⏭️ 素材已存在，跳过`);
+          }
+      });
+
+      console.log('🔍 最终添加的参考图片:', newRefs);
+      setReferences(prev => [...prev, ...newRefs]);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: ReferenceType) => {
+      if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          console.log(`📤 上传参考图片: ${file.name}, 大小: ${(file.size / 1024).toFixed(2)}KB`);
+          try {
+              const { uploadEntityFile } = await import('../services/entityFileService');
+              const shotId = selectedShot?.id || 'temp';
+              const saved = await uploadEntityFile(file, 'storyboard_item', shotId, 'reference_image', episodeId);
+              console.log(`✅ 参考图片已上传到服务器: ${saved.fileUrl}`);
+              handleAddReference(saved.fileUrl, type, file.name);
+          } catch (err) {
+              console.error('❌ 参考图片上传失败，回退到本地预览:', err);
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                  if (ev.target?.result) {
+                      handleAddReference(ev.target.result as string, type, file.name);
+                  }
+              };
+              reader.readAsDataURL(file);
+          }
+      }
+  };
+
+  const handleConfirmConfig = () => {
+      if (!selectedShot) return;
+      
+      // 🔧 确认/取消配置 - 只切换锁定状态，不修改任何页面数据
+      const newState = !selectedShot.isConfigConfirmed;
+      console.log(newState ? '🔒 锁定配置' : '🔓 解锁配置');
+      onUpdateStoryboardItem(selectedShot.id, { 
+        isConfigConfirmed: newState
+      });
+  };
+
+  // 🆕 拖拽状态
+  const [isDraggingRef, setIsDraggingRef] = useState(false);
+  const [isDraggingResult, setIsDraggingResult] = useState(false);
+
+  // 🆕 处理文件拖拽到参考图区域
+  const handleRefDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingRef(true);
+  };
+
+  const handleRefDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingRef(false);
+  };
+
+  const handleRefDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingRef(false);
+      
+      if (selectedShot?.isConfigConfirmed) return;
+      if (references.length >= 6) {
+          alert('最多只能添加6张参考图片');
+          return;
+      }
+
+      // 检查是否是从生成结果拖入的图片URL
+      const imageUrl = e.dataTransfer.getData('text/plain');
+      if (imageUrl && (imageUrl.startsWith('data:') || imageUrl.startsWith('http') || imageUrl.startsWith('/'))) {
+          console.log('📥 从生成结果拖入参考图片');
+          handleAddReference(imageUrl, 'character', '从生成结果拖入');
+          return;
+      }
+
+      // 处理从桌面拖入的文件
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+          const file = files[0];
+          if (!file.type.startsWith('image/')) {
+              alert('只支持图片文件');
+              return;
+          }
+          console.log(`📤 拖拽上传参考图片: ${file.name}`);
+          (async () => {
+              try {
+                  const { uploadEntityFile } = await import('../services/entityFileService');
+                  const shotId = selectedShot?.id || 'temp';
+                  const saved = await uploadEntityFile(file, 'storyboard_item', shotId, 'reference_image', episodeId);
+                  console.log(`✅ 拖拽参考图片已上传: ${saved.fileUrl}`);
+                  handleAddReference(saved.fileUrl, 'character', file.name);
+              } catch (err) {
+                  console.error('❌ 拖拽上传失败，回退本地预览:', err);
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                      if (ev.target?.result) {
+                          handleAddReference(ev.target.result as string, 'character', file.name);
+                      }
+                  };
+                  reader.readAsDataURL(file);
+              }
+          })();
+      }
+  };
+
+  // 🆕 处理文件拖拽到生成结果区域
+  const handleResultDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingResult(true);
+  };
+
+  const handleResultDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingResult(false);
+  };
+
+  const handleResultDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDraggingResult(false);
+      
+      if (!selectedShot) return;
+
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+          const file = files[0];
+          if (!file.type.startsWith('image/')) {
+              alert('只支持图片文件');
+              return;
+          }
+          console.log(`📤 拖拽上传到生成结果: ${file.name}`);
+          // 🛡️ 必须走 uploadEntityFile 上传到服务器，拿到持久化 URL
+          // 不能用 FileReader.readAsDataURL（base64 会撑爆 storyboard_items.generated_image_url
+          // 字段，并被下游 VideoGenPage 拒收 → 视频页空白）。详见 docs/faq.md。
+          (async () => {
+              try {
+                  const { uploadEntityFile } = await import('../services/entityFileService');
+                  const saved = await uploadEntityFile(
+                      file, 'storyboard_item', selectedShot.id, 'generated_image', episodeId
+                  );
+                  console.log(`✅ 拖拽上传画面成功（持久化 URL）: ${saved.fileUrl}`);
+                  const newImage: GeneratedImage = {
+                      id: saved.fileId || uuidv4(),
+                      url: saved.fileUrl,
+                      thumbnail: saved.fileUrl,
+                      timestamp: Date.now(),
+                      fileId: saved.fileId || undefined,
+                  };
+                  onUpdateStoryboardItem(selectedShot.id, (currentItem) => {
+                      const existingImages = currentItem.generatedImages || [];
+                      return {
+                          generatedImages: [...existingImages, newImage],
+                          selectedImageId: newImage.id,
+                          generatedImage: saved.fileUrl,
+                      };
+                  });
+                  queryClient.invalidateQueries({
+                      queryKey: ['entityFiles', 'storyboard_item', selectedShot.id, 'generated_image'],
+                  });
+                  console.log('✅ 已添加到生成结果（已持久化，视频页可正常导入）');
+              } catch (err) {
+                  console.error('❌ 拖拽上传到生成结果失败:', err);
+                  alert(`上传失败：${(err as Error).message || '未知错误'}\n\n图片未保存，请重试或检查网络。`);
+              }
+          })();
+      }
+  };
+
+  // 🆕 生成结果图片开始拖拽
+  const handleResultImageDragStart = (e: React.DragEvent, imageUrl: string) => {
+      e.dataTransfer.setData('text/plain', imageUrl);
+      e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  // --- Generation Logic ---
+
+  // 🔧 修复：接收当前参考图片作为参数，确保使用最新的参考图片
+  const generateForShot = async (
+      shot: StoryboardItem, 
+      useCurrentState = false, 
+      model?: GenerationModel,
+      currentRefs?: GenerationReference[]  // 🆕 新增参数：当前的参考图片
+  ) => {
+      try {
+          const promptToUse = useCurrentState ? prompt : shot.imagePrompt;
+          // 🔧 修复：使用传入的当前参考图片，而不是从闭包中读取
+          const refImages = (currentRefs || references).map(r => r.url); 
+          const modelToUse = model || (useCurrentState ? globalModel : (shotModels[shot.id] || globalModel));
+
+          console.log(`🎨 开始生成 - 模型: ${modelToUse}`);
+          console.log(`📋 提示词: ${promptToUse?.substring(0, 100)}...`);
+          console.log(`🖼️ 参考图片数量: ${refImages.length}`);
+          console.log(`🖼️ 参考图片URLs:`, refImages.map(url => url.substring(0, 60) + '...'));
+
+          let resultUrl: string;
+
+          if (modelToUse === 'nanobanana') {
+              // 使用 Gemini nano2 (gemini-3.1-flash-image-preview) 生成 — 化神
+              console.log(`🎨 化神(nano2)生成，参考图数量: ${refImages.length}, ratio=${geminiNano2Ratio} size=${geminiNano2Size}`);
+              resultUrl = await generateFinalIllustration(
+                  promptToUse,
+                  refImages,
+                  { entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId },
+                  { aspectRatio: geminiNano2Ratio, imageSize: geminiNano2Size },
+              );
+          } else if (modelToUse === 'gpt_image_vip' || modelToUse === 'gpt_image_official') {
+              // 2026-05-21：天劫系列 — laozhang OpenAI Images API 兼容
+              const tier = modelToUse === 'gpt_image_vip' ? 'vip' : 'official';
+              console.log(`🎨 天劫${tier === 'vip' ? '一阶' : '二阶'} 生成，参考图数量: ${refImages.length}, ratio=${imageRatio} K=${imageK} quality=${imageQuality}`);
+              const resp = await generateGptImage({
+                  tier,
+                  prompt: promptToUse,
+                  references: refImages,
+                  ratio: imageRatio,
+                  k: imageK,
+                  // 天劫一阶 quality 不暴露给上游（强制 auto）；天劫二阶才尊重用户选择
+                  quality: tier === 'official' ? imageQuality : 'auto',
+                  entityType: 'storyboard_item',
+                  entityId: shot.id,
+                  fileRole: 'generated_image',
+                  episodeId,
+              });
+              const first = resp.files?.[0];
+              resultUrl = first?.file_url || first?.url || first?.data_url || resp.images[0] || '';
+              if (!resultUrl) throw new Error('天劫系列未返回可用图片 URL');
+          } else {
+              // 使用ComfyUI工作流生成
+              let workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN';
+              const imageCount = refImages.length;
+              
+              if (modelToUse === 'qwen') {
+                  workflowType = 'qwen';
+              } else if (modelToUse === 'qwen_lora') {
+                  workflowType = 'qwen_lora';
+              } else if (modelToUse === 'kontext') {
+                  // 🔧 交换：练气二阶(kontext) 实际使用 qwenN 工作流
+                  workflowType = 'qwenN';
+              } else if (modelToUse === 'qwenN') {
+                  // 🔧 交换：K神(qwenN) 实际使用 kontext 工作流
+                  workflowType = 'kontext';
+              } else {
+                  workflowType = 'kontext';
+              }
+              
+              console.log(`🎨 使用工作流: ${workflowType} (${imageCount}张参考图，后端会自动选择对应的工作流)`);
+              
+              // 🔧 如果没有参考图，提示用户
+              if (refImages.length === 0) {
+                  console.warn('⚠️ 警告：没有参考图片！使用1x1透明像素作为默认图。');
+                  console.warn('⚠️ 建议：请先添加参考图片再生成，否则效果可能不佳。');
+              }
+              
+              // 确保至少有一张参考图（使用第一张或默认图）
+              const mainImage = refImages.length > 0 ? refImages[0] : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+              
+              let currentTaskId = '';
+              const resultUrls = await generateWithComfyUIWorkflowQueued(
+                  workflowType,
+                  promptToUse,
+                  mainImage,
+                  refImages.slice(1),
+                  -1,
+                  (taskId) => {
+                      currentTaskId = taskId;
+                      saveRunningTask({ taskId, shotId: shot.id, fileId: selectedFileId || '', model: modelToUse, startedAt: Date.now() });
+                  },
+                  { entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId },
+                  buildRegistryMeta(shot, workflowType === 'qwen_lora' ? 'qwen-lora' : workflowType === 'kontext' ? 'kontext' : 'qwen-image', `画面分镜 ${workflowType}`),
+              );
+              if (currentTaskId) removeRunningTask(currentTaskId);
+              
+              const newImages: GeneratedImage[] = (resultUrls as GeneratedImageResult[])
+                  .filter((r) => r.url)
+                  .map((r) => ({
+                      id: r.fileId || uuidv4(),
+                      url: r.url,
+                      thumbnail: r.url,
+                      timestamp: Date.now(),
+                      fileId: r.fileId || undefined,
+                  }));
+
+              if (newImages.length === 0) {
+                  throw new Error('未获取到生成结果');
+              }
+
+              resultUrl = newImages[0].url;
+
+              const existingImages = shot.generatedImages || [];
+              const mergedImages = [...existingImages, ...newImages];
+              console.log(`🔄 [GenerationPage] 追加图片: 原有${existingImages.length}张 + 新增${newImages.length}张 = ${mergedImages.length}张`);
+
+              onUpdateStoryboardItem(shot.id, {
+                  generatedImages: mergedImages,
+                  selectedImageId: newImages[0].id,
+                  generatedImage: resultUrl,
+              });
+
+              window.dispatchEvent(new CustomEvent('generation-save-trigger'));
+
+              return;
+          }
+          
+          // 生成缩略图
+          const thumbnail = await generateThumbnail(resultUrl, 1024, 0.8);
+          
+          const newImage: GeneratedImage = {
+              id: uuidv4(),
+              url: resultUrl,
+              thumbnail: thumbnail,
+              timestamp: Date.now()
+          };
+
+          // 主通道：onUpdateStoryboardItem 同步更新 parent state
+          onUpdateStoryboardItem(shot.id, (currentItem) => {
+              const existingImages = currentItem.generatedImages || [];
+              const isDuplicate = existingImages.some(existImg => existImg.url === newImage.url);
+              return { 
+                  generatedImages: isDuplicate ? existingImages : [...existingImages, newImage],
+                  selectedImageId: newImage.id,
+                  generatedImage: resultUrl
+              };
+          });
+
+          // 安全网：仅触发强制保存
+          window.dispatchEvent(new CustomEvent('generation-save-trigger'));
+          
+      } catch (e) {
+          console.error(`Generation failed for shot ${shot.id}`, e);
+          throw e;
+      }
+  };
+
+  const handleGenerateCurrent = async () => {
+      if (!selectedShot) return;
+      
+      // 🆕 没有参考图片时禁止生成
+      if (references.length === 0) {
+          alert('⚠️ 请先添加参考图片后再生成！');
+          return;
+      }
+      
+      const shotId = selectedShot.id;
+      setGeneratingShotIds(prev => new Set(prev).add(shotId));
+      try {
+          console.log('🔄 重新生成 - 当前参考图片:', references.map(r => ({ id: r.id, url: r.url.substring(0, 50) + '...' })));
+          await generateForShot(selectedShot, true, globalModel, references);
+      } catch (e) {
+          alert("生成失败，请检查网络或图片大小");
+      } finally {
+          setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(shotId); return next; });
+      }
+  };
+
+  const handleBatchGenerate = async () => {
+      if (!selectedFile?.storyboard || !selectedShot || selectedShotIds.size === 0) return;
+      
+      setBatchProgress({ current: 0, total: selectedShotIds.size });
+
+      const ids = Array.from(selectedShotIds);
+      setGeneratingShotIds(prev => {
+          const next = new Set(prev);
+          ids.forEach(id => next.add(id));
+          return next;
+      });
+      let successCount = 0;
+
+      for (let i = 0; i < ids.length; i++) {
+          const id = ids[i];
+          const shot = selectedFile.storyboard?.items.find(item => item.id === id);
+          if (shot) {
+              try {
+                  const isCurrent = id === selectedShot.id;
+                  const model = shotModels[shot.id] || globalModel;
+                  await generateForShot(shot, isCurrent, model);
+                  successCount++;
+              } catch (e) {
+                  console.error(e);
+              }
+          }
+          setBatchProgress({ current: i + 1, total: ids.length });
+          setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+      }
+      
+      setBatchProgress(null);
+      alert(`批量生成完成: ${successCount}/${ids.length} 成功`);
+  };
+
+  const handleDeleteResult = async (imgId: string) => {
+      if (!selectedShot || !selectedShotId) return;
+      
+      const existingImages = selectedShot.generatedImages || [];
+      const imgToDelete = existingImages.find(img => img.id === imgId);
+      const newImages = existingImages.filter(img => img.id !== imgId);
+      
+      let newSelectedId = selectedShot.selectedImageId;
+      if (newSelectedId === imgId) {
+          newSelectedId = newImages.length > 0 ? newImages[0].id : undefined;
+      }
+
+      console.log(`🗑️ 删除图片 ${imgId} 从镜头 ${selectedShot.id} (${existingImages.length} → ${newImages.length})`);
+      
+      removeImageFromCache(selectedShot.id, imgId);
+
+      // 从 DB 删除（如果有 fileId）
+      if (imgToDelete?.fileId) {
+          try {
+              const { deleteEntityFile } = await import('../services/entityFileService');
+              await deleteEntityFile(imgToDelete.fileId);
+              console.log(`✅ DB 删除成功: ${imgToDelete.fileId}`);
+          } catch (err) {
+              console.error('DB 删除失败:', err);
+          }
+      }
+
+      onUpdateStoryboardItem(selectedShot.id, {
+          generatedImages: newImages,
+          selectedImageId: newSelectedId,
+          generatedImage: newImages.length > 0 ? newImages[0].url : undefined
+      });
+      
+      onForceSave();
+  };
+
+  const handleSelectResult = (imgId: string) => {
+      if (!selectedShot) return;
+      const img = (selectedShot.generatedImages || []).find(i => i.id === imgId);
+      onUpdateStoryboardItem(selectedShot.id, {
+          selectedImageId: imgId,
+          generatedImage: img?.url || img?.thumbnail
+      });
+  };
+
+  const handleViewFullImage = async (shotId: string, imageId: string) => {
+      if (!selectedFileId) return;
+      
+      const currentImg = currentGeneratedImages.find(img => img.id === imageId);
+      
+      if (!currentImg) {
+          console.error(`❌ 未找到图片: shotId=${shotId}, imageId=${imageId}`);
+          return;
+      }
+      
+      // 🆕 记录当前预览的镜头和图片ID，用于左右切换导航
+      setPreviewShotId(shotId);
+      setPreviewImageId(imageId);
+      
+      // 🔧 优先使用完整URL，其次使用缩略图
+      const imageUrl = currentImg.url || currentImg.thumbnail;
+      
+      if (!imageUrl) {
+          console.error('❌ 图片URL为空');
+          return;
+      }
+      
+      console.log(`🖼️ 查看大图: ${imageId}, URL类型: ${imageUrl.startsWith('data:') ? 'dataURL' : imageUrl.startsWith('blob:') ? 'blobURL' : 'serverURL'}`);
+      
+      // 如果已经是 dataURL 或 blobURL，直接显示
+      if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+          setIsLoadingFullImage(false);
+          setPreviewImage(imageUrl);
+          return;
+      }
+      
+      // 需要从服务器加载的情况
+      setIsLoadingFullImage(true);
+      setPreviewImage(currentImg.thumbnail || imageUrl); // 先显示缩略图
+      
+      try {
+          // 检查缓存
+          const cacheKey = `${shotId}:${imageId}`;
+          const cachedUrl = getCachedBlobUrl(cacheKey);
+          if (cachedUrl) {
+              console.log('📦 从缓存加载完整图片');
+              setPreviewImage(cachedUrl);
+              setIsLoadingFullImage(false);
+              return;
+          }
+          
+          // 从服务器加载并转换为 Blob URL
+          const token = localStorage.getItem('auth_token');
+          const fullUrl = imageUrl.startsWith('http') ? imageUrl : `${window.location.origin}${imageUrl}`;
+          const securedUrl = token ? `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}token=${token}` : fullUrl;
+          
+          const response = await fetch(securedUrl, {
+              headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+          });
+          
+          if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+          
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          
+          // 缓存 Blob URL
+          setCachedBlobUrl(cacheKey, blobUrl);
+          setPreviewImage(blobUrl);
+          console.log('✅ 完整图片已加载');
+          
+      } catch (error) {
+          console.error('❌ 加载完整图片失败:', error);
+          // 加载失败时保持显示缩略图
+      } finally {
+          setIsLoadingFullImage(false);
+      }
+  };
+
+  const getPreviewImageList = () => {
+      if (!previewShotId) return [];
+      return currentGeneratedImages;
+  };
+
+  // 🆕 切换到上一张图片
+  const handlePrevImage = () => {
+      if (!previewShotId || !previewImageId || isLoadingFullImage) return;
+      const imageList = getPreviewImageList();
+      const currentIndex = imageList.findIndex(img => img.id === previewImageId);
+      if (currentIndex > 0) {
+          const prevImage = imageList[currentIndex - 1];
+          handleViewFullImage(previewShotId, prevImage.id);
+      }
+  };
+
+  // 🆕 切换到下一张图片
+  const handleNextImage = () => {
+      if (!previewShotId || !previewImageId || isLoadingFullImage) return;
+      const imageList = getPreviewImageList();
+      const currentIndex = imageList.findIndex(img => img.id === previewImageId);
+      if (currentIndex < imageList.length - 1) {
+          const nextImage = imageList[currentIndex + 1];
+          handleViewFullImage(previewShotId, nextImage.id);
+      }
+  };
+
+  // 🆕 关闭图片预览
+  const closePreview = () => {
+      setPreviewImage(null);
+      setPreviewShotId(null);
+      setPreviewImageId(null);
+  };
+
+  // --- Camera Angle Adjustment ---
+  const randomSeed = () => Math.floor(Math.random() * 900000000000000) + 100000000000000;
+  
+  const ensureDataUrl = async (url: string): Promise<string> => {
+    if (url.startsWith('data:')) return url;
+    const token = localStorage.getItem('auth_token');
+    const absolute = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+    const secured = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
+    const response = await fetch(secured, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+    });
+    if (!response.ok) throw new Error('无法下载图片');
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+  };
+
+  // 🆕 将图片转换为 PNG 格式的 DataURL（用于 ComfyUI 兼容性）
+  const ensureDataUrlAsPng = async (url: string): Promise<string> => {
+    return new Promise<string>(async (resolve, reject) => {
+        try {
+            // 先获取图片源
+            let imgSrc = url;
+            if (!url.startsWith('data:') && !url.startsWith('blob:')) {
+                const token = localStorage.getItem('auth_token');
+                const absolute = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+                imgSrc = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
+            }
+            
+            // 使用 Image 加载并通过 Canvas 转换为 PNG
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        reject(new Error('无法创建 Canvas 上下文'));
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0);
+                    const pngDataUrl = canvas.toDataURL('image/png');
+                    console.log(`✅ 图片已转换为 PNG 格式 (${img.naturalWidth}x${img.naturalHeight})`);
+                    resolve(pngDataUrl);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            
+            img.onerror = () => {
+                reject(new Error('图片加载失败，无法转换为 PNG'));
+            };
+            
+            // 如果是 DataURL，直接使用；否则添加认证头
+            if (url.startsWith('data:') || url.startsWith('blob:')) {
+                img.src = url;
+            } else {
+                // 对于服务器 URL，需要先 fetch 再转换为 blob URL
+                const token = localStorage.getItem('auth_token');
+                const absolute = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+                const secured = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
+                const response = await fetch(secured, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+                });
+                if (!response.ok) throw new Error('无法下载图片');
+                const blob = await response.blob();
+                img.src = URL.createObjectURL(blob);
+            }
+        } catch (err) {
+            reject(err);
+        }
+    });
+  };
+
+  const handleAngleAdjustment = async (imageUrl: string, params: {
+    rotate: number;
+    move: number;
+    vertical: number;
+    wideAngle: boolean;
+    customPrompt?: string;
+    seed: number;
+  }) => {
+    if (!selectedShot) return;
+    // 🔧 不立即关闭模态框，而是显示loading状态
+    setIsAngleAdjusting(true);
+    try {
+        let prompt = '';
+        
+        // 如果用户自己写了提示词,直接使用
+        if (params.customPrompt?.trim()) {
+            prompt = params.customPrompt.trim();
+        } else {
+            // 否则根据滑块参数拼接提示词
+            const prompts: string[] = [];
+            
+            // 水平旋转
+            if (params.rotate === -90) {
+                prompts.push("将镜头向左旋转90度 Rotate the camera 90 degrees to the left.");
+            } else if (params.rotate === -45) {
+                prompts.push("将镜头向左旋转45度 Rotate the camera 45 degrees to the left.");
+            } else if (params.rotate === 45) {
+                prompts.push("将镜头向右旋转45度 Rotate the camera 45 degrees to the right.");
+            } else if (params.rotate === 90) {
+                prompts.push("将镜头向右旋转90度 Rotate the camera 90 degrees to the right.");
+            }
+            
+            // 推进距离
+            if (params.move === 5) {
+                prompts.push("将镜头向前移动 Move the camera forward.");
+            } else if (params.move === 10) {
+                prompts.push("将镜头转为特写镜头 Turn the camera into a close-up shot.");
+            }
+            
+            // 垂直角度
+            if (params.vertical === 1) {
+                prompts.push("将相机切换到仰视视角 Turn the camera to a worm's-eye view.");
+            } else if (params.vertical === -1) {
+                prompts.push("将相机转向鸟瞰视角 Turn the camera to a bird's-eye view.");
+            }
+            
+            // 广角镜头
+            if (params.wideAngle) {
+                prompts.push("将镜头转为广角镜头 Turn the camera to a wide-angle lens.");
+            }
+            
+            prompt = prompts.join(' ');
+        }
+        
+        // 如果既没有自定义提示词,也没有任何滑块设置,使用默认提示
+        if (!prompt) {
+            prompt = "保持当前画面构图和内容。";
+        }
+        
+        const baseImage = await ensureDataUrl(imageUrl);
+        // 🔧 使用队列执行，确保同时只有一个任务
+        const resultUrl = await adjustImageAngleQueued(baseImage, prompt, params.seed, {
+          entityType: 'storyboard_item',
+          entityId: selectedShot?.id,
+          fileRole: 'generated_image',
+          episodeId,
+        }, buildRegistryMeta(selectedShot, 'angle-adjust', '角度调整'));
+        
+        const newImage: GeneratedImage = {
+            id: uuidv4(),
+            url: resultUrl,
+            thumbnail: resultUrl,
+            timestamp: Date.now()
+        };
+        
+        // 🔧 使用函数式更新，确保并发任务不会互相覆盖
+        onUpdateStoryboardItem(selectedShot.id, (currentItem) => {
+            const existingImages = currentItem.generatedImages || [];
+            const updatedImages = [...existingImages, newImage];
+            return {
+                generatedImages: updatedImages,
+                selectedImageId: newImage.id,
+                generatedImage: resultUrl,
+            };
+        });
+        
+        // 🆕 生成完成后立即保存
+        console.log('💾 角度调整完成，触发立即保存');
+        onForceSave();
+        queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        
+        // 🔧 处理完成后关闭模态框
+        setCameraModalImage(null);
+    } catch (error: any) {
+        console.error('Angle adjustment failed', error);
+        alert(error?.message || '角度调整失败，请稍后再试。');
+    } finally {
+        setIsAngleAdjusting(false);
+    }
+  };
+
+  // 🆕 多角度人物生成处理函数
+  const handleHumanMultiAngle = async (imageUrl: string, seed: number) => {
+    if (!selectedShot) return;
+    
+    setIsHumanMultiAngleGenerating(true);
+    try {
+        // 将图片转换为 dataUrl（如果需要）
+        const baseImage = await ensureDataUrl(imageUrl);
+        
+        // 🔧 使用队列执行多角度生成API，确保同时只有一个任务
+        console.log(`🔄 开始多角度生成任务（队列执行）`);
+        const resultUrls = await generateHumanMultiAngleQueued(baseImage, seed, {
+          entityType: 'storyboard_item',
+          entityId: selectedShot?.id,
+          fileRole: 'generated_image',
+          episodeId,
+        }, buildRegistryMeta(selectedShot, 'human-multi-angle', '多角度人物'));
+        console.log(`✅ 多角度生成完成，共 ${resultUrls.length} 张图片:`, resultUrls);
+        
+        const newImages: GeneratedImage[] = (resultUrls as GeneratedImageResult[])
+            .filter((r) => r.url)
+            .map((r) => ({
+                id: r.fileId || uuidv4(),
+                url: r.url,
+                thumbnail: r.url,
+                timestamp: Date.now(),
+                fileId: r.fileId || undefined,
+            }));
+        
+        if (newImages.length === 0) {
+            throw new Error('没有成功生成任何图片');
+        }
+        
+        onUpdateStoryboardItem(selectedShot.id, {
+            generatedImages: newImages,
+            selectedImageId: newImages[0]?.id,
+            generatedImage: newImages[0]?.url,
+        });
+        
+        console.log('💾 多角度生成完成，触发立即保存');
+        onForceSave();
+        queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        
+        setHumanMultiAngleModalImage(null);
+    } catch (error: any) {
+        console.error('Human multi-angle generation failed', error);
+        alert(error?.message || '多角度人物生成失败，请稍后再试。');
+    } finally {
+        setIsHumanMultiAngleGenerating(false);
+    }
+  };
+
+  // 🆕 全景角度生成处理函数
+  const handleAroundAngle = async (imageUrl: string, prompt: string, seed: number) => {
+    if (!selectedShot) return;
+    
+    setIsAroundAngleGenerating(true);
+    try {
+        const baseImage = await ensureDataUrl(imageUrl);
+        
+        // 🔧 使用队列执行全景角度生成，确保同时只有一个任务
+        console.log(`🔄 开始全景角度生成任务（队列执行）`);
+        const resultUrls = await generateAroundAngleQueued(baseImage, prompt, seed, {
+          entityType: 'storyboard_item',
+          entityId: selectedShot?.id,
+          fileRole: 'generated_image',
+          episodeId,
+        }, buildRegistryMeta(selectedShot, 'around-angle', '全景角度'));
+        console.log(`✅ 全景角度生成完成，共 ${resultUrls.length} 张图片`);
+        
+        const newImages: GeneratedImage[] = (resultUrls as GeneratedImageResult[])
+            .filter((r) => r.url)
+            .map((r) => ({
+                id: r.fileId || uuidv4(),
+                url: r.url,
+                thumbnail: r.url,
+                timestamp: Date.now(),
+                fileId: r.fileId || undefined,
+            }));
+        
+        if (newImages.length === 0) {
+            throw new Error('没有成功生成任何图片');
+        }
+        
+        onUpdateStoryboardItem(selectedShot.id, {
+            generatedImages: newImages,
+            selectedImageId: newImages[0]?.id,
+            generatedImage: newImages[0]?.url,
+        });
+        
+        console.log('💾 全景角度生成完成，触发立即保存');
+        onForceSave();
+        queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        
+        setAroundAngleModalImage(null);
+    } catch (error: any) {
+        console.error('Around angle generation failed', error);
+        alert(error?.message || '全景角度生成失败，请稍后再试。');
+    } finally {
+        setIsAroundAngleGenerating(false);
+    }
+  };
+
+  // 🆕 抠图处理函数（支持返回多张图片）
+  const handleMatting = async (mattingType: 'subject' | 'split', seed: number) => {
+    if (!selectedShot || !mattingModalImage) return;
+    
+    setIsMattingProcessing(true);
+    try {
+        // 🔧 使用 PNG 格式转换，避免 WebP 在 ComfyUI 中报错
+        console.log(`🔄 将图片转换为 PNG 格式...`);
+        const baseImage = await ensureDataUrlAsPng(mattingModalImage);
+        
+        console.log(`🔄 开始抠图任务（类型: ${mattingType}）`);
+        const resultUrls = await generateMattingQueued(baseImage, mattingType, seed, {
+          entityType: 'storyboard_item',
+          entityId: selectedShot?.id,
+          fileRole: 'generated_image',
+          episodeId,
+        }, buildRegistryMeta(selectedShot, 'matting', mattingType === 'subject' ? '抠图（主体）' : '抠图（分离）'));
+        console.log(`✅ 抠图完成，返回 ${resultUrls.length} 张图片`);
+        
+        if (!resultUrls || resultUrls.length === 0) {
+            throw new Error('抠图失败，没有返回结果');
+        }
+        
+        const newImages: GeneratedImage[] = (resultUrls as GeneratedImageResult[])
+            .filter((r) => r.url)
+            .map((r) => ({
+                id: r.fileId || uuidv4(),
+                url: r.url,
+                thumbnail: r.url,
+                timestamp: Date.now(),
+                fileId: r.fileId || undefined,
+            }));
+        
+        console.log(`📸 创建了 ${newImages.length} 张新图片`);
+        
+        onUpdateStoryboardItem(selectedShot.id, {
+            generatedImages: newImages,
+            selectedImageId: newImages[0]?.id,
+            generatedImage: newImages[0]?.url,
+        });
+        
+        console.log('💾 抠图完成，触发保存');
+        onForceSave();
+        queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        
+        setMattingModalImage(null);
+    } catch (error: any) {
+        console.error('Matting failed', error);
+        alert(error?.message || '抠图失败，请稍后再试。');
+    } finally {
+        setIsMattingProcessing(false);
+    }
+  };
+
+  // 🆕 融合处理函数
+  const handleImageFusion = async (
+    fusionType: 'fusion' | 'transfer' | 'imitation' | 'direct',
+    params: { imageBk: string; imageHu: string; imageMb?: string; compositeImage?: string; seed?: number }
+  ) => {
+    if (!selectedShot) return;
+    
+    setIsFusionProcessing(true);
+    try {
+        // 直接拼合模式 - 前端已合成，直接使用
+        if (fusionType === 'direct') {
+            console.log('🔄 直接拼合（前端已合成）');
+            
+            if (!params.compositeImage) {
+                throw new Error('合成图片缺失');
+            }
+            
+            const newImage: GeneratedImage = {
+                id: uuidv4(),
+                url: params.compositeImage,
+                timestamp: Date.now()
+            };
+            
+            onUpdateStoryboardItem(selectedShot.id, (currentItem) => ({
+                generatedImages: [...(currentItem.generatedImages || []), newImage],
+                selectedImageId: newImage.id,
+                generatedImage: newImage.url
+            }));
+            
+            console.log('✅ 直接拼合完成');
+        } else if (fusionType === 'fusion') {
+            // 图像融合模式 - 使用合成图调用ComfyUI
+            console.log('🔄 开始图像融合（传送合成图到ComfyUI）');
+            
+            if (!params.compositeImage) {
+                throw new Error('合成图片缺失');
+            }
+            
+            // 图像融合只需要传送合成后的单张图
+            const compositeDataUrl = await ensureDataUrl(params.compositeImage);
+            
+            const resultUrl = await generateImageFusionQueued(
+                compositeDataUrl,
+                compositeDataUrl, // 合成模式下，底图和人物图用同一张合成图
+                'fusion',
+                undefined,
+                params.seed ?? -1,
+                {
+                  entityType: 'storyboard_item',
+                  entityId: selectedShot?.id,
+                  fileRole: 'generated_image',
+                  episodeId,
+                },
+                buildRegistryMeta(selectedShot, 'image-fusion', '图像融合'),
+            );
+            
+            if (!resultUrl) {
+                throw new Error('融合失败，没有返回结果');
+            }
+            
+            const newImage: GeneratedImage = {
+                id: uuidv4(),
+                url: resultUrl,
+                thumbnail: resultUrl,
+                timestamp: Date.now()
+            };
+            
+            onUpdateStoryboardItem(selectedShot.id, (currentItem) => ({
+                generatedImages: [...(currentItem.generatedImages || []), newImage],
+                selectedImageId: newImage.id,
+                generatedImage: newImage.url
+            }));
+            
+            console.log('✅ 图像融合完成');
+        } else {
+            // 迁移学习/模仿学习 - 调用后端API（传送多张图）
+            console.log(`🔄 开始${fusionType}（多图模式）`);
+            
+            const bkDataUrl = await ensureDataUrl(params.imageBk);
+            const huDataUrl = await ensureDataUrl(params.imageHu);
+            let mbDataUrl: string | undefined;
+            if (params.imageMb) {
+                mbDataUrl = await ensureDataUrl(params.imageMb);
+            }
+            
+            const resultUrl = await generateImageFusionQueued(
+                bkDataUrl,
+                huDataUrl,
+                fusionType as 'transfer' | 'imitation',
+                mbDataUrl,
+                params.seed ?? -1,
+                {
+                  entityType: 'storyboard_item',
+                  entityId: selectedShot?.id,
+                  fileRole: 'generated_image',
+                  episodeId,
+                },
+                buildRegistryMeta(selectedShot, 'image-fusion', fusionType === 'transfer' ? '迁移学习' : '模仿学习'),
+            );
+            
+            if (!resultUrl) {
+                throw new Error('融合失败，没有返回结果');
+            }
+            
+            const newImage: GeneratedImage = {
+                id: uuidv4(),
+                url: resultUrl,
+                thumbnail: resultUrl,
+                timestamp: Date.now()
+            };
+            
+            onUpdateStoryboardItem(selectedShot.id, (currentItem) => ({
+                generatedImages: [...(currentItem.generatedImages || []), newImage],
+                selectedImageId: newImage.id,
+                generatedImage: newImage.url
+            }));
+            
+            console.log(`✅ ${fusionType}完成`);
+        }
+        
+        onForceSave();
+        queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        setShowFusionModal(false);
+    } catch (error: any) {
+        console.error('Image fusion failed', error);
+        alert(error?.message || '融合失败，请稍后再试。');
+    } finally {
+        setIsFusionProcessing(false);
+    }
+  };
+
+  // 🆕 分镜工具处理函数
+  const handlePanorama360 = async (imageUrl: string, prompt: string, seed: number): Promise<string> => {
+    const baseImage = await ensureDataUrl(imageUrl);
+    const result = await generatePanorama360Queued(baseImage, prompt, seed, undefined, buildRegistryMeta(selectedShot, 'panorama-360', '360 全景'));
+    return result;
+  };
+
+  const handlePanoramaFusion = async (
+    image1: string, 
+    image3: string, 
+    prompt: string, 
+    image2?: string, 
+    seed?: number
+  ): Promise<string> => {
+    const img1 = await ensureDataUrl(image1);
+    const img3 = await ensureDataUrl(image3);
+    const img2 = image2 ? await ensureDataUrl(image2) : undefined;
+    const result = await generatePanoramaFusionQueued(img1, img3, prompt, img2, seed ?? -1, undefined, buildRegistryMeta(selectedShot, 'panorama-fusion', '全景融合'));
+    return result;
+  };
+
+  const handleAutoStoryboard = async (imageUrl: string, prompt: string, seed: number): Promise<string> => {
+    if (!selectedShot) throw new Error('请先选择镜头');
+    
+    const baseImage = await ensureDataUrl(imageUrl);
+    const result = await generateAutoStoryboardQueued(baseImage, prompt, seed, {
+      entityType: 'storyboard_item',
+      entityId: selectedShot?.id,
+      fileRole: 'generated_image',
+      episodeId,
+    }, buildRegistryMeta(selectedShot, 'auto-storyboard', '自动分镜'));
+    
+    const newImage: GeneratedImage = {
+        id: uuidv4(),
+        url: result,
+        thumbnail: result,
+        timestamp: Date.now()
+    };
+    
+    onUpdateStoryboardItem(selectedShot.id, (currentItem) => ({
+        generatedImages: [...(currentItem.generatedImages || []), newImage],
+        selectedImageId: newImage.id,
+        generatedImage: newImage.url
+    }));
+    
+    onForceSave();
+    queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+    return result;
+  };
+
+  const handleMultiGridStoryboardSubmit = async (
+    mode: 'multi_shot' | 'story', 
+    prompt: string,
+    referenceImage: string
+  ): Promise<{ images?: string[] }> => {
+    const result = await generateMultiGridStoryboard(mode, prompt, referenceImage, {
+      entityType: 'storyboard_item',
+      entityId: selectedShot?.id,
+      fileRole: 'generated_image',
+      episodeId,
+    });
+    
+    // 如果有结果图片，添加到当前镜头
+    if (result.images && result.images.length > 0 && selectedShot) {
+        const newImages: GeneratedImage[] = result.images
+            .filter(url => url)
+            .map(url => ({
+                id: uuidv4(),
+                url: url,
+                thumbnail: url,
+                timestamp: Date.now()
+            }));
+        
+        if (newImages.length > 0) {
+            onUpdateStoryboardItem(selectedShot.id, (currentItem) => ({
+                generatedImages: [...(currentItem.generatedImages || []), ...newImages],
+                selectedImageId: newImages[0].id,
+                generatedImage: newImages[0].url
+            }));
+            onForceSave();
+            queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        }
+    }
+    
+    return result;
+  };
+
+  // 🆕 图片编辑器回调：保存编辑后的图片（更新底图）
+  const handleImageEditorSave = (editedImageUrl: string, referenceId: string) => {
+    console.log('💾 保存编辑后的图片:', { referenceId, urlLength: editedImageUrl.length });
+    setReferences(prev => prev.map(ref => 
+      ref.id === referenceId ? { ...ref, url: editedImageUrl } : ref
+    ));
+    setImageEditorData(null);
+  };
+
+  // 🆕 图片编辑器回调：添加线稿作为新参考图
+  const handleAddSketch = (sketchImageUrl: string) => {
+    if (references.length >= 6) {
+      alert('参考图片已满（最多6张），请先删除一些再添加线稿');
+      return;
+    }
+    console.log('🎨 添加线稿作为新参考图');
+    const newRef: GenerationReference = {
+      id: uuidv4(),
+      url: sketchImageUrl,
+      type: 'pose',  // 线稿通常用于姿态参考
+      name: '手绘线稿'
+    };
+    setReferences(prev => [...prev, newRef]);
+    // 不关闭编辑器，用户可以继续编辑或选择保存
+  };
+
+  // --- Export Logic ---
+  const handleExport = () => {
+      if (!selectedFile?.storyboard) {
+          console.error('❌ 没有分镜数据');
+          return;
+      }
+      
+      console.log('🔍 开始导出流程...');
+      console.log('   - 当前选中镜头数:', selectedShotIds.size);
+      console.log('   - 总镜头数:', selectedFile.storyboard.items.length);
+      
+      // 2026-05-20 (Bug #2)：取消「必须有图片才能导出」的硬性限制。
+      // - 未勾选时：导出所有分镜（无图镜头作为占位项进入视频页）
+      // - 已勾选时：仅导出勾选的镜头（不要求有图）
+      // 视频页 handleImportAll 已支持空分镜（占位卡 + isPlaceholder 标记）。
+      let itemsToCheck = selectedShotIds.size > 0 
+          ? selectedFile.storyboard.items.filter(item => selectedShotIds.has(item.id))
+          : [...selectedFile.storyboard.items];
+      
+      console.log('   - 待导出的镜头数:', itemsToCheck.length);
+      
+      const itemsToExport = itemsToCheck.map(item => {
+          const selectedImg = item.selectedImageId 
+              ? item.generatedImages?.find(img => img.id === item.selectedImageId)
+              : item.generatedImages?.[0];
+          
+          console.log(`   📸 镜头 ${item.id}:`, {
+              hasImages: !!item.generatedImages,
+              imageCount: item.generatedImages?.length || 0,
+              selectedImageId: item.selectedImageId,
+              hasSelectedImg: !!selectedImg,
+              isPlaceholder: !selectedImg,
+          });
+          
+          return {
+              shotId: item.id,
+              script: item.scriptSegment,
+              imagePrompt: item.imagePrompt,
+              videoPrompt: item.videoPrompt,
+              finalImage: selectedImg?.url || selectedImg?.thumbnail || null,
+          };
+      });
+
+      console.log('   - 最终导出镜头数:', itemsToExport.length, '（含无图占位项）');
+
+      if (!itemsToExport || itemsToExport.length === 0) {
+          alert("还没有分镜数据可导出。\n\n请先生成分镜镜头（剧本 → 分镜），然后再导出到视频生成阶段。");
+          return;
+      }
+
+      console.log(`📤 准备导出 ${itemsToExport.length} 个镜头到视频生成阶段`);
+      console.log('📋 导出的镜头:', itemsToExport.map(i => ({ shotId: i.shotId, hasImage: !!i.finalImage })));
+      
+      onExportNext({ items: itemsToExport });
+  };
+
+  // --- Version Control ---
+  const handleSaveClick = () => {
+    setIsNamingVersion(true);
+    const count = selectedFile?.versions?.length || 0;
+    setVersionName(`画面分镜存档 v${count + 1} - ${new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}`);
+  };
+
+  const submitVersionSave = () => {
+    if(versionName.trim()) {
+        onSaveVersion(versionName);
+        setIsNamingVersion(false);
+    }
+  };
+
+  const categories: { type: ReferenceType; label: string; icon: any }[] = [
+      { type: 'character', label: '角色', icon: Users },
+      { type: 'scene', label: '场景', icon: MapPin },
+      { type: 'pose', label: '姿态', icon: User },
+      { type: 'prop', label: '道具', icon: Box },
+      { type: 'effect', label: '特效', icon: Zap },
+  ];
+
+  // 单一数据源：直接从 parent state 读取图片
+  const currentGeneratedImages = [
+      ...(selectedShot?.generatedImages || []),
+      ...(selectedShot?.generatedImage && !(selectedShot?.generatedImages?.length)
+          ? [{ id: 'legacy', url: selectedShot.generatedImage, thumbnail: selectedShot.generatedImage, timestamp: 0 }]
+          : [])
+  ].filter(img => img.url || img.thumbnail);
+  const effectiveSelectedId = selectedShot?.selectedImageId;
+
+  if (selectedShotId) {
+    console.log(`🖼️ [GenerationPage render] shotId=${selectedShotId}, generatedImages=${selectedShot?.generatedImages?.length || 0}, currentGeneratedImages=${currentGeneratedImages.length}`);
+  }
+
+  return (
+      <div className="flex-1 flex h-full w-full bg-gray-950 overflow-hidden relative">
+          
+          {/* Header Bar */}
+          <div className="absolute top-0 left-0 right-0 h-[52px] bg-gray-850 border-b border-gray-800 z-20 flex items-center justify-between px-4">
+              <div className="flex items-center gap-4">
+                  <h2 className="text-sm font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
+                      <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+                      画面分镜列表
+                  </h2>
+                  <div className="h-4 w-px bg-gray-700"></div>
+                  <div className="flex items-center gap-2">
+                      <button 
+                        onClick={toggleSelectAll}
+                        className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
+                      >
+                         {selectedShotIds.size === selectedFile?.storyboard?.items.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                         全选
+                      </button>
+                      <span className="text-xs text-gray-500">
+                          已选 {selectedShotIds.size} 项
+                      </span>
+                  </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                  {batchProgress ? (
+                      <div className="flex items-center gap-2 bg-indigo-900/40 px-3 py-1.5 rounded text-xs text-indigo-300 border border-indigo-500/20">
+                          <CircleDashed className="w-3.5 h-3.5 animate-spin" />
+                          <span>批量生成中 {batchProgress.current}/{batchProgress.total}</span>
+                      </div>
+                  ) : (
+                      <button 
+                          onClick={handleBatchGenerate}
+                          disabled={isGenerating || selectedShotIds.size === 0}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                      >
+                          <Play className="w-3.5 h-3.5" />
+                          批量生成 ({selectedShotIds.size})
+                      </button>
+                  )}
+
+                  <div className="h-6 w-px bg-gray-700 mx-1"></div>
+
+                  {/* Fixed Top-Right Buttons */}
+                  <button 
+                        onClick={handleSaveClick}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 transition-colors"
+                    >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>存档</span>
+                    </button>
+
+                    <button 
+                        onClick={() => setShowHistory(!showHistory)}
+                        className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
+                        showHistory 
+                            ? 'bg-indigo-600 text-white border-indigo-500' 
+                            : 'bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 border-gray-700'
+                        }`}
+                    >
+                        <History className="w-3.5 h-3.5" />
+                        <span>历史</span>
+                    </button>
+
+                    <button 
+                        onClick={handleExport}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold shadow-lg shadow-emerald-900/30 ml-2"
+                    >
+                        一键导出选定
+                        <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+              </div>
+          </div>
+
+          {/* Resizable Sidebar: Shot List */}
+          <div 
+             style={{ width: sidebarWidth }} 
+             className="pt-[52px] border-r border-gray-800 bg-gray-900 flex flex-col z-10 flex-shrink-0 relative"
+          >
+               <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                   {hasStoryboard && selectedFile?.storyboard?.items.map((item, index) => {
+                       const isSelected = item.id === selectedShotId;
+                       const hasImage = (item.generatedImages && item.generatedImages.length > 0) || !!item.generatedImage;
+                       const isChecked = selectedShotIds.has(item.id);
+                       const isShotGenerating = generatingShotIds.has(item.id);
+                       
+                       // 🔧 使用 thumbnail 而不是 url（url是懒加载的）
+                       const selectedImg = item.selectedImageId 
+                            ? item.generatedImages?.find(img => img.id === item.selectedImageId)
+                            : item.generatedImages?.[0];
+                       
+                       const thumb = selectedImg?.thumbnail || selectedImg?.url || item.generatedImage;
+
+                       return (
+                           <div 
+                               key={item.id}
+                               onClick={() => {
+                                   setSelectedShotId(item.id);
+                               }}
+                               className={`p-2 rounded-lg cursor-pointer border transition-all flex gap-2 group ${
+                                   isSelected 
+                                   ? 'bg-indigo-900/30 border-indigo-500' 
+                                   : 'bg-gray-800 border-gray-700 hover:bg-gray-700'
+                               }`}
+                           >
+                               <div 
+                                    onClick={(e) => toggleShotSelection(e, item.id)}
+                                    className="flex items-center justify-center w-5 flex-shrink-0 text-gray-500 hover:text-white"
+                               >
+                                   {isChecked ? <CheckSquare className="w-4 h-4 text-indigo-400" /> : <Square className="w-4 h-4" />}
+                               </div>
+
+                               <div className="w-12 h-10 bg-black/40 rounded flex-shrink-0 overflow-hidden border border-gray-600/50 relative">
+                                   {thumb ? (
+                                       <img 
+                                           src={thumb} 
+                                           loading="lazy"
+                                           className="w-full h-full object-cover" 
+                                       />
+                                   ) : (
+                                       <div className="w-full h-full flex items-center justify-center">
+                                           <ImageIcon className="w-3 h-3 text-gray-600" />
+                                       </div>
+                                   )}
+                                   {isShotGenerating && (
+                                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                           <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                       </div>
+                                   )}
+                               </div>
+                               <div className="flex-1 min-w-0">
+                                   <div className="flex justify-between items-center mb-0.5">
+                                       <span className={`text-[10px] font-bold ${isSelected ? 'text-indigo-400' : 'text-gray-400'}`}>
+                                           镜头 {String(index + 1).padStart(2, '0')}
+                                       </span>
+                                       <div className="flex items-center gap-1">
+                                           {/* Model Indicator */}
+                                           <div 
+                                               className="relative group/model cursor-pointer"
+                                               onClick={(e) => {
+                                                   e.stopPropagation();
+                                                   const currentModel = shotModels[item.id] || globalModel;
+                                                   // 2026-05-21：循环顺序覆盖全部 8 个模型，确保 indicator 点击能切到天劫系列
+                                                   const models: GenerationModel[] = ['nanobanana', 'qwen', 'qwen_lora', 'kontext', 'qwenN', 'qwenN_lora', 'gpt_image_vip', 'gpt_image_official'];
+                                                   const currentIndex = models.indexOf(currentModel);
+                                                   const nextModel = models[(currentIndex + 1) % models.length];
+                                                   setShotModels(prev => ({ ...prev, [item.id]: nextModel }));
+                                               }}
+                                           >
+                                               <div className={`w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold transition-all ${
+                                                   (shotModels[item.id] || globalModel) === 'nanobanana' 
+                                                       ? 'bg-yellow-500/20 text-yellow-400' 
+                                                       : (shotModels[item.id] || globalModel) === 'qwen'
+                                                       ? 'bg-blue-500/20 text-blue-400'
+                                                       : (shotModels[item.id] || globalModel) === 'qwen_lora'
+                                                       ? 'bg-green-500/20 text-green-400'
+                                                       : (shotModels[item.id] || globalModel) === 'qwenN'
+                                                       ? 'bg-red-500/20 text-red-400'
+                                                       : (shotModels[item.id] || globalModel) === 'gpt_image_vip'
+                                                       ? 'bg-fuchsia-500/20 text-fuchsia-300'
+                                                       : (shotModels[item.id] || globalModel) === 'gpt_image_official'
+                                                       ? 'bg-rose-500/20 text-rose-300'
+                                                       : 'bg-purple-500/20 text-purple-400'
+                                               }`}>
+                                                   {(shotModels[item.id] || globalModel) === 'nanobanana' ? '化神' : 
+                                                    (shotModels[item.id] || globalModel) === 'qwen' ? '练气一阶' : 
+                                                    (shotModels[item.id] || globalModel) === 'qwen_lora' ? '筑基一阶' : 
+                                                    (shotModels[item.id] || globalModel) === 'qwenN' ? 'K神' : 
+                                                    (shotModels[item.id] || globalModel) === 'qwenN_lora' ? '筑基二阶' : 
+                                                    (shotModels[item.id] || globalModel) === 'kontext' ? '练气二阶' : 
+                                                    (shotModels[item.id] || globalModel) === 'gpt_image_vip' ? '天劫一' : 
+                                                    (shotModels[item.id] || globalModel) === 'gpt_image_official' ? '天劫二' : '未知'}
+                                               </div>
+                                               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 hidden group-hover/model:block z-10 whitespace-nowrap bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[8px] text-gray-300 shadow-lg">
+                                                   点击切换模型
+                                               </div>
+                                           </div>
+                                       {item.isConfigConfirmed && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                                       </div>
+                                   </div>
+                                   <p className="text-[9px] text-gray-500 line-clamp-1">{item.scriptSegment}</p>
+                               </div>
+                           </div>
+                       );
+                   })}
+               </div>
+               {/* Drag Handle */}
+               <div
+                    className="absolute top-0 right-0 bottom-0 w-1 bg-transparent hover:bg-indigo-500/50 cursor-col-resize z-50 transition-colors"
+                    onMouseDown={startResizing}
+                >
+                    <div className="absolute top-1/2 -translate-y-1/2 right-0.5">
+                        <GripVertical className="w-3 h-3 text-gray-600 opacity-0 hover:opacity-100" />
+                    </div>
+                </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 flex overflow-hidden pt-[52px]">
+              
+            {/* Configuration Column */}
+            <div className="w-[380px] flex flex-col border-r border-gray-800 bg-gray-900/50 p-6 overflow-y-auto custom-scrollbar">
+                  <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-400" />
+                      画面分镜配置
+                      </h3>
+                      <button 
+                        onClick={handleConfirmConfig}
+                        className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${
+                          selectedShot?.isConfigConfirmed 
+                            ? 'bg-green-900/30 text-green-400 border-green-500/30' 
+                            : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
+                        }`}
+                      >
+                          <CheckCircle2 className="w-3 h-3" />
+                        {selectedShot?.isConfigConfirmed ? '配置已确认' : '确认配置'}
+                      </button>
+                  </div>
+
+                {/* Model Selection */}
+                <div className="mb-6 p-4 bg-gray-950/50 border border-gray-800 rounded-xl">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Zap className="w-3.5 h-3.5 text-yellow-400" />
+                        <span className="text-xs font-bold text-gray-300">默认生成模型</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        <button
+                            onClick={() => setGlobalModel('qwen')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'qwen'
+                                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            练气一阶
+                        </button>
+                        <button
+                            onClick={() => setGlobalModel('qwen_lora')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'qwen_lora'
+                                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            筑基一阶
+                        </button>
+                        <button
+                            onClick={() => setGlobalModel('nanobanana')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'nanobanana'
+                                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            化神
+                        </button>
+                        <button
+                            onClick={() => setGlobalModel('kontext')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'kontext'
+                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            练气二阶
+                        </button>
+                        <button
+                            onClick={() => setGlobalModel('qwenN_lora')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'qwenN_lora'
+                                    ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            筑基二阶
+                        </button>
+                        <button
+                            onClick={() => setGlobalModel('qwenN')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'qwenN'
+                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            K神
+                        </button>
+                        <button
+                            onClick={() => setGlobalModel('gpt_image_vip')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'gpt_image_vip'
+                                    ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            天劫一阶
+                        </button>
+                        <button
+                            onClick={() => setGlobalModel('gpt_image_official')}
+                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                                globalModel === 'gpt_image_official'
+                                    ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-lg'
+                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                            }`}
+                            disabled={isGenerating}
+                        >
+                            天劫二阶
+                        </button>
+                    </div>
+                    <p className="text-[9px] text-gray-500 mt-2">
+                        {globalModel === 'nanobanana' && '化神境界 · 点击分镜列表中的模型标识可单独设置'}
+                        {globalModel === 'qwen' && '练气一阶 · 点击分镜列表中的模型标识可单独设置'}
+                        {globalModel === 'qwen_lora' && '筑基一阶境界 · 点击分镜列表中的模型标识可单独设置'}
+                        {globalModel === 'kontext' && '练气二阶 · 点击分镜列表中的模型标识可单独设置'}
+                        {globalModel === 'qwenN' && 'K神境界 · 点击分镜列表中的模型标识可单独设置'}
+                        {globalModel === 'qwenN_lora' && '筑基二阶境界 · 点击分镜列表中的模型标识可单独设置'}
+                        {globalModel === 'gpt_image_vip' && '天劫一阶 · GPT Image VIP 系列，可调整比例 / 分辨率档位'}
+                        {globalModel === 'gpt_image_official' && '天劫二阶 · GPT Image 官方混合，可调整比例 / 分辨率 / 质量'}
+                    </p>
+
+                    {/* 2026-05-21：化神 / 天劫系列 参数面板 — 仅对应模型选中时显示 */}
+                    {globalModel === 'nanobanana' && (
+                      <div className="mt-3 pt-3 border-t border-gray-800">
+                        <div className="text-[9px] text-gray-500 mb-2 flex items-center gap-1">
+                          <span className="text-yellow-400">●</span> 化神参数 (Gemini Flash · 1K/2K/4K)
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[9px] text-gray-500 block mb-1">画面比例</label>
+                            <select
+                              value={geminiNano2Ratio}
+                              onChange={(e) => setGeminiNano2Ratio(e.target.value)}
+                              disabled={isGenerating}
+                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-yellow-500 focus:outline-none"
+                            >
+                              {GEMINI_NANO2_RATIO_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-gray-500 block mb-1">分辨率</label>
+                            <select
+                              value={geminiNano2Size}
+                              onChange={(e) => setGeminiNano2Size(e.target.value as '1K' | '2K' | '4K')}
+                              disabled={isGenerating}
+                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-yellow-500 focus:outline-none"
+                            >
+                              {GEMINI_NANO2_SIZE_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(globalModel === 'gpt_image_vip' || globalModel === 'gpt_image_official') && (
+                      <div className="mt-3 pt-3 border-t border-gray-800">
+                        <div className="text-[9px] text-gray-500 mb-2 flex items-center gap-1">
+                          <span className={globalModel === 'gpt_image_vip' ? 'text-fuchsia-300' : 'text-rose-300'}>●</span>
+                          {globalModel === 'gpt_image_vip' ? '天劫一阶 (GPT Image 2 VIP)' : '天劫二阶 (GPT Image 2 官方混合)'}
+                          <span className="text-gray-600 ml-1">· auto = 上游自选</span>
+                        </div>
+                        <div className={`grid ${globalModel === 'gpt_image_official' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                          <div>
+                            <label className="text-[9px] text-gray-500 block mb-1">画面比例</label>
+                            <select
+                              value={imageRatio}
+                              onChange={(e) => setImageRatio(e.target.value as GptImageRatio)}
+                              disabled={isGenerating}
+                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-fuchsia-500 focus:outline-none"
+                            >
+                              {GPT_IMAGE_RATIO_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[9px] text-gray-500 block mb-1">分辨率</label>
+                            <select
+                              value={imageK}
+                              onChange={(e) => setImageK(e.target.value as GptImageK)}
+                              disabled={isGenerating}
+                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-fuchsia-500 focus:outline-none"
+                            >
+                              {GPT_IMAGE_K_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {globalModel === 'gpt_image_official' && (
+                            <div>
+                              <label className="text-[9px] text-gray-500 block mb-1">质量</label>
+                              <select
+                                value={imageQuality}
+                                onChange={(e) => setImageQuality(e.target.value as GptImageQuality)}
+                                disabled={isGenerating}
+                                className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-rose-500 focus:outline-none"
+                              >
+                                {GPT_IMAGE_QUALITY_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Prompt */}
+                  <div className="mb-6">
+                      <label className="text-xs font-bold text-gray-400 mb-2 block">画面提示词 (Image Prompt)</label>
+                      <textarea
+                          value={prompt}
+                          onChange={(e) => {
+                            setPrompt(e.target.value);
+                            userEditedPromptRef.current = true; // 🆕 标记用户已手动编辑
+                          }}
+                          onBlur={(e) => {
+                            // 🆕 当用户修改完prompt后，同步更新到storyboard
+                            if (selectedShot && userEditedPromptRef.current) {
+                              console.log('💾 同步prompt到storyboard:', e.target.value.substring(0, 50) + '...');
+                              onUpdateStoryboardItem(selectedShot.id, {
+                                imagePrompt: e.target.value
+                              });
+                            }
+                          }}
+                        disabled={selectedShot?.isConfigConfirmed}
+                        className={`w-full h-32 bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs text-gray-200 focus:border-indigo-500 focus:outline-none resize-none leading-relaxed ${selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      />
+                  </div>
+
+                  {/* Reference Images */}
+                  <div 
+                      className={`mb-6 transition-all ${isDraggingRef ? 'ring-2 ring-indigo-500 ring-inset rounded-lg bg-indigo-500/10' : ''}`}
+                      onDragOver={handleRefDragOver}
+                      onDragLeave={handleRefDragLeave}
+                      onDrop={handleRefDrop}
+                  >
+                      <div className="flex items-center justify-between mb-3">
+                          <label className="text-xs font-bold text-gray-400">
+                              参考图片 ({references.length}/6) 
+                              <span className="font-normal text-gray-500 ml-2">可拖拽图片到此</span>
+                          </label>
+                          <button 
+                             onClick={handleAutoFill}
+                           disabled={selectedShot?.isConfigConfirmed}
+                             className="text-[10px] flex items-center gap-1 bg-indigo-900/30 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30 hover:bg-indigo-900/50 disabled:opacity-50"
+                          >
+                              <Wand2 className="w-3 h-3" />
+                              自动填充绑定素材
+                          </button>
+                      </div>
+
+                      {/* Reference Grid */}
+                      <div className="grid grid-cols-3 gap-2 mb-4">
+                          {references.map((ref) => (
+                              <div 
+                                key={ref.id} 
+                              className="relative group aspect-square bg-black/40 rounded-lg border border-gray-700 overflow-hidden"
+                              >
+                                <img 
+                                  src={ref.url} 
+                                  className="w-full h-full object-cover cursor-pointer" 
+                                  onClick={() => {
+                                    // 🆕 点击打开图片编辑器
+                                    setImageEditorData({ imageUrl: ref.url, referenceId: ref.id });
+                                  }} 
+                                />
+                                  
+                                {/* Action Buttons */}
+                                {!selectedShot?.isConfigConfirmed && (
+                                  <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); setImageEditorData({ imageUrl: ref.url, referenceId: ref.id }); }}
+                                          className="bg-purple-500/80 hover:bg-purple-600 text-white rounded-full p-0.5"
+                                          title="编辑图片"
+                                      >
+                                          <Pencil className="w-3 h-3" />
+                                      </button>
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); setCameraModalImage(ref.url); }}
+                                          className="bg-indigo-500/80 hover:bg-indigo-600 text-white rounded-full p-0.5"
+                                          title="角度调整"
+                                      >
+                                          <Camera className="w-3 h-3" />
+                                      </button>
+                                      <button 
+                                          onClick={(e) => { e.stopPropagation(); setAroundAngleModalImage(ref.url); }}
+                                          className="bg-cyan-500/80 hover:bg-cyan-600 text-white rounded-full p-0.5"
+                                          title="全景角度生成"
+                                      >
+                                          <RotateCcw className="w-3 h-3" />
+                                      </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setReferences(prev => prev.filter(r => r.id !== ref.id)); }}
+                                            className="bg-black/50 hover:bg-red-500 text-white rounded-full p-0.5"
+                                          title="移除"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                  )}
+
+                                  <div className="absolute top-1 left-1 pointer-events-none">
+                                      {ref.type === 'character' && <Users className="w-3 h-3 text-indigo-400 drop-shadow-md" />}
+                                      {ref.type === 'scene' && <MapPin className="w-3 h-3 text-orange-400 drop-shadow-md" />}
+                                      {ref.type === 'pose' && <User className="w-3 h-3 text-blue-400 drop-shadow-md" />}
+                                      {ref.type === 'prop' && <Box className="w-3 h-3 text-yellow-400 drop-shadow-md" />}
+                                      {ref.type === 'effect' && <Zap className="w-3 h-3 text-purple-400 drop-shadow-md" />}
+                                  </div>
+                              </div>
+                          ))}
+                          
+                          {/* 空的参考图槽 - 可点击选择类型上传 */}
+                          {Array.from({ length: Math.max(0, 6 - references.length) }).map((_, i) => (
+                              <div 
+                                  key={i} 
+                                  onClick={(e) => {
+                                      if (!selectedShot?.isConfigConfirmed) {
+                                          setUploadMenuPosition({ x: e.clientX, y: e.clientY });
+                                          setShowUploadMenu(true);
+                                      }
+                                  }}
+                                  className={`aspect-square rounded-lg border border-dashed flex flex-col items-center justify-center text-xs ${
+                                      selectedShot?.isConfigConfirmed 
+                                          ? 'bg-gray-800/20 border-gray-800 text-gray-700 cursor-not-allowed' 
+                                          : 'bg-gray-800/30 border-gray-700 text-gray-600 hover:bg-gray-800/50 hover:border-gray-600 hover:text-gray-400 cursor-pointer transition-all'
+                                  }`}
+                              >
+                                  <Upload className="w-4 h-4 mb-1 opacity-50" />
+                                  <span>{i + 1 + references.length}</span>
+                              </div>
+                          ))}
+                      </div>
+                      
+                      {/* 类型选择菜单 */}
+                      {showUploadMenu && uploadMenuPosition && (
+                          <>
+                              <div 
+                                  className="fixed inset-0 z-[100]" 
+                                  onClick={() => setShowUploadMenu(false)}
+                              />
+                              <div 
+                                  className="fixed z-[101] bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[120px]"
+                                  style={{
+                                      left: `${uploadMenuPosition.x}px`,
+                                      top: `${uploadMenuPosition.y}px`,
+                                  }}
+                              >
+                                  {categories.map((cat) => (
+                                      <label 
+                                          key={cat.type}
+                                          className="flex items-center gap-2 px-3 py-2 hover:bg-gray-800 cursor-pointer text-xs text-gray-300 hover:text-white transition-colors"
+                                      >
+                                          <cat.icon className="w-3.5 h-3.5" />
+                                          {cat.label}
+                                          <input 
+                                              type="file" 
+                                              className="hidden" 
+                                              accept="image/*"
+                                              onChange={(e) => {
+                                                  handleFileUpload(e, cat.type);
+                                                  setShowUploadMenu(false);
+                                              }} 
+                                          />
+                                      </label>
+                                  ))}
+                              </div>
+                          </>
+                      )}
+
+                      {/* Add Buttons */}
+                      <div className="space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                              {categories.map((cat) => (
+                                  <label 
+                                    key={cat.type}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[10px] cursor-pointer transition-colors ${references.length >= 6 || selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed bg-gray-800 border-gray-700 text-gray-500' : 'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300 hover:text-white'}`}
+                                  >
+                                      <cat.icon className="w-3 h-3" />
+                                      {cat.label}
+                                      <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        accept="image/*"
+                                      disabled={references.length >= 6 || selectedShot?.isConfigConfirmed}
+                                        onChange={(e) => handleFileUpload(e, cat.type)} 
+                                      />
+                                  </label>
+                              ))}
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+            {/* Results Column */}
+            <div 
+                className={`flex-1 flex flex-col bg-gray-950 relative overflow-hidden transition-all ${isDraggingResult ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-500/5' : ''}`}
+                onDragOver={handleResultDragOver}
+                onDragLeave={handleResultDragLeave}
+                onDrop={handleResultDrop}
+            >
+                   <div className="flex-1 overflow-y-auto p-6 custom-scrollbar pb-20">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
+                                <ImageIcon className="w-4 h-4 text-emerald-400" />
+                              画面分镜结果
+                              <span className="font-normal text-gray-500 text-xs">可拖拽图片到此</span>
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setShowStoryboardToolModal(true)}
+                                    disabled={!selectedShot}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 hover:border-purple-400 rounded-lg text-xs font-medium text-purple-400 hover:text-purple-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="分镜工具（全景融合/自动分镜/多宫格）"
+                                >
+                                    <Grid3X3 className="w-3.5 h-3.5" />
+                                    分镜工具
+                                </button>
+                            </div>
+                            <input
+                                type="file"
+                                id="upload-result-image"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={async (e) => {
+                                    const fileList = e.target.files;
+                                    if (!fileList || fileList.length === 0 || !selectedShot) return;
+                                    const { uploadEntityFile } = await import('../services/entityFileService');
+                                    
+                                    for (const file of Array.from(fileList)) {
+                                        try {
+                                            const saved = await uploadEntityFile(
+                                                file, 'storyboard_item', selectedShot.id,
+                                                'generated_image', episodeId
+                                            );
+                                            const newImage: GeneratedImage = {
+                                                id: saved.fileId || uuidv4(),
+                                                url: saved.fileUrl,
+                                                thumbnail: saved.fileUrl,
+                                                timestamp: Date.now(),
+                                                fileId: saved.fileId || undefined,
+                                            };
+                                            onUpdateStoryboardItem(selectedShot.id, {
+                                                generatedImages: [newImage],
+                                                selectedImageId: newImage.id,
+                                                generatedImage: saved.fileUrl,
+                                            });
+                                        } catch (err) {
+                                            console.error('上传图片失败:', err);
+                                        }
+                                    }
+                                    e.target.value = '';
+                                }}
+                            />
+                            <button
+                                onClick={() => document.getElementById('upload-result-image')?.click()}
+                                disabled={!selectedShot}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-emerald-500 rounded-lg text-xs font-medium text-gray-300 hover:text-emerald-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="从本地上传图片"
+                            >
+                                <Upload className="w-3.5 h-3.5" />
+                                上传图片
+                            </button>
+                        </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {currentGeneratedImages.map((img) => (
+                                <div 
+                                    key={img.id} 
+                                    draggable
+                                    onDragStart={(e) => handleResultImageDragStart(e, img.url)}
+                                  className={`relative group bg-gray-900 border rounded-xl overflow-hidden shadow-lg transition-all cursor-grab active:cursor-grabbing ${effectiveSelectedId === img.id ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-gray-800'}`}
+                                    onClick={() => handleSelectResult(img.id)}
+                                    title="拖拽到左侧参考图区域可添加为参考图"
+                                >
+                                    <div 
+                                        className="aspect-video bg-black/40 relative cursor-zoom-in group" 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            // 🔧 懒加载：按需加载原图并更新URL
+                                            if (selectedShot && selectedFileId) {
+                                                handleViewFullImage(selectedShot.id, img.id);
+                                            }
+                                        }}
+                                    >
+                                        <img 
+                                            src={img.thumbnail || img.url}
+                                            loading="lazy"
+                                            className="w-full h-full object-contain transition-opacity duration-300"
+                                            style={{ imageRendering: 'auto', opacity: 1 }}
+                                            onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.opacity = '0.3';
+                                                target.alt = '图片加载失败';
+                                            }}
+                                        />
+                                        {img.thumbnail && (
+                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <span className="text-xs text-white bg-black/80 px-2 py-1 rounded">点击查看高清原图</span>
+                                            </div>
+                                        )}
+                                      {effectiveSelectedId === img.id && (
+                                            <div className="absolute top-2 right-2 bg-emerald-500 text-white p-1 rounded-full shadow-lg">
+                                                <CheckCircle2 className="w-4 h-4" />
+                                            </div>
+                                        )}
+                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-end">
+                                            <span className="text-[9px] text-gray-400 font-mono">
+                                                {new Date(img.timestamp).toLocaleTimeString()}
+                                            </span>
+                                          <div className="flex items-center gap-2">
+                                              <button 
+                                                  onClick={(e) => { 
+                                                      e.stopPropagation(); 
+                                                      // 🔧 修改：打开多角度生成弹窗
+                                                      setHumanMultiAngleModalImage(img.url || img.thumbnail);
+                                                  }}
+                                                  className="p-1.5 bg-blue-500/80 hover:bg-blue-600 text-white rounded-md transition-colors"
+                                                  title="多角度人物生成"
+                                              >
+                                                  <Users className="w-3.5 h-3.5" />
+                                              </button>
+                                              <button 
+                                                  onClick={(e) => { 
+                                                      e.stopPropagation(); 
+                                                      // 🆕 打开全景生成弹窗
+                                                      setAroundAngleModalImage(img.url || img.thumbnail);
+                                                  }}
+                                                  className="p-1.5 bg-cyan-500/80 hover:bg-cyan-600 text-white rounded-md transition-colors"
+                                                  title="全景角度生成"
+                                              >
+                                                  <RotateCcw className="w-3.5 h-3.5" />
+                                              </button>
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setCameraModalImage(img.url || img.thumbnail); }}
+                                                  className="p-1.5 bg-indigo-500/80 hover:bg-indigo-600 text-white rounded-md transition-colors"
+                                                  title="角度调整"
+                                              >
+                                                  <Camera className="w-3.5 h-3.5" />
+                                              </button>
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setMattingModalImage(img.url || img.thumbnail); }}
+                                                  className="p-1.5 bg-green-500/80 hover:bg-green-600 text-white rounded-md transition-colors"
+                                                  title="抠图"
+                                              >
+                                                  <Scissors className="w-3.5 h-3.5" />
+                                              </button>
+                                              <button 
+                                                  onClick={(e) => { e.stopPropagation(); setShowFusionModal(true); }}
+                                                  className="p-1.5 bg-orange-500/80 hover:bg-orange-600 text-white rounded-md transition-colors"
+                                                  title="融合"
+                                              >
+                                                  <Layers className="w-3.5 h-3.5" />
+                                              </button>
+                                            <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteResult(img.id); }}
+                                                    className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-md transition-colors"
+                                                    title="删除"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                    </div>
+                                    <div className="p-2 bg-gray-850 flex items-center justify-center cursor-pointer hover:bg-gray-800 transition-colors" onClick={(e) => { e.stopPropagation(); handleSelectResult(img.id); }}>
+                                      <span className={`text-xs font-medium ${effectiveSelectedId === img.id ? 'text-emerald-400' : 'text-gray-500'}`}>
+                                          {effectiveSelectedId === img.id ? '已选定 (最终结果)' : '点击选定'}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {isCurrentShotGenerating && (
+                                <div className="aspect-video bg-gray-900 border-2 border-dashed border-indigo-500/50 rounded-xl flex flex-col items-center justify-center animate-pulse">
+                                    <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                                    <span className="text-indigo-300 text-xs">生成中...</span>
+                                </div>
+                            )}
+
+                            {!isCurrentShotGenerating && currentGeneratedImages.length === 0 && (
+                                <div className="col-span-full py-12 border-2 border-dashed border-gray-800 rounded-xl flex flex-col items-center justify-center text-gray-600 bg-gray-900/30">
+                                    <ImageIcon className="w-12 h-12 mb-3 opacity-20" />
+                                    <p className="text-sm">暂无生成结果</p>
+                                    <p className="text-xs mt-1">请配置提示词并点击生成</p>
+                                </div>
+                            )}
+                      </div>
+                        </div>
+                   </div>
+                   
+                   {/* 🆕 生成按钮 - 固定在结果栏底部居中 */}
+                   <div className="absolute bottom-0 left-0 right-0 flex justify-center py-3 bg-gray-950/95 border-t border-gray-800/50 backdrop-blur-sm">
+                        <button 
+                            onClick={handleGenerateCurrent}
+                            disabled={isCurrentShotGenerating || !prompt || references.length === 0}
+                            className="px-8 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-900/50 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
+                            title={references.length === 0 ? '请先添加参考图片' : ''}
+                        >
+                            <Sparkles className={`w-4 h-4 ${isCurrentShotGenerating ? 'animate-spin' : ''}`} />
+                            {isCurrentShotGenerating ? '正在生成...' : references.length === 0 ? '请添加参考图' : (currentGeneratedImages.length > 0 ? '重新/追加生成' : '开始生成')}
+                        </button>
+                   </div>
+
+        </div>
+
+          {/* Save Version Modal */}
+         {isNamingVersion && (
+            <div className="absolute top-14 right-40 z-50 bg-gray-800 border border-gray-700 shadow-xl rounded-lg p-3 w-72 animate-in fade-in slide-in-from-top-2">
+                <h4 className="text-xs font-bold text-gray-300 mb-2">保存生成存档</h4>
+                <input 
+                    type="text" 
+                    value={versionName}
+                    onChange={(e) => setVersionName(e.target.value)}
+                    className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-xs text-white mb-2 focus:outline-none focus:border-indigo-500"
+                    autoFocus
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitVersionSave();
+                        if (e.key === 'Escape') setIsNamingVersion(false);
+                    }}
+                />
+                <div className="flex gap-2">
+                    <button onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-gray-700 text-gray-300 text-xs rounded hover:bg-gray-600">取消</button>
+                    <button onClick={submitVersionSave} className="flex-1 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-500">确认保存</button>
+                </div>
+            </div>
+        )}
+
+        {/* History Panel */}
+        {showHistory && renderHistoryPanel()}
+
+        {/* Image Preview Modal (Lightbox) with Navigation */}
+        {previewImage && (
+            <div 
+                className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-8 cursor-zoom-out"
+                onClick={closePreview}
+                onKeyDown={(e) => {
+                    if (e.key === 'ArrowLeft') handlePrevImage();
+                    else if (e.key === 'ArrowRight') handleNextImage();
+                    else if (e.key === 'Escape') closePreview();
+                }}
+                tabIndex={0}
+            >
+                {/* 🔧 修复：给容器添加固定尺寸，防止loading动画挤到一起 */}
+                <div className="relative flex items-center justify-center" style={{ minWidth: '50vw', minHeight: '50vh' }}>
+                    {/* 🆕 加载进度指示器 - 独立定位 */}
+                    {isLoadingFullImage && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 rounded-lg z-10">
+                            <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+                            <p className="text-white text-sm">加载大图中...</p>
+                        </div>
+                    )}
+                    <img 
+                        src={previewImage} 
+                        className={`max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl transition-opacity ${isLoadingFullImage ? 'opacity-30' : 'opacity-100'}`}
+                        onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
+                        onLoad={() => {
+                            console.log('✅ 大图加载完成');
+                            setIsLoadingFullImage(false);
+                        }}
+                        onError={() => {
+                            console.error('❌ 大图加载失败');
+                            setIsLoadingFullImage(false);
+                        }}
+                    />
+                    
+                    {/* 🆕 左右导航按钮 */}
+                    {(() => {
+                        const imageList = getPreviewImageList();
+                        const currentIndex = imageList.findIndex(img => img.id === previewImageId);
+                        const hasPrev = currentIndex > 0;
+                        const hasNext = currentIndex < imageList.length - 1;
+                        const totalImages = imageList.length;
+                        
+                        return (
+                            <>
+                                {/* 左箭头 - 上一张 */}
+                                {hasPrev && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
+                                        className="absolute left-4 top-1/2 -translate-y-1/2 bg-gray-800/80 hover:bg-gray-700 text-white rounded-full p-3 border border-gray-600 transition-all hover:scale-110 z-20"
+                                        title="上一张 (←)"
+                                    >
+                                        <ChevronLeft className="w-6 h-6" />
+                                    </button>
+                                )}
+                                
+                                {/* 右箭头 - 下一张 */}
+                                {hasNext && (
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-gray-800/80 hover:bg-gray-700 text-white rounded-full p-3 border border-gray-600 transition-all hover:scale-110 z-20"
+                                        title="下一张 (→)"
+                                    >
+                                        <ChevronRight className="w-6 h-6" />
+                                    </button>
+                                )}
+                                
+                                {/* 图片计数器 */}
+                                {totalImages > 1 && (
+                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/80 text-white text-sm px-4 py-2 rounded-full border border-gray-600 z-20">
+                                        {currentIndex + 1} / {totalImages}
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
+                    
+                    {/* 关闭按钮 */}
+                    <button 
+                        onClick={closePreview}
+                        className="absolute -top-4 -right-4 bg-gray-800 text-white rounded-full p-2 hover:bg-gray-700 border border-gray-600 z-20"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+            </div>
+        )}
+
+        {/* Camera Angle Adjustment Modal */}
+        {cameraModalImage && (
+            <CameraAngleModal
+                imageUrl={cameraModalImage}
+                onClose={() => setCameraModalImage(null)}
+                onSubmit={handleAngleAdjustment}
+                isProcessing={isAngleAdjusting}
+            />
+        )}
+
+        {/* 🆕 Human Multi-Angle Generation Modal */}
+        {humanMultiAngleModalImage && (
+            <HumanMultiAngleModal
+                imageUrl={humanMultiAngleModalImage}
+                onClose={() => setHumanMultiAngleModalImage(null)}
+                onSubmit={handleHumanMultiAngle}
+                isProcessing={isHumanMultiAngleGenerating}
+            />
+        )}
+
+        {/* 🆕 Around Angle Generation Modal */}
+        {aroundAngleModalImage && (
+            <AroundAngleModal
+                imageUrl={aroundAngleModalImage}
+                onClose={() => setAroundAngleModalImage(null)}
+                onSubmit={handleAroundAngle}
+                isProcessing={isAroundAngleGenerating}
+            />
+        )}
+
+        {/* 🆕 Image Editor Modal */}
+        {imageEditorData && (
+            <ImageEditorModal
+                imageUrl={imageEditorData.imageUrl}
+                referenceId={imageEditorData.referenceId}
+                onClose={() => setImageEditorData(null)}
+                onSave={handleImageEditorSave}
+                onAddSketch={handleAddSketch}
+            />
+        )}
+
+        {/* 🆕 抠图弹窗 */}
+        {mattingModalImage && (
+            <MattingModal
+                imageUrl={mattingModalImage}
+                onClose={() => setMattingModalImage(null)}
+                onSubmit={handleMatting}
+                isProcessing={isMattingProcessing}
+            />
+        )}
+
+        {/* 🆕 融合弹窗 */}
+        {showFusionModal && (
+            <ImageFusionModal
+                generatedImages={currentGeneratedImages}
+                onClose={() => setShowFusionModal(false)}
+                onSubmit={handleImageFusion}
+                isProcessing={isFusionProcessing}
+            />
+        )}
+
+        {/* 🆕 分镜工具弹窗 */}
+        {showStoryboardToolModal && (
+            <StoryboardToolModal
+                generatedImages={currentGeneratedImages}
+                materialImages={Object.values(materialLibrary).flat().map(m => ({ url: m.url, name: m.name }))}
+                onClose={() => setShowStoryboardToolModal(false)}
+                onPanorama360={handlePanorama360}
+                onPanoramaFusion={handlePanoramaFusion}
+                onAutoStoryboard={handleAutoStoryboard}
+                onMultiGridStoryboard={handleMultiGridStoryboardSubmit}
+                isProcessing={isStoryboardToolProcessing}
+            />
+        )}
+
+      </div>
+  );
+};
+
+// Camera Angle Adjustment Modal Component
+interface CameraAngleModalProps {
+    imageUrl: string;
+    onClose: () => void;
+    onSubmit: (imageUrl: string, params: {
+        rotate: number;
+        move: number;
+        vertical: number;
+        wideAngle: boolean;
+        customPrompt?: string;
+        seed: number;
+    }) => void;
+    isProcessing: boolean;
+}
+
+const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, onSubmit, isProcessing }) => {
+    const [rotate, setRotate] = useState(0);
+    const [move, setMove] = useState(0);
+    const [vertical, setVertical] = useState(0);
+    const [wideAngle, setWideAngle] = useState(false);
+    const [customPrompt, setCustomPrompt] = useState('');
+    const [seed, setSeed] = useState(() => Math.floor(Math.random() * 900000000000000) + 100000000000000);
+
+    const promptExamples = [
+        "将镜头向前移动（Move the camera forward.）",
+        "将镜头向左移动（Move the camera left.）",
+        "将镜头向右移动（Move the camera right.）",
+        "将镜头向下移动（Move the camera down.）",
+        "将镜头转为俯视（Turn the camera to a top-down view.）",
+        "将镜头转为广角镜头（Turn the camera to a wide-angle lens.）",
+        "将镜头转为特写镜头（Turn the camera to a close-up.）"
+    ];
+
+    const handleSubmit = () => {
+        onSubmit(imageUrl, {
+            rotate,
+            move,
+            vertical,
+            wideAngle,
+            customPrompt: customPrompt.trim() || undefined,
+            seed
+        });
+    };
+
+    const DiscreteSlider: React.FC<{
+        label: string;
+        values: number[];
+        value: number;
+        onChange: (val: number) => void;
+    }> = ({ label, values, value, onChange }) => {
+        const currentIndex = values.indexOf(value);
+        const displayIndex = currentIndex === -1 ? 0 : currentIndex;
+        
+        return (
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] text-gray-400">
+                    <span>{label}</span>
+                    <span className="font-semibold text-white">{value}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="range"
+                        min={0}
+                        max={values.length - 1}
+                        step={1}
+                        value={displayIndex}
+                        onChange={(e) => onChange(values[Number(e.target.value)])}
+                        className="flex-1 accent-indigo-500"
+                    />
+                </div>
+                <div className="flex justify-between text-[9px] text-gray-500">
+                    {values.map((v, i) => (
+                        <span key={i} className={value === v ? 'text-indigo-400 font-semibold' : ''}>{v}</span>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
+            <div className="w-full max-w-4xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+                
+                {/* 🆕 Loading覆盖层 - 处理中时显示 */}
+                {isProcessing && (
+                    <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
+                        <div className="relative">
+                            <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+                        </div>
+                        <h4 className="text-lg font-bold text-white mb-2">正在生成新角度...</h4>
+                        <p className="text-sm text-gray-400 mb-4">请稍候，AI正在重建镜头</p>
+                        <div className="flex items-center gap-2 text-xs text-indigo-300">
+                            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                            <span>处理中</span>
+                        </div>
+                    </div>
+                )}
+                
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-lg font-bold text-white">角度调整</h3>
+                        <p className="text-xs text-gray-400 mt-1">基于现有图片重建镜头角度，保持画面一致性。</p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white" disabled={isProcessing}>
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                        <div className="relative rounded-2xl overflow-hidden border border-gray-800 h-80 bg-black/30 flex items-center justify-center">
+                            <img src={imageUrl} className="w-full h-full object-contain" alt="预览" />
+                        </div>
+                    </div>
+
+                    <div className="space-y-5">
+                        <div className="space-y-3 bg-gray-950/30 border border-gray-800 rounded-xl p-4">
+                            <h4 className="text-xs font-bold text-gray-400 uppercase">镜头控制</h4>
+                            <DiscreteSlider 
+                                label="水平旋转 (°)" 
+                                values={[-90, -45, 0, 45, 90]} 
+                                value={rotate} 
+                                onChange={setRotate} 
+                            />
+                            <DiscreteSlider 
+                                label="推进距离" 
+                                values={[0, 5, 10]} 
+                                value={move} 
+                                onChange={setMove} 
+                            />
+                            <DiscreteSlider 
+                                label="垂直角度" 
+                                values={[-1, 0, 1]} 
+                                value={vertical} 
+                                onChange={setVertical} 
+                            />
+                            <label className="flex items-center gap-2 text-xs text-gray-300">
+                                <input type="checkbox" checked={wideAngle} onChange={(e) => setWideAngle(e.target.checked)} />
+                                启用广角透视
+                            </label>
+                        </div>
+
+                        <div className="space-y-2">
+                            <span className="text-[11px] font-bold text-gray-500 uppercase">自定义提示词 (可覆盖镜头设定)</span>
+                            <textarea
+                                rows={3}
+                                value={customPrompt}
+                                onChange={(e) => setCustomPrompt(e.target.value)}
+                                className="w-full bg-gray-900 border border-gray-700 rounded-lg text-sm text-white p-3 focus:outline-none focus:border-indigo-500 resize-none"
+                                placeholder="输入更详细的场景描述或留空使用自动提示..."
+                            />
+                            <div className="flex flex-wrap gap-1 mt-2">
+                                {promptExamples.map((example, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => setCustomPrompt(example)}
+                                        className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-indigo-600 text-gray-400 hover:text-white rounded border border-gray-700 hover:border-indigo-500 transition-colors"
+                                    >
+                                        {example.split('（')[0]}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-xs text-gray-300">
+                            <div className="flex items-center gap-2">
+                                <span>随机种子</span>
+                                <input
+                                    type="number"
+                                    value={seed}
+                                    onChange={(e) => setSeed(Number(e.target.value))}
+                                    className="w-32 bg-gray-900 border border-gray-700 rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+                                />
+                            </div>
+                            <button 
+                                onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
+                                className="px-2 py-1 rounded border border-gray-700 hover:border-indigo-500 hover:text-white transition-colors"
+                            >
+                                随机
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800" disabled={isProcessing}>取消</button>
+                    <button 
+                        onClick={handleSubmit} 
+                        disabled={isProcessing}
+                        className="px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 text-xs font-bold text-white shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isProcessing ? '生成中...' : '生成新角度'}
+                    </button>
+                </div>
+            </div>
+      </div>
+  );
+};
+
+// 🆕 Human Multi-Angle Generation Modal Component
+interface HumanMultiAngleModalProps {
+    imageUrl: string;
+    onClose: () => void;
+    onSubmit: (imageUrl: string, seed: number) => void;
+    isProcessing: boolean;
+}
+
+const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, onClose, onSubmit, isProcessing }) => {
+    const [seed, setSeed] = useState(() => Math.floor(Math.random() * 900000000000000) + 100000000000000);
+
+    const handleSubmit = () => {
+        onSubmit(imageUrl, seed);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
+            <div className="w-full max-w-2xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+                
+                {/* Loading覆盖层 - 处理中时显示 */}
+                {isProcessing && (
+                    <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
+                        <div className="relative">
+                            <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4"></div>
+                        </div>
+                        <h4 className="text-lg font-bold text-white mb-2">正在生成多角度人物...</h4>
+                        <p className="text-sm text-gray-400 mb-4">请稍候，AI正在生成多视角图像</p>
+                        <div className="flex items-center gap-2 text-xs text-purple-300">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                            <span>处理中</span>
+                        </div>
+                    </div>
+                )}
+                
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-lg font-bold text-white">多角度人物生成</h3>
+                        <p className="text-xs text-gray-400 mt-1">基于选中的图片生成多角度人物视图</p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white" disabled={isProcessing}>
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                    {/* 预览图 */}
+                    <div className="relative rounded-2xl overflow-hidden border border-gray-800 h-64 bg-black/30 flex items-center justify-center">
+                        <img src={imageUrl} className="w-full h-full object-contain" alt="选中的图片" />
+                    </div>
+
+                    {/* Seed 控制 */}
+                    <div className="bg-gray-950/30 border border-gray-800 rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <span className="text-[11px] font-bold text-gray-400 uppercase">随机种子</span>
+                                <input
+                                    type="number"
+                                    value={seed}
+                                    onChange={(e) => setSeed(Number(e.target.value))}
+                                    className="w-48 bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-purple-500 text-white"
+                                />
+                            </div>
+                            <button 
+                                onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
+                                className="px-3 py-1.5 rounded border border-gray-700 hover:border-purple-500 hover:text-white transition-colors text-sm text-gray-400"
+                            >
+                                随机
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800" disabled={isProcessing}>取消</button>
+                    <button 
+                        onClick={handleSubmit} 
+                        disabled={isProcessing}
+                        className="px-5 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-xs font-bold text-white shadow-lg shadow-purple-900/30 hover:shadow-purple-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isProcessing ? '生成中...' : '开始生成'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// 🆕 Around Angle (全景) Generation Modal Component
+interface AroundAngleModalProps {
+    imageUrl: string;
+    onClose: () => void;
+    onSubmit: (imageUrl: string, prompt: string, seed: number) => void;
+    isProcessing: boolean;
+}
+
+const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, onSubmit, isProcessing }) => {
+    const [prompt, setPrompt] = useState('front view, eye level, medium shot');
+    const [seed, setSeed] = useState(() => Math.floor(Math.random() * 900000000000000) + 100000000000000);
+    const [rawValues, setRawValues] = useState({ horizontal: 0, vertical: 0, zoom: 5 });
+
+    // 处理 3D 控制器的更新
+    const handleControllerChange = useCallback((newPrompt: string, raw: { horizontal: number; vertical: number; zoom: number }) => {
+        setPrompt(newPrompt);
+        setRawValues(raw);
+    }, []);
+
+    const handleSubmit = () => {
+        onSubmit(imageUrl, prompt, seed);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[130] p-6" onClick={isProcessing ? undefined : onClose}>
+            <div className="w-full h-full max-w-6xl max-h-[90vh] bg-gray-900 border border-cyan-500/30 rounded-2xl shadow-2xl flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+                
+                {/* Loading覆盖层 */}
+                {isProcessing && (
+                    <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
+                        <div className="relative">
+                            <div className="w-20 h-20 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mb-4"></div>
+                        </div>
+                        <h4 className="text-xl font-bold text-white mb-2">正在生成全景角度...</h4>
+                        <p className="text-sm text-gray-400 mb-4">请稍候，AI正在生成指定视角图像</p>
+                        <div className="flex items-center gap-2 text-sm text-cyan-300">
+                            <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
+                            <span>处理中</span>
+                        </div>
+                    </div>
+                )}
+                
+                {/* 顶部标题栏 - 包含数值输入 */}
+                <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 shrink-0">
+                    <div className="flex items-center gap-6">
+                        <div>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <span className="text-cyan-400">◈</span>
+                                全景角度生成
+                                <span className="text-xs font-normal text-gray-500 ml-1">96种组合</span>
+                            </h3>
+                        </div>
+                        
+                        {/* 数值输入区域 */}
+                        <div className="flex items-center gap-4 ml-4">
+                            {/* 水平角度 */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-pink-400 font-medium">水平</span>
+                                <input 
+                                    type="number" 
+                                    value={Math.round(rawValues.horizontal)}
+                                    onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        const clamped = ((val % 360) + 360) % 360;
+                                        setRawValues(prev => ({ ...prev, horizontal: clamped }));
+                                    }}
+                                    className="w-16 px-2 py-1 bg-gray-800 border border-pink-500/40 rounded text-pink-400 text-sm font-semibold text-center focus:outline-none focus:border-pink-500"
+                                    min={0}
+                                    max={360}
+                                />
+                                <span className="text-pink-400 text-xs">°</span>
+                            </div>
+                            
+                            {/* 垂直角度 */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-cyan-400 font-medium">垂直</span>
+                                <input 
+                                    type="number" 
+                                    value={Math.round(rawValues.vertical)}
+                                    onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        const clamped = Math.max(-30, Math.min(90, val));
+                                        setRawValues(prev => ({ ...prev, vertical: clamped }));
+                                    }}
+                                    className="w-16 px-2 py-1 bg-gray-800 border border-cyan-500/40 rounded text-cyan-400 text-sm font-semibold text-center focus:outline-none focus:border-cyan-500"
+                                    min={-30}
+                                    max={90}
+                                />
+                                <span className="text-cyan-400 text-xs">°</span>
+                            </div>
+                            
+                            {/* 缩放 */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-yellow-400 font-medium">距离</span>
+                                <input 
+                                    type="number" 
+                                    value={rawValues.zoom.toFixed(1)}
+                                    onChange={(e) => {
+                                        const val = parseFloat(e.target.value) || 0;
+                                        const clamped = Math.max(0, Math.min(10, val));
+                                        setRawValues(prev => ({ ...prev, zoom: clamped }));
+                                    }}
+                                    className="w-16 px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded text-yellow-400 text-sm font-semibold text-center focus:outline-none focus:border-yellow-500"
+                                    min={0}
+                                    max={10}
+                                    step={0.1}
+                                />
+                            </div>
+                            
+                            {/* 重置按钮 */}
+                            <button 
+                                onClick={() => setRawValues({ horizontal: 0, vertical: 0, zoom: 5 })}
+                                className="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
+                                title="重置角度"
+                            >
+                                ↺
+                            </button>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white p-2" disabled={isProcessing}>
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+
+                {/* 3D 控制器 - 占据主要空间 */}
+                <div className="flex-1 min-h-0 p-4">
+                    <MultiAngle3DController
+                        imageUrl={imageUrl}
+                        onChange={handleControllerChange}
+                        initialValues={rawValues}
+                    />
+                </div>
+                
+                {/* 底部工具栏 */}
+                <div className="flex items-center gap-4 px-6 py-4 border-t border-gray-800 bg-gray-950/50 shrink-0">
+                    {/* 提示词显示 */}
+                    <div className="flex-1">
+                        <input
+                            type="text"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-cyan-500 text-cyan-300 font-mono"
+                            placeholder="角度提示词（由上方控制器自动生成）"
+                        />
+                    </div>
+                    
+                    {/* 种子 */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">种子:</span>
+                        <input
+                            type="number"
+                            value={seed}
+                            onChange={(e) => setSeed(Number(e.target.value))}
+                            className="w-40 bg-gray-900 border border-gray-700 rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-cyan-500 text-white"
+                        />
+                        <button 
+                            onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
+                            className="px-3 py-3 rounded-lg border border-gray-700 hover:border-cyan-500 hover:bg-gray-800 transition-colors text-lg"
+                            title="随机种子"
+                        >
+                            🎲
+                        </button>
+                    </div>
+                    
+                    {/* 按钮 */}
+                    <button onClick={onClose} className="px-6 py-3 rounded-lg border border-gray-600 text-sm text-gray-300 hover:bg-gray-800 transition-colors" disabled={isProcessing}>
+                        取消
+                    </button>
+                    <button 
+                        onClick={handleSubmit} 
+                        disabled={isProcessing}
+                        className="px-8 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-sm font-bold text-white shadow-lg shadow-cyan-900/30 hover:shadow-cyan-900/50 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isProcessing ? '生成中...' : '🚀 开始生成'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// 🆕 Image Editor Modal Component
+interface ImageEditorModalProps {
+    imageUrl: string;
+    referenceId: string;
+    onClose: () => void;
+    onSave: (editedImageUrl: string, referenceId: string) => void;
+    onAddSketch: (sketchImageUrl: string) => void;
+}
+
+type EditorTool = 'brush' | 'text' | 'arrow' | 'eraser';
+type EditorMode = 'edit' | 'sketch';
+
+const ImageEditorModal: React.FC<ImageEditorModalProps> = ({ 
+    imageUrl, 
+    referenceId, 
+    onClose, 
+    onSave, 
+    onAddSketch 
+}) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const sketchCanvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [tool, setTool] = useState<EditorTool>('brush');
+    const [mode, setMode] = useState<EditorMode>('edit');
+    const [brushColor, setBrushColor] = useState('#ff0000');
+    const [brushSize, setBrushSize] = useState(3);
+    const [textInput, setTextInput] = useState('');
+    const [textPosition, setTextPosition] = useState<{x: number, y: number} | null>(null);
+    const [arrowStart, setArrowStart] = useState<{x: number, y: number} | null>(null);
+    const [imageLoaded, setImageLoaded] = useState(false);
+    const lastPosRef = useRef<{x: number, y: number} | null>(null);
+
+    // 加载图片到画布
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const sketchCanvas = sketchCanvasRef.current;
+        if (!canvas || !sketchCanvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const sketchCtx = sketchCanvas.getContext('2d');
+        if (!ctx || !sketchCtx) return;
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            // 设置画布大小
+            const maxWidth = 800;
+            const maxHeight = 600;
+            let width = img.width;
+            let height = img.height;
+            
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+            if (height > maxHeight) {
+                width = (maxHeight / height) * width;
+                height = maxHeight;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            sketchCanvas.width = width;
+            sketchCanvas.height = height;
+
+            // 绘制图片到编辑画布
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // 线稿画布：白色背景 + 半透明图片参考
+            sketchCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            sketchCtx.fillRect(0, 0, width, height);
+            sketchCtx.globalAlpha = 0.15;
+            sketchCtx.drawImage(img, 0, 0, width, height);
+            sketchCtx.globalAlpha = 1.0;
+
+            setImageLoaded(true);
+        };
+        img.src = imageUrl;
+    }, [imageUrl]);
+
+    const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        // 🔧 直接使用事件的目标画布，而不是通过 mode 判断
+        const canvas = e.currentTarget;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        
+        // 🔧 计算画布实际尺寸与显示尺寸的缩放比例
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        return {
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
+        };
+    };
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const coords = getCanvasCoords(e);
+        
+        if (tool === 'text') {
+            setTextPosition(coords);
+            return;
+        }
+        
+        if (tool === 'arrow') {
+            setArrowStart(coords);
+            return;
+        }
+        
+        setIsDrawing(true);
+        lastPosRef.current = coords;
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (!isDrawing) return;
+        
+        // 🔧 直接使用事件的目标画布
+        const canvas = e.currentTarget;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const coords = getCanvasCoords(e);
+        const lastPos = lastPosRef.current;
+        
+        if (!lastPos) {
+            lastPosRef.current = coords;
+            return;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(lastPos.x, lastPos.y);
+        ctx.lineTo(coords.x, coords.y);
+        
+        if (tool === 'eraser') {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.strokeStyle = 'rgba(0,0,0,1)';
+            ctx.lineWidth = brushSize * 3;
+        } else {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = mode === 'sketch' ? '#000000' : brushColor;
+            ctx.lineWidth = brushSize;
+        }
+        
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+        
+        lastPosRef.current = coords;
+    };
+
+    const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (tool === 'arrow' && arrowStart) {
+            // 🔧 直接使用事件的目标画布
+            const canvas = e.currentTarget;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    const coords = getCanvasCoords(e);
+                    drawArrow(ctx, arrowStart.x, arrowStart.y, coords.x, coords.y);
+                }
+            }
+            setArrowStart(null);
+        }
+        setIsDrawing(false);
+        lastPosRef.current = null;
+    };
+
+    const drawArrow = (ctx: CanvasRenderingContext2D, fromX: number, fromY: number, toX: number, toY: number) => {
+        const headLen = 15;
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const angle = Math.atan2(dy, dx);
+
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.strokeStyle = mode === 'sketch' ? '#000000' : brushColor;
+        ctx.lineWidth = brushSize;
+        ctx.stroke();
+
+        // 箭头头部
+        ctx.beginPath();
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(toX, toY);
+        ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+    };
+
+    const handleAddText = () => {
+        if (!textPosition || !textInput.trim()) return;
+        
+        const canvas = mode === 'edit' ? canvasRef.current : sketchCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.font = `${brushSize * 6}px Arial`;
+        ctx.fillStyle = mode === 'sketch' ? '#000000' : brushColor;
+        ctx.fillText(textInput, textPosition.x, textPosition.y);
+        
+        setTextInput('');
+        setTextPosition(null);
+    };
+
+    const handleSaveEdit = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const dataUrl = canvas.toDataURL('image/png');
+        onSave(dataUrl, referenceId);
+    };
+
+    const handleAddSketchAsRef = () => {
+        const canvas = sketchCanvasRef.current;
+        if (!canvas) return;
+        
+        // 创建纯白底黑线的线稿
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        if (!tempCtx) return;
+        
+        // 白色背景
+        tempCtx.fillStyle = '#ffffff';
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        
+        // 复制线稿（需要提取黑色线条）
+        tempCtx.drawImage(canvas, 0, 0);
+        
+        const dataUrl = tempCanvas.toDataURL('image/png');
+        onAddSketch(dataUrl);
+    };
+
+    const handleReset = () => {
+        const canvas = mode === 'edit' ? canvasRef.current : sketchCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        if (mode === 'edit') {
+            // 重新加载原图
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = imageUrl;
+        } else {
+            // 重置线稿画布
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = 0.15;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = 1.0;
+            };
+            img.src = imageUrl;
+        }
+    };
+
+    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff', '#000000'];
+
+    return (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur flex items-center justify-center z-[140]" onClick={onClose}>
+            <div className="w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 relative" onClick={(e) => e.stopPropagation()}>
+                
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="text-lg font-bold text-white">图片编辑器</h3>
+                        <p className="text-xs text-gray-400">画笔涂鸦、添加文字和箭头标注</p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Mode Tabs */}
+                <div className="flex gap-2 mb-4">
+                    <button
+                        onClick={() => setMode('edit')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                            mode === 'edit' 
+                                ? 'bg-purple-500 text-white' 
+                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                        }`}
+                    >
+                        <Pencil className="w-4 h-4" />
+                        编辑底图
+                    </button>
+                    <button
+                        onClick={() => setMode('sketch')}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                            mode === 'sketch' 
+                                ? 'bg-blue-500 text-white' 
+                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                        }`}
+                    >
+                        <Layers className="w-4 h-4" />
+                        绘制线稿
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-[1fr_200px] gap-4">
+                    {/* Canvas Area */}
+                    <div className="relative bg-gray-950 rounded-xl overflow-hidden flex items-center justify-center min-h-[400px]">
+                        {!imageLoaded && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                            </div>
+                        )}
+                        <canvas
+                            ref={canvasRef}
+                            className={`max-w-full max-h-[500px] cursor-crosshair ${mode === 'edit' ? 'block' : 'hidden'}`}
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUp}
+                            onMouseLeave={handleMouseUp}
+                        />
+                        <canvas
+                            ref={sketchCanvasRef}
+                            className={`max-w-full max-h-[500px] cursor-crosshair ${mode === 'sketch' ? 'block' : 'hidden'}`}
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUp}
+                            onMouseLeave={handleMouseUp}
+                        />
+                    </div>
+
+                    {/* Tools Panel */}
+                    <div className="bg-gray-950 rounded-xl p-4 space-y-4">
+                        <div>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">工具</span>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => setTool('brush')}
+                                    className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
+                                        tool === 'brush' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                    }`}
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                    <span className="text-[9px]">画笔</span>
+                                </button>
+                                <button
+                                    onClick={() => setTool('text')}
+                                    className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
+                                        tool === 'text' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                    }`}
+                                >
+                                    <Type className="w-4 h-4" />
+                                    <span className="text-[9px]">文字</span>
+                                </button>
+                                <button
+                                    onClick={() => setTool('arrow')}
+                                    className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
+                                        tool === 'arrow' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                    }`}
+                                >
+                                    <MoveRight className="w-4 h-4" />
+                                    <span className="text-[9px]">箭头</span>
+                                </button>
+                                <button
+                                    onClick={() => setTool('eraser')}
+                                    className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
+                                        tool === 'eraser' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                    }`}
+                                >
+                                    <Eraser className="w-4 h-4" />
+                                    <span className="text-[9px]">橡皮</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {mode === 'edit' && (
+                            <div>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">颜色</span>
+                                <div className="grid grid-cols-4 gap-1">
+                                    {colors.map(color => (
+                                        <button
+                                            key={color}
+                                            onClick={() => setBrushColor(color)}
+                                            className={`w-8 h-8 rounded-lg border-2 transition-all ${
+                                                brushColor === color ? 'border-white scale-110' : 'border-transparent'
+                                            }`}
+                                            style={{ backgroundColor: color }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">
+                                笔刷大小: {brushSize}px
+                            </span>
+                            <input
+                                type="range"
+                                min="1"
+                                max="20"
+                                value={brushSize}
+                                onChange={(e) => setBrushSize(Number(e.target.value))}
+                                className="w-full accent-purple-500"
+                            />
+                        </div>
+
+                        {tool === 'text' && textPosition && (
+                            <div>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">输入文字</span>
+                                <input
+                                    type="text"
+                                    value={textInput}
+                                    onChange={(e) => setTextInput(e.target.value)}
+                                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white mb-2"
+                                    placeholder="输入文字..."
+                                    autoFocus
+                                />
+                                <button
+                                    onClick={handleAddText}
+                                    className="w-full py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded text-xs font-bold"
+                                >
+                                    添加文字
+                                </button>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleReset}
+                            className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-bold flex items-center justify-center gap-2"
+                        >
+                            <RotateCcw className="w-3 h-3" />
+                            重置
+                        </button>
+                    </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-800">
+                    <p className="text-[10px] text-gray-500">
+                        {mode === 'edit' ? '编辑模式：修改会改变底图' : '线稿模式：在透明层上绘制，生成白底黑线参考图'}
+                    </p>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={onClose} 
+                            className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800"
+                        >
+                            取消
+                        </button>
+                        {mode === 'sketch' && (
+                            <button 
+                                onClick={handleAddSketchAsRef}
+                                className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-xs font-bold text-white flex items-center gap-2"
+                            >
+                                <Layers className="w-3 h-3" />
+                                添加为参考图
+                            </button>
+                        )}
+                        {mode === 'edit' && (
+                            <button 
+                                onClick={handleSaveEdit}
+                                className="px-4 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-xs font-bold text-white flex items-center gap-2"
+                            >
+                                <Save className="w-3 h-3" />
+                                保存修改
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};

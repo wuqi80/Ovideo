@@ -1,0 +1,154 @@
+"""dashscope_video_api 把前端新字段（multi_shot/seed/resolution/ratio/...）
+正确序列化到 DashScope API 请求 payload 里。
+
+2026-05-24：DashScopeCards 重设计 → 后端透传新字段（kling 多镜头、Vidu
+resolution/seed/audio、HappyHorse ratio/duration/watermark/seed）。本测试
+通过 mock `aiohttp.ClientSession` 抓获 POST body，校验字段位置（input vs
+parameters）和值映射。
+"""
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+import dashscope_video_api as ds
+
+
+# ─── helpers（沿用 test_minimax_tts_sync 的 fake aiohttp 范式） ───────────
+
+
+def _fake_response(status: int = 200):
+    """Build an `async with session.post(...) as resp` compatible mock."""
+    resp = MagicMock()
+    resp.status = status
+    resp.json = AsyncMock(return_value={
+        "output": {"task_id": "ds-test-123", "task_status": "PENDING"},
+        "request_id": "req-test",
+    })
+    resp.text = AsyncMock(return_value="")
+    resp.__aenter__ = AsyncMock(return_value=resp)
+    resp.__aexit__ = AsyncMock(return_value=False)
+    return resp
+
+
+def _fake_session(captured: dict, post_response):
+    """Mock aiohttp.ClientSession() context manager + capture POST body."""
+    session = MagicMock()
+
+    def _capture(url, **kwargs):
+        captured["url"] = url
+        body = kwargs.get("json")
+        if body is None and kwargs.get("data") is not None:
+            data = kwargs["data"]
+            if isinstance(data, (bytes, bytearray)):
+                body = json.loads(data.decode("utf-8"))
+            elif isinstance(data, str):
+                body = json.loads(data)
+        captured["payload"] = body
+        return post_response
+
+    session.post = MagicMock(side_effect=_capture)
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    return session
+
+
+@pytest.fixture
+def patch_http():
+    """拦截 aiohttp ClientSession POST，捕获 payload 到 captured dict。"""
+    captured: dict = {}
+    resp = _fake_response()
+    session_ctx = _fake_session(captured, resp)
+    with patch("aiohttp.ClientSession", return_value=session_ctx):
+        yield captured
+
+
+# ─── 4 个 mock-based 异步测试（pytest-asyncio auto-mode） ─────────────────
+
+
+async def test_kling_multi_shot_intelligence_serialized(patch_http):
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="合体",
+        params={
+            "prompt": "雾岭镇",
+            "kling_multi_shot": True,
+            "kling_shot_type": "intelligence",
+            "duration": 10,
+            "aspect_ratio": "9:16",
+        },
+    )
+    p = patch_http["payload"]
+    assert p["input"].get("multi_shot") is True
+    assert p["input"].get("shot_type") == "intelligence"
+    assert p["parameters"].get("duration") == 10
+    assert p["parameters"].get("aspect_ratio") == "9:16"
+
+
+async def test_kling_multi_shot_customize_multi_prompt_serialized(patch_http):
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="合体",
+        params={
+            "kling_multi_shot": True,
+            "kling_shot_type": "customize",
+            "kling_multi_prompt": [
+                {"index": 1, "prompt": "雾岭镇黄昏", "duration": 5},
+                {"index": 2, "prompt": "拨打电话", "duration": 5},
+            ],
+            "duration": 10,
+        },
+    )
+    p = patch_http["payload"]
+    assert p["input"].get("shot_type") == "customize"
+    assert isinstance(p["input"].get("multi_prompt"), list)
+    assert len(p["input"]["multi_prompt"]) == 2
+    assert p["input"]["multi_prompt"][0]["prompt"] == "雾岭镇黄昏"
+
+
+async def test_vidu_resolution_size_seed_audio_serialized(patch_http):
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="大乘",
+        params={
+            "prompt": "弹吉他",
+            "media_inputs": [
+                {"kind": "image", "url": "https://x/1.jpg", "role": "reference_image"}
+            ],
+            "vidu_resolution": "1080P",
+            "vidu_size": "1920*1080",
+            "vidu_seed": 12345,
+            "vidu_audio": True,
+            "duration": 8,
+        },
+    )
+    p = patch_http["payload"]
+    assert p["parameters"].get("resolution") == "1080P"
+    assert p["parameters"].get("size") == "1920*1080"
+    assert p["parameters"].get("seed") == 12345
+    assert p["parameters"].get("audio") is True
+    assert p["parameters"].get("duration") == 8
+
+
+async def test_happyhorse_resolution_ratio_duration_watermark_seed_serialized(patch_http):
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="炼虚",
+        params={
+            "prompt": "[Image 1] 红衣女子",
+            "media_inputs": [
+                {"kind": "image", "url": "https://x/g.jpg", "role": "reference_image"}
+            ],
+            "hh_resolution": "720P",
+            "hh_ratio": "9:16",
+            "hh_duration": 7,
+            "hh_watermark": False,
+            "hh_seed": 42,
+        },
+    )
+    p = patch_http["payload"]
+    assert p["parameters"].get("resolution") == "720P"
+    assert p["parameters"].get("ratio") == "9:16"
+    assert p["parameters"].get("duration") == 7
+    assert p["parameters"].get("watermark") is False
+    assert p["parameters"].get("seed") == 42

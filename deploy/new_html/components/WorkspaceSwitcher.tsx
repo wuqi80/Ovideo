@@ -1,0 +1,110 @@
+/**
+ * WorkspaceSwitcher.tsx
+ * 2026-05-26 组织管理 MVP — Slice 3
+ *
+ * 顶栏下拉，让用户在「个人空间」和「我加入的组织」之间切换。
+ * 切换会触发 WorkspaceContext 状态更新，依赖 useCurrentOrgId() 的页面
+ * （ProjectHub / MediaLibraryPage 等）会自动重新拉数据。
+ *
+ * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §6.2
+ */
+
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronDown, User as UserIcon, Building2, Check, RefreshCw } from 'lucide-react';
+import { useWorkspace, WorkspaceId } from '../contexts/WorkspaceContext';
+
+export const WorkspaceSwitcher: React.FC = () => {
+  const { currentWorkspace, currentName, isOrgWorkspace, organizations, setWorkspace, refreshOrganizations, loading } = useWorkspace();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const handlePick = (ws: WorkspaceId) => {
+    setWorkspace(ws);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700"
+        title="切换工作区"
+      >
+        {isOrgWorkspace ? <Building2 size={12} className="text-indigo-300" /> : <UserIcon size={12} className="text-gray-400" />}
+        <span className="max-w-[120px] truncate">{currentName}</span>
+        <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-50 overflow-hidden">
+          <div className="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wider text-gray-500">切换工作区</span>
+            <button
+              onClick={() => refreshOrganizations()}
+              className="text-gray-500 hover:text-gray-300"
+              title="刷新组织列表"
+            >
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
+          <button
+            onClick={() => handlePick('personal')}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-800 ${
+              currentWorkspace === 'personal' ? 'bg-gray-800/50' : ''
+            }`}
+          >
+            <UserIcon size={13} className="text-gray-400" />
+            <div className="flex-1">
+              <div className="text-gray-200">个人空间</div>
+              <div className="text-[10px] text-gray-500">仅我可见的项目和素材</div>
+            </div>
+            {currentWorkspace === 'personal' && <Check size={12} className="text-indigo-400" />}
+          </button>
+
+          {organizations.length > 0 && (
+            <div className="border-t border-gray-800">
+              <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-gray-500">我加入的组织</div>
+              {organizations.map(o => (
+                <button
+                  key={o.org_id}
+                  onClick={() => handlePick(o.org_id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-gray-800 ${
+                    currentWorkspace === o.org_id ? 'bg-gray-800/50' : ''
+                  }`}
+                >
+                  <Building2 size={13} className="text-indigo-300" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-gray-200 truncate">{o.name}</div>
+                    <div className="text-[10px] text-gray-500">
+                      角色：{o.my_role || 'member'}
+                    </div>
+                  </div>
+                  {currentWorkspace === o.org_id && <Check size={12} className="text-indigo-400" />}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {organizations.length === 0 && !loading && (
+            <div className="px-3 py-3 text-[11px] text-gray-500 border-t border-gray-800">
+              你还没加入任何组织。
+              <div className="mt-1 text-[10px] text-gray-600">联系管理员把你加入组织即可获得组织 workspace。</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default WorkspaceSwitcher;

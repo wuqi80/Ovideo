@@ -1,0 +1,46 @@
+# === Web Framework ===
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.9
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# === HTTP / WebSocket ===
+aiohttp==3.9.1
+requests==2.31.0
+websockets==12.0
+python-socketio==5.11.0
+
+# === Database ===
+asyncpg==0.29.0
+redis[hiredis]==5.0.1
+
+# === File / Media ===
+aiofiles==23.2.1
+Pillow==10.2.0
+ffmpeg-python==0.2.0
+
+# === Auth / Security ===
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+PyJWT==2.8.0
+bcrypt==4.1.2
+
+# === AI / LLM ===
+openai>=1.35.0
+
+# === Utils ===
+python-dateutil==2.8.2
+python-dotenv==1.0.0
+pyyaml>=6.0
+
+# === Testing ===
+pytest>=8.0
+pytest-asyncio>=0.23
+httpx>=0.27
+
+# === Optional: MinIO storage ===
+# minio>=7.1.0
+
+# 2026-06-10：Gemini TTS（audio_provider.py 的 from google import genai）所需，原 requirements 遗漏
+google-genai

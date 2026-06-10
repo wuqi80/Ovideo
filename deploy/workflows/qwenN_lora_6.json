@@ -1,0 +1,29 @@
+{
+  "_comment": "筑基二阶(qwenN_lora) 6张参考图工作流 - 占位符文件，具体实现由用户填写",
+  "_placeholders": {
+    "image_1": "{image_1}",
+    "image_2": "{image_2}",
+    "image_3": "{image_3}",
+    "image_4": "{image_4}",
+    "image_5": "{image_5}",
+    "image_6": "{image_6}",
+    "prompt": "{prompt}",
+    "seed": "{seed}"
+  },
+  "placeholder_node": {
+    "inputs": {
+      "image_1": "{image_1}",
+      "image_2": "{image_2}",
+      "image_3": "{image_3}",
+      "image_4": "{image_4}",
+      "image_5": "{image_5}",
+      "image_6": "{image_6}",
+      "prompt": "{prompt}",
+      "seed": "{seed}"
+    },
+    "class_type": "PlaceholderNode",
+    "_meta": {
+      "title": "筑基二阶 6张参考图 - 请替换为实际工作流"
+    }
+  }
+}

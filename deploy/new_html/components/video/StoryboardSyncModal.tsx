@@ -1,0 +1,105 @@
+// new_html/components/video/StoryboardSyncModal.tsx
+//
+// 同步分镜弹窗：比对当前 storyboard 与工作区会话，提供三种同步策略：
+//  - add_new:              仅添加新分镜（保留全部已有卡片编辑）
+//  - overwrite_unmodified: 覆盖未编辑的卡片（保留用户手动改过的部分）
+//  - full_reset:           丢弃所有卡片端编辑，重新导入
+//
+// 仅作展示 + 触发：实际写入逻辑在 utils/storyboardSync.ts 中。
+import React, { useMemo } from 'react';
+import { X } from 'lucide-react';
+import type { WorkspaceSession } from '../../services/videoService';
+
+export type SyncMode = 'add_new' | 'overwrite_unmodified' | 'full_reset';
+
+export interface StoryboardSyncModalProps {
+    open: boolean;
+    onClose: () => void;
+    storyboardItems: any[];
+    session: WorkspaceSession;
+    onApply: (mode: SyncMode) => void | Promise<void>;
+}
+
+export const StoryboardSyncModal: React.FC<StoryboardSyncModalProps> = (p) => {
+    const stats = useMemo(() => {
+        const sbIds = new Set(
+            p.storyboardItems.map(s => (s as any).item_id ?? (s as any).itemId).filter(Boolean)
+        );
+        const wsIds = new Set(
+            (p.session.uploaded_images || []).map(i => i.storyboardItemId).filter(Boolean)
+        );
+        const newOnSb = [...sbIds].filter(id => !wsIds.has(id as string));
+        const cardModified = (p.session.task_groups || []).filter(g =>
+            g.durationUserOverride
+            || (p.session.seedance_params?.[g.uuid]?.media_inputs?.length || 0) > 1
+        );
+        const modifiedSinceSync = p.storyboardItems.filter(s => {
+            const itemId = (s as any).item_id ?? (s as any).itemId;
+            const m = itemId ? p.session.storyboard_meta?.[itemId] : undefined;
+            if (!m?.lastSyncedAt) return false;
+            const updatedAt = (s as any).updated_at ?? (s as any).updatedAt;
+            if (!updatedAt) return false;
+            const t = new Date(updatedAt).getTime();
+            return Number.isFinite(t) && t > m.lastSyncedAt;
+        });
+        return {
+            new: newOnSb.length,
+            modifiedSinceSync: modifiedSinceSync.length,
+            cardModified: cardModified.length,
+        };
+    }, [p.storyboardItems, p.session]);
+
+    if (!p.open) return null;
+
+    return (
+        <div
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
+            onClick={p.onClose}
+        >
+            <div
+                className="w-[480px] bg-slate-900 border border-slate-700 rounded-lg overflow-hidden"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700">
+                    <div className="text-sm text-slate-200">同步分镜</div>
+                    <button
+                        type="button"
+                        onClick={p.onClose}
+                        className="p-1 text-slate-400 hover:text-slate-200"
+                        aria-label="关闭"
+                    >
+                        <X size={14} />
+                    </button>
+                </div>
+                <div className="p-3 space-y-2 text-xs text-slate-300">
+                    <div>新分镜：<span className="text-emerald-400">{stats.new}</span></div>
+                    <div>分镜端有修改：<span className="text-amber-400">{stats.modifiedSinceSync}</span></div>
+                    <div>卡片端已编辑：<span className="text-rose-400">{stats.cardModified}</span></div>
+                </div>
+                <div className="px-3 pb-3 space-y-1 text-xs">
+                    <button
+                        type="button"
+                        onClick={() => p.onApply('add_new')}
+                        className="w-full text-left px-2 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-200"
+                    >
+                        仅添加 {stats.new} 个新分镜
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => p.onApply('overwrite_unmodified')}
+                        className="w-full text-left px-2 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-200"
+                    >
+                        覆盖未修改的（保留卡片端 {stats.cardModified} 处编辑）
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => p.onApply('full_reset')}
+                        className="w-full text-left px-2 py-1.5 bg-rose-800 hover:bg-rose-700 rounded text-rose-100"
+                    >
+                        ⚠ 全量重置（丢弃所有卡片端编辑）
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};

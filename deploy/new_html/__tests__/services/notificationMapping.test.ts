@@ -1,0 +1,187 @@
+// new_html/__tests__/services/notificationMapping.test.ts
+//
+// 2026-05-20 (Task System Overhaul M5)：dao_notification → RegisteredTask 映射测试。
+
+import { describe, it, expect } from 'vitest';
+import {
+    mapNotificationToTask,
+    mapNotificationsToTasks,
+    type ServerNotificationRow,
+} from '../../services/notificationMapping';
+
+function row(overrides: Partial<ServerNotificationRow> = {}): ServerNotificationRow {
+    return {
+        notification_id: 'notif_abc',
+        user_id: 'u1',
+        task_id: 'task_001',
+        type: 'task',
+        category: 'video',
+        title: '视频生成 镜头1 已完成',
+        message: '任务 task_001 执行成功',
+        status: 'unread',
+        target_view: 'Video',
+        target_project_id: 'p1',
+        target_page: 'video',
+        target_item_id: 'item_5',
+        metadata: {},
+        created_at: '2026-05-20T10:00:00Z',
+        read_at: null,
+        ...overrides,
+    };
+}
+
+describe('notificationMapping', () => {
+    describe('mapNotificationToTask', () => {
+        it('maps a completed notification to RegisteredTask with status=completed', () => {
+            const t = mapNotificationToTask(row());
+            expect(t).not.toBeNull();
+            expect(t!.taskId).toBe('task_001');
+            expect(t!.status).toBe('completed');
+            expect(t!.targetPage).toBe('video');
+            expect(t!.targetProjectId).toBe('p1');
+            expect(t!.targetItemId).toBe('item_5');
+            expect(t!.progress).toBe(1);
+            expect(t!.error).toBeUndefined();
+        });
+
+        it('strips "已完成" suffix from title', () => {
+            const t = mapNotificationToTask(row({ title: 'Seedance 视频生成 已完成' }));
+            expect(t!.title).toBe('Seedance 视频生成');
+        });
+
+        it('strips "失败" suffix and sets status=failed + error', () => {
+            const t = mapNotificationToTask(row({
+                title: '视频生成 失败',
+                message: '任务 xxx 执行失败: timeout',
+            }));
+            expect(t!.title).toBe('视频生成');
+            expect(t!.status).toBe('failed');
+            expect(t!.error).toContain('执行失败');
+            expect(t!.progress).toBeUndefined();
+        });
+
+        it('falls back to notification_id when task_id is null', () => {
+            const t = mapNotificationToTask(row({ task_id: null, notification_id: 'notif_xyz' }));
+            expect(t!.taskId).toBe('notif_xyz');
+        });
+
+        it('returns null for invalid input (no title)', () => {
+            const t = mapNotificationToTask({ ...row(), title: '' });
+            expect(t).toBeNull();
+        });
+
+        it('normalizes invalid target_page to "global"', () => {
+            const t = mapNotificationToTask(row({ target_page: 'unknown_page' }));
+            expect(t!.targetPage).toBe('global');
+        });
+
+        it('infers kind=seedance from "Seedance" in title', () => {
+            const t = mapNotificationToTask(row({ category: 'video', title: 'Seedance 镜头1 已完成' }));
+            expect(t!.kind).toBe('seedance');
+        });
+
+        it('infers kind=video-upscale from "放大" in title', () => {
+            const t = mapNotificationToTask(row({ category: 'video', title: '视频放大 已完成' }));
+            expect(t!.kind).toBe('video-upscale');
+        });
+
+        // 2026-05-24 — DashScope 共享 API 三家
+        it('infers kind=kling from "Kling" in title', () => {
+            const t = mapNotificationToTask(row({ category: 'video', title: '视频 · Kling · 镜头1 已完成' }));
+            expect(t!.kind).toBe('kling');
+        });
+
+        it('infers kind=vidu from "Vidu" in title', () => {
+            const t = mapNotificationToTask(row({ category: 'video', title: '视频 · Vidu · 镜头1 已完成' }));
+            expect(t!.kind).toBe('vidu');
+        });
+
+        it('infers kind=happyhorse from "HappyHorse" in title', () => {
+            const t = mapNotificationToTask(row({ category: 'video', title: '视频 · HappyHorse · 镜头1 已完成' }));
+            expect(t!.kind).toBe('happyhorse');
+        });
+
+        it('infers kind=happyhorse from spaced "happy horse" variant', () => {
+            const t = mapNotificationToTask(row({ category: 'video', title: '视频 · happy horse · 镜头2 已完成' }));
+            expect(t!.kind).toBe('happyhorse');
+        });
+
+        it('infers kind=matting from category=material', () => {
+            const t = mapNotificationToTask(row({ category: 'material', title: '抠图任务 已完成' }));
+            expect(t!.kind).toBe('matting');
+        });
+
+        it('infers kind=qwen-image from "Qwen" in title', () => {
+            const t = mapNotificationToTask(row({ category: 'image', title: 'Qwen 图像生成 已完成' }));
+            expect(t!.kind).toBe('qwen-image');
+        });
+
+        it('infers kind=auto-storyboard from category=text + "分镜"', () => {
+            const t = mapNotificationToTask(row({ category: 'text', title: '自动分镜 已完成' }));
+            expect(t!.kind).toBe('auto-storyboard');
+        });
+
+        it('parses created_at to unix ms for createdAt/completedAt', () => {
+            const t = mapNotificationToTask(row({ created_at: '2026-05-20T10:00:00Z' }));
+            expect(t!.createdAt).toBe(Date.UTC(2026, 4, 20, 10, 0, 0));
+            expect(t!.completedAt).toBe(t!.createdAt);
+        });
+
+        it('falls back to Date.now() for invalid created_at', () => {
+            const before = Date.now();
+            const t = mapNotificationToTask(row({ created_at: 'not-a-date' }));
+            const after = Date.now();
+            expect(t!.createdAt).toBeGreaterThanOrEqual(before);
+            expect(t!.createdAt).toBeLessThanOrEqual(after);
+        });
+    });
+
+    describe('metadata pass-through (Phase 8)', () => {
+        it('passes through valid metadata object', () => {
+            const t = mapNotificationToTask(row({
+                metadata: { stage: '已完成', workerNodeId: 'gpu-1', step: 50 },
+            }));
+            expect(t!.metadata).toEqual({ stage: '已完成', workerNodeId: 'gpu-1', step: 50 });
+        });
+
+        it('returns undefined metadata when raw is null', () => {
+            const t = mapNotificationToTask(row({ metadata: null as any }));
+            expect(t!.metadata).toBeUndefined();
+        });
+
+        it('returns undefined metadata when raw is array (invalid shape)', () => {
+            const t = mapNotificationToTask(row({ metadata: ['not', 'object'] as any }));
+            expect(t!.metadata).toBeUndefined();
+        });
+
+        it('returns undefined metadata when field missing entirely', () => {
+            const r = row();
+            delete (r as any).metadata;
+            const t = mapNotificationToTask(r);
+            expect(t!.metadata).toBeUndefined();
+        });
+    });
+
+    describe('mapNotificationsToTasks', () => {
+        it('maps batch and filters out dismissed', () => {
+            const tasks = mapNotificationsToTasks([
+                row({ task_id: 'a', status: 'unread' }),
+                row({ task_id: 'b', status: 'read' }),
+                row({ task_id: 'c', status: 'dismissed' }),
+            ]);
+            expect(tasks.map(t => t.taskId)).toEqual(['a', 'b']);
+        });
+
+        it('drops invalid rows but keeps valid ones', () => {
+            const tasks = mapNotificationsToTasks([
+                { ...row({ task_id: 'a' }), title: '' },     // invalid → drop
+                row({ task_id: 'b' }),                        // valid → keep
+            ]);
+            expect(tasks.map(t => t.taskId)).toEqual(['b']);
+        });
+
+        it('returns empty array for empty input', () => {
+            expect(mapNotificationsToTasks([])).toEqual([]);
+        });
+    });
+});
