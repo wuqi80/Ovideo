@@ -1331,21 +1331,25 @@ class Worker:
             image_path_end = task.data.get('image_path_end')
             prompt = task.data.get('prompt', '')
             
-            # 构建图片URL列表
+            # 构建图片URL列表（base64 data URI，不依赖公网地址。
+            # 旧实现用 cluster_url/uploads/<临时文件名> 拼 URL，但临时文件在系统
+            # Temp 目录而非 uploads，外部网关 fetch 必 404 → 任务静默失败）
+            import base64
             image_urls = []
-            
+
+            def _temp_to_data_uri(path: str) -> str:
+                with open(path, 'rb') as f:
+                    return f"data:image/png;base64,{base64.b64encode(f.read()).decode('utf-8')}"
+
             if image_path:
-                # 下载首帧图片到临时文件，然后构建URL
+                # 下载首帧图片到临时文件，转 base64 data URI
                 temp_image_path = await self._download_image_to_temp(image_path)
-                # 构建公网URL（假设cluster_url是公网可访问的）
-                image_url = f"{self.cluster_url}/uploads/{Path(temp_image_path).name}"
-                image_urls.append(image_url)
-            
+                image_urls.append(_temp_to_data_uri(temp_image_path))
+
             if task.task_type == 'veo_morph' and image_path_end:
                 # 下载尾帧
                 temp_image_path_end = await self._download_image_to_temp(image_path_end)
-                end_image_url = f"{self.cluster_url}/uploads/{Path(temp_image_path_end).name}"
-                image_urls.append(end_image_url)
+                image_urls.append(_temp_to_data_uri(temp_image_path_end))
             
             # 创建视频生成任务
             logger.info(f"🎬 创建 Veo 任务: {task.task_type}, {len(image_urls)}张图片")
