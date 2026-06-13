@@ -90,7 +90,7 @@ const AdminOperationsRoute: React.FC = () => {
         <div className="relative">
             <button
                 onClick={() => navigate('/admin')}
-                className="fixed top-3 left-3 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-zinc-300 bg-zinc-900/80 hover:bg-zinc-800 backdrop-blur-sm border border-zinc-700 hover:border-emerald-500/40 shadow-lg transition-all"
+                className="fixed top-3 left-3 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-n400 bg-n0/95 hover:bg-n20 hover:text-primary backdrop-blur-sm border border-n40 hover:border-primary shadow-card transition-all"
                 title="返回控制台 Hub"
             >
                 <Home className="w-3.5 h-3.5" /> 返回 Hub
