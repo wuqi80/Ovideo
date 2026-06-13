@@ -163,6 +163,10 @@ const AccountsTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [pwUserId, setPwUserId] = useState<string | null>(null);
   const [pwValue, setPwValue] = useState('');
+  // 新建用户
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [cu, setCu] = useState({ username: '', password: '', email: '', role: 'user' });
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -198,6 +202,26 @@ const AccountsTab: React.FC = () => {
     await apiPut(`/api/admin/users/${uid}`, { role });
     reload();
   };
+  const handleCreate = async () => {
+    if (!cu.username.trim()) { alert('请输入用户名'); return; }
+    if (!cu.password || cu.password.length < 4) { alert('密码至少 4 位'); return; }
+    setCreating(true);
+    try {
+      await apiPost('/api/admin/users/create', {
+        username: cu.username.trim(),
+        password: cu.password,
+        email: cu.email.trim() || undefined,
+        role: cu.role,
+      });
+      setCreateOpen(false);
+      setCu({ username: '', password: '', email: '', role: 'user' });
+      reload();
+    } catch (e: any) {
+      alert(`创建用户失败：${await readApiError(e)}`);
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -219,6 +243,12 @@ const AccountsTab: React.FC = () => {
         </select>
         <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20">
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+        </button>
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs font-medium"
+        >
+          <Plus size={13} /> 新建用户
         </button>
         <span className="ml-auto text-xs text-n100">{users.length} 个用户</span>
       </div>
@@ -310,6 +340,75 @@ const AccountsTab: React.FC = () => {
             >
               确认重置
             </button>
+          </div>
+        </div>
+      )}
+
+      {createOpen && (
+        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
+          <div className="bg-n0 border border-n40 rounded-lg p-5 w-96 shadow-bottom">
+            <div className="flex justify-between items-center mb-4">
+              <div className="text-sm font-semibold text-n800">新建用户</div>
+              <button onClick={() => setCreateOpen(false)} className="text-n100 hover:text-n700">×</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] text-n300 mb-1">用户名 *</label>
+                <input
+                  value={cu.username}
+                  onChange={e => setCu({ ...cu, username: e.target.value })}
+                  placeholder="登录用户名"
+                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-n300 mb-1">密码 *</label>
+                <input
+                  type="text"
+                  value={cu.password}
+                  onChange={e => setCu({ ...cu, password: e.target.value })}
+                  placeholder="至少 4 位"
+                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-n300 mb-1">邮箱（可选）</label>
+                <input
+                  value={cu.email}
+                  onChange={e => setCu({ ...cu, email: e.target.value })}
+                  placeholder="留空则自动生成 用户名@studio.com"
+                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-n300 mb-1">角色</label>
+                <select
+                  value={cu.role}
+                  onChange={e => setCu({ ...cu, role: e.target.value })}
+                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
+                >
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                  <option value="super_admin">super_admin</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setCreateOpen(false)}
+                className="flex-1 px-3 py-1.5 rounded border border-n40 text-n300 hover:bg-n20 text-sm"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={creating}
+                className="flex-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm disabled:opacity-60"
+              >
+                {creating ? '创建中…' : '确认创建'}
+              </button>
+            </div>
           </div>
         </div>
       )}
