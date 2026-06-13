@@ -7,8 +7,7 @@ import { TaskBadge } from '../components/TaskBadge';
 import { NotificationPanel } from '../components/NotificationPanel';
 
 // 2026-05-20 (Task System Overhaul M1)：每个 nav item 关联 sourcePage，用于 per-page TaskBadge。
-// 2026-05-26 Slice 1/3：插入"视频反推"（剧本之后）与"素材库"（历史之前），
-//                        两者本身是项目级页面，但挂在 workflow 路由下以复用顶部统一导航。
+// 2026-05-26 Slice 1/3：插入"视频反推"（剧本之后）与"素材库"（历史之前）。
 const NAV_ITEMS: { path: string; label: string; icon: any; sourcePage: SourcePage }[] = [
   { path: 'script',         label: '剧本',     icon: FileText,   sourcePage: 'script' },
   { path: 'video-reverse',  label: '视频反推', icon: Wand2,      sourcePage: 'video-reverse' },
@@ -22,22 +21,22 @@ const NAV_ITEMS: { path: string; label: string; icon: any; sourcePage: SourcePag
   { path: 'history',        label: '历史',     icon: Clock,      sourcePage: 'history' },
 ];
 
+// refactor/v2 (P1 shell)：顶栏从暗色(gray-950/indigo) 换成 Atlassian 企业级浅色
+// （56px 白色顶栏 + n40 细边 + 主色 #0052CC 活跃态）。导航项/逻辑/功能完全不变。
 export const WorkflowLayout: React.FC = () => {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
   const navigate = useNavigate();
-  // 2026-05-26：流程化页面顶部不再放"管理"入口 — 后台抽成独立 /admin Shell，
-  // 详见 docs/vertical-slices.md "Admin Shell（2026-05-26）" 章节。
 
   return (
     <EpisodeProvider>
-      <div className="flex flex-col h-screen bg-gray-950">
-        <nav className="flex items-center gap-1 px-3 h-12 border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm shrink-0">
+      <div className="flex flex-col h-screen bg-n20 text-n800">
+        <nav className="flex items-center gap-1 px-4 h-14 border-b border-n40 bg-n0 shadow-card shrink-0">
           <button
             onClick={() => navigate(`/projects/${projectId}/episodes`)}
-            className="flex items-center gap-1.5 px-3 py-1.5 mr-2 text-sm text-gray-500 hover:text-white rounded-md hover:bg-gray-800 transition-all duration-200 border-r border-gray-800 pr-4"
+            className="flex items-center gap-1.5 pr-4 mr-1 py-1.5 px-3 text-sm font-medium text-n300 hover:text-n800 rounded hover:bg-n20 transition-colors border-r border-n40"
             title="返回分集管理"
           >
-            <ArrowLeft size={14} /> 分集
+            <ArrowLeft size={15} /> 分集
           </button>
           <div className="flex items-center gap-0.5">
             {NAV_ITEMS.map(item => {
@@ -47,14 +46,14 @@ export const WorkflowLayout: React.FC = () => {
                   key={item.path}
                   to={item.path}
                   className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                    `relative flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium transition-colors ${
                       isActive
-                        ? 'bg-indigo-600/15 text-indigo-400 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/60'
+                        ? 'text-primary bg-primary-light'
+                        : 'text-n300 hover:text-n800 hover:bg-n20'
                     }`
                   }
                 >
-                  <Icon size={14} />
+                  <Icon size={15} />
                   {item.label}
                   {/* per-page 任务指示器（仅活跃时渲染） */}
                   <TaskBadge page={item.sourcePage} />
@@ -64,11 +63,11 @@ export const WorkflowLayout: React.FC = () => {
           </div>
           <NavLink
             to={`/projects/${projectId}/ep/${episodeId}/canvas`}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-gray-500 hover:text-emerald-400 hover:bg-emerald-600/10 transition-all duration-200"
+            className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-n300 hover:text-teal hover:bg-t50 transition-colors"
           >
-            <Brush size={14} /> 自由创作
+            <Brush size={15} /> 自由创作
           </NavLink>
-          {/* 2026-05-20 (Task System Overhaul M1)：通知铃铛（统一面板，点击下拉显示任务列表） */}
+          {/* 2026-05-20：通知铃铛（统一面板） */}
           <div className="ml-1">
             <NotificationPanel compact />
           </div>
@@ -78,13 +77,13 @@ export const WorkflowLayout: React.FC = () => {
               localStorage.removeItem('username');
               window.location.href = '/login';
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 ml-2 rounded-md text-sm text-gray-500 hover:text-red-400 hover:bg-red-600/10 transition-all duration-200"
+            className="flex items-center gap-1.5 px-2.5 py-2 ml-1 rounded text-sm text-n300 hover:text-danger hover:bg-r50 transition-colors"
             title="退出登录"
           >
-            <LogOut size={14} />
+            <LogOut size={15} />
           </button>
         </nav>
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto scrollbar-atlas">
           <Outlet />
         </main>
       </div>
