@@ -14,10 +14,11 @@ import { useSearchParams } from 'react-router-dom';
 
 // 版本号：旧版静态资源（index/style/app）改动后手动 +1，强制 iframe 重新拉取、
 // 绕开浏览器对 iframe 子资源的缓存（刷新外层 SPA 未必会让 iframe 资源重新校验）。
-const LEGACY_VER = '20260613c';
+const LEGACY_VER = '20260613d';
 
-/** 合法的 legacy 内嵌页；非法 item 一律回落到 apiconfig。 */
-const LEGACY_PAGES = ['apiconfig', 'cluster', 'workflows'];
+/** 合法的 legacy 内嵌页；非法 item 一律回落到 apiconfig。
+ *  dashboard 即旧版「仪表盘」：实时任务列表 + 集群统计 + 清理僵尸任务（挂在「数据监控 › 任务监控」）。 */
+const LEGACY_PAGES = ['apiconfig', 'cluster', 'workflows', 'dashboard'];
 
 export const AdminSettingsPage: React.FC = () => {
     const [sp] = useSearchParams();

@@ -77,6 +77,7 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '数据监控',
     icon: 'BarChart3',
     children: [
+      { id: 'tasks', label: '任务监控', to: '/admin/settings?item=dashboard' },
       { id: 'stats', label: '生成统计分析', to: '/admin/operations?tab=stats' },
       { id: 'cluster_monitor', label: '集群节点监控', to: '/admin/operations?tab=system' },
     ],
@@ -87,14 +88,8 @@ export const ADMIN_MENU: MenuSection[] = [
     icon: 'Settings',
     children: [
       { id: 'apiconfig', label: 'API 厂商配置', to: '/admin/settings?item=apiconfig' },
-      {
-        id: 'gen_cluster',
-        label: '生成集群',
-        children: [
-          { id: 'cluster', label: '集群节点', to: '/admin/settings?item=cluster' },
-          { id: 'workflows', label: '工作流模板', to: '/admin/settings?item=workflows' },
-        ],
-      },
+      { id: 'cluster', label: '集群节点', to: '/admin/settings?item=cluster' },
+      { id: 'workflows', label: '工作流模板', to: '/admin/settings?item=workflows' },
     ],
   },
 ];

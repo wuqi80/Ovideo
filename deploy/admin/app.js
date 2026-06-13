@@ -795,7 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 直接访问（非 iframe 内嵌）→ 折叠回统一后台壳，避免出现「第二个后台」独立形态；
   // 顺带享受壳的登录鉴权门（旧版静态页本身无鉴权）。被壳以 ?embed=1 嵌入时跳过此逻辑。
   if (!embed && window.self === window.top) {
-    const ITEM = { dashboard: 'cluster', cluster: 'cluster', workflows: 'workflows', apiconfig: 'apiconfig' };
+    const ITEM = { dashboard: 'dashboard', cluster: 'cluster', workflows: 'workflows', apiconfig: 'apiconfig' };
     location.replace('/admin/settings?item=' + (ITEM[targetPage()] || 'apiconfig'));
     return;
   }
