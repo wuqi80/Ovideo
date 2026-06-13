@@ -151,17 +151,14 @@ export const AdminHubPage: React.FC = () => {
                 <TileBase
                     icon={<SettingsIcon className="w-6 h-6 text-cyan-400" />}
                     title="系统设置"
-                    subtitle="API 配置 · 模型路由 · 通知规则 · 集群节点"
+                    subtitle="API 厂商配置 · 集群节点 · 工作流模板"
                     accent="via-cyan-500/60"
                     onClick={() => navigate('/admin/settings?item=apiconfig')}
                 >
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-n100">
                         <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>API 厂商</div>
-                        <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>模型路由</div>
-                        <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>通知映射</div>
                         <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>集群节点</div>
                         <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>工作流模板</div>
-                        <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>速率限制</div>
                     </div>
                 </TileBase>
             </section>

@@ -63,7 +63,7 @@ export const AdminSidebar: React.FC = () => {
           <ShieldCheck className="w-4 h-4 text-primary" />
         </div>
         <div className="leading-tight">
-          <div className="text-sm font-bold tracking-tight text-n800">企业管理后台</div>
+          <div className="text-sm font-bold tracking-tight text-n800">系统管理后台</div>
           <div className="text-[10px] uppercase tracking-widest text-n100"
                style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>Admin Console</div>
         </div>

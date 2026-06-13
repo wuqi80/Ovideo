@@ -86,28 +86,13 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '系统设置',
     icon: 'Settings',
     children: [
-      {
-        id: 'api_model',
-        label: 'API 与模型',
-        children: [
-          { id: 'apiconfig', label: 'API 厂商配置', to: '/admin/settings?item=apiconfig' },
-          { id: 'routing', label: '模型路由', to: '/admin/settings?item=routing' },
-          { id: 'ratelimit', label: '速率限制', to: '/admin/settings?item=ratelimit' },
-        ],
-      },
+      { id: 'apiconfig', label: 'API 厂商配置', to: '/admin/settings?item=apiconfig' },
       {
         id: 'gen_cluster',
         label: '生成集群',
         children: [
           { id: 'cluster', label: '集群节点', to: '/admin/settings?item=cluster' },
           { id: 'workflows', label: '工作流模板', to: '/admin/settings?item=workflows' },
-        ],
-      },
-      {
-        id: 'rules',
-        label: '通知与规则',
-        children: [
-          { id: 'notify', label: '通知映射', to: '/admin/settings?item=notify' },
         ],
       },
     ],
