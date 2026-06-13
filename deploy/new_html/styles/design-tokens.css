@@ -1,0 +1,109 @@
+/**
+ * Drama 设计令牌（design tokens）—— refactor/v2
+ * 移植自参考仓 wk_crm-java-ai/frontend/src/styles/var.scss 的 Atlassian Design System。
+ * 企业级浅色主题。所有组件应优先使用这些 CSS 变量 / 对应的 Tailwind 命名色（见 index.html）。
+ */
+
+:root {
+  /* ---------- 中性色阶 n0~n900 ---------- */
+  --n0:   #FFFFFF;
+  --n10:  #FAFBFC;
+  --n20:  #F4F5F7;
+  --n30:  #EBECF0;
+  --n40:  #DFE1E6;
+  --n50:  #C1C7D0;
+  --n60:  #B3BAC5;
+  --n70:  #A5ADBA;
+  --n80:  #97A0AF;
+  --n90:  #8993A4;
+  --n100: #7A869A;
+  --n200: #6B778C;
+  --n300: #5E6C84;
+  --n400: #505F79;
+  --n500: #42526E;
+  --n600: #344563;
+  --n700: #253858;
+  --n800: #172B4D;
+  --n900: #091E42;
+
+  /* ---------- 功能色（红/黄/绿/蓝/紫/青 各 50~500） ---------- */
+  --r50: #FFEBE6; --r75: #FFBDAD; --r100: #FF8F73; --r200: #FF7452; --r300: #FF5630; --r400: #DE350B; --r500: #BF2600;
+  --y50: #FFFAE6; --y75: #FFF0B3; --y100: #FFE380; --y200: #FFC400; --y300: #FFAB00; --y400: #FF991F; --y500: #FF8B00;
+  --g50: #E3FCEF; --g75: #ABF5D1; --g100: #79F2C0; --g200: #57D9A3; --g300: #36B37E; --g400: #00875A; --g500: #006644;
+  --b50: #DEEBFF; --b75: #B3D4FF; --b100: #4C9AFF; --b200: #2684FF; --b300: #0065FF; --b400: #0052CC; --b500: #0747A6;
+  --p50: #EAE6FF; --p75: #C0B6F2; --p100: #998DD9; --p200: #8777D9; --p300: #6554C0; --p400: #5243AA; --p500: #403294;
+  --t50: #E6FCFF; --t75: #B3F5FF; --t100: #79E2F2; --t200: #00C7E6; --t300: #00B8D9; --t400: #00A3BF; --t500: #008DA6;
+
+  /* ---------- 语义色 ---------- */
+  --color-primary:        var(--b400);   /* #0052CC 主品牌色 */
+  --color-primary-hover:  var(--b300);
+  --color-primary-active: var(--b500);
+  --color-primary-light:  var(--b50);
+  --color-success: var(--g300);
+  --color-warning: var(--y300);
+  --color-danger:  var(--r300);
+  --color-info:    var(--n800);
+  --color-purple:  var(--p300);
+  --color-teal:    var(--t300);
+
+  /* ---------- 文字 ---------- */
+  --text-primary:     var(--n800);
+  --text-regular:     var(--n500);
+  --text-secondary:   var(--n200);
+  --text-placeholder: var(--n100);
+  --text-inverse:     var(--n0);
+
+  /* ---------- 边框 / 背景 ---------- */
+  --border-base:  var(--n40);
+  --border-light: var(--n30);
+  --bg-body:      var(--n20);   /* 页面底色 */
+  --bg-surface:   var(--n0);    /* 卡片/面板 */
+  --bg-sunken:    var(--n30);   /* 凹陷区/表头 */
+  --bg-hover:     var(--n20);
+
+  /* ---------- 字体 ---------- */
+  --font-sans: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  /* 字号（11~29px，base 14） */
+  --fs-xxxl: 29px; --fs-xxl: 24px; --fs-xl: 20px; --fs-lg: 16px;
+  --fs-base: 14px; --fs-md: 14px; --fs-sm: 12px; --fs-xs: 11px;
+  /* 字重 */
+  --fw-light: 300; --fw-normal: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+  /* 行高 */
+  --lh-base: 24px; --lh-sm: 16px;
+
+  /* ---------- 间距（8px 基准） ---------- */
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px;
+  --interval-base: 8px;
+  --main-padding: 16px;
+
+  /* ---------- 圆角 ---------- */
+  --radius-sm: 2px; --radius-base: 4px; --radius-chart: 10px; --radius-circle: 100%;
+
+  /* ---------- 阴影（3 档） ---------- */
+  --shadow-base:   0px 2px 8px 0px rgba(23, 43, 77, 0.10);
+  --shadow-dark:   0 2px 4px rgba(0, 0, 0, .12), 0 0 6px rgba(0, 0, 0, .12);
+  --shadow-card:   0 1px 2px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.31);
+  --shadow-bottom: rgba(9, 30, 66, 0.25) 0px 4px 8px -2px, rgba(9, 30, 66, 0.31) 0px 0px 1px;
+
+  /* ---------- 布局尺寸 ---------- */
+  --topbar-height: 56px;
+  --sidebar-width: 224px;
+  --sidebar-width-collapsed: 56px;
+  --detail-width: 75%;
+}
+
+/* 浅色主题基线 */
+body.theme-light {
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+}
+
+/* Atlassian 风格细滚动条（浅色） */
+.scrollbar-atlas::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-atlas::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-atlas::-webkit-scrollbar-thumb { background: var(--n50); border-radius: 4px; }
+.scrollbar-atlas::-webkit-scrollbar-thumb:hover { background: var(--n70); }

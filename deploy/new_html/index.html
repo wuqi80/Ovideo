@@ -8,8 +8,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <title>MESSIAH Storyboard AI</title>
     <link rel="icon" href="/static/image_1ca1c5.png" type="image/png" />
+    <link rel="stylesheet" href="/styles/design-tokens.css" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // refactor/v2：注册 Atlassian 设计体系命名色（移植自 wk_crm 前端 var.scss）。
+      // 组件迁移时改用 bg-n20 / text-n800 / bg-primary / shadow-card 等；
+      // 旧的 gray-750/850/950 暂留以兼容尚未迁移的暗色组件。
       tailwind.config = {
         theme: {
           extend: {
@@ -18,12 +22,29 @@
               mono: ['JetBrains Mono', 'monospace'],
             },
             colors: {
-              gray: {
-                750: '#2d3748',
-                850: '#1a202c',
-                950: '#0d1117',
-              }
-            }
+              // 中性色阶
+              n0:'#FFFFFF', n10:'#FAFBFC', n20:'#F4F5F7', n30:'#EBECF0', n40:'#DFE1E6',
+              n50:'#C1C7D0', n60:'#B3BAC5', n70:'#A5ADBA', n80:'#97A0AF', n90:'#8993A4',
+              n100:'#7A869A', n200:'#6B778C', n300:'#5E6C84', n400:'#505F79', n500:'#42526E',
+              n600:'#344563', n700:'#253858', n800:'#172B4D', n900:'#091E42',
+              // 功能色
+              r:{50:'#FFEBE6',75:'#FFBDAD',100:'#FF8F73',200:'#FF7452',300:'#FF5630',400:'#DE350B',500:'#BF2600'},
+              y:{50:'#FFFAE6',75:'#FFF0B3',100:'#FFE380',200:'#FFC400',300:'#FFAB00',400:'#FF991F',500:'#FF8B00'},
+              g:{50:'#E3FCEF',75:'#ABF5D1',100:'#79F2C0',200:'#57D9A3',300:'#36B37E',400:'#00875A',500:'#006644'},
+              b:{50:'#DEEBFF',75:'#B3D4FF',100:'#4C9AFF',200:'#2684FF',300:'#0065FF',400:'#0052CC',500:'#0747A6'},
+              p:{50:'#EAE6FF',75:'#C0B6F2',100:'#998DD9',200:'#8777D9',300:'#6554C0',400:'#5243AA',500:'#403294'},
+              t:{50:'#E6FCFF',75:'#B3F5FF',100:'#79E2F2',200:'#00C7E6',300:'#00B8D9',400:'#00A3BF',500:'#008DA6'},
+              // 语义色
+              primary:{DEFAULT:'#0052CC', hover:'#0065FF', active:'#0747A6', light:'#DEEBFF'},
+              success:'#36B37E', warning:'#FFAB00', danger:'#FF5630', teal:'#00B8D9',
+              // 兼容旧暗色组件（待 P2 迁移后移除）
+              gray: { 750: '#2d3748', 850: '#1a202c', 950: '#0d1117' },
+            },
+            boxShadow: {
+              'card': '0 1px 2px rgba(9,30,66,0.08), 0 0 1px rgba(9,30,66,0.31)',
+              'atlas': '0px 2px 8px 0px rgba(23,43,77,0.10)',
+              'bottom': 'rgba(9,30,66,0.25) 0px 4px 8px -2px, rgba(9,30,66,0.31) 0px 0px 1px',
+            },
           }
         }
       }
