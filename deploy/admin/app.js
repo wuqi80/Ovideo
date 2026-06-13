@@ -788,9 +788,15 @@ function pageFromHash() {
   return VALID_PAGES.includes(h) ? h : 'dashboard';
 }
 document.addEventListener('DOMContentLoaded', () => {
-  if (new URLSearchParams(location.search).get('embed') === '1') {
-    document.body.classList.add('embedded');
+  const embed = new URLSearchParams(location.search).get('embed') === '1';
+  // 直接访问（非 iframe 内嵌）→ 折叠回统一后台壳，避免出现「第二个后台」独立形态；
+  // 顺带享受壳的登录鉴权门（旧版静态页本身无鉴权）。被壳以 ?embed=1 嵌入时跳过此逻辑。
+  if (!embed && window.self === window.top) {
+    const ITEM = { dashboard: 'cluster', cluster: 'cluster', workflows: 'workflows', apiconfig: 'apiconfig' };
+    location.replace('/admin/settings?item=' + (ITEM[pageFromHash()] || 'apiconfig'));
+    return;
   }
+  if (embed) document.body.classList.add('embedded');
   navigateTo(pageFromHash());
 });
 window.addEventListener('hashchange', () => navigateTo(pageFromHash()));
