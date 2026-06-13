@@ -111,11 +111,15 @@ const SUB_TABS: { key: SubTab; label: string; icon: React.ReactNode }[] = [
   { key: 'audit',               label: '审计日志',    icon: <ShieldCheck size={14} /> },
 ];
 
-export const AdminFeatureTabs: React.FC = () => {
-  const [tab, setTab] = useState<SubTab>('accounts');
+export const AdminFeatureTabs: React.FC<{ embedTab?: SubTab }> = ({ embedTab }) => {
+  // refactor/v2：统一后台壳传入 embedTab → 只渲染对应面板、隐藏自带横向 tab 条
+  // （8 个面板已被提升为壳层级菜单的二级项，不再需要内部二次导航）。
+  const [tab, setTab] = useState<SubTab>(embedTab ?? 'accounts');
+  useEffect(() => { if (embedTab) setTab(embedTab); }, [embedTab]);
 
   return (
     <div className="h-full flex flex-col">
+      {!embedTab && (
       <div className="flex border-b border-n40 bg-n0">
         {SUB_TABS.map(t => (
           <button
@@ -132,6 +136,7 @@ export const AdminFeatureTabs: React.FC = () => {
           </button>
         ))}
       </div>
+      )}
 
       <div className="flex-1 overflow-auto p-4">
         {tab === 'accounts' && <AccountsTab />}

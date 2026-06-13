@@ -779,4 +779,18 @@ async function saveGlobalSettings() {
 }
 
 /* ────────────────── Init ────────────────── */
-document.addEventListener('DOMContentLoaded', () => navigateTo('dashboard'));
+// refactor/v2：支持被统一后台壳以 <iframe> 内嵌。
+//  - URL hash 深链：/admin-legacy/#cluster 直接打开对应页（dashboard/cluster/workflows/apiconfig）
+//  - ?embed=1：隐藏旧版自带侧栏（导航交给壳的层级菜单），只显示内容区，营造「一个后台」体验
+const VALID_PAGES = ['dashboard', 'cluster', 'workflows', 'apiconfig'];
+function pageFromHash() {
+  const h = (location.hash || '').replace(/^#/, '');
+  return VALID_PAGES.includes(h) ? h : 'dashboard';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  if (new URLSearchParams(location.search).get('embed') === '1') {
+    document.body.classList.add('embedded');
+  }
+  navigateTo(pageFromHash());
+});
+window.addEventListener('hashchange', () => navigateTo(pageFromHash()));

@@ -1,32 +1,23 @@
 /**
- * AdminLayout.tsx — 后台总管 Shell
+ * AdminLayout.tsx — 统一后台 Shell（refactor/v2）
  *
- * 视觉 DNA（参考 cluster_main 舰桥控制台风格）：
- *  - 暗黑工业风：bg-zinc-950 主背景，bg-zinc-900 卡片，border-zinc-800/60 极细边
- *  - 状态色：emerald（健康）/ amber（待处理）/ red（异常）；不复用主站 indigo
- *  - 字体：中文 PingFang/Source Han，等宽 ID 用 'JetBrains Mono', ui-monospace
- *  - 左 sidebar 固定 14rem，顶 topbar 56px，主区 zinc-950
+ * 一个台子、一套层级菜单。左侧 AdminSidebar 提供 一级/二级/三级 折叠菜单（始终在场），
+ * 右侧只换内容区——彻底消除「在多个后台之间跳动」的割裂感。
  *
- * 路由结构（由 App.tsx 提供 Routes）：
- *  /admin/login        → AdminLoginPage（独立，不被本 Layout 包裹）
- *  /admin              → AdminLayout > Outlet → AdminHubPage
- *  /admin/operations   → AdminLayout > Outlet → AdminOperationsPage（5 tab：用户/统计/审计/集群/新功能）
- *  /admin/settings     → AdminLayout > Outlet → AdminSettingsPage
+ * 路由（由 App.tsx 提供）：
+ *   /admin               → 运营概览 (AdminDashboard)
+ *   /admin/operations    → AdminPage（embedTab 由 ?tab 决定：users/stats/results/system）
+ *   /admin/features      → AdminFeatureTabs（embedTab 由 ?tab 决定：accounts/groups/...）
+ *   /admin/settings      → AdminSettingsPage（?item 决定：apiconfig/cluster/workflows/... 内嵌 legacy）
+ *   /admin/login         → AdminLoginPage（独立，不被本 Shell 包裹）
  */
 
 import React, { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import {
-    LayoutDashboard, Cpu, Settings as SettingsIcon, LogOut, ShieldCheck,
-    ExternalLink, ChevronLeft,
-} from 'lucide-react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAdminToken, getAdminUsername, clearAdminSession, isAdminWhitelisted } from './adminAuth';
-
-const NAV_ITEMS = [
-    { to: '/admin',            label: '总览',     icon: LayoutDashboard, end: true },
-    { to: '/admin/operations', label: '生成管理', icon: Cpu },
-    { to: '/admin/settings',   label: '系统设置', icon: SettingsIcon },
-];
+import { AdminSidebar } from './AdminSidebar';
+import { getActiveTrail } from './adminMenu';
 
 export const AdminLayout: React.FC = () => {
     const navigate = useNavigate();
@@ -42,13 +33,13 @@ export const AdminLayout: React.FC = () => {
         }
     }, [navigate, location.pathname]);
 
-    // 顶栏右侧的实时时钟（小细节，提升仪表盘感）
     useEffect(() => {
         const t = window.setInterval(() => setNow(new Date()), 1000);
         return () => window.clearInterval(t);
     }, []);
 
     const adminName = getAdminUsername() || '—';
+    const trail = getActiveTrail(location.pathname, location.search);
 
     const handleLogout = () => {
         if (!confirm('确认退出管理后台？（不影响主站登录状态）')) return;
@@ -57,75 +48,16 @@ export const AdminLayout: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen w-screen bg-n20 text-n700 flex"
+        <div className="h-screen w-screen bg-n20 text-n700 flex overflow-hidden"
              style={{ fontFamily: '"PingFang SC", "Source Han Sans CN", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif' }}>
-            {/* ================ Sidebar ================ */}
-            <aside className="w-56 shrink-0 bg-n0 border-r border-n40 flex flex-col">
-                {/* Brand */}
-                <div className="h-14 flex items-center gap-2.5 px-4 border-b border-n40">
-                    <div className="w-8 h-8 rounded-md bg-primary-light border border-primary/40 flex items-center justify-center">
-                        <ShieldCheck className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="leading-tight">
-                        <div className="text-sm font-bold tracking-tight text-n800">MESSIAH</div>
-                        <div className="text-[10px] uppercase tracking-widest text-n100" style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>Admin Console</div>
-                    </div>
-                </div>
+            {/* ============ 统一层级菜单 ============ */}
+            <AdminSidebar />
 
-                {/* Primary nav */}
-                <nav className="flex-1 p-3 space-y-1">
-                    {NAV_ITEMS.map(item => {
-                        const Icon = item.icon;
-                        return (
-                            <NavLink
-                                key={item.to}
-                                to={item.to}
-                                end={(item as any).end}
-                                className={({ isActive }) =>
-                                    `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-150 ${
-                                        isActive
-                                            ? 'bg-primary-light text-primary border border-primary/20'
-                                            : 'text-n300 hover:text-n800 hover:bg-n20 border border-transparent'
-                                    }`
-                                }
-                            >
-                                <Icon className="w-4 h-4" />
-                                <span>{item.label}</span>
-                            </NavLink>
-                        );
-                    })}
-
-                    {/* 外链：集群仪表盘（cluster_main 静态后台） */}
-                    <a
-                        href="/admin-legacy/" target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-n100 hover:text-n700 hover:bg-n20 transition-all duration-150"
-                        title="Cluster Admin（旧版，独立窗口）"
-                    >
-                        <ExternalLink className="w-4 h-4" />
-                        <span>集群仪表盘</span>
-                    </a>
-                </nav>
-
-                {/* Footer — 当前管理员 + 退出 */}
-                <div className="p-3 border-t border-n40">
-                    <div className="px-3 py-2 mb-2 rounded-md bg-n20 border border-n40">
-                        <div className="text-[9px] uppercase tracking-widest text-n100 mb-0.5" style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>SIGNED IN AS</div>
-                        <div className="text-xs font-semibold text-primary">{adminName}</div>
-                    </div>
-                    <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-n300 hover:text-danger hover:bg-r50 border border-n40 hover:border-danger/30 transition-all"
-                    >
-                        <LogOut className="w-3.5 h-3.5" /> 退出后台
-                    </button>
-                </div>
-            </aside>
-
-            {/* ================ Main pane ================ */}
+            {/* ============ 主区 ============ */}
             <div className="flex-1 flex flex-col min-w-0">
-                {/* Topbar */}
-                <header className="h-14 shrink-0 bg-n0 backdrop-blur-sm border-b border-n40 flex items-center justify-between px-6">
-                    <div className="flex items-center gap-3">
+                {/* 顶栏：面包屑 + 在线/时钟 + 当前管理员 + 退出 */}
+                <header className="h-14 shrink-0 bg-n0 border-b border-n40 flex items-center justify-between px-5">
+                    <div className="flex items-center gap-2 min-w-0">
                         <button
                             onClick={() => navigate(-1)}
                             className="p-1.5 rounded-md text-n100 hover:text-n700 hover:bg-n20 transition-colors"
@@ -133,26 +65,48 @@ export const AdminLayout: React.FC = () => {
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
-                        <div className="text-[11px] uppercase tracking-widest text-n100"
-                             style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
-                            {location.pathname.replace('/admin', '').replace(/^\//, '') || 'overview'}
-                        </div>
+                        {/* 面包屑 */}
+                        <nav className="flex items-center gap-1.5 text-sm min-w-0">
+                            {trail.map((seg, i) => (
+                                <React.Fragment key={i}>
+                                    {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-n70 shrink-0" />}
+                                    <span className={i === trail.length - 1 ? 'font-semibold text-n800 truncate' : 'text-n200 truncate'}>
+                                        {seg}
+                                    </span>
+                                </React.Fragment>
+                            ))}
+                        </nav>
                     </div>
-                    <div className="flex items-center gap-4 text-xs">
+
+                    <div className="flex items-center gap-4 text-xs shrink-0">
                         <div className="hidden md:flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
                             <span className="text-n100 uppercase tracking-wider"
                                   style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>ONLINE</span>
                         </div>
-                        <div className="text-n300 tabular-nums"
+                        <div className="hidden lg:block text-n200 tabular-nums"
                              style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
-                            {now.toLocaleString('zh-CN', { hour12: false })}
+                            {now.toLocaleTimeString('zh-CN', { hour12: false })}
+                        </div>
+                        <div className="flex items-center gap-2 pl-3 border-l border-n40">
+                            <div className="text-right leading-tight">
+                                <div className="text-[9px] uppercase tracking-widest text-n100"
+                                     style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>SIGNED IN</div>
+                                <div className="text-xs font-semibold text-primary">{adminName}</div>
+                            </div>
+                            <button
+                                onClick={handleLogout}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-n300 hover:text-danger hover:bg-r50 border border-n40 hover:border-danger/30 transition-all"
+                                title="退出管理后台"
+                            >
+                                <LogOut className="w-3.5 h-3.5" /> 退出
+                            </button>
                         </div>
                     </div>
                 </header>
 
-                {/* Body */}
-                <main className="flex-1 overflow-auto bg-n20 scrollbar-atlas">
+                {/* 内容区 */}
+                <main className="flex-1 overflow-auto bg-n20">
                     <Outlet />
                 </main>
             </div>

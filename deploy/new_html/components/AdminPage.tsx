@@ -19,6 +19,9 @@ interface AdminPageProps {
     // 2026-05-26：embedded 模式 — 在 AdminLayout 内渲染时为 true，
     // 隐藏自身的左 sidebar（由 AdminLayout 接管），改用顶部横向 tab 条。
     embedded?: boolean;
+    // refactor/v2：统一后台壳通过 embedTab 直接驱动当前面板（菜单点哪个就显示哪个），
+    // 同时隐藏 AdminPage 自带的侧栏与页头——避免「后台里又套一个后台」的割裂感。
+    embedTab?: 'users' | 'stats' | 'results' | 'system' | 'features';
 }
 
 // 可用模型列表（按类型分组）
@@ -170,8 +173,10 @@ const normalizeUserRow = (raw: any): UserAccount => {
     };
 };
 
-export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrary = {} as MaterialLibrary, embedded = false }) => {
-    const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'results' | 'system' | 'features'>('users');
+export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrary = {} as MaterialLibrary, embedded = false, embedTab }) => {
+    const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'results' | 'system' | 'features'>(embedTab ?? 'users');
+    // refactor/v2：统一壳的菜单切换会改变 embedTab（同一路由不卸载），此处同步到内部 activeTab。
+    useEffect(() => { if (embedTab) setActiveTab(embedTab); }, [embedTab]);
     const [users, setUsers] = useState<UserAccount[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
     const [nodes, setNodes] = useState<ServerNode[]>([]);
@@ -748,7 +753,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
         //   旧实现 min-h-screen 让容器最少 100vh 但允许撑大；内部 flex-1 子在 "无明确高度的父容器"下
         //   不会形成滚动区域（overflow-y-auto 失效）→ "生成统计分析" / "新功能管理" 等长内容看不全也滚不动。
         //   h-screen 固定为精确 100vh，配合 overflow-hidden + flex-1 + overflow-y-auto 三件套才正确触发滚动。
-        <div className="flex h-screen w-screen bg-n20 text-n800 overflow-hidden font-sans relative">
+        <div className={`flex ${embedded ? 'h-full w-full' : 'h-screen w-screen'} bg-n20 text-n800 overflow-hidden font-sans relative`}>
             {/* 🆕 创建用户Loading遮罩 */}
             {isCreatingUser && (
                 <div className="fixed inset-0 z-[100] bg-n900/50 backdrop-blur-sm flex items-center justify-center">
@@ -762,7 +767,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 </div>
             )}
             
-          {/* 侧边栏 */}
+          {/* 侧边栏 —— embedded（统一壳）模式下隐藏，导航交给壳的层级菜单 */}
+          {!embedded && (
           <div className="w-64 bg-n0 border-r border-n40 flex flex-col flex-shrink-0">
             <div className="p-6 border-b border-n40">
               <h2 className="text-lg font-bold flex items-center gap-2 text-primary">
@@ -833,7 +839,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
               </button>
             </nav>
           </div>
-      
+          )}
+
           {/* 主内容 */}
           <div className="flex-1 overflow-hidden flex flex-col bg-n20">
             {/* Header */}

@@ -20,7 +20,7 @@
  */
 
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskProvider } from './contexts/TaskContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
@@ -63,7 +63,7 @@ import { MediaLibraryPage } from './pages/MediaLibraryPage';
 import { CreditsPage } from './pages/CreditsPage';
 import { VideoReversePage } from './pages/VideoReversePage';
 import { AdminPage } from './components/AdminPage';
-import { ArrowLeft, Home } from 'lucide-react';
+import { AdminFeatureTabs } from './components/AdminFeatureTabs';
 
 import PostProcessPage from './components/PostProcessPage';
 
@@ -77,27 +77,18 @@ import { AdminLayout } from './admin/AdminLayout';
 import { AdminLoginPage } from './admin/AdminLoginPage';
 import { AdminHubPage } from './admin/AdminHubPage';
 import { AdminSettingsPage } from './admin/AdminSettingsPage';
-import { getAdminToken, getAdminUsername, isAdminWhitelisted } from './admin/adminAuth';
 
-const AdminOperationsRoute: React.FC = () => {
-    const navigate = useNavigate();
-    const token = getAdminToken();
-    const username = getAdminUsername();
-    if (!token || !isAdminWhitelisted(username)) {
-        return <Navigate to="/admin/login" replace state={{ from: '/admin/operations' }} />;
-    }
-    return (
-        <div className="relative">
-            <button
-                onClick={() => navigate('/admin')}
-                className="fixed top-3 left-3 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-n400 bg-n0/95 hover:bg-n20 hover:text-primary backdrop-blur-sm border border-n40 hover:border-primary shadow-card transition-all"
-                title="返回控制台 Hub"
-            >
-                <Home className="w-3.5 h-3.5" /> 返回 Hub
-            </button>
-            <AdminPage />
-        </div>
-    );
+// refactor/v2：操作面板/功能面板已并入统一壳（AdminLayout 提供层级菜单 + 鉴权门）。
+// 这两个轻包装只负责把 ?tab 透传给被内嵌的组件，组件不卸载 → 切 tab 不重复拉数。
+const AdminOperationsPanel: React.FC = () => {
+    const [sp] = useSearchParams();
+    const tab = (sp.get('tab') as 'users' | 'stats' | 'results' | 'system') || 'users';
+    return <AdminPage embedded embedTab={tab} />;
+};
+const AdminFeaturesPanel: React.FC = () => {
+    const [sp] = useSearchParams();
+    const tab = (sp.get('tab') as any) || 'accounts';
+    return <AdminFeatureTabs embedTab={tab} />;
 };
 
 const GlobalToastWithNav: React.FC = () => {
@@ -170,11 +161,12 @@ const App: React.FC = () => {
                     {/* 2026-05-26 Slice 2: 用户积分页 */}
                     <Route path="/credits" element={<CreditsPage />} />
 
-                    {/* 2026-05-26：独立 Admin Shell — 与主站 token 隔离 */}
+                    {/* 统一 Admin Shell（refactor/v2）— 一个台子、一套层级菜单，与主站 token 隔离 */}
                     <Route path="/admin/login" element={<AdminLoginPage />} />
-                    <Route path="/admin/operations" element={<AdminOperationsRoute />} />
                     <Route path="/admin" element={<AdminLayout />}>
                         <Route index element={<AdminHubPage />} />
+                        <Route path="operations" element={<AdminOperationsPanel />} />
+                        <Route path="features" element={<AdminFeaturesPanel />} />
                         <Route path="settings" element={<AdminSettingsPage />} />
                     </Route>
 

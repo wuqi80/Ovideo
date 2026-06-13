@@ -6,27 +6,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-0: #09090b;
-  --bg-1: #111113;
-  --bg-2: #18181b;
-  --bg-3: #27272a;
-  --border: rgba(255,255,255,0.06);
-  --border-hover: rgba(255,255,255,0.12);
-  --border-active: rgba(255,255,255,0.18);
-  --text-0: #fafafa;
-  --text-1: #a1a1aa;
-  --text-2: #52525b;
-  --text-3: #3f3f46;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-muted: rgba(59,130,246,0.12);
-  --success: #22c55e;
-  --success-muted: rgba(34,197,94,0.12);
-  --warning: #eab308;
-  --warning-muted: rgba(234,179,8,0.12);
-  --error: #ef4444;
-  --error-muted: rgba(239,68,68,0.12);
-  --font-sans: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  /* refactor/v2：Atlassian 浅色体系（与主站 design-tokens 对齐）。
+     旧版「Terminal Noir」深色全部由下列变量驱动，仅翻变量即整页变浅。 */
+  --bg-0: #F4F5F7;   /* 页面底  n20 */
+  --bg-1: #FFFFFF;   /* 侧栏/卡 n0  */
+  --bg-2: #FAFBFC;   /* 抬升面  n10 */
+  --bg-3: #EBECF0;   /* 滚条/分隔 n30 */
+  --border: #DFE1E6;          /* n40 */
+  --border-hover: #C1C7D0;    /* n50 */
+  --border-active: #B3BAC5;   /* n60 */
+  --text-0: #172B4D;   /* 主文 n800 */
+  --text-1: #5E6C84;   /* 次文 n300 */
+  --text-2: #7A869A;   /* 弱文 n100 */
+  --text-3: #A5ADBA;   /* 极弱 n70  */
+  --accent: #0052CC;
+  --accent-hover: #0065FF;
+  --accent-muted: rgba(0,82,204,0.10);
+  --success: #36B37E;
+  --success-muted: rgba(54,179,126,0.14);
+  --warning: #FF991F;
+  --warning-muted: rgba(255,171,0,0.16);
+  --error: #FF5630;
+  --error-muted: rgba(255,86,48,0.12);
+  --font-sans: 'Plus Jakarta Sans', 'Noto Sans SC', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --radius-sm: 6px;
   --radius: 8px;
@@ -50,7 +52,7 @@ body {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+::-webkit-scrollbar-thumb:hover { background: #B3BAC5; }
 
 /* ── Sidebar ── */
 .sidebar {
@@ -102,11 +104,11 @@ body {
 }
 .nav-item:hover {
   color: var(--text-0);
-  background: rgba(255,255,255,0.04);
+  background: rgba(9,30,66,0.06);
 }
 .nav-item.active {
   color: var(--text-0);
-  background: rgba(255,255,255,0.06);
+  background: rgba(9,30,66,0.08);
   border-color: var(--border);
 }
 .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
@@ -130,6 +132,10 @@ body {
 .main { flex: 1; overflow-y: auto; background: var(--bg-0); }
 .page { display: none; padding: 32px; max-width: 1200px; }
 .page.active { display: block; }
+
+/* refactor/v2：被统一后台壳 <iframe ?embed=1> 内嵌时，隐藏自带侧栏，只留内容区 */
+body.embedded .sidebar { display: none; }
+body.embedded .page { padding: 24px 28px; max-width: none; }
 .page-header {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 28px;
@@ -165,14 +171,14 @@ body {
 }
 .btn-secondary:hover {
   color: var(--text-0); border-color: var(--border-active);
-  background: rgba(255,255,255,0.04);
+  background: rgba(9,30,66,0.06);
 }
 
 .btn-ghost {
   background: transparent; color: var(--text-1);
   border-color: transparent;
 }
-.btn-ghost:hover { color: var(--text-0); background: rgba(255,255,255,0.06); }
+.btn-ghost:hover { color: var(--text-0); background: rgba(9,30,66,0.08); }
 
 .btn-danger {
   background: var(--error-muted); color: var(--error);
@@ -281,7 +287,7 @@ body {
   color: var(--text-1);
 }
 .data-table tbody tr { transition: background var(--transition); }
-.data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+.data-table tbody tr:hover { background: rgba(9,30,66,0.04); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table .mono {
   font-family: var(--font-mono); font-size: 12px; color: var(--text-2);
@@ -340,7 +346,7 @@ select.input {
 /* ── Modal ── */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 100;
-  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  background: rgba(9,30,66,0.54); backdrop-filter: blur(4px);
   display: none; align-items: center; justify-content: center;
 }
 .modal-overlay.open { display: flex; }
@@ -367,7 +373,7 @@ select.input {
   transition: all var(--transition);
   font-size: 18px;
 }
-.modal-close:hover { color: var(--text-0); background: rgba(255,255,255,0.06); }
+.modal-close:hover { color: var(--text-0); background: rgba(9,30,66,0.08); }
 .modal-body { flex: 1; overflow-y: auto; padding: 20px; }
 .modal-footer {
   padding: 14px 20px;
@@ -517,10 +523,10 @@ select.input {
   margin-bottom: 12px;
 }
 .token-result pre {
-  background: #000; border-radius: var(--radius-sm);
+  background: #091E42; border-radius: var(--radius-sm);
   padding: 12px; overflow-x: auto;
   font-family: var(--font-mono); font-size: 12px;
-  color: #7dd3fc; line-height: 1.6;
+  color: #79E2F2; line-height: 1.6;
 }
 
 /* ── Proxy Settings ── */

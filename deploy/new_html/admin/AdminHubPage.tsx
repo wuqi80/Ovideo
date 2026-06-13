@@ -136,7 +136,7 @@ export const AdminHubPage: React.FC = () => {
                     title="生成管理"
                     subtitle="账号 · 项目分组 · 积分 · 素材库 · 审计日志"
                     accent="via-emerald-500/60"
-                    onClick={() => navigate('/admin/operations')}
+                    onClick={() => navigate('/admin/features?tab=accounts')}
                 >
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-n100">
                         <div className="flex items-center gap-1.5"><Users size={12} className="text-n100" />账号 / 权限</div>
@@ -153,7 +153,7 @@ export const AdminHubPage: React.FC = () => {
                     title="系统设置"
                     subtitle="API 配置 · 模型路由 · 通知规则 · 集群节点"
                     accent="via-cyan-500/60"
-                    onClick={() => navigate('/admin/settings')}
+                    onClick={() => navigate('/admin/settings?item=apiconfig')}
                 >
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-n100">
                         <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>API 厂商</div>
@@ -166,11 +166,11 @@ export const AdminHubPage: React.FC = () => {
                 </TileBase>
             </section>
 
-            {/* 集群仪表盘外链 — 单独一行，弱化样式 */}
+            {/* 集群仪表盘 — 内嵌入壳（不再弹独立窗口，保持「一个后台」体验） */}
             <section>
-                <a
-                    href="/admin-legacy/" target="_blank" rel="noreferrer"
-                    className="group flex items-center justify-between bg-n0 hover:bg-n20 border border-n40 hover:border-primary rounded-md p-5 transition-all shadow-card hover:shadow-atlas"
+                <div
+                    onClick={() => navigate('/admin/settings?item=cluster')}
+                    className="group flex items-center justify-between bg-n0 hover:bg-n20 border border-n40 hover:border-primary rounded-md p-5 transition-all shadow-card hover:shadow-atlas cursor-pointer"
                 >
                     <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-lg flex items-center justify-center border border-n40 bg-n0">
@@ -178,11 +178,11 @@ export const AdminHubPage: React.FC = () => {
                         </div>
                         <div>
                             <div className="text-sm font-semibold text-n700">集群仪表盘 (Cluster Admin)</div>
-                            <div className="text-xs text-n100 mt-0.5">独立窗口打开旧版 ComfyUI / AI API 控制台</div>
+                            <div className="text-xs text-n100 mt-0.5">ComfyUI / AI API 控制台 · 已内嵌于「系统设置 › 生成集群」</div>
                         </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-n100 group-hover:text-n700 group-hover:translate-x-1 transition-all" />
-                </a>
+                </div>
             </section>
         </div>
     );
