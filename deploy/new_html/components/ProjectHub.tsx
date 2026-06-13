@@ -192,16 +192,18 @@ const ProjectHub: React.FC = () => {
         return d.toLocaleDateString('zh-CN');
     };
 
+    // refactor/v2 (P1 旗舰)：项目中心整体换肤为 Atlassian 企业级浅色。
+    // 逻辑/状态/handler 全部不变，仅替换样式（暗 gray/purple → 浅 n色阶/primary）。
     return (
-        <div className="h-screen bg-gray-950 text-gray-100 flex flex-col" onClick={() => setContextMenu(null)}>
+        <div className="h-screen bg-n20 text-n800 flex flex-col" onClick={() => setContextMenu(null)}>
             {/* 顶部栏 */}
-            <header className="h-14 bg-gray-900 border-b border-gray-800 flex items-center px-6 justify-between flex-shrink-0">
+            <header className="h-14 bg-n0 border-b border-n40 shadow-card flex items-center px-6 justify-between flex-shrink-0">
                 <div className="flex items-center gap-3">
-                    <FolderOpen className="w-5 h-5 text-purple-400" />
-                    <h1 className="text-lg font-semibold">项目管理</h1>
+                    <FolderOpen className="w-5 h-5 text-primary" />
+                    <h1 className="text-lg font-semibold text-n800">项目管理</h1>
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-n300">
                         {localStorage.getItem('username') || ''}
                     </span>
                     <button
@@ -210,7 +212,7 @@ const ProjectHub: React.FC = () => {
                             localStorage.removeItem('username');
                             window.location.href = '/login';
                         }}
-                        className="text-sm text-gray-500 hover:text-gray-300"
+                        className="text-sm text-n200 hover:text-danger transition-colors"
                     >
                         退出
                     </button>
@@ -218,31 +220,31 @@ const ProjectHub: React.FC = () => {
             </header>
 
             {/* 工具栏 */}
-            <div className="px-6 py-4 flex items-center gap-4 border-b border-gray-800/50">
+            <div className="px-6 py-4 flex items-center gap-4 border-b border-n40 bg-n0">
                 <button
                     onClick={() => setShowCreateModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium transition-colors shadow-card"
                 >
                     <Plus className="w-4 h-4" /> 新建项目
                 </button>
 
                 <div className="flex-1 relative max-w-md">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-n100" />
                     <input
                         type="text"
                         placeholder="搜索项目名称、描述或标签..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-purple-500"
+                        className="w-full pl-10 pr-4 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
                     />
                 </div>
 
                 <div className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-500">排序:</span>
+                    <span className="text-n200">排序:</span>
                     <select
                         value={sortBy}
                         onChange={e => setSortBy(e.target.value as SortKey)}
-                        className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm focus:outline-none"
+                        className="bg-n0 border border-n40 rounded px-2 py-1.5 text-sm text-n800 focus:outline-none focus:border-primary"
                     >
                         <option value="updated">最近更新</option>
                         <option value="created">创建时间</option>
@@ -250,29 +252,29 @@ const ProjectHub: React.FC = () => {
                     </select>
                 </div>
 
-                <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                <label className="flex items-center gap-2 text-sm text-n300 cursor-pointer">
                     <input
                         type="checkbox"
                         checked={showArchived}
                         onChange={e => setShowArchived(e.target.checked)}
-                        className="rounded"
+                        className="rounded accent-primary"
                     />
                     显示已归档
                 </label>
             </div>
 
             {/* 项目列表 */}
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto p-6 scrollbar-atlas">
                 {loading ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {[1, 2, 3, 4].map(i => (
-                            <div key={i} className="h-48 bg-gray-800/50 rounded-xl animate-pulse" />
+                            <div key={i} className="h-48 bg-n30 rounded-md animate-pulse" />
                         ))}
                     </div>
                 ) : filteredProjects.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                        <FolderOpen className="w-16 h-16 mb-4 opacity-20" />
-                        <p className="text-lg mb-2">
+                    <div className="flex flex-col items-center justify-center h-64 text-n100">
+                        <FolderOpen className="w-16 h-16 mb-4 opacity-30" />
+                        <p className="text-lg mb-2 text-n300">
                             {searchQuery ? '未找到匹配的项目' : '还没有项目'}
                         </p>
                         <p className="text-sm">
@@ -284,37 +286,37 @@ const ProjectHub: React.FC = () => {
                         {filteredProjects.map(p => (
                             <div
                                 key={p.projectId}
-                                className={`group relative bg-gray-800/60 hover:bg-gray-800 border border-gray-700/50 hover:border-purple-500/50 rounded-xl p-4 cursor-pointer transition-all ${p.isArchived ? 'opacity-60' : ''}`}
+                                className={`group relative bg-n0 border border-n40 hover:border-primary shadow-card hover:shadow-atlas rounded-md p-4 cursor-pointer transition-all ${p.isArchived ? 'opacity-60' : ''}`}
                                 onClick={() => navigate(`/projects/${p.projectId}`)}
                             >
                                 {/* 封面区域 */}
-                                <div className="h-24 bg-gradient-to-br from-purple-900/30 to-blue-900/30 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                                <div className="h-24 bg-gradient-to-br from-primary-light to-p50 rounded mb-3 flex items-center justify-center overflow-hidden">
                                     {p.coverUrl ? (
                                         <img src={p.coverUrl} alt="" className="w-full h-full object-cover" />
                                     ) : (
-                                        <FolderOpen className="w-10 h-10 text-gray-600" />
+                                        <FolderOpen className="w-10 h-10 text-n50" />
                                     )}
                                 </div>
 
                                 {/* 项目信息 */}
-                                <h3 className="font-medium text-sm truncate mb-1 flex items-center gap-1.5">
+                                <h3 className="font-medium text-sm truncate mb-1 flex items-center gap-1.5 text-n800">
                                     <span className="truncate">{p.projectName}</span>
                                     {/* 2026-05-26 组织管理 MVP — Slice 5: visibility badge */}
                                     {p.visibility && p.visibility !== 'private' && (
-                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-800/50">
+                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-b50 text-b400 border border-b75">
                                             🌐 组
                                         </span>
                                     )}
                                 </h3>
                                 {p.description && (
-                                    <p className="text-xs text-gray-400 truncate mb-2">{p.description}</p>
+                                    <p className="text-xs text-n200 truncate mb-2">{p.description}</p>
                                 )}
 
                                 {/* 标签 */}
                                 {p.tags.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mb-2">
                                         {p.tags.slice(0, 3).map(t => (
-                                            <span key={t} className="text-[10px] px-1.5 py-0.5 bg-gray-700/50 text-gray-400 rounded">
+                                            <span key={t} className="text-[10px] px-1.5 py-0.5 bg-n30 text-n300 rounded">
                                                 {t}
                                             </span>
                                         ))}
@@ -322,7 +324,7 @@ const ProjectHub: React.FC = () => {
                                 )}
 
                                 {/* 底部元信息 */}
-                                <div className="flex items-center justify-between text-xs text-gray-500 mt-auto">
+                                <div className="flex items-center justify-between text-xs text-n100 mt-auto">
                                     <div className="flex items-center gap-1">
                                         <Users className="w-3 h-3" />
                                         <span>{p.memberCount}</span>
@@ -335,18 +337,18 @@ const ProjectHub: React.FC = () => {
 
                                 {/* 右上角菜单 */}
                                 <button
-                                    className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-700 transition-all"
+                                    className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-n20 transition-all"
                                     onClick={e => {
                                         e.stopPropagation();
                                         setContextMenu({ projectId: p.projectId, x: e.clientX, y: e.clientY, isArchived: p.isArchived });
                                     }}
                                 >
-                                    <MoreVertical className="w-4 h-4 text-gray-400" />
+                                    <MoreVertical className="w-4 h-4 text-n200" />
                                 </button>
 
                                 {p.isArchived && (
                                     <div className="absolute top-3 left-3">
-                                        <Archive className="w-4 h-4 text-yellow-500/60" />
+                                        <Archive className="w-4 h-4 text-warning" />
                                     </div>
                                 )}
                             </div>
@@ -358,27 +360,27 @@ const ProjectHub: React.FC = () => {
             {/* 右键菜单 */}
             {contextMenu && (
                 <div
-                    className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[140px]"
+                    className="fixed z-50 bg-n0 border border-n40 rounded-md shadow-bottom py-1 min-w-[140px]"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={e => e.stopPropagation()}
                 >
                     {contextMenu.isArchived ? (
                     <button
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center gap-2 text-emerald-400"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-success"
                         onClick={() => handleUnarchive(contextMenu.projectId)}
                     >
                         <Archive className="w-4 h-4" /> 取消归档
                     </button>
                     ) : (
                     <button
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-n700"
                         onClick={() => handleArchive(contextMenu.projectId)}
                     >
                         <Archive className="w-4 h-4" /> 归档
                     </button>
                     )}
                     <button
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center gap-2 text-indigo-300"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-primary"
                         onClick={() => {
                             const proj = projects.find(p => p.projectId === contextMenu.projectId);
                             if (proj) setShareTarget(proj);
@@ -388,7 +390,7 @@ const ProjectHub: React.FC = () => {
                         <Share2 className="w-4 h-4" /> 共享…
                     </button>
                     <button
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-700 flex items-center gap-2 text-red-400"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-r50 flex items-center gap-2 text-danger"
                         onClick={() => handleDelete(contextMenu.projectId)}
                     >
                         <Trash2 className="w-4 h-4" /> 删除
@@ -408,44 +410,45 @@ const ProjectHub: React.FC = () => {
 
             {/* 新建项目弹窗 */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
-                    <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-lg font-semibold mb-4">新建项目</h2>
+                <div className="fixed inset-0 bg-n900/50 flex items-center justify-center z-50 animate-fadeIn" onClick={() => setShowCreateModal(false)}>
+                    <div className="bg-n0 rounded-md p-6 w-full max-w-md border border-n40 shadow-bottom animate-scaleIn" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-lg font-semibold mb-4 text-n800">新建项目</h2>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm text-gray-400 mb-1">项目名称</label>
+                                <label className="block text-sm text-n300 mb-1">项目名称</label>
                                 <input
                                     type="text"
                                     value={newProjectName}
                                     onChange={e => setNewProjectName(e.target.value)}
                                     placeholder="输入项目名称"
-                                    className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-purple-500"
+                                    className="w-full px-3 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
                                     autoFocus
                                     onKeyDown={e => e.key === 'Enter' && handleCreate()}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm text-gray-400 mb-1">项目描述（可选）</label>
+                                <label className="block text-sm text-n300 mb-1">项目描述（可选）</label>
                                 <textarea
                                     value={newProjectDesc}
                                     onChange={e => setNewProjectDesc(e.target.value)}
                                     placeholder="简要描述项目内容"
                                     rows={3}
-                                    className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-purple-500 resize-none"
+                                    className="w-full px-3 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none transition-colors"
                                 />
                             </div>
                             {/* 2026-05-26 组织管理 MVP — Slice 5: visibility radio */}
                             <div>
-                                <label className="block text-sm text-gray-400 mb-1.5">可见性</label>
+                                <label className="block text-sm text-n300 mb-1.5">可见性</label>
                                 <div className="space-y-1.5">
                                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                                         <input
                                             type="radio"
                                             checked={newProjectVisibility === 'private'}
                                             onChange={() => setNewProjectVisibility('private')}
+                                            className="accent-primary"
                                         />
-                                        <span className="text-gray-300">🔒 私有</span>
-                                        <span className="text-xs text-gray-500">— 仅我可见</span>
+                                        <span className="text-n700">🔒 私有</span>
+                                        <span className="text-xs text-n100">— 仅我可见</span>
                                     </label>
                                     <label className={`flex items-center gap-2 text-sm cursor-pointer ${!isOrgWorkspace ? 'opacity-50' : ''}`}>
                                         <input
@@ -453,9 +456,10 @@ const ProjectHub: React.FC = () => {
                                             checked={newProjectVisibility === 'org-default'}
                                             onChange={() => setNewProjectVisibility('org-default')}
                                             disabled={!isOrgWorkspace}
+                                            className="accent-primary"
                                         />
-                                        <span className="text-gray-300">🌐 对组可见</span>
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-n700">🌐 对组可见</span>
+                                        <span className="text-xs text-n100">
                                             {isOrgWorkspace ? `— 自动共享给「${currentName}」` : '— 切到组织 workspace 才能用'}
                                         </span>
                                     </label>
@@ -465,14 +469,14 @@ const ProjectHub: React.FC = () => {
                         <div className="flex justify-end gap-3 mt-6">
                             <button
                                 onClick={() => setShowCreateModal(false)}
-                                className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200"
+                                className="px-4 py-2 text-sm text-n300 hover:text-n800 hover:bg-n20 rounded transition-colors"
                             >
                                 取消
                             </button>
                             <button
                                 onClick={handleCreate}
                                 disabled={!newProjectName.trim()}
-                                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium"
+                                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium transition-colors"
                             >
                                 创建
                             </button>
