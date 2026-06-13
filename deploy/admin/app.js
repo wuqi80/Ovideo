@@ -783,7 +783,10 @@ async function saveGlobalSettings() {
 //  - URL hash 深链：/admin-legacy/#cluster 直接打开对应页（dashboard/cluster/workflows/apiconfig）
 //  - ?embed=1：隐藏旧版自带侧栏（导航交给壳的层级菜单），只显示内容区，营造「一个后台」体验
 const VALID_PAGES = ['dashboard', 'cluster', 'workflows', 'apiconfig'];
-function pageFromHash() {
+// 目标页优先取 ?page=（壳内嵌时每个叶子 URL 各不相同，最可靠），回退到 #hash。
+function targetPage() {
+  const q = new URLSearchParams(location.search).get('page');
+  if (VALID_PAGES.includes(q)) return q;
   const h = (location.hash || '').replace(/^#/, '');
   return VALID_PAGES.includes(h) ? h : 'dashboard';
 }
@@ -793,10 +796,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // 顺带享受壳的登录鉴权门（旧版静态页本身无鉴权）。被壳以 ?embed=1 嵌入时跳过此逻辑。
   if (!embed && window.self === window.top) {
     const ITEM = { dashboard: 'cluster', cluster: 'cluster', workflows: 'workflows', apiconfig: 'apiconfig' };
-    location.replace('/admin/settings?item=' + (ITEM[pageFromHash()] || 'apiconfig'));
+    location.replace('/admin/settings?item=' + (ITEM[targetPage()] || 'apiconfig'));
     return;
   }
   if (embed) document.body.classList.add('embedded');
-  navigateTo(pageFromHash());
+  navigateTo(targetPage());
 });
-window.addEventListener('hashchange', () => navigateTo(pageFromHash()));
+window.addEventListener('hashchange', () => navigateTo(targetPage()));

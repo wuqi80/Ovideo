@@ -38,13 +38,16 @@ const PLACEHOLDERS: Record<string, { icon: React.ReactNode; title: string; desc:
 
 // 版本号：旧版静态资源（index/style/app）改动后手动 +1，强制 iframe 重新拉取、
 // 绕开浏览器对 iframe 子资源的缓存（刷新外层 SPA 未必会让 iframe 资源重新校验）。
-const LEGACY_VER = '20260613b';
+const LEGACY_VER = '20260613c';
 
 const LegacyEmbed: React.FC<{ page: string }> = ({ page }) => (
-    // 内嵌旧版控制台：?embed=1 隐藏其侧栏，#page 直达对应页，&v 击穿缓存
+    // 内嵌旧版控制台：?embed=1 隐藏其自带侧栏（导航只靠左侧统一菜单），page=<page> 直达对应页。
+    // key={page} 关键：切换不同 settings 叶子时强制 iframe 重新挂载，
+    // 否则仅 #hash 变化浏览器不会重载 iframe → 各页看起来「都一样」。
     <iframe
+        key={page}
         title="legacy-admin"
-        src={`/admin-legacy/?embed=1&v=${LEGACY_VER}#${page}`}
+        src={`/admin-legacy/?embed=1&v=${LEGACY_VER}&page=${page}#${page}`}
         className="w-full h-full border-0 block bg-n20"
     />
 );
