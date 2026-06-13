@@ -127,15 +127,15 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-lg w-[480px] max-h-[80vh] flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-800 flex items-center gap-2">
-          <Share2 size={14} className="text-indigo-400" />
-          <span className="text-sm font-medium text-gray-200">共享资源</span>
+    <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+      <div className="bg-n0 border border-n40 rounded-lg w-[480px] max-h-[80vh] flex flex-col overflow-hidden shadow-bottom">
+        <div className="px-4 py-3 border-b border-n40 flex items-center gap-2">
+          <Share2 size={14} className="text-primary" />
+          <span className="text-sm font-medium text-n700">共享资源</span>
           {resourceName && (
-            <span className="ml-1 text-xs text-gray-500 truncate">— {resourceName}</span>
+            <span className="ml-1 text-xs text-n100 truncate">— {resourceName}</span>
           )}
-          <button onClick={onClose} className="ml-auto text-gray-500 hover:text-gray-300">
+          <button onClick={onClose} className="ml-auto text-n100 hover:text-n700">
             <X size={14} />
           </button>
         </div>
@@ -143,35 +143,35 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* 已共享列表 */}
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2">
+            <div className="text-[10px] uppercase tracking-wider text-n100 mb-2">
               已共享 ({shares.length})
             </div>
             {loading ? (
-              <div className="text-xs text-gray-500 py-2">加载中…</div>
+              <div className="text-xs text-n100 py-2">加载中…</div>
             ) : shares.length === 0 ? (
-              <div className="text-xs text-gray-500 py-2 px-3 bg-gray-900/40 border border-dashed border-gray-800 rounded">
+              <div className="text-xs text-n100 py-2 px-3 bg-n30 border border-dashed border-n40 rounded">
                 尚未共享给任何目标
               </div>
             ) : (
               <div className="space-y-1.5">
                 {shares.map(s => (
-                  <div key={s.share_id} className="flex items-center gap-2 px-3 py-2 bg-gray-800/60 border border-gray-800 rounded">
+                  <div key={s.share_id} className="flex items-center gap-2 px-3 py-2 bg-n30 border border-n40 rounded">
                     {s.share_target_type === 'org' ? (
-                      <Building2 size={12} className="text-indigo-300" />
+                      <Building2 size={12} className="text-primary" />
                     ) : (
-                      <FolderOpen size={12} className="text-emerald-300" />
+                      <FolderOpen size={12} className="text-success" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-200 truncate">
+                      <div className="text-xs text-n700 truncate">
                         {s.share_target_name || s.share_target_id}
                       </div>
-                      <div className="text-[10px] text-gray-500">
+                      <div className="text-[10px] text-n100">
                         {s.share_target_type === 'org' ? '整个组织' : '组织内项目'} · {new Date(s.granted_at).toLocaleString('zh-CN')}
                       </div>
                     </div>
                     <button
                       onClick={() => handleRemove(s)}
-                      className="px-2 py-0.5 text-[10px] rounded bg-red-900/40 hover:bg-red-900/70 text-red-200 inline-flex items-center gap-1"
+                      className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger inline-flex items-center gap-1"
                     ><Trash2 size={10} />取消</button>
                   </div>
                 ))}
@@ -180,10 +180,10 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
           </div>
 
           {/* 新增表单 */}
-          <div className="border-t border-gray-800 pt-3">
-            <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2">添加共享</div>
+          <div className="border-t border-n40 pt-3">
+            <div className="text-[10px] uppercase tracking-wider text-n100 mb-2">添加共享</div>
             {organizations.length === 0 ? (
-              <div className="text-xs text-gray-500 px-3 py-2 bg-gray-900/40 border border-dashed border-gray-800 rounded">
+              <div className="text-xs text-n100 px-3 py-2 bg-n30 border border-dashed border-n40 rounded">
                 你还没加入任何组织，无法共享资源。请联系管理员把你加入组织。
               </div>
             ) : (
@@ -195,7 +195,7 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
                       checked={targetType === 'org'}
                       onChange={() => setTargetType('org')}
                     />
-                    <span className="text-gray-300">整个组织</span>
+                    <span className="text-n700">整个组织</span>
                   </label>
                   <label className="flex items-center gap-1.5 cursor-pointer ml-3">
                     <input
@@ -203,14 +203,14 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
                       checked={targetType === 'project'}
                       onChange={() => setTargetType('project')}
                     />
-                    <span className="text-gray-300">组织内某项目</span>
+                    <span className="text-n700">组织内某项目</span>
                   </label>
                 </div>
 
                 <select
                   value={targetOrgId}
                   onChange={e => setTargetOrgId(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs"
+                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs"
                 >
                   <option value="">— 选择组织 —</option>
                   {organizations.map(o => (
@@ -225,7 +225,7 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
                     value={targetProjectId}
                     onChange={e => setTargetProjectId(e.target.value)}
                     disabled={!targetOrgId}
-                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs disabled:opacity-40"
+                    className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs disabled:opacity-40"
                   >
                     <option value="">{targetOrgId ? '— 选择项目 —' : '— 先选组织 —'}</option>
                     {orgProjects.map(p => (
@@ -239,7 +239,7 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
                 <button
                   onClick={handleAdd}
                   disabled={busy || !targetOrgId || (targetType === 'project' && !targetProjectId)}
-                  className="w-full px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-xs inline-flex items-center justify-center gap-1"
+                  className="w-full px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white disabled:bg-n0 disabled:cursor-not-allowed text-xs inline-flex items-center justify-center gap-1"
                 >
                   <Plus size={11} />{busy ? '共享中…' : '共享'}
                 </button>

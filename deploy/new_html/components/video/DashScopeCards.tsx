@@ -87,15 +87,15 @@ interface ShellProps {
 // 配合 VideoPage 的 'min-h-[420px] h-full flex flex-col' 卡片外壳，让 Shell 撑满；
 // 主体内容区自己负责滚动，避免整张卡撑出滚动条破坏 grid stretch。
 const DashScopeCardShell: React.FC<ShellProps> = ({ theme, subtitle, children }) => (
-    <div className={`w-full rounded-lg border ${theme.accentBorder} bg-slate-900/40 flex flex-col flex-1 min-h-0`}>
-        <div className={`px-2.5 py-1.5 bg-gradient-to-r ${theme.gradient} flex items-center justify-between border-b border-slate-700/60 rounded-t-lg shrink-0`}>
+    <div className={`w-full rounded-md border ${theme.accentBorder} bg-n0 shadow-card flex flex-col flex-1 min-h-0`}>
+        <div className={`px-2.5 py-1.5 bg-gradient-to-r ${theme.gradient} flex items-center justify-between border-b border-n40 rounded-t-md shrink-0`}>
             <div className="flex items-center gap-1.5">
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase border ${theme.badge}`}>
                     {theme.name}
                 </span>
-                <span className="text-[10px] text-slate-400">{subtitle}</span>
+                <span className="text-[10px] text-n300">{subtitle}</span>
             </div>
-            <div className="flex items-center gap-1 text-[9px] text-slate-500">
+            <div className="flex items-center gap-1 text-[9px] text-n100">
                 <Sparkles className="w-2.5 h-2.5" /> DashScope
             </div>
         </div>
@@ -133,7 +133,7 @@ const ImageSlot: React.FC<ImageSlotProps> = ({
             <button
                 type="button"
                 onClick={onUploadClick}
-                className={`relative aspect-video w-full rounded border border-dashed ${accentBorder} ${accentBg} hover:opacity-90 transition-opacity flex flex-col items-center justify-center text-slate-400`}
+                className={`relative aspect-video w-full rounded border border-dashed ${accentBorder} ${accentBg} hover:opacity-90 transition-opacity flex flex-col items-center justify-center text-n300`}
             >
                 <ImagePlus className="w-5 h-5 mb-1" />
                 <span className="text-[10px]">{placeholder}</span>
@@ -149,7 +149,7 @@ const ImageSlot: React.FC<ImageSlotProps> = ({
                     onClick={() => onPreview?.(previewUrl)}
                 />
             ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-[10px] px-2">
+                <div className="w-full h-full flex flex-col items-center justify-center text-n100 text-[10px] px-2">
                     <ImageIcon className="w-5 h-5 mb-1" />
                     <span className="truncate w-full text-center">{media?.file_id || '已选'}</span>
                 </div>
@@ -159,7 +159,7 @@ const ImageSlot: React.FC<ImageSlotProps> = ({
                     <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onPreview?.(previewUrl); }}
-                        className="p-1 bg-black/60 hover:bg-black/80 rounded"
+                        className="p-1 bg-n900/50 hover:bg-n900/50 rounded"
                         title="放大"
                     >
                         <Maximize2 className="w-2.5 h-2.5 text-white" />
@@ -169,7 +169,7 @@ const ImageSlot: React.FC<ImageSlotProps> = ({
                     <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onClear(); }}
-                        className="p-1 bg-black/60 hover:bg-red-600 rounded"
+                        className="p-1 bg-n900/50 hover:bg-danger rounded"
                         title="移除"
                     >
                         <X className="w-2.5 h-2.5 text-white" />
@@ -204,7 +204,7 @@ const CompactImageSlot: React.FC<CompactImageSlotProps> = ({
     const previewUrl = media?.url || '';
     return (
         <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-400 shrink-0 w-10">{label}</span>
+            <span className="text-[10px] text-n300 shrink-0 w-10">{label}</span>
             {hasImage ? (
                 <div className={`relative w-20 h-14 shrink-0 rounded border ${accentBorder} overflow-hidden bg-black group`}>
                     {previewUrl ? (
@@ -214,7 +214,7 @@ const CompactImageSlot: React.FC<CompactImageSlotProps> = ({
                             onClick={() => onPreview?.(previewUrl)}
                         />
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[9px] text-slate-500 px-1 truncate">
+                        <div className="w-full h-full flex items-center justify-center text-[9px] text-n100 px-1 truncate">
                             {media?.file_id || '已选'}
                         </div>
                     )}
@@ -222,7 +222,7 @@ const CompactImageSlot: React.FC<CompactImageSlotProps> = ({
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onClear(); }}
-                            className="absolute top-0 right-0 p-0.5 bg-black/70 hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-0 right-0 p-0.5 bg-n900/50 hover:bg-danger opacity-0 group-hover:opacity-100 transition-opacity"
                             title="移除"
                         >
                             <X className="w-2.5 h-2.5 text-white" />
@@ -233,7 +233,7 @@ const CompactImageSlot: React.FC<CompactImageSlotProps> = ({
                 <button
                     type="button"
                     onClick={onUploadClick}
-                    className={`w-20 h-14 shrink-0 rounded border border-dashed ${accentBorder} ${accentBg} hover:opacity-90 flex flex-col items-center justify-center text-slate-400 transition-opacity`}
+                    className={`w-20 h-14 shrink-0 rounded border border-dashed ${accentBorder} ${accentBg} hover:opacity-90 flex flex-col items-center justify-center text-n300 transition-opacity`}
                 >
                     <ImagePlus className="w-3.5 h-3.5 mb-0.5" />
                     <span className="text-[9px]">上传</span>
@@ -268,17 +268,17 @@ const MultiRefRow: React.FC<MultiRefRowProps> = ({
                     {url ? (
                         <img src={url} className="w-full h-full object-cover cursor-zoom-in" onClick={() => onPreview?.(url)} />
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[9px] text-slate-500">
+                        <div className="w-full h-full flex items-center justify-center text-[9px] text-n100">
                             #{idx + 1}
                         </div>
                     )}
-                    <div className="absolute bottom-0 left-0 right-0 text-center text-[8px] bg-black/70 text-white">
+                    <div className="absolute bottom-0 left-0 right-0 text-center text-[8px] bg-n900/50 text-white">
                         [Image {idx + 1}]
                     </div>
                     <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onRemove(idx); }}
-                        className="absolute top-0 right-0 p-0.5 bg-black/70 hover:bg-red-600 opacity-0 group-hover:opacity-100"
+                        className="absolute top-0 right-0 p-0.5 bg-n900/50 hover:bg-danger opacity-0 group-hover:opacity-100"
                         title="移除"
                     >
                         <X className="w-2.5 h-2.5 text-white" />
@@ -290,7 +290,7 @@ const MultiRefRow: React.FC<MultiRefRowProps> = ({
             <button
                 type="button"
                 onClick={onAdd}
-                className={`w-14 h-14 shrink-0 rounded border border-dashed ${accentBorder} ${accentBg} hover:opacity-90 flex flex-col items-center justify-center text-slate-400 text-[8px] leading-tight px-1`}
+                className={`w-14 h-14 shrink-0 rounded border border-dashed ${accentBorder} ${accentBg} hover:opacity-90 flex flex-col items-center justify-center text-n300 text-[8px] leading-tight px-1`}
                 title={placeholder}
             >
                 <ImagePlus className="w-3 h-3 mb-0.5" />
@@ -301,8 +301,8 @@ const MultiRefRow: React.FC<MultiRefRowProps> = ({
 );
 
 // 表单字段统一样式
-const inputCls = 'bg-slate-900 border border-slate-700 text-[11px] text-white rounded px-1.5 py-0.5 focus:outline-none focus:border-indigo-500';
-const labelCls = 'flex items-center gap-1 text-[10px] text-slate-400';
+const inputCls = 'bg-n0 border border-n40 text-[11px] text-n800 rounded px-1.5 py-0.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
+const labelCls = 'flex items-center gap-1 text-[10px] text-n300';
 
 // ─── Media 辅助：拆分 first/last/reference ─────────────────────────────────────
 
@@ -471,7 +471,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                         className={`flex-1 px-1.5 py-1 rounded border flex items-center justify-center gap-1 transition-colors ${
                             currentMode === m
                                 ? `${theme.accentBg} ${theme.accentBorder} ${theme.accentText}`
-                                : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300'
+                                : 'bg-n0 border-n40 text-n100 hover:text-n700'
                         }`}
                     >
                         <Icon className="w-3 h-3" /> {label}
@@ -501,7 +501,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                             : '描述画面内容、动作、镜头语言...'
                     }
                     disabled={disabled || isCustomMulti}
-                    className={`w-full bg-black/30 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:border-sky-500 focus:outline-none resize-none h-12 disabled:opacity-50`}
+                    className={`w-full bg-n0 border border-n40 rounded px-2 py-1 text-[11px] text-n700 focus:border-sky-500 focus:outline-none resize-none h-12 disabled:opacity-50`}
                 />
             )}
 
@@ -524,7 +524,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                 <div className="flex flex-col gap-1.5 border border-sky-700/40 rounded p-2 bg-sky-950/20">
                     {/* shot_type 切换 */}
                     <div className="flex items-center gap-1.5 text-[10px]">
-                        <span className="text-slate-400">分镜模式：</span>
+                        <span className="text-n300">分镜模式：</span>
                         {(['intelligence', 'customize'] as const).map(st => (
                             <button
                                 key={st}
@@ -534,7 +534,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                                 className={`px-2 py-0.5 rounded border ${
                                     (params.kling_shot_type || 'intelligence') === st
                                         ? `${theme.accentBg} ${theme.accentBorder} ${theme.accentText}`
-                                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                                        : 'bg-n0 border-n40 text-n300'
                                 }`}
                             >
                                 {st === 'intelligence' ? '智能分镜' : '自定义分镜'}
@@ -545,7 +545,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                     {params.kling_shot_type === 'customize' && (
                         <div className="flex flex-col gap-1.5 max-h-[160px] overflow-y-auto pr-1">
                             {(params.kling_multi_prompt || []).map((seg, idx) => (
-                                <div key={idx} className="flex items-center gap-1 bg-slate-900/60 rounded px-1.5 py-1">
+                                <div key={idx} className="flex items-center gap-1 bg-n20 rounded px-1.5 py-1">
                                     <span className="text-[10px] text-sky-300 shrink-0 w-12">分镜 {seg.index}</span>
                                     <textarea
                                         value={seg.prompt}
@@ -557,7 +557,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                                         placeholder="本镜头的画面描述"
                                         rows={2}
                                         disabled={disabled}
-                                        className="flex-1 bg-black/30 border border-slate-700 rounded px-1.5 py-0.5 text-[11px] text-slate-200 focus:border-sky-500 focus:outline-none resize-none"
+                                        className="flex-1 bg-n0 border border-n40 rounded px-1.5 py-0.5 text-[11px] text-n700 focus:border-sky-500 focus:outline-none resize-none"
                                     />
                                     <div className="flex flex-col items-end gap-0.5 shrink-0">
                                         <input
@@ -578,7 +578,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                                                 const next = (params.kling_multi_prompt || []).filter((_, i) => i !== idx);
                                                 onChange({ ...params, kling_multi_prompt: next });
                                             }}
-                                            className="text-[9px] text-red-400 hover:text-red-300"
+                                            className="text-[9px] text-danger hover:text-danger"
                                         >移除</button>
                                     </div>
                                 </div>
@@ -662,7 +662,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                     />
                     水印
                 </label>
-                <div className="flex items-center justify-end text-[9px] text-slate-500">
+                <div className="flex items-center justify-end text-[9px] text-n100">
                     {params.sub_model_kling === 'omni' ? 'omni · 多参考' : 'standard'}
                 </div>
             </div>
@@ -742,7 +742,7 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                     onChange={(e) => onChange({ ...params, prompt: e.target.value })}
                     placeholder="描述参考主体如何融合到场景中..."
                     disabled={disabled}
-                    className="w-full bg-black/30 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:border-purple-500 focus:outline-none resize-none h-12"
+                    className="w-full bg-n0 border border-n40 rounded px-2 py-1 text-[11px] text-n700 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none resize-none h-12"
                 />
             )}
 
@@ -750,7 +750,7 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                 storyboard 单图 → first_frame，走 reference 通道；
                 storyboard 双图 → first_frame + last_frame，自动走 startend 通道；
                 用户额外 @ 或点 + 添加的图 → reference_image。 */}
-            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+            <div className="flex items-center gap-2 text-[10px] text-n300">
                 <span className="shrink-0">参考</span>
                 <MultiRefRow
                     refs={refs}
@@ -809,8 +809,8 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
 
             {/* 高级参数：永久展开（2026-05-25 A5：<section> 替换 <details open>，
                 用户明确"参数显示都全"，不允许折叠后参数消失） */}
-            <section className="border-t border-slate-700/50 pt-2">
-                <div className="text-[10px] text-slate-400 mb-1.5">高级参数</div>
+            <section className="border-t border-n40 pt-2">
+                <div className="text-[10px] text-n300 mb-1.5">高级参数</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     <label className={labelCls}>
                         <Maximize2 className="w-2.5 h-2.5" /> 分辨率
@@ -869,7 +869,7 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                             disabled={disabled || !supportsAudio}
                             aria-label="audio"
                         />
-                        <Volume2 className="w-2.5 h-2.5" /> 有声 {!supportsAudio && <span className="text-[8px] text-amber-400">(仅 q3)</span>}
+                        <Volume2 className="w-2.5 h-2.5" /> 有声 {!supportsAudio && <span className="text-[8px] text-warning">(仅 q3)</span>}
                     </label>
                 </div>
             </section>
@@ -906,7 +906,7 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
 
     return (
         <DashScopeCardShell theme={theme} subtitle="HappyHorse · 多图参考生">
-            <div className="flex items-center gap-1 text-[10px] text-slate-500">
+            <div className="flex items-center gap-1 text-[10px] text-n100">
                 <Sparkles className="w-3 h-3" />
                 提示词中用 <span className={`${theme.accentText} font-mono mx-0.5`}>[Image 1]</span> 等引用第 N 张参考图
             </div>
@@ -924,7 +924,7 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
                     onChange={(e) => onChange({ ...params, prompt: e.target.value })}
                     placeholder="[Image 1] 中身着红衣的女性，... [Image 2] 中的折扇..."
                     disabled={disabled}
-                    className="w-full bg-black/30 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:border-orange-500 focus:outline-none resize-none h-14"
+                    className="w-full bg-n0 border border-n40 rounded px-2 py-1 text-[11px] text-n700 focus:border-orange-500 focus:outline-none resize-none h-14"
                 />
             )}
 
@@ -988,8 +988,8 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
 
             {/* 高级参数：永久展开（2026-05-25 A5：<section> 替换 <details open>，
                 用户明确"参数显示都全"，不允许折叠后参数消失） */}
-            <section className="border-t border-slate-700/50 pt-2">
-                <div className="text-[10px] text-slate-400 mb-1.5">高级参数</div>
+            <section className="border-t border-n40 pt-2">
+                <div className="text-[10px] text-n300 mb-1.5">高级参数</div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                     <label className={`${labelCls} cursor-pointer`}>
                         <input

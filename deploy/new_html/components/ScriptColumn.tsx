@@ -559,25 +559,25 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 border-r border-gray-800/50 relative">
-      <div className="h-[52px] px-4 border-b border-gray-800 bg-gray-850 flex-shrink-0 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+    <div className="flex flex-col h-full bg-n0 border-r border-n40 relative">
+      <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex-shrink-0 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-n700 uppercase tracking-wider flex items-center gap-2">
             3. 分镜脚本
             </h2>
             <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 border-r border-gray-700 pr-2 mr-1">
-                     <button onClick={onUndo} disabled={!canUndo} className="p-1.5 text-gray-500 hover:text-white disabled:opacity-30 rounded hover:bg-gray-800">
+                <div className="flex items-center gap-1 border-r border-n40 pr-2 mr-1">
+                     <button onClick={onUndo} disabled={!canUndo} className="p-1.5 text-n100 hover:text-n800 disabled:opacity-30 rounded hover:bg-n20">
                          <Undo2 className="w-4 h-4" />
                      </button>
-                     <button onClick={onRedo} disabled={!canRedo} className="p-1.5 text-gray-500 hover:text-white disabled:opacity-30 rounded hover:bg-gray-800">
+                     <button onClick={onRedo} disabled={!canRedo} className="p-1.5 text-n100 hover:text-n800 disabled:opacity-30 rounded hover:bg-n20">
                          <Redo2 className="w-4 h-4" />
                      </button>
                  </div>
 
                 {hasScript && (
-                  <button 
+                  <button
                     onClick={() => setIsEditMode(!isEditMode)}
-                    className={`p-1.5 rounded transition-colors ${isEditMode ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+                    className={`p-1.5 rounded transition-colors ${isEditMode ? 'bg-primary text-white' : 'text-n100 hover:text-n800 hover:bg-n20'}`}
                     title={isEditMode ? "完成编辑" : "手动编辑剧本"}
                   >
                       {isEditMode ? <Save className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
@@ -587,7 +587,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
       </div>
 
       {/* Toolbar - 固定高度52px，与其他栏目对齐 */}
-      <div className="h-[52px] px-3 border-b border-gray-800 bg-gray-900/50 flex items-center">
+      <div className="h-[52px] px-3 border-b border-n40 bg-n0 flex items-center">
            {/* 🆕 提取分镜按钮 */}
            {hasScript && !selectedFile?.storyboard && (
                <button
@@ -595,8 +595,8 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                disabled={isShotExtracting || isProcessing}
                className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold text-xs transition-all ${
                  isShotExtracting || isProcessing
-                   ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                   : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-900/50'
+                   ? 'bg-n0 text-n100 cursor-not-allowed'
+                   : 'bg-gradient-to-r from-primary to-pink-600 hover:from-primary-hover hover:to-pink-500 text-white shadow-lg shadow-purple-900/50'
                }`}
              >
                {isShotExtracting ? (
@@ -616,15 +616,15 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
           {/* 🆕 已提取分镜提示 + 导出按钮 */}
           {selectedFile?.storyboard && (
             <div className="w-full flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 px-3 py-2 bg-green-900/20 border border-green-500/30 rounded-lg text-xs text-green-400">
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-900/20 border border-green-500/30 rounded-lg text-xs text-success">
                 <LayoutDashboard className="w-4 h-4" />
                 <span>已提取 {selectedFile.storyboard.items.length} 个分镜</span>
               </div>
-              
+
               {/* 🆕 导出Excel按钮 */}
               <button
                 onClick={() => exportStoryboardToExcel()}
-                className="flex items-center gap-1.5 px-3 py-2 bg-blue-900/20 hover:bg-blue-600 border border-blue-500/30 rounded-lg text-xs text-blue-400 hover:text-white transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 bg-b50 hover:bg-blue-600 border border-b75 rounded-lg text-xs text-b400 hover:text-white transition-all"
                 title="导出分镜表格"
               >
                 <FileSpreadsheet className="w-4 h-4" />
@@ -640,8 +640,8 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
               disabled={isProcessing}
               className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-bold text-xs transition-all ${
                 isProcessing
-                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-lg shadow-indigo-900/50'
+                  ? 'bg-n0 text-n100 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-primary to-purple-600 hover:from-primary-hover hover:to-purple-500 text-white shadow-lg shadow-indigo-900/50'
               }`}
             >
               {isProcessing ? (
@@ -658,12 +658,12 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
             </button>
           )}
           {!hasScript && !onRewrite && (
-            <div className="w-full text-center text-xs text-gray-600">等待剧本生成...</div>
+            <div className="w-full text-center text-xs text-n100">等待剧本生成...</div>
           )}
       </div>
 
-      <div 
-        className="flex-1 overflow-y-auto bg-gray-950/50 relative custom-scrollbar" 
+      <div
+        className="flex-1 overflow-y-auto bg-n20 relative custom-scrollbar"
         ref={contentRef}
         onClick={(e) => {
           // 🔧 编辑模式下不清除选择，让textarea正常工作
@@ -680,8 +680,8 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
         {hasScript ? (
           <>
             {isEditMode ? (
-                <textarea 
-                    className="w-full h-full p-6 bg-gray-900/30 text-sm font-mono text-gray-300 leading-relaxed resize-none focus:outline-none focus:bg-gray-900/50 border border-indigo-500/30 focus:border-indigo-500"
+                <textarea
+                    className="w-full h-full p-6 bg-n0 text-sm font-mono text-n700 leading-relaxed resize-none focus:outline-none focus:bg-n0 border border-primary focus:border-primary focus:ring-2 focus:ring-primary/20"
                     value={selectedFile.scriptContent || ''}
                     onChange={(e) => onUpdateScript(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
@@ -695,22 +695,22 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
             ) : selectedFile?.storyboard?.items && selectedFile.storyboard.items.length > 0 ? (
                 // 🆕 已提取分镜：显示原文+选择高亮+工具条
                 <div className="p-6 space-y-6 pb-20 relative">
-                    <div 
-                      className="font-mono text-sm whitespace-pre-wrap text-emerald-100/90 leading-relaxed border-l-2 border-emerald-500/30 pl-4 selection:bg-indigo-500/50 selection:text-white relative"
+                    <div
+                      className="font-mono text-sm whitespace-pre-wrap text-n700 leading-relaxed border-l-2 border-success pl-4 selection:bg-primary-light selection:text-n800 relative"
                       style={{ userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}
                       dangerouslySetInnerHTML={{ __html: renderScriptContentWithHighlight() }}
                     />
-                    
+
                     {/* 分镜统计 */}
-                    <div className="mt-6 p-4 bg-indigo-900/20 border border-indigo-500/30 rounded-lg">
+                    <div className="mt-6 p-4 bg-primary-light border border-primary rounded-lg">
                       <div className="flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-green-500" />
-                        <span className="text-sm text-gray-300">
-                          已提取 <strong className="text-indigo-400">{selectedFile.storyboard.items.length}</strong> 个分镜段落
+                        <CheckCircle className="w-5 h-5 text-success" />
+                        <span className="text-sm text-n700">
+                          已提取 <strong className="text-primary">{selectedFile.storyboard.items.length}</strong> 个分镜段落
                         </span>
                         {/* 🔧 已移除"重新提取"按钮 - 新流程中分镜由AI直接生成并流式解析 */}
                       </div>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-n100 mt-2">
                         💡 选择文本片段可查看对应分镜的场景描述
                       </p>
                     </div>
@@ -719,25 +719,25 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                 // 纯剧本文本显示
                 <div className="p-6 space-y-6 pb-20">
                     {/* 显示原文脚本并基于数据结构高亮 */}
-                    <div 
-                      className="font-mono text-sm whitespace-pre-wrap text-emerald-100/90 leading-relaxed border-l-2 border-emerald-500/30 pl-4 selection:bg-indigo-500/50 selection:text-white"
+                    <div
+                      className="font-mono text-sm whitespace-pre-wrap text-n700 leading-relaxed border-l-2 border-success pl-4 selection:bg-primary-light selection:text-n800"
                       style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                       dangerouslySetInnerHTML={{ __html: renderScriptContentWithHighlight() }}
                     />
-                    
+
                     {(selectedFile.extractedCharacters.length > 0 || selectedFile.extractedScenes.length > 0) && (
-                        <div className="mt-8 pt-6 border-t border-gray-800 space-y-4">
-                            <h3 className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
+                        <div className="mt-8 pt-6 border-t border-n40 space-y-4">
+                            <h3 className="text-xs font-bold text-n100 uppercase flex items-center gap-2">
                                 <Tags className="w-3 h-3" />
                                 数据库标签提取
                             </h3>
                             
                             {selectedFile.extractedCharacters.length > 0 && (
                                 <div>
-                                    <span className="text-[10px] text-indigo-400 font-bold mb-2 block">角色 (Characters)</span>
+                                    <span className="text-[10px] text-primary font-bold mb-2 block">角色 (Characters)</span>
                                     <div className="flex flex-wrap gap-2">
                                         {selectedFile.extractedCharacters.map((char, i) => (
-                                            <span key={i} className="px-2 py-1 bg-indigo-900/30 border border-indigo-500/20 rounded text-[10px] text-indigo-200">
+                                            <span key={i} className="px-2 py-1 bg-primary-light border border-primary rounded text-[10px] text-primary">
                                                 {char}
                                             </span>
                                         ))}
@@ -763,13 +763,13 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
             )}
           </>
         ) : selectedFile ? (
-          <div className="h-full flex flex-col items-center justify-center text-gray-600">
+          <div className="h-full flex flex-col items-center justify-center text-n100">
             <FileSignature className="w-12 h-12 mb-4 opacity-20" />
             <p>暂无剧本内容</p>
             <p className="text-xs mt-2">请在"文字脚本"栏点击改写</p>
           </div>
         ) : (
-           <div className="h-full flex flex-col items-center justify-center text-gray-600">
+           <div className="h-full flex flex-col items-center justify-center text-n100">
             <ScrollText className="w-12 h-12 mb-4 opacity-20" />
             <p>请选择文件查看剧本</p>
           </div>
@@ -779,22 +779,22 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
       {!isEditMode && selection && toolbarPosition && (
           <div 
             style={{ top: toolbarPosition.top, left: toolbarPosition.left, transform: 'translate(-50%, -100%)' }}
-            className="fixed z-50 bg-gray-800 rounded-lg shadow-2xl border border-gray-700 p-1.5 flex flex-col gap-2 min-w-[280px] max-w-[320px] animate-in fade-in zoom-in-95 duration-200"
+            className="fixed z-50 bg-n0 rounded-lg shadow-bottom border border-n40 p-1.5 flex flex-col gap-2 min-w-[280px] max-w-[320px] animate-in fade-in zoom-in-95 duration-200"
             onMouseDown={(e) => e.preventDefault()}
           >
              {!showInput ? (
                  <>
                  {/* 第一行：快速操作 */}
                  <div className="flex items-center gap-1 justify-between">
-                    <button onClick={() => handleToolbarAction('润色文字', 'refine')} className="flex flex-col items-center gap-1 p-2 hover:bg-gray-700 rounded text-xs text-gray-300 hover:text-white transition-colors flex-1">
-                        <Wand2 className="w-4 h-4 text-indigo-400" />
+                    <button onClick={() => handleToolbarAction('润色文字', 'refine')} className="flex flex-col items-center gap-1 p-2 hover:bg-n20 rounded text-xs text-n700 hover:text-n800 transition-colors flex-1">
+                        <Wand2 className="w-4 h-4 text-primary" />
                         <span>润色</span>
                     </button>
-                    <button onClick={() => handleToolbarAction('扩写这一段，增加细节', 'expand')} className="flex flex-col items-center gap-1 p-2 hover:bg-gray-700 rounded text-xs text-gray-300 hover:text-white transition-colors flex-1">
-                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                    <button onClick={() => handleToolbarAction('扩写这一段，增加细节', 'expand')} className="flex flex-col items-center gap-1 p-2 hover:bg-n20 rounded text-xs text-n700 hover:text-n800 transition-colors flex-1">
+                        <Sparkles className="w-4 h-4 text-success" />
                         <span>扩写</span>
                     </button>
-                    <button onClick={() => handleToolbarAction('拆分这个分镜，使其更细致', 'split')} className="flex flex-col items-center gap-1 p-2 hover:bg-gray-700 rounded text-xs text-gray-300 hover:text-white transition-colors flex-1">
+                    <button onClick={() => handleToolbarAction('拆分这个分镜，使其更细致', 'split')} className="flex flex-col items-center gap-1 p-2 hover:bg-n20 rounded text-xs text-n700 hover:text-n800 transition-colors flex-1">
                         <Split className="w-4 h-4 text-orange-400" />
                         <span>拆分</span>
                     </button>
@@ -812,9 +812,9 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                           alert('合并操作需要选择多个镜头的文字');
                         }
                       }}
-                      className="flex flex-col items-center gap-1 p-2 hover:bg-gray-700 rounded text-xs text-gray-300 hover:text-white transition-colors flex-1"
+                      className="flex flex-col items-center gap-1 p-2 hover:bg-n20 rounded text-xs text-n700 hover:text-n800 transition-colors flex-1"
                     >
-                        <Merge className="w-4 h-4 text-blue-400" />
+                        <Merge className="w-4 h-4 text-b400" />
                         <span>合并</span>
                     </button>
                  </div>
@@ -831,11 +831,11 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                    if (matchedShots.length === 0) return null;
                    
                    return (
-                     <div className="w-full flex items-center gap-2 px-2 py-2 bg-gray-900/50 border-t border-gray-700">
-                       <span className="text-[10px] text-gray-500">
-                         匹配到 <strong className="text-indigo-400">{matchedShots.length}</strong> 个分镜
+                     <div className="w-full flex items-center gap-2 px-2 py-2 bg-n20 border-t border-n40">
+                       <span className="text-[10px] text-n100">
+                         匹配到 <strong className="text-primary">{matchedShots.length}</strong> 个分镜
                        </span>
-                       <button 
+                       <button
                          onClick={() => {
                            if (matchedShots.length === 1) {
                              // 单个分镜：直接查看详情
@@ -850,7 +850,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                            setToolbarPosition(null);
                            setSelection(null);
                          }}
-                         className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-indigo-900/30 hover:bg-indigo-800/50 border border-indigo-500/30 rounded text-indigo-300 hover:text-white transition-colors"
+                         className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-primary-light hover:bg-primary-light border border-primary rounded text-primary hover:text-white transition-colors"
                        >
                          <FileText className="w-3.5 h-3.5" />
                          <span className="text-xs font-medium">
@@ -863,14 +863,14 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                  </>
              ) : (
                  <div className="flex flex-col gap-2 p-2">
-                     <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-1">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase">
+                     <div className="flex items-center justify-between border-b border-n40 pb-2 mb-1">
+                        <span className="text-[10px] font-bold text-n300 uppercase">
                             {activeActionType === 'split' ? '拆分分镜' : activeActionType === 'merge' ? '合并分镜' : activeActionType === 'expand' ? '文本扩写' : '文本润色'}
                         </span>
-                        <button onClick={cancelAction} className="text-gray-500 hover:text-white"><X className="w-3 h-3" /></button>
+                        <button onClick={cancelAction} className="text-n100 hover:text-n800"><X className="w-3 h-3" /></button>
                      </div>
-                     
-                     <span className="text-[10px] text-gray-500">具体要求:</span>
+
+                     <span className="text-[10px] text-n100">具体要求:</span>
                      <textarea 
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
@@ -881,7 +881,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                         }
                         autoFocus
                         rows={3}
-                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 resize-none"
+                        className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs text-n800 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
@@ -893,29 +893,29 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                         }}
                      />
                      <div className="flex gap-2 mt-1">
-                        <button onClick={cancelAction} className="flex-1 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-[10px] text-gray-300 font-medium">取消</button>
-                        <button onClick={submitAction} className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-[10px] text-white font-bold">确认执行</button>
+                        <button onClick={cancelAction} className="flex-1 py-1.5 bg-n30 hover:bg-n20 rounded text-[10px] text-n700 font-medium">取消</button>
+                        <button onClick={submitAction} className="flex-1 py-1.5 bg-primary hover:bg-primary-hover rounded text-[10px] text-white font-bold">确认执行</button>
                      </div>
                  </div>
              )}
              {/* 🔧 箭头指向下方（选中的文字） */}
-             <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-gray-800 border-b border-r border-gray-700 rotate-45 z-10"></div>
+             <div className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-n0 border-b border-r border-n40 rotate-45 z-10"></div>
           </div>
       )}
       
       {/* 🆕 分镜场景描述弹窗 */}
       {showShotPromptModal && selectedShotId && selectedFile?.storyboard && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowShotPromptModal(false)}>
-          <div className="bg-gray-900 border border-gray-700 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col shadow-2xl m-4" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-gray-700 flex items-center justify-between sticky top-0 bg-gray-900 z-10">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <LayoutDashboard className="w-5 h-5 text-indigo-500" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm" onClick={() => setShowShotPromptModal(false)}>
+          <div className="bg-n0 border border-n40 rounded-md w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col shadow-bottom m-4" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-n40 flex items-center justify-between sticky top-0 bg-n0 z-10">
+              <h3 className="text-lg font-semibold text-n800 flex items-center gap-2">
+                <LayoutDashboard className="w-5 h-5 text-primary" />
                 分镜场景描述
                 {(() => {
                   const currentIndex = selectedFile.storyboard.items.findIndex(i => i.id === selectedShotId);
                   const totalShots = selectedFile.storyboard.items.length;
                   return currentIndex >= 0 ? (
-                    <span className="text-sm text-gray-500 ml-2">
+                    <span className="text-sm text-n100 ml-2">
                       ({currentIndex + 1} / {totalShots})
                     </span>
                   ) : null;
@@ -934,10 +934,10 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                           }
                         }}
                         disabled={currentIndex <= 0}
-                        className="p-1 hover:bg-gray-800 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="p-1 hover:bg-n20 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         title="上一个分镜"
                       >
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-n300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
                       </button>
@@ -948,10 +948,10 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                           }
                         }}
                         disabled={currentIndex >= selectedFile.storyboard.items.length - 1}
-                        className="p-1 hover:bg-gray-800 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="p-1 hover:bg-n20 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         title="下一个分镜"
                       >
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-n300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </button>
@@ -960,9 +960,9 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                 })()}
                 <button
                   onClick={() => setShowShotPromptModal(false)}
-                  className="p-1 hover:bg-gray-800 rounded transition-colors"
+                  className="p-1 hover:bg-n20 rounded transition-colors"
                 >
-                  <X className="w-5 h-5 text-gray-400" />
+                  <X className="w-5 h-5 text-n300" />
                 </button>
               </div>
             </div>
@@ -979,25 +979,25 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                     {/* 镜头编号 */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="font-bold text-gray-400">镜头编号:</span>
-                        <span className="text-white text-lg">#{shot.shotNumber || selectedFile.storyboard.items.indexOf(shot) + 1}</span>
+                        <span className="font-bold text-n300">镜头编号:</span>
+                        <span className="text-n800 text-lg">#{shot.shotNumber || selectedFile.storyboard.items.indexOf(shot) + 1}</span>
                       </div>
                       {hasDetails ? (
-                        <span className="px-2 py-1 bg-green-900/30 text-green-400 rounded text-xs flex items-center gap-1">
+                        <span className="px-2 py-1 bg-green-900/30 text-success rounded text-xs flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
                           已生成详情
                         </span>
                       ) : (
-                        <span className="px-2 py-1 bg-gray-800 text-gray-500 rounded text-xs flex items-center gap-1">
+                        <span className="px-2 py-1 bg-n0 text-n100 rounded text-xs flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           待生成详情
                         </span>
                       )}
                     </div>
-                    
+
                     {/* 场景描述 - 可编辑 */}
                     <div>
-                      <label className="text-xs font-bold text-gray-400 block mb-2">
+                      <label className="text-xs font-bold text-n300 block mb-2">
                         场景描述（AI提炼的视觉描述）
                       </label>
                       {editingShotId === shot.id ? (
@@ -1005,7 +1005,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                           <textarea
                             value={editingScriptSegment}
                             onChange={(e) => setEditingScriptSegment(e.target.value)}
-                            className="w-full p-3 bg-gray-900 border border-indigo-500 rounded text-sm text-gray-300 focus:outline-none focus:border-indigo-400"
+                            className="w-full p-3 bg-n0 border border-primary rounded text-sm text-n700 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                             rows={4}
                             autoFocus
                           />
@@ -1020,13 +1020,13 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                                 }
                                 setEditingShotId(null);
                               }}
-                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded transition-all"
+                              className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm rounded transition-all"
                             >
                               保存修改
                             </button>
                             <button
                               onClick={() => setEditingShotId(null)}
-                              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-all"
+                              className="px-4 py-2 bg-n30 hover:bg-n20 text-n800 text-sm rounded transition-all"
                             >
                               取消
                             </button>
@@ -1034,7 +1034,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                         </div>
                       ) : (
                         <div className="relative group">
-                          <div className="p-3 bg-gray-800 rounded text-sm text-gray-300 border border-gray-700 leading-relaxed">
+                          <div className="p-3 bg-n0 rounded text-sm text-n700 border border-n40 leading-relaxed">
                             {shot.scriptSegment}
                           </div>
                           <button
@@ -1042,10 +1042,10 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                               setEditingShotId(shot.id);
                               setEditingScriptSegment(shot.scriptSegment);
                             }}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-all"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1.5 bg-n30 hover:bg-n20 rounded transition-all"
                             title="编辑场景描述"
                           >
-                            <Edit className="w-4 h-4 text-gray-300" />
+                            <Edit className="w-4 h-4 text-n700" />
                           </button>
                         </div>
                       )}
@@ -1053,63 +1053,63 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                     
                     {/* 原文段落 */}
                     <div>
-                      <label className="text-xs font-bold text-gray-400 block mb-2">原文段落（剧本原文）</label>
-                      <details className="bg-gray-800 rounded border border-gray-700">
-                        <summary className="p-3 cursor-pointer text-xs text-gray-400 hover:text-gray-300 select-none">
+                      <label className="text-xs font-bold text-n300 block mb-2">原文段落（剧本原文）</label>
+                      <details className="bg-n0 rounded border border-n40">
+                        <summary className="p-3 cursor-pointer text-xs text-n300 hover:text-n700 select-none">
                           点击展开/收起原文
                         </summary>
-                        <div className="p-3 pt-0 text-xs text-gray-400 max-h-48 overflow-y-auto custom-scrollbar">
+                        <div className="p-3 pt-0 text-xs text-n300 max-h-48 overflow-y-auto custom-scrollbar">
                           {shot.originalText}
                         </div>
                       </details>
                     </div>
-                    
+
                     {/* 🆕 已生成详情时显示 */}
                     {hasDetails ? (
-                      <div className="space-y-4 pt-4 border-t border-gray-700">
-                        <h4 className="text-sm font-bold text-gray-300 flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-green-500" />
+                      <div className="space-y-4 pt-4 border-t border-n40">
+                        <h4 className="text-sm font-bold text-n700 flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-success" />
                           生成的详细信息
                         </h4>
-                        
+
                         {/* 图像提示词 */}
                         {shot.imagePrompt && (
                           <div>
-                            <label className="text-xs font-bold text-gray-400 block mb-2">图像生成提示词</label>
-                            <div className="p-3 bg-gray-800 rounded text-sm text-gray-300 border border-gray-700 leading-relaxed">
+                            <label className="text-xs font-bold text-n300 block mb-2">图像生成提示词</label>
+                            <div className="p-3 bg-n0 rounded text-sm text-n700 border border-n40 leading-relaxed">
                               {shot.imagePrompt}
                             </div>
                           </div>
                         )}
-                        
+
                         {/* 视频提示词 */}
                         {shot.videoPrompt && (
                           <div>
-                            <label className="text-xs font-bold text-gray-400 block mb-2">视频生成提示词</label>
-                            <div className="p-3 bg-gray-800 rounded text-sm text-gray-300 border border-gray-700 leading-relaxed">
+                            <label className="text-xs font-bold text-n300 block mb-2">视频生成提示词</label>
+                            <div className="p-3 bg-n0 rounded text-sm text-n700 border border-n40 leading-relaxed">
                               {shot.videoPrompt}
                             </div>
                           </div>
                         )}
-                        
+
                         {/* 台词 */}
                         {shot.dialogue && (
                           <div>
-                            <label className="text-xs font-bold text-gray-400 block mb-2">台词</label>
-                            <div className="p-3 bg-gray-800 rounded text-sm text-gray-300 border border-gray-700 italic">
+                            <label className="text-xs font-bold text-n300 block mb-2">台词</label>
+                            <div className="p-3 bg-n0 rounded text-sm text-n700 border border-n40 italic">
                               "{shot.dialogue}"
                             </div>
                           </div>
                         )}
-                        
+
                         {/* 角色和场景 */}
                         <div className="grid grid-cols-2 gap-4">
                           {shot.characters && shot.characters.length > 0 && (
                             <div>
-                              <label className="text-xs font-bold text-gray-400 block mb-2">角色</label>
+                              <label className="text-xs font-bold text-n300 block mb-2">角色</label>
                               <div className="flex flex-wrap gap-1.5">
                                 {shot.characters.map(char => (
-                                  <span key={char} className="px-2 py-1 bg-indigo-900/30 text-indigo-400 rounded text-xs border border-indigo-500/30">
+                                  <span key={char} className="px-2 py-1 bg-primary-light text-primary rounded text-xs border border-primary">
                                     {char}
                                   </span>
                                 ))}
@@ -1118,8 +1118,8 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                           )}
                           {shot.scene && (
                             <div>
-                              <label className="text-xs font-bold text-gray-400 block mb-2">场景</label>
-                              <div className="px-2 py-1 bg-gray-800 text-gray-300 rounded text-xs border border-gray-700">
+                              <label className="text-xs font-bold text-n300 block mb-2">场景</label>
+                              <div className="px-2 py-1 bg-n0 text-n700 rounded text-xs border border-n40">
                                 📍 {shot.scene}
                               </div>
                             </div>
@@ -1128,15 +1128,15 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                       </div>
                     ) : (
                       /* 🆕 未生成详情时的提示 */
-                      <div className="p-4 bg-blue-900/10 border border-blue-500/30 rounded-lg">
+                      <div className="p-4 bg-b50 border border-b75 rounded-lg">
                         <div className="flex items-start gap-3">
-                          <AlertOctagon className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                          <AlertOctagon className="w-5 h-5 text-b400 flex-shrink-0 mt-0.5" />
                           <div className="flex-1">
-                            <h4 className="text-sm font-bold text-blue-300 mb-1">尚未生成详细信息</h4>
-                            <p className="text-xs text-blue-400/80 leading-relaxed">
+                            <h4 className="text-sm font-bold text-b400 mb-1">尚未生成详细信息</h4>
+                            <p className="text-xs text-b400 leading-relaxed">
                               此分镜仅提取了场景描述。
                               <br/>
-                              请前往右侧 <strong className="text-blue-300">"镜头设计"</strong> 栏，点击 <strong className="text-blue-300">"一键生成分镜详情"</strong> 按钮，
+                              请前往右侧 <strong className="text-b400">"镜头设计"</strong> 栏，点击 <strong className="text-b400">"一键生成分镜详情"</strong> 按钮，
                               <br/>
                               为所有分镜生成图像提示词、视频提示词、角色标签等详细信息。
                             </p>
@@ -1146,8 +1146,8 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                     )}
                     
                     {/* 操作按钮区域 */}
-                    <div className="pt-4 border-t border-gray-700">
-                      <label className="text-xs font-bold text-gray-400 block mb-3">快速操作（当前分镜）</label>
+                    <div className="pt-4 border-t border-n40">
+                      <label className="text-xs font-bold text-n300 block mb-3">快速操作（当前分镜）</label>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={async () => {
@@ -1175,7 +1175,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                               }
                             }
                           }}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-900/30 hover:bg-purple-800/50 border border-purple-500/30 text-purple-300 hover:text-white rounded transition-all"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-light hover:bg-primary-light border border-primary text-primary hover:text-white rounded transition-all"
                         >
                           <Wand2 className="w-4 h-4" />
                           <span className="text-sm">润色</span>
@@ -1206,7 +1206,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                               }
                             }
                           }}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-900/30 hover:bg-emerald-800/50 border border-emerald-500/30 text-emerald-300 hover:text-white rounded transition-all"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/50 border border-green-500/30 text-success hover:text-white rounded transition-all"
                         >
                           <Sparkles className="w-4 h-4" />
                           <span className="text-sm">扩写</span>
@@ -1269,7 +1269,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                             // 合并功能需要选中多个分镜，在工具条中提供
                             alert('请在分镜脚本中框选多个镜头的文字，然后点击工具条的"合并"按钮');
                           }}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-900/30 hover:bg-blue-800/50 border border-blue-500/30 text-blue-300 hover:text-white rounded transition-all"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-b50 hover:bg-blue-800/50 border border-b75 text-b400 hover:text-white rounded transition-all"
                         >
                           <Merge className="w-4 h-4" />
                           <span className="text-sm">合并</span>

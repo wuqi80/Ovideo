@@ -292,24 +292,24 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
   // Helper to render History Panel
   const renderHistoryPanel = () => (
-    <div className="absolute top-[52px] right-0 bottom-0 w-80 bg-gray-900 border-l border-gray-800 z-40 flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
-        <div className="p-3 border-b border-gray-800 flex items-center justify-between bg-gray-850">
-            <h3 className="text-xs font-bold text-gray-300 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-400" />
+    <div className="absolute top-[52px] right-0 bottom-0 w-80 bg-n0 border-l border-n40 z-40 flex flex-col shadow-bottom animate-in slide-in-from-right duration-200">
+        <div className="p-3 border-b border-n40 flex items-center justify-between bg-n0">
+            <h3 className="text-xs font-bold text-n700 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
                 内部历史版本存档
             </h3>
-            <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-white">
+            <button onClick={() => setShowHistory(false)} className="text-n100 hover:text-n800">
                 <X className="w-4 h-4" />
             </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {selectedFile?.versions && selectedFile.versions.length > 0 ? (
                 [...selectedFile.versions].reverse().map(ver => (
-                    <div key={ver.id} className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 hover:bg-gray-800 transition-colors group">
+                    <div key={ver.id} className="bg-n30 border border-n40 rounded-lg p-3 hover:bg-n20 transition-colors group">
                         <div className="flex justify-between items-start mb-2">
                             <div>
-                                <div className="text-xs font-bold text-gray-200">{ver.name}</div>
-                                <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                                <div className="text-xs font-bold text-n700">{ver.name}</div>
+                                <div className="text-[10px] text-n100 font-mono mt-0.5">
                                     {new Date(ver.timestamp).toLocaleString()}
                                 </div>
                             </div>
@@ -322,7 +322,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                                         setShowHistory(false);
                                     }
                                 }}
-                                className="flex-1 py-1.5 bg-indigo-900/50 hover:bg-indigo-600 border border-indigo-500/30 rounded text-[10px] text-indigo-200 hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:border-indigo-500"
+                                className="flex-1 py-1.5 bg-primary-light hover:bg-primary border border-primary/30 rounded text-[10px] text-primary hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:border-primary"
                             >
                                 <RefreshCw className="w-3 h-3" />
                                 恢复此版本
@@ -331,11 +331,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     </div>
                 ))
             ) : (
-                <div className="flex flex-col items-center justify-center py-10 text-gray-500 gap-2">
+                <div className="flex flex-col items-center justify-center py-10 text-n100 gap-2">
                     <History className="w-8 h-8 opacity-20" />
                     <div className="text-center text-xs">
                         暂无内部存档记录<br/>
-                        请点击上方 <span className="text-indigo-400 font-bold">保存</span> 按钮创建存档
+                        请点击上方 <span className="text-primary font-bold">保存</span> 按钮创建存档
                     </div>
                 </div>
             )}
@@ -692,15 +692,15 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   };
 
   return (
-    <div className="flex-1 flex h-full w-full bg-gray-950 overflow-hidden relative">
+    <div className="flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
       {/* Resizable Sidebar: Shot List */}
-      <div 
-        style={{ width: sidebarWidth }} 
-        className="flex-shrink-0 border-r border-gray-800 bg-gray-900 flex flex-col relative"
+      <div
+        style={{ width: sidebarWidth }}
+        className="flex-shrink-0 border-r border-n40 bg-n0 flex flex-col relative"
       >
-        <div className="h-[52px] px-4 border-b border-gray-800 bg-gray-850 flex items-center justify-between flex-shrink-0">
-          <h2 className="text-sm font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+        <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex items-center justify-between flex-shrink-0">
+          <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
+              <LayoutDashboard className="w-4 h-4 text-primary" />
               分镜列表
           </h2>
           <div className="flex items-center gap-2">
@@ -711,7 +711,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                   setSelectedAppendFileIds(new Set());
                   setShowAppendModal(true);
                 }}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors"
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary hover:bg-primary-hover text-white rounded transition-colors"
                 title="追加其他文件的分镜"
               >
                 <Plus className="w-3 h-3" />
@@ -726,14 +726,14 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     onRemoveAppendedStoryboard();
                   }
                 }}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-red-600 hover:bg-red-500 text-white rounded transition-colors"
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-danger hover:bg-danger text-white rounded transition-colors"
                 title="移除所有追加的镜头"
               >
                 <Trash2 className="w-3 h-3" />
                 清除追加
               </button>
             )}
-            <span className="text-xs text-gray-500 truncate max-w-[100px]">{selectedFile?.name || '未命名'}</span>
+            <span className="text-xs text-n100 truncate max-w-[100px]">{selectedFile?.name || '未命名'}</span>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
@@ -748,10 +748,10 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             if (appendedSources.size > 0) {
               return (
                 <div className="mb-2 p-2 bg-amber-900/20 border border-amber-500/30 rounded-lg">
-                  <div className="text-[10px] text-amber-400 font-bold mb-1.5">📎 已追加的文件镜头：</div>
+                  <div className="text-[10px] text-warning font-bold mb-1.5">📎 已追加的文件镜头：</div>
                   <div className="flex flex-wrap gap-1">
                     {Array.from(appendedSources.entries()).map(([fileId, fileName]) => (
-                      <div key={fileId} className="flex items-center gap-1 px-2 py-0.5 bg-amber-900/30 border border-amber-500/20 rounded text-[9px] text-amber-300">
+                      <div key={fileId} className="flex items-center gap-1 px-2 py-0.5 bg-amber-900/30 border border-amber-500/20 rounded text-[9px] text-warning">
                         <span>{fileName}</span>
                         {onRemoveAppendedStoryboard && (
                           <button
@@ -761,7 +761,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                                 onRemoveAppendedStoryboard(fileId);
                               }
                             }}
-                            className="p-0.5 hover:bg-red-600 rounded transition-colors"
+                            className="p-0.5 hover:bg-r50 rounded transition-colors"
                             title={`移除来自"${fileName}"的镜头`}
                           >
                             <X className="w-2.5 h-2.5" />
@@ -788,48 +788,48 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 key={item.id}
                 onClick={() => setSelectedShotId(item.id)}
                 className={`p-3 rounded-lg cursor-pointer border transition-all relative ${
-                  isSelected 
-                    ? 'bg-indigo-900/30 border-indigo-500 ring-1 ring-indigo-500/50' 
+                  isSelected
+                    ? 'bg-primary-light border-primary ring-1 ring-primary/50'
                     : isAppended
                       ? 'bg-amber-900/20 border-amber-500/30 hover:border-amber-500/50 hover:bg-amber-900/30'  // 🆕 追加镜头的颜色
-                      : 'bg-gray-800 border-gray-700 hover:border-gray-600 hover:bg-gray-800/80'
+                      : 'bg-n0 border-n40 hover:border-n40 hover:bg-n20'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold ${isSelected ? 'text-indigo-400' : isAppended ? 'text-amber-400' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-bold ${isSelected ? 'text-primary' : isAppended ? 'text-warning' : 'text-n300'}`}>
                       镜头 {String(index + 1).padStart(2, '0')}
                     </span>
                     {/* 🆕 追加来源标记 */}
                     {isAppended && (
-                      <span className="text-[8px] px-1.5 py-0.5 bg-amber-600/30 border border-amber-500/30 text-amber-300 rounded" title={`来自: ${item.sourceFileName}`}>
+                      <span className="text-[8px] px-1.5 py-0.5 bg-amber-600/30 border border-amber-500/30 text-warning rounded" title={`来自: ${item.sourceFileName}`}>
                         📎 {item.sourceFileName}
                       </span>
                     )}
                   </div>
                   {hasTags && (
                     isBound ? (
-                        <div className="flex items-center gap-1 text-[9px] text-green-400 bg-green-950/30 px-1.5 py-0.5 rounded-full border border-green-500/20">
+                        <div className="flex items-center gap-1 text-[9px] text-success bg-green-950/30 px-1.5 py-0.5 rounded-full border border-green-500/20">
                             <Check className="w-2.5 h-2.5" />
                             已完成
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1 text-[9px] text-yellow-400 bg-yellow-950/30 px-1.5 py-0.5 rounded-full border border-yellow-500/20">
+                        <div className="flex items-center gap-1 text-[9px] text-warning bg-yellow-950/30 px-1.5 py-0.5 rounded-full border border-yellow-500/20">
                             <AlertCircle className="w-2.5 h-2.5" />
                             待绑定
                         </div>
                     )
                   )}
                 </div>
-                <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed opacity-80 mb-2">"{item.scriptSegment}"</p>
+                <p className="text-[10px] text-n300 line-clamp-2 leading-relaxed opacity-80 mb-2">"{item.scriptSegment}"</p>
                 <div className="flex gap-1 overflow-hidden flex-wrap">
                    {item.characters.map(c => (
-                     <span key={c} className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[c] ? 'bg-indigo-900/40 border-indigo-500/30 text-indigo-300' : 'bg-gray-700/50 border-gray-600 text-gray-500'}`}>
+                     <span key={c} className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[c] ? 'bg-primary-light border-primary/30 text-primary' : 'bg-n30 border-n40 text-n100'}`}>
                          {c}
                      </span>
                    ))}
                    {item.scene && (
-                     <span className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[item.scene] ? 'bg-orange-900/40 border-orange-500/30 text-orange-300' : 'bg-gray-700/50 border-gray-600 text-gray-500'}`}>
+                     <span className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[item.scene] ? 'bg-orange-900/40 border-orange-500/30 text-orange-300' : 'bg-n30 border-n40 text-n100'}`}>
                          {item.scene}
                      </span>
                    )}
@@ -841,22 +841,22 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
         {/* Drag Handle */}
         <div
-            className="absolute top-0 right-0 bottom-0 w-1 bg-transparent hover:bg-indigo-500/50 cursor-col-resize z-50 transition-colors"
+            className="absolute top-0 right-0 bottom-0 w-1 bg-transparent hover:bg-primary/50 cursor-col-resize z-50 transition-colors"
             onMouseDown={startResizing}
         >
              <div className="absolute top-1/2 -translate-y-1/2 right-0.5">
-                 <GripVertical className="w-3 h-3 text-gray-600 opacity-0 hover:opacity-100" />
+                 <GripVertical className="w-3 h-3 text-n100 opacity-0 hover:opacity-100" />
              </div>
         </div>
       </div>
 
       {/* Right Content: Workspace */}
-      <div className="flex-1 flex flex-col bg-gray-950 overflow-hidden relative">
+      <div className="flex-1 flex flex-col bg-n20 overflow-hidden relative">
          {/* Top Bar */}
-         <div className="h-[52px] border-b border-gray-800 bg-gray-850 px-6 flex items-center justify-between flex-shrink-0 shadow-sm z-20">
+         <div className="h-[52px] border-b border-n40 bg-n0 px-6 flex items-center justify-between flex-shrink-0 shadow-sm z-20">
              <div className="flex items-center gap-4">
-                <h3 className="font-bold text-gray-200 text-sm flex items-center gap-2">
-                    <span className="w-1.5 h-4 bg-indigo-500 rounded-full"></span>
+                <h3 className="font-bold text-n700 text-sm flex items-center gap-2">
+                    <span className="w-1.5 h-4 bg-primary rounded-full"></span>
                     {hasStoryboard && selectedFile && selectedShot 
                       ? `镜头 ${String(selectedFile.storyboard!.items.findIndex(i => i.id === selectedShot.id) + 1).padStart(2, '0')}` 
                       : '素材绑定工作区'}
@@ -864,19 +864,19 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
              </div>
 
              <div className="flex items-center gap-4">
-                 <div className="flex items-center gap-2 text-[10px] text-green-400/80 bg-green-950/20 px-2 py-1 rounded border border-green-500/20">
+                 <div className="flex items-center gap-2 text-[10px] text-success bg-green-950/20 px-2 py-1 rounded border border-green-500/20">
                      <Database className="w-3 h-3" />
                      <span>素材绑定数据已自动保存</span>
                  </div>
                  
                  {!hideVersionArchive && (
                    <>
-                 <div className="h-6 w-px bg-gray-700"></div>
+                 <div className="h-6 w-px bg-n40"></div>
 
                  <div className="flex items-center gap-2">
-                    <button 
+                    <button
                         onClick={handleSaveClick}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-indigo-600 rounded transition-colors border border-gray-700 hover:border-indigo-500"
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-n700 hover:text-white bg-n0 hover:bg-primary rounded transition-colors border border-n40 hover:border-primary"
                     >
                         <Save className="w-3.5 h-3.5" />
                         <span>保存</span>
@@ -885,9 +885,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     <button 
                         onClick={() => setShowHistory(!showHistory)}
                         className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded transition-colors border ${
-                        showHistory 
-                            ? 'bg-indigo-600 text-white border-indigo-500' 
-                            : 'bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 border-gray-700'
+                        showHistory
+                            ? 'bg-primary text-white border-primary'
+                            : 'bg-n0 text-n700 hover:text-white hover:bg-n20 border-n40'
                         }`}
                     >
                         <History className="w-3.5 h-3.5" />
@@ -897,11 +897,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                    </>
                  )}
 
-                 <div className="h-6 w-px bg-gray-700"></div>
-                 
-                 <button 
+                 <div className="h-6 w-px bg-n40"></div>
+
+                 <button
                 onClick={onNextStep}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all hover:scale-105"
+                className="bg-primary hover:bg-primary-hover text-white px-5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all hover:scale-105"
                 >
                     下一步
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -911,13 +911,13 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
          {/* Save Version Modal */}
          {!hideVersionArchive && isNamingVersion && (
-            <div className="absolute top-14 right-40 z-50 bg-gray-800 border border-gray-700 shadow-xl rounded-lg p-3 w-72 animate-in fade-in slide-in-from-top-2">
-                <h4 className="text-xs font-bold text-gray-300 mb-2">保存当前绑定状态</h4>
-                <input 
-                    type="text" 
+            <div className="absolute top-14 right-40 z-50 bg-n0 border border-n40 shadow-bottom rounded-lg p-3 w-72 animate-in fade-in slide-in-from-top-2">
+                <h4 className="text-xs font-bold text-n700 mb-2">保存当前绑定状态</h4>
+                <input
+                    type="text"
                     value={versionName}
                     onChange={(e) => setVersionName(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-xs text-white mb-2 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs text-n800 mb-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     autoFocus
                     onKeyDown={(e) => {
                         if (e.key === 'Enter') submitVersionSave();
@@ -925,8 +925,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     }}
                 />
                 <div className="flex gap-2">
-                    <button onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-gray-700 text-gray-300 text-xs rounded hover:bg-gray-600">取消</button>
-                    <button onClick={submitVersionSave} className="flex-1 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-500">确认保存</button>
+                    <button onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-n0 text-n700 text-xs rounded hover:bg-n20">取消</button>
+                    <button onClick={submitVersionSave} className="flex-1 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover">确认保存</button>
                 </div>
             </div>
         )}
@@ -936,26 +936,26 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
          <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
              {!selectedShot ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                <div className="flex flex-col items-center justify-center h-full text-n100">
                   <LayoutDashboard className="w-16 h-16 mb-4 opacity-20" />
                   <p className="text-sm mb-2">当前无分镜数据</p>
-                  <p className="text-xs text-gray-600">
+                  <p className="text-xs text-n100">
                     {hideVersionArchive ? '请先在阶段1生成分镜' : '请先在阶段1生成分镜，或从历史版本恢复'}
                   </p>
                 </div>
              ) : (
                <div className="w-full">
              {/* Context Section - 3 Column Layout */}
-             <div className="bg-gray-900 rounded-xl p-1 border border-gray-800 mb-8 shadow-sm">
-                 <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-800">
+             <div className="bg-n0 rounded-md p-1 border border-n40 mb-8 shadow-card">
+                 <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-n40">
                     {/* Script */}
                     <div className="p-4 flex flex-col h-full min-h-[140px]">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase block mb-3 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
+                        <span className="text-[10px] font-bold text-n100 uppercase block mb-3 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-n100"></span>
                             剧本描述
                         </span>
                         <div className="flex-1 overflow-y-auto max-h-[100px] custom-scrollbar pr-2">
-                             <p className="text-sm text-gray-300 leading-relaxed font-serif whitespace-pre-wrap break-words">
+                             <p className="text-sm text-n700 leading-relaxed font-serif whitespace-pre-wrap break-words">
                                  {selectedShot.originalText || '无'}
                              </p>
                         </div>
@@ -968,7 +968,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                              画面提示词 (Image)
                         </span>
                         <div className="flex-1 overflow-y-auto max-h-[100px] custom-scrollbar pr-2">
-                            <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap break-words">
+                            <p className="text-xs text-n300 leading-relaxed whitespace-pre-wrap break-words">
                                 {selectedShot.imagePrompt || '无'}
                             </p>
                         </div>
@@ -976,12 +976,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
                     {/* Video Prompt */}
                     <div className="p-4 flex flex-col h-full min-h-[140px]">
-                         <span className="text-[10px] font-bold text-purple-500 uppercase block mb-3 flex items-center gap-2">
+                         <span className="text-[10px] font-bold text-primary uppercase block mb-3 flex items-center gap-2">
                              <Film className="w-3.5 h-3.5" />
                              视频提示词 (Video)
                          </span>
                          <div className="flex-1 overflow-y-auto max-h-[100px] custom-scrollbar pr-2">
-                            <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap break-words">
+                            <p className="text-xs text-n300 leading-relaxed whitespace-pre-wrap break-words">
                                 {selectedShot.videoPrompt || '无'}
                             </p>
                         </div>
@@ -989,14 +989,14 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                  </div>
              </div>
 
-             <h4 className="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2 px-1">
-                 <Users className="w-4 h-4 text-indigo-400" />
+             <h4 className="text-sm font-bold text-n700 mb-4 flex items-center gap-2 px-1">
+                 <Users className="w-4 h-4 text-primary" />
                  角色素材 (Characters)
-                 <span className="text-[10px] font-normal text-gray-500 ml-2">绑定后将自动应用于后续同名角色</span>
+                 <span className="text-[10px] font-normal text-n100 ml-2">绑定后将自动应用于后续同名角色</span>
              </h4>
              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
                  {!selectedShot || selectedShot.characters.length === 0 ? (
-                     <div className="col-span-full py-8 border-2 border-dashed border-gray-800 rounded-xl flex items-center justify-center text-gray-600 bg-gray-900/30">
+                     <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
                         <span className="text-xs">本镜头无登场角色</span>
                      </div>
                  ) : (
@@ -1022,14 +1022,14 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                  )}
              </div>
 
-             <h4 className="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2 px-1">
+             <h4 className="text-sm font-bold text-n700 mb-4 flex items-center gap-2 px-1">
                  <MapPin className="w-4 h-4 text-orange-400" />
                  场景素材 (Scene)
-                 <span className="text-[10px] font-normal text-gray-500 ml-2">为该场景绑定背景参考</span>
+                 <span className="text-[10px] font-normal text-n100 ml-2">为该场景绑定背景参考</span>
              </h4>
              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
                  {!selectedShot.scene ? (
-                     <div className="col-span-full py-8 border-2 border-dashed border-gray-800 rounded-xl flex items-center justify-center text-gray-600 bg-gray-900/30">
+                     <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
                          <span className="text-xs">本镜头无特定场景描述</span>
                      </div>
                  ) : (
@@ -1120,27 +1120,27 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         };
         
         return (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={() => setShowAppendModal(false)}>
-            <div className="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={() => setShowAppendModal(false)}>
+            <div className="w-full max-w-lg bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Plus className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-lg font-bold text-n800 flex items-center gap-2">
+                    <Plus className="w-5 h-5 text-primary" />
                     追加文件分镜
                   </h3>
-                  <p className="text-xs text-gray-400 mt-1">支持多选，根据文件顺序决定追加位置</p>
+                  <p className="text-xs text-n300 mt-1">支持多选，根据文件顺序决定追加位置</p>
                 </div>
-                <button onClick={() => setShowAppendModal(false)} className="text-gray-400 hover:text-white">
+                <button onClick={() => setShowAppendModal(false)} className="text-n300 hover:text-n800">
                   <X className="w-5 h-5" />
                 </button>
               </div>
               
-              <div className="p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg">
-                <p className="text-xs text-indigo-200">
+              <div className="p-3 bg-primary-light border border-primary/30 rounded-lg">
+                <p className="text-xs text-primary">
                   💡 <strong>提示：</strong>文件顺序决定追加位置。可多选后一次性追加：
                 </p>
-                <ul className="text-[10px] text-indigo-300 mt-2 space-y-1 ml-4">
-                  <li>• 上方文件的镜头 → 追加到<strong className="text-green-400">前面</strong></li>
+                <ul className="text-[10px] text-primary mt-2 space-y-1 ml-4">
+                  <li>• 上方文件的镜头 → 追加到<strong className="text-success">前面</strong></li>
                   <li>• 下方文件的镜头 → 追加到<strong className="text-orange-400">后面</strong></li>
                 </ul>
               </div>
@@ -1150,19 +1150,19 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 <button
                   onClick={selectAll}
                   disabled={filesWithStoryboard.length === 0}
-                  className="px-3 py-1 text-[10px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 disabled:opacity-50"
+                  className="px-3 py-1 text-[10px] bg-n0 hover:bg-n20 text-n700 rounded border border-n40 disabled:opacity-50"
                 >
                   全选
                 </button>
                 <button
                   onClick={clearSelection}
                   disabled={selectedAppendFileIds.size === 0}
-                  className="px-3 py-1 text-[10px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 disabled:opacity-50"
+                  className="px-3 py-1 text-[10px] bg-n0 hover:bg-n20 text-n700 rounded border border-n40 disabled:opacity-50"
                 >
                   清除选择
                 </button>
                 {selectedAppendFileIds.size > 0 && (
-                  <span className="text-[10px] text-indigo-400">
+                  <span className="text-[10px] text-primary">
                     已选择 {selectedAppendFileIds.size} 个文件
                   </span>
                 )}
@@ -1178,16 +1178,16 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                       <div
                         key={file.id}
                         onClick={() => toggleFileSelection(file.id)}
-                        className={`flex items-center justify-between p-4 rounded-xl transition-all cursor-pointer ${
-                          isSelected 
-                            ? 'bg-indigo-900/40 border-2 border-indigo-500 ring-2 ring-indigo-500/30' 
-                            : 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600'
+                        className={`flex items-center justify-between p-4 rounded-md transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary-light border-2 border-primary ring-2 ring-primary/30'
+                            : 'bg-n0 hover:bg-n20 border border-n40 hover:border-n40'
                         }`}
                       >
                         <div className="flex items-center gap-3">
                           {/* 选择框 */}
                           <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                            isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-gray-600'
+                            isSelected ? 'bg-primary border-primary' : 'border-n40'
                           }`}>
                             {isSelected && <Check className="w-3 h-3 text-white" />}
                           </div>
@@ -1195,21 +1195,21 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                             appendToFront ? 'bg-green-600/20' : 'bg-orange-600/20'
                           }`}>
-                            <Film className={`w-5 h-5 ${appendToFront ? 'text-green-400' : 'text-orange-400'}`} />
+                            <Film className={`w-5 h-5 ${appendToFront ? 'text-success' : 'text-orange-400'}`} />
                           </div>
                           <div className="text-left">
-                            <div className="text-sm font-medium text-gray-200 flex items-center gap-2">
-                              <span className="text-[10px] text-gray-500 font-mono">[{fileIndex + 1}]</span>
+                            <div className="text-sm font-medium text-n700 flex items-center gap-2">
+                              <span className="text-[10px] text-n100 font-mono">[{fileIndex + 1}]</span>
                               {file.name}
                             </div>
-                            <div className="text-[10px] text-gray-500">
+                            <div className="text-[10px] text-n100">
                               {file.storyboard?.items?.length || 0} 个镜头
                             </div>
                           </div>
                         </div>
                         <span className={`text-[10px] px-2 py-1 rounded ${
-                          appendToFront 
-                            ? 'text-green-400 bg-green-900/30' 
+                          appendToFront
+                            ? 'text-success bg-green-900/30'
                             : 'text-orange-400 bg-orange-900/30'
                         }`}>
                           {appendToFront ? '← 前置' : '追加 →'}
@@ -1220,25 +1220,25 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 
                 {/* 显示没有镜头的文件 */}
                 {filesWithoutStoryboard.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-gray-800">
-                    <p className="text-[10px] text-gray-500 mb-2">以下文件暂无分镜：</p>
+                  <div className="mt-4 pt-4 border-t border-n40">
+                    <p className="text-[10px] text-n100 mb-2">以下文件暂无分镜：</p>
                     {filesWithoutStoryboard.map(file => {
                       const fileIndex = files.findIndex(f => f.id === file.id);
                       return (
                         <div
                           key={file.id}
-                          className="flex items-center gap-3 p-3 bg-gray-800/50 border border-gray-700/50 rounded-lg opacity-50 cursor-not-allowed"
+                          className="flex items-center gap-3 p-3 bg-n30 border border-n40 rounded-lg opacity-50 cursor-not-allowed"
                         >
-                          <div className="w-5 h-5 rounded border-2 border-gray-700"></div>
-                          <div className="w-10 h-10 rounded-lg bg-gray-700/50 flex items-center justify-center">
-                            <Film className="w-5 h-5 text-gray-600" />
+                          <div className="w-5 h-5 rounded border-2 border-n40"></div>
+                          <div className="w-10 h-10 rounded-lg bg-n30 flex items-center justify-center">
+                            <Film className="w-5 h-5 text-n100" />
                           </div>
                           <div className="text-left">
-                            <div className="text-sm text-gray-500 flex items-center gap-2">
+                            <div className="text-sm text-n100 flex items-center gap-2">
                               <span className="text-[10px] font-mono">[{fileIndex + 1}]</span>
                               {file.name}
                             </div>
-                            <div className="text-[10px] text-gray-600">无镜头</div>
+                            <div className="text-[10px] text-n100">无镜头</div>
                           </div>
                         </div>
                       );
@@ -1247,15 +1247,15 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 )}
                 
                 {availableFiles.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
+                  <div className="text-center py-8 text-n100">
                     <Film className="w-10 h-10 mx-auto mb-2 opacity-30" />
                     <p className="text-xs">没有其他文件</p>
                   </div>
                 )}
               </div>
               
-              <div className="flex items-center justify-between pt-4 border-t border-gray-800">
-                <div className="text-[10px] text-gray-500">
+              <div className="flex items-center justify-between pt-4 border-t border-n40">
+                <div className="text-[10px] text-n100">
                   {selectedAppendFileIds.size > 0 && (
                     <>
                       将追加 {Array.from(selectedAppendFileIds).reduce((sum, id) => {
@@ -1268,14 +1268,14 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => setShowAppendModal(false)} 
-                    className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800"
+                    className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20"
                   >
                     取消
                   </button>
-                  <button 
+                  <button
                     onClick={handleConfirmAppend}
                     disabled={selectedAppendFileIds.size === 0}
-                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     确认追加 ({selectedAppendFileIds.size})
                   </button>
@@ -1321,7 +1321,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         };
 
         return (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[150]" onClick={() => setLightboxImage(null)}>
+          <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[150]" onClick={() => setLightboxImage(null)}>
             <button 
               onClick={() => setLightboxImage(null)} 
               className="absolute top-6 right-6 text-white hover:text-gray-300 bg-black/50 rounded-full p-2 z-10"
@@ -1387,20 +1387,20 @@ const MaterialCard: React.FC<{
     const hasMaterials = materials.length > 0;
 
     return (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col h-[520px] shadow-sm hover:shadow-lg hover:border-gray-700 transition-all group">
-            <div className={`px-4 py-3 border-b border-gray-800 flex justify-between items-center ${type === 'character' ? 'bg-indigo-950/20' : 'bg-orange-950/20'}`}>
+        <div className="bg-n0 border border-n40 rounded-md overflow-hidden flex flex-col h-[520px] shadow-card hover:shadow-atlas hover:border-n40 transition-all group">
+            <div className={`px-4 py-3 border-b border-n40 flex justify-between items-center ${type === 'character' ? 'bg-primary-light' : 'bg-orange-950/20'}`}>
                 <div className="flex items-center gap-2">
-                    <div className="font-bold text-sm text-gray-100">{name}</div>
-                    {selectedMaterialId && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
+                    <div className="font-bold text-sm text-n800">{name}</div>
+                    {selectedMaterialId && <CheckCircle className="w-3.5 h-3.5 text-success" />}
                 </div>
-                <div className={`text-[9px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${type === 'character' ? 'text-indigo-300 border-indigo-500/20 bg-indigo-500/10' : 'text-orange-300 border-orange-500/20 bg-orange-500/10'}`}>
+                <div className={`text-[9px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${type === 'character' ? 'text-primary border-primary/20 bg-primary-light' : 'text-orange-300 border-orange-500/20 bg-orange-500/10'}`}>
                     {type === 'character' ? 'Character' : 'Scene'}
                 </div>
             </div>
             
             {/* Selected Area */}
-            <div className="p-4 border-b border-gray-800 bg-gray-950/50 h-[160px] flex gap-4">
-                 <div className="w-[120px] flex-shrink-0 bg-black/40 rounded-lg overflow-hidden border border-gray-700/50 relative flex items-center justify-center group-hover:border-gray-600 transition-colors">
+            <div className="p-4 border-b border-n40 bg-n20 h-[160px] flex gap-4">
+                 <div className="w-[120px] flex-shrink-0 bg-n20 rounded-lg overflow-hidden border border-n40 relative flex items-center justify-center group-hover:border-n40 transition-colors">
                      {boundMaterial ? (
                          <>
                             <img 
@@ -1410,13 +1410,13 @@ const MaterialCard: React.FC<{
                                 className="w-full h-full object-cover" 
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-60" />
-                            <div className="absolute bottom-2 right-2 bg-green-500 text-white p-1 rounded-full shadow-lg">
+                            <div className="absolute bottom-2 right-2 bg-success text-white p-1 rounded-full shadow-lg">
                                 <Lock className="w-3 h-3" />
                             </div>
                          </>
                      ) : (
-                         <div className="text-[10px] text-gray-600 text-center px-2 flex flex-col items-center gap-2">
-                             <div className="p-2 rounded-full bg-gray-800/50">
+                         <div className="text-[10px] text-n100 text-center px-2 flex flex-col items-center gap-2">
+                             <div className="p-2 rounded-full bg-n30">
                                  <Plus className="w-4 h-4" />
                              </div>
                              未绑定
@@ -1425,8 +1425,8 @@ const MaterialCard: React.FC<{
                  </div>
                  <div className="flex-1 flex flex-col justify-center gap-3">
                      <div>
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block mb-1">当前状态</span>
-                        <p className={`text-xs leading-relaxed ${boundMaterial ? 'text-green-400' : 'text-gray-400'}`}>
+                        <span className="text-[10px] font-bold text-n100 uppercase tracking-wide block mb-1">当前状态</span>
+                        <p className={`text-xs leading-relaxed ${boundMaterial ? 'text-success' : 'text-n300'}`}>
                             {boundMaterial 
                                 ? "已锁定当前及后续镜头。"
                                 : "请选择素材。绑定后将自动填充后续所有同名标签。"}
@@ -1435,7 +1435,7 @@ const MaterialCard: React.FC<{
                      {boundMaterial && (
                          <button 
                             onClick={onUnbind}
-                            className="text-[10px] bg-red-950/20 hover:bg-red-900/40 text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-3 py-1.5 rounded-md self-start flex items-center gap-1.5 transition-all"
+                            className="text-[10px] bg-r50 hover:bg-r50 text-danger hover:text-danger border border-danger/20 hover:border-danger/40 px-3 py-1.5 rounded-md self-start flex items-center gap-1.5 transition-all"
                          >
                              <Trash2 className="w-3 h-3" />
                              解除锁定 (及后续)
@@ -1445,9 +1445,9 @@ const MaterialCard: React.FC<{
             </div>
 
             {/* Library Grid */}
-            <div className="flex-1 bg-gray-950/30 p-3 overflow-y-auto custom-scrollbar">
+            <div className="flex-1 bg-n20 p-3 overflow-y-auto custom-scrollbar">
                 {materials.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800/50 rounded-lg m-1">
+                    <div className="h-full flex flex-col items-center justify-center text-n100 border-2 border-dashed border-n40 rounded-lg m-1">
                         <AlertCircle className="w-5 h-5 mb-2 opacity-40" />
                         <span className="text-[10px]">暂无素材，请上传或生成</span>
                     </div>
@@ -1458,7 +1458,7 @@ const MaterialCard: React.FC<{
                             return (
                                 <div 
                                     key={m.id} 
-                                    className={`relative group/item aspect-square rounded-lg overflow-hidden border cursor-pointer transition-all ${isCurrent ? 'border-green-500 ring-2 ring-green-500/30' : 'border-gray-800 hover:border-indigo-400'}`}
+                                    className={`relative group/item aspect-square rounded-lg overflow-hidden border cursor-pointer transition-all ${isCurrent ? 'border-success ring-2 ring-green-500/30' : 'border-n40 hover:border-primary'}`}
                                     onClick={() => onBind(m.id)}
                                 >
                                     <img 
@@ -1469,21 +1469,21 @@ const MaterialCard: React.FC<{
                                     />
                                     
                                     {/* Hover Actions */}
-                                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/item:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                    <div className="absolute inset-0 bg-n900/50 opacity-0 group-hover/item:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                                         {!isCurrent && (
                                             <span className="text-[9px] font-bold text-white uppercase tracking-wider">点击使用</span>
                                         )}
                                         <div className="flex items-center gap-2">
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); onViewImage(m.url); }} 
-                                                className="p-1.5 bg-indigo-500/80 rounded-full text-white hover:bg-indigo-600 transform hover:scale-110 transition-transform"
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onViewImage(m.url); }}
+                                                className="p-1.5 bg-primary rounded-full text-white hover:bg-primary-hover transform hover:scale-110 transition-transform"
                                                 title="查看大图"
                                             >
                                                 <ZoomIn className="w-3 h-3" />
                                             </button>
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); onDeleteFromLibrary(m.id); }} 
-                                            className="p-1.5 bg-red-500/80 rounded-full text-white hover:bg-red-600 transform hover:scale-110 transition-transform"
+                                            className="p-1.5 bg-danger rounded-full text-white hover:bg-danger transform hover:scale-110 transition-transform"
                                             title="删除素材"
                                         >
                                             <Trash2 className="w-3 h-3" />
@@ -1491,7 +1491,7 @@ const MaterialCard: React.FC<{
                                         </div>
                                     </div>
 
-                                    {m.source === 'ai' && <div className="absolute top-1 right-1 text-[8px] bg-indigo-600/90 text-white px-1 rounded shadow-sm">AI</div>}
+                                    {m.source === 'ai' && <div className="absolute top-1 right-1 text-[8px] bg-primary text-white px-1 rounded shadow-sm">AI</div>}
                                 </div>
                             );
                         })}
@@ -1500,8 +1500,8 @@ const MaterialCard: React.FC<{
             </div>
 
             {/* Action Footer */}
-            <div className="p-3 border-t border-gray-800 bg-gray-900 grid grid-cols-2 gap-3">
-                <label className="flex items-center justify-center gap-2 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600 rounded-lg cursor-pointer transition-colors text-xs text-gray-300 font-medium group/btn">
+            <div className="p-3 border-t border-n40 bg-n0 grid grid-cols-2 gap-3">
+                <label className="flex items-center justify-center gap-2 py-2 bg-n0 hover:bg-n20 border border-n40 hover:border-n40 rounded-lg cursor-pointer transition-colors text-xs text-n700 font-medium group/btn">
                     <Upload className="w-3.5 h-3.5 group-hover/btn:-translate-y-0.5 transition-transform" />
                     <span>本地上传</span>
                     <input type="file" className="hidden" accept="image/*" onChange={onUpload} />
@@ -1509,7 +1509,7 @@ const MaterialCard: React.FC<{
                 <button 
                     onClick={onOpenAI}
                     disabled={aiGenerating}
-                    className="flex items-center justify-center gap-2 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg text-xs font-bold shadow-lg shadow-indigo-900/30 hover:shadow-indigo-900/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn"
+                    className="flex items-center justify-center gap-2 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-bold shadow-lg shadow-indigo-900/30 hover:shadow-indigo-900/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn"
                 >
                     {aiGenerating ? (
                         <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
@@ -1521,7 +1521,7 @@ const MaterialCard: React.FC<{
                 <button
                     onClick={onOpenCamera}
                     disabled={!hasMaterials || cameraGenerating}
-                    className="flex items-center justify-center gap-2 py-2 mt-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-semibold border border-gray-700 hover:border-gray-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 py-2 mt-2 bg-n0 hover:bg-n20 text-n700 rounded-lg text-xs font-semibold border border-n40 hover:border-n40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {cameraGenerating ? (
                         <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
@@ -1533,7 +1533,7 @@ const MaterialCard: React.FC<{
                 <button
                     onClick={() => onProcessMaterial('upscale_hd')}
                     disabled={!hasMaterials || cameraGenerating}
-                    className="flex items-center justify-center gap-2 py-2 mt-2 bg-blue-900 hover:bg-blue-800 text-blue-200 rounded-lg text-xs font-semibold border border-blue-700 hover:border-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 py-2 mt-2 bg-b50 hover:bg-b75 text-b400 rounded-lg text-xs font-semibold border border-b75 hover:border-b75 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {cameraGenerating ? (
                         <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
@@ -1545,7 +1545,7 @@ const MaterialCard: React.FC<{
                 <button
                     onClick={() => onProcessMaterial('remove_watermark')}
                     disabled={!hasMaterials || cameraGenerating}
-                    className="flex items-center justify-center gap-2 py-2 bg-purple-900 hover:bg-purple-800 text-purple-200 rounded-lg text-xs font-semibold border border-purple-700 hover:border-purple-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 py-2 bg-primary-light hover:bg-primary-light text-primary rounded-lg text-xs font-semibold border border-primary/30 hover:border-primary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {cameraGenerating ? (
                         <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
@@ -1559,7 +1559,7 @@ const MaterialCard: React.FC<{
                     <button
                         onClick={() => onProcessMaterial('three_view')}
                         disabled={!hasMaterials}
-                        className="flex items-center justify-center gap-2 py-2 bg-green-900 hover:bg-green-800 text-green-200 rounded-lg text-xs font-semibold border border-green-700 hover:border-green-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="flex items-center justify-center gap-2 py-2 bg-success/10 hover:bg-success/20 text-success rounded-lg text-xs font-semibold border border-success/30 hover:border-success transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                         <span>三视图</span>
                     </button>
@@ -1636,44 +1636,44 @@ const MaterialAIModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={onClose}>
-            <div className="w-full max-w-4xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={onClose}>
+            <div className="w-full max-w-4xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-white">AI 生成素材 - {config.tagName}</h3>
-                        <p className="text-xs text-gray-400 mt-1">选择模型与参考图，自定义提示词快速生成角色/场景素材。</p>
+                        <h3 className="text-lg font-bold text-n800">AI 生成素材 - {config.tagName}</h3>
+                        <p className="text-xs text-n300 mt-1">选择模型与参考图，自定义提示词快速生成角色/场景素材。</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                    <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="col-span-1 space-y-3 border border-gray-800 rounded-xl p-4">
-                        <span className="text-[11px] font-bold text-gray-500 uppercase">引擎选择</span>
+                    <div className="col-span-1 space-y-3 border border-n40 rounded-md p-4">
+                        <span className="text-[11px] font-bold text-n100 uppercase">引擎选择</span>
                         <div className="flex gap-2">
                             <button
                                 onClick={() => setEngine('nanobanana')}
-                                className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-indigo-600 text-white border-indigo-500' : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}
+                                className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}
                             >
                                 化神进阶
                             </button>
                             <button
                                 onClick={() => setEngine('doubao')}
-                                className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-purple-600 text-white border-purple-500' : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}
+                                className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}
                             >
                                 筑基境界
                             </button>
                         </div>
                         {engine === 'nanobanana' && (
                             <div className="space-y-2">
-                                <span className="text-[11px] font-bold text-gray-500 uppercase">图像模型</span>
+                                <span className="text-[11px] font-bold text-n100 uppercase">图像模型</span>
                                 <div className="flex flex-col gap-2">
                                     {[
                                         { id: 'gemini-2.5-flash-image', label: '化神1阶（快速）', desc: '快速生成，效率优先' },
                                         { id: 'gemini-3-pro-image-preview', label: '化神2阶（高质量）', desc: '高质量生成，效果优先' }
                                     ].map(model => (
-                                        <label key={model.id} className={`flex flex-col gap-1 text-xs p-2 rounded border cursor-pointer ${geminiModel === model.id ? 'bg-indigo-600/20 border-indigo-500 text-white' : 'border-gray-700 text-gray-400 hover:border-gray-600'}`}>
+                                        <label key={model.id} className={`flex flex-col gap-1 text-xs p-2 rounded border cursor-pointer ${geminiModel === model.id ? 'bg-primary-light border-primary text-primary' : 'border-n40 text-n300 hover:border-n40'}`}>
                                             <div className="flex items-center gap-2">
                                             <input
                                                 type="radio"
@@ -1685,7 +1685,7 @@ const MaterialAIModal: React.FC<{
                                                 <span className="font-semibold">{model.label}</span>
                                             </div>
                                             {model.desc && (
-                                                <span className="text-[10px] text-gray-500 ml-5">{model.desc}</span>
+                                                <span className="text-[10px] text-n100 ml-5">{model.desc}</span>
                                             )}
                                         </label>
                                     ))}
@@ -1694,13 +1694,13 @@ const MaterialAIModal: React.FC<{
                         )}
 
                         <div className="space-y-2">
-                            <span className="text-[11px] font-bold text-gray-500 uppercase">输出规格</span>
+                            <span className="text-[11px] font-bold text-n100 uppercase">输出规格</span>
                             <div className="grid grid-cols-2 gap-2">
                                 {['1:1', '3:4', '4:3', '9:16', '16:9'].map(ratio => (
                                     <button
                                         key={ratio}
                                         onClick={() => setAspectRatio(ratio)}
-                                        className={`py-1.5 rounded text-[11px] border ${aspectRatio === ratio ? 'bg-gray-100 text-gray-900 font-semibold' : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}
+                                        className={`py-1.5 rounded text-[11px] border ${aspectRatio === ratio ? 'bg-primary text-white font-semibold border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}
                                     >
                                         {ratio}
                                     </button>
@@ -1709,7 +1709,7 @@ const MaterialAIModal: React.FC<{
                             <select
                                 value={resolution}
                                 onChange={(e) => setResolution(e.target.value as '1K' | '2K' | '4K')}
-                                className="w-full bg-gray-800 border border-gray-700 rounded-lg text-xs text-white px-2 py-1.5 focus:outline-none focus:border-indigo-500"
+                                className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                             >
                                 <option value="1K">1K 输出</option>
                                 <option value="2K">2K 输出</option>
@@ -1719,7 +1719,7 @@ const MaterialAIModal: React.FC<{
 
                         {engine === 'doubao' && (
                             <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-xs text-gray-300">
+                                <label className="flex items-center gap-2 text-xs text-n700">
                                     <input
                                         type="checkbox"
                                         checked={sequential === 'auto'}
@@ -1728,7 +1728,7 @@ const MaterialAIModal: React.FC<{
                                     生成关联组图
                                 </label>
                                 {sequential === 'auto' && (
-                                    <div className="flex items-center gap-2 text-xs text-gray-300">
+                                    <div className="flex items-center gap-2 text-xs text-n700">
                                         <span>张数</span>
                                         <input
                                             type="number"
@@ -1736,7 +1736,7 @@ const MaterialAIModal: React.FC<{
                                             max={5}
                                             value={count}
                                             onChange={(e) => setCount(Math.min(5, Math.max(1, Number(e.target.value))))}
-                                            className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1 focus:outline-none focus:border-purple-500"
+                                            className="w-16 bg-n0 border border-n40 rounded px-2 py-1 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                                         />
                                     </div>
                                 )}
@@ -1746,22 +1746,22 @@ const MaterialAIModal: React.FC<{
 
                     <div className="col-span-2 space-y-4">
                         <div>
-                            <span className="text-[11px] font-bold text-gray-500 uppercase block mb-1">提示词</span>
+                            <span className="text-[11px] font-bold text-n100 uppercase block mb-1">提示词</span>
                             <textarea
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
                                 rows={5}
-                                className="w-full bg-gray-900 border border-gray-700 rounded-xl text-sm text-white p-3 focus:outline-none focus:border-indigo-500 resize-none"
+                                className="w-full bg-n0 border border-n40 rounded-md text-sm text-n800 p-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
                                 placeholder={selectedRefs.size > 0 ? "描述你想要的变化，例如：换一个姿势、改变背景、添加道具等。AI会参考你选择的图片风格。" : "描述你想要生成的内容"}
                             />
                             {selectedRefs.size > 0 && (
-                                <div className="mt-2 flex items-start gap-2 p-2 bg-indigo-900/20 border border-indigo-700/30 rounded-lg">
-                                    <div className="text-indigo-400 mt-0.5">
+                                <div className="mt-2 flex items-start gap-2 p-2 bg-primary-light border border-primary/30 rounded-lg">
+                                    <div className="text-primary mt-0.5">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                     </div>
-                                    <div className="flex-1 text-xs text-indigo-200 leading-relaxed">
+                                    <div className="flex-1 text-xs text-primary leading-relaxed">
                                         <strong>💡 提示：</strong>你已选择 {selectedRefs.size} 张参考图，AI会严格遵循参考图的画风、构图和角色设计。建议在提示词中描述你想要的<strong>改变或变化</strong>，而不是重复描述参考图中已有的元素。
                                     </div>
                                 </div>
@@ -1769,12 +1769,12 @@ const MaterialAIModal: React.FC<{
                         </div>
 
                         <div>
-                            <div className="flex items-center justify-between text-[11px] text-gray-500 mb-2">
+                            <div className="flex items-center justify-between text-[11px] text-n100 mb-2">
                                 <span className="font-bold uppercase">参考图 (可多选，最多 {maxRefs} 张)</span>
-                                <span className={selectedRefs.size > 0 ? "text-emerald-400 font-semibold" : ""}>{selectedRefs.size}/{maxRefs}</span>
+                                <span className={selectedRefs.size > 0 ? "text-success font-semibold" : ""}>{selectedRefs.size}/{maxRefs}</span>
                             </div>
                             {config.materials.length === 0 ? (
-                                <div className="border border-dashed border-gray-700 rounded-xl text-center py-6 text-xs text-gray-500">
+                                <div className="border border-dashed border-n40 rounded-md text-center py-6 text-xs text-n100">
                                     暂无素材，可先上传或生成后再选作参考。
                                 </div>
                             ) : (
@@ -1785,11 +1785,11 @@ const MaterialAIModal: React.FC<{
                                             <button
                                                 key={material.id}
                                                 onClick={() => toggleSelection(material.id)}
-                                                className={`relative aspect-square rounded-lg overflow-hidden border ${active ? 'border-emerald-400 ring-2 ring-emerald-500/40' : 'border-gray-700'}`}
+                                                className={`relative aspect-square rounded-lg overflow-hidden border ${active ? 'border-success ring-2 ring-success/40' : 'border-n40'}`}
                                                 type="button"
                                             >
                                                 <img src={material.thumbnail || material.url} loading="lazy" className="w-full h-full object-cover" />
-                                                {active && <div className="absolute inset-0 bg-emerald-600/30"></div>}
+                                                {active && <div className="absolute inset-0 bg-success/30"></div>}
                                             </button>
                                         );
                                     })}
@@ -1799,9 +1799,9 @@ const MaterialAIModal: React.FC<{
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
-                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-xs font-bold text-white shadow-lg shadow-indigo-900/30 hover:shadow-indigo-900/50">开始生成</button>
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg shadow-indigo-900/30 hover:shadow-indigo-900/50">开始生成</button>
                 </div>
             </div>
         </div>
@@ -1865,9 +1865,9 @@ const CameraModal: React.FC<{
         
         return (
             <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-gray-400">
+                <div className="flex items-center justify-between text-[11px] text-n300">
                     <span>{label}</span>
-                    <span className="font-semibold text-white">{value}</span>
+                    <span className="font-semibold text-n800">{value}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <input
@@ -1877,12 +1877,12 @@ const CameraModal: React.FC<{
                         step={1}
                         value={displayIndex}
                         onChange={(e) => onChange(values[Number(e.target.value)])}
-                        className="flex-1 accent-indigo-500"
+                        className="flex-1 accent-primary"
                     />
                 </div>
-                <div className="flex justify-between text-[9px] text-gray-500">
+                <div className="flex justify-between text-[9px] text-n100">
                     {values.map((v, i) => (
-                        <span key={i} className={value === v ? 'text-indigo-400 font-semibold' : ''}>{v}</span>
+                        <span key={i} className={value === v ? 'text-primary font-semibold' : ''}>{v}</span>
                     ))}
                 </div>
             </div>
@@ -1890,25 +1890,25 @@ const CameraModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-            <div className="w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
+            <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-white">角度调整 - {config.tagName}</h3>
-                        <p className="text-xs text-gray-400 mt-1">基于现有素材重建镜头角度，保持角色/场景一致性。</p>
+                        <h3 className="text-lg font-bold text-n800">角度调整 - {config.tagName}</h3>
+                        <p className="text-xs text-n300 mt-1">基于现有素材重建镜头角度，保持角色/场景一致性。</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                    <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                        <div className="relative rounded-2xl overflow-hidden border border-gray-800 h-72 bg-black/30 flex items-center justify-center">
+                        <div className="relative rounded-md overflow-hidden border border-n40 h-72 bg-n20 flex items-center justify-center">
                             {currentMaterial ? (
                                 <img src={currentMaterial.url} loading="lazy" className="w-full h-full object-contain" />
                             ) : (
-                                <span className="text-xs text-gray-500">暂无素材</span>
+                                <span className="text-xs text-n100">暂无素材</span>
                             )}
                         </div>
                         <div className="grid grid-cols-5 gap-2 max-h-32 overflow-y-auto pr-1">
@@ -1916,7 +1916,7 @@ const CameraModal: React.FC<{
                                 <button
                                     key={material.id}
                                     onClick={() => setSelectedMaterialId(material.id)}
-                                    className={`relative aspect-square rounded-lg overflow-hidden border ${selectedMaterialId === material.id ? 'border-emerald-400 ring-2 ring-emerald-500/40' : 'border-gray-700'}`}
+                                    className={`relative aspect-square rounded-lg overflow-hidden border ${selectedMaterialId === material.id ? 'border-success ring-2 ring-success/40' : 'border-n40'}`}
                                 >
                                     <img src={material.thumbnail || material.url} loading="lazy" className="w-full h-full object-cover" />
                                 </button>
@@ -1925,8 +1925,8 @@ const CameraModal: React.FC<{
                     </div>
 
                     <div className="space-y-5">
-                        <div className="space-y-3 bg-gray-950/30 border border-gray-800 rounded-xl p-4">
-                            <h4 className="text-xs font-bold text-gray-400 uppercase">镜头控制</h4>
+                        <div className="space-y-3 bg-n20 border border-n40 rounded-md p-4">
+                            <h4 className="text-xs font-bold text-n300 uppercase">镜头控制</h4>
                             <DiscreteSlider 
                                 label="水平旋转 (°)" 
                                 values={[-90, -45, 0, 45, 90]} 
@@ -1945,19 +1945,19 @@ const CameraModal: React.FC<{
                                 value={vertical} 
                                 onChange={setVertical} 
                             />
-                            <label className="flex items-center gap-2 text-xs text-gray-300">
+                            <label className="flex items-center gap-2 text-xs text-n700">
                                 <input type="checkbox" checked={wideAngle} onChange={(e) => setWideAngle(e.target.checked)} />
                                 启用广角透视
                             </label>
                         </div>
 
                         <div className="space-y-2">
-                            <span className="text-[11px] font-bold text-gray-500 uppercase">自定义提示词 (可覆盖镜头设定)</span>
+                            <span className="text-[11px] font-bold text-n100 uppercase">自定义提示词 (可覆盖镜头设定)</span>
                             <textarea
                                 rows={3}
                                 value={customPrompt}
                                 onChange={(e) => setCustomPrompt(e.target.value)}
-                                className="w-full bg-gray-900 border border-gray-700 rounded-lg text-sm text-white p-3 focus:outline-none focus:border-indigo-500 resize-none"
+                                className="w-full bg-n0 border border-n40 rounded-lg text-sm text-n800 p-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
                                 placeholder="输入更详细的场景描述或留空使用自动提示..."
                             />
                             <div className="flex flex-wrap gap-1 mt-2">
@@ -1965,7 +1965,7 @@ const CameraModal: React.FC<{
                                     <button
                                         key={idx}
                                         onClick={() => setCustomPrompt(example)}
-                                        className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-indigo-600 text-gray-400 hover:text-white rounded border border-gray-700 hover:border-indigo-500 transition-colors"
+                                        className="text-[10px] px-2 py-1 bg-n0 hover:bg-primary text-n300 hover:text-white rounded border border-n40 hover:border-primary transition-colors"
                                     >
                                         {example.split('（')[0]}
                                     </button>
@@ -1973,26 +1973,26 @@ const CameraModal: React.FC<{
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs text-gray-300">
+                        <div className="flex items-center gap-3 text-xs text-n700">
                             <div className="flex items-center gap-2">
                                 <span>随机种子</span>
                                 <input
                                     type="number"
                                     value={seed}
                                     onChange={(e) => setSeed(Number(e.target.value))}
-                                    className="w-32 bg-gray-900 border border-gray-700 rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+                                    className="w-32 bg-n0 border border-n40 rounded px-2 py-1 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                                 />
                             </div>
-                            <button onClick={() => setSeed(randomSeed())} className="px-2 py-1 rounded border border-gray-700 hover:border-indigo-500 hover:text-white transition-colors">
+                            <button onClick={() => setSeed(randomSeed())} className="px-2 py-1 rounded border border-n40 hover:border-primary hover:text-n800 transition-colors">
                                 随机
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
-                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 text-xs font-bold text-white shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50">生成新角度</button>
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50">生成新角度</button>
                 </div>
             </div>
         </div>
@@ -2028,14 +2028,14 @@ const ProcessModal: React.FC<{
     const workflowInfo = workflowNames[config.workflow];
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-            <div className="w-full max-w-3xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
+            <div className="w-full max-w-3xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-white">{workflowInfo.title} - {config.tagName}</h3>
-                        <p className="text-xs text-gray-400 mt-1">{workflowInfo.desc}</p>
+                        <h3 className="text-lg font-bold text-n800">{workflowInfo.title} - {config.tagName}</h3>
+                        <p className="text-xs text-n300 mt-1">{workflowInfo.desc}</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                    <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -2043,14 +2043,14 @@ const ProcessModal: React.FC<{
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* 左侧：当前素材预览 */}
                     <div className="space-y-4">
-                        <div className="relative rounded-2xl overflow-hidden border border-gray-800 h-72 bg-black/30 flex items-center justify-center">
+                        <div className="relative rounded-md overflow-hidden border border-n40 h-72 bg-n20 flex items-center justify-center">
                             {currentMaterial ? (
                                 <img src={currentMaterial.url} loading="lazy" className="w-full h-full object-contain" alt="素材预览" />
                             ) : (
-                                <span className="text-xs text-gray-500">暂无素材</span>
+                                <span className="text-xs text-n100">暂无素材</span>
                             )}
                         </div>
-                        <div className="text-center text-xs text-gray-400">
+                        <div className="text-center text-xs text-n300">
                             当前选中的素材
                         </div>
                     </div>
@@ -2058,21 +2058,21 @@ const ProcessModal: React.FC<{
                     {/* 右侧：素材选择 */}
                     <div className="space-y-4">
                         <div>
-                            <span className="text-[11px] font-bold text-gray-500 uppercase mb-2 block">选择要处理的素材</span>
-                            <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto p-2 bg-gray-950 rounded-lg border border-gray-800">
+                            <span className="text-[11px] font-bold text-n100 uppercase mb-2 block">选择要处理的素材</span>
+                            <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto p-2 bg-n20 rounded-lg border border-n40">
                                 {config.materials.map((mat) => (
                                     <button
                                         key={mat.id}
                                         onClick={() => setSelectedMaterialId(mat.id)}
                                         className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
                                             selectedMaterialId === mat.id
-                                                ? 'border-indigo-500 ring-2 ring-indigo-500/30'
-                                                : 'border-transparent hover:border-gray-600'
+                                                ? 'border-primary ring-2 ring-primary/30'
+                                                : 'border-transparent hover:border-n40'
                                         }`}
                                     >
                                         <img src={mat.thumbnail || mat.url} loading="lazy" className="w-full h-full object-cover" alt="素材" />
                                         {selectedMaterialId === mat.id && (
-                                            <div className="absolute inset-0 bg-indigo-500/20 flex items-center justify-center">
+                                            <div className="absolute inset-0 bg-primary-light flex items-center justify-center">
                                                 <Check className="w-6 h-6 text-white" />
                                             </div>
                                         )}
@@ -2084,12 +2084,12 @@ const ProcessModal: React.FC<{
                 </div>
 
                 {/* 底部按钮 */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
                     <button onClick={handleSubmit} className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg ${
-                        config.workflow === 'upscale_hd' 
-                            ? 'bg-gradient-to-r from-blue-500 to-cyan-500 shadow-blue-900/30 hover:shadow-blue-900/50'
-                            : 'bg-gradient-to-r from-purple-500 to-pink-500 shadow-purple-900/30 hover:shadow-purple-900/50'
+                        config.workflow === 'upscale_hd'
+                            ? 'bg-b400 hover:bg-b500 shadow-blue-900/30 hover:shadow-blue-900/50'
+                            : 'bg-primary hover:bg-primary-hover shadow-purple-900/30 hover:shadow-purple-900/50'
                     }`}>
                         开始处理
                     </button>
@@ -2153,14 +2153,14 @@ const ThreeViewModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-            <div className="w-full max-w-3xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
+            <div className="w-full max-w-3xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-white">三视图生成 - {config.tagName}</h3>
-                        <p className="text-xs text-gray-400 mt-1">为角色生成正面、侧面、背面的四视图参考</p>
+                        <h3 className="text-lg font-bold text-n800">三视图生成 - {config.tagName}</h3>
+                        <p className="text-xs text-n300 mt-1">为角色生成正面、侧面、背面的四视图参考</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                    <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -2168,7 +2168,7 @@ const ThreeViewModal: React.FC<{
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* 左侧：当前素材预览 */}
                     <div className="space-y-4">
-                        <div className="relative rounded-2xl overflow-hidden border border-gray-800 h-72 bg-black/30 flex items-center justify-center">
+                        <div className="relative rounded-md overflow-hidden border border-n40 h-72 bg-n20 flex items-center justify-center">
                             {currentMaterial && currentMaterial.url ? (
                                 <img 
                                     src={currentMaterial.url} 
@@ -2181,12 +2181,12 @@ const ThreeViewModal: React.FC<{
                                     }}
                                 />
                             ) : (
-                                <span className="text-xs text-gray-500">
+                                <span className="text-xs text-n100">
                                     {currentMaterial ? '素材URL无效' : '暂无素材'}
                                 </span>
                             )}
                         </div>
-                        <div className="text-center text-xs text-gray-400">
+                        <div className="text-center text-xs text-n300">
                             当前选中的素材
                         </div>
                     </div>
@@ -2194,16 +2194,16 @@ const ThreeViewModal: React.FC<{
                     {/* 右侧：素材选择 */}
                     <div className="space-y-4">
                         <div>
-                            <span className="text-[11px] font-bold text-gray-500 uppercase mb-2 block">选择要处理的素材</span>
-                            <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto p-2 bg-gray-950 rounded-lg border border-gray-800">
+                            <span className="text-[11px] font-bold text-n100 uppercase mb-2 block">选择要处理的素材</span>
+                            <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto p-2 bg-n20 rounded-lg border border-n40">
                                 {config.materials.map((mat) => (
                                     <button
                                         key={mat.id}
                                         onClick={() => setSelectedMaterialId(mat.id)}
                                         className={`relative rounded-lg overflow-hidden border-2 transition-all ${
                                             selectedMaterialId === mat.id
-                                                ? 'border-green-500 shadow-lg shadow-green-900/50'
-                                                : 'border-transparent hover:border-gray-600'
+                                                ? 'border-success shadow-lg shadow-green-900/50'
+                                                : 'border-transparent hover:border-n40'
                                         }`}
                                     >
                                         {mat.url ? (
@@ -2218,13 +2218,13 @@ const ThreeViewModal: React.FC<{
                                                 }}
                                             />
                                         ) : (
-                                            <div className="w-full h-20 flex items-center justify-center bg-gray-800">
-                                                <span className="text-xs text-gray-500">无效</span>
+                                            <div className="w-full h-20 flex items-center justify-center bg-n30">
+                                                <span className="text-xs text-n100">无效</span>
                                             </div>
                                         )}
                                         {selectedMaterialId === mat.id && (
-                                            <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
-                                                <CheckCircle className="w-5 h-5 text-green-400" />
+                                            <div className="absolute inset-0 bg-success/20 flex items-center justify-center">
+                                                <CheckCircle className="w-5 h-5 text-success" />
                                             </div>
                                         )}
                                     </button>
@@ -2236,22 +2236,22 @@ const ThreeViewModal: React.FC<{
 
                 {/* 提示词输入 */}
                 <div className="space-y-2">
-                    <label className="text-xs font-bold text-gray-400 uppercase">生成提示词</label>
+                    <label className="text-xs font-bold text-n300 uppercase">生成提示词</label>
                     <textarea
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         placeholder="输入生成提示词..."
-                        className="w-full h-24 bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-green-500 transition-colors"
+                        className="w-full h-24 bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n800 placeholder:text-n100 resize-none focus:outline-none focus:border-success transition-colors"
                         spellCheck={false}
                     />
-                    <p className="text-[10px] text-gray-500">
+                    <p className="text-[10px] text-n100">
                         💡 提示：描述需要生成的视图角度和背景要求
                     </p>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
-                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg bg-gradient-to-r from-green-500 to-emerald-500 shadow-green-900/30 hover:shadow-green-900/50">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg bg-success hover:bg-success shadow-green-900/30 hover:shadow-green-900/50">
                         开始生成
                     </button>
                 </div>

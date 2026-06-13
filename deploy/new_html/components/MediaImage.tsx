@@ -63,13 +63,13 @@ export function MediaImage({
   if (status === 'error') {
     return (
       <div 
-        className={fallbackClassName || className || 'flex flex-col items-center justify-center bg-gray-900/50 rounded'}
+        className={fallbackClassName || className || 'flex flex-col items-center justify-center bg-n30 rounded'}
         style={{ ...style, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 60 }}
       >
-        <ImageOff className="w-6 h-6 text-gray-600" />
+        <ImageOff className="w-6 h-6 text-n100" />
         <button 
           onClick={handleRetry}
-          className="text-[10px] text-blue-400 hover:text-blue-300 mt-1 flex items-center gap-1"
+          className="text-[10px] text-b400 hover:text-b300 mt-1 flex items-center gap-1"
         >
           <RefreshCw className="w-3 h-3" />
           重新加载

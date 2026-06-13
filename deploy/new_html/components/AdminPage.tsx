@@ -55,13 +55,13 @@ const InteractiveHistogram = ({ data }: { data: { date: string, text: number, im
     const maxVal = Math.max(...sortedData.map(d => d.text + d.image + d.video), 1) * 1.1;
 
     return (
-        <div className="w-full h-64 flex items-end justify-between gap-2 pt-8 pb-6 px-2 relative border-b border-gray-800">
+        <div className="w-full h-64 flex items-end justify-between gap-2 pt-8 pb-6 px-2 relative border-b border-n40">
             {/* Y-Axis */}
-            <div className="absolute inset-0 pointer-events-none flex flex-col justify-between text-[10px] text-gray-700 pb-8 pl-1">
-                <div className="w-full border-t border-gray-800/50 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal)}</span></div>
-                <div className="w-full border-t border-gray-800/50 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal * 0.75)}</span></div>
-                <div className="w-full border-t border-gray-800/50 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal * 0.5)}</span></div>
-                <div className="w-full border-t border-gray-800/50 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal * 0.25)}</span></div>
+            <div className="absolute inset-0 pointer-events-none flex flex-col justify-between text-[10px] text-n100 pb-8 pl-1">
+                <div className="w-full border-t border-n40 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal)}</span></div>
+                <div className="w-full border-t border-n40 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal * 0.75)}</span></div>
+                <div className="w-full border-t border-n40 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal * 0.5)}</span></div>
+                <div className="w-full border-t border-n40 relative"><span className="absolute -top-3 right-0">{Math.round(maxVal * 0.25)}</span></div>
                 <div className="w-full relative"></div>
             </div>
 
@@ -76,26 +76,26 @@ const InteractiveHistogram = ({ data }: { data: { date: string, text: number, im
                 return (
                     <div key={i} className="flex-1 flex flex-col justify-end h-full group relative min-w-[20px] z-10">
                         {/* Tooltip */}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-900/95 text-[10px] p-2 rounded-lg border border-gray-700 shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-200 z-50 w-32 pointer-events-none transform translate-y-2 group-hover:translate-y-0">
-                            <div className="font-bold text-gray-200 border-b border-gray-700 pb-1 mb-1">{d.date}</div>
-                            <div className="flex justify-between text-indigo-300"><span>Text:</span><span>{d.text}</span></div>
-                            <div className="flex justify-between text-emerald-300"><span>Image:</span><span>{d.image}</span></div>
-                            <div className="flex justify-between text-purple-300"><span>Video:</span><span>{d.video}</span></div>
-                            <div className="flex justify-between text-white font-bold mt-1 pt-1 border-t border-gray-700"><span>Total:</span><span>{total}</span></div>
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-n0 text-[10px] p-2 rounded-lg border border-n40 shadow-bottom opacity-0 group-hover:opacity-100 transition-all duration-200 z-50 w-32 pointer-events-none transform translate-y-2 group-hover:translate-y-0">
+                            <div className="font-bold text-n700 border-b border-n40 pb-1 mb-1">{d.date}</div>
+                            <div className="flex justify-between text-primary"><span>Text:</span><span>{d.text}</span></div>
+                            <div className="flex justify-between text-success"><span>Image:</span><span>{d.image}</span></div>
+                            <div className="flex justify-between text-primary"><span>Video:</span><span>{d.video}</span></div>
+                            <div className="flex justify-between text-n800 font-bold mt-1 pt-1 border-t border-n40"><span>Total:</span><span>{total}</span></div>
                         </div>
 
                         {/* Bar */}
                         <div 
                             style={{ height: `${Math.max(barHeightPercent, 1)}%` }} 
-                            className="w-full rounded-t-sm overflow-hidden flex flex-col justify-end transition-all duration-300 hover:brightness-110 relative bg-gray-800/50"
+                            className="w-full rounded-t-sm overflow-hidden flex flex-col justify-end transition-all duration-300 hover:brightness-110 relative bg-n30"
                         >
-                             {d.video > 0 && <div style={{ height: `${pctVideo}%` }} className="w-full bg-purple-600 border-b border-purple-500/20"></div>}
-                             {d.image > 0 && <div style={{ height: `${pctImage}%` }} className="w-full bg-emerald-600 border-b border-emerald-500/20"></div>}
-                             {d.text > 0 && <div style={{ height: `${pctText}%` }} className="w-full bg-indigo-600"></div>}
+                             {d.video > 0 && <div style={{ height: `${pctVideo}%` }} className="w-full bg-primary border-b border-primary"></div>}
+                             {d.image > 0 && <div style={{ height: `${pctImage}%` }} className="w-full bg-success border-b border-success"></div>}
+                             {d.text > 0 && <div style={{ height: `${pctText}%` }} className="w-full bg-primary"></div>}
                         </div>
                         
                         {/* Label */}
-                        <div className="text-[9px] text-gray-500 mt-2 text-center truncate w-full font-mono group-hover:text-white transition-colors">
+                        <div className="text-[9px] text-n100 mt-2 text-center truncate w-full font-mono group-hover:text-n800 transition-colors">
                             {d.date.slice(5)}
                         </div>
                     </div>
@@ -729,10 +729,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
     if (isLoading) {
         return (
-            <div className="fixed inset-0 flex items-center justify-center bg-gray-950">
+            <div className="fixed inset-0 flex items-center justify-center bg-n20">
                 <div className="text-center">
-                    <Activity className="w-12 h-12 mx-auto mb-4 text-indigo-400 animate-spin" />
-                    <p className="text-gray-400">加载管理数据...</p>
+                    <Activity className="w-12 h-12 mx-auto mb-4 text-primary animate-spin" />
+                    <p className="text-n300">加载管理数据...</p>
                 </div>
             </div>
         );
@@ -748,28 +748,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
         //   旧实现 min-h-screen 让容器最少 100vh 但允许撑大；内部 flex-1 子在 "无明确高度的父容器"下
         //   不会形成滚动区域（overflow-y-auto 失效）→ "生成统计分析" / "新功能管理" 等长内容看不全也滚不动。
         //   h-screen 固定为精确 100vh，配合 overflow-hidden + flex-1 + overflow-y-auto 三件套才正确触发滚动。
-        <div className="flex h-screen w-screen bg-gray-950 text-gray-100 overflow-hidden font-sans relative">
+        <div className="flex h-screen w-screen bg-n20 text-n800 overflow-hidden font-sans relative">
             {/* 🆕 创建用户Loading遮罩 */}
             {isCreatingUser && (
-                <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center">
-                    <div className="bg-gray-900 border border-gray-700 rounded-xl p-8 shadow-2xl">
+                <div className="fixed inset-0 z-[100] bg-n900/50 backdrop-blur-sm flex items-center justify-center">
+                    <div className="bg-n0 border border-n40 rounded-md p-8 shadow-bottom">
                         <div className="text-center">
-                            <Loader2 className="w-12 h-12 mx-auto mb-4 text-indigo-400 animate-spin" />
-                            <p className="text-gray-300 text-lg font-medium">创建用户中...</p>
-                            <p className="text-gray-500 text-sm mt-2">请稍候</p>
+                            <Loader2 className="w-12 h-12 mx-auto mb-4 text-primary animate-spin" />
+                            <p className="text-n700 text-lg font-medium">创建用户中...</p>
+                            <p className="text-n100 text-sm mt-2">请稍候</p>
                         </div>
                     </div>
                 </div>
             )}
             
           {/* 侧边栏 */}
-          <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0">
-            <div className="p-6 border-b border-gray-800">
-              <h2 className="text-lg font-bold flex items-center gap-2 text-indigo-400">
+          <div className="w-64 bg-n0 border-r border-n40 flex flex-col flex-shrink-0">
+            <div className="p-6 border-b border-n40">
+              <h2 className="text-lg font-bold flex items-center gap-2 text-primary">
                 <ShieldCheck className="w-6 h-6" />
                 管理控制台
               </h2>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="text-xs text-n100 mt-2">
                 数据源: {systemStats?.source === "backend" ? "后端数据库" : "本地存储"}
               </p>
             </div>
@@ -779,8 +779,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 onClick={() => setActiveTab("users")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === "users"
-                    ? "bg-indigo-600 text-white"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                    ? "bg-primary text-white"
+                    : "text-n300 hover:bg-n20 hover:text-n800"
                 }`}
               >
                 <Users className="w-4 h-4" />
@@ -790,8 +790,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 onClick={() => setActiveTab("stats")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === "stats"
-                    ? "bg-indigo-600 text-white"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                    ? "bg-primary text-white"
+                    : "text-n300 hover:bg-n20 hover:text-n800"
                 }`}
               >
                 <BarChart3 className="w-4 h-4" />
@@ -801,8 +801,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 onClick={() => setActiveTab("results")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === "results"
-                    ? "bg-indigo-600 text-white"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                    ? "bg-primary text-white"
+                    : "text-n300 hover:bg-n20 hover:text-n800"
                 }`}
               >
                 <Terminal className="w-4 h-4" />
@@ -812,8 +812,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 onClick={() => setActiveTab("system")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === "system"
-                    ? "bg-indigo-600 text-white"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                    ? "bg-primary text-white"
+                    : "text-n300 hover:bg-n20 hover:text-n800"
                 }`}
               >
                 <HardDrive className="w-4 h-4" />
@@ -824,8 +824,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 onClick={() => setActiveTab("features")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === "features"
-                    ? "bg-indigo-600 text-white"
-                    : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                    ? "bg-primary text-white"
+                    : "text-n300 hover:bg-n20 hover:text-n800"
                 }`}
               >
                 <Settings className="w-4 h-4" />
@@ -835,10 +835,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
           </div>
       
           {/* 主内容 */}
-          <div className="flex-1 overflow-hidden flex flex-col bg-gray-950">
+          <div className="flex-1 overflow-hidden flex flex-col bg-n20">
             {/* Header */}
-            <div className="h-[60px] border-b border-gray-800 bg-gray-900/50 flex items-center px-8 justify-between">
-              <h3 className="text-xl font-bold text-gray-200">
+            <div className="h-[60px] border-b border-n40 bg-n0 flex items-center px-8 justify-between">
+              <h3 className="text-xl font-bold text-n700">
                 {activeTab === "users" && "用户账号与模型权限"}
                 {activeTab === "stats" && "生成数据与趋势分析"}
                 {activeTab === "results" && "全局生成结果审计"}
@@ -846,8 +846,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 {activeTab === "features" && "新功能管理（账号 / 分组 / 积分 / 素材 / 审计）"}
               </h3>
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-800 px-3 py-1.5 rounded-full border border-gray-700">
-                  <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                <div className="flex items-center gap-2 text-xs text-n300 bg-n0 px-3 py-1.5 rounded-full border border-n40">
+                  <Clock className="w-3.5 h-3.5 text-primary" />
                   在线: {users.filter((u) => u.isOnline).length} / {users.length}
                 </div>
               </div>
@@ -864,25 +864,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 <div className="w-full">
                   <div className="flex justify-between items-center mb-6">
                     <div className="relative">
-                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-n100" />
                       <input
                         type="text"
                         placeholder="搜索用户..."
-                        className="bg-gray-900 border border-gray-700 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500 w-64"
+                        className="bg-n0 border border-n40 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-primary w-64"
                       />
                     </div>
                     <button
                       onClick={() => setShowAddUser(true)}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
+                      className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"
                     >
                       <Plus className="w-4 h-4" />
                       添加用户
                     </button>
                   </div>
       
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                  <div className="bg-n0 border border-n40 rounded-md overflow-hidden">
                     <table className="w-full text-left text-sm table-fixed">
-                      <thead className="bg-gray-850 text-gray-400 uppercase font-medium text-xs">
+                      <thead className="bg-n30 text-n300 uppercase font-medium text-xs">
                         <tr>
                           <th className="px-6 py-4 w-[20%]">用户</th>
                           <th className="px-6 py-4 w-[12%]">在线状态</th>
@@ -891,28 +891,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           <th className="px-6 py-4 w-[15%] text-right">管理</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-800">
+                      <tbody className="divide-y divide-n40">
                         {users.map((user) => (
                           <tr
                             key={user.id}
-                            className="hover:bg-gray-800/50 transition-colors"
+                            className="hover:bg-n20 transition-colors"
                           >
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-3">
                                 <div
-                                  className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-gray-300 ${
+                                  className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-n700 ${
                                     user.isActive
-                                      ? "bg-gray-700"
-                                      : "bg-red-900/50"
+                                      ? "bg-n0"
+                                      : "bg-r50"
                                   }`}
                                 >
                                   {user.username[0].toUpperCase()}
                                 </div>
                                 <div>
-                                  <div className="font-bold text-gray-200">
+                                  <div className="font-bold text-n700">
                                     {user.username}
                                   </div>
-                                  <div className="text-xs text-gray-500">
+                                  <div className="text-xs text-n100">
                                     {user.role}
                                   </div>
                                 </div>
@@ -920,13 +920,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             </td>
                             <td className="px-6 py-4">
                               {user.isOnline ? (
-                                <div className="flex items-center gap-1.5 text-xs text-green-400">
-                                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                <div className="flex items-center gap-1.5 text-xs text-success">
+                                  <span className="w-2 h-2 bg-success rounded-full animate-pulse"></span>
                                   Online
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                                  <span className="w-2 h-2 bg-gray-600 rounded-full"></span>
+                                <div className="flex items-center gap-1.5 text-xs text-n100">
+                                  <span className="w-2 h-2 bg-n40 rounded-full"></span>
                                   Offline
                                 </div>
                               )}
@@ -934,7 +934,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
                                 {user.permissions.allowedModels.length === 0 ? (
-                                  <span className="text-xs text-red-500">
+                                  <span className="text-xs text-danger">
                                     无权限
                                   </span>
                                 ) : user.permissions.allowedModels.length <= 3 ? (
@@ -942,7 +942,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                     {user.permissions.allowedModels.map((m) => (
                                       <span
                                         key={m}
-                                        className="px-1.5 py-0.5 rounded bg-indigo-900/30 text-indigo-300 text-[10px] border border-indigo-500/20"
+                                        className="px-1.5 py-0.5 rounded bg-primary-light text-primary text-[10px] border border-primary"
                                       >
                                         {m.split("-")[0]}
                                       </span>
@@ -956,13 +956,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                         .map((m) => (
                                           <span
                                             key={m}
-                                            className="px-1.5 py-0.5 rounded bg-indigo-900/30 text-indigo-300 text-[10px] border border-indigo-500/20"
+                                            className="px-1.5 py-0.5 rounded bg-primary-light text-primary text-[10px] border border-primary"
                                           >
                                             {m.split("-")[0]}
                                           </span>
                                         ))}
                                     </div>
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-xs text-n100">
                                       +{user.permissions.allowedModels.length - 2} more
                                     </span>
                                   </div>
@@ -971,16 +971,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-baseline gap-1">
-                                <span className="text-white font-bold">
+                                <span className="text-n800 font-bold">
                                   {user.stats.todayCount}
                                 </span>
-                                <span className="text-gray-500 text-xs">
+                                <span className="text-n100 text-xs">
                                   / {user.stats.totalCount}
                                 </span>
                               </div>
-                              <div className="w-24 h-1 bg-gray-800 rounded-full mt-1 overflow-hidden">
+                              <div className="w-24 h-1 bg-n0 rounded-full mt-1 overflow-hidden">
                                 <div
-                                  className="h-full bg-green-500"
+                                  className="h-full bg-success"
                                   style={{
                                     width: `${Math.min(
                                       100,
@@ -994,17 +994,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={() => setEditingUser(user)}
-                                  className="p-1.5 hover:bg-gray-700 rounded text-indigo-400 hover:text-indigo-300"
+                                  className="p-1.5 hover:bg-n20 rounded text-primary hover:text-primary"
                                   title="配置权限"
                                 >
                                   <Settings className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => toggleUserStatus(user.id)}
-                                  className={`p-1.5 hover:bg-gray-700 rounded ${
+                                  className={`p-1.5 hover:bg-n20 rounded ${
                                     user.isActive
-                                      ? "text-gray-400"
-                                      : "text-red-400"
+                                      ? "text-n300"
+                                      : "text-danger"
                                   }`}
                                   title={user.isActive ? "冻结" : "解冻"}
                                 >
@@ -1018,7 +1018,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                   onClick={() =>
                                     handleDeleteUser(user.id, user.username)
                                   }
-                                  className="p-1.5 hover:bg-gray-700 rounded text-red-400 hover:text-red-300"
+                                  className="p-1.5 hover:bg-n20 rounded text-danger hover:text-danger"
                                   title="删除用户"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -1037,92 +1037,92 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
               {activeTab === "stats" && (
                 <div className="space-y-6 w-full">
                   {/* 2026-05-26 Slice 6: 「按用户 / 按组织」切换 */}
-                  <div className="flex items-center gap-2 bg-gray-900/70 rounded-lg px-3 py-2 border border-gray-800 w-fit">
-                    <span className="text-xs text-gray-400">分组维度</span>
+                  <div className="flex items-center gap-2 bg-n0 rounded-lg px-3 py-2 border border-n40 w-fit">
+                    <span className="text-xs text-n300">分组维度</span>
                     <button
                       onClick={() => setStatsGroupBy('user')}
-                      className={`px-3 py-1 text-xs rounded ${statsGroupBy === 'user' ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
+                      className={`px-3 py-1 text-xs rounded ${statsGroupBy === 'user' ? 'bg-primary text-white' : 'text-n700 hover:bg-n20'}`}
                     >按用户</button>
                     <button
                       onClick={() => setStatsGroupBy('org')}
-                      className={`px-3 py-1 text-xs rounded ${statsGroupBy === 'org' ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`}
+                      className={`px-3 py-1 text-xs rounded ${statsGroupBy === 'org' ? 'bg-primary text-white' : 'text-n700 hover:bg-n20'}`}
                     >按组织</button>
-                    {breakdownLoading && <span className="text-xs text-gray-500">加载中…</span>}
+                    {breakdownLoading && <span className="text-xs text-n100">加载中…</span>}
                   </div>
 
                   {/* 概览卡片 */}
                   <div className="grid grid-cols-4 gap-4">
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                    <div className="bg-n0 border border-n40 rounded-md p-5 shadow-card">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-500 uppercase">
+                        <span className="text-xs text-n100 uppercase">
                           文本生成
                         </span>
-                        <Activity className="w-4 h-4 text-indigo-400" />
+                        <Activity className="w-4 h-4 text-primary" />
                       </div>
-                      <div className="text-3xl font-bold text-white">
+                      <div className="text-3xl font-bold text-n800">
                         {systemStats?.totalText || 0}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">总计</div>
+                      <div className="text-xs text-n100 mt-1">总计</div>
                     </div>
       
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                    <div className="bg-n0 border border-n40 rounded-md p-5 shadow-card">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-500 uppercase">
+                        <span className="text-xs text-n100 uppercase">
                           图片生成
                         </span>
-                        <ImageIcon className="w-4 h-4 text-emerald-400" />
+                        <ImageIcon className="w-4 h-4 text-success" />
                       </div>
-                      <div className="text-3xl font-bold text-white">
+                      <div className="text-3xl font-bold text-n800">
                         {systemStats?.totalImages || 0}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">已生成图片</div>
+                      <div className="text-xs text-n100 mt-1">已生成图片</div>
                     </div>
       
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                    <div className="bg-n0 border border-n40 rounded-md p-5 shadow-card">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-500 uppercase">
+                        <span className="text-xs text-n100 uppercase">
                           视频生成
                         </span>
-                        <Play className="w-4 h-4 text-purple-400" />
+                        <Play className="w-4 h-4 text-primary" />
                       </div>
-                      <div className="text-3xl font-bold text-white">
+                      <div className="text-3xl font-bold text-n800">
                         {systemStats?.totalVideos || 0}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">已生成视频</div>
+                      <div className="text-xs text-n100 mt-1">已生成视频</div>
                     </div>
       
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                    <div className="bg-n0 border border-n40 rounded-md p-5 shadow-card">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-gray-500 uppercase">
+                        <span className="text-xs text-n100 uppercase">
                           项目总数
                         </span>
-                        <Database className="w-4 h-4 text-yellow-400" />
+                        <Database className="w-4 h-4 text-warning" />
                       </div>
-                      <div className="text-3xl font-bold text-white">
+                      <div className="text-3xl font-bold text-n800">
                         {systemStats?.totalProjects || 0}
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">当前项目</div>
+                      <div className="text-xs text-n100 mt-1">当前项目</div>
                     </div>
                   </div>
       
                   {/* 趋势图 */}
-                  <div className="bg-gray-900 p-6 rounded-xl border border-gray-800">
+                  <div className="bg-n0 p-6 rounded-md border border-n40">
                     <div className="flex justify-between items-center mb-4">
-                      <h4 className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-indigo-400" />
+                      <h4 className="text-sm font-bold text-n700 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-primary" />
                         每日生成量趋势 (Last 14 Days)
                       </h4>
                       <div className="flex gap-4 text-xs font-medium">
                         <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 bg-indigo-500 rounded"></div>
+                          <div className="w-2.5 h-2.5 bg-primary rounded"></div>
                           Text
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 bg-emerald-500 rounded"></div>
+                          <div className="w-2.5 h-2.5 bg-success rounded"></div>
                           Image
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <div className="w-2.5 h-2.5 bg-purple-500 rounded"></div>
+                          <div className="w-2.5 h-2.5 bg-primary rounded"></div>
                           Video
                         </div>
                       </div>
@@ -1132,38 +1132,38 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
       
                   {/* 模型统计 */}
                   <div className="grid grid-cols-3 gap-6">
-                    <div className="bg-gray-900 p-6 rounded-xl border border-gray-800">
-                      <h4 className="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2">
-                        <PieChart className="w-4 h-4 text-indigo-400" />
+                    <div className="bg-n0 p-6 rounded-md border border-n40">
+                      <h4 className="text-sm font-bold text-n700 mb-4 flex items-center gap-2">
+                        <PieChart className="w-4 h-4 text-primary" />
                         模型使用分布
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {modelStats.map((m) => (
                           <div
                             key={m.model}
-                            className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 relative overflow-hidden"
+                            className="bg-n30 rounded-lg p-4 border border-n40 relative overflow-hidden"
                           >
                             <div className="flex justify-between items-start z-10 relative">
                               <div>
-                                <div className="text-xs text-gray-400 font-mono mb-1">
+                                <div className="text-xs text-n300 font-mono mb-1">
                                   {m.model}
                                 </div>
-                                <div className="text-xl font-bold text-white">
+                                <div className="text-xl font-bold text-n800">
                                   {m.count}{" "}
-                                  <span className="text-xs font-normal text-gray-500">
+                                  <span className="text-xs font-normal text-n100">
                                     次
                                   </span>
                                 </div>
                               </div>
                               <div className="text-right">
-                                <div className="text-xs text-gray-400">
+                                <div className="text-xs text-n300">
                                   平均等待
                                 </div>
                                 <div
                                   className={`text-sm font-bold ${
                                     m.avgWait > 1000
-                                      ? "text-yellow-400"
-                                      : "text-green-400"
+                                      ? "text-warning"
+                                      : "text-success"
                                   }`}
                                 >
                                   {m.avgWait.toFixed(0)} ms
@@ -1171,7 +1171,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                               </div>
                             </div>
                             <div
-                              className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500"
+                              className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-primary to-primary"
                               style={{
                                 width: `${(m.count / (logs.length || 1)) * 100}%`,
                               }}
@@ -1182,10 +1182,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                     </div>
       
                     {/* 用户活跃度 */}
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                      <div className="p-6 border-b border-gray-800">
-                        <h4 className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                          <Users className="w-4 h-4 text-purple-400" />
+                    <div className="bg-n0 border border-n40 rounded-md overflow-hidden">
+                      <div className="p-6 border-b border-n40">
+                        <h4 className="text-sm font-bold text-n700 flex items-center gap-2">
+                          <Users className="w-4 h-4 text-primary" />
                           用户活跃度分析
                         </h4>
                       </div>
@@ -1193,13 +1193,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                         {userPerformanceStats.map((u) => (
                           <div
                             key={u.id}
-                            className="mb-4 pb-4 border-b border-gray-800 last:border-0"
+                            className="mb-4 pb-4 border-b border-n40 last:border-0"
                           >
                             <div className="flex justify-between items-center mb-2">
-                              <span className="font-bold text-gray-300">
+                              <span className="font-bold text-n700">
                                 {u.username}
                               </span>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-n100">
                                 {u.perf.totalGens} 次生成
                               </span>
                             </div>
@@ -1220,21 +1220,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                   </div>
 
                   {/* 2026-05-26 Slice 6: breakdown 表 */}
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl">
-                    <div className="px-6 py-4 border-b border-gray-800 flex justify-between items-center">
-                      <h4 className="text-sm font-bold text-gray-200">
+                  <div className="bg-n0 border border-n40 rounded-md">
+                    <div className="px-6 py-4 border-b border-n40 flex justify-between items-center">
+                      <h4 className="text-sm font-bold text-n700">
                         {statsGroupBy === 'user' ? '按用户聚合' : '按组织聚合'}
                       </h4>
-                      <span className="text-xs text-gray-500">{statsBreakdown.length} 条</span>
+                      <span className="text-xs text-n100">{statsBreakdown.length} 条</span>
                     </div>
                     {statsBreakdown.length === 0 ? (
-                      <div className="px-6 py-12 text-center text-sm text-gray-500">
+                      <div className="px-6 py-12 text-center text-sm text-n100">
                         {breakdownLoading ? '加载中…' : (statsGroupBy === 'org' ? '尚无组织数据（请先到「组织管理」创建）' : '暂无数据')}
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
-                          <thead className="bg-gray-850/50 text-[11px] uppercase text-gray-500">
+                          <thead className="bg-n30 text-[11px] uppercase text-n100">
                             <tr>
                               <th className="text-left px-6 py-2 font-medium">{statsGroupBy === 'user' ? '用户' : '组织'}</th>
                               {statsGroupBy === 'org' && <th className="text-right px-3 py-2 font-medium">成员数</th>}
@@ -1249,19 +1249,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             {statsBreakdown.map((row: any) => {
                               const total = (row.projects || 0) + (row.images || 0) + (row.videos || 0) + (row.audios || 0);
                               return (
-                                <tr key={row.user_id || row.org_id} className="border-t border-gray-800/60 hover:bg-gray-850/40">
-                                  <td className="px-6 py-2 text-gray-200">
+                                <tr key={row.user_id || row.org_id} className="border-t border-n40 hover:bg-n20">
+                                  <td className="px-6 py-2 text-n700">
                                     {statsGroupBy === 'user' ? row.username : row.name}
-                                    <span className="ml-2 text-[10px] text-gray-500 font-mono">{row.user_id || row.org_id}</span>
+                                    <span className="ml-2 text-[10px] text-n100 font-mono">{row.user_id || row.org_id}</span>
                                   </td>
                                   {statsGroupBy === 'org' && (
-                                    <td className="px-3 py-2 text-right text-gray-300">{row.member_count}</td>
+                                    <td className="px-3 py-2 text-right text-n700">{row.member_count}</td>
                                   )}
-                                  <td className="px-3 py-2 text-right text-yellow-400">{row.projects}</td>
-                                  <td className="px-3 py-2 text-right text-emerald-400">{row.images}</td>
-                                  <td className="px-3 py-2 text-right text-purple-400">{row.videos}</td>
-                                  <td className="px-3 py-2 text-right text-blue-400">{row.audios}</td>
-                                  <td className="px-6 py-2 text-right font-medium text-gray-100">{total}</td>
+                                  <td className="px-3 py-2 text-right text-warning">{row.projects}</td>
+                                  <td className="px-3 py-2 text-right text-success">{row.images}</td>
+                                  <td className="px-3 py-2 text-right text-primary">{row.videos}</td>
+                                  <td className="px-3 py-2 text-right text-b400">{row.audios}</td>
+                                  <td className="px-6 py-2 text-right font-medium text-n800">{total}</td>
                                 </tr>
                               );
                             })}
@@ -1277,8 +1277,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
               {activeTab === "results" && (
                 <div className="flex h-full gap-6 p-8">
                   {/* 用户过滤侧边栏 */}
-                  <div className="w-56 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col">
-                    <div className="p-3 border-b border-gray-800 bg-gray-850 font-bold text-xs text-gray-400 uppercase">
+                  <div className="w-56 bg-n0 border border-n40 rounded-md overflow-hidden flex flex-col">
+                    <div className="p-3 border-b border-n40 bg-n30 font-bold text-xs text-n300 uppercase">
                       筛选用户
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -1286,8 +1286,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                         onClick={() => setSelectedUserId(null)}
                         className={`w-full text-left px-3 py-2 rounded text-xs font-medium ${
                           !selectedUserId
-                            ? "bg-indigo-600 text-white"
-                            : "text-gray-400 hover:bg-gray-800"
+                            ? "bg-primary text-white"
+                            : "text-n300 hover:bg-n20"
                         }`}
                       >
                         全部用户 (All)
@@ -1298,8 +1298,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           onClick={() => setSelectedUserId(u.id)}
                           className={`w-full text-left px-3 py-2 rounded text-xs font-medium flex items-center justify-between ${
                             selectedUserId === u.id
-                              ? "bg-indigo-600 text-white"
-                              : "text-gray-400 hover:bg-gray-800"
+                              ? "bg-primary text-white"
+                              : "text-n300 hover:bg-n20"
                           }`}
                         >
                           {u.username}
@@ -1310,20 +1310,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                   </div>
       
                   {/* 日志列表 */}
-                  <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex flex-col">
-                    <div className="p-3 border-b border-gray-800 bg-gray-850 flex justify-between items-center">
-                      <span className="font-bold text-xs text-gray-400 uppercase">
+                  <div className="flex-1 bg-n0 border border-n40 rounded-md overflow-hidden flex flex-col">
+                    <div className="p-3 border-b border-n40 bg-n30 flex justify-between items-center">
+                      <span className="font-bold text-xs text-n300 uppercase">
                         生成日志列表 ({filteredLogs.length})
                       </span>
                       <div className="flex gap-2">
-                        <button className="p-1 hover:bg-gray-700 rounded text-gray-400">
+                        <button className="p-1 hover:bg-n20 rounded text-n300">
                           <Filter className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
                       <table className="w-full text-left text-xs table-fixed">
-                        <thead className="bg-gray-850 text-gray-500 sticky top-0 z-10">
+                        <thead className="bg-n30 text-n100 sticky top-0 z-10">
                           <tr>
                             <th className="px-4 py-3 w-[12%]">时间</th>
                             <th className="px-4 py-3 w-[15%]">用户</th>
@@ -1333,50 +1333,50 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             <th className="px-4 py-3 w-[20%] text-right">操作</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-800">
+                        <tbody className="divide-y divide-n40">
                           {filteredLogs.slice(0, 200).map((log) => (
                             <tr
                               key={log.id}
-                              className="hover:bg-gray-800/50 cursor-pointer group"
+                              className="hover:bg-n20 cursor-pointer group"
                               onClick={() => setInspectLog(log)}
                             >
-                              <td className="px-4 py-3 text-gray-400 font-mono">
+                              <td className="px-4 py-3 text-n300 font-mono">
                                 {new Date(log.timestamp).toLocaleTimeString()}
                               </td>
-                              <td className="px-4 py-3 font-medium text-gray-300">
+                              <td className="px-4 py-3 font-medium text-n700">
                                 {log.username}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex flex-col">
                                   <span
-                                    className="text-gray-300 truncate"
+                                    className="text-n700 truncate"
                                     title={log.model}
                                   >
                                     {log.model.length > 18
                                       ? log.model.substring(0, 15) + "..."
                                       : log.model}
                                   </span>
-                                  <span className="text-[10px] text-gray-500 uppercase">
+                                  <span className="text-[10px] text-n100 uppercase">
                                     {log.type}
                                   </span>
                                 </div>
                               </td>
-                              <td className="px-4 py-3 text-gray-400 font-mono">
+                              <td className="px-4 py-3 text-n300 font-mono">
                                 {(log.executionTimeMs / 1000).toFixed(2)}s
                               </td>
                               <td className="px-4 py-3">
                                 {log.status === "success" ? (
-                                  <span className="text-green-400 flex items-center gap-1">
+                                  <span className="text-success flex items-center gap-1">
                                     <CheckCircle2 className="w-3 h-3" /> Success
                                   </span>
                                 ) : (
-                                  <span className="text-red-400 flex items-center gap-1">
+                                  <span className="text-danger flex items-center gap-1">
                                     <XCircle className="w-3 h-3" /> Failed
                                   </span>
                                 )}
                               </td>
                               <td className="px-4 py-3 text-right">
-                                <button className="px-2 py-1 bg-gray-800 hover:bg-indigo-600 text-gray-400 hover:text-white rounded transition-colors opacity-0 group-hover:opacity-100">
+                                <button className="px-2 py-1 bg-n0 hover:bg-primary text-n300 hover:text-white rounded transition-colors opacity-0 group-hover:opacity-100">
                                   查看详情
                                 </button>
                               </td>
@@ -1393,13 +1393,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
               {activeTab === "system" && (
                 <div className="space-y-6 w-full">
                   <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-n300 uppercase tracking-wider flex items-center gap-2">
                       <Server className="w-4 h-4" />
                       集群节点状态 ({nodes.length} Nodes)
                     </h4>
                     <button
                       onClick={() => setShowAddNode(true)}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2"
+                      className="bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       添加节点
@@ -1410,26 +1410,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                     {nodes.map((node) => (
                       <div
                         key={node.id}
-                        className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-indigo-500/30 transition-colors"
+                        className="bg-n0 border border-n40 rounded-md p-5 shadow-card hover:shadow-atlas hover:border-primary transition-colors"
                       >
                         <div className="flex justify-between items-start mb-4">
                           <div className="flex items-center gap-3">
                             <div
                               className={`p-2 rounded-lg ${
                                 node.status === "online"
-                                  ? "bg-green-900/20 text-green-400"
+                                  ? "bg-g50 text-success"
                                   : node.status === "maintenance"
-                                  ? "bg-yellow-900/20 text-yellow-400"
-                                  : "bg-red-900/20 text-red-400"
+                                  ? "bg-y50 text-warning"
+                                  : "bg-r50 text-danger"
                               }`}
                             >
                               <Server className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="font-bold text-gray-200">
+                              <h3 className="font-bold text-n700">
                                 {node.name}
                               </h3>
-                              <div className="flex items-center gap-2 text-xs text-gray-500 font-mono">
+                              <div className="flex items-center gap-2 text-xs text-n100 font-mono">
                                 <Network className="w-3 h-3" />
                                 {node.ip}
                               </div>
@@ -1438,10 +1438,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           <div
                             className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
                               node.status === "online"
-                                ? "bg-green-900/20 text-green-400 border border-green-500/20"
+                                ? "bg-g50 text-success border border-success"
                                 : node.status === "maintenance"
-                                ? "bg-yellow-900/20 text-yellow-400 border border-yellow-500/20"
-                                : "bg-red-900/20 text-red-400 border border-red-500/20"
+                                ? "bg-y50 text-warning border border-warning"
+                                : "bg-r50 text-danger border border-danger"
                             }`}
                           >
                             {node.status}
@@ -1452,19 +1452,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           {/* Storage */}
                           <div>
                             <div className="flex justify-between text-xs mb-1">
-                              <span className="text-gray-400 flex items-center gap-1">
+                              <span className="text-n300 flex items-center gap-1">
                                 <Database className="w-3 h-3" /> Storage
                               </span>
-                              <span className="text-gray-300 font-mono">
+                              <span className="text-n700 font-mono">
                                 {node.storageUsed} GB / {node.storageTotal} GB
                               </span>
                             </div>
-                            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                            <div className="h-2 bg-n0 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
                                   node.storageUsed / node.storageTotal > 0.9
-                                    ? "bg-red-500"
-                                    : "bg-blue-500"
+                                    ? "bg-danger"
+                                    : "bg-b400"
                                 }`}
                                 style={{
                                   width: `${
@@ -1478,17 +1478,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           {/* GPU */}
                           <div>
                             <div className="flex justify-between text-xs mb-1">
-                              <span className="text-gray-400 flex items-center gap-1">
+                              <span className="text-n300 flex items-center gap-1">
                                 <Zap className="w-3 h-3" /> GPU Load
                               </span>
-                              <span className="text-gray-300 font-mono">
+                              <span className="text-n700 font-mono">
                                 {node.gpuUsage}%
                               </span>
                             </div>
-                            <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                            <div className="h-2 bg-n0 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
-                                  node.gpuUsage > 90 ? "bg-red-500" : "bg-purple-500"
+                                  node.gpuUsage > 90 ? "bg-danger" : "bg-primary"
                                 }`}
                                 style={{ width: `${node.gpuUsage}%` }}
                               ></div>
@@ -1496,10 +1496,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           </div>
                         </div>
       
-                        <div className="mt-5 pt-4 border-t border-gray-800 flex justify-end">
+                        <div className="mt-5 pt-4 border-t border-n40 flex justify-end">
                           <button
                             onClick={() => openSshConfig(node)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-300 hover:text-white transition-colors border border-gray-700"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-n0 hover:bg-n20 rounded text-xs text-n700 hover:text-n800 transition-colors border border-n40"
                           >
                             <Terminal className="w-3.5 h-3.5" />
                             配置 SSH
@@ -1522,18 +1522,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
             
             {/* 用户权限编辑 Modal */}
             {editingUser && (
-                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-                    <div className="bg-gray-900 border border-gray-700 rounded-xl w-[500px] shadow-2xl animate-in fade-in zoom-in-95">
-                        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-850 rounded-t-xl">
-                            <h3 className="font-bold text-gray-200">配置用户权限: {editingUser.username}</h3>
-                            <button onClick={() => setEditingUser(null)}><X className="w-5 h-5 text-gray-500 hover:text-white" /></button>
+                <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+                    <div className="bg-n0 border border-n40 rounded-md w-[500px] shadow-bottom animate-in fade-in zoom-in-95">
+                        <div className="p-4 border-b border-n40 flex justify-between items-center bg-n30 rounded-t-md">
+                            <h3 className="font-bold text-n700">配置用户权限: {editingUser.username}</h3>
+                            <button onClick={() => setEditingUser(null)}><X className="w-5 h-5 text-n100 hover:text-n800" /></button>
                         </div>
                         <div className="p-6 space-y-6">
                             <div>
-                                <label className="text-xs font-bold text-gray-400 block mb-2">允许使用的模型</label>
-                                <div className="space-y-2 bg-gray-800 p-3 rounded-lg border border-gray-700">
+                                <label className="text-xs font-bold text-n300 block mb-2">允许使用的模型</label>
+                                <div className="space-y-2 bg-n0 p-3 rounded-lg border border-n40">
                                     {MODELS.map(model => (
-                                        <label key={model} className="flex items-center gap-2 cursor-pointer hover:bg-gray-700/50 p-1.5 rounded transition-colors">
+                                        <label key={model} className="flex items-center gap-2 cursor-pointer hover:bg-n20 p-1.5 rounded transition-colors">
                                             <input 
                                                 type="checkbox" 
                                                 checked={editingUser.permissions.allowedModels.includes(model)}
@@ -1541,9 +1541,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                                     const newModels = handleModelToggle(model, editingUser.permissions.allowedModels);
                                                     setEditingUser({ ...editingUser, permissions: { ...editingUser.permissions, allowedModels: newModels } });
                                                 }}
-                                                className="rounded bg-gray-900 border-gray-600 text-indigo-500 focus:ring-0"
+                                                className="rounded bg-n0 border-n40 text-primary focus:ring-0"
                                             />
-                                            <span className="text-sm text-gray-300">{model}</span>
+                                            <span className="text-sm text-n700">{model}</span>
                                         </label>
                                     ))}
                                 </div>
@@ -1551,11 +1551,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-bold text-gray-400 block mb-2">优先级队列</label>
+                                    <label className="text-xs font-bold text-n300 block mb-2">优先级队列</label>
                                     <select 
                                         value={editingUser.permissions.priority}
                                         onChange={(e) => setEditingUser({ ...editingUser, permissions: { ...editingUser.permissions, priority: e.target.value as any } })}
-                                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                                        className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none"
                                     >
                                         <option value="low">Low (Free)</option>
                                         <option value="normal">Normal</option>
@@ -1568,16 +1568,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                             type="checkbox"
                                             checked={editingUser.permissions.canExport}
                                             onChange={(e) => setEditingUser({ ...editingUser, permissions: { ...editingUser.permissions, canExport: e.target.checked } })}
-                                            className="rounded bg-gray-800 border-gray-600 text-indigo-500"
+                                            className="rounded bg-n0 border-n40 text-primary"
                                         />
-                                        <span className="text-sm text-gray-300">允许导出结果</span>
+                                        <span className="text-sm text-n700">允许导出结果</span>
                                     </label>
                                 </div>
                             </div>
                         </div>
-                        <div className="p-4 border-t border-gray-800 bg-gray-850 rounded-b-xl flex justify-end gap-3">
-                            <button onClick={() => setEditingUser(null)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 text-sm">取消</button>
-                            <button onClick={() => saveUserPermissions(editingUser.permissions)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-bold">保存配置</button>
+                        <div className="p-4 border-t border-n40 bg-n30 rounded-b-md flex justify-end gap-3">
+                            <button onClick={() => setEditingUser(null)} className="px-4 py-2 bg-n0 hover:bg-n20 rounded text-n700 text-sm">取消</button>
+                            <button onClick={() => saveUserPermissions(editingUser.permissions)} className="px-4 py-2 bg-primary hover:bg-primary-hover rounded text-white text-sm font-bold">保存配置</button>
                         </div>
                     </div>
                 </div>
@@ -1585,57 +1585,57 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
             {/* 添加用户 Modal */}
             {showAddUser && (
-                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-                    <div className="bg-gray-900 border border-gray-700 rounded-xl w-[400px] shadow-2xl">
-                         <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-850 rounded-t-xl">
-                            <h3 className="font-bold text-gray-200">添加新用户</h3>
-                            <button onClick={() => setShowAddUser(false)}><X className="w-5 h-5 text-gray-500 hover:text-white" /></button>
+                <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+                    <div className="bg-n0 border border-n40 rounded-md w-[400px] shadow-bottom">
+                         <div className="p-4 border-b border-n40 flex justify-between items-center bg-n30 rounded-t-md">
+                            <h3 className="font-bold text-n700">添加新用户</h3>
+                            <button onClick={() => setShowAddUser(false)}><X className="w-5 h-5 text-n100 hover:text-n800" /></button>
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="text-xs font-bold text-gray-400 block mb-2">
-                                    用户名 <span className="text-red-500">*</span>
+                                <label className="text-xs font-bold text-n300 block mb-2">
+                                    用户名 <span className="text-danger">*</span>
                                 </label>
                                 <input 
                                     type="text" 
                                     value={newUserForm.username}
                                     onChange={(e) => setNewUserForm({ ...newUserForm, username: e.target.value })}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                                    className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none"
                                     placeholder="输入用户名"
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 block mb-2">
-                                    登录密码 <span className="text-red-500">*</span>
+                                <label className="text-xs font-bold text-n300 block mb-2">
+                                    登录密码 <span className="text-danger">*</span>
                                 </label>
                                 <input 
                                     type="password" 
                                     value={newUserForm.password}
                                     onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                                    className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none"
                                     placeholder="设置初始密码"
                                     required
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 block mb-2">
-                                    邮箱 <span className="text-gray-600 text-[10px]">(可选)</span>
+                                <label className="text-xs font-bold text-n300 block mb-2">
+                                    邮箱 <span className="text-n100 text-[10px]">(可选)</span>
                                 </label>
                                 <input 
                                     type="email" 
                                     value={newUserForm.email}
                                     onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                                    className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none"
                                     placeholder="留空则自动生成"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 block mb-2">初始角色</label>
+                                <label className="text-xs font-bold text-n300 block mb-2">初始角色</label>
                                 <select 
                                     value={newUserForm.role}
                                     onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                                    className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none"
                                 >
                                     <option value="editor">Editor</option>
                                     <option value="viewer">Viewer</option>
@@ -1643,9 +1643,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                 </select>
                             </div>
                         </div>
-                        <div className="p-4 border-t border-gray-800 bg-gray-850 rounded-b-xl flex justify-end gap-3">
-                            <button onClick={() => setShowAddUser(false)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 text-sm">取消</button>
-                            <button onClick={handleAddUser} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-bold">创建用户</button>
+                        <div className="p-4 border-t border-n40 bg-n30 rounded-b-md flex justify-end gap-3">
+                            <button onClick={() => setShowAddUser(false)} className="px-4 py-2 bg-n0 hover:bg-n20 rounded text-n700 text-sm">取消</button>
+                            <button onClick={handleAddUser} className="px-4 py-2 bg-primary hover:bg-primary-hover rounded text-white text-sm font-bold">创建用户</button>
                         </div>
                     </div>
                 </div>
@@ -1653,61 +1653,61 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
             {/* SSH配置 Modal */}
             {sshModalNode && (
-                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-                    <div className="bg-gray-900 border border-gray-700 rounded-xl w-[450px] shadow-2xl">
-                         <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-850 rounded-t-xl">
+                <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+                    <div className="bg-n0 border border-n40 rounded-md w-[450px] shadow-bottom">
+                         <div className="p-4 border-b border-n40 flex justify-between items-center bg-n30 rounded-t-md">
                             <div className="flex items-center gap-2">
-                                <Terminal className="w-5 h-5 text-indigo-400" />
-                                <h3 className="font-bold text-gray-200">配置 SSH: {sshModalNode.name}</h3>
+                                <Terminal className="w-5 h-5 text-primary" />
+                                <h3 className="font-bold text-n700">配置 SSH: {sshModalNode.name}</h3>
                             </div>
-                            <button onClick={() => setSshModalNode(null)}><X className="w-5 h-5 text-gray-500 hover:text-white" /></button>
+                            <button onClick={() => setSshModalNode(null)}><X className="w-5 h-5 text-n100 hover:text-n800" /></button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <div className="bg-gray-950/50 p-3 rounded border border-gray-800 text-xs text-gray-400 font-mono mb-4">
+                            <div className="bg-n30 p-3 rounded border border-n40 text-xs text-n300 font-mono mb-4">
                                 Connection: ssh {sshForm.user}@{sshForm.host} -p {sshForm.port}
                             </div>
                             
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="col-span-2">
-                                    <label className="text-xs font-bold text-gray-400 block mb-2">Host / IP</label>
+                                    <label className="text-xs font-bold text-n300 block mb-2">Host / IP</label>
                                     <input 
                                         type="text" 
                                         value={sshForm.host}
                                         onChange={(e) => setSshForm({ ...sshForm, host: e.target.value })}
-                                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none font-mono"
+                                        className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none font-mono"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-bold text-gray-400 block mb-2">Port</label>
+                                    <label className="text-xs font-bold text-n300 block mb-2">Port</label>
                                     <input 
                                         type="number" 
                                         value={sshForm.port}
                                         onChange={(e) => setSshForm({ ...sshForm, port: parseInt(e.target.value) })}
-                                        className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none font-mono"
+                                        className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none font-mono"
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 block mb-2">Username</label>
+                                <label className="text-xs font-bold text-n300 block mb-2">Username</label>
                                 <input 
                                     type="text" 
                                     value={sshForm.user}
                                     onChange={(e) => setSshForm({ ...sshForm, user: e.target.value })}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none font-mono"
+                                    className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none font-mono"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 block mb-2">Password (Optional)</label>
+                                <label className="text-xs font-bold text-n300 block mb-2">Password (Optional)</label>
                                 <input 
                                     type="password" 
                                     value={sshForm.password}
                                     onChange={(e) => setSshForm({ ...sshForm, password: e.target.value })}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none font-mono"
+                                    className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none font-mono"
                                     placeholder="Leave blank if using key"
                                 />
                             </div>
                             <div>
-                                <label className="text-xs font-bold text-gray-400 flex items-center gap-2 mb-2">
+                                <label className="text-xs font-bold text-n300 flex items-center gap-2 mb-2">
                                     <Key className="w-3 h-3" />
                                     Private Key Path
                                 </label>
@@ -1715,13 +1715,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                     type="text" 
                                     value={sshForm.keyPath}
                                     onChange={(e) => setSshForm({ ...sshForm, keyPath: e.target.value })}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none font-mono"
+                                    className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none font-mono"
                                 />
                             </div>
                         </div>
-                        <div className="p-4 border-t border-gray-800 bg-gray-850 rounded-b-xl flex justify-end gap-3">
-                            <button onClick={() => setSshModalNode(null)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 text-sm">取消</button>
-                            <button onClick={saveSshConfig} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-bold">保存连接配置</button>
+                        <div className="p-4 border-t border-n40 bg-n30 rounded-b-md flex justify-end gap-3">
+                            <button onClick={() => setSshModalNode(null)} className="px-4 py-2 bg-n0 hover:bg-n20 rounded text-n700 text-sm">取消</button>
+                            <button onClick={saveSshConfig} className="px-4 py-2 bg-primary hover:bg-primary-hover rounded text-white text-sm font-bold">保存连接配置</button>
                         </div>
                     </div>
                 </div>
@@ -1729,27 +1729,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
             {/* 添加节点 Modal */}
             {showAddNode && (
-                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-                    <div className="bg-gray-900 border border-gray-700 rounded-xl w-[550px] shadow-2xl flex flex-col max-h-[90vh]">
-                         <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-850 rounded-t-xl">
+                <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+                    <div className="bg-n0 border border-n40 rounded-md w-[550px] shadow-bottom flex flex-col max-h-[90vh]">
+                         <div className="p-4 border-b border-n40 flex justify-between items-center bg-n30 rounded-t-md">
                             <div className="flex items-center gap-2">
-                                <Server className="w-5 h-5 text-indigo-400" />
-                                <h3 className="font-bold text-gray-200">Add Compute Node</h3>
+                                <Server className="w-5 h-5 text-primary" />
+                                <h3 className="font-bold text-n700">Add Compute Node</h3>
                             </div>
-                            <button onClick={() => setShowAddNode(false)}><X className="w-5 h-5 text-gray-500 hover:text-white" /></button>
+                            <button onClick={() => setShowAddNode(false)}><X className="w-5 h-5 text-n100 hover:text-n800" /></button>
                         </div>
 
                         {/* Tabs */}
-                        <div className="flex border-b border-gray-800">
+                        <div className="flex border-b border-n40">
                              <button 
                                 onClick={() => setAddNodeMode('quick')}
-                                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${addNodeMode === 'quick' ? 'border-indigo-500 text-white bg-gray-800/50' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
+                                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${addNodeMode === 'quick' ? 'border-primary text-primary bg-n30' : 'border-transparent text-n100 hover:text-n700'}`}
                              >
                                  Quick Import (SSH)
                              </button>
                              <button 
                                 onClick={() => setAddNodeMode('manual')}
-                                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${addNodeMode === 'manual' ? 'border-indigo-500 text-white bg-gray-800/50' : 'border-transparent text-gray-500 hover:text-gray-300'}`}
+                                className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide border-b-2 transition-colors ${addNodeMode === 'manual' ? 'border-primary text-primary bg-n30' : 'border-transparent text-n100 hover:text-n700'}`}
                              >
                                  Manual Config
                              </button>
@@ -1758,10 +1758,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                         <div className="p-6 space-y-4 flex-1 overflow-y-auto">
                             {addNodeMode === 'quick' ? (
                                 <div className="space-y-4">
-                                    <div className="bg-indigo-900/20 border border-indigo-500/20 rounded p-3 text-xs text-indigo-200">
+                                    <div className="bg-primary-light border border-primary rounded p-3 text-xs text-primary">
                                         <p className="mb-2 font-bold">Paste your connection string below.</p>
                                         <p className="opacity-70">Supported format:</p>
-                                        <code className="block bg-black/30 p-2 rounded mt-1 text-indigo-100 font-mono">
+                                        <code className="block bg-black/30 p-2 rounded mt-1 text-primary font-mono">
                                             通道：ssh -p 37174 root@connect.westd.seetacloud.com<br/>
                                             密码：D6JTE9P
                                         </code>
@@ -1771,18 +1771,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                         <textarea 
                                             value={quickConfigText}
                                             onChange={(e) => setQuickConfigText(e.target.value)}
-                                            className="w-full h-32 bg-gray-950 border border-gray-700 rounded p-3 font-mono text-xs text-green-400 focus:border-indigo-500 focus:outline-none resize-none"
+                                            className="w-full h-32 bg-n20 border border-n40 rounded p-3 font-mono text-xs text-success focus:border-primary focus:outline-none resize-none"
                                             placeholder="Paste configuration here..."
                                         />
                                     ) : (
-                                        <div className="bg-black rounded-lg border border-gray-700 p-4 font-mono text-xs h-48 overflow-y-auto custom-scrollbar" ref={terminalRef}>
+                                        <div className="bg-black rounded-lg border border-n40 p-4 font-mono text-xs h-48 overflow-y-auto custom-scrollbar" ref={terminalRef}>
                                             {connectionLogs.map((log, i) => (
                                                 <div key={i} className="mb-1">
-                                                    <span className="text-green-500">root@admin-console:~$</span> <span className="text-gray-300">{log}</span>
+                                                    <span className="text-success">root@admin-console:~$</span> <span className="text-n700">{log}</span>
                                                 </div>
                                             ))}
                                             {connectionStep !== 'success' && (
-                                                <div className="animate-pulse text-indigo-400">_</div>
+                                                <div className="animate-pulse text-primary">_</div>
                                             )}
                                         </div>
                                     )}
@@ -1790,32 +1790,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             ) : (
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="text-xs font-bold text-gray-400 block mb-2">节点名称</label>
+                                        <label className="text-xs font-bold text-n300 block mb-2">节点名称</label>
                                         <input 
                                             type="text" 
                                             value={newNodeForm.name}
                                             onChange={(e) => setNewNodeForm({ ...newNodeForm, name: e.target.value })}
-                                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                                            className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none"
                                             placeholder="e.g. Render-Node-05"
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-bold text-gray-400 block mb-2">IP 地址</label>
+                                        <label className="text-xs font-bold text-n300 block mb-2">IP 地址</label>
                                         <input 
                                             type="text" 
                                             value={newNodeForm.ip}
                                             onChange={(e) => setNewNodeForm({ ...newNodeForm, ip: e.target.value })}
-                                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none font-mono"
+                                            className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none font-mono"
                                             placeholder="192.168.x.x"
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-bold text-gray-400 block mb-2">总存储容量 (GB)</label>
+                                        <label className="text-xs font-bold text-n300 block mb-2">总存储容量 (GB)</label>
                                         <input 
                                             type="number" 
                                             value={newNodeForm.storageTotal}
                                             onChange={(e) => setNewNodeForm({ ...newNodeForm, storageTotal: parseInt(e.target.value) })}
-                                            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none font-mono"
+                                            className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none font-mono"
                                             placeholder="2000"
                                         />
                                     </div>
@@ -1823,14 +1823,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             )}
                         </div>
 
-                        <div className="p-4 border-t border-gray-800 bg-gray-850 rounded-b-xl flex justify-end gap-3">
-                            <button onClick={() => setShowAddNode(false)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 text-sm">Cancel</button>
+                        <div className="p-4 border-t border-n40 bg-n30 rounded-b-md flex justify-end gap-3">
+                            <button onClick={() => setShowAddNode(false)} className="px-4 py-2 bg-n0 hover:bg-n20 rounded text-n700 text-sm">Cancel</button>
                             
                             {addNodeMode === 'quick' ? (
                                 <button 
                                     onClick={parseAndConnect}
                                     disabled={connectionStep !== 'idle' || !quickConfigText.trim()}
-                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="px-4 py-2 bg-primary hover:bg-primary-hover rounded text-white text-sm font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {connectionStep === 'idle' ? (
                                         <>
@@ -1850,7 +1850,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                     )}
                                 </button>
                             ) : (
-                                <button onClick={handleManualAddNode} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white text-sm font-bold">Add Node</button>
+                                <button onClick={handleManualAddNode} className="px-4 py-2 bg-primary hover:bg-primary-hover rounded text-white text-sm font-bold">Add Node</button>
                             )}
                         </div>
                     </div>
@@ -1859,51 +1859,51 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
             {/* 日志详情 Modal */}
             {inspectLog && (
-                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-                     <div className="bg-gray-900 border border-gray-700 rounded-xl w-[800px] max-h-[90vh] flex flex-col shadow-2xl">
-                        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-850 rounded-t-xl">
+                <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+                     <div className="bg-n0 border border-n40 rounded-md w-[800px] max-h-[90vh] flex flex-col shadow-bottom">
+                        <div className="p-4 border-b border-n40 flex justify-between items-center bg-n30 rounded-t-md">
                             <div className="flex items-center gap-3">
-                                <Terminal className="w-5 h-5 text-emerald-400" />
-                                <h3 className="font-bold text-gray-200 font-mono">Log ID: {inspectLog.id}</h3>
+                                <Terminal className="w-5 h-5 text-success" />
+                                <h3 className="font-bold text-n700 font-mono">Log ID: {inspectLog.id}</h3>
                             </div>
-                            <button onClick={() => setInspectLog(null)}><X className="w-5 h-5 text-gray-500 hover:text-white" /></button>
+                            <button onClick={() => setInspectLog(null)}><X className="w-5 h-5 text-n100 hover:text-n800" /></button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-2 gap-6">
                             <div className="space-y-4">
                                 <div>
-                                    <span className="text-xs font-bold text-gray-500 uppercase">Timestamp</span>
-                                    <div className="text-sm text-gray-300">{new Date(inspectLog.timestamp).toLocaleString()}</div>
+                                    <span className="text-xs font-bold text-n100 uppercase">Timestamp</span>
+                                    <div className="text-sm text-n700">{new Date(inspectLog.timestamp).toLocaleString()}</div>
                                 </div>
                                 <div>
-                                    <span className="text-xs font-bold text-gray-500 uppercase">User</span>
-                                    <div className="text-sm text-gray-300 flex items-center gap-2">
-                                        <span className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold">{inspectLog.username[0]}</span>
+                                    <span className="text-xs font-bold text-n100 uppercase">User</span>
+                                    <div className="text-sm text-n700 flex items-center gap-2">
+                                        <span className="w-6 h-6 rounded-full bg-n0 flex items-center justify-center text-xs font-bold">{inspectLog.username[0]}</span>
                                         {inspectLog.username}
                                     </div>
                                 </div>
                                 <div>
-                                    <span className="text-xs font-bold text-gray-500 uppercase">Model Config</span>
-                                    <div className="text-sm text-indigo-300 font-mono bg-gray-950 p-2 rounded border border-gray-800 mt-1">
+                                    <span className="text-xs font-bold text-n100 uppercase">Model Config</span>
+                                    <div className="text-sm text-primary font-mono bg-n20 p-2 rounded border border-n40 mt-1">
                                         {inspectLog.model}
                                     </div>
                                 </div>
                                 <div>
-                                    <span className="text-xs font-bold text-gray-500 uppercase">Prompt Content</span>
-                                    <div className="text-xs text-gray-300 bg-gray-950 p-3 rounded border border-gray-800 mt-1 h-32 overflow-y-auto leading-relaxed custom-scrollbar whitespace-pre-wrap">
+                                    <span className="text-xs font-bold text-n100 uppercase">Prompt Content</span>
+                                    <div className="text-xs text-n700 bg-n20 p-3 rounded border border-n40 mt-1 h-32 overflow-y-auto leading-relaxed custom-scrollbar whitespace-pre-wrap">
                                         {inspectLog.prompt}
                                     </div>
                                 </div>
                                 <div>
-                                    <span className="text-xs font-bold text-gray-500 uppercase">Parameters (JSON)</span>
-                                    <div className="text-xs text-green-400 font-mono bg-gray-950 p-3 rounded border border-gray-800 mt-1">
+                                    <span className="text-xs font-bold text-n100 uppercase">Parameters (JSON)</span>
+                                    <div className="text-xs text-success font-mono bg-n20 p-3 rounded border border-n40 mt-1">
                                         {inspectLog.params}
                                     </div>
                                 </div>
                             </div>
 
                             <div className="flex flex-col h-full">
-                                <span className="text-xs font-bold text-gray-500 uppercase mb-2">Generation Result</span>
-                                <div className="flex-1 bg-black/40 rounded-lg border border-gray-700 flex items-center justify-center overflow-hidden relative">
+                                <span className="text-xs font-bold text-n100 uppercase mb-2">Generation Result</span>
+                                <div className="flex-1 bg-black/40 rounded-lg border border-n40 flex items-center justify-center overflow-hidden relative">
                                     {/* 根据类型显示不同的结果 */}
                                     {inspectLog.type === 'video' && inspectLog.resultVideo ? (
                                         <video 
@@ -1914,32 +1914,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                         />
                                     ) : inspectLog.type === 'text' ? (
                                         <div className="w-full h-full p-4 overflow-y-auto custom-scrollbar">
-                                            <div className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
+                                            <div className="text-n700 text-sm leading-relaxed whitespace-pre-wrap">
                                                 {inspectLog.resultText || '（流式输出，无法回放完整内容）'}
                                             </div>
                                         </div>
                                     ) : inspectLog.resultPreview ? (
                                         <img src={inspectLog.resultPreview} loading="lazy" className="w-full h-full object-contain" alt="Result" />
                                     ) : (
-                                        <div className="text-gray-600 flex flex-col items-center">
+                                        <div className="text-n100 flex flex-col items-center">
                                             <AlertTriangle className="w-8 h-8 mb-2 opacity-50" />
                                             <span>No Preview Available</span>
                                         </div>
                                     )}
                                     <div className="absolute top-2 right-2 flex gap-2">
-                                        <span className="bg-gray-900/80 text-gray-300 text-[10px] px-2 py-1 rounded border border-gray-700">
+                                        <span className="bg-n0 text-n700 text-[10px] px-2 py-1 rounded border border-n40">
                                             {inspectLog.executionTimeMs.toFixed(0)}ms exec
                                         </span>
                                     </div>
                                 </div>
-                                <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                                <div className="mt-4 p-3 bg-n30 rounded-lg border border-n40">
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className="text-xs text-gray-400">Queue Time</span>
-                                        <span className="text-xs font-mono text-gray-200">{inspectLog.queueTimeMs.toFixed(2)}ms</span>
+                                        <span className="text-xs text-n300">Queue Time</span>
+                                        <span className="text-xs font-mono text-n700">{inspectLog.queueTimeMs.toFixed(2)}ms</span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-xs text-gray-400">Status</span>
-                                        <span className="text-xs font-bold text-green-400 uppercase">{inspectLog.status}</span>
+                                        <span className="text-xs text-n300">Status</span>
+                                        <span className="text-xs font-bold text-success uppercase">{inspectLog.status}</span>
                                     </div>
                                 </div>
                             </div>
@@ -1950,31 +1950,31 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
             {/* 🆕 自定义弹窗 */}
             {dialog && (
-                <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="bg-gray-900 border border-gray-700 rounded-xl w-[420px] shadow-2xl animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 z-[200] bg-n900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-n0 border border-n40 rounded-md w-[420px] shadow-bottom animate-in zoom-in-95 duration-200">
                         {/* 标题栏 */}
-                        <div className="p-5 border-b border-gray-800 bg-gradient-to-r from-gray-850 to-gray-900">
+                        <div className="p-5 border-b border-n40 bg-gradient-to-r from-n30 to-n0">
                             <div className="flex items-center gap-3">
                                 {dialog.type === 'confirm' ? (
-                                    <AlertTriangle className="w-6 h-6 text-yellow-400" />
+                                    <AlertTriangle className="w-6 h-6 text-warning" />
                                 ) : (
-                                    <CheckCircle2 className="w-6 h-6 text-indigo-400" />
+                                    <CheckCircle2 className="w-6 h-6 text-primary" />
                                 )}
-                                <h3 className="text-lg font-bold text-gray-100">{dialog.title}</h3>
+                                <h3 className="text-lg font-bold text-n800">{dialog.title}</h3>
                             </div>
                         </div>
                         
                         {/* 内容 */}
                         <div className="p-6">
-                            <p className="text-gray-300 leading-relaxed">{dialog.message}</p>
+                            <p className="text-n700 leading-relaxed">{dialog.message}</p>
                         </div>
                         
                         {/* 按钮区 */}
-                        <div className="p-5 border-t border-gray-800 bg-gray-850 rounded-b-xl flex justify-end gap-3">
+                        <div className="p-5 border-t border-n40 bg-n30 rounded-b-md flex justify-end gap-3">
                             {dialog.type === 'confirm' && (
                                 <button 
                                     onClick={closeDialog}
-                                    className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-300 text-sm font-medium transition-colors"
+                                    className="px-5 py-2.5 bg-n0 hover:bg-n20 rounded-lg text-n700 text-sm font-medium transition-colors"
                                 >
                                     {dialog.cancelText || '取消'}
                                 </button>
@@ -1988,8 +1988,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                 }}
                                 className={`px-5 py-2.5 rounded-lg text-white text-sm font-medium transition-colors ${
                                     dialog.type === 'confirm' 
-                                        ? 'bg-red-600 hover:bg-red-500' 
-                                        : 'bg-indigo-600 hover:bg-indigo-500'
+                                        ? 'bg-danger hover:bg-r50' 
+                                        : 'bg-primary hover:bg-primary-hover'
                                 }`}
                             >
                                 {dialog.confirmText || '确定'}

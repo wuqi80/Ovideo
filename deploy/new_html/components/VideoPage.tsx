@@ -81,7 +81,7 @@ const InsertEmptyCardButton: React.FC<{ onClick: () => void }> = ({ onClick }) =
     <button
         type="button"
         onClick={onClick}
-        className={`${INSERT_EMPTY_BTN_BASE_CLASSES} border-slate-600 hover:border-cyan-500 hover:bg-cyan-950/20 text-slate-500 hover:text-cyan-300`}
+        className={`${INSERT_EMPTY_BTN_BASE_CLASSES} border-n40 hover:border-primary hover:bg-primary-light text-n100 hover:text-primary`}
         title="在此处插入一张空白卡片"
     >
         <Plus className="w-3 h-3" /> 插入空卡
@@ -2151,8 +2151,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return (
             <div
                 key={group.uuid}
-                className={`bg-slate-800 rounded-lg border px-3 flex items-center gap-3 transition-all hover:border-slate-600 mb-2 h-16 ${
-                    status.selected ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-700'
+                className={`bg-n0 rounded-lg border px-3 flex items-center gap-3 transition-all hover:border-n40 mb-2 h-16 ${
+                    status.selected ? 'border-primary ring-1 ring-primary/30' : 'border-n40'
                 }`}
             >
                 {/* 拖拽占位（与左侧 GripVertical w-4 对齐，2026-05-20 Bug 1） */}
@@ -2164,13 +2164,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         type="checkbox"
                         checked={status.selected || false}
                         onChange={() => toggleTaskSelection(group.uuid)}
-                        className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-indigo-600 cursor-pointer"
+                        className="w-4 h-4 rounded bg-n0 border-n40 text-primary cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                    <span className="text-xs font-bold text-n300">#{index + 1}</span>
                 </div>
                 
                 {/* 视频缩略图/状态（与左侧 w-20 h-14 对齐） */}
-                <div className="w-20 h-14 shrink-0 bg-black rounded overflow-hidden border border-slate-700">
+                <div className="w-20 h-14 shrink-0 bg-n800 rounded overflow-hidden border border-n40">
                     {status.state === 'done' && videos.length > 0 ? (
                         <video 
                             src={videos[0]}
@@ -2182,12 +2182,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             onMouseLeave={(e) => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
                         />
                     ) : status.state === 'running' || status.state === 'processing' ? (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-900">
-                            <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+                        <div className="w-full h-full flex items-center justify-center bg-n20">
+                            <Loader2 className="w-5 h-5 animate-spin text-primary" />
                         </div>
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-900/50">
-                            <Film className="w-5 h-5 text-slate-600" />
+                        <div className="w-full h-full flex items-center justify-center bg-n20/50">
+                            <Film className="w-5 h-5 text-n100" />
                         </div>
                     )}
                 </div>
@@ -2195,36 +2195,36 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 {/* 类型和模型（与左侧 w-24 对齐） */}
                 <div className="flex flex-col gap-1 w-24 shrink-0">
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase text-center ${
-                        isPair ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
+                        isPair ? 'bg-p50 text-p400' : 'bg-b50 text-b400'
                     }`}>
                         {isPair ? 'Morph' : 'I2V'}
                     </span>
-                    <span className="text-[10px] text-slate-500 text-center truncate">
+                    <span className="text-[10px] text-n100 text-center truncate">
                         {videoService.getModelDisplayName(group.model)}
                     </span>
                 </div>
                 
                 {/* 提示词（只读） */}
-                <div className="flex-1 min-w-0 text-xs text-slate-400 truncate px-2">
+                <div className="flex-1 min-w-0 text-xs text-n300 truncate px-2">
                     {promptText || <span className="italic opacity-50">无描述...</span>}
                 </div>
                 
                 {/* 状态 */}
                 <div className="w-20 shrink-0 text-center">
                     {status.state === 'done' ? (
-                        <span className="text-xs text-green-400 flex items-center justify-center gap-1">
+                        <span className="text-xs text-success flex items-center justify-center gap-1">
                             <Check className="w-3 h-3" /> 完成
                         </span>
                     ) : status.state === 'running' || status.state === 'processing' ? (
-                        <span className="text-xs text-indigo-400 flex items-center justify-center gap-1">
+                        <span className="text-xs text-primary flex items-center justify-center gap-1">
                             <Loader2 className="w-3 h-3 animate-spin" /> {getElapsedTimeStr(group.uuid)}
                         </span>
                     ) : status.state === 'failed' ? (
-                        <span className="text-xs text-red-400 flex items-center justify-center gap-1">
+                        <span className="text-xs text-danger flex items-center justify-center gap-1">
                             <AlertCircle className="w-3 h-3" /> 失败
                         </span>
                     ) : (
-                        <span className="text-xs text-slate-500">等待</span>
+                        <span className="text-xs text-n100">等待</span>
                     )}
                 </div>
                 
@@ -2233,7 +2233,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <button
                         onClick={() => runTask(group.uuid)}
                         disabled={status.state === 'running' || status.state === 'processing'}
-                        className="p-1.5 bg-slate-700 hover:bg-indigo-600 text-white rounded transition-colors disabled:opacity-50"
+                        className="p-1.5 bg-n0 hover:bg-primary-hover text-n700 hover:text-white rounded transition-colors disabled:opacity-50"
                         title={status.state === 'done' ? '重做' : '生成'}
                     >
                         {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -2243,21 +2243,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <>
                             <button
                                 onClick={() => openUpscaleModal(group.uuid)}
-                                className="p-1.5 bg-purple-700 hover:bg-purple-600 text-white rounded transition-colors"
+                                className="p-1.5 bg-primary hover:bg-primary-hover text-white rounded transition-colors"
                                 title="放大"
                             >
                                 <Maximize className="w-3 h-3" />
                             </button>
                             <button
                                 onClick={() => openVoiceModal(group.uuid)}
-                                className="p-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded transition-colors"
+                                className="p-1.5 bg-warning hover:bg-warning text-white rounded transition-colors"
                                 title="配音"
                             >
                                 <Mic className="w-3 h-3" />
                             </button>
                             <button
                                 onClick={() => openEditModal(group.uuid)}
-                                className="p-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded transition-colors"
+                                className="p-1.5 bg-primary hover:bg-primary-hover text-white rounded transition-colors"
                                 title="编辑"
                             >
                                 <Scissors className="w-3 h-3" />
@@ -2286,14 +2286,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         onChange={(e) => onChangeParams({ ...params, prompt: e.target.value })}
                         placeholder={isPlaceholder ? '@ 选首帧...' : '描述动作、镜头...'}
                         rows={1}
-                        className="w-full bg-black/30 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none h-10 leading-tight"
+                        className="w-full bg-n20 border border-n40 rounded px-2 py-1 text-xs text-n700 focus:border-primary focus:outline-none resize-none h-10 leading-tight"
                     />
                 </div>
                 <MediaBadges params={params} />
                 <button
                     type="button"
                     onClick={onOpenDetail}
-                    className="p-1 text-slate-400 hover:text-cyan-300 transition-colors"
+                    className="p-1 text-n300 hover:text-primary transition-colors"
                     title="完整参数 / @-mention / 模式切换"
                     aria-label={`Seedance 详情 ${group.uuid}`}
                 >
@@ -2352,12 +2352,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDragDrop(e, index)}
-                className={`bg-slate-800 rounded-lg border px-3 flex items-center gap-3 transition-all hover:border-slate-600 mb-2 h-16 ${
-                    status.selected ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-700'
+                className={`bg-n0 rounded-lg border px-3 flex items-center gap-3 transition-all hover:border-n40 mb-2 h-16 ${
+                    status.selected ? 'border-primary ring-1 ring-primary/30' : 'border-n40'
                 }`}
             >
                 {/* 拖拽手柄 */}
-                <div className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400">
+                <div className="cursor-grab active:cursor-grabbing text-n100 hover:text-n300">
                     <GripVertical className="w-4 h-4" />
                 </div>
                 
@@ -2367,14 +2367,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         type="checkbox"
                         checked={status.selected || false}
                         onChange={() => toggleTaskSelection(group.uuid)}
-                        className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-indigo-600 cursor-pointer"
+                        className="w-4 h-4 rounded bg-n0 border-n40 text-primary cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                    <span className="text-xs font-bold text-n300">#{index + 1}</span>
                 </div>
                 
                 {/* 缩略图 */}
                 <div 
-                    className="w-20 h-14 shrink-0 bg-black rounded overflow-hidden cursor-pointer border border-slate-700 relative"
+                    className="w-20 h-14 shrink-0 bg-n800 rounded overflow-hidden cursor-pointer border border-n40 relative"
                     onClick={() => { if (img1.url) { setLightboxUrl(img1.url); setLightboxType('image'); } }}
                 >
                     {isPair && img2 ? (
@@ -2384,23 +2384,23 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </div>
                     ) : img1.isPlaceholder || !img1.url ? (
                         // Task 6：列表视图占位缩略图
-                        <div className="w-full h-full bg-slate-800 border border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500">
+                        <div className="w-full h-full bg-n0 border border-dashed border-n40 rounded flex items-center justify-center text-n100">
                             <ImageOff size={14} />
                         </div>
                     ) : (
                         <img src={img1.url} className="w-full h-full object-cover" />
                     )}
                     {img1.isUploading && (
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
+                        <div className="absolute inset-0 bg-n900/60 flex flex-col items-center justify-center">
                             <div className="text-[9px] text-white mb-1">{img1.uploadProgress ?? 0}%</div>
-                            <div className="w-14 h-1 bg-slate-700 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-500 transition-all duration-200 rounded-full" style={{ width: `${img1.uploadProgress ?? 0}%` }} />
+                            <div className="w-14 h-1 bg-n0 rounded-full overflow-hidden">
+                                <div className="h-full bg-primary transition-all duration-200 rounded-full" style={{ width: `${img1.uploadProgress ?? 0}%` }} />
                             </div>
                         </div>
                     )}
                     {img1.uploadFailed && (
-                        <div className="absolute inset-0 bg-red-900/60 flex items-center justify-center">
-                            <span className="text-[9px] text-red-300">上传失败</span>
+                        <div className="absolute inset-0 bg-r50 flex items-center justify-center">
+                            <span className="text-[9px] text-danger">上传失败</span>
                         </div>
                     )}
                 </div>
@@ -2408,14 +2408,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 {/* 类型和模型 */}
                 <div className="flex flex-col gap-1 w-24 shrink-0">
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase text-center ${
-                        isPair ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
+                        isPair ? 'bg-p50 text-p400' : 'bg-b50 text-b400'
                     }`}>
                         {isPair ? 'Morph' : 'I2V'}
                     </span>
                     <select
                         value={group.model}
                         onChange={(e) => updateTaskModel(group.uuid, e.target.value as videoService.VideoModel)}
-                        className="bg-slate-900 border border-slate-700 text-[10px] text-white rounded px-1 py-0.5 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer"
                     >
                         {videoService.ALL_MODELS.map(m => (
                             <option key={m} value={m}>{videoService.getModelDisplayName(m)}</option>
@@ -2444,14 +2444,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 : `${dsParams.resolution || '720P'} · ${dsParams.ratio || '16:9'}`;
                             return (
                                 <>
-                                    <span className="text-[9px] text-slate-400 px-1.5 py-0.5 bg-slate-800 rounded border border-slate-700 whitespace-nowrap">
+                                    <span className="text-[9px] text-n300 px-1.5 py-0.5 bg-n0 rounded border border-n40 whitespace-nowrap">
                                         {subLabel} · {refCount}图
                                     </span>
                                     <textarea
                                         value={dsParams.prompt || ''}
                                         onChange={(e) => setDashScopeParams(group.uuid, { ...dsParams, prompt: e.target.value })}
                                         placeholder="描述画面/动作（详情请切到卡片视图）"
-                                        className="flex-1 bg-black/30 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none h-10"
+                                        className="flex-1 bg-n20 border border-n40 rounded px-2 py-1 text-xs text-n700 focus:border-primary focus:outline-none resize-none h-10"
                                     />
                                 </>
                             );
@@ -2461,7 +2461,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             value={promptText}
                             onChange={(e) => updatePrompt(group.ids[0], e.target.value)}
                             placeholder={isPair ? '描述变化过程...' : '描述动作内容...'}
-                            className="flex-1 bg-black/30 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none h-10"
+                            className="flex-1 bg-n20 border border-n40 rounded px-2 py-1 text-xs text-n700 focus:border-primary focus:outline-none resize-none h-10"
                         />
                     )}
                 </div>
@@ -2469,19 +2469,19 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 {/* 状态 */}
                 <div className="w-20 shrink-0 text-center">
                     {status.state === 'done' ? (
-                        <span className="text-xs text-green-400 flex items-center justify-center gap-1">
+                        <span className="text-xs text-success flex items-center justify-center gap-1">
                             <Check className="w-3 h-3" /> 完成
                         </span>
                     ) : status.state === 'running' || status.state === 'processing' ? (
-                        <span className="text-xs text-indigo-400 flex items-center justify-center gap-1">
+                        <span className="text-xs text-primary flex items-center justify-center gap-1">
                             <Loader2 className="w-3 h-3 animate-spin" /> {getElapsedTimeStr(group.uuid)}
                         </span>
                     ) : status.state === 'failed' ? (
-                        <span className="text-xs text-red-400 flex items-center justify-center gap-1">
+                        <span className="text-xs text-danger flex items-center justify-center gap-1">
                             <AlertCircle className="w-3 h-3" /> 失败
                         </span>
                     ) : (
-                        <span className="text-xs text-slate-500">等待</span>
+                        <span className="text-xs text-n100">等待</span>
                     )}
                 </div>
                 
@@ -2490,7 +2490,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <button
                         onClick={() => runTask(group.uuid)}
                         disabled={status.state === 'running' || status.state === 'processing'}
-                        className="p-1.5 bg-slate-700 hover:bg-indigo-600 text-white rounded transition-colors disabled:opacity-50"
+                        className="p-1.5 bg-n0 hover:bg-primary-hover text-n700 hover:text-white rounded transition-colors disabled:opacity-50"
                         title={status.state === 'done' ? '重做' : '生成'}
                     >
                         {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
@@ -2500,21 +2500,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <>
                             <button
                                 onClick={() => openUpscaleModal(group.uuid)}
-                                className="p-1.5 bg-purple-700 hover:bg-purple-600 text-white rounded transition-colors"
+                                className="p-1.5 bg-primary hover:bg-primary-hover text-white rounded transition-colors"
                                 title="放大"
                             >
                                 <Maximize className="w-3 h-3" />
                             </button>
                             <button
                                 onClick={() => openVoiceModal(group.uuid)}
-                                className="p-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded transition-colors"
+                                className="p-1.5 bg-warning hover:bg-warning text-white rounded transition-colors"
                                 title="配音"
                             >
                                 <Mic className="w-3 h-3" />
                             </button>
                             <button
                                 onClick={() => openEditModal(group.uuid)}
-                                className="p-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded transition-colors"
+                                className="p-1.5 bg-primary hover:bg-primary-hover text-white rounded transition-colors"
                                 title="编辑"
                             >
                                 <Scissors className="w-3 h-3" />
@@ -2526,7 +2526,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {group.mergedFrom && group.mergedFrom.length > 0 ? (
                         <button
                             onClick={() => splitMergedCard(index)}
-                            className="p-1.5 bg-slate-700 hover:bg-amber-600 text-white rounded transition-colors"
+                            className="p-1.5 bg-n0 hover:bg-warning text-n700 hover:text-white rounded transition-colors"
                             title={`拆分为 ${group.mergedFrom.length} 张原始卡片`}
                         >
                             <Split className="w-3 h-3" />
@@ -2535,7 +2535,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <button
                             onClick={() => mergeWithNext(index)}
                             disabled={!canMergeWithNext(index)}
-                            className="p-1.5 bg-slate-700 hover:bg-teal-600 text-white rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="p-1.5 bg-n0 hover:bg-teal text-n700 hover:text-white rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                             title={canMergeWithNext(index) ? '与下一张合并（提示词追加、素材合并）' : '需与下一张相邻且同模型才能合并'}
                         >
                             <Combine className="w-3 h-3" />
@@ -2544,7 +2544,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
 
                     <button
                         onClick={() => removeTask(group.uuid)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                        className="p-1.5 text-n100 hover:text-danger hover:bg-r50 rounded transition-colors"
                         title="删除"
                     >
                         <X className="w-3 h-3" />
@@ -2577,27 +2577,27 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 onDragStart={(e) => handleDragStart(e, index)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDragDrop(e, index)}
-                className={`bg-slate-800 rounded-xl border border-slate-700 p-4 transition-all hover:border-slate-600 group mb-4 flex flex-col overflow-hidden ${cardHeight} ${
-                    seedanceCard ? 'border-cyan-700/40 bg-gradient-to-b from-slate-800 to-slate-900' : ''
+                className={`bg-n0 rounded-md border border-n40 p-4 transition-all hover:border-n40 shadow-card hover:shadow-atlas group mb-4 flex flex-col overflow-hidden ${cardHeight} ${
+                    seedanceCard ? 'border-primary/40 bg-gradient-to-b from-n0 to-n20' : ''
                 }`}
             >
                 {/* Header */}
-                <div className="flex justify-between items-center w-full mb-2 pb-2 border-b border-slate-700/50 shrink-0">
+                <div className="flex justify-between items-center w-full mb-2 pb-2 border-b border-n40 shrink-0">
                     <div className="flex items-center gap-2 flex-wrap">
                         {/* 拖拽手柄 - 明确显示 */}
-                        <div className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-400 mr-1">
+                        <div className="cursor-grab active:cursor-grabbing text-n100 hover:text-n300 mr-1">
                             <GripVertical className="w-4 h-4" />
                         </div>
                         {/* 2026-05-20 (Bug 2)：卡片视图也显示分镜编号，与列表视图 #N 一致；
                             对应 storyboard sort_order，没有 linkedImg 的卡退化用 index+1。 */}
-                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-200 mr-1 tabular-nums">
+                        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-n30 text-n700 mr-1 tabular-nums">
                             {(() => {
                                 const sortOrder = img1.sortOrder;
                                 return sortOrder != null ? `SB-${sortOrder + 1}` : `#${index + 1}`;
                             })()}
                         </span>
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase border mr-2 ${
-                            isPair ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                            isPair ? 'bg-p50 text-p400 border-p75' : 'bg-b50 text-b400 border-b75'
                         }`}>
                             {isPair ? 'Morph' : 'I2V'}
                         </span>
@@ -2606,7 +2606,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <select
                             value={group.model}
                             onChange={(e) => updateTaskModel(group.uuid, e.target.value as videoService.VideoModel)}
-                            className="bg-slate-900 border border-slate-700 text-[10px] text-white rounded px-1 py-0.5 focus:outline-none focus:border-indigo-500 cursor-pointer hover:bg-slate-700"
+                            className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer hover:bg-n0"
                         >
                             {videoService.ALL_MODELS.map(m => (
                                 <option key={m} value={m}>{videoService.getModelDisplayName(m)}</option>
@@ -2620,7 +2620,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 onChange={(e) => setTaskGroups(prev => prev.map(g => 
                                     g.uuid === group.uuid ? { ...g, shotType: e.target.value as videoService.ShotType } : g
                                 ))}
-                                className="bg-amber-900/30 border border-amber-600/50 text-[10px] text-amber-200 rounded px-1 py-0.5 focus:outline-none focus:border-amber-500 cursor-pointer hover:bg-amber-800/40"
+                                className="bg-y50 border border-warning/50 text-[10px] text-warning rounded px-1 py-0.5 focus:outline-none focus:border-warning cursor-pointer hover:bg-y75"
                             >
                                 <option value="multi">智能多镜头</option>
                                 <option value="single">单镜头</option>
@@ -2630,7 +2630,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     
                     <div className="flex items-center gap-2">
                         {img1.uploadTime && (
-                            <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                            <span className="text-[10px] text-n100 flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
                                 {videoService.formatUploadTime(img1.uploadTime)}
                             </span>
@@ -2638,7 +2638,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {isPair ? (
                             <button
                                 onClick={() => unlinkGroup(index)}
-                                className="text-xs text-slate-500 hover:text-red-400 p-1"
+                                className="text-xs text-n100 hover:text-danger p-1"
                                 title="拆分"
                             >
                                 <Unlink className="w-3.5 h-3.5" />
@@ -2646,7 +2646,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         ) : (
                             <button
                                 onClick={() => removeTask(group.uuid)}
-                                className="text-slate-500 hover:text-red-400 p-1"
+                                className="text-n100 hover:text-danger p-1"
                                 title="删除"
                             >
                                 <X className="w-3.5 h-3.5" />
@@ -2660,24 +2660,24 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {isPair && img2 ? (
                         <>
                             <div 
-                                className="flex-1 relative bg-black rounded-lg overflow-hidden border border-slate-600 cursor-zoom-in"
+                                className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
                                 onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
                             >
-                                <img src={img1.url} className={`w-full ${previewHeight} object-contain bg-black/50`} />
-                                <div className="absolute bottom-0 left-0 bg-black/60 text-white text-[10px] px-1">Start</div>
+                                <img src={img1.url} className={`w-full ${previewHeight} object-contain bg-n900/50`} />
+                                <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">Start</div>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-slate-500" />
+                            <ArrowRight className="w-4 h-4 text-n100" />
                             <div 
-                                className="flex-1 relative bg-black rounded-lg overflow-hidden border border-slate-600 cursor-zoom-in"
+                                className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
                                 onClick={() => { setLightboxUrl(img2.url); setLightboxType('image'); }}
                             >
-                                <img src={img2.url} className={`w-full ${previewHeight} object-contain bg-black/50`} />
-                                <div className="absolute bottom-0 left-0 bg-black/60 text-white text-[10px] px-1">End</div>
+                                <img src={img2.url} className={`w-full ${previewHeight} object-contain bg-n900/50`} />
+                                <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">End</div>
                             </div>
                         </>
                     ) : img1.isPlaceholder || !img1.url ? (
                         // 2026-05-25：空分镜占位卡改为可点击上传本地图片
-                        <label className={`relative w-full bg-slate-800 border border-dashed border-slate-600 hover:border-cyan-500 hover:bg-cyan-950/20 rounded-lg overflow-hidden flex flex-col items-center justify-center text-slate-500 cursor-pointer transition-colors ${previewHeight}`}>
+                        <label className={`relative w-full bg-n0 border border-dashed border-n40 hover:border-primary hover:bg-primary-light rounded-lg overflow-hidden flex flex-col items-center justify-center text-n100 cursor-pointer transition-colors ${previewHeight}`}>
                             <input
                                 type="file"
                                 accept="image/*"
@@ -2690,36 +2690,36 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             />
                             <ImageIcon size={20} />
                             <div className="text-[10px] mt-1">点击上传图片</div>
-                            <div className="text-[9px] mt-0.5 text-slate-600">或 @ 选首帧</div>
+                            <div className="text-[9px] mt-0.5 text-n100">或 @ 选首帧</div>
                         </label>
                     ) : (
                         <div 
-                            className="relative w-full bg-black rounded-lg overflow-hidden border border-slate-600 cursor-zoom-in group/img"
+                            className="relative w-full bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in group/img"
                             onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
                         >
-                            <img src={img1.url} className={`w-full ${previewHeight} object-contain bg-black/50`} />
+                            <img src={img1.url} className={`w-full ${previewHeight} object-contain bg-n900/50`} />
                             {/* 2026-05-25 #5：右上角"清空图"按钮——hover 时显示，点击后整卡退回空镜 */}
                             {!img1.isUploading && (
                                 <button
                                     type="button"
                                     title="清空图（恢复为空卡）"
                                     onClick={(e) => { e.stopPropagation(); clearTaskImage(group.uuid); }}
-                                    className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-red-600 rounded text-white opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                    className="absolute top-1 right-1 p-1 bg-n900/70 hover:bg-danger rounded text-white opacity-0 group-hover/img:opacity-100 transition-opacity"
                                 >
                                     <X className="w-3 h-3" />
                                 </button>
                             )}
                             {img1.isUploading && (
-                                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
+                                <div className="absolute inset-0 bg-n900/60 flex flex-col items-center justify-center">
                                     <div className="text-xs text-white mb-1">上传中 {img1.uploadProgress ?? 0}%</div>
-                                    <div className="w-2/3 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                        <div className="h-full bg-blue-500 transition-all duration-200 rounded-full" style={{ width: `${img1.uploadProgress ?? 0}%` }} />
+                                    <div className="w-2/3 h-1.5 bg-n0 rounded-full overflow-hidden">
+                                        <div className="h-full bg-primary transition-all duration-200 rounded-full" style={{ width: `${img1.uploadProgress ?? 0}%` }} />
                                     </div>
                                 </div>
                             )}
                             {img1.uploadFailed && (
-                                <div className="absolute inset-0 bg-red-900/60 flex items-center justify-center">
-                                    <span className="text-xs text-red-300">上传失败，点击重试</span>
+                                <div className="absolute inset-0 bg-r50 flex items-center justify-center">
+                                    <span className="text-xs text-danger">上传失败，点击重试</span>
                                 </div>
                             )}
                         </div>
@@ -2810,7 +2810,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const renderStatusBadge = () => {
             if (status.state === 'running') {
                 return (
-                    <div className="text-xs text-indigo-400 flex items-center gap-1">
+                    <div className="text-xs text-primary flex items-center gap-1">
                         <Loader2 className="w-3 h-3 animate-spin" />
                         {getElapsedTimeStr(group.uuid)}
                     </div>
@@ -2818,7 +2818,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }
             if (status.state === 'processing') {
                 return (
-                    <div className="text-xs text-purple-400 flex items-center gap-1">
+                    <div className="text-xs text-primary flex items-center gap-1">
                         <Loader2 className="w-3 h-3 animate-spin" />
                         处理中 {status.progress || 0}%
                     </div>
@@ -2826,7 +2826,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }
             if (status.state === 'done') {
                 return (
-                    <div className="text-xs text-green-400 flex items-center gap-1">
+                    <div className="text-xs text-success flex items-center gap-1">
                         <Check className="w-3 h-3" />
                         完成
                     </div>
@@ -2834,13 +2834,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }
             if (status.state === 'failed') {
                 return (
-                    <div className="text-xs text-red-400 flex items-center gap-1">
+                    <div className="text-xs text-danger flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
                         失败
                     </div>
                 );
             }
-            return <div className="text-xs text-slate-500">等待</div>;
+            return <div className="text-xs text-n100">等待</div>;
         };
         
         const renderVisual = () => {
@@ -2859,7 +2859,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 {videos.map((videoUrl, idx) => (
                                     <div 
                                         key={idx}
-                                        className="relative bg-black rounded border border-slate-700 group/video overflow-hidden"
+                                        className="relative bg-n800 rounded border border-n40 group/video overflow-hidden"
                                     >
                                         <video 
                                             src={videoUrl} 
@@ -2871,19 +2871,19 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                             onClick={() => { setLightboxUrl(videoUrl); setLightboxType('video'); }}
                                         />
                                         {/* 视频编号 - 左上角 */}
-                                        <span className="absolute top-1 left-1 bg-blue-600/90 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
+                                        <span className="absolute top-1 left-1 bg-primary/90 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
                                             #{idx + 1}
                                         </span>
                                         {/* 生成时间 - 左下角 */}
                                         {status.videoGenerateTimes && status.videoGenerateTimes[idx] && (
-                                            <span className="absolute bottom-1 left-1 bg-green-500/80 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
+                                            <span className="absolute bottom-1 left-1 bg-success/80 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
                                                 {status.videoGenerateTimes[idx]}s
                                             </span>
                                         )}
                                         {!isRunning && (
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); deleteVideo(group.uuid, idx); }}
-                                                className="absolute top-1 right-1 w-5 h-5 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity z-10"
+                                                className="absolute top-1 right-1 w-5 h-5 bg-danger hover:bg-danger text-white rounded-full flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity z-10"
                                                 title="删除此视频"
                                             >
                                                 <X className="w-3 h-3" />
@@ -2893,17 +2893,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 ))}
                                 {/* 运行中时显示loading网格 */}
                                 {isRunning && (
-                                    <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded border border-slate-700 flex flex-col items-center justify-center">
+                                    <div className="bg-gradient-to-br from-n30 to-n20 rounded border border-n40 flex flex-col items-center justify-center">
                                         <div className="relative w-8 h-8 mb-2">
                                             <div className="absolute inset-0 border-2 border-t-indigo-500 border-r-indigo-500 border-b-transparent border-l-transparent rounded-full animate-spin" />
                                         </div>
-                                        <div className="text-indigo-400 text-[10px] font-medium">生成中</div>
-                                        <div className="text-slate-500 text-[9px]">{status.progress || 0}%</div>
+                                        <div className="text-primary text-[10px] font-medium">生成中</div>
+                                        <div className="text-n100 text-[9px]">{status.progress || 0}%</div>
                                     </div>
                                 )}
                                 {/* 显示剩余空位 */}
                                 {!isRunning && videoCount < 12 && (
-                                    <div className="bg-slate-900 rounded border border-dashed border-slate-600 flex items-center justify-center text-slate-600 text-xs">
+                                    <div className="bg-n20 rounded border border-dashed border-n40 flex items-center justify-center text-n100 text-xs">
                                         +
                                     </div>
                                 )}
@@ -2916,7 +2916,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 const videoHeight = resultVisualHeight;
                 return (
                     <div 
-                        className={`relative w-full bg-black rounded-lg overflow-hidden border border-slate-700 ${videoHeight} group/video`}
+                        className={`relative w-full bg-n800 rounded-lg overflow-hidden border border-n40 ${videoHeight} group/video`}
                     >
                         <video 
                             src={videos[0]} 
@@ -2928,11 +2928,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             onClick={() => { setLightboxUrl(videos[0]); setLightboxType('video'); }}
                         />
                         {status.videoGenerateTimes && status.videoGenerateTimes[0] && (
-                            <span className="absolute top-2 right-2 bg-green-500/80 text-white text-[10px] px-2 py-0.5 rounded-full font-bold z-10 backdrop-blur-sm">
+                            <span className="absolute top-2 right-2 bg-success/80 text-white text-[10px] px-2 py-0.5 rounded-full font-bold z-10 backdrop-blur-sm">
                                 {status.videoGenerateTimes[0]}s
                             </span>
                         )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover/video:opacity-100 transition-opacity pointer-events-none">
+                        <div className="absolute inset-0 flex items-center justify-center bg-n900/50 opacity-0 group-hover/video:opacity-100 transition-opacity pointer-events-none">
                             <Maximize2 className="w-5 h-5 text-white" />
                         </div>
                     </div>
@@ -2943,12 +2943,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             if (status.state === 'running' || status.state === 'processing') {
                 const loadingHeight = resultVisualHeight;
                 return (
-                    <div className={`w-full ${loadingHeight} rounded border border-slate-700 flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800`}>
+                    <div className={`w-full ${loadingHeight} rounded border border-n40 flex flex-col items-center justify-center bg-gradient-to-br from-n30 to-n20`}>
                         <div className="relative w-12 h-12 mb-2">
                             <div className="absolute inset-0 border-2 border-t-indigo-500 border-r-indigo-500 border-b-transparent border-l-transparent rounded-full animate-spin" />
                         </div>
-                        <div className="text-indigo-400 text-sm font-medium">生成中...</div>
-                        <div className="text-slate-400 text-xs">{status.progress || 0}%</div>
+                        <div className="text-primary text-sm font-medium">生成中...</div>
+                        <div className="text-n300 text-xs">{status.progress || 0}%</div>
                     </div>
                 );
             }
@@ -2958,14 +2958,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const idleHeight = resultVisualHeight;
             if (isPlaceholderCard || !idleImg?.url) {
                 return (
-                    <div className={`w-full ${idleHeight} bg-slate-800/80 rounded border border-dashed border-slate-600 overflow-hidden flex flex-col items-center justify-center text-slate-500`}>
+                    <div className={`w-full ${idleHeight} bg-n30 rounded border border-dashed border-n40 overflow-hidden flex flex-col items-center justify-center text-n100`}>
                         <ImageIcon size={18} />
                         <div className="text-[9px] mt-1">等待上传</div>
                     </div>
                 );
             }
             return (
-                <div className={`w-full ${idleHeight} bg-black rounded border border-slate-700 overflow-hidden opacity-60 grayscale`}>
+                <div className={`w-full ${idleHeight} bg-n800 rounded border border-n40 overflow-hidden opacity-60 grayscale`}>
                     <img src={idleImg.url} className="w-full h-full object-contain" alt="" />
                 </div>
             );
@@ -2974,25 +2974,25 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return (
             <div
                 key={group.uuid}
-                className={`bg-slate-800 rounded-xl border p-4 mb-4 flex flex-col overflow-hidden ${cardHeight} ${
-                    seedanceCard ? 'bg-gradient-to-b from-slate-800 to-slate-900' : ''
+                className={`bg-n0 rounded-md border p-4 mb-4 shadow-card hover:shadow-atlas flex flex-col overflow-hidden ${cardHeight} ${
+                    seedanceCard ? 'bg-gradient-to-b from-n0 to-n20' : ''
                 } ${
-                    status.selected ? 'border-blue-500 ring-1 ring-blue-500/30' : (seedanceCard ? 'border-cyan-700/40' : 'border-slate-700')
+                    status.selected ? 'border-primary ring-1 ring-primary/30' : (seedanceCard ? 'border-primary/40' : 'border-n40')
                 }`}
             >
                 {/* Header - 包含状态和操作按钮 */}
-                <div className="flex justify-between items-center w-full pb-2 border-b border-slate-700/50 shrink-0">
+                <div className="flex justify-between items-center w-full pb-2 border-b border-n40 shrink-0">
                     <div className="flex items-center gap-2">
                         <input
                             type="checkbox"
                             checked={status.selected || false}
                             onChange={() => toggleTaskSelection(group.uuid)}
-                            className="w-4 h-4 rounded bg-slate-700 border-slate-600 text-indigo-600 cursor-pointer"
+                            className="w-4 h-4 rounded bg-n0 border-n40 text-primary cursor-pointer"
                         />
-                        <span className="text-xs font-bold text-slate-300">
+                        <span className="text-xs font-bold text-n700">
                             #{index + 1} {isPair ? 'Morph' : 'I2V'}
                         </span>
-                        <span className="text-[10px] px-1 rounded border border-slate-600 text-slate-400">
+                        <span className="text-[10px] px-1 rounded border border-n40 text-n300">
                             {videoService.getModelDisplayName(group.model)}
                         </span>
                         {renderStatusBadge()}
@@ -3003,7 +3003,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <button
                             onClick={() => runTask(group.uuid)}
                             disabled={status.state === 'running' || status.state === 'processing'}
-                            className="flex items-center gap-1 px-2 py-1 bg-slate-700 hover:bg-indigo-600 text-white text-[10px] rounded transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 px-2 py-1 bg-n0 hover:bg-primary-hover text-n700 hover:text-white text-[10px] rounded transition-colors disabled:opacity-50"
                         >
                             {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                             {status.state === 'done' ? '重做' : '生成'}
@@ -3015,21 +3015,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 {!status.isUpscaled ? (
                                     <button
                                         onClick={() => openUpscaleModal(group.uuid)}
-                                        className="flex items-center gap-1 px-2 py-1 bg-purple-700 hover:bg-purple-600 text-white text-[10px] rounded transition-colors"
+                                        className="flex items-center gap-1 px-2 py-1 bg-primary hover:bg-primary-hover text-white text-[10px] rounded transition-colors"
                                         title="视频放大"
                                     >
                                         <Maximize className="w-3 h-3" />
                                         放大
                                     </button>
                                 ) : (
-                                    <span className="flex items-center gap-1 px-2 py-1 bg-green-700 text-white text-[10px] rounded" title="已放大">
+                                    <span className="flex items-center gap-1 px-2 py-1 bg-success text-white text-[10px] rounded" title="已放大">
                                         <Check className="w-3 h-3" />
                                         已放大
                                     </span>
                                 )}
                                 <button
                                     onClick={() => openVoiceModal(group.uuid)}
-                                    className="flex items-center gap-1 px-2 py-1 bg-orange-700 hover:bg-orange-600 text-white text-[10px] rounded transition-colors"
+                                    className="flex items-center gap-1 px-2 py-1 bg-warning hover:bg-warning text-white text-[10px] rounded transition-colors"
                                     title="配音"
                                 >
                                     <Mic className="w-3 h-3" />
@@ -3037,7 +3037,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 </button>
                                 <button
                                     onClick={() => openEditModal(group.uuid)}
-                                    className="flex items-center gap-1 px-2 py-1 bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] rounded transition-colors"
+                                    className="flex items-center gap-1 px-2 py-1 bg-primary hover:bg-primary-hover text-white text-[10px] rounded transition-colors"
                                     title="编辑"
                                 >
                                     <Scissors className="w-3 h-3" />
@@ -3074,25 +3074,25 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const videos = status?.videos || [];
         
         return (
-            <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setUpscaleModalUuid(null)}>
-                <div className="bg-slate-800 rounded-xl p-6 w-[500px] max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center" onClick={() => setUpscaleModalUuid(null)}>
+                <div className="bg-n0 rounded-md p-6 w-[500px] max-h-[80vh] overflow-y-auto shadow-bottom" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                            <Maximize className="w-5 h-5 text-purple-400" />
+                        <h3 className="text-lg font-bold text-n800 flex items-center gap-2">
+                            <Maximize className="w-5 h-5 text-primary" />
                             视频放大
                         </h3>
-                        <button onClick={() => setUpscaleModalUuid(null)} className="text-slate-400 hover:text-white">
+                        <button onClick={() => setUpscaleModalUuid(null)} className="text-n300 hover:text-n800">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
                     
                     {videos.length > 1 && (
                         <div className="mb-4">
-                            <label className="text-sm text-slate-400 mb-2 block">选择要放大的视频</label>
+                            <label className="text-sm text-n300 mb-2 block">选择要放大的视频</label>
                             <select
                                 value={selectedVideoIndex}
                                 onChange={(e) => setSelectedVideoIndex(parseInt(e.target.value))}
-                                className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2"
+                                className="w-full bg-n20 border border-n40 text-n800 rounded px-3 py-2"
                             >
                                 {videos.map((_, idx) => (
                                     <option key={idx} value={idx}>视频 #{idx + 1}</option>
@@ -3104,26 +3104,26 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <div className="mb-4">
                         <video 
                             src={videos[selectedVideoIndex]}
-                            className="w-full rounded border border-slate-700"
+                            className="w-full rounded border border-n40"
                             controls
                         />
                     </div>
                     
-                    <div className="text-sm text-slate-400 mb-4 p-3 bg-slate-900/50 rounded">
+                    <div className="text-sm text-n300 mb-4 p-3 bg-n20/50 rounded">
                         <p>放大后的视频将提升至2倍分辨率，处理时间约5-10分钟。</p>
                     </div>
                     
                     <div className="flex justify-end gap-3">
                         <button
                             onClick={() => setUpscaleModalUuid(null)}
-                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded"
+                            className="px-4 py-2 bg-n0 hover:bg-n20 text-n700 rounded"
                         >
                             取消
                         </button>
                         <button
                             onClick={submitUpscale}
                             disabled={isSubmitting}
-                            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded flex items-center gap-2 disabled:opacity-50"
+                            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded flex items-center gap-2 disabled:opacity-50"
                         >
                             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                             开始放大
@@ -3140,25 +3140,25 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const videos = status?.videos || [];
         
         return (
-            <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setVoiceModalUuid(null)}>
-                <div className="bg-slate-800 rounded-xl p-6 w-[600px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center" onClick={() => setVoiceModalUuid(null)}>
+                <div className="bg-n0 rounded-md p-6 w-[600px] max-h-[90vh] overflow-y-auto shadow-bottom" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                            <Mic className="w-5 h-5 text-orange-400" />
+                        <h3 className="text-lg font-bold text-n800 flex items-center gap-2">
+                            <Mic className="w-5 h-5 text-warning" />
                             视频配音
                         </h3>
-                        <button onClick={() => setVoiceModalUuid(null)} className="text-slate-400 hover:text-white">
+                        <button onClick={() => setVoiceModalUuid(null)} className="text-n300 hover:text-n800">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
                     
                     {videos.length > 1 && (
                         <div className="mb-4">
-                            <label className="text-sm text-slate-400 mb-2 block">选择视频</label>
+                            <label className="text-sm text-n300 mb-2 block">选择视频</label>
                             <select
                                 value={selectedVideoIndex}
                                 onChange={(e) => setSelectedVideoIndex(parseInt(e.target.value))}
-                                className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2"
+                                className="w-full bg-n20 border border-n40 text-n800 rounded px-3 py-2"
                             >
                                 {videos.map((_, idx) => (
                                     <option key={idx} value={idx}>视频 #{idx + 1}</option>
@@ -3168,9 +3168,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     )}
                     
                     <div className="mb-4">
-                        <label className="text-sm text-slate-400 mb-2 block">上传音频文件</label>
+                        <label className="text-sm text-n300 mb-2 block">上传音频文件</label>
                         <div 
-                            className="border-2 border-dashed border-slate-600 rounded-lg p-4 text-center hover:border-orange-500 transition-colors cursor-pointer"
+                            className="border-2 border-dashed border-n40 rounded-lg p-4 text-center hover:border-warning transition-colors cursor-pointer"
                             onClick={() => audioInputRef.current?.click()}
                         >
                             <input
@@ -3181,12 +3181,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 className="hidden"
                             />
                             {voiceAudioFile ? (
-                                <div className="flex items-center justify-center gap-2 text-orange-400">
+                                <div className="flex items-center justify-center gap-2 text-warning">
                                     <Music className="w-5 h-5" />
                                     <span>{voiceAudioFile.name}</span>
                                 </div>
                             ) : (
-                                <div className="text-slate-500">
+                                <div className="text-n100">
                                     <Upload className="w-8 h-8 mx-auto mb-2" />
                                     <p>点击或拖拽上传音频文件</p>
                                 </div>
@@ -3196,26 +3196,26 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     
                     {voiceAudioFile && (
                         <div className="mb-4">
-                            <label className="text-sm text-slate-400 mb-2 block">音频裁剪（取5秒）</label>
+                            <label className="text-sm text-n300 mb-2 block">音频裁剪（取5秒）</label>
                             <div className="flex items-center gap-3">
                                 <div className="flex-1">
-                                    <label className="text-xs text-slate-500">起始时间(秒)</label>
+                                    <label className="text-xs text-n100">起始时间(秒)</label>
                                     <input
                                         type="number"
                                         value={voiceStartTime}
                                         onChange={(e) => setVoiceStartTime(parseFloat(e.target.value) || 0)}
                                         min={0}
                                         step={0.1}
-                                        className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2"
+                                        className="w-full bg-n20 border border-n40 text-n800 rounded px-3 py-2"
                                     />
                                 </div>
                                 <div className="flex-1">
-                                    <label className="text-xs text-slate-500">结束时间(秒)</label>
+                                    <label className="text-xs text-n100">结束时间(秒)</label>
                                     <input
                                         type="number"
                                         value={voiceStartTime + 5}
                                         disabled
-                                        className="w-full bg-slate-900 border border-slate-700 text-slate-500 rounded px-3 py-2"
+                                        className="w-full bg-n20 border border-n40 text-n100 rounded px-3 py-2"
                                     />
                                 </div>
                             </div>
@@ -3223,26 +3223,26 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     )}
                     
                     <div className="mb-4">
-                        <label className="text-sm text-slate-400 mb-2 block">配音提示词（可选）</label>
+                        <label className="text-sm text-n300 mb-2 block">配音提示词（可选）</label>
                         <textarea
                             value={voicePrompt}
                             onChange={(e) => setVoicePrompt(e.target.value)}
                             placeholder="例如：生动的表情、自然的口型同步"
-                            className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 h-20 resize-none"
+                            className="w-full bg-n20 border border-n40 text-n800 rounded px-3 py-2 h-20 resize-none"
                         />
                     </div>
                     
                     <div className="flex justify-end gap-3">
                         <button
                             onClick={() => setVoiceModalUuid(null)}
-                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded"
+                            className="px-4 py-2 bg-n0 hover:bg-n20 text-n700 rounded"
                         >
                             取消
                         </button>
                         <button
                             onClick={submitVoice}
                             disabled={isSubmitting || !voiceAudioFile}
-                            className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded flex items-center gap-2 disabled:opacity-50"
+                            className="px-4 py-2 bg-warning hover:bg-warning text-white rounded flex items-center gap-2 disabled:opacity-50"
                         >
                             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                             开始配音
@@ -3260,25 +3260,25 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const currentVideoUrl = videos[selectedVideoIndex] || videos[0] || '';
         
         return (
-            <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setEditModalUuid(null)}>
-                <div className="bg-slate-800 rounded-xl p-6 w-[700px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center" onClick={() => setEditModalUuid(null)}>
+                <div className="bg-n0 rounded-md p-6 w-[700px] max-h-[90vh] overflow-y-auto shadow-bottom" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                            <Scissors className="w-5 h-5 text-cyan-400" />
+                        <h3 className="text-lg font-bold text-n800 flex items-center gap-2">
+                            <Scissors className="w-5 h-5 text-primary" />
                             视频编辑
                         </h3>
-                        <button onClick={() => setEditModalUuid(null)} className="text-slate-400 hover:text-white">
+                        <button onClick={() => setEditModalUuid(null)} className="text-n300 hover:text-n800">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
                     
                     {videos.length > 1 && (
                         <div className="mb-4">
-                            <label className="text-sm text-slate-400 mb-2 block">选择视频</label>
+                            <label className="text-sm text-n300 mb-2 block">选择视频</label>
                             <select
                                 value={selectedVideoIndex}
                                 onChange={(e) => setSelectedVideoIndex(parseInt(e.target.value))}
-                                className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2"
+                                className="w-full bg-n20 border border-n40 text-n800 rounded px-3 py-2"
                             >
                                 {videos.map((_, idx) => (
                                     <option key={idx} value={idx}>视频 #{idx + 1}</option>
@@ -3291,17 +3291,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <video 
                             ref={editVideoRef}
                             src={currentVideoUrl}
-                            className="w-full rounded border border-slate-700"
+                            className="w-full rounded border border-n40"
                             controls
                         />
                     </div>
                     
                     {/* 时间裁剪控制 */}
-                    <div className="mb-4 p-4 bg-slate-900/50 rounded-lg">
-                        <h4 className="text-sm font-medium text-white mb-3">视频裁剪</h4>
+                    <div className="mb-4 p-4 bg-n20/50 rounded-lg">
+                        <h4 className="text-sm font-medium text-n800 mb-3">视频裁剪</h4>
                         <div className="grid grid-cols-2 gap-4 mb-3">
                             <div>
-                                <label className="text-xs text-slate-500 block mb-1">开始时间(秒)</label>
+                                <label className="text-xs text-n100 block mb-1">开始时间(秒)</label>
                                 <div className="flex gap-2">
                                     <input
                                         type="number"
@@ -3309,18 +3309,18 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                         onChange={(e) => setCropStartTime(parseFloat(e.target.value) || 0)}
                                         min={0}
                                         step={0.1}
-                                        className="flex-1 bg-slate-900 border border-slate-700 text-white rounded px-3 py-2"
+                                        className="flex-1 bg-n20 border border-n40 text-n800 rounded px-3 py-2"
                                     />
                                     <button
                                         onClick={setCurrentTimeAsStart}
-                                        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
+                                        className="px-3 py-2 bg-n0 hover:bg-n20 text-n700 rounded text-xs"
                                     >
                                         当前
                                     </button>
                                 </div>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-500 block mb-1">结束时间(秒)</label>
+                                <label className="text-xs text-n100 block mb-1">结束时间(秒)</label>
                                 <div className="flex gap-2">
                                     <input
                                         type="number"
@@ -3328,11 +3328,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                         onChange={(e) => setCropEndTime(parseFloat(e.target.value) || 0)}
                                         min={0}
                                         step={0.1}
-                                        className="flex-1 bg-slate-900 border border-slate-700 text-white rounded px-3 py-2"
+                                        className="flex-1 bg-n20 border border-n40 text-n800 rounded px-3 py-2"
                                     />
                                     <button
                                         onClick={setCurrentTimeAsEnd}
-                                        className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
+                                        className="px-3 py-2 bg-n0 hover:bg-n20 text-n700 rounded text-xs"
                                     >
                                         当前
                                     </button>
@@ -3342,13 +3342,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <div className="flex gap-2">
                             <button
                                 onClick={() => seekToTime(cropStartTime)}
-                                className="flex-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
+                                className="flex-1 px-3 py-1.5 bg-n0 hover:bg-n20 text-n700 rounded text-xs"
                             >
                                 跳到开始
                             </button>
                             <button
                                 onClick={() => seekToTime(cropEndTime)}
-                                className="flex-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs"
+                                className="flex-1 px-3 py-1.5 bg-n0 hover:bg-n20 text-n700 rounded text-xs"
                             >
                                 跳到结束
                             </button>
@@ -3356,29 +3356,29 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     </div>
                     
                     {/* 抽帧功能 */}
-                    <div className="mb-4 p-4 bg-slate-900/50 rounded-lg">
-                        <h4 className="text-sm font-medium text-white mb-3">抽取帧</h4>
+                    <div className="mb-4 p-4 bg-n20/50 rounded-lg">
+                        <h4 className="text-sm font-medium text-n800 mb-3">抽取帧</h4>
                         <button
                             onClick={extractCurrentFrame}
-                            className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded flex items-center justify-center gap-2"
+                            className="w-full px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded flex items-center justify-center gap-2"
                         >
                             <ImageIcon className="w-4 h-4" />
                             抽取当前帧为图片
                         </button>
-                        <p className="text-xs text-slate-500 mt-2">抽取的图片将添加到左侧分镜板</p>
+                        <p className="text-xs text-n100 mt-2">抽取的图片将添加到左侧分镜板</p>
                     </div>
                     
                     <div className="flex justify-end gap-3">
                         <button
                             onClick={() => setEditModalUuid(null)}
-                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded"
+                            className="px-4 py-2 bg-n0 hover:bg-n20 text-n700 rounded"
                         >
                             取消
                         </button>
                         <button
                             onClick={submitCrop}
                             disabled={isSubmitting}
-                            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded flex items-center gap-2 disabled:opacity-50"
+                            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded flex items-center gap-2 disabled:opacity-50"
                         >
                             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                             裁剪视频
@@ -3393,31 +3393,31 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     if (isLoading) {
         return (
-            <div className="flex-1 flex items-center justify-center bg-slate-900">
+            <div className="flex-1 flex items-center justify-center bg-n20">
                 <div className="text-center">
-                    <Loader2 className="w-12 h-12 animate-spin text-indigo-500 mx-auto mb-4" />
-                    <p className="text-slate-400">加载工作区...</p>
+                    <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+                    <p className="text-n300">加载工作区...</p>
                 </div>
             </div>
         );
     }
     
     return (
-        <div className="flex-1 flex flex-col bg-slate-900 text-white overflow-hidden">
+        <div className="flex-1 flex flex-col bg-n20 text-n800 overflow-hidden">
             {/* Toast消息 */}
             {toast && (
-                <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 bg-slate-800 border border-slate-600 text-white rounded-lg shadow-lg">
+                <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 bg-n0 border border-n40 text-n800 rounded-lg shadow-bottom">
                     {toast}
                 </div>
             )}
             
             {/* 工具栏 - 固定52px高度 */}
-            <div className="h-[52px] flex-shrink-0 px-4 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between">
+            <div className="h-[52px] flex-shrink-0 px-4 border-b border-n40 bg-n30 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     {/* 上传按钮组 */}
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-colors"
                     >
                         <Upload className="w-3.5 h-3.5" />
                         批量上传
@@ -3433,7 +3433,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     
                     <button
                         onClick={() => videoInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-bold transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-colors"
                     >
                         <Video className="w-3.5 h-3.5" />
                         上传视频
@@ -3447,24 +3447,24 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     />
                     
                     {/* 视图切换 */}
-                    <div className="h-6 w-px bg-slate-600 mx-1" />
+                    <div className="h-6 w-px bg-n40 mx-1" />
                     
-                    <div className="flex items-center bg-slate-700 rounded-lg p-1">
+                    <div className="flex items-center bg-n0 rounded-lg p-1">
                         <button
                             onClick={() => setViewMode('card')}
-                            className={`p-1.5 rounded ${viewMode === 'card' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}
+                            className={`p-1.5 rounded ${viewMode === 'card' ? 'bg-primary text-white' : 'text-n300'}`}
                         >
                             <LayoutGrid className="w-4 h-4" />
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}
+                            className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-primary text-white' : 'text-n300'}`}
                         >
                             <List className="w-4 h-4" />
                         </button>
                     </div>
                     
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-n300">
                         {taskGroups.length} 任务
                     </span>
 
@@ -3474,7 +3474,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             type="button"
                             onClick={() => setSyncModalOpen(true)}
                             title="比对当前 storyboard 与工作区，按需同步"
-                            className="ml-2 p-1 text-slate-300 hover:text-white"
+                            className="ml-2 p-1 text-n700 hover:text-n800"
                         >
                             <RotateCw size={14} />
                         </button>
@@ -3485,7 +3485,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 选择和批量操作 */}
                     <button
                         onClick={selectAll}
-                        className="flex items-center gap-1 text-xs text-slate-400 hover:text-white"
+                        className="flex items-center gap-1 text-xs text-n300 hover:text-n800"
                     >
                         {taskGroups.every(g => tasksStatus[g.uuid]?.selected) ? (
                             <CheckSquare className="w-3.5 h-3.5" />
@@ -3495,11 +3495,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         全选
                     </button>
                     
-                    <div className="h-5 w-px bg-slate-600 mx-1"></div>
+                    <div className="h-5 w-px bg-n40 mx-1"></div>
                     
                     <button
                         onClick={batchUpscale}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded transition-colors"
                     >
                         <Maximize className="w-3.5 h-3.5" />
                         批量放大
@@ -3508,7 +3508,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <button
                         onClick={runAllSelected}
                         disabled={!taskGroups.some(g => tasksStatus[g.uuid]?.selected)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-n0 hover:bg-n20 text-n700 text-xs font-bold rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         <Play className="w-3.5 h-3.5" />
                         执行选中
@@ -3516,7 +3516,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     
                     <button
                         onClick={runAllPending}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded shadow-sm transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-success hover:bg-success text-white text-xs font-bold rounded shadow-sm transition-colors"
                     >
                         <Play className="w-3.5 h-3.5 fill-current" />
                         批量执行
@@ -3524,7 +3524,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     
                     <button
                         onClick={clearAll}
-                        className="flex items-center gap-1 px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded text-xs transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 text-danger hover:text-danger hover:bg-r50 rounded text-xs transition-colors"
                     >
                         <Trash2 className="w-3.5 h-3.5" />
                         清空
@@ -3543,11 +3543,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 左侧列表 - 隐藏滚动条 */}
                     <div 
                         ref={leftPanelRef}
-                        className="w-1/2 p-4 overflow-y-auto border-r border-slate-700 scrollbar-hide"
+                        className="w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                     >
                         {sortedTaskGroups.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                            <div className="h-full flex flex-col items-center justify-center text-n100">
                                 <ImageIcon className="w-16 h-16 mb-4 opacity-20" />
                                 <p className="text-sm">拖拽图片或 Ctrl+V 粘贴</p>
                             </div>
@@ -3561,7 +3561,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         className="w-1/2 p-4 overflow-y-auto scrollbar-thin"
                     >
                         {sortedTaskGroups.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                            <div className="h-full flex flex-col items-center justify-center text-n100">
                                 <Film className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-sm">等待任务配置...</p>
                             </div>
@@ -3580,11 +3580,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 左侧：分镜板 - 隐藏滚动条 */}
                     <div 
                         ref={leftPanelRef}
-                        className="w-1/2 p-4 overflow-y-auto border-r border-slate-700 scrollbar-hide"
+                        className="w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                     >
                         {sortedTaskGroups.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                            <div className="h-full flex flex-col items-center justify-center text-n100">
                                 <ImageIcon className="w-16 h-16 mb-4 opacity-20" />
                                 <p className="text-sm">拖拽图片或 Ctrl+V 粘贴</p>
                             </div>
@@ -3606,7 +3606,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                             <div className="h-[18px] -mt-3 mb-2 relative pointer-events-none">
                                                 <button
                                                     onClick={() => linkGroups(originalIndex)}
-                                                    className="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 hover:bg-purple-600 text-slate-400 hover:text-white border border-slate-600 hover:border-purple-500 rounded-full p-1 transition-all shadow-lg hover:scale-110 z-10"
+                                                    className="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-n0 hover:bg-primary-hover text-n300 hover:text-white border border-n40 hover:border-primary rounded-full p-1 transition-all shadow-lg hover:scale-110 z-10"
                                                     title="合并为首尾帧任务"
                                                 >
                                                     <Link className="w-3 h-3" />
@@ -3628,7 +3628,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         className="w-1/2 p-4 overflow-y-auto scrollbar-thin"
                     >
                         {sortedTaskGroups.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                            <div className="h-full flex flex-col items-center justify-center text-n100">
                                 <Film className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-sm">等待任务配置...</p>
                             </div>
@@ -3662,17 +3662,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 2026-05-25 #4 — 新增本地上传按钮：与 Seedance 选素材 UX 对齐 */}
             {dashScopePicker && (
                 <div
-                    className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+                    className="fixed inset-0 z-50 bg-n900/85 flex items-center justify-center p-4"
                     onClick={() => setDashScopePicker(null)}
                 >
                     <div
-                        className="bg-slate-900 border border-slate-700 rounded-lg max-w-3xl w-full max-h-[80vh] overflow-y-auto p-4"
+                        className="bg-n20 border border-n40 rounded-lg max-w-3xl w-full max-h-[80vh] overflow-y-auto p-4 shadow-bottom"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-semibold text-slate-200">选择 / 替换图片</h3>
+                            <h3 className="text-sm font-semibold text-n700">选择 / 替换图片</h3>
                             <div className="flex items-center gap-2">
-                                <label className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] rounded cursor-pointer inline-flex items-center gap-1">
+                                <label className="px-2 py-1 bg-primary hover:bg-primary-hover text-white text-[11px] rounded cursor-pointer inline-flex items-center gap-1">
                                     <Upload className="w-3 h-3" /> 上传新图
                                     <input
                                         type="file"
@@ -3699,21 +3699,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     />
                                 </label>
                                 <button
-                                    className="text-slate-400 hover:text-white"
+                                    className="text-n300 hover:text-n800"
                                     onClick={() => setDashScopePicker(null)}
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
                         </div>
-                        <p className="text-[11px] text-slate-500 mb-3">
+                        <p className="text-[11px] text-n100 mb-3">
                             从已上传的素材中选一张，或点击右上角"上传新图"上传本地文件后立即替换。
                         </p>
                         {(() => {
                             const candidates = uploadedImages.filter(img => img.url && !img.isPlaceholder);
                             if (candidates.length === 0) {
                                 return (
-                                    <div className="text-center text-slate-500 py-12 text-sm">
+                                    <div className="text-center text-n100 py-12 text-sm">
                                         当前会话还没有可选的图片，请点击"上传新图"或从分镜导入。
                                     </div>
                                 );
@@ -3732,10 +3732,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                                 });
                                                 setDashScopePicker(null);
                                             }}
-                                            className="relative aspect-video rounded border border-slate-700 hover:border-indigo-500 overflow-hidden bg-black"
+                                            className="relative aspect-video rounded border border-n40 hover:border-primary overflow-hidden bg-n800"
                                         >
                                             <img src={img.url} className="w-full h-full object-cover" />
-                                            <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/60 text-[9px] text-slate-300 truncate">
+                                            <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-n900/60 text-[9px] text-n700 truncate">
                                                 {img.filename || img.id}
                                             </div>
                                         </button>
@@ -3750,11 +3750,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             {/* Lightbox */}
             {lightboxUrl && (
                 <div 
-                    className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+                    className="fixed inset-0 z-50 bg-n900/90 flex items-center justify-center"
                     onClick={() => setLightboxUrl(null)}
                 >
                     <button
-                        className="absolute top-4 right-4 text-white hover:text-gray-300"
+                        className="absolute top-4 right-4 text-white hover:text-n300"
                         onClick={() => setLightboxUrl(null)}
                     >
                         <X className="w-8 h-8" />
@@ -3762,7 +3762,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <a
                         href={lightboxUrl}
                         download
-                        className="absolute top-4 right-16 text-white hover:text-gray-300"
+                        className="absolute top-4 right-16 text-white hover:text-n300"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <Download className="w-8 h-8" />

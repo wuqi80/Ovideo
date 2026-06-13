@@ -126,37 +126,37 @@ export const AdminOrganizationsTab: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-900 border border-gray-800 rounded">
-        <Building2 size={14} className="text-indigo-400" />
+      <div className="flex flex-wrap items-center gap-2 p-3 bg-n0 border border-n40 rounded shadow-card">
+        <Building2 size={14} className="text-primary" />
         <input
           value={keyword}
           onChange={e => setKeyword(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') reload(); }}
           placeholder="搜索名称 / 描述… (Enter)"
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-64"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-64 placeholder:text-n100"
         />
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as any)}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs"
         >
           <option value="">全部状态</option>
           <option value="active">active</option>
           <option value="archived">archived</option>
         </select>
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700">
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20">
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
         <button
           onClick={() => setShowCreate(true)}
-          className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs"
+          className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs"
         ><Plus size={12} />创建组织</button>
-        <span className="text-xs text-gray-500">{orgs.length} 个组织</span>
+        <span className="text-xs text-n100">{orgs.length} 个组织</span>
       </div>
 
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded scrollbar-atlas">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="w-6"></th>
               <th className="text-left p-2">组织</th>
@@ -170,41 +170,41 @@ export const AdminOrganizationsTab: React.FC = () => {
           <tbody>
             {orgs.map(o => (
               <React.Fragment key={o.org_id}>
-                <tr className="border-t border-gray-800/60 hover:bg-gray-900/30">
+                <tr className="border-t border-n40 hover:bg-n20">
                   <td className="p-2">
                     <button
                       onClick={() => setExpanded(expanded === o.org_id ? null : o.org_id)}
-                      className="text-gray-500 hover:text-gray-300"
+                      className="text-n100 hover:text-n700"
                     >
                       {expanded === o.org_id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </button>
                   </td>
                   <td className="p-2">
-                    <div className="text-gray-200 font-medium">{o.name}</div>
-                    <div className="text-[10px] text-gray-500 font-mono">{o.org_id}</div>
-                    {o.description && <div className="text-[10px] text-gray-500">{o.description}</div>}
+                    <div className="text-n700 font-medium">{o.name}</div>
+                    <div className="text-[10px] text-n100 font-mono">{o.org_id}</div>
+                    {o.description && <div className="text-[10px] text-n100">{o.description}</div>}
                   </td>
-                  <td className="p-2 text-gray-300">{o.owner_name || o.owner_user_id}</td>
-                  <td className="p-2 text-gray-300">{o.member_count ?? '-'}</td>
+                  <td className="p-2 text-n700">{o.owner_name || o.owner_user_id}</td>
+                  <td className="p-2 text-n700">{o.member_count ?? '-'}</td>
                   <td className="p-2">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                       o.status === 'active'
-                        ? 'bg-emerald-900/40 text-emerald-300'
-                        : 'bg-gray-800 text-gray-400'
+                        ? 'bg-success-light text-success'
+                        : 'bg-n30 text-n300'
                     }`}>{o.status}</span>
                   </td>
-                  <td className="p-2 text-gray-500 text-[10px]">
+                  <td className="p-2 text-n100 text-[10px]">
                     {o.created_at ? new Date(o.created_at).toLocaleString('zh-CN') : '-'}
                   </td>
                   <td className="p-2">
                     <button
                       onClick={() => handleDelete(o)}
-                      className="px-2 py-0.5 text-[10px] rounded bg-red-900/40 hover:bg-red-900/70 text-red-200"
+                      className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r75 text-danger"
                     >删除</button>
                   </td>
                 </tr>
                 {expanded === o.org_id && (
-                  <tr className="bg-gray-900/40">
+                  <tr className="bg-n20">
                     <td colSpan={7} className="p-3">
                       <MembersPanel orgId={o.org_id} ownerUserId={o.owner_user_id} users={users} />
                     </td>
@@ -213,7 +213,7 @@ export const AdminOrganizationsTab: React.FC = () => {
               </React.Fragment>
             ))}
             {!orgs.length && (
-              <tr><td colSpan={7} className="text-center py-6 text-gray-500">
+              <tr><td colSpan={7} className="text-center py-6 text-n100">
                 {loading ? '加载中…' : '暂无组织 — 点右上角「创建组织」'}
               </td></tr>
             )}
@@ -222,28 +222,28 @@ export const AdminOrganizationsTab: React.FC = () => {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 w-96 space-y-3">
+        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
+          <div className="bg-n0 border border-n40 rounded-lg p-4 w-96 space-y-3 shadow-bottom">
             <div className="flex justify-between items-center">
               <div className="text-sm font-medium">创建组织</div>
-              <button onClick={() => setShowCreate(false)} className="text-gray-500"><X size={14} /></button>
+              <button onClick={() => setShowCreate(false)} className="text-n100"><X size={14} /></button>
             </div>
             <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-wider">组织名称</label>
+              <label className="text-[10px] text-n100 uppercase tracking-wider">组织名称</label>
               <input
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 placeholder="例如：内容运营组"
-                className="mt-1 w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
+                className="mt-1 w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm placeholder:text-n100"
                 autoFocus
               />
             </div>
             <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-wider">Owner（成员管理员）</label>
+              <label className="text-[10px] text-n100 uppercase tracking-wider">Owner（成员管理员）</label>
               <select
                 value={newOwner}
                 onChange={e => setNewOwner(e.target.value)}
-                className="mt-1 w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
+                className="mt-1 w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
               >
                 <option value="">— 选择 owner —</option>
                 {users.map(u => (
@@ -254,17 +254,17 @@ export const AdminOrganizationsTab: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-wider">描述（可选）</label>
+              <label className="text-[10px] text-n100 uppercase tracking-wider">描述（可选）</label>
               <textarea
                 value={newDesc}
                 onChange={e => setNewDesc(e.target.value)}
-                className="mt-1 w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm h-20"
+                className="mt-1 w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm h-20 placeholder:text-n100"
               />
             </div>
             <button
               onClick={handleCreate}
               disabled={submitting}
-              className="w-full px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 text-sm"
+              className="w-full px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white disabled:bg-n0 text-sm"
             >{submitting ? '创建中…' : '创建'}</button>
           </div>
         </div>
@@ -342,14 +342,14 @@ const MembersPanel: React.FC<{
   const candidateUsers = users.filter(u => !memberUserIds.has(u.id || u.user_id));
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded p-3 space-y-3">
-      <div className="flex items-center gap-2 text-xs text-gray-400">
+    <div className="bg-n0 border border-n40 rounded p-3 space-y-3 shadow-card">
+      <div className="flex items-center gap-2 text-xs text-n300">
         <UserPlus size={12} />
         <span>添加成员：</span>
         <select
           value={newUserId}
           onChange={e => setNewUserId(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-56"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-56"
         >
           <option value="">— 选择用户 —</option>
           {candidateUsers.map(u => (
@@ -361,7 +361,7 @@ const MembersPanel: React.FC<{
         <select
           value={newRole}
           onChange={e => setNewRole(e.target.value as 'admin' | 'member')}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs"
         >
           <option value="member">member</option>
           <option value="admin">admin</option>
@@ -369,17 +369,17 @@ const MembersPanel: React.FC<{
         <button
           onClick={handleAdd}
           disabled={submitting}
-          className="px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 text-xs"
+          className="px-3 py-1 rounded bg-primary hover:bg-primary-hover text-white disabled:bg-n0 text-xs"
         >{submitting ? '添加中…' : '添加'}</button>
         <button
           onClick={reload}
-          className="p-1 rounded bg-gray-800 hover:bg-gray-700"
+          className="p-1 rounded bg-n0 hover:bg-n20"
           title="刷新"
         ><RefreshCw size={11} className={loading ? 'animate-spin' : ''} /></button>
       </div>
 
       <table className="w-full text-xs">
-        <thead className="bg-gray-900/60 text-gray-500">
+        <thead className="bg-n20 text-n100">
           <tr>
             <th className="text-left p-2">用户名</th>
             <th className="text-left p-2">邮箱</th>
@@ -390,17 +390,17 @@ const MembersPanel: React.FC<{
         </thead>
         <tbody>
           {members.map(m => (
-            <tr key={m.user_id} className="border-t border-gray-800/60">
+            <tr key={m.user_id} className="border-t border-n40">
               <td className="p-2">
-                <div className="text-gray-200">{m.username || m.user_id}</div>
-                <div className="text-[10px] text-gray-500 font-mono">{m.user_id}</div>
+                <div className="text-n700">{m.username || m.user_id}</div>
+                <div className="text-[10px] text-n100 font-mono">{m.user_id}</div>
               </td>
-              <td className="p-2 text-gray-400">{m.email || '-'}</td>
+              <td className="p-2 text-n300">{m.email || '-'}</td>
               <td className="p-2">
                 <select
                   value={m.role}
                   onChange={e => handleSetRole(m, e.target.value as any)}
-                  className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs"
+                  className="bg-n0 border border-n40 rounded px-1 py-0.5 text-xs"
                   disabled={m.user_id === ownerUserId && m.role === 'owner'}
                   title={m.user_id === ownerUserId ? 'owner 角色不能改（请先转让 owner）' : ''}
                 >
@@ -409,7 +409,7 @@ const MembersPanel: React.FC<{
                   <option value="member">member</option>
                 </select>
               </td>
-              <td className="p-2 text-gray-500 text-[10px]">
+              <td className="p-2 text-n100 text-[10px]">
                 {m.joined_at ? new Date(m.joined_at).toLocaleString('zh-CN') : '-'}
               </td>
               <td className="p-2">
@@ -417,13 +417,13 @@ const MembersPanel: React.FC<{
                   onClick={() => handleRemove(m)}
                   disabled={m.user_id === ownerUserId}
                   title={m.user_id === ownerUserId ? '不能删除 owner' : ''}
-                  className="px-2 py-0.5 text-[10px] rounded bg-red-900/40 hover:bg-red-900/70 text-red-200 disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                  className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r75 text-danger disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-1"
                 ><Trash2 size={10} />移除</button>
               </td>
             </tr>
           ))}
           {!members.length && (
-            <tr><td colSpan={5} className="text-center py-4 text-gray-500">
+            <tr><td colSpan={5} className="text-center py-4 text-n100">
               {loading ? '加载成员…' : '暂无成员'}
             </td></tr>
           )}

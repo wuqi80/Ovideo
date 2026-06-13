@@ -336,22 +336,22 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
     const canSubmit = selectedBk && selectedHu && (fusionType !== 'transfer' || maskDataUrl);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="bg-gray-900 rounded-2xl border border-gray-700 shadow-2xl w-[1000px] max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm">
+            <div className="bg-n0 rounded-2xl border border-n40 shadow-bottom w-[1000px] max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-n40 flex-shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-orange-500/20 rounded-lg">
                             <Layers className="w-5 h-5 text-orange-400" />
                         </div>
-                        <h2 className="text-lg font-bold text-white">图像融合</h2>
+                        <h2 className="text-lg font-bold text-n800">图像融合</h2>
                     </div>
                     <button
                         onClick={onClose}
                         disabled={isProcessing}
-                        className="p-2 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 hover:bg-n20 rounded-lg transition-colors disabled:opacity-50"
                     >
-                        <X className="w-5 h-5 text-gray-400" />
+                        <X className="w-5 h-5 text-n300" />
                     </button>
                 </div>
 
@@ -359,7 +359,7 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
                     {/* 模式选择 */}
                     <div className="space-y-3">
-                        <label className="text-sm font-medium text-gray-300">融合模式</label>
+                        <label className="text-sm font-medium text-n700">融合模式</label>
                         <div className="grid grid-cols-4 gap-3">
                             {FUSION_MODES.map((mode) => {
                                 const Icon = mode.icon;
@@ -368,18 +368,18 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                         key={mode.type}
                                         onClick={() => setFusionType(mode.type)}
                                         disabled={isProcessing}
-                                        className={`p-3 rounded-xl border-2 transition-all ${
+                                        className={`p-3 rounded-md border-2 transition-all ${
                                             fusionType === mode.type
                                                 ? 'border-orange-500 bg-orange-500/10'
-                                                : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                                                : 'border-n40 bg-n0 hover:border-n40'
                                         } disabled:opacity-50`}
                                     >
                                         <div className="flex flex-col items-center gap-2">
-                                            <Icon className={`w-5 h-5 ${fusionType === mode.type ? 'text-orange-400' : 'text-gray-400'}`} />
-                                            <span className={`text-sm font-medium ${fusionType === mode.type ? 'text-orange-400' : 'text-gray-300'}`}>
+                                            <Icon className={`w-5 h-5 ${fusionType === mode.type ? 'text-orange-400' : 'text-n300'}`} />
+                                            <span className={`text-sm font-medium ${fusionType === mode.type ? 'text-orange-400' : 'text-n700'}`}>
                                                 {mode.name}
                                             </span>
-                                            <span className="text-xs text-gray-500 text-center">
+                                            <span className="text-xs text-n100 text-center">
                                                 {mode.desc}
                                             </span>
                                         </div>
@@ -393,10 +393,10 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                     <div className="grid grid-cols-2 gap-6">
                         {/* 底图选择 */}
                         <div className="space-y-3">
-                            <label className="text-sm font-medium text-gray-300">
+                            <label className="text-sm font-medium text-n700">
                                 {fusionType === 'imitation' ? '姿势参考图' : '底图/背景图'}
                             </label>
-                            <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-gray-800/50 rounded-lg">
+                            <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-n30 rounded-lg">
                                 {generatedImages.map((img, idx) => (
                                     <div
                                         key={idx}
@@ -404,7 +404,7 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                         className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
                                             selectedBk === img.url
                                                 ? 'border-orange-500 ring-2 ring-orange-500/50'
-                                                : 'border-transparent hover:border-gray-600'
+                                                : 'border-transparent hover:border-n40'
                                         }`}
                                     >
                                         <img src={img.url} alt={`Image ${idx}`} className="w-full h-full object-cover" />
@@ -415,8 +415,8 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
 
                         {/* 人物选择 */}
                         <div className="space-y-3">
-                            <label className="text-sm font-medium text-gray-300">人物图</label>
-                            <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-gray-800/50 rounded-lg">
+                            <label className="text-sm font-medium text-n700">人物图</label>
+                            <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-n30 rounded-lg">
                                 {generatedImages.map((img, idx) => (
                                     <div
                                         key={idx}
@@ -424,7 +424,7 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                         className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
                                             selectedHu === img.url
                                                 ? 'border-blue-500 ring-2 ring-blue-500/50'
-                                                : 'border-transparent hover:border-gray-600'
+                                                : 'border-transparent hover:border-n40'
                                         }`}
                                     >
                                         <img src={img.url} alt={`Image ${idx}`} className="w-full h-full object-cover" />
@@ -438,12 +438,12 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                     {(fusionType === 'fusion' || fusionType === 'direct') && selectedBk && selectedHu && (
                         <div className="space-y-3">
                             <div className="flex items-center justify-between flex-wrap gap-2">
-                                <label className="text-sm font-medium text-gray-300">
+                                <label className="text-sm font-medium text-n700">
                                     调整人物位置和大小（拖拽移动，拖拽四角缩放）
                                 </label>
                                 <div className="flex items-center gap-4">
                                     {/* 透明度滑块 */}
-                                    <label className="flex items-center gap-2 text-sm text-gray-400">
+                                    <label className="flex items-center gap-2 text-sm text-n300">
                                         透明度
                                         <input
                                             type="range"
@@ -456,20 +456,20 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                         <span className="w-8 text-center">{Math.round(huOpacity * 100)}%</span>
                                     </label>
                                     {/* 缩放显示 */}
-                                    <span className="text-sm text-gray-400">缩放: {Math.round(huScale * 100)}%</span>
+                                    <span className="text-sm text-n300">缩放: {Math.round(huScale * 100)}%</span>
                                     {/* 重置按钮 */}
                                     <button
                                         onClick={() => { setHuPosition({ x: 100, y: 100 }); setHuScale(0.5); setHuOpacity(1); }}
-                                        className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg"
+                                        className="p-2 bg-n0 hover:bg-n20 rounded-lg"
                                         title="重置位置、大小和透明度"
                                     >
-                                        <RotateCcw className="w-4 h-4 text-gray-300" />
+                                        <RotateCcw className="w-4 h-4 text-n700" />
                                     </button>
                                 </div>
                             </div>
                             <div 
                                 ref={containerRef}
-                                className="relative aspect-video bg-black rounded-lg overflow-hidden border border-gray-700"
+                                className="relative aspect-video bg-black rounded-lg overflow-hidden border border-n40"
                                 onMouseMove={handleMouseMove}
                                 onMouseUp={handleMouseUp}
                                 onMouseLeave={handleMouseUp}
@@ -528,11 +528,11 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                     {fusionType === 'transfer' && selectedBk && (
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-gray-300">
+                                <label className="text-sm font-medium text-n700">
                                     在底图上绘制蒙版（白色区域为人物迁移位置）
                                 </label>
                                 <div className="flex items-center gap-3">
-                                    <label className="flex items-center gap-2 text-sm text-gray-400">
+                                    <label className="flex items-center gap-2 text-sm text-n300">
                                         画笔
                                         <input
                                             type="range"
@@ -547,7 +547,7 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                     <button
                                         onClick={() => setIsErasing(!isErasing)}
                                         className={`p-2 rounded-lg transition-colors ${
-                                            isErasing ? 'bg-red-500/20 text-red-400' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                                            isErasing ? 'bg-r50 text-danger' : 'bg-n0 text-n300 hover:bg-n20'
                                         }`}
                                         title={isErasing ? '橡皮擦模式' : '画笔模式'}
                                     >
@@ -555,17 +555,17 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                     </button>
                                     <button
                                         onClick={clearMask}
-                                        className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm"
+                                        className="px-3 py-1 bg-n0 hover:bg-n20 text-n700 rounded-lg text-sm"
                                     >
                                         清除蒙版
                                     </button>
                                 </div>
                             </div>
                             {/* 底图 + 蒙版绘制（全宽显示） */}
-                            <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-gray-700">
-                                <img 
-                                    src={selectedBk} 
-                                    alt="Background" 
+                            <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-n40">
+                                <img
+                                    src={selectedBk}
+                                    alt="Background"
                                     className="absolute inset-0 w-full h-full object-contain"
                                 />
                                 <canvas
@@ -577,11 +577,11 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                     onMouseUp={stopDrawing}
                                     onMouseLeave={stopDrawing}
                                 />
-                                <div className="absolute bottom-2 left-2 text-xs text-gray-400 bg-black/70 px-2 py-1 rounded">
+                                <div className="absolute bottom-2 left-2 text-xs text-n300 bg-black/70 px-2 py-1 rounded">
                                     在此绘制蒙版区域
                                 </div>
                                 {selectedHu && (
-                                    <div className="absolute top-2 right-2 text-xs text-green-400 bg-black/70 px-2 py-1 rounded flex items-center gap-1">
+                                    <div className="absolute top-2 right-2 text-xs text-success bg-black/70 px-2 py-1 rounded flex items-center gap-1">
                                         <span>✓</span>
                                         <span>已选择人物图</span>
                                     </div>
@@ -594,14 +594,14 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                     {fusionType === 'imitation' && selectedBk && selectedHu && (
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-300">人物图（将模仿姿势）</label>
-                                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-700">
+                                <label className="text-sm font-medium text-n700">人物图（将模仿姿势）</label>
+                                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-n40">
                                     <img src={selectedHu} alt="Character" className="w-full h-full object-contain" />
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-300">姿势参考图</label>
-                                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-700">
+                                <label className="text-sm font-medium text-n700">姿势参考图</label>
+                                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-n40">
                                     <img src={selectedBk} alt="Pose Reference" className="w-full h-full object-contain" />
                                 </div>
                             </div>
@@ -612,14 +612,14 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                     {fusionType !== 'direct' && (
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-gray-300">种子值</label>
-                                <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                                <label className="text-sm font-medium text-n700">种子值</label>
+                                <label className="flex items-center gap-2 text-sm text-n300 cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={useRandomSeed}
                                         onChange={(e) => setUseRandomSeed(e.target.checked)}
                                         disabled={isProcessing}
-                                        className="rounded border-gray-600 bg-gray-800 text-orange-500 focus:ring-orange-500"
+                                        className="rounded border-n40 bg-n0 text-orange-500 focus:ring-orange-500"
                                     />
                                     随机
                                 </label>
@@ -630,7 +630,7 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                                     value={seed}
                                     onChange={(e) => setSeed(parseInt(e.target.value) || 0)}
                                     disabled={isProcessing}
-                                    className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
+                                    className="w-full px-4 py-2 bg-n0 border border-n40 rounded-lg text-n800 focus:outline-none focus:border-orange-500 disabled:opacity-50"
                                     placeholder="输入种子值"
                                 />
                             )}
@@ -639,11 +639,11 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-800 flex-shrink-0">
+                <div className="flex justify-end gap-3 px-6 py-4 border-t border-n40 flex-shrink-0">
                     <button
                         onClick={onClose}
                         disabled={isProcessing}
-                        className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        className="px-4 py-2 bg-n0 hover:bg-n20 text-n700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                     >
                         取消
                     </button>

@@ -325,23 +325,23 @@ export const EnhancePage: React.FC = () => {
   }, [enhancementKind, videoUnderPlayhead, videoClips, selectedClipId, targetResolution, projectId, episodeId, reload]);
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-gray-100 overflow-hidden">
+    <div className="flex flex-col h-full bg-n20 text-n800 overflow-hidden">
       {/* Top section: preview + settings */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Preview area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="h-12 px-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/80 backdrop-blur-sm shrink-0">
+          <div className="h-12 px-4 border-b border-n40 flex items-center justify-between bg-n0 backdrop-blur-sm shrink-0">
             <div className="flex items-center gap-2">
-              <Wand2 size={16} className="text-indigo-400" />
+              <Wand2 size={16} className="text-primary" />
               <h2 className="text-sm font-semibold">视频美化</h2>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-xs font-mono text-gray-500">{formatTime(currentTime)}</span>
-              <span className="text-[10px] text-gray-600">{videoClips.length}V · {audioClips.length}A</span>
-              {isLoading && <Loader size={14} className="animate-spin text-indigo-400" />}
+              <span className="text-xs font-mono text-n100">{formatTime(currentTime)}</span>
+              <span className="text-[10px] text-n100">{videoClips.length}V · {audioClips.length}A</span>
+              {isLoading && <Loader size={14} className="animate-spin text-primary" />}
               <button
                 onClick={() => reload()}
-                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                className="text-xs text-n100 hover:text-n700 transition-colors"
               >
                 刷新
               </button>
@@ -363,11 +363,11 @@ export const EnhancePage: React.FC = () => {
           </div>
           <div className="flex-1 flex items-center justify-center bg-black/30 p-4">
             {error && (
-              <div className="absolute top-14 left-4 right-4 z-10 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
+              <div className="absolute top-14 left-4 right-4 z-10 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-danger text-xs">
                 {error}
               </div>
             )}
-            <div className="w-full max-w-3xl aspect-video bg-black rounded-xl border border-gray-800 shadow-2xl overflow-hidden relative">
+            <div className="w-full max-w-3xl aspect-video bg-black rounded-md border border-n40 shadow-2xl overflow-hidden relative">
               {videoUnderPlayhead?.url ? (
                 <video
                   src={videoUnderPlayhead.url}
@@ -375,7 +375,7 @@ export const EnhancePage: React.FC = () => {
                   className="w-full h-full object-contain"
                 />
               ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-600 gap-2">
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-n100 gap-2">
                   <Film size={40} strokeWidth={1.2} />
                   <span className="text-sm">
                     {clips.length === 0 ? '暂无视频片段，请先在「视频」中生成' : '当前时间点无视频'}
@@ -387,14 +387,14 @@ export const EnhancePage: React.FC = () => {
         </div>
 
         {/* Right settings panel */}
-        <div className="w-72 border-l border-gray-800 bg-gray-900/50 flex flex-col shrink-0">
-          <div className="h-12 px-4 border-b border-gray-800 flex items-center shrink-0">
+        <div className="w-72 border-l border-n40 bg-n0 flex flex-col shrink-0">
+          <div className="h-12 px-4 border-b border-n40 flex items-center shrink-0">
             <h2 className="text-sm font-semibold">片段美化选项</h2>
           </div>
           <div className="flex-1 p-4 space-y-4 overflow-y-auto">
             {selectedClip && selectedClip.type === 'video' ? (
               <>
-                <div className="text-[11px] text-gray-500 truncate">
+                <div className="text-[11px] text-n100 truncate">
                   选中: {selectedClip.id.slice(0, 20)}{selectedClip.id.length > 20 ? '...' : ''}
                 </div>
                 <div className="space-y-2.5">
@@ -407,13 +407,13 @@ export const EnhancePage: React.FC = () => {
                     return (
                       <label
                         key={opt.kind}
-                        className="flex items-center justify-between p-3 bg-gray-800/60 rounded-lg border border-gray-700/50 cursor-pointer hover:border-indigo-500/40 transition-all"
+                        className="flex items-center justify-between p-3 bg-n0 rounded-lg border border-n40 cursor-pointer hover:border-primary transition-all"
                       >
                         <div className="flex items-center gap-2.5">
-                          <opt.Icon size={16} className="text-indigo-400" />
+                          <opt.Icon size={16} className="text-primary" />
                           <div>
                             <div className="text-sm font-medium">{opt.label}</div>
-                            <div className="text-[11px] text-gray-500">{opt.desc}</div>
+                            <div className="text-[11px] text-n100">{opt.desc}</div>
                           </div>
                         </div>
                         {settingsKey ? (
@@ -421,12 +421,12 @@ export const EnhancePage: React.FC = () => {
                             type="checkbox"
                             checked={checked}
                             onChange={e => updateClipSettings({ [settingsKey]: e.target.checked })}
-                            className="rounded bg-gray-900 border-gray-600 text-indigo-500 w-4 h-4"
+                            className="rounded bg-n0 border-n40 text-primary w-4 h-4"
                           />
                         ) : (
                           <button
                             onClick={(e) => { e.preventDefault(); setEnhancementKind('dub'); }}
-                            className={`text-xs px-2 py-1 rounded ${enhancementKind === 'dub' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-700 text-gray-400'}`}
+                            className={`text-xs px-2 py-1 rounded ${enhancementKind === 'dub' ? 'bg-primary-light text-primary' : 'bg-n0 text-n300'}`}
                           >
                             设置
                           </button>
@@ -438,9 +438,9 @@ export const EnhancePage: React.FC = () => {
 
                 {enhancementKind === 'upscale' && (
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs text-gray-500">目标分辨率</span>
+                    <span className="text-xs text-n100">目标分辨率</span>
                     <select value={targetResolution} onChange={e => setTargetResolution(e.target.value as any)}
-                      className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                      className="px-3 py-2 rounded-lg bg-n0 border border-n40 text-n700 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                       <option value="720p">720p</option>
                       <option value="1080p">1080p</option>
                       <option value="4K">4K</option>
@@ -449,9 +449,9 @@ export const EnhancePage: React.FC = () => {
                 )}
                 {enhancementKind === 'interpolate' && (
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs text-gray-500">目标帧率</span>
+                    <span className="text-xs text-n100">目标帧率</span>
                     <select value={targetFps} onChange={e => setTargetFps(Number(e.target.value) as any)}
-                      className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                      className="px-3 py-2 rounded-lg bg-n0 border border-n40 text-n700 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                       <option value={30}>30 FPS</option>
                       <option value={60}>60 FPS</option>
                       <option value={120}>120 FPS</option>
@@ -460,9 +460,9 @@ export const EnhancePage: React.FC = () => {
                 )}
                 {enhancementKind === 'dub' && (
                   <label className="flex flex-col gap-1.5">
-                    <span className="text-xs text-gray-500">配音风格</span>
+                    <span className="text-xs text-n100">配音风格</span>
                     <select value={dubVoiceStyle} onChange={e => setDubVoiceStyle(e.target.value as any)}
-                      className="px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                      className="px-3 py-2 rounded-lg bg-n0 border border-n40 text-n700 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
                       <option value="neutral">自然 / 中性</option>
                       <option value="dramatic">戏剧 / 张力</option>
                       <option value="soft">柔和 / 叙述</option>
@@ -473,7 +473,7 @@ export const EnhancePage: React.FC = () => {
                 <button
                   onClick={() => void applyEnhancement()}
                   disabled={processing}
-                  className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {processing ? (
                     <><Loader size={14} className="animate-spin" /> 处理中 {processProgress}%</>
@@ -483,7 +483,7 @@ export const EnhancePage: React.FC = () => {
                 </button>
               </>
             ) : (
-              <div className="text-sm text-gray-600 text-center py-10">
+              <div className="text-sm text-n100 text-center py-10">
                 请在下方时间轴选择一个视频片段
               </div>
             )}
@@ -492,22 +492,22 @@ export const EnhancePage: React.FC = () => {
       </div>
 
       {/* Bottom Timeline */}
-      <div className="h-56 bg-gray-900 border-t border-gray-800 flex flex-col shrink-0 z-20">
+      <div className="h-56 bg-n0 border-t border-n40 flex flex-col shrink-0 z-20">
         {/* Toolbar */}
-        <div className="px-4 py-1.5 border-b border-gray-800 flex justify-between items-center shrink-0 bg-gray-900/80">
+        <div className="px-4 py-1.5 border-b border-n40 flex justify-between items-center shrink-0 bg-n0">
           <div className="flex items-center gap-1.5">
             <button
               onClick={togglePlay}
-              className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
+              className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"
               title={playing ? '暂停' : '播放'}
             >
               {playing ? <Pause size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
             </button>
-            <div className="w-px h-4 bg-gray-700 mx-1" />
+            <div className="w-px h-4 bg-n40 mx-1" />
             <button
               onClick={handleSplit}
               disabled={!selectedClipId}
-              className={`p-1.5 rounded transition-colors ${selectedClipId ? 'hover:bg-gray-800 text-gray-400 hover:text-white' : 'text-gray-700 cursor-not-allowed'}`}
+              className={`p-1.5 rounded transition-colors ${selectedClipId ? 'hover:bg-n20 text-n300 hover:text-n800' : 'text-n100 cursor-not-allowed'}`}
               title="在播放头处切分"
             >
               <Scissors size={14} />
@@ -515,15 +515,15 @@ export const EnhancePage: React.FC = () => {
             <button
               onClick={handleDelete}
               disabled={!selectedClipId}
-              className={`p-1.5 rounded transition-colors ${selectedClipId ? 'hover:bg-gray-800 text-gray-400 hover:text-red-400' : 'text-gray-700 cursor-not-allowed'}`}
+              className={`p-1.5 rounded transition-colors ${selectedClipId ? 'hover:bg-n20 text-n300 hover:text-danger' : 'text-n100 cursor-not-allowed'}`}
               title="删除选中片段"
             >
               <Trash2 size={14} />
             </button>
-            <div className="w-px h-4 bg-gray-700 mx-1" />
+            <div className="w-px h-4 bg-n40 mx-1" />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1 px-2 py-1.5 hover:bg-gray-800 rounded text-xs text-gray-400 hover:text-gray-200 transition-colors"
+              className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-n700 transition-colors"
             >
               <Music size={12} /> 导入音频
             </button>
@@ -533,14 +533,14 @@ export const EnhancePage: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setScale(Math.max(5, scale - 5))}
-              className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
+              className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"
             >
               <ZoomOut size={14} />
             </button>
-            <span className="text-[11px] text-gray-500 font-mono w-12 text-center">{scale}px/s</span>
+            <span className="text-[11px] text-n100 font-mono w-12 text-center">{scale}px/s</span>
             <button
               onClick={() => setScale(Math.min(100, scale + 5))}
-              className="p-1.5 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition-colors"
+              className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"
             >
               <ZoomIn size={14} />
             </button>
@@ -550,12 +550,12 @@ export const EnhancePage: React.FC = () => {
         {/* Tracks */}
         <div className="flex-1 flex overflow-hidden relative">
           {/* Track headers */}
-          <div className="w-16 shrink-0 border-r border-gray-800 bg-gray-900 flex flex-col z-10">
-            <div className="h-5 border-b border-gray-800" />
-            <div className="h-16 border-b border-gray-800 flex items-center justify-center text-[11px] text-gray-500 gap-1">
+          <div className="w-16 shrink-0 border-r border-n40 bg-n0 flex flex-col z-10">
+            <div className="h-5 border-b border-n40" />
+            <div className="h-16 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
               <MonitorPlay size={12} /> 视频
             </div>
-            <div className="h-14 border-b border-gray-800 flex items-center justify-center text-[11px] text-gray-500 gap-1">
+            <div className="h-14 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
               <Music size={12} /> 音频
             </div>
           </div>
@@ -564,11 +564,11 @@ export const EnhancePage: React.FC = () => {
           <div className="flex-1 overflow-auto relative" ref={timelineContainerRef}>
             <div style={{ width: `${totalDuration * scale}px`, minWidth: '100%' }} className="relative h-full">
               {/* Ruler */}
-              <div className="h-5 border-b border-gray-800 relative cursor-pointer" onClick={handleRulerClick}>
+              <div className="h-5 border-b border-n40 relative cursor-pointer" onClick={handleRulerClick}>
                 {Array.from({ length: Math.ceil(totalDuration) }).map((_, i) => (
-                  <div key={i} className="absolute top-0 bottom-0 border-l border-gray-700/50" style={{ left: `${i * scale}px` }}>
+                  <div key={i} className="absolute top-0 bottom-0 border-l border-n40" style={{ left: `${i * scale}px` }}>
                     {i % 5 === 0 && (
-                      <span className="absolute top-0.5 left-1 text-[9px] text-gray-600 select-none">{formatTime(i)}</span>
+                      <span className="absolute top-0.5 left-1 text-[9px] text-n100 select-none">{formatTime(i)}</span>
                     )}
                   </div>
                 ))}
@@ -583,50 +583,50 @@ export const EnhancePage: React.FC = () => {
               </div>
 
               {/* Video track */}
-              <div className="h-16 border-b border-gray-800/50 relative bg-gray-800/10">
+              <div className="h-16 border-b border-n40 relative bg-n0">
                 {videoClips.map(clip => (
                   <div
                     key={clip.id}
                     onMouseDown={e => handleDragStart(e, clip)}
                     className={`absolute top-1.5 bottom-1.5 rounded border-2 overflow-hidden cursor-grab active:cursor-grabbing transition-colors ${
                       selectedClipId === clip.id
-                        ? 'border-indigo-500 z-20 bg-gray-800'
-                        : 'border-gray-600 z-10 hover:border-indigo-400 bg-gray-800/80'
+                        ? 'border-primary z-20 bg-n0'
+                        : 'border-n40 z-10 hover:border-primary bg-n0'
                     }`}
                     style={{ left: `${clip.startTime * scale}px`, width: `${clip.duration * scale}px` }}
                   >
-                    <div className="absolute inset-0 p-1 text-[9px] text-gray-300 font-mono z-10 truncate pointer-events-none">
+                    <div className="absolute inset-0 p-1 text-[9px] text-n700 font-mono z-10 truncate pointer-events-none">
                       {clip.id.slice(0, 12)}
                     </div>
                     <div className="absolute bottom-0.5 left-1 flex gap-0.5 z-10">
-                      {clip.settings?.upscale && <MonitorPlay size={10} className="text-indigo-400" />}
-                      {clip.settings?.interpolate && <Zap size={10} className="text-yellow-400" />}
-                      {clip.settings?.lipSync && <Mic2 size={10} className="text-green-400" />}
+                      {clip.settings?.upscale && <MonitorPlay size={10} className="text-primary" />}
+                      {clip.settings?.interpolate && <Zap size={10} className="text-warning" />}
+                      {clip.settings?.lipSync && <Mic2 size={10} className="text-success" />}
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Audio track */}
-              <div className="h-14 border-b border-gray-800/50 relative bg-gray-800/10">
+              <div className="h-14 border-b border-n40 relative bg-n0">
                 {audioClips.map(clip => (
                   <div
                     key={clip.id}
                     onMouseDown={e => handleDragStart(e, clip)}
                     className={`absolute top-1.5 bottom-1.5 rounded border-2 overflow-hidden cursor-grab active:cursor-grabbing ${
                       selectedClipId === clip.id
-                        ? 'border-indigo-400 z-20 bg-indigo-900/30'
-                        : 'border-indigo-800 z-10 hover:border-indigo-500 bg-indigo-900/20'
+                        ? 'border-primary z-20 bg-primary-light'
+                        : 'border-primary z-10 hover:border-primary bg-primary-light'
                     }`}
                     style={{ left: `${clip.startTime * scale}px`, width: `${clip.duration * scale}px` }}
                   >
-                    <GripHorizontal size={10} className="text-indigo-300 absolute left-1 top-1/2 -translate-y-1/2 opacity-50" />
+                    <GripHorizontal size={10} className="text-primary absolute left-1 top-1/2 -translate-y-1/2 opacity-50" />
                     <div className="w-full h-full flex items-center justify-center overflow-hidden opacity-60">
-                      <svg className="w-full h-6 text-indigo-400" preserveAspectRatio="none" viewBox="0 0 100 100">
+                      <svg className="w-full h-6 text-primary" preserveAspectRatio="none" viewBox="0 0 100 100">
                         <path d="M0,50 Q5,10 10,50 T20,50 T30,50 T40,50 T50,50 T60,50 T70,50 T80,50 T90,50 T100,50" stroke="currentColor" fill="none" strokeWidth="2" />
                       </svg>
                     </div>
-                    <div className="absolute top-0.5 right-1 text-[9px] text-indigo-200 font-mono z-10 pointer-events-none">
+                    <div className="absolute top-0.5 right-1 text-[9px] text-primary font-mono z-10 pointer-events-none">
                       {clip.duration.toFixed(1)}s
                     </div>
                   </div>

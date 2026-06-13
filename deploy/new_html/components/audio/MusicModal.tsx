@@ -76,43 +76,43 @@ export const MusicModal: React.FC<MusicModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-800 rounded-2xl w-[600px] max-h-[80vh] overflow-auto p-6">
+      <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
+      <div className="relative bg-n0 border border-n40 rounded-2xl w-[600px] max-h-[80vh] overflow-auto p-6">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold flex items-center gap-2">
-            <Music size={16} className="text-emerald-400" /> 添加背景音乐
+            <Music size={16} className="text-success" /> 添加背景音乐
           </h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300">
+          <button onClick={onClose} className="text-n100 hover:text-n700">
             <X size={18} />
           </button>
         </div>
 
         {/* Lyrics */}
-        <div className="bg-gray-800/50 rounded-xl border border-gray-700/50 p-4 mb-4">
-          <h4 className="text-sm font-bold text-gray-300 flex items-center gap-2 mb-3">
-            <FileText size={14} className="text-indigo-400" /> 歌词生成
+        <div className="bg-n30 rounded-md border border-n40 p-4 mb-4">
+          <h4 className="text-sm font-bold text-n700 flex items-center gap-2 mb-3">
+            <FileText size={14} className="text-primary" /> 歌词生成
           </h4>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">输入故事概要（或留空使用剧本内容）</label>
+              <label className="block text-xs text-n100 mb-1">输入故事概要（或留空使用剧本内容）</label>
               <textarea
                 value={lyricsInput}
                 onChange={e => setLyricsInput(e.target.value)}
                 rows={3}
                 placeholder="描述故事情节或主题..."
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 resize-none"
+                className="w-full bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n700 resize-none"
               />
             </div>
             <button
               onClick={handleGenerateLyrics}
               disabled={lyricsLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-all disabled:opacity-50"
             >
               {lyricsLoading ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
               生成歌词
             </button>
             {generatedLyrics && (
-              <div className="bg-gray-900 rounded-lg p-3 text-sm text-gray-300 whitespace-pre-wrap max-h-32 overflow-auto border border-gray-700">
+              <div className="bg-n0 rounded-lg p-3 text-sm text-n700 whitespace-pre-wrap max-h-32 overflow-auto border border-n40">
                 {generatedLyrics}
               </div>
             )}
@@ -120,25 +120,25 @@ export const MusicModal: React.FC<MusicModalProps> = ({
         </div>
 
         {/* Music */}
-        <div className="bg-gray-800/50 rounded-xl border border-gray-700/50 p-4">
-          <h4 className="text-sm font-bold text-gray-300 flex items-center gap-2 mb-3">
-            <Music size={14} className="text-emerald-400" /> 音乐生成
+        <div className="bg-n30 rounded-md border border-n40 p-4">
+          <h4 className="text-sm font-bold text-n700 flex items-center gap-2 mb-3">
+            <Music size={14} className="text-success" /> 音乐生成
           </h4>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">歌词（可编辑）</label>
+              <label className="block text-xs text-n100 mb-1">歌词（可编辑）</label>
               <textarea
                 value={musicLyrics}
                 onChange={e => setMusicLyrics(e.target.value)}
                 rows={4}
                 placeholder="输入歌词或从上方生成..."
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 resize-none"
+                className="w-full bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n700 resize-none"
               />
             </div>
             <button
               onClick={handleGenerateMusic}
               disabled={musicLoading || !musicLyrics.trim()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-success hover:bg-success text-white text-sm font-semibold transition-all disabled:opacity-50"
             >
               {musicLoading ? <Loader size={14} className="animate-spin" /> : <Music size={14} />}
               生成音乐
@@ -146,7 +146,7 @@ export const MusicModal: React.FC<MusicModalProps> = ({
             {musicResult && (
               <div className="flex items-center gap-3 pt-2">
                 <audio controls src={musicResult.url} className="flex-1 h-10" />
-                <span className="text-xs text-gray-500 tabular-nums">{fmtSec(musicResult.durationMs)}</span>
+                <span className="text-xs text-n100 tabular-nums">{fmtSec(musicResult.durationMs)}</span>
               </div>
             )}
           </div>

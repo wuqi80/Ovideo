@@ -78,36 +78,36 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
   if (sortedItems.length === 0) {
     return (
-      <div className="border-t border-gray-800 bg-gray-950 h-16 flex items-center justify-center text-xs text-gray-600">
+      <div className="border-t border-n40 bg-n20 h-16 flex items-center justify-center text-xs text-n100">
         暂无分镜数据
       </div>
     );
   }
 
   return (
-    <div className="border-t border-gray-800 bg-gray-950 flex flex-col" style={{ height: '200px' }}>
+    <div className="border-t border-n40 bg-n20 flex flex-col" style={{ height: '200px' }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-800 shrink-0">
-        <span className="text-xs font-bold text-gray-500 uppercase">时间轴</span>
-        <span className="text-[10px] text-gray-600 tabular-nums">
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-n40 shrink-0">
+        <span className="text-xs font-bold text-n100 uppercase">时间轴</span>
+        <span className="text-[10px] text-n100 tabular-nums">
           总 {(totalMs / 1000).toFixed(1)}s | {pixelsPerSecond}px/s
         </span>
         <span className="flex-1" />
-        <span className="text-[10px] text-gray-600">Ctrl+滚轮缩放</span>
+        <span className="text-[10px] text-n100">Ctrl+滚轮缩放</span>
       </div>
 
       {/* Tracks */}
       <div className="flex-1 overflow-auto" onWheel={handleWheel}>
         <div style={{ minWidth: msToWidth(totalMs) }}>
           {/* Track 1: Shot markers */}
-          <div className="flex items-center h-7 border-b border-gray-800/50">
-            <span className="w-16 shrink-0 text-[10px] text-gray-600 px-2">镜头</span>
+          <div className="flex items-center h-7 border-b border-n40">
+            <span className="w-16 shrink-0 text-[10px] text-n100 px-2">镜头</span>
             <div className="flex h-full">
               {segments.map(seg => (
                 <div
                   key={`mark-${seg.itemId}`}
                   style={{ width: msToWidth(seg.durationMs) }}
-                  className="border-r border-gray-800/30 flex items-center justify-center text-[10px] text-gray-500 cursor-pointer hover:bg-gray-900/50"
+                  className="border-r border-n40 flex items-center justify-center text-[10px] text-n100 cursor-pointer hover:bg-n20"
                   onClick={() => onClickItem(seg.itemId)}
                 >
                   #{seg.sortOrder}
@@ -117,8 +117,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           </div>
 
           {/* Track 2: Dialogue audio */}
-          <div className="flex items-center h-8 border-b border-gray-800/50">
-            <span className="w-16 shrink-0 text-[10px] text-gray-600 px-2">台词</span>
+          <div className="flex items-center h-8 border-b border-n40">
+            <span className="w-16 shrink-0 text-[10px] text-n100 px-2">台词</span>
             <div className="flex h-full py-0.5 gap-px">
               {segments.map(seg => (
                 <div
@@ -126,10 +126,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   style={{ width: msToWidth(seg.durationMs) }}
                   className={`rounded-sm flex items-center justify-center text-[9px] truncate px-1 cursor-pointer transition-colors ${
                     seg.hasAudio
-                      ? 'bg-sky-500/50 text-sky-200 hover:bg-sky-500/70'
+                      ? 'bg-b50 text-b400 hover:bg-b75'
                       : seg.hasDialogue
-                        ? 'bg-amber-500/30 text-amber-300 hover:bg-amber-500/50'
-                        : 'bg-gray-800/30 text-gray-600 border border-dashed border-gray-700/50'
+                        ? 'bg-warning/20 text-warning hover:bg-warning/30'
+                        : 'bg-n30 text-n100 border border-dashed border-n40'
                   }`}
                   onClick={() => onClickItem(seg.itemId)}
                   title={seg.label}
@@ -141,8 +141,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           </div>
 
           {/* Track 3: BGM */}
-          <div className="flex items-center h-8 border-b border-gray-800/50">
-            <span className="w-16 shrink-0 text-[10px] text-gray-600 px-2">BGM</span>
+          <div className="flex items-center h-8 border-b border-n40">
+            <span className="w-16 shrink-0 text-[10px] text-n100 px-2">BGM</span>
             <div className="flex-1 h-full py-0.5 relative">
               {bgmTracks.map((t: any) => {
                 const durMs = t.durationMs || t.duration_ms || 0;
@@ -150,7 +150,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <div
                     key={t.trackId || t.track_id}
                     style={{ width: durMs > 0 ? msToWidth(durMs) : '100%' }}
-                    className="h-full bg-emerald-500/30 rounded-sm flex items-center px-2 text-[9px] text-emerald-300 truncate"
+                    className="h-full bg-success/20 rounded-sm flex items-center px-2 text-[9px] text-success truncate"
                   >
                     <Music size={10} className="mr-1 shrink-0" /> {t.name || 'BGM'}
                   </div>
@@ -158,7 +158,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               })}
               <button
                 onClick={() => setShowMusicModal(true)}
-                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-600/80 hover:bg-emerald-500 text-white text-[10px] font-semibold transition-all"
+                className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-0.5 rounded bg-success hover:bg-success text-white text-[10px] font-semibold transition-all"
               >
                 <Plus size={10} /> 添加音乐
               </button>
@@ -167,7 +167,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
           {/* Track 4: SFX */}
           <div className="flex items-center h-7">
-            <span className="w-16 shrink-0 text-[10px] text-gray-600 px-2">音效</span>
+            <span className="w-16 shrink-0 text-[10px] text-n100 px-2">音效</span>
             <div className="flex h-full py-0.5 gap-px">
               {segments.map(seg => {
                 const item = sortedItems.find(i => i.itemId === seg.itemId);
@@ -176,7 +176,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <div
                     key={`sfx-${seg.itemId}`}
                     style={{ width: msToWidth(seg.durationMs) }}
-                    className={`rounded-sm ${hasSfx ? 'bg-purple-500/30' : ''}`}
+                    className={`rounded-sm ${hasSfx ? 'bg-primary/20' : ''}`}
                   />
                 );
               })}

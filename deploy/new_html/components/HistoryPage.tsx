@@ -253,20 +253,20 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
   const meta = (file: EntityFile) => file.metadata as { prompt?: string; model?: string } | undefined;
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <div className="flex flex-col h-full bg-n20">
       {/* 头部 - 固定52px高度 */}
-      <div className="h-[52px] px-4 bg-gray-850 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+      <div className="h-[52px] px-4 bg-n0 border-b border-n40 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <History className="w-4 h-4 text-indigo-400" />
-          <h2 className="text-sm font-bold text-gray-200 uppercase tracking-wider">生成历史</h2>
-          <span className="text-xs text-gray-500">共 {files.length} 个文件</span>
+          <History className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-bold text-n700 uppercase tracking-wider">生成历史</h2>
+          <span className="text-xs text-n100">共 {files.length} 个文件</span>
         </div>
 
         <div className="flex items-center gap-2">
           {/* 全选 */}
           <button
             onClick={toggleSelectAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-n0 hover:bg-n20 text-n700 rounded text-xs font-medium transition-colors"
           >
             {selectedTasks.size > 0 ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
             {selectedTasks.size > 0 ? `已选 ${selectedTasks.size}` : '全选'}
@@ -276,7 +276,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
           <button
             onClick={downloadSelected}
             disabled={selectedTasks.size === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
             批量下载
@@ -286,7 +286,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
           <button
             onClick={openBatchDeleteModal}
             disabled={selectedTasks.size === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
           >
             <Trash2 className="w-3.5 h-3.5" />
             批量删除
@@ -296,7 +296,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
           <button
             onClick={loadHistory}
             disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-medium transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-n0 hover:bg-n20 text-n700 rounded text-xs font-medium transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
             刷新
@@ -307,14 +307,14 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
       {/* 内容区 */}
       <div className="flex-1 overflow-y-auto p-6">
         {activeTasks.length > 0 && (
-          <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-            <h4 className="text-xs font-bold text-blue-400 mb-2 flex items-center gap-1">
+          <div className="mb-4 p-3 bg-b50 border border-b75 rounded-lg">
+            <h4 className="text-xs font-bold text-b400 mb-2 flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 animate-spin" />
               进行中 ({activeTasks.length})
             </h4>
             <div className="flex flex-wrap gap-2">
               {activeTasks.map(t => (
-                <div key={t.task_id} className="px-3 py-1.5 bg-blue-950/50 border border-blue-500/20 rounded text-xs text-blue-300">
+                <div key={t.task_id} className="px-3 py-1.5 bg-b50 border border-b75 rounded text-xs text-b400">
                   {t.task_type} - {t.status === 'processing' ? '处理中' : '排队中'}
                 </div>
               ))}
@@ -323,22 +323,22 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
         )}
         {loadError && (
           <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-            <div className="flex items-center gap-2 text-red-400 text-xs font-bold mb-1">
+            <div className="flex items-center gap-2 text-danger text-xs font-bold mb-1">
               <AlertTriangle className="w-3.5 h-3.5" />
               加载出错
             </div>
-            <p className="text-red-300 text-xs">{loadError}</p>
+            <p className="text-danger text-xs">{loadError}</p>
           </div>
         )}
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-              <span className="text-gray-400">加载中...</span>
+              <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
+              <span className="text-n300">加载中...</span>
             </div>
           </div>
         ) : files.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-600">
+          <div className="flex flex-col items-center justify-center h-64 text-n100">
             <History className="w-16 h-16 mb-4 opacity-20" />
             <p className="text-lg font-medium">暂无历史记录</p>
             <p className="text-sm mt-2">开始生成你的第一个视频吧</p>
@@ -356,8 +356,8 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
               return (
                 <div
                   key={file.fileId}
-                  className={`bg-gray-800 rounded-xl border overflow-hidden hover:border-indigo-500 transition-all hover:shadow-lg hover:shadow-indigo-900/20 group relative ${
-                    isSelected ? 'border-indigo-500 ring-1 ring-indigo-500/30' : 'border-gray-700'
+                  className={`bg-n0 rounded-md border overflow-hidden hover:border-primary transition-all shadow-card hover:shadow-atlas group relative ${
+                    isSelected ? 'border-primary ring-1 ring-primary/30' : 'border-n40'
                   }`}
                 >
                   {/* 复选框 */}
@@ -367,14 +367,14 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelect(file.fileId)}
-                        className="w-5 h-5 rounded border-2 border-slate-600 bg-slate-700/80 text-indigo-600 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer transition-all"
+                        className="w-5 h-5 rounded border-2 border-n40 bg-n0 text-primary focus:ring-2 focus:ring-primary focus:ring-offset-0 cursor-pointer transition-all"
                       />
                     </div>
                   )}
 
                   {/* 预览区域 */}
                   <div
-                    className="relative w-full aspect-video bg-gray-900 cursor-pointer"
+                    className="relative w-full aspect-video bg-n0 cursor-pointer"
                     onClick={() => canSelect && openPreview(file)}
                   >
                     {mediaUrl ? (
@@ -394,12 +394,12 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                           <img src={thumbnailUrl || mediaUrl} className="w-full h-full object-cover" loading="lazy" alt="" />
                         )}
 
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute inset-0 flex items-center justify-center bg-n900/50 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Play className="w-12 h-12 text-white" />
                         </div>
                       </>
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-600">
+                      <div className="w-full h-full flex items-center justify-center text-n100">
                         {isVideoFile ? <Film className="w-16 h-16 opacity-20" /> : <ImageIcon className="w-16 h-16 opacity-20" />}
                       </div>
                     )}
@@ -408,13 +408,13 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                   {/* 信息区域 */}
                   <div className="p-3">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] text-slate-500 truncate max-w-[55%]" title={m?.model}>
+                      <span className="text-[10px] text-n100 truncate max-w-[55%]" title={m?.model}>
                         {m?.model || '—'}
                       </span>
-                      <span className="text-[10px] text-slate-500 shrink-0">{formatTime(file.createdAt)}</span>
+                      <span className="text-[10px] text-n100 shrink-0">{formatTime(file.createdAt)}</span>
                     </div>
 
-                    <div className="text-xs text-slate-400 mb-3 line-clamp-2 min-h-[2.5rem]">
+                    <div className="text-xs text-n300 mb-3 line-clamp-2 min-h-[2.5rem]">
                       {m?.prompt || <span className="italic opacity-50">无提示词</span>}
                     </div>
 
@@ -423,7 +423,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                         <a
                           href={mediaUrl}
                           download
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition-colors"
                         >
                           <Download className="w-3 h-3" />
                           下载
@@ -431,7 +431,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                       ) : (
                         <button
                           disabled
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-700 text-slate-500 rounded text-xs cursor-not-allowed"
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-n0 text-n100 rounded text-xs cursor-not-allowed"
                         >
                           <Download className="w-3 h-3" />
                           下载
@@ -439,7 +439,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                       )}
                       <button
                         onClick={() => openDeleteModal(file)}
-                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-medium transition-colors"
+                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 text-white rounded text-xs font-medium transition-colors"
                       >
                         <Trash2 className="w-3 h-3" />
                         删除
@@ -455,27 +455,27 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
 
       {/* 删除确认弹窗 */}
       {deleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteModal(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm" onClick={() => !isDeleting && setDeleteModal(null)}>
           <div
-            className="relative w-full max-w-lg mx-4 bg-gray-900 border border-red-500/20 rounded-2xl shadow-2xl shadow-red-950/30 overflow-hidden"
+            className="relative w-full max-w-lg mx-4 bg-n0 border border-red-500/20 rounded-2xl shadow-bottom shadow-red-950/30 overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
             <div className="h-1 bg-gradient-to-r from-red-600 via-red-500 to-orange-500" />
 
             <div className="flex items-center justify-between px-6 pt-5 pb-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                  <ShieldAlert className="w-5 h-5 text-red-400" />
+                <div className="w-10 h-10 rounded-md bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <ShieldAlert className="w-5 h-5 text-danger" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-100">
+                  <h3 className="text-base font-bold text-n800">
                     {deleteModal.mode === 'single' ? '确认删除' : `批量删除 ${deleteModal.files.length} 个文件`}
                   </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">此操作不可撤销</p>
+                  <p className="text-xs text-n100 mt-0.5">此操作不可撤销</p>
                 </div>
               </div>
               {!isDeleting && (
-                <button onClick={() => setDeleteModal(null)} className="w-8 h-8 rounded-lg hover:bg-gray-800 flex items-center justify-center text-gray-500 hover:text-gray-300 transition-colors">
+                <button onClick={() => setDeleteModal(null)} className="w-8 h-8 rounded-lg hover:bg-n20 flex items-center justify-center text-n100 hover:text-n700 transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               )}
@@ -483,74 +483,74 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
 
             <div className="px-6 py-3">
               {deleteModal.mode === 'single' ? (
-                <div className="flex gap-4 p-3 bg-gray-800/50 rounded-xl border border-gray-700/50">
-                  <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-800 flex-shrink-0">
+                <div className="flex gap-4 p-3 bg-n30 rounded-md border border-n40">
+                  <div className="w-24 h-24 rounded-lg overflow-hidden bg-n0 flex-shrink-0">
                     {deleteModal.files[0]?.fileUrl ? (
                       <img src={getMediaUrl(deleteModal.files[0]) || ''} className="w-full h-full object-cover" alt="" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-8 h-8 text-gray-600" /></div>
+                      <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-8 h-8 text-n100" /></div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-400 truncate">{meta(deleteModal.files[0])?.model || '未知模型'}</p>
-                    <p className="text-xs text-gray-500 mt-1">{formatTime(deleteModal.files[0]?.createdAt || '')}</p>
-                    <p className="text-xs text-gray-500 mt-2 line-clamp-2">{meta(deleteModal.files[0])?.prompt || '无提示词'}</p>
+                    <p className="text-xs text-n300 truncate">{meta(deleteModal.files[0])?.model || '未知模型'}</p>
+                    <p className="text-xs text-n100 mt-1">{formatTime(deleteModal.files[0]?.createdAt || '')}</p>
+                    <p className="text-xs text-n100 mt-2 line-clamp-2">{meta(deleteModal.files[0])?.prompt || '无提示词'}</p>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <div className="grid grid-cols-4 gap-2">
                     {deleteModal.files.slice(0, 8).map(f => (
-                      <div key={f.fileId} className="aspect-square rounded-lg overflow-hidden bg-gray-800 border border-gray-700/50">
+                      <div key={f.fileId} className="aspect-square rounded-lg overflow-hidden bg-n0 border border-n40">
                         {f.fileUrl ? (
                           <img src={getMediaUrl(f) || ''} className="w-full h-full object-cover" alt="" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-gray-600" /></div>
+                          <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-n100" /></div>
                         )}
                       </div>
                     ))}
                   </div>
                   {deleteModal.files.length > 8 && (
-                    <p className="text-xs text-gray-500 text-center">...还有 {deleteModal.files.length - 8} 个文件</p>
+                    <p className="text-xs text-n100 text-center">...还有 {deleteModal.files.length - 8} 个文件</p>
                   )}
                 </div>
               )}
             </div>
 
             <div className="px-6 py-3">
-              <label className="flex items-center gap-3 p-3 rounded-xl bg-gray-800/30 border border-gray-700/30 cursor-pointer hover:bg-gray-800/50 transition-colors">
+              <label className="flex items-center gap-3 p-3 rounded-md bg-n30 border border-n40 cursor-pointer hover:bg-n20 transition-colors">
                 <input
                   type="checkbox"
                   checked={hardDelete}
                   onChange={e => setHardDelete(e.target.checked)}
                   disabled={isDeleting}
-                  className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-red-500 focus:ring-red-500 focus:ring-offset-0"
+                  className="w-4 h-4 rounded border-n40 bg-n0 text-danger focus:ring-red-500 focus:ring-offset-0"
                 />
-                <HardDrive className="w-4 h-4 text-gray-400" />
+                <HardDrive className="w-4 h-4 text-n300" />
                 <div>
-                  <span className="text-sm text-gray-300">同时删除磁盘文件</span>
-                  <p className="text-[10px] text-gray-500 mt-0.5">勾选后将永久释放存储空间，文件无法恢复</p>
+                  <span className="text-sm text-n700">同时删除磁盘文件</span>
+                  <p className="text-[10px] text-n100 mt-0.5">勾选后将永久释放存储空间，文件无法恢复</p>
                 </div>
               </label>
             </div>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-800/20 border-t border-gray-800">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-n30 border-t border-n40">
               {deleteProgress && (
-                <div className="flex-1 text-xs text-gray-500">
+                <div className="flex-1 text-xs text-n100">
                   正在删除 {deleteProgress.done}/{deleteProgress.total}...
                 </div>
               )}
               <button
                 onClick={() => setDeleteModal(null)}
                 disabled={isDeleting}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm text-n300 hover:text-n700 hover:bg-n20 rounded-lg transition-colors disabled:opacity-50"
               >
                 取消
               </button>
               <button
                 onClick={executeDelete}
                 disabled={isDeleting}
-                className="px-5 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-500 rounded-lg transition-all disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2 text-sm font-medium text-white bg-danger hover:bg-red-500 rounded-lg transition-all disabled:opacity-50 flex items-center gap-2"
               >
                 {isDeleting ? (
                   <>
@@ -572,7 +572,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
       {/* 预览弹窗 */}
       {previewUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm"
           onClick={() => setPreviewUrl(null)}
         >
           <div className="max-w-4xl max-h-[90vh] relative" onClick={e => e.stopPropagation()}>
@@ -588,7 +588,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
             )}
             <button
               onClick={() => setPreviewUrl(null)}
-              className="absolute -top-2 -right-2 w-8 h-8 bg-gray-800 hover:bg-gray-700 text-white rounded-full flex items-center justify-center"
+              className="absolute -top-2 -right-2 w-8 h-8 bg-n0 hover:bg-n20 text-n800 rounded-full flex items-center justify-center"
             >
               ×
             </button>

@@ -310,21 +310,21 @@ export const MediaLibraryPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex flex-col h-screen bg-n20 text-n800">
       {/* 顶部工具栏 */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
         <button
           onClick={() => navigate(`/projects/${projectId}/episodes`)}
-          className="text-sm text-zinc-400 hover:text-zinc-100"
+          className="text-sm text-n300 hover:text-n800"
         >
           ← 返回项目
         </button>
         <div className="text-sm font-medium ml-2">素材库</div>
-        <div className="text-xs text-zinc-500">项目 {projectId}</div>
+        <div className="text-xs text-n100">项目 {projectId}</div>
 
         <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center gap-1 px-2 py-1 rounded bg-zinc-800">
-            <Search size={14} className="text-zinc-500" />
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-n0">
+            <Search size={14} className="text-n100" />
             <input
               value={keyword}
               onChange={e => setKeyword(e.target.value)}
@@ -335,7 +335,7 @@ export const MediaLibraryPage: React.FC = () => {
 
           <button
             onClick={() => setView(view === 'grid' ? 'list' : 'grid')}
-            className="p-2 rounded bg-zinc-800 hover:bg-zinc-700"
+            className="p-2 rounded bg-n0 hover:bg-n20"
             title="切换视图"
           >
             {view === 'grid' ? <ListIcon size={14} /> : <GridIcon size={14} />}
@@ -343,7 +343,7 @@ export const MediaLibraryPage: React.FC = () => {
 
           <button
             onClick={reload}
-            className="p-2 rounded bg-zinc-800 hover:bg-zinc-700"
+            className="p-2 rounded bg-n0 hover:bg-n20"
             disabled={loading}
             title="刷新"
           >
@@ -353,7 +353,7 @@ export const MediaLibraryPage: React.FC = () => {
           <button
             onClick={handleBatchDownload}
             disabled={!checked.size}
-            className="flex items-center gap-1 px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-sm"
+            className="flex items-center gap-1 px-3 py-1.5 rounded bg-n0 hover:bg-n20 disabled:opacity-50 text-sm"
             title="批量下载"
           >
             <Download size={14} />
@@ -365,7 +365,7 @@ export const MediaLibraryPage: React.FC = () => {
             value={uploadVisibility}
             onChange={e => setUploadVisibility(e.target.value as any)}
             disabled={!isOrgWorkspace}
-            className="px-2 py-1.5 rounded bg-zinc-800 text-xs border border-zinc-700 disabled:opacity-50"
+            className="px-2 py-1.5 rounded bg-n0 text-xs border border-n40 disabled:opacity-50"
             title={isOrgWorkspace ? '新上传素材的可见性' : '切到组织 workspace 才能选「对组可见」'}
           >
             <option value="private">🔒 私有</option>
@@ -378,7 +378,7 @@ export const MediaLibraryPage: React.FC = () => {
           <select
             value={uploadTargetFolderId}
             onChange={e => setUploadTargetFolderId(e.target.value)}
-            className="px-2 py-1.5 rounded bg-zinc-800 text-xs border border-zinc-700 max-w-[150px]"
+            className="px-2 py-1.5 rounded bg-n0 text-xs border border-n40 max-w-[150px]"
             title="上传到哪个文件夹"
           >
             <option value="">📂 未归类（不放入文件夹）</option>
@@ -392,7 +392,7 @@ export const MediaLibraryPage: React.FC = () => {
           <button
             onClick={handleUploadClick}
             disabled={uploading}
-            className="flex items-center gap-1 px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-sm font-medium"
+            className="flex items-center gap-1 px-3 py-1.5 rounded bg-success hover:bg-success text-white disabled:opacity-60 text-sm font-medium"
           >
             <Upload size={14} />
             <span>{uploading ? '上传中…' : '上传素材'}</span>
@@ -410,15 +410,15 @@ export const MediaLibraryPage: React.FC = () => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧分类 + 文件夹 */}
-        <aside className="w-56 border-r border-zinc-800 bg-zinc-900 p-2 flex flex-col gap-1 overflow-y-auto">
+        <aside className="w-56 border-r border-n40 bg-n0 p-2 flex flex-col gap-1 overflow-y-auto">
           {CATEGORIES.map(c => (
             <button
               key={c.key}
               onClick={() => { setCategory(c.key); setSelectedId(null); }}
               className={`flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
                 category === c.key
-                  ? 'bg-zinc-800 text-zinc-100'
-                  : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100'
+                  ? 'bg-n30 text-n800'
+                  : 'text-n300 hover:bg-n20 hover:text-n800'
               }`}
             >
               {c.icon}
@@ -427,12 +427,12 @@ export const MediaLibraryPage: React.FC = () => {
           ))}
 
           {/* ── 文件夹分类（人物 / 场景 / 道具 …）── */}
-          <div className="mt-3 pt-2 border-t border-zinc-800">
+          <div className="mt-3 pt-2 border-t border-n40">
             <div className="flex items-center justify-between px-2 mb-1">
-              <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">文件夹</span>
+              <span className="text-[11px] font-semibold text-n100 uppercase tracking-wider">文件夹</span>
               <button
                 onClick={() => handleCreateFolder(null)}
-                className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400"
+                className="p-1 rounded hover:bg-n20 text-n300 hover:text-success"
                 title="新建文件夹"
               >
                 <FolderPlus size={14} />
@@ -443,7 +443,7 @@ export const MediaLibraryPage: React.FC = () => {
             <button
               onClick={() => { setSelectedFolderId(null); setSelectedId(null); }}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
-                selectedFolderId === null ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60'
+                selectedFolderId === null ? 'bg-n30 text-n800' : 'text-n300 hover:bg-n20'
               }`}
             >
               <Folder size={14} />
@@ -459,8 +459,8 @@ export const MediaLibraryPage: React.FC = () => {
                 if (id) moveItemToFolder(id, null);
               }}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left ${
-                dragOverFolder === '__unfiled__' ? 'ring-1 ring-emerald-500 bg-emerald-950/30' :
-                selectedFolderId === '__unfiled__' ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60'
+                dragOverFolder === '__unfiled__' ? 'ring-1 ring-success bg-success-light' :
+                selectedFolderId === '__unfiled__' ? 'bg-n30 text-n800' : 'text-n300 hover:bg-n20'
               }`}
             >
               <Folder size={14} className="opacity-50" />
@@ -468,7 +468,7 @@ export const MediaLibraryPage: React.FC = () => {
             </button>
 
             {folderTree.length === 0 ? (
-              <div className="px-2 py-2 text-[11px] text-zinc-600">
+              <div className="px-2 py-2 text-[11px] text-n100">
                 还没有文件夹，点击 <FolderPlus size={11} className="inline" /> 新建
               </div>
             ) : (
@@ -498,7 +498,7 @@ export const MediaLibraryPage: React.FC = () => {
             )}
           </div>
 
-          <div className="mt-auto pt-3 border-t border-zinc-800 text-xs text-zinc-500 px-2">
+          <div className="mt-auto pt-3 border-t border-n40 text-xs text-n100 px-2">
             共 {total} 个素材
           </div>
         </aside>
@@ -506,18 +506,18 @@ export const MediaLibraryPage: React.FC = () => {
         {/* 主区 */}
         <main className="flex-1 overflow-auto p-4">
           {error && (
-            <div className="mb-3 p-2 text-xs text-red-300 bg-red-950/50 border border-red-900 rounded">
+            <div className="mb-3 p-2 text-xs text-danger bg-r50 border border-r75 rounded">
               {error}
             </div>
           )}
 
           {loading && !items.length && (
-            <div className="text-center text-sm text-zinc-500 py-12">加载中…</div>
+            <div className="text-center text-sm text-n100 py-12">加载中…</div>
           )}
 
           {!loading && !items.length && (
-            <div className="text-center text-sm text-zinc-500 py-16">
-              <ImageIcon size={32} className="mx-auto mb-3 text-zinc-700" />
+            <div className="text-center text-sm text-n100 py-16">
+              <ImageIcon size={32} className="mx-auto mb-3 text-n100" />
               <div>暂无素材</div>
               <div className="text-xs mt-1">点击右上角"上传素材"开始</div>
             </div>
@@ -553,7 +553,7 @@ export const MediaLibraryPage: React.FC = () => {
 
         {/* 右侧详情 */}
         {selected && (
-          <aside className="w-80 border-l border-zinc-800 bg-zinc-900 overflow-auto">
+          <aside className="w-80 border-l border-n40 bg-n0 overflow-auto">
             <MediaDetailPanel
               item={selected}
               onClose={() => setSelectedId(null)}
@@ -625,13 +625,13 @@ const FolderTreeNode: React.FC<FolderTreeNodeProps> = ({
         }}
         style={{ paddingLeft: 8 + depth * 14 }}
         className={`group/folder flex items-center gap-1 pr-1 py-1.5 rounded text-sm cursor-pointer ${
-          isDragOver ? 'ring-1 ring-emerald-500 bg-emerald-950/30' :
-          isSelected ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-400 hover:bg-zinc-800/60'
+          isDragOver ? 'ring-1 ring-success bg-success-light' :
+          isSelected ? 'bg-n30 text-n800' : 'text-n300 hover:bg-n20'
         }`}
       >
         <button
           onClick={e => { e.stopPropagation(); if (hasChildren) onToggleExpand(node.folder_id); }}
-          className={`shrink-0 ${hasChildren ? 'text-zinc-400' : 'text-transparent pointer-events-none'}`}
+          className={`shrink-0 ${hasChildren ? 'text-n300' : 'text-transparent pointer-events-none'}`}
         >
           {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
@@ -639,13 +639,13 @@ const FolderTreeNode: React.FC<FolderTreeNodeProps> = ({
         <span className="truncate flex-1" title={node.name}>{node.name}</span>
 
         <div className="hidden group-hover/folder:flex items-center gap-0.5 shrink-0">
-          <button onClick={e => { e.stopPropagation(); onCreateChild(node.folder_id); }} className="p-0.5 hover:text-emerald-400" title="新建子文件夹">
+          <button onClick={e => { e.stopPropagation(); onCreateChild(node.folder_id); }} className="p-0.5 hover:text-success" title="新建子文件夹">
             <FolderPlus size={12} />
           </button>
-          <button onClick={e => { e.stopPropagation(); onRename(node); }} className="p-0.5 hover:text-blue-400" title="重命名">
+          <button onClick={e => { e.stopPropagation(); onRename(node); }} className="p-0.5 hover:text-primary" title="重命名">
             <Pencil size={12} />
           </button>
-          <button onClick={e => { e.stopPropagation(); onDelete(node); }} className="p-0.5 hover:text-red-400" title="删除文件夹">
+          <button onClick={e => { e.stopPropagation(); onDelete(node); }} className="p-0.5 hover:text-danger" title="删除文件夹">
             <XIcon size={12} />
           </button>
         </div>
@@ -700,33 +700,33 @@ const MediaCard: React.FC<MediaCardProps> = ({
         e.dataTransfer.setData('text/library-item-id', item.library_item_id);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      className={`relative group rounded overflow-hidden border bg-zinc-900 cursor-pointer ${
-        selected ? 'border-emerald-500' : 'border-zinc-800 hover:border-zinc-700'
+      className={`relative group rounded overflow-hidden border bg-n0 cursor-pointer shadow-card hover:shadow-atlas ${
+        selected ? 'border-primary' : 'border-n40 hover:border-n40'
       }`}
     >
-      <div className="aspect-square bg-zinc-950 flex items-center justify-center overflow-hidden">
+      <div className="aspect-square bg-n20 flex items-center justify-center overflow-hidden">
         {thumb ? (
           <img src={thumb} alt={item.title || item.file_name} className="w-full h-full object-cover" />
         ) : item.item_type === 'video' ? (
-          <Film size={32} className="text-zinc-600" />
+          <Film size={32} className="text-n100" />
         ) : item.item_type === 'audio' ? (
-          <Music size={32} className="text-zinc-600" />
+          <Music size={32} className="text-n100" />
         ) : (
-          <FileText size={32} className="text-zinc-600" />
+          <FileText size={32} className="text-n100" />
         )}
       </div>
 
       <div className="px-2 py-1.5">
-        <div className="text-xs text-zinc-300 truncate flex items-center gap-1" title={item.title || item.file_name}>
+        <div className="text-xs text-n700 truncate flex items-center gap-1" title={item.title || item.file_name}>
           <span className="truncate">{item.title || item.file_name || item.library_item_id}</span>
           {/* 2026-05-26 Slice 5: visibility badge */}
           {item.visibility && item.visibility !== 'private' && (
-            <span className="shrink-0 text-[9px] px-1 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-800/50">
+            <span className="shrink-0 text-[9px] px-1 py-0.5 rounded bg-b50 text-b400 border border-b75">
               🌐
             </span>
           )}
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-zinc-500">
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-n100">
           <span>{SCOPE_LABEL[item.permission_scope] || item.permission_scope}</span>
           <span>·</span>
           <span>{item.item_type}</span>
@@ -747,22 +747,22 @@ const MediaCard: React.FC<MediaCardProps> = ({
           type="checkbox"
           checked={checked}
           onChange={() => {}}
-          className="w-4 h-4 accent-emerald-500"
+          className="w-4 h-4 accent-success"
         />
       </div>
 
       <button
         onClick={e => { e.stopPropagation(); onToggleFavorite(); }}
-        className="absolute top-1.5 right-1.5 p-1 rounded bg-black/50 opacity-0 group-hover:opacity-100 hover:bg-black/70"
+        className="absolute top-1.5 right-1.5 p-1 rounded bg-n900/50 opacity-0 group-hover:opacity-100 hover:bg-n900/50"
         title={item.is_favorite ? '取消收藏' : '收藏'}
       >
         {item.is_favorite
-          ? <Star size={12} className="text-yellow-400" fill="currentColor" />
-          : <StarOff size={12} className="text-zinc-300" />}
+          ? <Star size={12} className="text-warning" fill="currentColor" />
+          : <StarOff size={12} className="text-n700" />}
       </button>
 
       {!isMine && (
-        <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 text-[10px] bg-blue-900/70 text-blue-200 rounded">
+        <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 text-[10px] bg-b50 text-b400 rounded">
           共享
         </div>
       )}
@@ -781,8 +781,8 @@ const MediaList: React.FC<{
   myUserId: string;
 }> = ({ items, selectedId, checked, onSelect, onToggleCheck, onToggleFavorite, myUserId }) => (
   <table className="w-full text-sm">
-    <thead className="text-xs text-zinc-500">
-      <tr className="border-b border-zinc-800">
+    <thead className="text-xs text-n100">
+      <tr className="border-b border-n40">
         <th className="w-8"></th>
         <th className="text-left py-2 pr-2">名称</th>
         <th className="text-left py-2 pr-2">类型</th>
@@ -805,29 +805,29 @@ const MediaList: React.FC<{
               e.dataTransfer.setData('text/library-item-id', item.library_item_id);
               e.dataTransfer.effectAllowed = 'move';
             }}
-            className={`border-b border-zinc-900 cursor-pointer ${
-              selectedId === item.library_item_id ? 'bg-zinc-800/50' : 'hover:bg-zinc-800/30'
+            className={`border-b border-n40 cursor-pointer ${
+              selectedId === item.library_item_id ? 'bg-n30' : 'hover:bg-n20'
             }`}
           >
             <td onClick={e => { e.stopPropagation(); onToggleCheck(item.library_item_id); }} className="py-2 pl-1">
-              <input type="checkbox" checked={checked.has(item.library_item_id)} onChange={() => {}} className="w-3 h-3 accent-emerald-500" />
+              <input type="checkbox" checked={checked.has(item.library_item_id)} onChange={() => {}} className="w-3 h-3 accent-success" />
             </td>
-            <td className="py-2 pr-2 text-zinc-200 truncate max-w-[260px]">
+            <td className="py-2 pr-2 text-n700 truncate max-w-[260px]">
               {item.title || item.file_name}
               {item.visibility && item.visibility !== 'private' && (
-                <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded bg-blue-900/40 text-blue-300 border border-blue-800/50">🌐</span>
+                <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded bg-b50 text-b400 border border-b75">🌐</span>
               )}
             </td>
-            <td className="py-2 pr-2 text-zinc-400">{item.item_type}</td>
-            <td className="py-2 pr-2 text-zinc-400">{item.source}</td>
-            <td className="py-2 pr-2 text-zinc-400">{formatBytes(item.file_size_bytes)}</td>
-            <td className="py-2 pr-2 text-zinc-400">{SCOPE_LABEL[item.permission_scope] || item.permission_scope}{!isMine && ' (他人)'}</td>
-            <td className="py-2 pr-2 text-zinc-400">{item.use_count}</td>
+            <td className="py-2 pr-2 text-n300">{item.item_type}</td>
+            <td className="py-2 pr-2 text-n300">{item.source}</td>
+            <td className="py-2 pr-2 text-n300">{formatBytes(item.file_size_bytes)}</td>
+            <td className="py-2 pr-2 text-n300">{SCOPE_LABEL[item.permission_scope] || item.permission_scope}{!isMine && ' (他人)'}</td>
+            <td className="py-2 pr-2 text-n300">{item.use_count}</td>
             <td className="py-2 pr-1">
               <button onClick={e => { e.stopPropagation(); onToggleFavorite(item); }}>
                 {item.is_favorite
-                  ? <Star size={12} className="text-yellow-400" fill="currentColor" />
-                  : <StarOff size={12} className="text-zinc-500" />}
+                  ? <Star size={12} className="text-warning" fill="currentColor" />
+                  : <StarOff size={12} className="text-n100" />}
               </button>
             </td>
           </tr>
@@ -858,10 +858,10 @@ const MediaDetailPanel: React.FC<{
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium truncate">{item.title || item.file_name}</div>
-        <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-sm">×</button>
+        <button onClick={onClose} className="text-n100 hover:text-n700 text-sm">×</button>
       </div>
 
-      <div className="rounded overflow-hidden bg-zinc-950 border border-zinc-800">
+      <div className="rounded overflow-hidden bg-n20 border border-n40">
         {isImage && item.file_url && (
           <img src={item.file_url} alt={item.title || ''} className="w-full max-h-72 object-contain" />
         )}
@@ -872,14 +872,14 @@ const MediaDetailPanel: React.FC<{
           <audio src={item.file_url} controls className="w-full p-3" />
         )}
         {!isImage && !isVideo && !isAudio && (
-          <div className="p-6 text-center text-xs text-zinc-500">
-            <FileText size={24} className="mx-auto mb-2 text-zinc-700" />
+          <div className="p-6 text-center text-xs text-n100">
+            <FileText size={24} className="mx-auto mb-2 text-n100" />
             无可用预览
           </div>
         )}
       </div>
 
-      <dl className="text-xs space-y-1.5 text-zinc-400">
+      <dl className="text-xs space-y-1.5 text-n300">
         <Detail k="素材 ID" v={item.library_item_id} mono />
         <Detail k="文件 ID" v={item.file_id} mono />
         <Detail k="类型" v={item.item_type} />
@@ -894,26 +894,26 @@ const MediaDetailPanel: React.FC<{
       </dl>
 
       {item.file_url && (
-        <div className="pt-2 border-t border-zinc-800">
-          <div className="text-xs text-zinc-500 mb-1">引用代码</div>
-          <code className="block text-[10px] bg-zinc-950 p-2 rounded border border-zinc-800 break-all">
+        <div className="pt-2 border-t border-n40">
+          <div className="text-xs text-n100 mb-1">引用代码</div>
+          <code className="block text-[10px] bg-n20 p-2 rounded border border-n40 break-all">
             asset_id="{item.library_item_id}"
           </code>
         </div>
       )}
 
-      <div className="pt-2 border-t border-zinc-800 space-y-2">
+      <div className="pt-2 border-t border-n40 space-y-2">
         <div className="flex items-center gap-2">
           <button
             onClick={onToggleFavorite}
-            className="flex-1 px-2 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700"
+            className="flex-1 px-2 py-1.5 text-xs rounded bg-n0 hover:bg-n20"
           >
             {item.is_favorite ? '取消收藏' : '加入收藏'}
           </button>
           {isMine && onShare && (
             <button
               onClick={onShare}
-              className="px-2 py-1.5 text-xs rounded bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-200"
+              className="px-2 py-1.5 text-xs rounded bg-primary-light hover:bg-primary-light text-primary"
               title="共享给组织或项目"
             >
               共享
@@ -922,7 +922,7 @@ const MediaDetailPanel: React.FC<{
           {isMine && (
             <button
               onClick={onDelete}
-              className="px-2 py-1.5 text-xs rounded bg-red-900/40 hover:bg-red-900/70 text-red-200"
+              className="px-2 py-1.5 text-xs rounded bg-r50 hover:bg-r50 text-danger"
             >
               <Trash2 size={12} />
             </button>
@@ -931,11 +931,11 @@ const MediaDetailPanel: React.FC<{
 
         {isMine && (
           <div>
-            <div className="text-xs text-zinc-500 mb-1">权限范围</div>
+            <div className="text-xs text-n100 mb-1">权限范围</div>
             <select
               value={item.permission_scope}
               onChange={e => onChangeScope(e.target.value as PermissionScope)}
-              className="w-full text-xs px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded"
+              className="w-full text-xs px-2 py-1.5 bg-n0 border border-n40 rounded"
             >
               <option value="private">私有</option>
               <option value="project">项目共享</option>
@@ -945,11 +945,11 @@ const MediaDetailPanel: React.FC<{
 
         {onMoveToFolder && (
           <div>
-            <div className="text-xs text-zinc-500 mb-1">所在文件夹</div>
+            <div className="text-xs text-n100 mb-1">所在文件夹</div>
             <select
               value={item.folder_id || ''}
               onChange={e => onMoveToFolder(e.target.value || null)}
-              className="w-full text-xs px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded"
+              className="w-full text-xs px-2 py-1.5 bg-n0 border border-n40 rounded"
             >
               <option value="">未归类</option>
               {folderOptions.map(o => (
@@ -968,7 +968,7 @@ const MediaDetailPanel: React.FC<{
 
 const Detail: React.FC<{ k: string; v: string; mono?: boolean }> = ({ k, v, mono }) => (
   <div className="flex items-start">
-    <dt className="w-20 shrink-0 text-zinc-500">{k}</dt>
+    <dt className="w-20 shrink-0 text-n100">{k}</dt>
     <dd className={`flex-1 break-all ${mono ? 'font-mono text-[10px]' : ''}`}>{v}</dd>
   </div>
 );

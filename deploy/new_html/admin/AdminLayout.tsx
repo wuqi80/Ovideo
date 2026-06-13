@@ -57,18 +57,18 @@ export const AdminLayout: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen w-screen bg-zinc-950 text-zinc-200 flex"
+        <div className="min-h-screen w-screen bg-n20 text-n700 flex"
              style={{ fontFamily: '"PingFang SC", "Source Han Sans CN", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif' }}>
             {/* ================ Sidebar ================ */}
-            <aside className="w-56 shrink-0 bg-zinc-900 border-r border-zinc-800/80 flex flex-col">
+            <aside className="w-56 shrink-0 bg-n0 border-r border-n40 flex flex-col">
                 {/* Brand */}
-                <div className="h-14 flex items-center gap-2.5 px-4 border-b border-zinc-800/80">
-                    <div className="w-8 h-8 rounded-md bg-gradient-to-br from-emerald-500/30 to-emerald-700/30 border border-emerald-500/40 flex items-center justify-center">
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <div className="h-14 flex items-center gap-2.5 px-4 border-b border-n40">
+                    <div className="w-8 h-8 rounded-md bg-primary-light border border-primary/40 flex items-center justify-center">
+                        <ShieldCheck className="w-4 h-4 text-primary" />
                     </div>
                     <div className="leading-tight">
-                        <div className="text-sm font-bold tracking-tight text-zinc-100">MESSIAH</div>
-                        <div className="text-[10px] uppercase tracking-widest text-zinc-500" style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>Admin Console</div>
+                        <div className="text-sm font-bold tracking-tight text-n800">MESSIAH</div>
+                        <div className="text-[10px] uppercase tracking-widest text-n100" style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>Admin Console</div>
                     </div>
                 </div>
 
@@ -84,8 +84,8 @@ export const AdminLayout: React.FC = () => {
                                 className={({ isActive }) =>
                                     `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-150 ${
                                         isActive
-                                            ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20'
-                                            : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50 border border-transparent'
+                                            ? 'bg-primary-light text-primary border border-primary/20'
+                                            : 'text-n300 hover:text-n800 hover:bg-n20 border border-transparent'
                                     }`
                                 }
                             >
@@ -98,7 +98,7 @@ export const AdminLayout: React.FC = () => {
                     {/* 外链：集群仪表盘（cluster_main 静态后台） */}
                     <a
                         href="/admin-legacy/" target="_blank" rel="noreferrer"
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all duration-150"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-n100 hover:text-n700 hover:bg-n20 transition-all duration-150"
                         title="Cluster Admin（旧版，独立窗口）"
                     >
                         <ExternalLink className="w-4 h-4" />
@@ -107,14 +107,14 @@ export const AdminLayout: React.FC = () => {
                 </nav>
 
                 {/* Footer — 当前管理员 + 退出 */}
-                <div className="p-3 border-t border-zinc-800/80">
-                    <div className="px-3 py-2 mb-2 rounded-md bg-zinc-800/40 border border-zinc-800">
-                        <div className="text-[9px] uppercase tracking-widest text-zinc-500 mb-0.5" style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>SIGNED IN AS</div>
-                        <div className="text-xs font-semibold text-emerald-300">{adminName}</div>
+                <div className="p-3 border-t border-n40">
+                    <div className="px-3 py-2 mb-2 rounded-md bg-n20 border border-n40">
+                        <div className="text-[9px] uppercase tracking-widest text-n100 mb-0.5" style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>SIGNED IN AS</div>
+                        <div className="text-xs font-semibold text-primary">{adminName}</div>
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-zinc-400 hover:text-red-300 hover:bg-red-500/10 border border-zinc-800 hover:border-red-500/30 transition-all"
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-n300 hover:text-danger hover:bg-r50 border border-n40 hover:border-danger/30 transition-all"
                     >
                         <LogOut className="w-3.5 h-3.5" /> 退出后台
                     </button>
@@ -124,27 +124,27 @@ export const AdminLayout: React.FC = () => {
             {/* ================ Main pane ================ */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Topbar */}
-                <header className="h-14 shrink-0 bg-zinc-900/60 backdrop-blur-sm border-b border-zinc-800/80 flex items-center justify-between px-6">
+                <header className="h-14 shrink-0 bg-n0 backdrop-blur-sm border-b border-n40 flex items-center justify-between px-6">
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => navigate(-1)}
-                            className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                            className="p-1.5 rounded-md text-n100 hover:text-n700 hover:bg-n20 transition-colors"
                             title="返回上一页"
                         >
                             <ChevronLeft className="w-4 h-4" />
                         </button>
-                        <div className="text-[11px] uppercase tracking-widest text-zinc-500"
+                        <div className="text-[11px] uppercase tracking-widest text-n100"
                              style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
                             {location.pathname.replace('/admin', '').replace(/^\//, '') || 'overview'}
                         </div>
                     </div>
                     <div className="flex items-center gap-4 text-xs">
                         <div className="hidden md:flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span className="text-zinc-500 uppercase tracking-wider"
+                            <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                            <span className="text-n100 uppercase tracking-wider"
                                   style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>ONLINE</span>
                         </div>
-                        <div className="text-zinc-400 tabular-nums"
+                        <div className="text-n300 tabular-nums"
                              style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
                             {now.toLocaleString('zh-CN', { hour12: false })}
                         </div>
@@ -152,7 +152,7 @@ export const AdminLayout: React.FC = () => {
                 </header>
 
                 {/* Body */}
-                <main className="flex-1 overflow-auto bg-zinc-950">
+                <main className="flex-1 overflow-auto bg-n20 scrollbar-atlas">
                     <Outlet />
                 </main>
             </div>

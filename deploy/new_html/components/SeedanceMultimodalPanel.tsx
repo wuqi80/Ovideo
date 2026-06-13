@@ -146,25 +146,25 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
     }, [videos.length, addMedia]);
 
     return (
-        <div className="space-y-3 bg-slate-950/70 border border-cyan-800/40 rounded-lg p-3 shadow-inner shadow-cyan-950/20">
-            <div className="flex items-center justify-between border-b border-cyan-900/40 pb-2">
+        <div className="space-y-3 bg-n0 border border-n40 rounded-md p-3 shadow-card">
+            <div className="flex items-center justify-between border-b border-n40 pb-2">
                 <div>
-                    <div className="text-[11px] font-semibold text-cyan-200 tracking-wide">Seedance 2.0 多模态控制台</div>
-                    <div className="text-[9px] text-slate-500">
+                    <div className="text-[11px] font-semibold text-primary tracking-wide">Seedance 2.0 多模态控制台</div>
+                    <div className="text-[9px] text-n100">
                         {mode === 'reference'
                             ? '全能参考：图片 0-9 · 视频 0-3 · 音频 0-3'
                             : '首尾帧：仅 2 张图（首+尾），视频/音频不发送给后端'}
                     </div>
                 </div>
-                <span className="text-[9px] px-1.5 py-0.5 rounded border border-cyan-700/40 text-cyan-300 bg-cyan-950/30">
+                <span className="text-[9px] px-1.5 py-0.5 rounded border border-primary text-primary bg-primary-light">
                     {value.sub_model === 'fast' ? '渡劫 Fast' : '飞升 Standard'}
                 </span>
             </div>
 
             {/* Mode toggle (Issue 3/4) */}
             <div className="flex items-center gap-2 -mt-1">
-                <span className="text-[10px] text-slate-400 shrink-0">模式</span>
-                <div className="inline-flex rounded-md border border-cyan-800/40 bg-slate-900/40 overflow-hidden text-[10px]">
+                <span className="text-[10px] text-n300 shrink-0">模式</span>
+                <div className="inline-flex rounded-md border border-n40 bg-n30 overflow-hidden text-[10px]">
                     <button
                         type="button"
                         aria-pressed={mode === 'reference'}
@@ -172,8 +172,8 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                         disabled={disabled}
                         className={`px-2 py-1 transition-colors ${
                             mode === 'reference'
-                                ? 'bg-cyan-700/60 text-white'
-                                : 'text-slate-400 hover:text-cyan-300'
+                                ? 'bg-primary text-white'
+                                : 'text-n300 hover:text-primary'
                         }`}
                     >
                         全能参考
@@ -185,8 +185,8 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                         disabled={disabled}
                         className={`px-2 py-1 transition-colors ${
                             mode === 'first_last'
-                                ? 'bg-cyan-700/60 text-white'
-                                : 'text-slate-400 hover:text-cyan-300'
+                                ? 'bg-primary text-white'
+                                : 'text-n300 hover:text-primary'
                         }`}
                     >
                         首尾帧
@@ -196,14 +196,14 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
 
             <section className="space-y-1">
                 <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">提示词</div>
+                    <div className="text-[10px] font-medium text-n700">提示词</div>
                     <div className="flex items-center gap-1">
-                        <span className="text-[9px] text-slate-500">可空，但必须有媒体或文本</span>
+                        <span className="text-[9px] text-n100">可空，但必须有媒体或文本</span>
                         <button
                             type="button"
                             onClick={() => setPickerOpen(true)}
                             disabled={disabled}
-                            className="ml-1 p-1 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded inline-flex items-center gap-0.5 text-[10px]"
+                            className="ml-1 p-1 text-n700 hover:text-n800 bg-n0 hover:bg-n20 rounded inline-flex items-center gap-0.5 text-[10px]"
                             title="插入素材（媒体库 / 素材库 / 分镜...）"
                         >
                             <Plus size={11} /> 插入素材
@@ -211,7 +211,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                         <button
                             type="button"
                             onClick={() => setPromptModalOpen(true)}
-                            className="p-1 text-cyan-300 hover:text-white bg-slate-800 hover:bg-cyan-700/60 rounded inline-flex items-center gap-0.5 text-[10px]"
+                            className="p-1 text-primary hover:text-white bg-n0 hover:bg-primary rounded inline-flex items-center gap-0.5 text-[10px]"
                             title="放大编辑提示词"
                         >
                             <Maximize2 size={11} /> 放大编辑
@@ -238,17 +238,17 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
 
             <section className="space-y-2">
                 <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-medium text-slate-300">媒体输入</div>
-                    <div className="text-[9px] text-slate-500">不可仅音频</div>
+                    <div className="text-[10px] font-medium text-n700">媒体输入</div>
+                    <div className="text-[9px] text-n100">不可仅音频</div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-md border border-slate-700/70 bg-slate-900/60 p-2 min-h-[122px]">
-                        <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                    <div className="rounded-md border border-n40 bg-n30 p-2 min-h-[122px]">
+                        <div className="flex items-center justify-between text-[10px] text-n300 mb-1">
                             <span>图片 {images.length}/9</span>
                             <button
                                 onClick={() => imgInputRef.current?.click()}
                                 disabled={disabled || uploadBusy || images.length >= 9}
-                                className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded text-[10px]"
+                                className="px-2 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px]"
                             >
                                 <Upload size={10} className="inline mr-1" />添加
                             </button>
@@ -258,19 +258,19 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                         {images.length > 0 && (
                             <div className="grid grid-cols-3 gap-1 max-h-28 overflow-y-auto pr-0.5">
                                 {value.media_inputs.map((m, i) => m.kind !== 'image' ? null : (
-                                    <div key={i} className="relative bg-slate-800 rounded p-1">
+                                    <div key={i} className="relative bg-n0 rounded p-1">
                                         <img src={m.url} alt="" className="w-full h-12 object-cover rounded" />
                                         <select
                                             value={m.role || ''}
                                             onChange={e => updateMediaRole(i, e.target.value as SeedanceMediaRole | '')}
                                             disabled={disabled}
-                                            className="w-full mt-1 bg-slate-900 border border-slate-700 text-[9px] text-white rounded px-1"
+                                            className="w-full mt-1 bg-n0 border border-n40 text-[9px] text-n800 rounded px-1"
                                         >
                                             {(mode === 'first_last' ? ROLE_OPTIONS_FIRST_LAST : ROLE_OPTIONS_REFERENCE)
                                                 .map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                         </select>
                                         <button onClick={() => removeMedia(i)} disabled={disabled}
-                                            className="absolute top-0 right-0 bg-red-600/80 text-white rounded p-0.5">
+                                            className="absolute top-0 right-0 bg-danger text-white rounded p-0.5">
                                             <X size={8} />
                                         </button>
                                     </div>
@@ -282,17 +282,17 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                     <div
                         data-section="video"
                         data-greyed={mode === 'first_last' ? 'true' : 'false'}
-                        className={`rounded-md border border-slate-700/70 bg-slate-900/60 p-2 min-h-[122px] ${
+                        className={`rounded-md border border-n40 bg-n30 p-2 min-h-[122px] ${
                             mode === 'first_last' ? 'opacity-30 pointer-events-none' : ''
                         }`}
                         title={mode === 'first_last' ? '首尾帧模式不发送视频给后端' : ''}
                     >
-                        <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                        <div className="flex items-center justify-between text-[10px] text-n300 mb-1">
                             <span>视频 {videos.length}/3 {mode === 'first_last' && '(跳过)'}</span>
                             <button
                                 onClick={() => videoInputRef.current?.click()}
                                 disabled={disabled || uploadBusy || videos.length >= 3}
-                                className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded text-[10px]"
+                                className="px-2 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px]"
                             >
                                 <Upload size={10} className="inline mr-1" />添加
                             </button>
@@ -300,12 +300,12 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                                    onChange={e => onPickVideos(e.target.files)} />
                         </div>
                         {videos.length > 0 && (
-                            <ul className="text-[10px] text-slate-300 space-y-0.5 max-h-28 overflow-y-auto pr-0.5">
+                            <ul className="text-[10px] text-n700 space-y-0.5 max-h-28 overflow-y-auto pr-0.5">
                                 {value.media_inputs.map((m, i) => m.kind !== 'video' ? null : (
-                                    <li key={i} className="flex items-center justify-between bg-slate-800 rounded px-1 py-0.5">
+                                    <li key={i} className="flex items-center justify-between bg-n0 rounded px-1 py-0.5">
                                         <span className="truncate">{(m.url || '').split('/').pop()}</span>
                                         <button onClick={() => removeMedia(i)} disabled={disabled}>
-                                            <X size={10} className="text-red-400" />
+                                            <X size={10} className="text-danger" />
                                         </button>
                                     </li>
                                 ))}
@@ -316,17 +316,17 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                     <div
                         data-section="audio"
                         data-greyed={mode === 'first_last' ? 'true' : 'false'}
-                        className={`rounded-md border border-slate-700/70 bg-slate-900/60 p-2 min-h-[122px] ${
+                        className={`rounded-md border border-n40 bg-n30 p-2 min-h-[122px] ${
                             mode === 'first_last' ? 'opacity-30 pointer-events-none' : ''
                         }`}
                         title={mode === 'first_last' ? '首尾帧模式不发送音频给后端' : ''}
                     >
-                        <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                        <div className="flex items-center justify-between text-[10px] text-n300 mb-1">
                             <span>音频 {audios.length}/3 {mode === 'first_last' && '(跳过)'}</span>
                             <button
                                 onClick={() => audioInputRef.current?.click()}
                                 disabled={disabled || uploadBusy || audios.length >= 3}
-                                className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded text-[10px]"
+                                className="px-2 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px]"
                             >
                                 <Upload size={10} className="inline mr-1" />添加
                             </button>
@@ -334,12 +334,12 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                                    onChange={e => onPickAudios(e.target.files)} />
                         </div>
                         {audios.length > 0 && (
-                            <ul className="text-[10px] text-slate-300 space-y-0.5 max-h-28 overflow-y-auto pr-0.5">
+                            <ul className="text-[10px] text-n700 space-y-0.5 max-h-28 overflow-y-auto pr-0.5">
                                 {value.media_inputs.map((m, i) => m.kind !== 'audio' ? null : (
-                                    <li key={i} className="flex items-center justify-between bg-slate-800 rounded px-1 py-0.5">
+                                    <li key={i} className="flex items-center justify-between bg-n0 rounded px-1 py-0.5">
                                         <span className="truncate">{m.url.split('/').pop()}</span>
                                         <button onClick={() => removeMedia(i)} disabled={disabled}>
-                                            <X size={10} className="text-red-400" />
+                                            <X size={10} className="text-danger" />
                                         </button>
                                     </li>
                                 ))}
@@ -349,19 +349,19 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                 </div>
             </section>
 
-            <section className="space-y-2 border-t border-cyan-900/40 pt-2">
+            <section className="space-y-2 border-t border-n40 pt-2">
                 <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-medium text-slate-300">输出参数</div>
-                    <div className="text-[9px] text-slate-500">核心参数默认展开</div>
+                    <div className="text-[10px] font-medium text-n700">输出参数</div>
+                    <div className="text-[9px] text-n100">核心参数默认展开</div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[10px]">
                     <label className="space-y-1">
-                        <span className="text-slate-400">分辨率</span>
+                        <span className="text-n300">分辨率</span>
                         <select
                             value={value.resolution || '720p'}
                             onChange={e => patch({ resolution: e.target.value as SeedanceParams['resolution'] })}
                             disabled={disabled}
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200"
+                            className="w-full bg-n0 border border-n40 rounded px-2 py-1 text-n700"
                         >
                             {RESOLUTION_OPTIONS.map(r => (
                                 <option key={r} value={r} disabled={r === '1080p' && value.sub_model === 'fast'}>
@@ -372,29 +372,29 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                     </label>
 
                     <label className="space-y-1">
-                        <span className="text-slate-400">画面比例</span>
+                        <span className="text-n300">画面比例</span>
                         <select
                             value={value.ratio || 'adaptive'}
                             onChange={e => patch({ ratio: e.target.value as SeedanceParams['ratio'] })}
                             disabled={disabled}
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200"
+                            className="w-full bg-n0 border border-n40 rounded px-2 py-1 text-n700"
                         >
                             {RATIO_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
                         </select>
                     </label>
 
                     <label className="space-y-1">
-                        <span className="text-slate-400">Seed</span>
+                        <span className="text-n300">Seed</span>
                         <input
                             type="number"
                             value={value.seed ?? -1}
                             onChange={e => patch({ seed: parseInt(e.target.value, 10) })}
                             disabled={disabled}
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200"
+                            className="w-full bg-n0 border border-n40 rounded px-2 py-1 text-n700"
                         />
                     </label>
 
-                    <label className="flex items-center gap-2 rounded border border-slate-700/70 bg-slate-900/60 px-2 py-1 text-slate-300">
+                    <label className="flex items-center gap-2 rounded border border-n40 bg-n30 px-2 py-1 text-n700">
                         <input
                             type="checkbox"
                             checked={!!value.watermark}
@@ -404,7 +404,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                         水印
                     </label>
 
-                    <label className="flex items-center gap-2 rounded border border-cyan-800/40 bg-cyan-950/20 px-2 py-1 text-cyan-200">
+                    <label className="flex items-center gap-2 rounded border border-primary bg-primary-light px-2 py-1 text-primary">
                         <input
                             type="checkbox"
                             checked={value.generate_audio !== false}
@@ -414,7 +414,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                         AI 配音
                     </label>
 
-                    <label className="col-span-2 flex items-center gap-2 rounded border border-slate-800 bg-slate-950/40 px-2 py-1 text-slate-500 opacity-70" title="Seedance 2.0 系列不支持 camera_fixed">
+                    <label className="col-span-2 flex items-center gap-2 rounded border border-n40 bg-n30 px-2 py-1 text-n100 opacity-70" title="Seedance 2.0 系列不支持 camera_fixed">
                         <input type="checkbox" disabled />
                         固定镜头（仅 1.5pro）
                     </label>
@@ -422,17 +422,17 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
             </section>
 
             <section className="space-y-1">
-                <div className="flex items-start gap-1 text-[10px] text-amber-300 bg-amber-950/20 border border-amber-800/40 rounded px-1.5 py-1">
+                <div className="flex items-start gap-1 text-[10px] text-warning bg-warning/15 border border-warning/40 rounded px-1.5 py-1">
                     <Info size={10} className="mt-0.5 shrink-0" />
                     <span>Seedance 2.0 不支持直接上传含真人人脸的图/视频；请使用模型产物、预置虚拟人像或已授权真人素材。</span>
                 </div>
-                <div className="text-[9px] text-slate-500">
+                <div className="text-[9px] text-n100">
                     样片任务 ID / draft 仅 1.5pro 支持，2.0 系列不开放。
                 </div>
             </section>
 
             {!validation.ok && (
-                <div className="flex items-center gap-1 text-[10px] text-red-300 bg-red-950/30 border border-red-800/40 rounded px-1.5 py-1">
+                <div className="flex items-center gap-1 text-[10px] text-danger bg-r50 border border-danger/40 rounded px-1.5 py-1">
                     <AlertCircle size={10} />{validation.msg}
                 </div>
             )}
@@ -440,24 +440,24 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
             {/* 放大编辑提示词弹窗：图像与提示词在小面板里会重叠，这里提供大画布全面编辑 */}
             {promptModalOpen && ReactDOM.createPortal(
                 <div
-                    className="fixed inset-0 z-[9500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                    className="fixed inset-0 z-[9500] flex items-center justify-center bg-n900/50 backdrop-blur-sm p-4"
                     onMouseDown={(e) => { if (e.target === e.currentTarget) setPromptModalOpen(false); }}
                 >
                     <div
                         role="dialog"
                         aria-label="放大编辑提示词"
                         /* 2026-06-05：放大编辑弹窗整体再放大 1.5 倍（max-w-3xl 768px → max-w-6xl 1152px，max-h 88vh → 94vh） */
-                        className="w-full max-w-6xl max-h-[94vh] flex flex-col bg-slate-950 border border-cyan-800/50 rounded-xl shadow-2xl shadow-black/50 overflow-hidden"
+                        className="w-full max-w-6xl max-h-[94vh] flex flex-col bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden"
                     >
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-cyan-900/50">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-n40">
                             <div>
-                                <div className="text-sm font-semibold text-cyan-200">提示词 · 放大编辑</div>
-                                <div className="text-[10px] text-slate-500">@ 插入素材 · ✨ AI 改写 · 全面修改提示词</div>
+                                <div className="text-sm font-semibold text-primary">提示词 · 放大编辑</div>
+                                <div className="text-[10px] text-n100">@ 插入素材 · ✨ AI 改写 · 全面修改提示词</div>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setPromptModalOpen(false)}
-                                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
+                                className="p-1.5 rounded hover:bg-n20 text-n300 hover:text-n800 transition-colors"
                                 aria-label="关闭"
                             >
                                 <X size={16} />
@@ -475,11 +475,11 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                                 onPreviewMedia={onPreviewMedia}
                             />
                         </div>
-                        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-cyan-900/50">
+                        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-n40">
                             <button
                                 type="button"
                                 onClick={() => setPromptModalOpen(false)}
-                                className="px-4 py-1.5 text-xs rounded bg-cyan-700 hover:bg-cyan-600 text-white transition-colors"
+                                className="px-4 py-1.5 text-xs rounded bg-primary hover:bg-primary-hover text-white transition-colors"
                             >
                                 完成
                             </button>

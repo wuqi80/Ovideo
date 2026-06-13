@@ -37,15 +37,15 @@ export const SeedanceDetailModal: React.FC<SeedanceDetailModalProps> = (p) => {
         <div
             role="dialog"
             aria-label="Seedance 详情"
-            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4"
             onClick={p.onClose}
         >
             <div
-                className="w-[520px] max-w-full max-h-[85vh] bg-slate-900 border border-cyan-700/40 rounded-xl shadow-2xl shadow-cyan-950/40 overflow-hidden flex flex-col"
+                className="w-[520px] max-w-full max-h-[85vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-cyan-900/40">
-                    <div className="text-xs text-cyan-200">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-n40">
+                    <div className="text-xs text-n800">
                         <span className="opacity-60">Seedance 详情 ·</span>
                         <span className="ml-1.5 font-semibold">{p.title}</span>
                     </div>
@@ -53,7 +53,7 @@ export const SeedanceDetailModal: React.FC<SeedanceDetailModalProps> = (p) => {
                         type="button"
                         onClick={p.onClose}
                         aria-label="关闭"
-                        className="p-1 text-slate-400 hover:text-cyan-300 transition-colors"
+                        className="p-1 text-n300 hover:text-primary transition-colors"
                     >
                         <X size={14} />
                     </button>

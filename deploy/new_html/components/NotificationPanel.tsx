@@ -20,12 +20,12 @@ import type { RegisteredTask, SourcePage, TaskKind } from '../types';
 
 // ===== 状态色板（窄域、克制） =====
 const STATUS_THEME = {
-    running:   { bg: 'bg-blue-500/15',    text: 'text-blue-200',    border: 'border-blue-400/40',    dot: 'bg-blue-400' },
-    pending:   { bg: 'bg-blue-500/10',    text: 'text-blue-300/80', border: 'border-blue-400/20',    dot: 'bg-blue-400' },
-    queued:    { bg: 'bg-amber-500/15',   text: 'text-amber-200',   border: 'border-amber-400/40',   dot: 'bg-amber-400' },
-    completed: { bg: 'bg-emerald-500/15', text: 'text-emerald-200', border: 'border-emerald-400/40', dot: 'bg-emerald-400' },
-    failed:    { bg: 'bg-rose-500/15',    text: 'text-rose-200',    border: 'border-rose-400/40',    dot: 'bg-rose-400' },
-    cancelled: { bg: 'bg-slate-500/15',   text: 'text-slate-300',   border: 'border-slate-400/30',   dot: 'bg-slate-400' },
+    running:   { bg: 'bg-b50',    text: 'text-b400',    border: 'border-b75',    dot: 'bg-b400' },
+    pending:   { bg: 'bg-b50',    text: 'text-b400', border: 'border-b75',    dot: 'bg-b400' },
+    queued:    { bg: 'bg-warning/15',   text: 'text-warning',   border: 'border-warning/40',   dot: 'bg-warning' },
+    completed: { bg: 'bg-success/15', text: 'text-success', border: 'border-success/40', dot: 'bg-success' },
+    failed:    { bg: 'bg-r50',    text: 'text-danger',    border: 'border-danger/40',    dot: 'bg-danger' },
+    cancelled: { bg: 'bg-n30',   text: 'text-n300',   border: 'border-n40',   dot: 'bg-n100' },
 } as const;
 
 // ===== Kind → 图标 =====
@@ -221,7 +221,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
     }, [navigate, location.pathname]);
 
     const triggerCls = triggerClassName
-        || `relative inline-flex items-center justify-center ${compact ? 'p-1.5' : 'p-2'} rounded-md text-gray-500 hover:text-white hover:bg-gray-800/60 transition-all duration-200`;
+        || `relative inline-flex items-center justify-center ${compact ? 'p-1.5' : 'p-2'} rounded-md text-n300 hover:text-n800 hover:bg-n20 transition-all duration-200`;
 
     return (
         <div className="relative">
@@ -241,15 +241,15 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
                 />
                 {/* Active 指示：脉冲光环（背景） */}
                 {totalActive > 0 && (
-                    <span className="absolute inset-0 rounded-md ring-1 ring-blue-400/30 animate-pulse motion-reduce:hidden pointer-events-none" />
+                    <span className="absolute inset-0 rounded-md ring-1 ring-b400/30 animate-pulse motion-reduce:hidden pointer-events-none" />
                 )}
                 {/* 计数徽章 */}
                 {totalActive > 0 ? (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-blue-500/90 rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums">
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-b400 rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums">
                         {totalActive > 99 ? '99+' : totalActive}
                     </span>
                 ) : unreadCount > 0 ? (
-                    <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 ${failed.length > 0 ? 'bg-rose-500/90' : 'bg-emerald-500/90'} rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums`}>
+                    <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 ${failed.length > 0 ? 'bg-danger' : 'bg-success'} rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums`}>
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                 ) : null}
@@ -261,19 +261,19 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
                     ref={panelRef}
                     role="dialog"
                     aria-label="任务通知面板"
-                    className="fixed w-[400px] max-h-[70vh] overflow-hidden bg-slate-950 border border-slate-800 rounded-lg shadow-2xl shadow-black/40 z-[9000] flex flex-col"
+                    className="fixed w-[400px] max-h-[70vh] overflow-hidden bg-n0 border border-n40 rounded-md shadow-bottom z-[9000] flex flex-col"
                     style={{ top: menuPos.top, right: menuPos.right, animationName: 'panelFadeIn', animationDuration: '160ms', animationTimingFunction: 'cubic-bezier(0.2, 0.9, 0.3, 1)' }}
                 >
                     {/* Header */}
-                    <div className="flex items-center px-4 py-3 border-b border-slate-800">
-                        <span className="text-sm font-semibold text-slate-100">任务通知</span>
-                        <span className="ml-2 text-xs text-slate-500 tabular-nums">
+                    <div className="flex items-center px-4 py-3 border-b border-n40">
+                        <span className="text-sm font-semibold text-n800">任务通知</span>
+                        <span className="ml-2 text-xs text-n100 tabular-nums">
                             {totalActive > 0 ? `${totalActive} 个运行中` : '空闲'}
                         </span>
                         <span className="flex-1" />
                         <button
                             onClick={() => setOpen(false)}
-                            className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+                            className="p-1 rounded hover:bg-n20 text-n300 hover:text-n800 transition-colors"
                             aria-label="关闭"
                         >
                             <X size={14} />
@@ -281,7 +281,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
                     </div>
 
                     {/* Body */}
-                    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
+                    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-n40">
                         {totalActive === 0 && completed.length === 0 && failed.length === 0 ? (
                             <EmptyState />
                         ) : (
@@ -325,7 +325,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
 
                     {/* Footer */}
                     {(running.length + completed.length + failed.length) > 0 && (
-                        <div className="px-4 py-2 border-t border-slate-800 text-xs text-slate-500 tabular-nums">
+                        <div className="px-4 py-2 border-t border-n40 text-xs text-n100 tabular-nums">
                             共 {running.length + completed.length + failed.length} 项
                         </div>
                     )}
@@ -352,10 +352,10 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ title, count, items, onNavigate, onRemove, removeLabel, removeIconKind }) => (
     <div>
-        <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-slate-500 bg-slate-900/40 border-b border-slate-800/60">
-            {title} <span className="ml-1 text-slate-600 tabular-nums">· {count}</span>
+        <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-n100 bg-n30 border-b border-n40">
+            {title} <span className="ml-1 text-n100 tabular-nums">· {count}</span>
         </div>
-        <ul role="list" className="divide-y divide-slate-800/50">
+        <ul role="list" className="divide-y divide-n40">
             {items.map((t, i) => (
                 <li
                     key={t.taskId}
@@ -398,22 +398,22 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
             role="button"
             tabIndex={0}
             onKeyDown={e => { if (e.key === 'Enter') onNavigate(); }}
-            className="flex items-start gap-3 px-4 py-3 hover:bg-slate-800/40 cursor-pointer transition-colors"
+            className="flex items-start gap-3 px-4 py-3 hover:bg-n20 cursor-pointer transition-colors"
         >
             {/* Status icon */}
             <div className="mt-0.5 shrink-0">
-                {task.status === 'running' && <Loader2 size={14} className="text-blue-400 animate-spin motion-reduce:animate-none" />}
-                {(task.status === 'pending' || task.status === 'queued') && <Clock size={14} className="text-amber-400" />}
-                {task.status === 'completed' && <CheckCircle size={14} className="text-emerald-400" />}
-                {task.status === 'failed' && <AlertCircle size={14} className="text-rose-400" />}
-                {task.status === 'cancelled' && <X size={14} className="text-slate-400" />}
+                {task.status === 'running' && <Loader2 size={14} className="text-b400 animate-spin motion-reduce:animate-none" />}
+                {(task.status === 'pending' || task.status === 'queued') && <Clock size={14} className="text-warning" />}
+                {task.status === 'completed' && <CheckCircle size={14} className="text-success" />}
+                {task.status === 'failed' && <AlertCircle size={14} className="text-danger" />}
+                {task.status === 'cancelled' && <X size={14} className="text-n300" />}
             </div>
 
             <div className="flex-1 min-w-0">
                 {/* Title row */}
                 <div className="flex items-center gap-1.5">
-                    <KindIcon size={11} className="text-slate-500 shrink-0" />
-                    <span className="text-sm font-medium text-slate-100 truncate">{task.title}</span>
+                    <KindIcon size={11} className="text-n300 shrink-0" />
+                    <span className="text-sm font-medium text-n800 truncate">{task.title}</span>
                     <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] tabular-nums ${theme.bg} ${theme.text} ${theme.border} border`}>
                         {kindLabel}
                     </span>
@@ -423,15 +423,15 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
                 <div className="mt-1 flex items-center gap-2">
                     <span className={`text-xs ${theme.text}`}>{statusText}</span>
                     {task.error && (
-                        <span className="text-xs text-rose-300/80 truncate">· {task.error}</span>
+                        <span className="text-xs text-danger truncate">· {task.error}</span>
                     )}
                 </div>
 
                 {/* Progress bar */}
                 {task.status === 'running' && task.progress != null && (
-                    <div className="mt-1.5 h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="mt-1.5 h-1 bg-n30 rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-blue-400/80 rounded-full transition-all duration-500"
+                            className="h-full bg-b400 rounded-full transition-all duration-500"
                             style={{ width: `${Math.min(100, Math.max(0, task.progress * 100))}%` }}
                         />
                     </div>
@@ -446,29 +446,29 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
                     const worker = task.metadata.workerNodeId as string | undefined;
                     if (!stage && step == null && eta == null && !worker) return null;
                     return (
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400/90">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-n300">
                             {stage && <span className="truncate max-w-[220px]">{stage}</span>}
                             {step != null && totalSteps != null && (
-                                <span className="tabular-nums text-slate-500">{step}/{totalSteps} 步</span>
+                                <span className="tabular-nums text-n100">{step}/{totalSteps} 步</span>
                             )}
                             {eta != null && eta > 0 && (
-                                <span className="tabular-nums text-slate-500">
+                                <span className="tabular-nums text-n100">
                                     剩 {eta < 60 ? `${eta}s` : `${Math.round(eta / 60)}m`}
                                 </span>
                             )}
-                            {worker && <span className="text-slate-600 truncate max-w-[80px]">@{worker}</span>}
+                            {worker && <span className="text-n100 truncate max-w-[80px]">@{worker}</span>}
                         </div>
                     );
                 })()}
 
                 {/* Time + actions */}
-                <div className="mt-1 flex items-center text-[10px] text-slate-500">
+                <div className="mt-1 flex items-center text-[10px] text-n100">
                     <span className="tabular-nums">{fmtRelative(task.completedAt || task.startedAt || task.createdAt)}</span>
                     {/* 2026-06-05：去掉 pending 守卫——待执行/排队任务也要能取消（后端 cancelTask
                         会把 pending/queued/processing 落为 cancelled，刷新不再出现）。 */}
                     <button
                         onClick={e => { e.stopPropagation(); onRemove(); }}
-                        className="ml-auto opacity-0 group-hover:opacity-100 px-1.5 py-0.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700/60 rounded transition-all"
+                        className="ml-auto opacity-0 group-hover:opacity-100 px-1.5 py-0.5 text-n300 hover:text-n800 hover:bg-n20 rounded transition-all"
                         aria-label={removeLabel}
                     >
                         {removeIconKind === 'cancel' ? '取消' : '关闭'}
@@ -481,11 +481,11 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
 
 const EmptyState: React.FC = () => (
     <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-        <div className="w-10 h-10 rounded-full bg-slate-800/60 flex items-center justify-center mb-3">
-            <Bell size={16} className="text-slate-500" />
+        <div className="w-10 h-10 rounded-full bg-n30 flex items-center justify-center mb-3">
+            <Bell size={16} className="text-n300" />
         </div>
-        <div className="text-sm text-slate-400 mb-1">还没有任务</div>
-        <div className="text-xs text-slate-600">提交生成任务后这里会显示进度</div>
+        <div className="text-sm text-n700 mb-1">还没有任务</div>
+        <div className="text-xs text-n100">提交生成任务后这里会显示进度</div>
     </div>
 );
 

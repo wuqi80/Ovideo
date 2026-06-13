@@ -29,16 +29,16 @@ function tooltipFor(params: SeedanceParams, kind: 'image' | 'video' | 'audio'): 
 
 const TONE: Record<'image' | 'video' | 'audio', { active: string; zero: string }> = {
     image: {
-        active: 'bg-blue-500/15 text-blue-300 border border-blue-700/40',
-        zero:   'bg-slate-800 text-slate-600 border border-slate-700/40',
+        active: 'bg-b50 text-b400 border border-b75',
+        zero:   'bg-n30 text-n100 border border-n40',
     },
     video: {
-        active: 'bg-purple-500/15 text-purple-300 border border-purple-700/40',
-        zero:   'bg-slate-800 text-slate-600 border border-slate-700/40',
+        active: 'bg-primary-light text-primary border border-primary',
+        zero:   'bg-n30 text-n100 border border-n40',
     },
     audio: {
-        active: 'bg-orange-500/15 text-orange-300 border border-orange-700/40',
-        zero:   'bg-slate-800 text-slate-600 border border-slate-700/40',
+        active: 'bg-warning/15 text-warning border border-warning/40',
+        zero:   'bg-n30 text-n100 border border-n40',
     },
 };
 

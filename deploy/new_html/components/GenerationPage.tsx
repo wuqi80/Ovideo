@@ -464,24 +464,24 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   }, []); // only on mount
 
   const renderHistoryPanel = () => (
-    <div className="absolute top-[52px] right-0 bottom-0 w-80 bg-gray-900 border-l border-gray-800 z-40 flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
-        <div className="p-3 border-b border-gray-800 flex items-center justify-between bg-gray-850">
-            <h3 className="text-xs font-bold text-gray-300 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-400" />
+    <div className="absolute top-[52px] right-0 bottom-0 w-80 bg-n0 border-l border-n40 z-40 flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
+        <div className="p-3 border-b border-n40 flex items-center justify-between bg-n0">
+            <h3 className="text-xs font-bold text-n700 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
                 内部历史版本存档
             </h3>
-            <button onClick={() => setShowHistory(false)} className="text-gray-500 hover:text-white">
+            <button onClick={() => setShowHistory(false)} className="text-n100 hover:text-n800">
                 <X className="w-4 h-4" />
             </button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
             {selectedFile?.versions && selectedFile.versions.length > 0 ? (
                 [...selectedFile.versions].reverse().map(ver => (
-                    <div key={ver.id} className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 hover:bg-gray-800 transition-colors group">
+                    <div key={ver.id} className="bg-n30 border border-n40 rounded-lg p-3 hover:bg-n20 transition-colors group">
                         <div className="flex justify-between items-start mb-2">
                             <div>
-                                <div className="text-xs font-bold text-gray-200">{ver.name}</div>
-                                <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                                <div className="text-xs font-bold text-n700">{ver.name}</div>
+                                <div className="text-[10px] text-n100 font-mono mt-0.5">
                                     {new Date(ver.timestamp).toLocaleString()}
                                 </div>
                             </div>
@@ -494,7 +494,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                         setShowHistory(false);
                                     }
                                 }}
-                                className="flex-1 py-1.5 bg-indigo-900/50 hover:bg-indigo-600 border border-indigo-500/30 rounded text-[10px] text-indigo-200 hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:border-indigo-500"
+                                className="flex-1 py-1.5 bg-primary-light hover:bg-primary border border-primary/30 rounded text-[10px] text-primary hover:text-n800 transition-colors flex items-center justify-center gap-1 group-hover:border-primary"
                             >
                                 <RefreshCw className="w-3 h-3" />
                                 恢复此版本
@@ -505,7 +505,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                         onDeleteVersion(ver.id);
                                     }
                                 }}
-                                className="py-1.5 px-3 bg-red-900/50 hover:bg-red-600 border border-red-500/30 rounded text-[10px] text-red-200 hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:border-red-500"
+                                className="py-1.5 px-3 bg-r50 hover:bg-danger border border-danger rounded text-[10px] text-danger hover:text-white transition-colors flex items-center justify-center gap-1 group-hover:border-danger"
                                 title="删除此版本"
                             >
                                 <Trash2 className="w-3 h-3" />
@@ -514,11 +514,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     </div>
                 ))
             ) : (
-                <div className="flex flex-col items-center justify-center py-10 text-gray-500 gap-2">
+                <div className="flex flex-col items-center justify-center py-10 text-n100 gap-2">
                     <History className="w-8 h-8 opacity-20" />
                     <div className="text-center text-xs">
                         暂无内部存档记录<br/>
-                        请点击上方 <span className="text-indigo-400 font-bold">保存</span> 按钮创建存档
+                        请点击上方 <span className="text-primary font-bold">保存</span> 按钮创建存档
                     </div>
                 </div>
             )}
@@ -1831,25 +1831,25 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   }
 
   return (
-      <div className="flex-1 flex h-full w-full bg-gray-950 overflow-hidden relative">
+      <div className="flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
           
           {/* Header Bar */}
-          <div className="absolute top-0 left-0 right-0 h-[52px] bg-gray-850 border-b border-gray-800 z-20 flex items-center justify-between px-4">
+          <div className="absolute top-0 left-0 right-0 h-[52px] bg-n0 border-b border-n40 z-20 flex items-center justify-between px-4">
               <div className="flex items-center gap-4">
-                  <h2 className="text-sm font-bold text-gray-200 uppercase tracking-wider flex items-center gap-2">
-                      <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+                  <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
+                      <LayoutDashboard className="w-4 h-4 text-primary" />
                       画面分镜列表
                   </h2>
-                  <div className="h-4 w-px bg-gray-700"></div>
+                  <div className="h-4 w-px bg-n40"></div>
                   <div className="flex items-center gap-2">
                       <button 
                         onClick={toggleSelectAll}
-                        className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
+                        className="text-xs text-n300 hover:text-n800 flex items-center gap-1"
                       >
                          {selectedShotIds.size === selectedFile?.storyboard?.items.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                          全选
                       </button>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-n100">
                           已选 {selectedShotIds.size} 项
                       </span>
                   </div>
@@ -1857,7 +1857,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
               <div className="flex items-center gap-3">
                   {batchProgress ? (
-                      <div className="flex items-center gap-2 bg-indigo-900/40 px-3 py-1.5 rounded text-xs text-indigo-300 border border-indigo-500/20">
+                      <div className="flex items-center gap-2 bg-primary-light px-3 py-1.5 rounded text-xs text-primary border border-primary/20">
                           <CircleDashed className="w-3.5 h-3.5 animate-spin" />
                           <span>批量生成中 {batchProgress.current}/{batchProgress.total}</span>
                       </div>
@@ -1865,19 +1865,19 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       <button 
                           onClick={handleBatchGenerate}
                           disabled={isGenerating || selectedShotIds.size === 0}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                       >
                           <Play className="w-3.5 h-3.5" />
                           批量生成 ({selectedShotIds.size})
                       </button>
                   )}
 
-                  <div className="h-6 w-px bg-gray-700 mx-1"></div>
+                  <div className="h-6 w-px bg-n40 mx-1"></div>
 
                   {/* Fixed Top-Right Buttons */}
                   <button 
                         onClick={handleSaveClick}
-                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 rounded border border-gray-700 transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-n700 hover:text-n800 bg-n0 hover:bg-n20 rounded border border-n40 transition-colors"
                     >
                         <Save className="w-3.5 h-3.5" />
                         <span>存档</span>
@@ -1887,8 +1887,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         onClick={() => setShowHistory(!showHistory)}
                         className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
                         showHistory 
-                            ? 'bg-indigo-600 text-white border-indigo-500' 
-                            : 'bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 border-gray-700'
+                            ? 'bg-primary text-white border-primary' 
+                            : 'bg-n0 text-n700 hover:text-n800 hover:bg-n20 border-n40'
                         }`}
                     >
                         <History className="w-3.5 h-3.5" />
@@ -1908,7 +1908,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           {/* Resizable Sidebar: Shot List */}
           <div 
              style={{ width: sidebarWidth }} 
-             className="pt-[52px] border-r border-gray-800 bg-gray-900 flex flex-col z-10 flex-shrink-0 relative"
+             className="pt-[52px] border-r border-n40 bg-n0 flex flex-col z-10 flex-shrink-0 relative"
           >
                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
                    {hasStoryboard && selectedFile?.storyboard?.items.map((item, index) => {
@@ -1932,18 +1932,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                }}
                                className={`p-2 rounded-lg cursor-pointer border transition-all flex gap-2 group ${
                                    isSelected 
-                                   ? 'bg-indigo-900/30 border-indigo-500' 
-                                   : 'bg-gray-800 border-gray-700 hover:bg-gray-700'
+                                   ? 'bg-primary-light border-primary' 
+                                   : 'bg-n0 border-n40 hover:bg-n20'
                                }`}
                            >
                                <div 
                                     onClick={(e) => toggleShotSelection(e, item.id)}
-                                    className="flex items-center justify-center w-5 flex-shrink-0 text-gray-500 hover:text-white"
+                                    className="flex items-center justify-center w-5 flex-shrink-0 text-n100 hover:text-n800"
                                >
-                                   {isChecked ? <CheckSquare className="w-4 h-4 text-indigo-400" /> : <Square className="w-4 h-4" />}
+                                   {isChecked ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
                                </div>
 
-                               <div className="w-12 h-10 bg-black/40 rounded flex-shrink-0 overflow-hidden border border-gray-600/50 relative">
+                               <div className="w-12 h-10 bg-n30 rounded flex-shrink-0 overflow-hidden border border-n40 relative">
                                    {thumb ? (
                                        <img 
                                            src={thumb} 
@@ -1952,18 +1952,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                        />
                                    ) : (
                                        <div className="w-full h-full flex items-center justify-center">
-                                           <ImageIcon className="w-3 h-3 text-gray-600" />
+                                           <ImageIcon className="w-3 h-3 text-n100" />
                                        </div>
                                    )}
                                    {isShotGenerating && (
-                                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                           <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                       <div className="absolute inset-0 bg-n900/50 flex items-center justify-center">
+                                           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                                        </div>
                                    )}
                                </div>
                                <div className="flex-1 min-w-0">
                                    <div className="flex justify-between items-center mb-0.5">
-                                       <span className={`text-[10px] font-bold ${isSelected ? 'text-indigo-400' : 'text-gray-400'}`}>
+                                       <span className={`text-[10px] font-bold ${isSelected ? 'text-primary' : 'text-n300'}`}>
                                            镜头 {String(index + 1).padStart(2, '0')}
                                        </span>
                                        <div className="flex items-center gap-1">
@@ -1993,7 +1993,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                        ? 'bg-fuchsia-500/20 text-fuchsia-300'
                                                        : (shotModels[item.id] || globalModel) === 'gpt_image_official'
                                                        ? 'bg-rose-500/20 text-rose-300'
-                                                       : 'bg-purple-500/20 text-purple-400'
+                                                       : 'bg-primary-light text-primary'
                                                }`}>
                                                    {(shotModels[item.id] || globalModel) === 'nanobanana' ? '化神' : 
                                                     (shotModels[item.id] || globalModel) === 'qwen' ? '练气一阶' : 
@@ -2004,14 +2004,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                     (shotModels[item.id] || globalModel) === 'gpt_image_vip' ? '天劫一' : 
                                                     (shotModels[item.id] || globalModel) === 'gpt_image_official' ? '天劫二' : '未知'}
                                                </div>
-                                               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 hidden group-hover/model:block z-10 whitespace-nowrap bg-gray-900 border border-gray-700 rounded px-2 py-1 text-[8px] text-gray-300 shadow-lg">
+                                               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 hidden group-hover/model:block z-10 whitespace-nowrap bg-n0 border border-n40 rounded px-2 py-1 text-[8px] text-n700 shadow-lg">
                                                    点击切换模型
                                                </div>
                                            </div>
-                                       {item.isConfigConfirmed && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                                       {item.isConfigConfirmed && <CheckCircle2 className="w-3 h-3 text-success" />}
                                        </div>
                                    </div>
-                                   <p className="text-[9px] text-gray-500 line-clamp-1">{item.scriptSegment}</p>
+                                   <p className="text-[9px] text-n100 line-clamp-1">{item.scriptSegment}</p>
                                </div>
                            </div>
                        );
@@ -2019,11 +2019,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                </div>
                {/* Drag Handle */}
                <div
-                    className="absolute top-0 right-0 bottom-0 w-1 bg-transparent hover:bg-indigo-500/50 cursor-col-resize z-50 transition-colors"
+                    className="absolute top-0 right-0 bottom-0 w-1 bg-transparent hover:bg-primary-hover/50 cursor-col-resize z-50 transition-colors"
                     onMouseDown={startResizing}
                 >
                     <div className="absolute top-1/2 -translate-y-1/2 right-0.5">
-                        <GripVertical className="w-3 h-3 text-gray-600 opacity-0 hover:opacity-100" />
+                        <GripVertical className="w-3 h-3 text-n100 opacity-0 hover:opacity-100" />
                     </div>
                 </div>
           </div>
@@ -2032,18 +2032,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           <div className="flex-1 flex overflow-hidden pt-[52px]">
               
             {/* Configuration Column */}
-            <div className="w-[380px] flex flex-col border-r border-gray-800 bg-gray-900/50 p-6 overflow-y-auto custom-scrollbar">
+            <div className="w-[380px] flex flex-col border-r border-n40 bg-n0 p-6 overflow-y-auto custom-scrollbar">
                   <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-purple-400" />
+                      <h3 className="text-sm font-bold text-n700 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-primary" />
                       画面分镜配置
                       </h3>
                       <button 
                         onClick={handleConfirmConfig}
                         className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${
                           selectedShot?.isConfigConfirmed 
-                            ? 'bg-green-900/30 text-green-400 border-green-500/30' 
-                            : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
+                            ? 'bg-green-900/30 text-success border-green-500/30'
+                            : 'bg-n0 text-n300 border-n40 hover:text-n800'
                         }`}
                       >
                           <CheckCircle2 className="w-3 h-3" />
@@ -2052,10 +2052,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   </div>
 
                 {/* Model Selection */}
-                <div className="mb-6 p-4 bg-gray-950/50 border border-gray-800 rounded-xl">
+                <div className="mb-6 p-4 bg-n20 border border-n40 rounded-md">
                     <div className="flex items-center gap-2 mb-3">
                         <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                        <span className="text-xs font-bold text-gray-300">默认生成模型</span>
+                        <span className="text-xs font-bold text-n700">默认生成模型</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         <button
@@ -2063,7 +2063,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'qwen'
                                     ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
@@ -2074,7 +2074,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'qwen_lora'
                                     ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
@@ -2085,7 +2085,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'nanobanana'
                                     ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
@@ -2096,7 +2096,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'kontext'
                                     ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
@@ -2107,7 +2107,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'qwenN_lora'
                                     ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
@@ -2118,7 +2118,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'qwenN'
                                     ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
@@ -2129,7 +2129,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'gpt_image_vip'
                                     ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
@@ -2140,14 +2140,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                                 globalModel === 'gpt_image_official'
                                     ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-lg'
-                                    : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-750'
+                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
                             }`}
                             disabled={isGenerating}
                         >
                             天劫二阶
                         </button>
                     </div>
-                    <p className="text-[9px] text-gray-500 mt-2">
+                    <p className="text-[9px] text-n100 mt-2">
                         {globalModel === 'nanobanana' && '化神境界 · 点击分镜列表中的模型标识可单独设置'}
                         {globalModel === 'qwen' && '练气一阶 · 点击分镜列表中的模型标识可单独设置'}
                         {globalModel === 'qwen_lora' && '筑基一阶境界 · 点击分镜列表中的模型标识可单独设置'}
@@ -2160,18 +2160,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
                     {/* 2026-05-21：化神 / 天劫系列 参数面板 — 仅对应模型选中时显示 */}
                     {globalModel === 'nanobanana' && (
-                      <div className="mt-3 pt-3 border-t border-gray-800">
-                        <div className="text-[9px] text-gray-500 mb-2 flex items-center gap-1">
+                      <div className="mt-3 pt-3 border-t border-n40">
+                        <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
                           <span className="text-yellow-400">●</span> 化神参数 (Gemini Flash · 1K/2K/4K)
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[9px] text-gray-500 block mb-1">画面比例</label>
+                            <label className="text-[9px] text-n100 block mb-1">画面比例</label>
                             <select
                               value={geminiNano2Ratio}
                               onChange={(e) => setGeminiNano2Ratio(e.target.value)}
                               disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-yellow-500 focus:outline-none"
+                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-yellow-500 focus:outline-none"
                             >
                               {GEMINI_NANO2_RATIO_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -2179,12 +2179,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </select>
                           </div>
                           <div>
-                            <label className="text-[9px] text-gray-500 block mb-1">分辨率</label>
+                            <label className="text-[9px] text-n100 block mb-1">分辨率</label>
                             <select
                               value={geminiNano2Size}
                               onChange={(e) => setGeminiNano2Size(e.target.value as '1K' | '2K' | '4K')}
                               disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-yellow-500 focus:outline-none"
+                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-yellow-500 focus:outline-none"
                             >
                               {GEMINI_NANO2_SIZE_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -2196,20 +2196,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     )}
 
                     {(globalModel === 'gpt_image_vip' || globalModel === 'gpt_image_official') && (
-                      <div className="mt-3 pt-3 border-t border-gray-800">
-                        <div className="text-[9px] text-gray-500 mb-2 flex items-center gap-1">
+                      <div className="mt-3 pt-3 border-t border-n40">
+                        <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
                           <span className={globalModel === 'gpt_image_vip' ? 'text-fuchsia-300' : 'text-rose-300'}>●</span>
                           {globalModel === 'gpt_image_vip' ? '天劫一阶 (GPT Image 2 VIP)' : '天劫二阶 (GPT Image 2 官方混合)'}
-                          <span className="text-gray-600 ml-1">· auto = 上游自选</span>
+                          <span className="text-n100 ml-1">· auto = 上游自选</span>
                         </div>
                         <div className={`grid ${globalModel === 'gpt_image_official' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
                           <div>
-                            <label className="text-[9px] text-gray-500 block mb-1">画面比例</label>
+                            <label className="text-[9px] text-n100 block mb-1">画面比例</label>
                             <select
                               value={imageRatio}
                               onChange={(e) => setImageRatio(e.target.value as GptImageRatio)}
                               disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-fuchsia-500 focus:outline-none"
+                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-fuchsia-500 focus:outline-none"
                             >
                               {GPT_IMAGE_RATIO_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -2217,12 +2217,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </select>
                           </div>
                           <div>
-                            <label className="text-[9px] text-gray-500 block mb-1">分辨率</label>
+                            <label className="text-[9px] text-n100 block mb-1">分辨率</label>
                             <select
                               value={imageK}
                               onChange={(e) => setImageK(e.target.value as GptImageK)}
                               disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-fuchsia-500 focus:outline-none"
+                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-fuchsia-500 focus:outline-none"
                             >
                               {GPT_IMAGE_K_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -2231,12 +2231,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           </div>
                           {globalModel === 'gpt_image_official' && (
                             <div>
-                              <label className="text-[9px] text-gray-500 block mb-1">质量</label>
+                              <label className="text-[9px] text-n100 block mb-1">质量</label>
                               <select
                                 value={imageQuality}
                                 onChange={(e) => setImageQuality(e.target.value as GptImageQuality)}
                                 disabled={isGenerating}
-                                className="w-full px-2 py-1 text-[10px] bg-gray-900 border border-gray-700 rounded text-gray-200 focus:border-rose-500 focus:outline-none"
+                                className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-rose-500 focus:outline-none"
                               >
                                 {GPT_IMAGE_QUALITY_OPTIONS.map(o => (
                                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -2251,7 +2251,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
                   {/* Prompt */}
                   <div className="mb-6">
-                      <label className="text-xs font-bold text-gray-400 mb-2 block">画面提示词 (Image Prompt)</label>
+                      <label className="text-xs font-bold text-n300 mb-2 block">画面提示词 (Image Prompt)</label>
                       <textarea
                           value={prompt}
                           onChange={(e) => {
@@ -2268,26 +2268,26 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             }
                           }}
                         disabled={selectedShot?.isConfigConfirmed}
-                        className={`w-full h-32 bg-gray-800 border border-gray-700 rounded-lg p-3 text-xs text-gray-200 focus:border-indigo-500 focus:outline-none resize-none leading-relaxed ${selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`w-full h-32 bg-n0 border border-n40 rounded-lg p-3 text-xs text-n700 focus:border-primary focus:outline-none resize-none leading-relaxed ${selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
                       />
                   </div>
 
                   {/* Reference Images */}
                   <div 
-                      className={`mb-6 transition-all ${isDraggingRef ? 'ring-2 ring-indigo-500 ring-inset rounded-lg bg-indigo-500/10' : ''}`}
+                      className={`mb-6 transition-all ${isDraggingRef ? 'ring-2 ring-primary ring-inset rounded-lg bg-primary-light' : ''}`}
                       onDragOver={handleRefDragOver}
                       onDragLeave={handleRefDragLeave}
                       onDrop={handleRefDrop}
                   >
                       <div className="flex items-center justify-between mb-3">
-                          <label className="text-xs font-bold text-gray-400">
+                          <label className="text-xs font-bold text-n300">
                               参考图片 ({references.length}/6) 
-                              <span className="font-normal text-gray-500 ml-2">可拖拽图片到此</span>
+                              <span className="font-normal text-n100 ml-2">可拖拽图片到此</span>
                           </label>
                           <button 
                              onClick={handleAutoFill}
                            disabled={selectedShot?.isConfigConfirmed}
-                             className="text-[10px] flex items-center gap-1 bg-indigo-900/30 text-indigo-300 px-2 py-1 rounded border border-indigo-500/30 hover:bg-indigo-900/50 disabled:opacity-50"
+                             className="text-[10px] flex items-center gap-1 bg-primary-light text-primary px-2 py-1 rounded border border-primary/30 hover:bg-primary-light disabled:opacity-50"
                           >
                               <Wand2 className="w-3 h-3" />
                               自动填充绑定素材
@@ -2299,7 +2299,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           {references.map((ref) => (
                               <div 
                                 key={ref.id} 
-                              className="relative group aspect-square bg-black/40 rounded-lg border border-gray-700 overflow-hidden"
+                              className="relative group aspect-square bg-n30 rounded-lg border border-n40 overflow-hidden"
                               >
                                 <img 
                                   src={ref.url} 
@@ -2315,14 +2315,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
                                       <button 
                                           onClick={(e) => { e.stopPropagation(); setImageEditorData({ imageUrl: ref.url, referenceId: ref.id }); }}
-                                          className="bg-purple-500/80 hover:bg-purple-600 text-white rounded-full p-0.5"
+                                          className="bg-primary hover:bg-primary-hover text-white rounded-full p-0.5"
                                           title="编辑图片"
                                       >
                                           <Pencil className="w-3 h-3" />
                                       </button>
                                       <button 
                                           onClick={(e) => { e.stopPropagation(); setCameraModalImage(ref.url); }}
-                                          className="bg-indigo-500/80 hover:bg-indigo-600 text-white rounded-full p-0.5"
+                                          className="bg-primary hover:bg-primary-hover text-white rounded-full p-0.5"
                                           title="角度调整"
                                       >
                                           <Camera className="w-3 h-3" />
@@ -2336,7 +2336,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       </button>
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); setReferences(prev => prev.filter(r => r.id !== ref.id)); }}
-                                            className="bg-black/50 hover:bg-red-500 text-white rounded-full p-0.5"
+                                            className="bg-n900/50 hover:bg-danger text-white rounded-full p-0.5"
                                           title="移除"
                                         >
                                             <X className="w-3 h-3" />
@@ -2345,11 +2345,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   )}
 
                                   <div className="absolute top-1 left-1 pointer-events-none">
-                                      {ref.type === 'character' && <Users className="w-3 h-3 text-indigo-400 drop-shadow-md" />}
+                                      {ref.type === 'character' && <Users className="w-3 h-3 text-primary drop-shadow-md" />}
                                       {ref.type === 'scene' && <MapPin className="w-3 h-3 text-orange-400 drop-shadow-md" />}
                                       {ref.type === 'pose' && <User className="w-3 h-3 text-blue-400 drop-shadow-md" />}
                                       {ref.type === 'prop' && <Box className="w-3 h-3 text-yellow-400 drop-shadow-md" />}
-                                      {ref.type === 'effect' && <Zap className="w-3 h-3 text-purple-400 drop-shadow-md" />}
+                                      {ref.type === 'effect' && <Zap className="w-3 h-3 text-primary drop-shadow-md" />}
                                   </div>
                               </div>
                           ))}
@@ -2366,8 +2366,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   }}
                                   className={`aspect-square rounded-lg border border-dashed flex flex-col items-center justify-center text-xs ${
                                       selectedShot?.isConfigConfirmed 
-                                          ? 'bg-gray-800/20 border-gray-800 text-gray-700 cursor-not-allowed' 
-                                          : 'bg-gray-800/30 border-gray-700 text-gray-600 hover:bg-gray-800/50 hover:border-gray-600 hover:text-gray-400 cursor-pointer transition-all'
+                                          ? 'bg-n30 border-n40 text-n100 cursor-not-allowed'
+                                          : 'bg-n30 border-n40 text-n100 hover:bg-n20 hover:border-n40 hover:text-n300 cursor-pointer transition-all'
                                   }`}
                               >
                                   <Upload className="w-4 h-4 mb-1 opacity-50" />
@@ -2384,7 +2384,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   onClick={() => setShowUploadMenu(false)}
                               />
                               <div 
-                                  className="fixed z-[101] bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[120px]"
+                                  className="fixed z-[101] bg-n0 border border-n40 rounded-lg shadow-xl py-1 min-w-[120px]"
                                   style={{
                                       left: `${uploadMenuPosition.x}px`,
                                       top: `${uploadMenuPosition.y}px`,
@@ -2393,7 +2393,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   {categories.map((cat) => (
                                       <label 
                                           key={cat.type}
-                                          className="flex items-center gap-2 px-3 py-2 hover:bg-gray-800 cursor-pointer text-xs text-gray-300 hover:text-white transition-colors"
+                                          className="flex items-center gap-2 px-3 py-2 hover:bg-n20 cursor-pointer text-xs text-n700 hover:text-n800 transition-colors"
                                       >
                                           <cat.icon className="w-3.5 h-3.5" />
                                           {cat.label}
@@ -2418,7 +2418,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               {categories.map((cat) => (
                                   <label 
                                     key={cat.type}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[10px] cursor-pointer transition-colors ${references.length >= 6 || selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed bg-gray-800 border-gray-700 text-gray-500' : 'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300 hover:text-white'}`}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[10px] cursor-pointer transition-colors ${references.length >= 6 || selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed bg-n0 border-n40 text-n100' : 'bg-n0 hover:bg-n20 border-n40 text-n700 hover:text-n800'}`}
                                   >
                                       <cat.icon className="w-3 h-3" />
                                       {cat.label}
@@ -2438,23 +2438,23 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
             {/* Results Column */}
             <div 
-                className={`flex-1 flex flex-col bg-gray-950 relative overflow-hidden transition-all ${isDraggingResult ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-500/5' : ''}`}
+                className={`flex-1 flex flex-col bg-n20 relative overflow-hidden transition-all ${isDraggingResult ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-500/5' : ''}`}
                 onDragOver={handleResultDragOver}
                 onDragLeave={handleResultDragLeave}
                 onDrop={handleResultDrop}
             >
                    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar pb-20">
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                                <ImageIcon className="w-4 h-4 text-emerald-400" />
+                            <h3 className="text-sm font-bold text-n700 flex items-center gap-2">
+                                <ImageIcon className="w-4 h-4 text-success" />
                               画面分镜结果
-                              <span className="font-normal text-gray-500 text-xs">可拖拽图片到此</span>
+                              <span className="font-normal text-n100 text-xs">可拖拽图片到此</span>
                             </h3>
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => setShowStoryboardToolModal(true)}
                                     disabled={!selectedShot}
-                                    className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 hover:border-purple-400 rounded-lg text-xs font-medium text-purple-400 hover:text-purple-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-primary-light hover:bg-primary-light border border-primary hover:border-primary rounded-lg text-xs font-medium text-primary hover:text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                     title="分镜工具（全景融合/自动分镜/多宫格）"
                                 >
                                     <Grid3X3 className="w-3.5 h-3.5" />
@@ -2500,7 +2500,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <button
                                 onClick={() => document.getElementById('upload-result-image')?.click()}
                                 disabled={!selectedShot}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-emerald-500 rounded-lg text-xs font-medium text-gray-300 hover:text-emerald-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-2 px-3 py-1.5 bg-n0 hover:bg-n20 border border-n40 hover:border-emerald-500 rounded-lg text-xs font-medium text-n700 hover:text-success transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="从本地上传图片"
                             >
                                 <Upload className="w-3.5 h-3.5" />
@@ -2514,12 +2514,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                     key={img.id} 
                                     draggable
                                     onDragStart={(e) => handleResultImageDragStart(e, img.url)}
-                                  className={`relative group bg-gray-900 border rounded-xl overflow-hidden shadow-lg transition-all cursor-grab active:cursor-grabbing ${effectiveSelectedId === img.id ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-gray-800'}`}
+                                  className={`relative group bg-n0 border rounded-md overflow-hidden shadow-lg transition-all cursor-grab active:cursor-grabbing ${effectiveSelectedId === img.id ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-n40'}`}
                                     onClick={() => handleSelectResult(img.id)}
                                     title="拖拽到左侧参考图区域可添加为参考图"
                                 >
                                     <div 
-                                        className="aspect-video bg-black/40 relative cursor-zoom-in group" 
+                                        className="aspect-video bg-n30 relative cursor-zoom-in group" 
                                         onClick={(e) => { 
                                             e.stopPropagation(); 
                                             // 🔧 懒加载：按需加载原图并更新URL
@@ -2540,8 +2540,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                             }}
                                         />
                                         {img.thumbnail && (
-                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                <span className="text-xs text-white bg-black/80 px-2 py-1 rounded">点击查看高清原图</span>
+                                            <div className="absolute inset-0 bg-n900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <span className="text-xs text-white bg-n900/50 px-2 py-1 rounded">点击查看高清原图</span>
                                             </div>
                                         )}
                                       {effectiveSelectedId === img.id && (
@@ -2550,7 +2550,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                             </div>
                                         )}
                                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-end">
-                                            <span className="text-[9px] text-gray-400 font-mono">
+                                            <span className="text-[9px] text-n300 font-mono">
                                                 {new Date(img.timestamp).toLocaleTimeString()}
                                             </span>
                                           <div className="flex items-center gap-2">
@@ -2578,7 +2578,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setCameraModalImage(img.url || img.thumbnail); }}
-                                                  className="p-1.5 bg-indigo-500/80 hover:bg-indigo-600 text-white rounded-md transition-colors"
+                                                  className="p-1.5 bg-primary hover:bg-primary-hover text-white rounded-md transition-colors"
                                                   title="角度调整"
                                               >
                                                   <Camera className="w-3.5 h-3.5" />
@@ -2599,7 +2599,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                               </button>
                                             <button 
                                                     onClick={(e) => { e.stopPropagation(); handleDeleteResult(img.id); }}
-                                                    className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-md transition-colors"
+                                                    className="p-1.5 bg-danger hover:bg-danger text-white rounded-md transition-colors"
                                                     title="删除"
                                             >
                                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2607,8 +2607,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                           </div>
                                         </div>
                                     </div>
-                                    <div className="p-2 bg-gray-850 flex items-center justify-center cursor-pointer hover:bg-gray-800 transition-colors" onClick={(e) => { e.stopPropagation(); handleSelectResult(img.id); }}>
-                                      <span className={`text-xs font-medium ${effectiveSelectedId === img.id ? 'text-emerald-400' : 'text-gray-500'}`}>
+                                    <div className="p-2 bg-n0 flex items-center justify-center cursor-pointer hover:bg-n20 transition-colors" onClick={(e) => { e.stopPropagation(); handleSelectResult(img.id); }}>
+                                      <span className={`text-xs font-medium ${effectiveSelectedId === img.id ? 'text-success' : 'text-n100'}`}>
                                           {effectiveSelectedId === img.id ? '已选定 (最终结果)' : '点击选定'}
                                         </span>
                                     </div>
@@ -2616,14 +2616,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             ))}
 
                             {isCurrentShotGenerating && (
-                                <div className="aspect-video bg-gray-900 border-2 border-dashed border-indigo-500/50 rounded-xl flex flex-col items-center justify-center animate-pulse">
-                                    <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-                                    <span className="text-indigo-300 text-xs">生成中...</span>
+                                <div className="aspect-video bg-n0 border-2 border-dashed border-primary/50 rounded-md flex flex-col items-center justify-center animate-pulse">
+                                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-3"></div>
+                                    <span className="text-primary text-xs">生成中...</span>
                                 </div>
                             )}
 
                             {!isCurrentShotGenerating && currentGeneratedImages.length === 0 && (
-                                <div className="col-span-full py-12 border-2 border-dashed border-gray-800 rounded-xl flex flex-col items-center justify-center text-gray-600 bg-gray-900/30">
+                                <div className="col-span-full py-12 border-2 border-dashed border-n40 rounded-md flex flex-col items-center justify-center text-n100 bg-n0">
                                     <ImageIcon className="w-12 h-12 mb-3 opacity-20" />
                                     <p className="text-sm">暂无生成结果</p>
                                     <p className="text-xs mt-1">请配置提示词并点击生成</p>
@@ -2634,11 +2634,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                    </div>
                    
                    {/* 🆕 生成按钮 - 固定在结果栏底部居中 */}
-                   <div className="absolute bottom-0 left-0 right-0 flex justify-center py-3 bg-gray-950/95 border-t border-gray-800/50 backdrop-blur-sm">
+                   <div className="absolute bottom-0 left-0 right-0 flex justify-center py-3 bg-n20 border-t border-n40 backdrop-blur-sm">
                         <button 
                             onClick={handleGenerateCurrent}
                             disabled={isCurrentShotGenerating || !prompt || references.length === 0}
-                            className="px-8 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-900/50 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
+                            className="px-8 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
                             title={references.length === 0 ? '请先添加参考图片' : ''}
                         >
                             <Sparkles className={`w-4 h-4 ${isCurrentShotGenerating ? 'animate-spin' : ''}`} />
@@ -2650,13 +2650,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
           {/* Save Version Modal */}
          {isNamingVersion && (
-            <div className="absolute top-14 right-40 z-50 bg-gray-800 border border-gray-700 shadow-xl rounded-lg p-3 w-72 animate-in fade-in slide-in-from-top-2">
-                <h4 className="text-xs font-bold text-gray-300 mb-2">保存生成存档</h4>
+            <div className="absolute top-14 right-40 z-50 bg-n0 border border-n40 shadow-xl rounded-lg p-3 w-72 animate-in fade-in slide-in-from-top-2">
+                <h4 className="text-xs font-bold text-n700 mb-2">保存生成存档</h4>
                 <input 
                     type="text" 
                     value={versionName}
                     onChange={(e) => setVersionName(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5 text-xs text-white mb-2 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs text-n800 mb-2 focus:outline-none focus:border-primary"
                     autoFocus
                     onKeyDown={(e) => {
                         if (e.key === 'Enter') submitVersionSave();
@@ -2664,8 +2664,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     }}
                 />
                 <div className="flex gap-2">
-                    <button onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-gray-700 text-gray-300 text-xs rounded hover:bg-gray-600">取消</button>
-                    <button onClick={submitVersionSave} className="flex-1 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-500">确认保存</button>
+                    <button onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-n0 text-n700 text-xs rounded hover:bg-n20">取消</button>
+                    <button onClick={submitVersionSave} className="flex-1 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover">确认保存</button>
                 </div>
             </div>
         )}
@@ -2676,7 +2676,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         {/* Image Preview Modal (Lightbox) with Navigation */}
         {previewImage && (
             <div 
-                className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-8 cursor-zoom-out"
+                className="fixed inset-0 z-[100] bg-n900/50 flex items-center justify-center p-8 cursor-zoom-out"
                 onClick={closePreview}
                 onKeyDown={(e) => {
                     if (e.key === 'ArrowLeft') handlePrevImage();
@@ -2689,8 +2689,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                 <div className="relative flex items-center justify-center" style={{ minWidth: '50vw', minHeight: '50vh' }}>
                     {/* 🆕 加载进度指示器 - 独立定位 */}
                     {isLoadingFullImage && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 rounded-lg z-10">
-                            <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-n900/50 rounded-lg z-10">
+                            <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
                             <p className="text-white text-sm">加载大图中...</p>
                         </div>
                     )}
@@ -2722,7 +2722,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                 {hasPrev && (
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
-                                        className="absolute left-4 top-1/2 -translate-y-1/2 bg-gray-800/80 hover:bg-gray-700 text-white rounded-full p-3 border border-gray-600 transition-all hover:scale-110 z-20"
+                                        className="absolute left-4 top-1/2 -translate-y-1/2 bg-n0 hover:bg-n20 text-n800 rounded-full p-3 border border-n40 transition-all hover:scale-110 z-20"
                                         title="上一张 (←)"
                                     >
                                         <ChevronLeft className="w-6 h-6" />
@@ -2733,7 +2733,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                 {hasNext && (
                                     <button 
                                         onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
-                                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-gray-800/80 hover:bg-gray-700 text-white rounded-full p-3 border border-gray-600 transition-all hover:scale-110 z-20"
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-n0 hover:bg-n20 text-n800 rounded-full p-3 border border-n40 transition-all hover:scale-110 z-20"
                                         title="下一张 (→)"
                                     >
                                         <ChevronRight className="w-6 h-6" />
@@ -2742,7 +2742,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                 
                                 {/* 图片计数器 */}
                                 {totalImages > 1 && (
-                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/80 text-white text-sm px-4 py-2 rounded-full border border-gray-600 z-20">
+                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-n0 text-n800 text-sm px-4 py-2 rounded-full border border-n40 z-20">
                                         {currentIndex + 1} / {totalImages}
                                     </div>
                                 )}
@@ -2753,7 +2753,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     {/* 关闭按钮 */}
                     <button 
                         onClick={closePreview}
-                        className="absolute -top-4 -right-4 bg-gray-800 text-white rounded-full p-2 hover:bg-gray-700 border border-gray-600 z-20"
+                        className="absolute -top-4 -right-4 bg-n0 text-n800 rounded-full p-2 hover:bg-n20 border border-n40 z-20"
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -2895,9 +2895,9 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
         
         return (
             <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] text-gray-400">
+                <div className="flex items-center justify-between text-[11px] text-n300">
                     <span>{label}</span>
-                    <span className="font-semibold text-white">{value}</span>
+                    <span className="font-semibold text-n800">{value}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <input
@@ -2907,12 +2907,12 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                         step={1}
                         value={displayIndex}
                         onChange={(e) => onChange(values[Number(e.target.value)])}
-                        className="flex-1 accent-indigo-500"
+                        className="flex-1 accent-primary"
                     />
                 </div>
-                <div className="flex justify-between text-[9px] text-gray-500">
+                <div className="flex justify-between text-[9px] text-n100">
                     {values.map((v, i) => (
-                        <span key={i} className={value === v ? 'text-indigo-400 font-semibold' : ''}>{v}</span>
+                        <span key={i} className={value === v ? 'text-primary font-semibold' : ''}>{v}</span>
                     ))}
                 </div>
             </div>
@@ -2920,19 +2920,19 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
-            <div className="w-full max-w-4xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
+            <div className="w-full max-w-4xl bg-n0 border border-n40 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
                 
                 {/* 🆕 Loading覆盖层 - 处理中时显示 */}
                 {isProcessing && (
-                    <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
+                    <div className="absolute inset-0 bg-n0 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
                         <div className="relative">
-                            <div className="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mb-4"></div>
+                            <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
                         </div>
-                        <h4 className="text-lg font-bold text-white mb-2">正在生成新角度...</h4>
-                        <p className="text-sm text-gray-400 mb-4">请稍候，AI正在重建镜头</p>
-                        <div className="flex items-center gap-2 text-xs text-indigo-300">
-                            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                        <h4 className="text-lg font-bold text-n800 mb-2">正在生成新角度...</h4>
+                        <p className="text-sm text-n300 mb-4">请稍候，AI正在重建镜头</p>
+                        <div className="flex items-center gap-2 text-xs text-primary">
+                            <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
                             <span>处理中</span>
                         </div>
                     </div>
@@ -2940,24 +2940,24 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                 
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-white">角度调整</h3>
-                        <p className="text-xs text-gray-400 mt-1">基于现有图片重建镜头角度，保持画面一致性。</p>
+                        <h3 className="text-lg font-bold text-n800">角度调整</h3>
+                        <p className="text-xs text-n300 mt-1">基于现有图片重建镜头角度，保持画面一致性。</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white" disabled={isProcessing}>
+                    <button onClick={onClose} className="text-n300 hover:text-n800" disabled={isProcessing}>
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-4">
-                        <div className="relative rounded-2xl overflow-hidden border border-gray-800 h-80 bg-black/30 flex items-center justify-center">
+                        <div className="relative rounded-2xl overflow-hidden border border-n40 h-80 bg-n30 flex items-center justify-center">
                             <img src={imageUrl} className="w-full h-full object-contain" alt="预览" />
                         </div>
                     </div>
 
                     <div className="space-y-5">
-                        <div className="space-y-3 bg-gray-950/30 border border-gray-800 rounded-xl p-4">
-                            <h4 className="text-xs font-bold text-gray-400 uppercase">镜头控制</h4>
+                        <div className="space-y-3 bg-n20 border border-n40 rounded-md p-4">
+                            <h4 className="text-xs font-bold text-n300 uppercase">镜头控制</h4>
                             <DiscreteSlider 
                                 label="水平旋转 (°)" 
                                 values={[-90, -45, 0, 45, 90]} 
@@ -2976,19 +2976,19 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                                 value={vertical} 
                                 onChange={setVertical} 
                             />
-                            <label className="flex items-center gap-2 text-xs text-gray-300">
+                            <label className="flex items-center gap-2 text-xs text-n700">
                                 <input type="checkbox" checked={wideAngle} onChange={(e) => setWideAngle(e.target.checked)} />
                                 启用广角透视
                             </label>
                         </div>
 
                         <div className="space-y-2">
-                            <span className="text-[11px] font-bold text-gray-500 uppercase">自定义提示词 (可覆盖镜头设定)</span>
+                            <span className="text-[11px] font-bold text-n100 uppercase">自定义提示词 (可覆盖镜头设定)</span>
                             <textarea
                                 rows={3}
                                 value={customPrompt}
                                 onChange={(e) => setCustomPrompt(e.target.value)}
-                                className="w-full bg-gray-900 border border-gray-700 rounded-lg text-sm text-white p-3 focus:outline-none focus:border-indigo-500 resize-none"
+                                className="w-full bg-n0 border border-n40 rounded-lg text-sm text-n800 p-3 focus:outline-none focus:border-primary resize-none"
                                 placeholder="输入更详细的场景描述或留空使用自动提示..."
                             />
                             <div className="flex flex-wrap gap-1 mt-2">
@@ -2996,7 +2996,7 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                                     <button
                                         key={idx}
                                         onClick={() => setCustomPrompt(example)}
-                                        className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-indigo-600 text-gray-400 hover:text-white rounded border border-gray-700 hover:border-indigo-500 transition-colors"
+                                        className="text-[10px] px-2 py-1 bg-n0 hover:bg-primary text-n300 hover:text-n800 rounded border border-n40 hover:border-primary transition-colors"
                                     >
                                         {example.split('（')[0]}
                                     </button>
@@ -3004,19 +3004,19 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs text-gray-300">
+                        <div className="flex items-center gap-3 text-xs text-n700">
                             <div className="flex items-center gap-2">
                                 <span>随机种子</span>
                                 <input
                                     type="number"
                                     value={seed}
                                     onChange={(e) => setSeed(Number(e.target.value))}
-                                    className="w-32 bg-gray-900 border border-gray-700 rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+                                    className="w-32 bg-n0 border border-n40 rounded px-2 py-1 focus:outline-none focus:border-primary"
                                 />
                             </div>
                             <button 
                                 onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
-                                className="px-2 py-1 rounded border border-gray-700 hover:border-indigo-500 hover:text-white transition-colors"
+                                className="px-2 py-1 rounded border border-n40 hover:border-primary hover:text-n800 transition-colors"
                             >
                                 随机
                             </button>
@@ -3024,8 +3024,8 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800" disabled={isProcessing}>取消</button>
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20" disabled={isProcessing}>取消</button>
                     <button 
                         onClick={handleSubmit} 
                         disabled={isProcessing}
@@ -3055,19 +3055,19 @@ const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, o
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
-            <div className="w-full max-w-2xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
+            <div className="w-full max-w-2xl bg-n0 border border-n40 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Loading覆盖层 - 处理中时显示 */}
                 {isProcessing && (
-                    <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
+                    <div className="absolute inset-0 bg-n0 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
                         <div className="relative">
-                            <div className="w-16 h-16 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin mb-4"></div>
+                            <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4"></div>
                         </div>
-                        <h4 className="text-lg font-bold text-white mb-2">正在生成多角度人物...</h4>
-                        <p className="text-sm text-gray-400 mb-4">请稍候，AI正在生成多视角图像</p>
-                        <div className="flex items-center gap-2 text-xs text-purple-300">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                        <h4 className="text-lg font-bold text-n800 mb-2">正在生成多角度人物...</h4>
+                        <p className="text-sm text-n300 mb-4">请稍候，AI正在生成多视角图像</p>
+                        <div className="flex items-center gap-2 text-xs text-primary">
+                            <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
                             <span>处理中</span>
                         </div>
                     </div>
@@ -3075,35 +3075,35 @@ const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, o
                 
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-white">多角度人物生成</h3>
-                        <p className="text-xs text-gray-400 mt-1">基于选中的图片生成多角度人物视图</p>
+                        <h3 className="text-lg font-bold text-n800">多角度人物生成</h3>
+                        <p className="text-xs text-n300 mt-1">基于选中的图片生成多角度人物视图</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white" disabled={isProcessing}>
+                    <button onClick={onClose} className="text-n300 hover:text-n800" disabled={isProcessing}>
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
                     {/* 预览图 */}
-                    <div className="relative rounded-2xl overflow-hidden border border-gray-800 h-64 bg-black/30 flex items-center justify-center">
+                    <div className="relative rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">
                         <img src={imageUrl} className="w-full h-full object-contain" alt="选中的图片" />
                     </div>
 
                     {/* Seed 控制 */}
-                    <div className="bg-gray-950/30 border border-gray-800 rounded-xl p-4">
+                    <div className="bg-n20 border border-n40 rounded-md p-4">
                         <div className="flex items-center justify-between">
                             <div className="space-y-1">
-                                <span className="text-[11px] font-bold text-gray-400 uppercase">随机种子</span>
+                                <span className="text-[11px] font-bold text-n300 uppercase">随机种子</span>
                                 <input
                                     type="number"
                                     value={seed}
                                     onChange={(e) => setSeed(Number(e.target.value))}
-                                    className="w-48 bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-purple-500 text-white"
+                                    className="w-48 bg-n0 border border-n40 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary text-n800"
                                 />
                             </div>
                             <button 
                                 onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
-                                className="px-3 py-1.5 rounded border border-gray-700 hover:border-purple-500 hover:text-white transition-colors text-sm text-gray-400"
+                                className="px-3 py-1.5 rounded border border-n40 hover:border-primary hover:text-n800 transition-colors text-sm text-n300"
                             >
                                 随机
                             </button>
@@ -3111,12 +3111,12 @@ const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, o
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800" disabled={isProcessing}>取消</button>
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20" disabled={isProcessing}>取消</button>
                     <button 
                         onClick={handleSubmit} 
                         disabled={isProcessing}
-                        className="px-5 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 text-xs font-bold text-white shadow-lg shadow-purple-900/30 hover:shadow-purple-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isProcessing ? '生成中...' : '开始生成'}
                     </button>
@@ -3150,17 +3150,17 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[130] p-6" onClick={isProcessing ? undefined : onClose}>
-            <div className="w-full h-full max-w-6xl max-h-[90vh] bg-gray-900 border border-cyan-500/30 rounded-2xl shadow-2xl flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur-md flex items-center justify-center z-[130] p-6" onClick={isProcessing ? undefined : onClose}>
+            <div className="w-full h-full max-w-6xl max-h-[90vh] bg-n0 border border-cyan-500/30 rounded-2xl shadow-2xl flex flex-col relative" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Loading覆盖层 */}
                 {isProcessing && (
-                    <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
+                    <div className="absolute inset-0 bg-n0 backdrop-blur-sm rounded-2xl z-50 flex flex-col items-center justify-center">
                         <div className="relative">
                             <div className="w-20 h-20 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mb-4"></div>
                         </div>
-                        <h4 className="text-xl font-bold text-white mb-2">正在生成全景角度...</h4>
-                        <p className="text-sm text-gray-400 mb-4">请稍候，AI正在生成指定视角图像</p>
+                        <h4 className="text-xl font-bold text-n800 mb-2">正在生成全景角度...</h4>
+                        <p className="text-sm text-n300 mb-4">请稍候，AI正在生成指定视角图像</p>
                         <div className="flex items-center gap-2 text-sm text-cyan-300">
                             <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse"></div>
                             <span>处理中</span>
@@ -3169,13 +3169,13 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
                 )}
                 
                 {/* 顶部标题栏 - 包含数值输入 */}
-                <div className="flex items-center justify-between px-6 py-3 border-b border-gray-800 shrink-0">
+                <div className="flex items-center justify-between px-6 py-3 border-b border-n40 shrink-0">
                     <div className="flex items-center gap-6">
                         <div>
-                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <h3 className="text-lg font-bold text-n800 flex items-center gap-2">
                                 <span className="text-cyan-400">◈</span>
                                 全景角度生成
-                                <span className="text-xs font-normal text-gray-500 ml-1">96种组合</span>
+                                <span className="text-xs font-normal text-n100 ml-1">96种组合</span>
                             </h3>
                         </div>
                         
@@ -3192,7 +3192,7 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
                                         const clamped = ((val % 360) + 360) % 360;
                                         setRawValues(prev => ({ ...prev, horizontal: clamped }));
                                     }}
-                                    className="w-16 px-2 py-1 bg-gray-800 border border-pink-500/40 rounded text-pink-400 text-sm font-semibold text-center focus:outline-none focus:border-pink-500"
+                                    className="w-16 px-2 py-1 bg-n0 border border-pink-500/40 rounded text-pink-400 text-sm font-semibold text-center focus:outline-none focus:border-pink-500"
                                     min={0}
                                     max={360}
                                 />
@@ -3210,7 +3210,7 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
                                         const clamped = Math.max(-30, Math.min(90, val));
                                         setRawValues(prev => ({ ...prev, vertical: clamped }));
                                     }}
-                                    className="w-16 px-2 py-1 bg-gray-800 border border-cyan-500/40 rounded text-cyan-400 text-sm font-semibold text-center focus:outline-none focus:border-cyan-500"
+                                    className="w-16 px-2 py-1 bg-n0 border border-cyan-500/40 rounded text-cyan-400 text-sm font-semibold text-center focus:outline-none focus:border-cyan-500"
                                     min={-30}
                                     max={90}
                                 />
@@ -3228,7 +3228,7 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
                                         const clamped = Math.max(0, Math.min(10, val));
                                         setRawValues(prev => ({ ...prev, zoom: clamped }));
                                     }}
-                                    className="w-16 px-2 py-1 bg-gray-800 border border-yellow-500/40 rounded text-yellow-400 text-sm font-semibold text-center focus:outline-none focus:border-yellow-500"
+                                    className="w-16 px-2 py-1 bg-n0 border border-yellow-500/40 rounded text-yellow-400 text-sm font-semibold text-center focus:outline-none focus:border-yellow-500"
                                     min={0}
                                     max={10}
                                     step={0.1}
@@ -3238,14 +3238,14 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
                             {/* 重置按钮 */}
                             <button 
                                 onClick={() => setRawValues({ horizontal: 0, vertical: 0, zoom: 5 })}
-                                className="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
+                                className="px-2 py-1 text-n300 hover:text-n800 hover:bg-n20 rounded transition-colors text-sm"
                                 title="重置角度"
                             >
                                 ↺
                             </button>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white p-2" disabled={isProcessing}>
+                    <button onClick={onClose} className="text-n300 hover:text-n800 p-2" disabled={isProcessing}>
                         <X className="w-6 h-6" />
                     </button>
                 </div>
@@ -3260,30 +3260,30 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
                 </div>
                 
                 {/* 底部工具栏 */}
-                <div className="flex items-center gap-4 px-6 py-4 border-t border-gray-800 bg-gray-950/50 shrink-0">
+                <div className="flex items-center gap-4 px-6 py-4 border-t border-n40 bg-n20 shrink-0">
                     {/* 提示词显示 */}
                     <div className="flex-1">
                         <input
                             type="text"
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-cyan-500 text-cyan-300 font-mono"
+                            className="w-full bg-n0 border border-n40 rounded-lg px-4 py-3 text-base focus:outline-none focus:border-cyan-500 text-cyan-300 font-mono"
                             placeholder="角度提示词（由上方控制器自动生成）"
                         />
                     </div>
                     
                     {/* 种子 */}
                     <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">种子:</span>
+                        <span className="text-xs text-n100">种子:</span>
                         <input
                             type="number"
                             value={seed}
                             onChange={(e) => setSeed(Number(e.target.value))}
-                            className="w-40 bg-gray-900 border border-gray-700 rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-cyan-500 text-white"
+                            className="w-40 bg-n0 border border-n40 rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-cyan-500 text-n800"
                         />
                         <button 
                             onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
-                            className="px-3 py-3 rounded-lg border border-gray-700 hover:border-cyan-500 hover:bg-gray-800 transition-colors text-lg"
+                            className="px-3 py-3 rounded-lg border border-n40 hover:border-cyan-500 hover:bg-n20 transition-colors text-lg"
                             title="随机种子"
                         >
                             🎲
@@ -3291,7 +3291,7 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
                     </div>
                     
                     {/* 按钮 */}
-                    <button onClick={onClose} className="px-6 py-3 rounded-lg border border-gray-600 text-sm text-gray-300 hover:bg-gray-800 transition-colors" disabled={isProcessing}>
+                    <button onClick={onClose} className="px-6 py-3 rounded-lg border border-n40 text-sm text-n700 hover:bg-n20 transition-colors" disabled={isProcessing}>
                         取消
                     </button>
                     <button 
@@ -3575,16 +3575,16 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
     const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff', '#000000'];
 
     return (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur flex items-center justify-center z-[140]" onClick={onClose}>
-            <div className="w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 relative" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[140]" onClick={onClose}>
+            <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-2xl p-6 relative" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h3 className="text-lg font-bold text-white">图片编辑器</h3>
-                        <p className="text-xs text-gray-400">画笔涂鸦、添加文字和箭头标注</p>
+                        <h3 className="text-lg font-bold text-n800">图片编辑器</h3>
+                        <p className="text-xs text-n300">画笔涂鸦、添加文字和箭头标注</p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white">
+                    <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
@@ -3595,8 +3595,8 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                         onClick={() => setMode('edit')}
                         className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
                             mode === 'edit' 
-                                ? 'bg-purple-500 text-white' 
-                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                ? 'bg-primary text-white' 
+                                : 'bg-n0 text-n300 hover:bg-n20'
                         }`}
                     >
                         <Pencil className="w-4 h-4" />
@@ -3607,7 +3607,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                         className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
                             mode === 'sketch' 
                                 ? 'bg-blue-500 text-white' 
-                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                : 'bg-n0 text-n300 hover:bg-n20'
                         }`}
                     >
                         <Layers className="w-4 h-4" />
@@ -3617,10 +3617,10 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
                 <div className="grid grid-cols-[1fr_200px] gap-4">
                     {/* Canvas Area */}
-                    <div className="relative bg-gray-950 rounded-xl overflow-hidden flex items-center justify-center min-h-[400px]">
+                    <div className="relative bg-n20 rounded-md overflow-hidden flex items-center justify-center min-h-[400px]">
                         {!imageLoaded && (
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                             </div>
                         )}
                         <canvas
@@ -3642,14 +3642,14 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                     </div>
 
                     {/* Tools Panel */}
-                    <div className="bg-gray-950 rounded-xl p-4 space-y-4">
+                    <div className="bg-n20 rounded-md p-4 space-y-4">
                         <div>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">工具</span>
+                            <span className="text-[10px] font-bold text-n300 uppercase block mb-2">工具</span>
                             <div className="grid grid-cols-2 gap-2">
                                 <button
                                     onClick={() => setTool('brush')}
                                     className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
-                                        tool === 'brush' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                        tool === 'brush' ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:bg-n20'
                                     }`}
                                 >
                                     <Pencil className="w-4 h-4" />
@@ -3658,7 +3658,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                 <button
                                     onClick={() => setTool('text')}
                                     className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
-                                        tool === 'text' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                        tool === 'text' ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:bg-n20'
                                     }`}
                                 >
                                     <Type className="w-4 h-4" />
@@ -3667,7 +3667,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                 <button
                                     onClick={() => setTool('arrow')}
                                     className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
-                                        tool === 'arrow' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                        tool === 'arrow' ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:bg-n20'
                                     }`}
                                 >
                                     <MoveRight className="w-4 h-4" />
@@ -3676,7 +3676,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                 <button
                                     onClick={() => setTool('eraser')}
                                     className={`p-2 rounded-lg flex flex-col items-center gap-1 transition-all ${
-                                        tool === 'eraser' ? 'bg-purple-500 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                                        tool === 'eraser' ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:bg-n20'
                                     }`}
                                 >
                                     <Eraser className="w-4 h-4" />
@@ -3687,7 +3687,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
                         {mode === 'edit' && (
                             <div>
-                                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">颜色</span>
+                                <span className="text-[10px] font-bold text-n300 uppercase block mb-2">颜色</span>
                                 <div className="grid grid-cols-4 gap-1">
                                     {colors.map(color => (
                                         <button
@@ -3704,7 +3704,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                         )}
 
                         <div>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">
+                            <span className="text-[10px] font-bold text-n300 uppercase block mb-2">
                                 笔刷大小: {brushSize}px
                             </span>
                             <input
@@ -3713,24 +3713,24 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                                 max="20"
                                 value={brushSize}
                                 onChange={(e) => setBrushSize(Number(e.target.value))}
-                                className="w-full accent-purple-500"
+                                className="w-full accent-primary"
                             />
                         </div>
 
                         {tool === 'text' && textPosition && (
                             <div>
-                                <span className="text-[10px] font-bold text-gray-400 uppercase block mb-2">输入文字</span>
+                                <span className="text-[10px] font-bold text-n300 uppercase block mb-2">输入文字</span>
                                 <input
                                     type="text"
                                     value={textInput}
                                     onChange={(e) => setTextInput(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white mb-2"
+                                    className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs text-n800 mb-2"
                                     placeholder="输入文字..."
                                     autoFocus
                                 />
                                 <button
                                     onClick={handleAddText}
-                                    className="w-full py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded text-xs font-bold"
+                                    className="w-full py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold"
                                 >
                                     添加文字
                                 </button>
@@ -3739,7 +3739,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
 
                         <button
                             onClick={handleReset}
-                            className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-bold flex items-center justify-center gap-2"
+                            className="w-full py-2 bg-n0 hover:bg-n20 text-n700 rounded-lg text-xs font-bold flex items-center justify-center gap-2"
                         >
                             <RotateCcw className="w-3 h-3" />
                             重置
@@ -3748,14 +3748,14 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-800">
-                    <p className="text-[10px] text-gray-500">
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-n40">
+                    <p className="text-[10px] text-n100">
                         {mode === 'edit' ? '编辑模式：修改会改变底图' : '线稿模式：在透明层上绘制，生成白底黑线参考图'}
                     </p>
                     <div className="flex gap-3">
                         <button 
                             onClick={onClose} 
-                            className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800"
+                            className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20"
                         >
                             取消
                         </button>
@@ -3771,7 +3771,7 @@ const ImageEditorModal: React.FC<ImageEditorModalProps> = ({
                         {mode === 'edit' && (
                             <button 
                                 onClick={handleSaveEdit}
-                                className="px-4 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-xs font-bold text-white flex items-center gap-2"
+                                className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white flex items-center gap-2"
                             >
                                 <Save className="w-3 h-3" />
                                 保存修改

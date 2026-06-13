@@ -167,11 +167,11 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   }, [showPreview, clips, currentTimeMs]);
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+    <div className="bg-n0 rounded-md border border-n40 p-4 shadow-card">
       <div className={showPreview ? 'flex gap-4' : ''}>
         {showPreview && (
           <div className="shrink-0 w-[200px]">
-            <div className="w-[200px] h-[120px] bg-black rounded-lg overflow-hidden border border-gray-700 flex items-center justify-center">
+            <div className="w-[200px] h-[120px] bg-black rounded-lg overflow-hidden border border-n40 flex items-center justify-center">
               {currentImageClip?.imageUrl ? (
                 <img
                   src={currentImageClip.imageUrl}
@@ -179,10 +179,10 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <span className="text-gray-600 text-xs">无画面</span>
+                <span className="text-n100 text-xs">无画面</span>
               )}
             </div>
-            <p className="text-[10px] text-gray-500 mt-1 truncate text-center">
+            <p className="text-[10px] text-n100 mt-1 truncate text-center">
               {currentImageClip?.label || '—'}
             </p>
           </div>
@@ -192,23 +192,23 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
           <div className="flex items-center gap-3 mb-3">
             <button
               onClick={handleStop}
-              className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 transition-colors"
+              className="w-8 h-8 rounded-lg bg-n0 hover:bg-n20 flex items-center justify-center text-n300 transition-colors"
             >
               <SkipBack size={14} />
             </button>
             <button
               onClick={isPlaying ? handlePause : handlePlay}
-              className="w-10 h-10 rounded-lg bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center text-white transition-colors"
+              className="w-10 h-10 rounded-lg bg-primary hover:bg-primary-hover flex items-center justify-center text-white transition-colors"
             >
               {isPlaying ? <Pause size={16} /> : <Play size={16} />}
             </button>
             <button
               onClick={handleStop}
-              className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 transition-colors"
+              className="w-8 h-8 rounded-lg bg-n0 hover:bg-n20 flex items-center justify-center text-n300 transition-colors"
             >
               <Square size={14} />
             </button>
-            <span className="text-sm text-gray-400 tabular-nums ml-2">
+            <span className="text-sm text-n300 tabular-nums ml-2">
               {fmtTime(currentTimeMs)} / {fmtTime(effectiveTotal)}
             </span>
           </div>
@@ -228,11 +228,11 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
             </div>
 
             {/* Time ruler */}
-            <div className="h-5 relative mb-1 border-b border-gray-800">
+            <div className="h-5 relative mb-1 border-b border-n40">
               {[0, 0.25, 0.5, 0.75, 1].map(pct => (
                 <span
                   key={pct}
-                  className="absolute text-[9px] text-gray-600 -translate-x-1/2"
+                  className="absolute text-[9px] text-n100 -translate-x-1/2"
                   style={{ left: `${pct * 100}%` }}
                 >
                   {fmtTime(pct * effectiveTotal)}
@@ -245,10 +245,10 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
               const trackClips = clipsByTrack.get(trackId) || [];
               return (
                 <div key={trackId} className="flex items-center h-10 relative mb-1">
-                  <span className="absolute -left-0 text-[9px] text-gray-600 w-10 text-right pr-1 z-10">
+                  <span className="absolute -left-0 text-[9px] text-n100 w-10 text-right pr-1 z-10">
                     {TRACK_LABELS[trackId] || trackId}
                   </span>
-                  <div className="ml-11 flex-1 relative h-full bg-gray-800/30 rounded overflow-hidden">
+                  <div className="ml-11 flex-1 relative h-full bg-n30 rounded overflow-hidden">
                     {trackClips.map(clip => {
                       const leftPct = (clip.startMs / effectiveTotal) * 100;
                       const widthPct = (clip.durationMs / effectiveTotal) * 100;

@@ -271,8 +271,8 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
                 aria-hidden="true"
                 className={
                     `${SHARED_TEXT_CLS} absolute inset-0 m-0 rounded ` +
-                    'bg-slate-800 border border-transparent select-none ' +
-                    `${composing ? 'text-transparent' : 'text-slate-100'} ` +
+                    'bg-n30 border border-transparent select-none ' +
+                    `${composing ? 'text-transparent' : 'text-n800'} ` +
                     'overflow-hidden pointer-events-none'
                 }
                 style={{ zIndex: 0 }}
@@ -306,13 +306,13 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
                 disabled={disabled}
                 rows={rows ?? 3}
                 className={
-                    `${SHARED_TEXT_CLS} relative bg-transparent border border-slate-700 rounded ` +
-                    `${composing ? 'text-slate-100' : 'text-transparent'} ` +
-                    'caret-slate-100 placeholder:text-slate-500 resize-none ' +
+                    `${SHARED_TEXT_CLS} relative bg-transparent border border-n40 rounded ` +
+                    `${composing ? 'text-n800' : 'text-transparent'} ` +
+                    'caret-n800 placeholder:text-n100 resize-none ' +
                     // 2026-06-05 修复（紫色框错位）：focus 不再用 ring（ring 画在边框外、和 overlay/
                     // textarea 的 inset-0 边框对不齐，长提示词时看起来像一个错位的紫色框），
                     // 改为只变边框色，边框与 overlay 像素重合，不再溢出。
-                    'focus:outline-none focus:border-purple-500/70'
+                    'focus:outline-none focus:border-primary'
                 }
                 style={{ zIndex: 1 }}
             />
@@ -324,7 +324,7 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
                 type="button"
                 onClick={() => setRewriteOpen(true)}
                 disabled={disabled || !(value.prompt || '').trim()}
-                className="absolute top-1 right-1 z-10 w-6 h-6 flex items-center justify-center text-purple-400 hover:text-purple-300 bg-slate-900/70 hover:bg-purple-500/20 border border-purple-500/30 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="absolute top-1 right-1 z-10 w-6 h-6 flex items-center justify-center text-primary hover:text-primary-hover bg-n0 hover:bg-primary-light border border-primary rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 title="AI 改写视频提示词"
                 aria-label="AI 改写"
             >
@@ -358,7 +358,7 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
                     role="listbox"
                     aria-label="mention candidates"
                     className={
-                        'absolute left-0 right-0 max-h-64 overflow-y-auto bg-slate-900 border border-slate-700 rounded shadow-lg z-50 ' +
+                        'absolute left-0 right-0 max-h-64 overflow-y-auto bg-n0 border border-n40 rounded shadow-bottom z-50 ' +
                         (openUpward ? 'bottom-full mb-1' : 'top-full mt-1')
                     }
                 >
@@ -369,11 +369,11 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
                         onChange={e => { setSearch(e.target.value); setActiveIdx(0); }}
                         onKeyDown={e => handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>)}
                         placeholder="搜索..."
-                        className="w-full px-2 py-1 text-xs bg-slate-800 border-b border-slate-700 text-slate-200"
+                        className="w-full px-2 py-1 text-xs bg-n0 border-b border-n40 text-n700"
                     />
                     {Object.entries(filtered).map(([group, items]) => (
                         <div key={group}>
-                            <div className="px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-500 bg-slate-800/50">
+                            <div className="px-2 py-0.5 text-[10px] uppercase tracking-wide text-n100 bg-n30">
                                 {GROUP_LABELS[group] || group}
                             </div>
                             {items.map((c) => {
@@ -383,22 +383,22 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
                                         key={c.id}
                                         type="button"
                                         onClick={() => handleSelect(c)}
-                                        className={`flex items-center gap-2 w-full text-left px-2 py-1 text-xs hover:bg-slate-700 ${
-                                            idx === activeIdx ? 'bg-slate-700' : ''
+                                        className={`flex items-center gap-2 w-full text-left px-2 py-1 text-xs hover:bg-n20 ${
+                                            idx === activeIdx ? 'bg-n20' : ''
                                         }`}
                                     >
                                         {c.thumbnailUrl && (
                                             <img src={c.thumbnailUrl} alt="" className="w-6 h-6 object-cover rounded" />
                                         )}
-                                        <span className="text-slate-200">{c.label}</span>
-                                        <span className="ml-auto text-[10px] text-slate-500">{c.kind}</span>
+                                        <span className="text-n700">{c.label}</span>
+                                        <span className="ml-auto text-[10px] text-n100">{c.kind}</span>
                                     </button>
                                 );
                             })}
                         </div>
                     ))}
                     {flatList.length === 0 && (
-                        <div className="px-2 py-2 text-[11px] text-slate-500">无匹配</div>
+                        <div className="px-2 py-2 text-[11px] text-n100">无匹配</div>
                     )}
                 </div>
             )}

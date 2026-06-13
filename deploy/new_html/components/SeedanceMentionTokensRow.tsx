@@ -55,12 +55,12 @@ export const SeedanceMentionTokensRow: React.FC<SeedanceMentionTokensRowProps> =
 
     return (
         <div
-            className="flex flex-wrap items-center gap-1 mt-1.5 pt-1.5 border-t border-slate-800/60"
+            className="flex flex-wrap items-center gap-1 mt-1.5 pt-1.5 border-t border-n40"
             data-testid="seedance-mention-tokens-row"
             aria-label="已插入素材"
         >
             {tokens.length === 0 ? (
-                <span className="text-[10px] text-slate-600 italic">尚未插入素材，输入 @ 选择</span>
+                <span className="text-[10px] text-n100 italic">尚未插入素材，输入 @ 选择</span>
             ) : (
                 tokens.map((t) => (
                     <TokenChip
@@ -101,7 +101,7 @@ const TokenChip: React.FC<TokenChipProps> = ({ token, hovering, onHoverStart, on
     // 尺寸：48×36 缩略图（图片）/ 48×24 文字（视频/音频）
     return (
         <div
-            className="relative inline-flex items-center gap-1 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-slate-200 group"
+            className="relative inline-flex items-center gap-1 bg-n30 hover:bg-n20 border border-n40 rounded px-1 py-0.5 text-[10px] text-n700 group"
             onMouseEnter={onHoverStart}
             onMouseLeave={onHoverEnd}
         >
@@ -111,7 +111,7 @@ const TokenChip: React.FC<TokenChipProps> = ({ token, hovering, onHoverStart, on
                     type="button"
                     onClick={onPreview}
                     title={`点击预览 ${token.label}`}
-                    className="block w-12 h-9 rounded overflow-hidden bg-slate-900 border border-slate-700 cursor-zoom-in"
+                    className="block w-12 h-9 rounded overflow-hidden bg-n0 border border-n40 cursor-zoom-in"
                 >
                     <img src={token.url} alt={token.label} className="w-full h-full object-cover" />
                 </button>
@@ -120,7 +120,7 @@ const TokenChip: React.FC<TokenChipProps> = ({ token, hovering, onHoverStart, on
                     type="button"
                     onClick={onPreview}
                     title={`点击预览 ${token.label}`}
-                    className="flex items-center justify-center w-12 h-9 rounded bg-slate-900 border border-slate-700 text-purple-300 cursor-zoom-in"
+                    className="flex items-center justify-center w-12 h-9 rounded bg-n0 border border-n40 text-primary cursor-zoom-in"
                 >
                     <VideoIcon size={14} />
                 </button>
@@ -129,7 +129,7 @@ const TokenChip: React.FC<TokenChipProps> = ({ token, hovering, onHoverStart, on
                     type="button"
                     onClick={onPreview}
                     title={`点击预览 ${token.label}`}
-                    className="flex items-center justify-center w-12 h-9 rounded bg-slate-900 border border-slate-700 text-emerald-300 cursor-zoom-in"
+                    className="flex items-center justify-center w-12 h-9 rounded bg-n0 border border-n40 text-success cursor-zoom-in"
                 >
                     <Music size={14} />
                 </button>
@@ -137,8 +137,8 @@ const TokenChip: React.FC<TokenChipProps> = ({ token, hovering, onHoverStart, on
 
             {/* 标签 + 删除 */}
             <div className="flex flex-col items-start min-w-0">
-                <span className="font-medium tabular-nums text-slate-100">{token.label}</span>
-                <span className="text-[9px] text-slate-500 truncate max-w-[80px]">
+                <span className="font-medium tabular-nums text-n800">{token.label}</span>
+                <span className="text-[9px] text-n100 truncate max-w-[80px]">
                     {(token.url || '').split('/').pop()?.split('?')[0] || token.kind}
                 </span>
             </div>
@@ -148,7 +148,7 @@ const TokenChip: React.FC<TokenChipProps> = ({ token, hovering, onHoverStart, on
                 onClick={onRemove}
                 disabled={disabled}
                 aria-label={`删除 ${token.label}`}
-                className="ml-0.5 p-0.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded opacity-60 group-hover:opacity-100 transition-opacity"
+                className="ml-0.5 p-0.5 text-n300 hover:text-danger hover:bg-r50 rounded opacity-60 group-hover:opacity-100 transition-opacity"
             >
                 <X size={10} />
             </button>
@@ -156,23 +156,23 @@ const TokenChip: React.FC<TokenChipProps> = ({ token, hovering, onHoverStart, on
             {/* hover 大图悬浮卡（仅 image 有意义） */}
             {hovering && isImage && (
                 <div
-                    className={`absolute z-50 left-0 ${popoverPos} p-1 bg-slate-900 border border-slate-600 rounded shadow-lg pointer-events-none`}
+                    className={`absolute z-50 left-0 ${popoverPos} p-1 bg-n0 border border-n40 rounded shadow-bottom pointer-events-none`}
                     style={{ minWidth: 180 }}
                 >
                     <img src={token.url} alt={token.label} className="block max-w-[220px] max-h-[160px] object-contain rounded" />
-                    <div className="mt-1 text-[9px] text-slate-400 text-center">{token.label}</div>
+                    <div className="mt-1 text-[9px] text-n300 text-center">{token.label}</div>
                 </div>
             )}
             {hovering && (isVideo || isAudio) && (
                 <div
-                    className={`absolute z-50 left-0 ${popoverPos} p-1.5 bg-slate-900 border border-slate-600 rounded shadow-lg pointer-events-none text-[10px] text-slate-300`}
+                    className={`absolute z-50 left-0 ${popoverPos} p-1.5 bg-n0 border border-n40 rounded shadow-bottom pointer-events-none text-[10px] text-n700`}
                     style={{ minWidth: 180 }}
                 >
                     <div className="flex items-center gap-1">
                         {isVideo ? <VideoIcon size={12} /> : <Music size={12} />}
                         <span className="truncate" style={{ maxWidth: 160 }}>{token.url}</span>
                     </div>
-                    <div className="mt-0.5 text-[9px] text-slate-500">点击在 lightbox 预览</div>
+                    <div className="mt-0.5 text-[9px] text-n100">点击在 lightbox 预览</div>
                 </div>
             )}
         </div>

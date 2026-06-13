@@ -99,10 +99,10 @@ function statusLabel(s: SegmentUiStatus): string {
 }
 
 const STATUS_BADGE: Record<SegmentUiStatus, string> = {
-  pending: 'bg-gray-800 text-gray-400',
-  generating: 'bg-indigo-500/20 text-indigo-300',
-  completed: 'bg-emerald-500/20 text-emerald-300',
-  error: 'bg-red-500/20 text-red-300',
+  pending: 'bg-n30 text-n300',
+  generating: 'bg-primary-light text-primary',
+  completed: 'bg-success/15 text-success',
+  error: 'bg-r50 text-danger',
 };
 
 function audioTrackColor(tt: string): string {
@@ -260,43 +260,43 @@ export const GenerationPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-full bg-gray-950 flex items-center justify-center">
-        <Loader size={24} className="animate-spin text-indigo-400" />
+      <div className="min-h-full bg-n20 flex items-center justify-center">
+        <Loader size={24} className="animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-full bg-gray-950 text-gray-100 flex flex-col">
+    <div className="min-h-full bg-n20 text-n800 flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-3.5 border-b border-gray-800 shrink-0 animate-slideDown">
+      <header className="flex items-center justify-between px-5 py-3.5 border-b border-n40 shrink-0 animate-slideDown">
         <div className="flex items-center gap-3">
-          <Film size={20} className="text-indigo-400" />
+          <Film size={20} className="text-primary" />
           <div>
             <div className="font-semibold text-base">视频生成工作台</div>
-            <div className="text-xs text-gray-500 mt-0.5">分镜驱动 · 时间轴预览</div>
+            <div className="text-xs text-n100 mt-0.5">分镜驱动 · 时间轴预览</div>
           </div>
         </div>
         <button
           onClick={() => void refreshSegmentsOnly()}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-indigo-500/40 text-indigo-400 hover:bg-indigo-500/10 text-sm transition-all"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-primary text-primary hover:bg-primary-light text-sm transition-all"
         >
           <RefreshCw size={14} /> 同步片段
         </button>
       </header>
 
-      {error && <div className="px-5 py-3 text-red-400 text-sm">{error}</div>}
+      {error && <div className="px-5 py-3 text-danger text-sm">{error}</div>}
 
       <div className="flex-1 grid grid-cols-[minmax(280px,340px)_1fr] grid-rows-[1fr_minmax(160px,220px)] gap-3 p-3 min-h-0">
         {/* Left: storyboard list */}
-        <aside className="row-span-1 bg-gray-900 rounded-xl border border-gray-800 flex flex-col min-h-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-800/50 text-sm font-semibold flex items-center gap-2">
-            <ImageIcon size={15} className="text-indigo-400" />
+        <aside className="row-span-1 bg-n0 rounded-md border border-n40 shadow-card flex flex-col min-h-0 overflow-hidden">
+          <div className="px-4 py-3 border-b border-n40 text-sm font-semibold flex items-center gap-2">
+            <ImageIcon size={15} className="text-primary" />
             分镜列表
           </div>
           <div className="flex-1 overflow-y-auto p-2.5 scrollbar-thin">
             {sortedItems.length === 0 ? (
-              <div className="text-center py-10 text-gray-600 text-sm">
+              <div className="text-center py-10 text-n100 text-sm">
                 <Plus size={28} className="inline-block mb-2 opacity-30" />
                 <div>暂无分镜条目</div>
               </div>
@@ -315,25 +315,25 @@ export const GenerationPage: React.FC = () => {
                 return (
                   <div
                     key={id || `storyboard-row-${idx}`}
-                    className="mb-2.5 p-2.5 rounded-lg bg-gray-800/50 border border-gray-800 hover:border-gray-700 transition-all animate-slideUp"
+                    className="mb-2.5 p-2.5 rounded-lg bg-n30 border border-n40 hover:border-primary transition-all animate-slideUp"
                     style={{ animationDelay: `${idx * 30}ms` }}
                   >
                     <div className="flex gap-2.5">
-                      <div className="w-[72px] h-[72px] rounded-lg overflow-hidden shrink-0 bg-gray-800">
+                      <div className="w-[72px] h-[72px] rounded-lg overflow-hidden shrink-0 bg-n30">
                         {img ? (
                           <MediaImage src={withAuthParam(img)} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-700">
+                          <div className="w-full h-full flex items-center justify-center text-n100">
                             <ImageIcon size={24} />
                           </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs text-gray-500 mb-1 flex items-center gap-1.5">
+                        <div className="text-xs text-n100 mb-1 flex items-center gap-1.5">
                           <Clock size={11} /> {durSec}s
                         </div>
                         <div className="text-sm leading-snug max-h-[72px] overflow-hidden">
-                          {sbDialogue(item) || <span className="text-gray-600">（无对白）</span>}
+                          {sbDialogue(item) || <span className="text-n100">（无对白）</span>}
                         </div>
                       </div>
                     </div>
@@ -344,7 +344,7 @@ export const GenerationPage: React.FC = () => {
                       <button
                         disabled={!episodeId || clientGen}
                         onClick={() => void handleGenerate(raw)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {clientGen ? <Loader size={12} className="animate-spin" /> : <Video size={12} />}
                         生成视频
@@ -358,9 +358,9 @@ export const GenerationPage: React.FC = () => {
         </aside>
 
         {/* Right: preview */}
-        <section className="row-span-1 bg-gray-900 rounded-xl border border-gray-800 flex flex-col min-h-0 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-800/50 text-sm font-semibold flex items-center gap-2">
-            <Video size={15} className="text-indigo-400" />
+        <section className="row-span-1 bg-n0 rounded-md border border-n40 shadow-card flex flex-col min-h-0 overflow-hidden">
+          <div className="px-4 py-3 border-b border-n40 text-sm font-semibold flex items-center gap-2">
+            <Video size={15} className="text-primary" />
             视频预览
           </div>
           <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-[200px]">
@@ -378,7 +378,7 @@ export const GenerationPage: React.FC = () => {
                 <div className="mt-3 flex gap-2.5">
                   <button
                     onClick={togglePlay}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-white text-sm transition-all"
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-primary bg-primary-light hover:bg-primary-light text-primary text-sm transition-all"
                   >
                     {playing ? <Pause size={16} /> : <Play size={16} />}
                     {playing ? '暂停' : '播放'}
@@ -386,7 +386,7 @@ export const GenerationPage: React.FC = () => {
                 </div>
               </>
             ) : (
-              <div className="text-center text-gray-600">
+              <div className="text-center text-n100">
                 <Film size={40} className="mx-auto mb-3 opacity-25" />
                 <p className="text-sm">暂无成片，生成后将在此播放</p>
                 <p className="text-xs mt-2 opacity-70">点击下方时间轴上的视频块可切换预览</p>
@@ -396,11 +396,11 @@ export const GenerationPage: React.FC = () => {
         </section>
 
         {/* Bottom: timeline */}
-        <div className="col-span-2 bg-gray-900 rounded-xl border border-gray-800 p-4 flex flex-col min-h-0 overflow-hidden">
+        <div className="col-span-2 bg-n0 rounded-md border border-n40 shadow-card p-4 flex flex-col min-h-0 overflow-hidden">
           <div className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <Clock size={15} className="text-indigo-400" />
+            <Clock size={15} className="text-primary" />
             时间轴
-            <span className="font-normal text-xs text-gray-500">
+            <span className="font-normal text-xs text-n100">
               {(totalTimelineMs / 1000).toFixed(1)}s 总时长
             </span>
           </div>
@@ -430,12 +430,12 @@ export const GenerationPage: React.FC = () => {
               const color = audioTrackColor(tt);
               return (
                 <div key={tid} className="mb-2">
-                  <div className="text-[11px] text-gray-500 mb-1 flex items-center gap-1.5">
+                  <div className="text-[11px] text-n100 mb-1 flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
                     {trackName(t)}
                     <span className="opacity-60">({tt})</span>
                   </div>
-                  <div className="h-7 bg-gray-800/60 rounded-md relative overflow-hidden">
+                  <div className="h-7 bg-n30 rounded-md relative overflow-hidden">
                     <div
                       title={`${trackName(t)} · ${(spanMs / 1000).toFixed(2)}s`}
                       className="absolute top-1 bottom-1 rounded"
@@ -454,12 +454,12 @@ export const GenerationPage: React.FC = () => {
 
             {/* Video track */}
             <div className="mb-2 mt-1">
-              <div className="text-[11px] text-gray-500 mb-1 flex items-center gap-1.5">
+              <div className="text-[11px] text-n100 mb-1 flex items-center gap-1.5">
                 <Film size={11} /> 视频轨
               </div>
-              <div className="h-9 bg-gray-800/60 rounded-md relative overflow-hidden">
+              <div className="h-9 bg-n30 rounded-md relative overflow-hidden">
                 {videoSegments.length === 0 ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-[11px] text-gray-600">
+                  <div className="absolute inset-0 flex items-center justify-center text-[11px] text-n100">
                     无视频片段
                   </div>
                 ) : (
@@ -483,7 +483,7 @@ export const GenerationPage: React.FC = () => {
                         key={segId(s)}
                         title={segId(s)}
                         onClick={() => { if (url) { setPreviewUrl(withAuthParam(url)); setPlaying(false); } }}
-                        className="absolute top-1 bottom-1 rounded border border-indigo-500/50 flex items-center justify-center gap-1 min-w-[24px] transition-colors hover:brightness-110"
+                        className="absolute top-1 bottom-1 rounded border border-primary flex items-center justify-center gap-1 min-w-[24px] transition-colors hover:brightness-110"
                         style={{
                           left: `${left}%`,
                           width: `${Math.max(width, 2)}%`,

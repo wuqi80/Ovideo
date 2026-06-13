@@ -154,7 +154,7 @@ const AssetImageRow: React.FC<{
   return (
     <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
       {images.map(img => (
-        <div key={img.key} className="shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-gray-700 hover:border-indigo-500 transition-colors group relative">
+        <div key={img.key} className="shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-n40 hover:border-primary transition-colors group relative">
           <button type="button" onClick={() => onLightbox(img.displayUrl)} className="w-full h-full">
             <img src={img.displayUrl} alt="" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none"><ZoomIn size={14} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" /></div>
@@ -163,7 +163,7 @@ const AssetImageRow: React.FC<{
             type="button"
             onClick={(e) => { e.stopPropagation(); onDeleteImage(assetId, img.rawUrl, img.fileId); }}
             disabled={busy}
-            className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
+            className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-n900/50 text-danger hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-30"
           >
             <X size={10} />
           </button>
@@ -385,74 +385,74 @@ export const DesignPage: React.FC = () => {
   const tabLabel = tab === 'character' ? '人物' : tab === 'scene' ? '场景' : '道具';
 
   return (
-    <div className="min-h-full bg-gray-950 text-gray-100 p-6">
+    <div className="min-h-full bg-n20 text-n800 p-6">
       <header className="mb-6 flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight">资产设计工作台</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-n100 mt-1">
             AI 辅助设计人物、场景、道具 ·
-            <span className="text-emerald-400 ml-1">共 {totalDesignedCount}/{assets.length} 已设计</span>
-            {filtered.length - tabDesignedCount > 0 && <span className="text-amber-400 ml-2">当前分类 {tabDesignedCount}/{filtered.length}</span>}
+            <span className="text-success ml-1">共 {totalDesignedCount}/{assets.length} 已设计</span>
+            {filtered.length - tabDesignedCount > 0 && <span className="text-warning ml-2">当前分类 {tabDesignedCount}/{filtered.length}</span>}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {selectedIds.size > 0 && (
-            <button onClick={() => setBatchModal(true)} className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors">
+            <button onClick={() => setBatchModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors">
               <Layers size={14} /> 批量生成 ({selectedIds.size})
             </button>
           )}
-          <button onClick={() => setBatchModal(true)} className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm rounded-lg transition-colors border border-gray-700">
+          <button onClick={() => setBatchModal(true)} className="flex items-center gap-2 px-4 py-2 bg-n0 hover:bg-n20 text-n700 text-sm rounded-lg transition-colors border border-n40">
             <Layers size={14} /> 批量生成
           </button>
           <button onClick={() => navigate(`/projects/${projectId}/ep/${episodeId}/workflow/materials`)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors">
             导出到素材绑定 <ArrowRight size={14} />
           </button>
         </div>
       </header>
 
-      {error && <div className="mb-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">{error}</div>}
+      {error && <div className="mb-4 px-4 py-3 rounded-lg bg-r50 border border-r75 text-sm text-danger">{error}</div>}
 
       <div className="flex gap-2 mb-4 flex-wrap items-center" role="tablist">
         {TAB_CONFIG.map(({ key, label, Icon }) => {
           const active = tab === key; const count = assets.filter(a => a.assetType === key).length;
           return (<button key={key} role="tab" aria-selected={active} onClick={() => { setTab(key); setSelectedIds(new Set()); }}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border ${active ? 'bg-indigo-600/15 border-indigo-500/50 text-white' : 'bg-gray-900 border-gray-800 text-gray-500 hover:text-gray-300 hover:border-gray-600'}`}>
-            <Icon size={16} /> {label} {count > 0 && <span className="text-xs bg-gray-800 px-1.5 py-0.5 rounded">{count}</span>}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border ${active ? 'bg-primary-light border-primary text-primary' : 'bg-n0 border-n40 text-n100 hover:text-n700 hover:border-n40'}`}>
+            <Icon size={16} /> {label} {count > 0 && <span className="text-xs bg-n0 px-1.5 py-0.5 rounded">{count}</span>}
           </button>);
         })}
-        <div className="ml-auto flex items-center gap-2 text-xs text-gray-500">
-          <button onClick={selectAllFiltered} className="hover:text-white transition-colors">全选</button>
+        <div className="ml-auto flex items-center gap-2 text-xs text-n100">
+          <button onClick={selectAllFiltered} className="hover:text-n800 transition-colors">全选</button>
           <span>|</span>
-          <button onClick={selectUndesigned} className="hover:text-white transition-colors">选未设计</button>
+          <button onClick={selectUndesigned} className="hover:text-n800 transition-colors">选未设计</button>
           <span>|</span>
-          <button onClick={() => setSelectedIds(new Set())} className="hover:text-white transition-colors">清空</button>
+          <button onClick={() => setSelectedIds(new Set())} className="hover:text-n800 transition-colors">清空</button>
         </div>
       </div>
 
       <div className="flex gap-6 items-start flex-col lg:flex-row">
-        <aside className="w-full lg:w-72 shrink-0 bg-gray-900 rounded-xl p-5 border border-gray-800">
-          <div className="flex items-center gap-2 mb-4"><Plus size={18} className="text-indigo-400" /><span className="font-semibold text-sm">新建{tabLabel}</span></div>
-          <label className="block text-xs text-gray-500 mb-1.5">名称</label>
+        <aside className="w-full lg:w-72 shrink-0 bg-n0 rounded-md p-5 border border-n40 shadow-card">
+          <div className="flex items-center gap-2 mb-4"><Plus size={18} className="text-primary" /><span className="font-semibold text-sm">新建{tabLabel}</span></div>
+          <label className="block text-xs text-n100 mb-1.5">名称</label>
           <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="例如：主角 / 客厅 / 古剑"
-            className="w-full px-3 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4" />
-          <label className="block text-xs text-gray-500 mb-1.5">描述</label>
+            className="w-full px-3 py-2.5 rounded-lg bg-n0 border border-n40 text-n800 text-sm placeholder:text-n100 focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4" />
+          <label className="block text-xs text-n100 mb-1.5">描述</label>
           <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="外观、风格等" rows={3}
-            className="w-full px-3 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm placeholder-gray-600 resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4" />
-          {formError && <p className="text-xs text-red-400 mb-3">{formError}</p>}
+            className="w-full px-3 py-2.5 rounded-lg bg-n0 border border-n40 text-n800 text-sm placeholder:text-n100 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4" />
+          {formError && <p className="text-xs text-danger mb-3">{formError}</p>}
           <button onClick={handleCreate} disabled={isCreating || !projectId}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/20">
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/20">
             {isCreating && <Loader size={16} className="animate-spin" />} {isCreating ? '创建中...' : '创建'}
           </button>
         </aside>
 
         <section className="flex-1 min-w-0">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-3 py-16 text-gray-500 text-sm"><Loader size={20} className="animate-spin" /> 加载资产...</div>
+            <div className="flex items-center justify-center gap-3 py-16 text-n100 text-sm"><Loader size={20} className="animate-spin" /> 加载资产...</div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-16 bg-gray-900 rounded-xl border border-dashed border-gray-800 text-gray-500">
+            <div className="text-center py-16 bg-n0 rounded-md border border-dashed border-n40 text-n100">
               <Palette size={40} className="mx-auto mb-3 opacity-40" /><p className="text-sm">暂无{tabLabel}资产</p>
-              <p className="text-xs mt-1 text-gray-600">在左侧创建，或从剧本页导出</p>
+              <p className="text-xs mt-1 text-n100">在左侧创建，或从剧本页导出</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -463,26 +463,26 @@ export const DesignPage: React.FC = () => {
                 const busy = isBusy(asset.assetId);
                 const checked = selectedIds.has(asset.assetId);
                 return (
-                  <div key={asset.assetId} className={`bg-gray-900 rounded-xl border transition-all duration-300 ${hasDesign ? 'border-gray-800' : 'border-amber-500/30 border-dashed'}`}>
+                  <div key={asset.assetId} className={`bg-n0 rounded-md border transition-all duration-300 shadow-card hover:shadow-atlas ${hasDesign ? 'border-n40' : 'border-warning border-dashed'}`}>
                     <div className="p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           <button onClick={() => toggleSelect(asset.assetId)} className="shrink-0 mt-0.5">
-                            {checked ? <CheckSquare size={18} className="text-indigo-400" /> : <Square size={18} className="text-gray-600" />}
+                            {checked ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-n100" />}
                           </button>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-bold truncate">{asset.name}</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${hasDesign ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${hasDesign ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}`}>
                                 {hasDesign ? '已设计' : '待设计'}
                               </span>
-                              {busy && <span className="text-[10px] text-indigo-400 animate-pulse flex items-center gap-1"><Loader size={10} className="animate-spin" />{busyLabel}</span>}
+                              {busy && <span className="text-[10px] text-primary animate-pulse flex items-center gap-1"><Loader size={10} className="animate-spin" />{busyLabel}</span>}
                             </div>
-                            {asset.description && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{asset.description}</p>}
+                            {asset.description && <p className="text-[11px] text-n100 mt-1 line-clamp-2">{asset.description}</p>}
                           </div>
                         </div>
                         <button onClick={() => handleDelete(asset.assetId)} disabled={busy}
-                          className="p-1.5 rounded-lg text-[11px] border border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/15 transition-all disabled:opacity-30 shrink-0 ml-2">
+                          className="p-1.5 rounded-lg text-[11px] border border-r75 bg-r50 text-danger hover:bg-r50 transition-all disabled:opacity-30 shrink-0 ml-2">
                           {deletingId === asset.assetId ? <Loader size={12} className="animate-spin" /> : <Trash2 size={12} />}
                         </button>
                       </div>
@@ -496,23 +496,23 @@ export const DesignPage: React.FC = () => {
                       />
                       <div className="flex flex-wrap gap-1.5">
                         <button onClick={() => setAiModal({ asset })} disabled={busy}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/25 transition-all disabled:opacity-30">
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-primary-light border border-primary text-primary hover:bg-primary-light transition-all disabled:opacity-30">
                           <Sparkles size={11} /> AI 生图
                         </button>
-                        <label className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-gray-800 border border-gray-700 text-gray-400 hover:bg-gray-700 transition-all cursor-pointer ${busy ? 'opacity-30' : ''}`}>
+                        <label className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-n0 border border-n40 text-n300 hover:bg-n20 transition-all cursor-pointer ${busy ? 'opacity-30' : ''}`}>
                           <Upload size={11} /> 上传
                           <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadImage(asset.assetId, f); e.target.value = ''; }} />
                         </label>
                         <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { alert('请先上传或生成图片'); return; } setCameraModal({ asset, materials: m }); }} disabled={busy}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-gray-800 border border-gray-700 text-gray-400 hover:bg-gray-700 transition-all disabled:opacity-30">
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-n0 border border-n40 text-n300 hover:bg-n20 transition-all disabled:opacity-30">
                           <Camera size={11} /> 角度
                         </button>
                         <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { alert('请先上传或生成图片'); return; } setProcessModal({ asset, materials: m, workflow: 'upscale_hd' }); }} disabled={busy}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-gray-800 border border-gray-700 text-gray-400 hover:bg-gray-700 transition-all disabled:opacity-30">
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-n0 border border-n40 text-n300 hover:bg-n20 transition-all disabled:opacity-30">
                           <Maximize size={11} /> 高清放大
                         </button>
                         <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { alert('请先上传或生成图片'); return; } setProcessModal({ asset, materials: m, workflow: 'remove_watermark' }); }} disabled={busy}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-gray-800 border border-gray-700 text-gray-400 hover:bg-gray-700 transition-all disabled:opacity-30">
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-n0 border border-n40 text-n300 hover:bg-n20 transition-all disabled:opacity-30">
                           <Scissors size={11} /> 去水印
                         </button>
                       </div>
@@ -526,7 +526,7 @@ export const DesignPage: React.FC = () => {
       </div>
 
       {lightboxUrl && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-8" onClick={() => setLightboxUrl(null)}>
+        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-8" onClick={() => setLightboxUrl(null)}>
           <button className="absolute top-6 right-6 text-white/70 hover:text-white" onClick={() => setLightboxUrl(null)}><X size={24} /></button>
           <img src={lightboxUrl} alt="" className="max-w-full max-h-full object-contain rounded-lg" onClick={e => e.stopPropagation()} />
         </div>
@@ -609,77 +609,77 @@ const UnifiedAIModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={handleClose}>
-      <div className="w-full max-w-4xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-5 relative max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={handleClose}>
+      <div className="w-full max-w-4xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 relative max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <div><h3 className="text-lg font-bold text-white">AI 生成素材 - {asset.name}</h3><p className="text-xs text-gray-400 mt-1">基于剧本内容智能生成，支持风格预设和参考图。提示词会自动保存。</p></div>
-          <button onClick={handleClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <div><h3 className="text-lg font-bold text-n800">AI 生成素材 - {asset.name}</h3><p className="text-xs text-n300 mt-1">基于剧本内容智能生成，支持风格预设和参考图。提示词会自动保存。</p></div>
+          <button onClick={handleClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button>
         </div>
 
         {/* Prompt + Refine */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold text-gray-500 uppercase">提示词</span>
+            <span className="text-[11px] font-bold text-n100 uppercase">提示词</span>
             <div className="flex items-center gap-1.5">
-              <select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="text-[10px] bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-gray-400">
+              <select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="text-[10px] bg-n0 border border-n40 rounded px-1.5 py-0.5 text-n300">
                 <option value={AiModel.Gemini}>Gemini</option><option value={AiModel.DeepseekChat}>DeepSeek</option>
               </select>
-              <button onClick={handleRefine} disabled={isRefining} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-purple-600/20 border border-purple-500/30 text-purple-400 hover:bg-purple-600/30 transition-all disabled:opacity-50">
+              <button onClick={handleRefine} disabled={isRefining} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-primary-light border border-primary text-primary hover:bg-primary-light transition-all disabled:opacity-50">
                 {isRefining ? <Loader size={10} className="animate-spin" /> : <Wand2 size={10} />} AI 润色
               </button>
             </div>
           </div>
           <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={4}
-            className="w-full bg-gray-950 border border-gray-700 rounded-xl text-sm text-white p-3 focus:outline-none focus:border-indigo-500 resize-none" placeholder="描述你想要生成的内容..." />
+            className="w-full bg-n0 border border-n40 rounded-md text-sm text-n800 p-3 focus:outline-none focus:border-primary resize-none" placeholder="描述你想要生成的内容..." />
           <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="text-[10px] text-gray-500 self-center mr-1">风格：</span>
+            <span className="text-[10px] text-n100 self-center mr-1">风格：</span>
             {STYLE_PRESETS.map(s => (
               <button key={s.id} onClick={() => appendStyle(s.id, s.suffix)}
-                className={`text-[10px] px-2 py-1 rounded border transition-colors ${activeStyle === s.id ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-gray-800 text-gray-400 border-gray-700 hover:border-indigo-500 hover:text-white'}`}>{s.label}</button>
+                className={`text-[10px] px-2 py-1 rounded border transition-colors ${activeStyle === s.id ? 'bg-primary text-white border-primary' : 'bg-n0 text-n300 border-n40 hover:border-primary hover:text-n800'}`}>{s.label}</button>
             ))}
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="col-span-1 space-y-3 border border-gray-800 rounded-xl p-4">
-            <span className="text-[11px] font-bold text-gray-500 uppercase">引擎</span>
+          <div className="col-span-1 space-y-3 border border-n40 rounded-md p-4">
+            <span className="text-[11px] font-bold text-n100 uppercase">引擎</span>
             <div className="flex gap-2">
-              <button onClick={() => setEngine('nanobanana')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-indigo-600 text-white border-indigo-500' : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}>化神进阶</button>
-              <button onClick={() => setEngine('doubao')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-purple-600 text-white border-purple-500' : 'border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'}`}>筑基境界</button>
+              <button onClick={() => setEngine('nanobanana')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}>化神进阶</button>
+              <button onClick={() => setEngine('doubao')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}>筑基境界</button>
             </div>
             {engine === 'nanobanana' && (
               <div className="space-y-2">
-                <span className="text-[11px] font-bold text-gray-500 uppercase">模型</span>
+                <span className="text-[11px] font-bold text-n100 uppercase">模型</span>
                 {[{ id: 'gemini-2.5-flash-image', label: '化神1阶', desc: '快速' }, { id: 'gemini-3-pro-image-preview', label: '化神2阶', desc: '高质量' }].map(m => (
-                  <label key={m.id} className={`flex items-center gap-2 text-xs p-2 rounded border cursor-pointer ${geminiModel === m.id ? 'bg-indigo-600/20 border-indigo-500 text-white' : 'border-gray-700 text-gray-400'}`}>
-                    <input type="radio" name="gm" value={m.id} checked={geminiModel === m.id} onChange={() => setGeminiModel(m.id)} /><span className="font-semibold">{m.label}</span><span className="text-[10px] text-gray-500">({m.desc})</span>
+                  <label key={m.id} className={`flex items-center gap-2 text-xs p-2 rounded border cursor-pointer ${geminiModel === m.id ? 'bg-primary-light border-primary text-primary' : 'border-n40 text-n300'}`}>
+                    <input type="radio" name="gm" value={m.id} checked={geminiModel === m.id} onChange={() => setGeminiModel(m.id)} /><span className="font-semibold">{m.label}</span><span className="text-[10px] text-n100">({m.desc})</span>
                   </label>
                 ))}
               </div>
             )}
             <div className="space-y-2">
-              <span className="text-[11px] font-bold text-gray-500 uppercase">输出</span>
-              <div className="grid grid-cols-2 gap-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => (<button key={r} onClick={() => setAspectRatio(r)} className={`py-1 rounded text-[11px] border ${aspectRatio === r ? 'bg-gray-100 text-gray-900 font-semibold' : 'border-gray-700 text-gray-400 hover:text-white'}`}>{r}</button>))}</div>
-              <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-gray-800 border border-gray-700 rounded-lg text-xs text-white px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select>
+              <span className="text-[11px] font-bold text-n100 uppercase">输出</span>
+              <div className="grid grid-cols-2 gap-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => (<button key={r} onClick={() => setAspectRatio(r)} className={`py-1 rounded text-[11px] border ${aspectRatio === r ? 'bg-primary text-white font-semibold' : 'border-n40 text-n300 hover:text-n800'}`}>{r}</button>))}</div>
+              <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select>
             </div>
             {engine === 'doubao' && (
               <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs text-gray-300"><input type="checkbox" checked={sequential === 'auto'} onChange={e => setSequential(e.target.checked ? 'auto' : 'disabled')} /> 关联组图</label>
-                {sequential === 'auto' && <div className="flex items-center gap-2 text-xs text-gray-300"><span>张数</span><input type="number" min={1} max={15} value={count} onChange={e => setCount(Math.min(15, Math.max(1, +e.target.value)))} className="w-16 bg-gray-800 border border-gray-700 rounded px-2 py-1" /><span className="text-[10px] text-gray-500">参考图+生成≤15</span></div>}
+                <label className="flex items-center gap-2 text-xs text-n700"><input type="checkbox" checked={sequential === 'auto'} onChange={e => setSequential(e.target.checked ? 'auto' : 'disabled')} /> 关联组图</label>
+                {sequential === 'auto' && <div className="flex items-center gap-2 text-xs text-n700"><span>张数</span><input type="number" min={1} max={15} value={count} onChange={e => setCount(Math.min(15, Math.max(1, +e.target.value)))} className="w-16 bg-n0 border border-n40 rounded px-2 py-1" /><span className="text-[10px] text-n100">参考图+生成≤15</span></div>}
               </div>
             )}
           </div>
           <div className="col-span-2">
-            <div className="flex items-center justify-between text-[11px] text-gray-500 mb-2"><span className="font-bold uppercase">参考图 (最多 {maxRefs})</span><span className={selectedRefs.size > 0 ? "text-emerald-400 font-semibold" : ""}>{selectedRefs.size}/{maxRefs}</span></div>
-            {materials.length === 0 ? <div className="border border-dashed border-gray-700 rounded-xl text-center py-6 text-xs text-gray-500">暂无素材</div> : (
-              <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">{materials.map(m => { const a = selectedRefs.has(m.id); return (<button key={m.id} onClick={() => toggleRef(m.id)} className={`relative aspect-square rounded-lg overflow-hidden border ${a ? 'border-emerald-400 ring-2 ring-emerald-500/40' : 'border-gray-700'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} loading="lazy" className="w-full h-full object-cover" />{a && <div className="absolute inset-0 bg-emerald-600/30" />}</button>); })}</div>
+            <div className="flex items-center justify-between text-[11px] text-n100 mb-2"><span className="font-bold uppercase">参考图 (最多 {maxRefs})</span><span className={selectedRefs.size > 0 ? "text-success font-semibold" : ""}>{selectedRefs.size}/{maxRefs}</span></div>
+            {materials.length === 0 ? <div className="border border-dashed border-n40 rounded-md text-center py-6 text-xs text-n100">暂无素材</div> : (
+              <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">{materials.map(m => { const a = selectedRefs.has(m.id); return (<button key={m.id} onClick={() => toggleRef(m.id)} className={`relative aspect-square rounded-lg overflow-hidden border ${a ? 'border-success ring-2 ring-success/40' : 'border-n40'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} loading="lazy" className="w-full h-full object-cover" />{a && <div className="absolute inset-0 bg-success/30" />}</button>); })}</div>
             )}
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-          <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+          <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
           <button onClick={() => { if (!prompt.trim()) { alert('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: prompt.trim(), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio, resolution, sequential, count }); }}
-            className="px-5 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-xs font-bold text-white shadow-lg">开始生成</button>
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">开始生成</button>
         </div>
       </div>
     </div>
@@ -712,20 +712,20 @@ const BatchGenerateModal: React.FC<{
   }, [assets]);
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={onClose}>
-      <div className="w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={onClose}>
+      <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <div><h3 className="text-lg font-bold text-white">批量生成</h3><p className="text-xs text-gray-400 mt-1">选择资产和统一配置，空描述的将由 AI 基于剧本自动推断。</p></div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <div><h3 className="text-lg font-bold text-n800">批量生成</h3><p className="text-xs text-n300 mt-1">选择资产和统一配置，空描述的将由 AI 基于剧本自动推断。</p></div>
+          <button onClick={onClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-3 border border-gray-800 rounded-xl p-4 max-h-[50vh] overflow-y-auto">
+          <div className="space-y-3 border border-n40 rounded-md p-4 max-h-[50vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-gray-500 uppercase">选择资产</span>
+              <span className="text-[11px] font-bold text-n100 uppercase">选择资产</span>
               <div className="flex gap-2 text-[10px]">
-                <button onClick={() => setChecked(new Set(assets.map(a => a.assetId)))} className="text-indigo-400 hover:text-indigo-300">全选</button>
-                <button onClick={() => setChecked(new Set(assets.filter(a => !a.thumbnailUrl && !(a.referenceImages?.length > 0)).map(a => a.assetId)))} className="text-amber-400 hover:text-amber-300">选未设计</button>
-                <button onClick={() => setChecked(new Set())} className="text-gray-500 hover:text-gray-300">清空</button>
+                <button onClick={() => setChecked(new Set(assets.map(a => a.assetId)))} className="text-primary hover:text-primary-hover">全选</button>
+                <button onClick={() => setChecked(new Set(assets.filter(a => !a.thumbnailUrl && !(a.referenceImages?.length > 0)).map(a => a.assetId)))} className="text-warning hover:text-warning">选未设计</button>
+                <button onClick={() => setChecked(new Set())} className="text-n100 hover:text-n700">清空</button>
               </div>
             </div>
             {(['character', 'scene', 'prop'] as const).map(type => {
@@ -734,16 +734,16 @@ const BatchGenerateModal: React.FC<{
               const label = type === 'character' ? '人物' : type === 'scene' ? '场景' : '道具';
               return (
                 <div key={type}>
-                  <span className="text-[10px] font-bold text-gray-600 uppercase">{label}</span>
+                  <span className="text-[10px] font-bold text-n100 uppercase">{label}</span>
                   {items.map(a => {
                     const hasDesign = !!(a.thumbnailUrl || a.referenceImages?.length);
                     const isChecked = checked.has(a.assetId);
                     return (
-                      <button key={a.assetId} onClick={() => toggle(a.assetId)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs transition-all ${isChecked ? 'bg-indigo-600/10 border border-indigo-500/30' : 'hover:bg-gray-800 border border-transparent'}`}>
-                        {isChecked ? <CheckSquare size={14} className="text-indigo-400 shrink-0" /> : <Square size={14} className="text-gray-600 shrink-0" />}
+                      <button key={a.assetId} onClick={() => toggle(a.assetId)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs transition-all ${isChecked ? 'bg-primary-light border border-primary' : 'hover:bg-n20 border border-transparent'}`}>
+                        {isChecked ? <CheckSquare size={14} className="text-primary shrink-0" /> : <Square size={14} className="text-n100 shrink-0" />}
                         <span className="truncate flex-1">{a.name}</span>
-                        <span className={`text-[10px] ${a.description ? 'text-gray-500' : 'text-amber-500'}`}>{a.description ? '有描述' : '空描述'}</span>
-                        <span className={`text-[10px] ${hasDesign ? 'text-emerald-500' : 'text-gray-600'}`}>{hasDesign ? '已设计' : '待设计'}</span>
+                        <span className={`text-[10px] ${a.description ? 'text-n100' : 'text-warning'}`}>{a.description ? '有描述' : '空描述'}</span>
+                        <span className={`text-[10px] ${hasDesign ? 'text-success' : 'text-n100'}`}>{hasDesign ? '已设计' : '待设计'}</span>
                       </button>
                     );
                   })}
@@ -751,43 +751,43 @@ const BatchGenerateModal: React.FC<{
               );
             })}
           </div>
-          <div className="space-y-4 border border-gray-800 rounded-xl p-4">
-            <span className="text-[11px] font-bold text-gray-500 uppercase">统一配置</span>
+          <div className="space-y-4 border border-n40 rounded-md p-4">
+            <span className="text-[11px] font-bold text-n100 uppercase">统一配置</span>
             <div className="flex gap-2">
-              <button onClick={() => setEngine('nanobanana')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-indigo-600 text-white border-indigo-500' : 'border-gray-700 text-gray-400'}`}>化神进阶</button>
-              <button onClick={() => setEngine('doubao')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-purple-600 text-white border-purple-500' : 'border-gray-700 text-gray-400'}`}>筑基境界</button>
+              <button onClick={() => setEngine('nanobanana')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300'}`}>化神进阶</button>
+              <button onClick={() => setEngine('doubao')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300'}`}>筑基境界</button>
             </div>
             {engine === 'nanobanana' && (
               <div className="flex gap-2">{[{ id: 'gemini-2.5-flash-image', label: '化神1阶' }, { id: 'gemini-3-pro-image-preview', label: '化神2阶' }].map(m => (
-                <button key={m.id} onClick={() => setGeminiModel(m.id)} className={`flex-1 py-1.5 rounded text-xs border ${geminiModel === m.id ? 'bg-indigo-600/20 border-indigo-500 text-white' : 'border-gray-700 text-gray-400'}`}>{m.label}</button>
+                <button key={m.id} onClick={() => setGeminiModel(m.id)} className={`flex-1 py-1.5 rounded text-xs border ${geminiModel === m.id ? 'bg-primary-light border-primary text-primary' : 'border-n40 text-n300'}`}>{m.label}</button>
               ))}</div>
             )}
             <div>
-              <span className="text-[11px] font-bold text-gray-500 uppercase block mb-1.5">风格</span>
-              <div className="flex flex-wrap gap-1.5">{STYLE_PRESETS.map(s => (<button key={s.id} onClick={() => setStyle(style === s.id ? '' : s.id)} className={`text-[11px] px-2.5 py-1 rounded border ${style === s.id ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'}`}>{s.label}</button>))}</div>
+              <span className="text-[11px] font-bold text-n100 uppercase block mb-1.5">风格</span>
+              <div className="flex flex-wrap gap-1.5">{STYLE_PRESETS.map(s => (<button key={s.id} onClick={() => setStyle(style === s.id ? '' : s.id)} className={`text-[11px] px-2.5 py-1 rounded border ${style === s.id ? 'bg-primary text-white border-primary' : 'bg-n0 text-n300 border-n40 hover:text-n800'}`}>{s.label}</button>))}</div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <div><span className="text-[11px] text-gray-500 block mb-1">比例</span><select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg text-xs text-white px-2 py-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-              <div><span className="text-[11px] text-gray-500 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-gray-800 border border-gray-700 rounded-lg text-xs text-white px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select></div>
+              <div><span className="text-[11px] text-n100 block mb-1">比例</span><select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+              <div><span className="text-[11px] text-n100 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select></div>
             </div>
-            <div><span className="text-[11px] text-gray-500 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-gray-800 border border-gray-700 rounded-lg text-xs text-white px-2 py-1.5"><option value={AiModel.Gemini}>Gemini</option><option value={AiModel.DeepseekChat}>DeepSeek</option></select></div>
-            <label className="flex items-center gap-2 text-xs text-gray-300 p-3 bg-gray-950/50 rounded-lg border border-gray-800">
+            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value={AiModel.Gemini}>Gemini</option><option value={AiModel.DeepseekChat}>DeepSeek</option></select></div>
+            <label className="flex items-center gap-2 text-xs text-n700 p-3 bg-n30 rounded-lg border border-n40">
               <input type="checkbox" checked={threeView} onChange={e => setThreeView(e.target.checked)} className="accent-indigo-500" />
               人物默认生成三视图（正面/侧面/背面设定图）
             </label>
-            <div className="text-xs text-gray-500 bg-gray-950/30 rounded-lg p-3 border border-gray-800">
-              已选 <strong className="text-white">{checked.size}</strong> 项
-              {charCount > 0 && <span className="ml-2 text-indigo-400">{charCount} 人物</span>}
-              {sceneCount > 0 && <span className="ml-2 text-emerald-400">{sceneCount} 场景</span>}
-              {propCount > 0 && <span className="ml-2 text-amber-400">{propCount} 道具</span>}
+            <div className="text-xs text-n100 bg-n30 rounded-lg p-3 border border-n40">
+              已选 <strong className="text-n800">{checked.size}</strong> 项
+              {charCount > 0 && <span className="ml-2 text-primary">{charCount} 人物</span>}
+              {sceneCount > 0 && <span className="ml-2 text-success">{sceneCount} 场景</span>}
+              {propCount > 0 && <span className="ml-2 text-warning">{propCount} 道具</span>}
               <br />空描述资产将由 AI 基于剧本自动推断外观。
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-800">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
           <button onClick={() => { if (!checked.size) { alert('请至少选择一个资产'); return; } onSubmit({ assetIds: Array.from(checked), engine, geminiModel, style, aspectRatio, resolution, threeView, refineModel }); }}
-            disabled={!checked.size} className="px-5 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-xs font-bold text-white shadow-lg disabled:opacity-50">
+            disabled={!checked.size} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50">
             开始批量生成 ({checked.size} 项)
           </button>
         </div>
@@ -812,32 +812,32 @@ const CameraModal: React.FC<{
   const promptExamples = ["镜头向前移动", "镜头向左移动", "转为俯视", "转为广角", "转为特写"];
   const Slider: React.FC<{ label: string; values: number[]; value: number; onChange: (v: number) => void }> = ({ label, values, value, onChange }) => {
     const idx = values.indexOf(value); const di = idx === -1 ? 0 : idx;
-    return (<div className="space-y-1"><div className="flex justify-between text-[11px] text-gray-400"><span>{label}</span><span className="text-white font-semibold">{value}</span></div><input type="range" min={0} max={values.length - 1} step={1} value={di} onChange={e => onChange(values[+e.target.value])} className="w-full accent-indigo-500" /></div>);
+    return (<div className="space-y-1"><div className="flex justify-between text-[11px] text-n300"><span>{label}</span><span className="text-n800 font-semibold">{value}</span></div><input type="range" min={0} max={values.length - 1} step={1} value={di} onChange={e => onChange(values[+e.target.value])} className="w-full accent-indigo-500" /></div>);
   };
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-      <div className="w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-white">角度调整 - {asset.name}</h3></div><button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button></div>
+    <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
+      <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-n800">角度调整 - {asset.name}</h3></div><button onClick={onClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button></div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-3">
-            <div className="rounded-2xl overflow-hidden border border-gray-800 h-64 bg-black/30 flex items-center justify-center">{cur ? <img src={secureMediaUrl(cur.url) || ''} className="w-full h-full object-contain" /> : <span className="text-xs text-gray-500">无</span>}</div>
-            <div className="grid grid-cols-5 gap-2">{materials.map(m => (<button key={m.id} onClick={() => setSelId(m.id)} className={`aspect-square rounded-lg overflow-hidden border ${selId === m.id ? 'border-emerald-400 ring-2 ring-emerald-500/40' : 'border-gray-700'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} className="w-full h-full object-cover" /></button>))}</div>
+            <div className="rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">{cur ? <img src={secureMediaUrl(cur.url) || ''} className="w-full h-full object-contain" /> : <span className="text-xs text-n100">无</span>}</div>
+            <div className="grid grid-cols-5 gap-2">{materials.map(m => (<button key={m.id} onClick={() => setSelId(m.id)} className={`aspect-square rounded-lg overflow-hidden border ${selId === m.id ? 'border-success ring-2 ring-success/40' : 'border-n40'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} className="w-full h-full object-cover" /></button>))}</div>
           </div>
           <div className="space-y-4">
-            <div className="bg-gray-950/30 border border-gray-800 rounded-xl p-4 space-y-3">
+            <div className="bg-n30 border border-n40 rounded-md p-4 space-y-3">
               <Slider label="水平旋转 (°)" values={[-90, -45, 0, 45, 90]} value={rotate} onChange={setRotate} />
               <Slider label="推进距离" values={[0, 5, 10]} value={move} onChange={setMove} />
               <Slider label="垂直角度" values={[-1, 0, 1]} value={vertical} onChange={setVertical} />
-              <label className="flex items-center gap-2 text-xs text-gray-300"><input type="checkbox" checked={wideAngle} onChange={e => setWideAngle(e.target.checked)} /> 广角</label>
+              <label className="flex items-center gap-2 text-xs text-n700"><input type="checkbox" checked={wideAngle} onChange={e => setWideAngle(e.target.checked)} /> 广角</label>
             </div>
-            <textarea rows={2} value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg text-sm text-white p-3 resize-none" placeholder="自定义提示词..." />
-            <div className="flex flex-wrap gap-1">{promptExamples.map((ex, i) => (<button key={i} onClick={() => setCustomPrompt(ex)} className="text-[10px] px-2 py-1 bg-gray-800 text-gray-400 rounded border border-gray-700 hover:bg-indigo-600 hover:text-white">{ex}</button>))}</div>
-            <div className="flex items-center gap-2 text-xs text-gray-300"><span>种子</span><input type="number" value={seed} onChange={e => setSeed(+e.target.value)} className="w-28 bg-gray-900 border border-gray-700 rounded px-2 py-1" /><button onClick={() => setSeed(randomSeed())} className="px-2 py-1 rounded border border-gray-700 hover:text-white">随机</button></div>
+            <textarea rows={2} value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-sm text-n800 p-3 resize-none" placeholder="自定义提示词..." />
+            <div className="flex flex-wrap gap-1">{promptExamples.map((ex, i) => (<button key={i} onClick={() => setCustomPrompt(ex)} className="text-[10px] px-2 py-1 bg-n0 text-n300 rounded border border-n40 hover:bg-primary hover:text-white">{ex}</button>))}</div>
+            <div className="flex items-center gap-2 text-xs text-n700"><span>种子</span><input type="number" value={seed} onChange={e => setSeed(+e.target.value)} className="w-28 bg-n0 border border-n40 rounded px-2 py-1" /><button onClick={() => setSeed(randomSeed())} className="px-2 py-1 rounded border border-n40 hover:text-n800">随机</button></div>
           </div>
         </div>
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
-          <button onClick={() => { if (!cur) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed }); }} className="px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 text-xs font-bold text-white shadow-lg">生成新角度</button>
+        <div className="flex justify-end gap-3 pt-4 border-t border-n40">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+          <button onClick={() => { if (!cur) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed }); }} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">生成新角度</button>
         </div>
       </div>
     </div>
@@ -852,16 +852,16 @@ const ProcessModal: React.FC<{
   const cur = materials.find(m => m.id === selId) || materials[0];
   const info = workflow === 'upscale_hd' ? { title: '高清放大', desc: 'AI放大到4K' } : { title: '去水印', desc: '智能移除水印' };
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-      <div className="w-full max-w-3xl bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl p-6 space-y-5" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-white">{info.title} - {asset.name}</h3><p className="text-xs text-gray-400 mt-1">{info.desc}</p></div><button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button></div>
+    <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
+      <div className="w-full max-w-3xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-n800">{info.title} - {asset.name}</h3><p className="text-xs text-n300 mt-1">{info.desc}</p></div><button onClick={onClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button></div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl overflow-hidden border border-gray-800 h-64 bg-black/30 flex items-center justify-center">{cur ? <img src={secureMediaUrl(cur.url) || ''} className="w-full h-full object-contain" /> : <span className="text-xs text-gray-500">无</span>}</div>
-          <div><span className="text-[11px] font-bold text-gray-500 uppercase mb-2 block">选择素材</span><div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-2 bg-gray-950 rounded-lg border border-gray-800">{materials.map(m => (<button key={m.id} onClick={() => setSelId(m.id)} className={`relative aspect-square rounded-lg overflow-hidden border-2 ${selId === m.id ? 'border-indigo-500 ring-2 ring-indigo-500/30' : 'border-transparent hover:border-gray-600'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} className="w-full h-full object-cover" />{selId === m.id && <div className="absolute inset-0 bg-indigo-500/20 flex items-center justify-center"><Check className="w-6 h-6 text-white" /></div>}</button>))}</div></div>
+          <div className="rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">{cur ? <img src={secureMediaUrl(cur.url) || ''} className="w-full h-full object-contain" /> : <span className="text-xs text-n100">无</span>}</div>
+          <div><span className="text-[11px] font-bold text-n100 uppercase mb-2 block">选择素材</span><div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-2 bg-n0 rounded-lg border border-n40">{materials.map(m => (<button key={m.id} onClick={() => setSelId(m.id)} className={`relative aspect-square rounded-lg overflow-hidden border-2 ${selId === m.id ? 'border-primary ring-2 ring-primary/30' : 'border-transparent hover:border-n40'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} className="w-full h-full object-cover" />{selId === m.id && <div className="absolute inset-0 bg-primary-light flex items-center justify-center"><Check className="w-6 h-6 text-primary" /></div>}</button>))}</div></div>
         </div>
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-700 text-xs text-gray-300 hover:bg-gray-800">取消</button>
-          <button onClick={() => { if (!cur) return; onSubmit(cur.url); }} className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg ${workflow === 'upscale_hd' ? 'bg-gradient-to-r from-blue-500 to-cyan-500' : 'bg-gradient-to-r from-purple-500 to-pink-500'}`}>开始处理</button>
+        <div className="flex justify-end gap-3 pt-4 border-t border-n40">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+          <button onClick={() => { if (!cur) return; onSubmit(cur.url); }} className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg ${workflow === 'upscale_hd' ? 'bg-primary hover:bg-primary-hover' : 'bg-primary hover:bg-primary-hover'}`}>开始处理</button>
         </div>
       </div>
     </div>

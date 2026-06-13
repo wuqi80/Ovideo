@@ -29,9 +29,9 @@ export const TaskBadge: React.FC<TaskBadgeProps> = ({ page, disablePulse, compac
     if (total === 0) return null;
 
     const hasRunning = summary.running > 0;
-    const dotColor = hasRunning ? 'bg-blue-400' : 'bg-amber-400';
-    const ringColor = hasRunning ? 'bg-blue-400/40' : 'bg-amber-400/40';
-    const textColor = hasRunning ? 'text-blue-300' : 'text-amber-300';
+    const dotColor = hasRunning ? 'bg-b400' : 'bg-warning';
+    const ringColor = hasRunning ? 'bg-b400/40' : 'bg-warning/40';
+    const textColor = hasRunning ? 'text-b400' : 'text-warning';
     const shouldPulse = hasRunning && !disablePulse;
 
     return (

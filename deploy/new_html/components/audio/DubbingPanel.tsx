@@ -82,10 +82,10 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
   return (
     <div ref={containerRef} className="flex-1 overflow-auto p-4 space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-4 sticky top-0 bg-gray-950/90 backdrop-blur-sm z-10 pb-3 border-b border-gray-800">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-900 border border-gray-800">
-          <Clock size={14} className="text-indigo-400" />
-          <span className="text-xs text-gray-500">总时长</span>
+      <div className="flex items-center gap-4 sticky top-0 bg-n20/90 backdrop-blur-sm z-10 pb-3 border-b border-n40">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-n0 border border-n40">
+          <Clock size={14} className="text-primary" />
+          <span className="text-xs text-n100">总时长</span>
           <span className="text-sm font-bold tabular-nums">
             {totalDurationMs > 0 ? `${(totalDurationMs / 1000).toFixed(1)}s` : '—'}
           </span>
@@ -93,19 +93,19 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
         <button
           disabled={batchRunning || clips.length === 0}
           onClick={onBatchGenerate}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold transition-all disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-semibold transition-all disabled:opacity-50"
         >
           {batchRunning ? <Loader size={14} className="animate-spin" /> : <Volume2 size={14} />}
           全部生成
         </button>
-        <span className="text-xs text-gray-600 ml-auto">
+        <span className="text-xs text-n100 ml-auto">
           {generatedCount}/{clips.length} 已生成
         </span>
       </div>
 
       {/* Shot groups */}
       {sortedItems.length === 0 ? (
-        <div className="py-16 text-center text-gray-500 bg-gray-900 rounded-xl border border-dashed border-gray-800">
+        <div className="py-16 text-center text-n100 bg-n0 rounded-md border border-dashed border-n40">
           暂无分镜条目。请先在剧本流程中创建分镜。
         </div>
       ) : (
@@ -116,19 +116,19 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
             <div
               key={item.itemId}
               ref={el => { if (el) itemRefs.current.set(item.itemId, el); }}
-              className="bg-gray-900 rounded-xl border border-gray-800 p-4"
+              className="bg-n0 rounded-md border border-n40 p-4 shadow-card"
             >
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
+                <span className="text-xs font-bold text-primary bg-primary-light px-2 py-0.5 rounded">
                   #{item.sortOrder}
                 </span>
                 {item.plannedDurationMs != null && item.plannedDurationMs > 0 && (
-                  <span className="text-[10px] text-gray-500">
+                  <span className="text-[10px] text-n100">
                     设计时长 {(item.plannedDurationMs / 1000).toFixed(1)}s
                   </span>
                 )}
                 {!hasDialogue && (
-                  <span className="text-[10px] text-gray-600 italic ml-auto">
+                  <span className="text-[10px] text-n100 italic ml-auto">
                     无台词 — 按设计时长占位
                   </span>
                 )}
@@ -163,15 +163,15 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
                 </div>
               ) : (
                 <div
-                  className="px-3 py-4 text-center cursor-pointer hover:bg-gray-700/30 rounded transition-colors border border-dashed border-gray-700"
+                  className="px-3 py-4 text-center cursor-pointer hover:bg-n30 rounded transition-colors border border-dashed border-n40"
                   onClick={() => {
                     if (onTextPersist) {
                       onTextPersist(item.itemId, allCharNames[0] || '旁白', '（请输入台词）');
                     }
                   }}
                 >
-                  <p className="text-xs text-gray-500">+ 添加台词</p>
-                  <p className="text-[10px] text-gray-600 mt-1">
+                  <p className="text-xs text-n100">+ 添加台词</p>
+                  <p className="text-[10px] text-n100 mt-1">
                     设计时长 {item.plannedDurationMs ? `${(item.plannedDurationMs / 1000).toFixed(1)}s` : '未设置'}
                   </p>
                 </div>

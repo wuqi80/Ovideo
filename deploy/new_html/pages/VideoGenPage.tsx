@@ -304,23 +304,23 @@ export const VideoGenPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex items-center justify-center h-full text-n300">
         <Loader className="w-5 h-5 animate-spin mr-2" /> 加载视频数据...
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-950">
+    <div className="h-full flex flex-col bg-n20">
       {/* Import panel */}
       {showImportPanel && !importDone && (
-        <div className="shrink-0 border-b border-gray-800 bg-gray-900/50 px-4 py-3">
+        <div className="shrink-0 border-b border-n40 bg-n0 px-4 py-3">
           {importMsg && (
             <div
               className={`mb-2 flex items-center justify-between gap-2 rounded px-3 py-1.5 text-xs ${
                 importMsg.kind === 'error'
-                  ? 'bg-red-900/40 border border-red-700/50 text-red-200'
-                  : 'bg-emerald-900/30 border border-emerald-700/40 text-emerald-200'
+                  ? 'bg-r50 border border-r75 text-danger'
+                  : 'bg-n30 border border-n40 text-success'
               }`}
             >
               <span>{importMsg.text}</span>
@@ -333,24 +333,24 @@ export const VideoGenPage: React.FC = () => {
             </div>
           )}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 text-xs text-gray-500">
-              <Film size={14} className="text-indigo-400" />
+            <div className="flex items-center gap-3 text-xs text-n100">
+              <Film size={14} className="text-primary" />
               <span>{itemsWithImages.length} 个分镜已生成画面</span>
-              <span className="text-gray-700">|</span>
+              <span className="text-n100">|</span>
               <span>{storyboardItems.length - itemsWithImages.length} 个待生成</span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleImportAll}
                 disabled={importing || allStoryboardItems.length === 0}
-                className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors disabled:opacity-50"
               >
                 {importing ? <Loader size={14} className="animate-spin" /> : <Upload size={14} />}
                 导入全部分镜到视频工作区
               </button>
               <button
                 onClick={() => setShowImportPanel(false)}
-                className="text-xs text-gray-600 hover:text-gray-400 px-2 py-1"
+                className="text-xs text-n100 hover:text-n300 px-2 py-1"
               >
                 跳过
               </button>
@@ -363,7 +363,7 @@ export const VideoGenPage: React.FC = () => {
               {itemsWithImages.slice(0, 12).map((item, idx) => {
                 const url = (item as any).generated_image_url ?? (item as any).generatedImageUrl;
                 return (
-                  <div key={(item as any).item_id ?? (item as any).itemId ?? idx} className="shrink-0 w-16 h-10 rounded overflow-hidden border border-gray-700">
+                  <div key={(item as any).item_id ?? (item as any).itemId ?? idx} className="shrink-0 w-16 h-10 rounded overflow-hidden border border-n40">
                     <img
                       src={secureMediaUrl(url)!}
                       alt={`分镜 ${idx + 1}`}
@@ -373,7 +373,7 @@ export const VideoGenPage: React.FC = () => {
                 );
               })}
               {itemsWithImages.length > 12 && (
-                <div className="shrink-0 w-16 h-10 rounded border border-gray-700 flex items-center justify-center text-[10px] text-gray-500">
+                <div className="shrink-0 w-16 h-10 rounded border border-n40 flex items-center justify-center text-[10px] text-n100">
                   +{itemsWithImages.length - 12}
                 </div>
               )}
@@ -383,10 +383,10 @@ export const VideoGenPage: React.FC = () => {
       )}
 
       {/* Navigation to next step */}
-      <div className="shrink-0 flex justify-end px-4 py-1.5 border-b border-gray-800/50">
+      <div className="shrink-0 flex justify-end px-4 py-1.5 border-b border-n40">
         <button
           onClick={() => navigate(`/projects/${projectId}/ep/${episodeId}/workflow/enhance`)}
-          className="flex items-center gap-2 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors"
+          className="flex items-center gap-2 px-3 py-1 bg-success hover:bg-success text-white text-xs rounded-lg transition-colors"
         >
           导出到美化 <ArrowRight size={12} />
         </button>

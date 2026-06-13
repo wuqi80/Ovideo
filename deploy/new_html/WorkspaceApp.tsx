@@ -2400,7 +2400,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                 )}
 
                 {isFullView && (
-                    <div onMouseDown={() => startResizing(0)} className="w-1 bg-gray-800 hover:bg-indigo-500 cursor-col-resize z-20 flex-shrink-0 transition-colors" />
+                    <div onMouseDown={() => startResizing(0)} className="w-1 bg-n0 hover:bg-primary cursor-col-resize z-20 flex-shrink-0 transition-colors" />
                 )}
 
                 {visibleColumns[1] && (
@@ -2427,11 +2427,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     />
                     </div>
                     {selectedFile && (
-                      <div className="flex-shrink-0 m-2 rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-sm">
+                      <div className="flex-shrink-0 m-2 rounded-md border border-n40 bg-n0 p-3 text-sm shadow-card">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-bold text-slate-200">三步生成</span>
+                          <span className="font-bold text-n700">三步生成</span>
                           <button
-                            className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold disabled:opacity-50"
+                            className="px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs font-bold disabled:opacity-50"
                             disabled={!selectedFile.originalContent?.trim()}
                             onClick={() => handleRunThreeStagePipeline(selectedFile.id)}
                           >按三步生成</button>
@@ -2450,18 +2450,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                             ? `进行中 ${st.completed ?? 0}/${st.total ?? '?'}`
                             : st?.status === 'done' ? '完成'
                             : st?.status === 'error' ? `失败: ${st.errorMessage || ''}` : '未开始';
-                          const statusColor = st?.status === 'done' ? 'text-green-400'
-                            : st?.status === 'error' ? 'text-red-400'
-                            : st?.status === 'running' ? 'text-amber-400' : 'text-slate-400';
+                          const statusColor = st?.status === 'done' ? 'text-success'
+                            : st?.status === 'error' ? 'text-danger'
+                            : st?.status === 'running' ? 'text-warning' : 'text-n300';
                           return (
-                            <div key={row.key} className="flex items-center justify-between py-1.5 border-t border-slate-700/60">
+                            <div key={row.key} className="flex items-center justify-between py-1.5 border-t border-n40">
                               <div className="flex items-center gap-2">
                                 <button
-                                  className="px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs disabled:opacity-50"
+                                  className="px-2 py-1 rounded bg-n0 hover:bg-n20 text-n700 text-xs disabled:opacity-50"
                                   disabled={st?.status === 'running'}
                                   onClick={row.action}
                                 >{row.label.replace(/^\d+\.\s*/, '')}</button>
-                                <span className="text-xs text-slate-400">{row.metric}</span>
+                                <span className="text-xs text-n300">{row.metric}</span>
                               </div>
                               <span className={`text-xs ${statusColor}`}>{statusText}</span>
                             </div>
@@ -2473,7 +2473,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                 )}
 
                 {isFullView && (
-                    <div onMouseDown={() => startResizing(1)} className="w-1 bg-gray-800 hover:bg-indigo-500 cursor-col-resize z-20 flex-shrink-0 transition-colors" />
+                    <div onMouseDown={() => startResizing(1)} className="w-1 bg-n0 hover:bg-primary cursor-col-resize z-20 flex-shrink-0 transition-colors" />
                 )}
 
                 {visibleColumns[2] && (
@@ -2508,7 +2508,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                 )}
 
                 {isFullView && (
-                    <div onMouseDown={() => startResizing(2)} className="w-1 bg-gray-800 hover:bg-indigo-500 cursor-col-resize z-20 flex-shrink-0 transition-colors" />
+                    <div onMouseDown={() => startResizing(2)} className="w-1 bg-n0 hover:bg-primary cursor-col-resize z-20 flex-shrink-0 transition-colors" />
                 )}
 
                 {visibleColumns[3] && (
@@ -2615,7 +2615,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           {mountedViews.has(AppView.Admin) && (
             <div style={{ display: currentView === AppView.Admin ? 'contents' : 'none' }}>
               {!isAdmin ? (
-                  <div className="flex items-center justify-center h-full text-gray-500 w-full">
+                  <div className="flex items-center justify-center h-full text-n100 w-full">
                       <div className="text-center">
                           <ShieldCheck className="w-16 h-16 mx-auto mb-4 opacity-20" />
                           <p className="text-xl font-bold mb-2">权限不足</p>
@@ -2635,7 +2635,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
   }
 
   return (
-    <div className={`flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} bg-gray-950 text-gray-100 font-sans`}>
+    <div className={`flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} bg-n20 text-n800 font-sans`}>
       {!hideHeader && (
         <Header 
           visibleColumns={visibleColumns} 

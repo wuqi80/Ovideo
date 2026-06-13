@@ -321,7 +321,7 @@ export const StoryboardGenPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex items-center justify-center h-full text-n300">
         <div className="animate-pulse flex items-center gap-2">
           <Loader className="w-5 h-5 animate-spin" />
           <span>加载分镜数据...</span>
@@ -332,7 +332,7 @@ export const StoryboardGenPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full text-red-400 p-6">
+      <div className="flex items-center justify-center h-full text-danger p-6">
         <p>{error}</p>
       </div>
     );
@@ -340,11 +340,11 @@ export const StoryboardGenPage: React.FC = () => {
 
   if (!pseudoFile.storyboard || pseudoFile.storyboard.items.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400">
+      <div className="h-full flex items-center justify-center text-n300">
         <div className="text-center space-y-3">
-          <LayoutGrid className="w-12 h-12 mx-auto text-indigo-500/50" />
-          <p className="text-xl font-medium text-gray-300">分镜画面生成</p>
-          <p className="text-sm text-gray-500">暂无分镜数据，请先在剧本页面创建分镜</p>
+          <LayoutGrid className="w-12 h-12 mx-auto text-primary" />
+          <p className="text-xl font-medium text-n700">分镜画面生成</p>
+          <p className="text-sm text-n100">暂无分镜数据，请先在剧本页面创建分镜</p>
         </div>
       </div>
     );
@@ -353,9 +353,9 @@ export const StoryboardGenPage: React.FC = () => {
   return (
     <div className="flex flex-col h-full">
       {durationWarnings.length > 0 && (
-        <div className="shrink-0 px-4 py-2 bg-amber-900/20 border-b border-amber-600/30 text-amber-400 text-sm flex items-center gap-2">
+        <div className="shrink-0 px-4 py-2 bg-n30 border-b border-n40 text-warning text-sm flex items-center gap-2">
           <span>⚠ {durationWarnings.length} 个镜头的音频时长超过设计时长</span>
-          <span className="text-xs text-amber-500/70 ml-2">
+          <span className="text-xs text-warning ml-2">
             {durationWarnings.map(i => `#${i.sortOrder}: 音频${((i.audioDurationMs || 0) / 1000).toFixed(1)}s/设计${((i.plannedDurationMs || 0) / 1000).toFixed(1)}s`).join(' | ')}
           </span>
         </div>
@@ -376,7 +376,7 @@ export const StoryboardGenPage: React.FC = () => {
         />
       </div>
       {showTimeline && (
-        <div className="shrink-0 border-t border-gray-800 bg-gray-950 relative">
+        <div className="shrink-0 border-t border-n40 bg-n20 relative">
           {/* 拖拽手柄：仅展开时可调高度 */}
           {!timelineCollapsed && (
             <div
@@ -384,20 +384,20 @@ export const StoryboardGenPage: React.FC = () => {
               className="absolute -top-1.5 left-0 right-0 h-3 flex items-center justify-center cursor-row-resize group z-10"
               title="拖动调整时间轴高度"
             >
-              <div className="w-12 h-1 rounded-full bg-gray-700 group-hover:bg-indigo-500 transition-colors flex items-center justify-center">
-                <GripHorizontal className="w-3 h-3 text-gray-500 opacity-0 group-hover:opacity-100" />
+              <div className="w-12 h-1 rounded-full bg-n0 group-hover:bg-primary transition-colors flex items-center justify-center">
+                <GripHorizontal className="w-3 h-3 text-n100 opacity-0 group-hover:opacity-100" />
               </div>
             </div>
           )}
           <div
-            className="px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-gray-900/50 transition-colors"
+            className="px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-n20 transition-colors"
             onClick={() => setTimelineCollapsed(c => !c)}
           >
-            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+            <h4 className="text-xs font-bold text-n100 uppercase tracking-wider flex items-center gap-2">
               {timelineCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               图 + 音联合时间轴
             </h4>
-            <span className="text-[10px] text-gray-600">
+            <span className="text-[10px] text-n100">
               {fmtTimeSimple(timelineTotalMs)} | {timelineClips.filter(c => c.track === 'image').length} 个镜头
             </span>
           </div>

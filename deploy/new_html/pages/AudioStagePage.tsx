@@ -365,14 +365,14 @@ export const AudioStagePage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-full bg-gray-950 flex items-center justify-center text-gray-500">
+      <div className="min-h-full bg-n20 flex items-center justify-center text-n100">
         加载中...
       </div>
     );
   }
   if (error) {
     return (
-      <div className="min-h-full bg-gray-950 text-red-400 p-6">
+      <div className="min-h-full bg-n20 text-danger p-6">
         {error}
       </div>
     );
@@ -381,15 +381,15 @@ export const AudioStagePage: React.FC = () => {
   // ─── Render ───────────────────────────────────────────────────
 
   return (
-    <div className="h-full bg-gray-950 text-gray-100 flex flex-col">
+    <div className="h-full bg-n20 text-n800 flex flex-col">
       {/* Header */}
-      <header className="flex items-center gap-3 px-6 py-3 border-b border-gray-800 shrink-0">
-        <Mic size={20} className="text-indigo-400" />
+      <header className="flex items-center gap-3 px-6 py-3 border-b border-n40 shrink-0">
+        <Mic size={20} className="text-primary" />
         <h1 className="text-lg font-bold tracking-tight">声音与配音</h1>
         <span className="flex-1" />
         <button
           onClick={() => navigate(`/projects/${projectId}/ep/${episodeId}/workflow/storyboard`)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-all"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-success hover:bg-success text-white text-sm font-semibold transition-all"
         >
           导出到分镜 <ArrowRight size={14} />
         </button>

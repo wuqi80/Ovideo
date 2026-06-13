@@ -14,12 +14,12 @@ export const SkeletonScreen: React.FC<SkeletonScreenProps> = ({
   message = '正在加载数据...' 
 }) => {
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950/50 backdrop-blur-sm">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-n20/50 backdrop-blur-sm">
       {/* 简洁的加载动画 */}
       <div className="relative mb-6">
         <div className="absolute inset-0 bg-indigo-500/20 blur-xl animate-pulse rounded-full"></div>
-        <div className="relative bg-gray-900/80 border border-indigo-500/30 p-4 rounded-xl shadow-lg flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+        <div className="relative bg-n0/80 border border-indigo-500/30 p-4 rounded-md shadow-lg flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
         <div className="absolute -top-1 -right-1">
           <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
@@ -27,12 +27,12 @@ export const SkeletonScreen: React.FC<SkeletonScreenProps> = ({
       </div>
 
       {/* 加载文本 */}
-      <p className="text-sm font-mono text-gray-400 tracking-wider animate-pulse">
+      <p className="text-sm font-mono text-n300 tracking-wider animate-pulse">
         {message}
       </p>
 
       {/* 进度条 */}
-      <div className="w-48 h-0.5 bg-gray-800 rounded-full mt-4 overflow-hidden">
+      <div className="w-48 h-0.5 bg-n30 rounded-full mt-4 overflow-hidden">
         <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500 w-1/3 animate-loading-shimmer rounded-full"></div>
       </div>
 

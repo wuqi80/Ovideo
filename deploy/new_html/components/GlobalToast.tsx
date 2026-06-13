@@ -134,8 +134,8 @@ export const GlobalToast: React.FC<{ onNavigate?: (view: string, projectId?: str
             key={notif.id}
             className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-lg shadow-2xl border backdrop-blur-sm transition-all duration-300 ease-out cursor-pointer
               ${isSuccess
-                ? 'bg-gray-900/95 border-green-500/30 hover:border-green-500/60'
-                : 'bg-gray-900/95 border-red-500/30 hover:border-red-500/60'}
+                ? 'bg-n0 border-green-500/30 hover:border-green-500/60'
+                : 'bg-n0 border-red-500/30 hover:border-red-500/60'}
               ${entering ? 'translate-x-full opacity-0' : exiting ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'}
             `}
             style={{ transitionDelay: entering ? `${index * 50}ms` : '0ms' }}
@@ -143,16 +143,16 @@ export const GlobalToast: React.FC<{ onNavigate?: (view: string, projectId?: str
           >
             <div className="mt-0.5 flex-shrink-0">
               {isSuccess
-                ? <CheckCircle className="w-5 h-5 text-green-400" />
-                : <AlertCircle className="w-5 h-5 text-red-400" />
+                ? <CheckCircle className="w-5 h-5 text-success" />
+                : <AlertCircle className="w-5 h-5 text-danger" />
               }
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">
+              <div className="text-sm font-medium text-n800 truncate">
                 {notif.message}
               </div>
-              <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+              <div className="text-xs text-n300 mt-0.5 flex items-center gap-1.5">
                 <span>
                   {notif.type === 'video' ? '视频' : notif.type === 'image' ? '图片' : notif.type === 'text' ? '文本' : '素材'}
                 </span>
@@ -160,7 +160,7 @@ export const GlobalToast: React.FC<{ onNavigate?: (view: string, projectId?: str
                 <span>{new Date(notif.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
               </div>
               {isSuccess && notif.targetView && (
-                <div className="mt-1.5 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">
+                <div className="mt-1.5 flex items-center gap-1 text-xs text-b400 hover:text-b300">
                   <ExternalLink className="w-3 h-3" />
                   <span>点击查看结果</span>
                 </div>
@@ -172,7 +172,7 @@ export const GlobalToast: React.FC<{ onNavigate?: (view: string, projectId?: str
                 e.stopPropagation();
                 dismissToast(notif.id);
               }}
-              className="flex-shrink-0 p-1 hover:bg-white/10 rounded transition-colors text-gray-500 hover:text-white"
+              className="flex-shrink-0 p-1 hover:bg-white/10 rounded transition-colors text-n100 hover:text-n800"
             >
               <X className="w-3.5 h-3.5" />
             </button>

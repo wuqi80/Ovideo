@@ -72,7 +72,7 @@ export const AdminLoginPage: React.FC = () => {
 
     return (
         <div
-            className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden bg-zinc-950 text-zinc-200"
+            className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden bg-n20 text-n700"
             style={{ fontFamily: '"PingFang SC", "Source Han Sans CN", "Microsoft YaHei", sans-serif' }}
         >
             {/* 背景：径向辉光 + 等距网格 + 微粒噪点 */}
@@ -92,7 +92,7 @@ export const AdminLoginPage: React.FC = () => {
             {/* 返回主站 */}
             <button
                 onClick={() => navigate('/')}
-                className="absolute top-5 left-5 z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-200 transition-colors"
+                className="absolute top-5 left-5 z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs text-n100 hover:text-n700 transition-colors"
             >
                 <ArrowLeft className="w-3.5 h-3.5" /> 返回主站
             </button>
@@ -101,11 +101,11 @@ export const AdminLoginPage: React.FC = () => {
             <div className="relative z-10 w-full max-w-md mx-4">
                 {/* 顶部品牌 */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-700/20 border border-emerald-500/40 mb-3 shadow-[0_0_40px_rgba(16,185,129,0.25)]">
-                        <ShieldCheck className="w-7 h-7 text-emerald-400" />
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-md bg-primary-light border border-primary/40 mb-3 shadow-card">
+                        <ShieldCheck className="w-7 h-7 text-primary" />
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-zinc-100">MESSIAH · ADMIN</h1>
-                    <p className="text-xs text-zinc-500 mt-1.5 tracking-wider uppercase"
+                    <h1 className="text-2xl font-bold tracking-tight text-n800">MESSIAH · ADMIN</h1>
+                    <p className="text-xs text-n100 mt-1.5 tracking-wider uppercase"
                        style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
                         Restricted · Authentication Required
                     </p>
@@ -114,20 +114,20 @@ export const AdminLoginPage: React.FC = () => {
                 {/* 表单卡 */}
                 <form
                     onSubmit={handleSubmit}
-                    className="relative bg-zinc-900/80 backdrop-blur-xl border border-zinc-800 rounded-xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+                    className="relative bg-n0 backdrop-blur-xl border border-n40 rounded-md p-6 shadow-bottom"
                 >
                     {/* 状态条 */}
-                    <div className="absolute -top-px left-6 right-6 h-px bg-gradient-to-r from-transparent via-emerald-500/60 to-transparent" />
+                    <div className="absolute -top-px left-6 right-6 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
                     <div className="space-y-4">
                         {/* 账号 */}
                         <div>
-                            <label className="block text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5"
+                            <label className="block text-[10px] uppercase tracking-widest text-n100 mb-1.5"
                                    style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
                                 ACCOUNT
                             </label>
                             <div className="relative">
-                                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-n100" />
                                 <input
                                     type="text"
                                     autoFocus
@@ -135,35 +135,35 @@ export const AdminLoginPage: React.FC = () => {
                                     value={username}
                                     onChange={e => setUsername(e.target.value)}
                                     placeholder="admin / lllsdhr"
-                                    className="w-full bg-zinc-950/60 border border-zinc-800 hover:border-zinc-700 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 rounded-lg pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-zinc-700"
+                                    className="w-full bg-n0 border border-n40 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-md pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-n100"
                                 />
                             </div>
                         </div>
 
                         {/* 密码 */}
                         <div>
-                            <label className="block text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5"
+                            <label className="block text-[10px] uppercase tracking-widest text-n100 mb-1.5"
                                    style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
                                 PASSPHRASE
                             </label>
                             <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-n100" />
                                 <input
                                     type="password"
                                     autoComplete="current-password"
                                     value={password}
                                     onChange={e => setPassword(e.target.value)}
                                     placeholder="••••••••"
-                                    className="w-full bg-zinc-950/60 border border-zinc-800 hover:border-zinc-700 focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/10 rounded-lg pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-zinc-700"
+                                    className="w-full bg-n0 border border-n40 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-md pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-n100"
                                 />
                             </div>
                         </div>
 
                         {/* 错误条 */}
                         {error && (
-                            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30">
-                                <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-                                <div className="text-xs text-red-300 leading-relaxed">{error}</div>
+                            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-r50 border border-danger/30">
+                                <AlertTriangle className="w-4 h-4 text-danger mt-0.5 shrink-0" />
+                                <div className="text-xs text-danger leading-relaxed">{error}</div>
                             </div>
                         )}
 
@@ -171,11 +171,11 @@ export const AdminLoginPage: React.FC = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:cursor-not-allowed text-sm font-semibold text-emerald-50 shadow-[0_0_20px_rgba(16,185,129,0.25)] hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] transition-all"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-primary hover:bg-primary-hover disabled:bg-n0 disabled:cursor-not-allowed text-sm font-semibold text-white shadow-card hover:shadow-atlas transition-all"
                         >
                             {loading ? (
                                 <>
-                                    <span className="inline-block w-3 h-3 border-2 border-emerald-200/40 border-t-emerald-100 rounded-full animate-spin" />
+                                    <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                                     验证中…
                                 </>
                             ) : (
@@ -187,14 +187,14 @@ export const AdminLoginPage: React.FC = () => {
                     </div>
 
                     {/* 脚注 */}
-                    <div className="mt-5 pt-4 border-t border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-600"
+                    <div className="mt-5 pt-4 border-t border-n40 flex items-center justify-between text-[10px] text-n100"
                          style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
                         <span>SESSION · SANDBOXED</span>
                         <span>v 2026.05.26</span>
                     </div>
                 </form>
 
-                <p className="text-center text-[11px] text-zinc-600 mt-5 leading-relaxed">
+                <p className="text-center text-[11px] text-n100 mt-5 leading-relaxed">
                     本控制台与主站会话隔离 · 主站登录状态不会被改动<br />
                     凭据仅在当前浏览器标签页内保留
                 </p>

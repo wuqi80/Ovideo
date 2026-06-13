@@ -180,7 +180,7 @@ export const StoryboardImageArea: React.FC<StoryboardImageAreaProps> = ({
 }) => {
     const placeholderClass =
         placeholderClassName ??
-        'w-full aspect-video bg-slate-800 border border-dashed border-slate-600 rounded flex flex-col items-center justify-center text-slate-500';
+        'w-full aspect-video bg-n30 border border-dashed border-n40 rounded flex flex-col items-center justify-center text-n100';
 
     const realImgClass =
         imgClassName ?? 'w-full aspect-video object-cover rounded';
@@ -218,12 +218,12 @@ export const AudioBadgesRow: React.FC<AudioBadgesRowProps> = ({ meta }) => {
     if (!(hasD || hasN || hasS)) return null;
     return (
         <div className="flex flex-wrap gap-1 mt-1">
-            {hasD && <span className="px-1 py-0.5 bg-blue-600/20 text-blue-300 rounded text-[9px]">对白</span>}
-            {hasN && <span className="px-1 py-0.5 bg-purple-600/20 text-purple-300 rounded text-[9px]">旁白</span>}
-            {hasS && <span className="px-1 py-0.5 bg-orange-600/20 text-orange-300 rounded text-[9px]">音效</span>}
+            {hasD && <span className="px-1 py-0.5 bg-b50 text-b400 rounded text-[9px]">对白</span>}
+            {hasN && <span className="px-1 py-0.5 bg-primary-light text-primary rounded text-[9px]">旁白</span>}
+            {hasS && <span className="px-1 py-0.5 bg-warning/15 text-warning rounded text-[9px]">音效</span>}
             {hasMx
-                ? <span className="px-1 py-0.5 bg-emerald-600/20 text-emerald-300 rounded text-[9px]">已混音</span>
-                : <span className="px-1 py-0.5 bg-slate-700 text-slate-400 rounded text-[9px]">混音中...</span>}
+                ? <span className="px-1 py-0.5 bg-success/15 text-success rounded text-[9px]">已混音</span>
+                : <span className="px-1 py-0.5 bg-n30 text-n300 rounded text-[9px]">混音中...</span>}
         </div>
     );
 };
@@ -259,7 +259,7 @@ export const VideoCard: React.FC<VideoCardProps> = (p) => {
     const autoOpenMention =
         !!p.image.isPlaceholder && (seedanceParams.prompt || '').trim() === '@';
     return (
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-3 flex flex-col gap-2">
+        <div className="bg-n0 rounded-md border border-n40 shadow-card hover:shadow-atlas p-3 flex flex-col gap-2">
             <StoryboardImageArea image={p.image} meta={p.meta} />
             <DurationFieldForGroup
                 group={p.group}

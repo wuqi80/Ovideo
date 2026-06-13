@@ -116,15 +116,15 @@ export const AdminFeatureTabs: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex border-b border-gray-800 bg-gray-900/30">
+      <div className="flex border-b border-n40 bg-n0">
         {SUB_TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 ${
               tab === t.key
-                ? 'border-indigo-500 text-indigo-300 bg-gray-900'
-                : 'border-transparent text-gray-500 hover:text-gray-300'
+                ? 'border-primary text-primary bg-n0'
+                : 'border-transparent text-n100 hover:text-n700'
             }`}
           >
             {t.icon}
@@ -201,26 +201,26 @@ const AccountsTab: React.FC = () => {
           value={keyword}
           onChange={e => setKeyword(e.target.value)}
           placeholder="搜索用户名/邮箱..."
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-64"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-64"
         />
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs"
         >
           <option value="">全部状态</option>
           <option value="active">active</option>
           <option value="disabled">disabled</option>
         </select>
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700">
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20">
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
-        <span className="ml-auto text-xs text-gray-500">{users.length} 个用户</span>
+        <span className="ml-auto text-xs text-n100">{users.length} 个用户</span>
       </div>
 
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="text-left p-2">用户</th>
               <th className="text-left p-2">邮箱</th>
@@ -232,17 +232,17 @@ const AccountsTab: React.FC = () => {
           </thead>
           <tbody>
             {users.map(u => (
-              <tr key={u.user_id} className="border-t border-gray-800/60">
+              <tr key={u.user_id} className="border-t border-n40">
                 <td className="p-2">
-                  <div className="text-gray-200">{u.username}</div>
-                  <div className="text-[10px] text-gray-500 font-mono">{u.user_id}</div>
+                  <div className="text-n700">{u.username}</div>
+                  <div className="text-[10px] text-n100 font-mono">{u.user_id}</div>
                 </td>
-                <td className="p-2 text-gray-400">{u.email || '-'}</td>
+                <td className="p-2 text-n300">{u.email || '-'}</td>
                 <td className="p-2">
                   <select
                     value={u.role || 'user'}
                     onChange={e => handleSetRole(u.user_id, e.target.value)}
-                    className="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-xs"
+                    className="bg-n0 border border-n40 rounded px-1 py-0.5 text-xs"
                   >
                     <option value="user">user</option>
                     <option value="admin">admin</option>
@@ -251,26 +251,26 @@ const AccountsTab: React.FC = () => {
                 </td>
                 <td className="p-2">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                    (u.status || 'active') === 'active' ? 'bg-emerald-900/40 text-emerald-300' : 'bg-red-900/40 text-red-300'
+                    (u.status || 'active') === 'active' ? 'bg-success-light text-success' : 'bg-r50 text-danger'
                   }`}>
                     {u.status || 'active'}
                   </span>
                   {u.disabled_reason && (
-                    <div className="text-[10px] text-red-400 mt-0.5">{u.disabled_reason}</div>
+                    <div className="text-[10px] text-danger mt-0.5">{u.disabled_reason}</div>
                   )}
                 </td>
-                <td className="p-2 text-gray-500 text-[10px]">
+                <td className="p-2 text-n100 text-[10px]">
                   {u.last_login_at ? new Date(u.last_login_at).toLocaleString('zh-CN') : '-'}
                 </td>
                 <td className="p-2 space-x-1">
                   {(u.status || 'active') === 'active' ? (
-                    <button onClick={() => handleDisable(u.user_id)} className="px-2 py-0.5 text-[10px] rounded bg-red-900/40 hover:bg-red-900/70 text-red-200">禁用</button>
+                    <button onClick={() => handleDisable(u.user_id)} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">禁用</button>
                   ) : (
-                    <button onClick={() => handleEnable(u.user_id)} className="px-2 py-0.5 text-[10px] rounded bg-emerald-900/40 hover:bg-emerald-900/70 text-emerald-200">启用</button>
+                    <button onClick={() => handleEnable(u.user_id)} className="px-2 py-0.5 text-[10px] rounded bg-success-light hover:bg-success-light text-success">启用</button>
                   )}
                   <button
                     onClick={() => setPwUserId(u.user_id)}
-                    className="px-2 py-0.5 text-[10px] rounded bg-gray-800 hover:bg-gray-700 text-gray-300"
+                    className="px-2 py-0.5 text-[10px] rounded bg-n0 hover:bg-n20 text-n700"
                   >
                     重置密码
                   </button>
@@ -278,30 +278,30 @@ const AccountsTab: React.FC = () => {
               </tr>
             ))}
             {!users.length && (
-              <tr><td colSpan={6} className="text-center py-6 text-gray-500">暂无数据</td></tr>
+              <tr><td colSpan={6} className="text-center py-6 text-n100">暂无数据</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
       {pwUserId && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 w-80">
+        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
+          <div className="bg-n0 border border-n40 rounded-lg p-4 w-80 shadow-bottom">
             <div className="flex justify-between items-center mb-3">
               <div className="text-sm font-medium">重置密码 — {pwUserId}</div>
-              <button onClick={() => { setPwUserId(null); setPwValue(''); }} className="text-gray-500">×</button>
+              <button onClick={() => { setPwUserId(null); setPwValue(''); }} className="text-n100">×</button>
             </div>
             <input
               type="text"
               value={pwValue}
               onChange={e => setPwValue(e.target.value)}
               placeholder="新密码（至少 4 位）"
-              className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm"
+              className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
               autoFocus
             />
             <button
               onClick={() => handleResetPassword(pwUserId)}
-              className="mt-3 w-full px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-sm"
+              className="mt-3 w-full px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm"
             >
               确认重置
             </button>
@@ -361,11 +361,11 @@ const GroupsTab: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-900 border border-gray-800 rounded">
+      <div className="flex flex-wrap items-center gap-2 p-3 bg-n0 border border-n40 rounded">
         <select
           value={newUserId}
           onChange={e => setNewUserId(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-56"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-56"
         >
           <option value="">— 选择归属用户 —</option>
           {users.map(u => (
@@ -374,19 +374,19 @@ const GroupsTab: React.FC = () => {
             </option>
           ))}
         </select>
-        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="分组名称" className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-44" />
-        <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="描述（可选）" className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs flex-1" />
+        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="分组名称" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
+        <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="描述（可选）" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs flex-1" />
         <button
           onClick={handleCreate}
           disabled={submitting}
-          className="flex items-center gap-1 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-xs"
+          className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white disabled:bg-n0 disabled:cursor-not-allowed text-xs"
         ><Plus size={12} />{submitting ? '创建中…' : '创建分组'}</button>
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
       </div>
 
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="text-left p-2">分组</th>
               <th className="text-left p-2">归属</th>
@@ -397,23 +397,23 @@ const GroupsTab: React.FC = () => {
           </thead>
           <tbody>
             {groups.map(g => (
-              <tr key={g.group_id} className="border-t border-gray-800/60">
+              <tr key={g.group_id} className="border-t border-n40">
                 <td className="p-2">
-                  <div className="text-gray-200">{g.group_name}</div>
-                  <div className="text-[10px] text-gray-500 font-mono">{g.group_id}</div>
-                  {g.description && <div className="text-[10px] text-gray-500">{g.description}</div>}
+                  <div className="text-n700">{g.group_name}</div>
+                  <div className="text-[10px] text-n100 font-mono">{g.group_id}</div>
+                  {g.description && <div className="text-[10px] text-n100">{g.description}</div>}
                 </td>
-                <td className="p-2 text-gray-400">
+                <td className="p-2 text-n300">
                   {g.owner_name || g.user_id || '-'}
                 </td>
-                <td className="p-2 text-gray-300">{g.project_count ?? 0}</td>
-                <td className="p-2 text-gray-500">{g.created_at ? new Date(g.created_at).toLocaleString('zh-CN') : '-'}</td>
+                <td className="p-2 text-n700">{g.project_count ?? 0}</td>
+                <td className="p-2 text-n100">{g.created_at ? new Date(g.created_at).toLocaleString('zh-CN') : '-'}</td>
                 <td className="p-2">
-                  <button onClick={() => handleDelete(g.group_id)} className="px-2 py-0.5 text-[10px] rounded bg-red-900/40 hover:bg-red-900/70 text-red-200">删除</button>
+                  <button onClick={() => handleDelete(g.group_id)} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">删除</button>
                 </td>
               </tr>
             ))}
-            {!groups.length && <tr><td colSpan={5} className="text-center py-6 text-gray-500">暂无分组</td></tr>}
+            {!groups.length && <tr><td colSpan={5} className="text-center py-6 text-n100">暂无分组</td></tr>}
           </tbody>
         </table>
       </div>
@@ -462,12 +462,12 @@ const CreditRulesTab: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <button onClick={handleCreate} className="flex items-center gap-1 px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs"><Plus size={12} />新建规则</button>
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
+        <button onClick={handleCreate} className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs"><Plus size={12} />新建规则</button>
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
       </div>
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="text-left p-2">feature_key</th>
               <th className="text-left p-2">名称</th>
@@ -483,7 +483,7 @@ const CreditRulesTab: React.FC = () => {
             {rules.map(r => (
               <CreditRuleRow key={r.rule_id} rule={r} onToggle={() => handleToggleEnabled(r)} onSave={handleSaveCost} onDelete={() => handleDelete(r)} />
             ))}
-            {!rules.length && <tr><td colSpan={8} className="text-center py-6 text-gray-500">暂无规则</td></tr>}
+            {!rules.length && <tr><td colSpan={8} className="text-center py-6 text-n100">暂无规则</td></tr>}
           </tbody>
         </table>
       </div>
@@ -501,21 +501,21 @@ const CreditRuleRow: React.FC<{
   const [min_, setMin] = useState(rule.min_cost);
   const [max_, setMax] = useState<number | null>(rule.max_cost);
   return (
-    <tr className="border-t border-gray-800/60">
-      <td className="p-2 font-mono text-[10px] text-gray-300">{rule.feature_key}</td>
-      <td className="p-2 text-gray-300">{rule.feature_name}</td>
+    <tr className="border-t border-n40">
+      <td className="p-2 font-mono text-[10px] text-n700">{rule.feature_key}</td>
+      <td className="p-2 text-n700">{rule.feature_name}</td>
       <td className="p-2">
         <button onClick={onToggle}>
-          {rule.enabled ? <ToggleRight size={20} className="text-emerald-400" /> : <ToggleLeft size={20} className="text-gray-500" />}
+          {rule.enabled ? <ToggleRight size={20} className="text-success" /> : <ToggleLeft size={20} className="text-n100" />}
         </button>
       </td>
-      <td className="p-2"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="w-16 bg-gray-800 border border-gray-700 rounded px-1 text-right text-xs" /></td>
-      <td className="p-2"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="w-14 bg-gray-800 border border-gray-700 rounded px-1 text-right text-xs" /></td>
-      <td className="p-2"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="w-14 bg-gray-800 border border-gray-700 rounded px-1 text-right text-xs" /></td>
-      <td className="p-2 text-gray-500 text-[10px]">{rule.rule_version}</td>
+      <td className="p-2"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="w-16 bg-n0 border border-n40 rounded px-1 text-right text-xs" /></td>
+      <td className="p-2"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="w-14 bg-n0 border border-n40 rounded px-1 text-right text-xs" /></td>
+      <td className="p-2"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="w-14 bg-n0 border border-n40 rounded px-1 text-right text-xs" /></td>
+      <td className="p-2 text-n100 text-[10px]">{rule.rule_version}</td>
       <td className="p-2 space-x-1">
-        <button onClick={() => onSave(rule, base, min_, max_)} className="px-2 py-0.5 text-[10px] rounded bg-emerald-900/40 hover:bg-emerald-900/70 text-emerald-200">保存</button>
-        <button onClick={onDelete} className="px-2 py-0.5 text-[10px] rounded bg-red-900/40 hover:bg-red-900/70 text-red-200">删除</button>
+        <button onClick={() => onSave(rule, base, min_, max_)} className="px-2 py-0.5 text-[10px] rounded bg-success-light hover:bg-success-light text-success">保存</button>
+        <button onClick={onDelete} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">删除</button>
       </td>
     </tr>
   );
@@ -555,12 +555,12 @@ const CreditAccountsTab: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="text-xs text-gray-500">{accounts.length} 个账户</span>
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
+        <span className="text-xs text-n100">{accounts.length} 个账户</span>
       </div>
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="text-left p-2">账户</th>
               <th className="text-left p-2">归属</th>
@@ -572,40 +572,40 @@ const CreditAccountsTab: React.FC = () => {
           </thead>
           <tbody>
             {accounts.map(a => (
-              <tr key={a.account_id} className="border-t border-gray-800/60">
+              <tr key={a.account_id} className="border-t border-n40">
                 <td className="p-2 font-mono text-[10px]">{a.account_id}</td>
-                <td className="p-2 text-gray-300">{a.owner_type}/{a.owner_id}</td>
-                <td className="p-2 text-right font-mono text-emerald-300">{a.available_credits}</td>
-                <td className="p-2 text-right font-mono text-amber-300">{a.frozen_credits}</td>
-                <td className="p-2 text-right font-mono text-gray-400">{a.total_used_credits}</td>
+                <td className="p-2 text-n700">{a.owner_type}/{a.owner_id}</td>
+                <td className="p-2 text-right font-mono text-success">{a.available_credits}</td>
+                <td className="p-2 text-right font-mono text-warning">{a.frozen_credits}</td>
+                <td className="p-2 text-right font-mono text-n300">{a.total_used_credits}</td>
                 <td className="p-2">
                   <button
                     onClick={() => setAdjustOpen({ owner_id: a.owner_id, owner: `${a.owner_type}/${a.owner_id}` })}
                     disabled={a.owner_type !== 'user'}
                     title={a.owner_type !== 'user' ? '当前只支持调整 user 账户' : ''}
-                    className="px-2 py-0.5 text-[10px] rounded bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-200 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="px-2 py-0.5 text-[10px] rounded bg-primary-light hover:bg-primary-light text-primary disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     手动调整
                   </button>
                 </td>
               </tr>
             ))}
-            {!accounts.length && <tr><td colSpan={6} className="text-center py-6 text-gray-500">暂无账户</td></tr>}
+            {!accounts.length && <tr><td colSpan={6} className="text-center py-6 text-n100">暂无账户</td></tr>}
           </tbody>
         </table>
       </div>
 
       {adjustOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 w-96 space-y-3">
+        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
+          <div className="bg-n0 border border-n40 rounded-lg p-4 w-96 space-y-3 shadow-bottom">
             <div className="flex justify-between items-center">
               <div className="text-sm font-medium">手动调整 — {adjustOpen.owner}</div>
-              <button onClick={() => setAdjustOpen(null)} className="text-gray-500"><X size={14} /></button>
+              <button onClick={() => setAdjustOpen(null)} className="text-n100"><X size={14} /></button>
             </div>
-            <div className="text-xs text-gray-400">正数 = 充值/赠送，负数 = 扣减。需要管理员审计理由。</div>
-            <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} placeholder="amount" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm" />
-            <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="调整理由（必填）" className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm h-20" />
-            <button onClick={submitAdjust} className="w-full px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-sm">提交调整</button>
+            <div className="text-xs text-n300">正数 = 充值/赠送，负数 = 扣减。需要管理员审计理由。</div>
+            <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} placeholder="amount" className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm" />
+            <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="调整理由（必填）" className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm h-20" />
+            <button onClick={submitAdjust} className="w-full px-3 py-1.5 rounded bg-success hover:bg-success text-white text-sm">提交调整</button>
           </div>
         </div>
       )}
@@ -643,14 +643,14 @@ const CreditTransactionsTab: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <input value={userFilter} onChange={e => setUserFilter(e.target.value)} placeholder="user_id" className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-44" />
-        <input value={featureFilter} onChange={e => setFeatureFilter(e.target.value)} placeholder="feature_key" className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-44" />
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="ml-auto text-xs text-gray-500">{txns.length} 条</span>
+        <input value={userFilter} onChange={e => setUserFilter(e.target.value)} placeholder="user_id" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
+        <input value={featureFilter} onChange={e => setFeatureFilter(e.target.value)} placeholder="feature_key" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
+        <span className="ml-auto text-xs text-n100">{txns.length} 条</span>
       </div>
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="text-left p-2">时间</th>
               <th className="text-left p-2">类型</th>
@@ -663,17 +663,17 @@ const CreditTransactionsTab: React.FC = () => {
           </thead>
           <tbody>
             {txns.map(t => (
-              <tr key={t.transaction_id} className="border-t border-gray-800/60">
-                <td className="p-2 text-gray-400 text-[10px]">{new Date(t.created_at).toLocaleString('zh-CN')}</td>
-                <td className="p-2 text-gray-300">{t.change_type}</td>
-                <td className="p-2 font-mono text-[10px] text-gray-400">{t.user_id || '-'}</td>
-                <td className="p-2 text-gray-300">{t.feature_key || '-'}</td>
-                <td className="p-2 text-right font-mono text-gray-300">{t.amount}</td>
-                <td className="p-2 text-right font-mono text-gray-500">{t.balance_before}</td>
-                <td className="p-2 text-right font-mono text-gray-300">{t.balance_after}</td>
+              <tr key={t.transaction_id} className="border-t border-n40">
+                <td className="p-2 text-n300 text-[10px]">{new Date(t.created_at).toLocaleString('zh-CN')}</td>
+                <td className="p-2 text-n700">{t.change_type}</td>
+                <td className="p-2 font-mono text-[10px] text-n300">{t.user_id || '-'}</td>
+                <td className="p-2 text-n700">{t.feature_key || '-'}</td>
+                <td className="p-2 text-right font-mono text-n700">{t.amount}</td>
+                <td className="p-2 text-right font-mono text-n100">{t.balance_before}</td>
+                <td className="p-2 text-right font-mono text-n700">{t.balance_after}</td>
               </tr>
             ))}
-            {!txns.length && <tr><td colSpan={7} className="text-center py-6 text-gray-500">暂无流水</td></tr>}
+            {!txns.length && <tr><td colSpan={7} className="text-center py-6 text-n100">暂无流水</td></tr>}
           </tbody>
         </table>
       </div>
@@ -727,12 +727,12 @@ const MediaLibraryAdminTab: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-900 border border-gray-800 rounded">
-        <span className="text-[10px] text-gray-500 uppercase tracking-wider">筛选</span>
+      <div className="flex flex-wrap items-center gap-2 p-3 bg-n0 border border-n40 rounded">
+        <span className="text-[10px] text-n100 uppercase tracking-wider">筛选</span>
         <select
           value={filterUserId}
           onChange={e => setFilterUserId(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-56"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-56"
         >
           <option value="">所有用户</option>
           {users.map(u => (
@@ -744,7 +744,7 @@ const MediaLibraryAdminTab: React.FC = () => {
         <select
           value={filterType}
           onChange={e => setFilterType(e.target.value)}
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-32"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-32"
         >
           <option value="">所有类型</option>
           <option value="image">图片</option>
@@ -759,14 +759,14 @@ const MediaLibraryAdminTab: React.FC = () => {
           onChange={e => setFilterKeyword(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') reload(); }}
           placeholder="搜索标题 / 文件名… (Enter)"
-          className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs flex-1 min-w-[180px]"
+          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs flex-1 min-w-[180px]"
         />
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="text-xs text-gray-500 ml-1">{items.length} 个素材</span>
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
+        <span className="text-xs text-n100 ml-1">{items.length} 个素材</span>
       </div>
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="text-left p-2">素材</th>
               <th className="text-left p-2">类型</th>
@@ -778,28 +778,28 @@ const MediaLibraryAdminTab: React.FC = () => {
           </thead>
           <tbody>
             {items.map(it => (
-              <tr key={it.library_item_id} className="border-t border-gray-800/60">
+              <tr key={it.library_item_id} className="border-t border-n40">
                 <td className="p-2">
-                  <div className="text-gray-200 truncate max-w-[300px]">{it.title || it.file_name}</div>
-                  <div className="text-[10px] text-gray-500 font-mono">{it.library_item_id}</div>
+                  <div className="text-n700 truncate max-w-[300px]">{it.title || it.file_name}</div>
+                  <div className="text-[10px] text-n100 font-mono">{it.library_item_id}</div>
                 </td>
-                <td className="p-2 text-gray-300">{it.item_type}</td>
-                <td className="p-2 text-[11px] text-gray-300">
+                <td className="p-2 text-n700">{it.item_type}</td>
+                <td className="p-2 text-[11px] text-n700">
                   {(() => {
                     const u = users.find(x => (x.id || x.user_id) === it.user_id);
                     return u
-                      ? (<><span className="text-gray-200">{u.username || u.email}</span><span className="ml-1 text-[9px] text-gray-500 font-mono">{(it.user_id || '').slice(0, 8)}…</span></>)
-                      : (<span className="font-mono text-gray-400">{it.user_id}</span>);
+                      ? (<><span className="text-n700">{u.username || u.email}</span><span className="ml-1 text-[9px] text-n100 font-mono">{(it.user_id || '').slice(0, 8)}…</span></>)
+                      : (<span className="font-mono text-n300">{it.user_id}</span>);
                   })()}
                 </td>
-                <td className="p-2 font-mono text-[10px] text-gray-400">{it.project_id || '-'}</td>
-                <td className="p-2 text-gray-300">{it.permission_scope}</td>
+                <td className="p-2 font-mono text-[10px] text-n300">{it.project_id || '-'}</td>
+                <td className="p-2 text-n700">{it.permission_scope}</td>
                 <td className="p-2">
-                  <button onClick={() => handleDelete(it.library_item_id)} className="px-2 py-0.5 text-[10px] rounded bg-red-900/40 hover:bg-red-900/70 text-red-200">删除</button>
+                  <button onClick={() => handleDelete(it.library_item_id)} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">删除</button>
                 </td>
               </tr>
             ))}
-            {!items.length && <tr><td colSpan={6} className="text-center py-6 text-gray-500">暂无素材</td></tr>}
+            {!items.length && <tr><td colSpan={6} className="text-center py-6 text-n100">暂无素材</td></tr>}
           </tbody>
         </table>
       </div>
@@ -837,14 +837,14 @@ const AuditLogsTab: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <input value={adminFilter} onChange={e => setAdminFilter(e.target.value)} placeholder="admin_user_id" className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-44" />
-        <input value={actionFilter} onChange={e => setActionFilter(e.target.value)} placeholder="action" className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-44" />
-        <button onClick={reload} className="p-1.5 rounded bg-gray-800 hover:bg-gray-700"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="ml-auto text-xs text-gray-500">{logs.length} 条</span>
+        <input value={adminFilter} onChange={e => setAdminFilter(e.target.value)} placeholder="admin_user_id" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
+        <input value={actionFilter} onChange={e => setActionFilter(e.target.value)} placeholder="action" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
+        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
+        <span className="ml-auto text-xs text-n100">{logs.length} 条</span>
       </div>
-      <div className="overflow-auto border border-gray-800 rounded">
+      <div className="overflow-auto border border-n40 rounded">
         <table className="w-full text-xs">
-          <thead className="bg-gray-900 text-gray-500">
+          <thead className="bg-n0 text-n100">
             <tr>
               <th className="text-left p-2">时间</th>
               <th className="text-left p-2">管理员</th>
@@ -856,16 +856,16 @@ const AuditLogsTab: React.FC = () => {
           </thead>
           <tbody>
             {logs.map(l => (
-              <tr key={l.audit_id} className="border-t border-gray-800/60">
-                <td className="p-2 text-gray-400 text-[10px]">{new Date(l.created_at).toLocaleString('zh-CN')}</td>
+              <tr key={l.audit_id} className="border-t border-n40">
+                <td className="p-2 text-n300 text-[10px]">{new Date(l.created_at).toLocaleString('zh-CN')}</td>
                 <td className="p-2 font-mono text-[10px]">{l.admin_user_id}</td>
-                <td className="p-2 text-gray-300">{l.action}</td>
-                <td className="p-2 font-mono text-[10px] text-gray-400">{l.target_type}/{l.target_id}</td>
-                <td className="p-2 text-gray-500 text-[10px]">{l.ip || '-'}</td>
-                <td className="p-2 text-gray-500 text-[10px] truncate max-w-[200px]">{l.user_agent || '-'}</td>
+                <td className="p-2 text-n700">{l.action}</td>
+                <td className="p-2 font-mono text-[10px] text-n300">{l.target_type}/{l.target_id}</td>
+                <td className="p-2 text-n100 text-[10px]">{l.ip || '-'}</td>
+                <td className="p-2 text-n100 text-[10px] truncate max-w-[200px]">{l.user_agent || '-'}</td>
               </tr>
             ))}
-            {!logs.length && <tr><td colSpan={6} className="text-center py-6 text-gray-500">暂无审计日志</td></tr>}
+            {!logs.length && <tr><td colSpan={6} className="text-center py-6 text-n100">暂无审计日志</td></tr>}
           </tbody>
         </table>
       </div>

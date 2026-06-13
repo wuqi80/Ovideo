@@ -279,33 +279,33 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
     const allImages = [...generatedImages.map(i => i.url), ...materialImages.map(i => i.url)];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="bg-gray-900 rounded-2xl border border-gray-700 shadow-2xl w-[1300px] max-w-[95vw] max-h-[92vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm">
+            <div className="bg-n0 rounded-2xl border border-n40 shadow-bottom w-[1300px] max-w-[95vw] max-h-[92vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-n40 flex-shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-500/20 rounded-lg">
-                            <Wand2 className="w-5 h-5 text-purple-400" />
+                        <div className="p-2 bg-primary-light rounded-lg">
+                            <Wand2 className="w-5 h-5 text-primary" />
                         </div>
-                        <h2 className="text-lg font-bold text-white">分镜工具</h2>
+                        <h2 className="text-lg font-bold text-n800">分镜工具</h2>
                     </div>
                     <button
                         onClick={onClose}
                         disabled={processing}
-                        className="p-2 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 hover:bg-n20 rounded-lg transition-colors disabled:opacity-50"
                     >
-                        <X className="w-5 h-5 text-gray-400" />
+                        <X className="w-5 h-5 text-n300" />
                     </button>
                 </div>
 
                 {/* Tab选择 */}
-                <div className="flex border-b border-gray-800 flex-shrink-0">
+                <div className="flex border-b border-n40 flex-shrink-0">
                     <button
                         onClick={() => setToolType('panorama')}
                         className={`flex-1 py-3 text-sm font-medium transition-colors ${
                             toolType === 'panorama'
-                                ? 'text-purple-400 border-b-2 border-purple-500 bg-purple-500/10'
-                                : 'text-gray-400 hover:text-gray-300'
+                                ? 'text-primary border-b-2 border-primary bg-primary-light'
+                                : 'text-n300 hover:text-n700'
                         }`}
                     >
                         <div className="flex items-center justify-center gap-2">
@@ -317,8 +317,8 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                         onClick={() => setToolType('auto')}
                         className={`flex-1 py-3 text-sm font-medium transition-colors ${
                             toolType === 'auto'
-                                ? 'text-purple-400 border-b-2 border-purple-500 bg-purple-500/10'
-                                : 'text-gray-400 hover:text-gray-300'
+                                ? 'text-primary border-b-2 border-primary bg-primary-light'
+                                : 'text-n300 hover:text-n700'
                         }`}
                     >
                         <div className="flex items-center justify-center gap-2">
@@ -330,8 +330,8 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                         onClick={() => setToolType('multi_grid')}
                         className={`flex-1 py-3 text-sm font-medium transition-colors ${
                             toolType === 'multi_grid'
-                                ? 'text-purple-400 border-b-2 border-purple-500 bg-purple-500/10'
-                                : 'text-gray-400 hover:text-gray-300'
+                                ? 'text-primary border-b-2 border-primary bg-primary-light'
+                                : 'text-n300 hover:text-n700'
                         }`}
                     >
                         <div className="flex items-center justify-center gap-2">
@@ -348,16 +348,16 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                         <div className="space-y-6">
                             {/* 步骤指示器 */}
                             <div className="flex items-center gap-4">
-                                <div className={`flex items-center gap-2 ${panoramaStep >= 1 ? 'text-purple-400' : 'text-gray-500'}`}>
+                                <div className={`flex items-center gap-2 ${panoramaStep >= 1 ? 'text-primary' : 'text-n100'}`}>
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                                        panoramaStep >= 1 ? 'bg-purple-500 text-white' : 'bg-gray-700'
+                                        panoramaStep >= 1 ? 'bg-primary text-white' : 'bg-n0'
                                     }`}>1</div>
                                     <span>选择场景生成全景</span>
                                 </div>
-                                <ChevronRight className="w-5 h-5 text-gray-600" />
-                                <div className={`flex items-center gap-2 ${panoramaStep >= 2 ? 'text-purple-400' : 'text-gray-500'}`}>
+                                <ChevronRight className="w-5 h-5 text-n100" />
+                                <div className={`flex items-center gap-2 ${panoramaStep >= 2 ? 'text-primary' : 'text-n100'}`}>
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                                        panoramaStep >= 2 ? 'bg-purple-500 text-white' : 'bg-gray-700'
+                                        panoramaStep >= 2 ? 'bg-primary text-white' : 'bg-n0'
                                     }`}>2</div>
                                     <span>框选区域融合人物</span>
                                 </div>
@@ -365,16 +365,16 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
 
                             {panoramaStep === 1 && (
                                 <div className="space-y-4">
-                                    <label className="text-sm font-medium text-gray-300">选择场景素材</label>
-                                    <div className="grid grid-cols-5 gap-3 max-h-60 overflow-y-auto p-2 bg-gray-800/50 rounded-lg">
+                                    <label className="text-sm font-medium text-n700">选择场景素材</label>
+                                    <div className="grid grid-cols-5 gap-3 max-h-60 overflow-y-auto p-2 bg-n30 rounded-lg">
                                         {allImages.map((img, idx) => (
                                             <div
                                                 key={idx}
                                                 onClick={() => !processing && setSelectedSceneImage(img)}
                                                 className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
                                                     selectedSceneImage === img
-                                                        ? 'border-purple-500 ring-2 ring-purple-500/50'
-                                                        : 'border-transparent hover:border-gray-600'
+                                                        ? 'border-primary ring-2 ring-primary/50'
+                                                        : 'border-transparent hover:border-n40'
                                                 }`}
                                             >
                                                 <img src={img} alt={`Image ${idx}`} className="w-full h-full object-cover" />
@@ -382,25 +382,25 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                         ))}
                                     </div>
                                     {selectedSceneImage && (
-                                        <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-700">
+                                        <div className="aspect-video bg-n800 rounded-lg overflow-hidden border border-n40">
                                             <img src={selectedSceneImage} alt="Selected" className="w-full h-full object-contain" />
                                         </div>
                                     )}
                                     <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-300">全景描述提示词（可选）</label>
+                                        <label className="text-sm font-medium text-n700">全景描述提示词（可选）</label>
                                         <input
                                             type="text"
                                             value={panorama360Prompt}
                                             onChange={(e) => setPanorama360Prompt(e.target.value)}
                                             disabled={processing}
-                                            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                                            className="w-full px-4 py-2 bg-n0 border border-n40 rounded-lg text-n800 text-sm focus:outline-none focus:border-primary disabled:opacity-50"
                                             placeholder="描述全景效果，如：室内360度环绕视角..."
                                         />
                                     </div>
                                     <button
                                         onClick={handlePanorama360Generate}
                                         disabled={!selectedSceneImage || processing}
-                                        className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                        className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                                     >
                                         {processing ? (
                                             <>
@@ -420,29 +420,29 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                             {panoramaStep === 2 && panorama360Result && (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-sm font-medium text-gray-300">
+                                        <label className="text-sm font-medium text-n700">
                                             在全景图上框选融合区域
-                                            <span className="text-gray-500 ml-2">（拖拽框选，Alt+拖拽平移）</span>
+                                            <span className="text-n100 ml-2">（拖拽框选，Alt+拖拽平移）</span>
                                         </label>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => handlePanoramaZoom(-0.2)}
-                                                className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+                                                className="p-1.5 bg-n0 hover:bg-n20 rounded text-n700"
                                                 title="缩小"
                                             >
                                                 <ZoomOut className="w-4 h-4" />
                                             </button>
-                                            <span className="text-xs text-gray-400 w-12 text-center">{Math.round(panoramaZoom * 100)}%</span>
+                                            <span className="text-xs text-n300 w-12 text-center">{Math.round(panoramaZoom * 100)}%</span>
                                             <button
                                                 onClick={() => handlePanoramaZoom(0.2)}
-                                                className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+                                                className="p-1.5 bg-n0 hover:bg-n20 rounded text-n700"
                                                 title="放大"
                                             >
                                                 <ZoomIn className="w-4 h-4" />
                                             </button>
                                             <button
                                                 onClick={resetPanoramaView}
-                                                className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+                                                className="p-1.5 bg-n0 hover:bg-n20 rounded text-n700"
                                                 title="重置视图"
                                             >
                                                 <RotateCcw className="w-4 h-4" />
@@ -450,7 +450,7 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                             {cropRect && (
                                                 <button
                                                     onClick={clearCropRect}
-                                                    className="flex items-center gap-1 px-2 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                                                    className="flex items-center gap-1 px-2 py-1 text-xs text-danger hover:text-danger hover:bg-r50 rounded transition-colors"
                                                 >
                                                     <Trash2 className="w-3 h-3" />
                                                     清除框选
@@ -460,7 +460,7 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                     </div>
                                     <div 
                                         ref={cropContainerRef}
-                                        className="relative bg-gray-900 rounded-lg overflow-hidden border-2 border-gray-700 select-none"
+                                        className="relative bg-n0 rounded-lg overflow-hidden border-2 border-n40 select-none"
                                         style={{ 
                                             height: '400px',
                                             cursor: isPanning ? 'grabbing' : 'crosshair'
@@ -520,7 +520,7 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                         {/* 框选区域边框（相对于容器定位） */}
                                         {cropRect && cropRect.width > 0 && cropRect.height > 0 && (
                                             <div
-                                                className="absolute border-2 border-purple-400 pointer-events-none"
+                                                className="absolute border-2 border-primary pointer-events-none"
                                                 style={{
                                                     left: cropRect.x,
                                                     top: cropRect.y,
@@ -535,7 +535,7 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                                 <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-white"></div>
                                                 <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-white"></div>
                                                 {/* 尺寸显示 */}
-                                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-purple-600 text-white text-xs rounded whitespace-nowrap">
+                                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-primary text-white text-xs rounded whitespace-nowrap">
                                                     {Math.round(cropRect.width)} × {Math.round(cropRect.height)}
                                                 </div>
                                             </div>
@@ -543,21 +543,21 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                         {/* 框选提示 */}
                                         {!cropRect && (
                                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                                <div className="px-4 py-2 bg-black/60 rounded-lg text-gray-300 text-sm">
+                                                <div className="px-4 py-2 bg-n900/50 rounded-lg text-n700 text-sm">
                                                     点击拖拽框选 · 滚轮缩放 · Alt+拖拽平移
                                                 </div>
                                             </div>
                                         )}
                                         {/* 缩放提示 */}
-                                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 rounded text-xs text-gray-400 pointer-events-none">
+                                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-n900/50 rounded text-xs text-n300 pointer-events-none">
                                             {panoramaImageSize.width} × {panoramaImageSize.height}
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-300">选择人物图（最多2张）</label>
-                                            <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto p-2 bg-gray-800/50 rounded-lg">
+                                            <label className="text-sm font-medium text-n700">选择人物图（最多2张）</label>
+                                            <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto p-2 bg-n30 rounded-lg">
                                                 {allImages.map((img, idx) => (
                                                     <div
                                                         key={idx}
@@ -571,8 +571,8 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                                         }}
                                                         className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
                                                             selectedCharacters.includes(img)
-                                                                ? 'border-blue-500 ring-2 ring-blue-500/50'
-                                                                : 'border-transparent hover:border-gray-600'
+                                                                ? 'border-b400 ring-2 ring-b400/50'
+                                                                : 'border-transparent hover:border-n40'
                                                         }`}
                                                     >
                                                         <img src={img} alt={`Image ${idx}`} className="w-full h-full object-cover" />
@@ -581,12 +581,12 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                             </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-sm font-medium text-gray-300">融合提示词</label>
+                                            <label className="text-sm font-medium text-n700">融合提示词</label>
                                             <textarea
                                                 value={fusionPrompt}
                                                 onChange={(e) => setFusionPrompt(e.target.value)}
                                                 disabled={processing}
-                                                className="w-full h-32 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm resize-none focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                                                className="w-full h-32 px-4 py-2 bg-n0 border border-n40 rounded-lg text-n800 text-sm resize-none focus:outline-none focus:border-primary disabled:opacity-50"
                                                 placeholder="描述融合效果..."
                                             />
                                         </div>
@@ -596,14 +596,14 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                         <button
                                             onClick={() => setPanoramaStep(1)}
                                             disabled={processing}
-                                            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                                            className="px-4 py-2 bg-n0 hover:bg-n20 text-n700 rounded-lg font-medium transition-colors disabled:opacity-50"
                                         >
                                             返回上一步
                                         </button>
                                         <button
                                             onClick={handlePanoramaFusion}
                                             disabled={!cropRect || selectedCharacters.length === 0 || processing}
-                                            className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                            className="flex-1 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                                         >
                                             {processing ? (
                                                 <>
@@ -627,16 +627,16 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                     {toolType === 'auto' && (
                         <div className="space-y-6">
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-300">选择图像</label>
-                                <div className="grid grid-cols-5 gap-3 max-h-48 overflow-y-auto p-2 bg-gray-800/50 rounded-lg">
+                                <label className="text-sm font-medium text-n700">选择图像</label>
+                                <div className="grid grid-cols-5 gap-3 max-h-48 overflow-y-auto p-2 bg-n30 rounded-lg">
                                     {allImages.map((img, idx) => (
                                         <div
                                             key={idx}
                                             onClick={() => !processing && setAutoImage(img)}
                                             className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
                                                 autoImage === img
-                                                    ? 'border-purple-500 ring-2 ring-purple-500/50'
-                                                    : 'border-transparent hover:border-gray-600'
+                                                    ? 'border-primary ring-2 ring-primary/50'
+                                                    : 'border-transparent hover:border-n40'
                                             }`}
                                         >
                                             <img src={img} alt={`Image ${idx}`} className="w-full h-full object-cover" />
@@ -646,18 +646,18 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                             </div>
 
                             {autoImage && (
-                                <div className="aspect-video bg-black rounded-lg overflow-hidden border border-gray-700">
+                                <div className="aspect-video bg-n800 rounded-lg overflow-hidden border border-n40">
                                     <img src={autoImage} alt="Selected" className="w-full h-full object-contain" />
                                 </div>
                             )}
 
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-300">分镜描述（提示词）</label>
+                                <label className="text-sm font-medium text-n700">分镜描述（提示词）</label>
                                 <textarea
                                     value={autoPrompt}
                                     onChange={(e) => setAutoPrompt(e.target.value)}
                                     disabled={processing}
-                                    className="w-full h-32 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white resize-none focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                                    className="w-full h-32 px-4 py-3 bg-n0 border border-n40 rounded-lg text-n800 resize-none focus:outline-none focus:border-primary disabled:opacity-50"
                                     placeholder="输入分镜描述，如：角色从左侧走入画面，背景是夕阳下的城市..."
                                 />
                             </div>
@@ -665,7 +665,7 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                             <button
                                 onClick={handleAutoStoryboard}
                                 disabled={!autoImage || !autoPrompt.trim() || processing}
-                                className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {processing ? (
                                     <>
@@ -686,22 +686,22 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                     {toolType === 'multi_grid' && (
                         <div className="space-y-6">
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-300">分镜模式</label>
+                                <label className="text-sm font-medium text-n700">分镜模式</label>
                                 <div className="grid grid-cols-2 gap-4">
                                     <button
                                         onClick={() => setMultiGridMode('multi_shot')}
                                         disabled={processing}
-                                        className={`p-4 rounded-xl border-2 transition-all ${
+                                        className={`p-4 rounded-md border-2 transition-all ${
                                             multiGridMode === 'multi_shot'
-                                                ? 'border-purple-500 bg-purple-500/10'
-                                                : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                                                ? 'border-primary bg-primary-light'
+                                                : 'border-n40 bg-n0 hover:border-n40'
                                         } disabled:opacity-50`}
                                     >
                                         <div className="text-left">
-                                            <div className={`font-medium ${multiGridMode === 'multi_shot' ? 'text-purple-400' : 'text-gray-300'}`}>
+                                            <div className={`font-medium ${multiGridMode === 'multi_shot' ? 'text-primary' : 'text-n700'}`}>
                                                 多镜头分镜
                                             </div>
-                                            <div className="text-xs text-gray-500 mt-1">
+                                            <div className="text-xs text-n100 mt-1">
                                                 生成多个不同镜头角度的画面
                                             </div>
                                         </div>
@@ -709,17 +709,17 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                     <button
                                         onClick={() => setMultiGridMode('story')}
                                         disabled={processing}
-                                        className={`p-4 rounded-xl border-2 transition-all ${
+                                        className={`p-4 rounded-md border-2 transition-all ${
                                             multiGridMode === 'story'
-                                                ? 'border-purple-500 bg-purple-500/10'
-                                                : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                                                ? 'border-primary bg-primary-light'
+                                                : 'border-n40 bg-n0 hover:border-n40'
                                         } disabled:opacity-50`}
                                     >
                                         <div className="text-left">
-                                            <div className={`font-medium ${multiGridMode === 'story' ? 'text-purple-400' : 'text-gray-300'}`}>
+                                            <div className={`font-medium ${multiGridMode === 'story' ? 'text-primary' : 'text-n700'}`}>
                                                 故事分镜
                                             </div>
-                                            <div className="text-xs text-gray-500 mt-1">
+                                            <div className="text-xs text-n100 mt-1">
                                                 生成故事情节的连续分镜
                                             </div>
                                         </div>
@@ -729,31 +729,31 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
 
                             {/* 必须选择一张参考图像 */}
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-300">
-                                    选择参考图像 <span className="text-red-400">*</span>
-                                    <span className="text-gray-500 ml-2">（必须选择一张）</span>
+                                <label className="text-sm font-medium text-n700">
+                                    选择参考图像 <span className="text-danger">*</span>
+                                    <span className="text-n100 ml-2">（必须选择一张）</span>
                                 </label>
-                                <div className="grid grid-cols-6 gap-2 max-h-40 overflow-y-auto p-2 bg-gray-800/50 rounded-lg">
+                                <div className="grid grid-cols-6 gap-2 max-h-40 overflow-y-auto p-2 bg-n30 rounded-lg">
                                     {allImages.length > 0 ? allImages.map((img, idx) => (
                                         <div
                                             key={idx}
                                             onClick={() => !processing && setMultiGridImage(img)}
                                             className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
                                                 multiGridImage === img
-                                                    ? 'border-purple-500 ring-2 ring-purple-500/50'
-                                                    : 'border-transparent hover:border-gray-600'
+                                                    ? 'border-primary ring-2 ring-primary/50'
+                                                    : 'border-transparent hover:border-n40'
                                             }`}
                                         >
                                             <img src={img} alt={`Image ${idx}`} className="w-full h-full object-cover" />
                                         </div>
                                     )) : (
-                                        <div className="col-span-6 py-8 text-center text-gray-500">
+                                        <div className="col-span-6 py-8 text-center text-n100">
                                             暂无可用图片，请先生成或上传图片
                                         </div>
                                     )}
                                 </div>
                                 {multiGridImage && (
-                                    <div className="flex items-center gap-2 text-sm text-green-400">
+                                    <div className="flex items-center gap-2 text-sm text-success">
                                         <span>✓</span>
                                         <span>已选择参考图像</span>
                                     </div>
@@ -761,18 +761,18 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                             </div>
 
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-300">输入提示词</label>
+                                <label className="text-sm font-medium text-n700">输入提示词</label>
                                 <textarea
                                     value={multiGridPrompt}
                                     onChange={(e) => setMultiGridPrompt(e.target.value)}
                                     disabled={processing}
-                                    className="w-full h-24 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white resize-none focus:outline-none focus:border-purple-500 disabled:opacity-50"
-                                    placeholder={multiGridMode === 'multi_shot' 
+                                    className="w-full h-24 px-4 py-3 bg-n0 border border-n40 rounded-lg text-n800 resize-none focus:outline-none focus:border-primary disabled:opacity-50"
+                                    placeholder={multiGridMode === 'multi_shot'
                                         ? "输入场景描述，如：一个武侠高手站在山顶..."
                                         : "输入故事描述，如：一个少年踏上修仙之路的故事..."
                                     }
                                 />
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-n100">
                                     {multiGridMode === 'multi_shot' 
                                         ? '后台将自动拼合："{您的输入}+AI+分镜"'
                                         : '后台将自动拼合："{您的输入}+AI+分镜1"'
@@ -783,7 +783,7 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                             <button
                                 onClick={handleMultiGridGenerate}
                                 disabled={!multiGridPrompt.trim() || !multiGridImage || processing}
-                                className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                                 {processing ? (
                                     <>
@@ -801,10 +801,10 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                             {/* 生成结果预览 */}
                             {multiGridResults.length > 0 && (
                                 <div className="space-y-3">
-                                    <label className="text-sm font-medium text-gray-300">生成结果</label>
+                                    <label className="text-sm font-medium text-n700">生成结果</label>
                                     <div className="grid grid-cols-3 gap-3">
                                         {multiGridResults.map((img, idx) => (
-                                            <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-gray-700">
+                                            <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-n40">
                                                 <img src={img} alt={`Result ${idx}`} className="w-full h-full object-cover" />
                                             </div>
                                         ))}
@@ -817,17 +817,17 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
 
                 {/* 种子值设置（通用） */}
                 {toolType !== 'multi_grid' && (
-                    <div className="px-6 py-4 border-t border-gray-800 flex-shrink-0">
+                    <div className="px-6 py-4 border-t border-n40 flex-shrink-0">
                         <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-gray-300">种子值</label>
+                            <label className="text-sm font-medium text-n700">种子值</label>
                             <div className="flex items-center gap-4">
-                                <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                                <label className="flex items-center gap-2 text-sm text-n300 cursor-pointer">
                                     <input
                                         type="checkbox"
                                         checked={useRandomSeed}
                                         onChange={(e) => setUseRandomSeed(e.target.checked)}
                                         disabled={processing}
-                                        className="rounded border-gray-600 bg-gray-800 text-purple-500 focus:ring-purple-500"
+                                        className="rounded border-n40 bg-n0 text-primary focus:ring-primary"
                                     />
                                     随机
                                 </label>
@@ -837,7 +837,7 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                                         value={seed}
                                         onChange={(e) => setSeed(parseInt(e.target.value) || 0)}
                                         disabled={processing}
-                                        className="w-32 px-3 py-1 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                                        className="w-32 px-3 py-1 bg-n0 border border-n40 rounded-lg text-n800 text-sm focus:outline-none focus:border-primary disabled:opacity-50"
                                         placeholder="种子值"
                                     />
                                 )}
@@ -847,11 +847,11 @@ export const StoryboardToolModal: React.FC<StoryboardToolModalProps> = ({
                 )}
 
                 {/* Footer */}
-                <div className="flex justify-end px-6 py-4 border-t border-gray-800 flex-shrink-0">
+                <div className="flex justify-end px-6 py-4 border-t border-n40 flex-shrink-0">
                     <button
                         onClick={onClose}
                         disabled={processing}
-                        className="px-6 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                        className="px-6 py-2 bg-n0 hover:bg-n20 text-n700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                     >
                         关闭
                     </button>

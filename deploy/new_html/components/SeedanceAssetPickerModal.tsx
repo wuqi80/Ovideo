@@ -52,16 +52,16 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={p.onClose}>
-            <div className="w-[600px] max-h-[80vh] bg-slate-900 border border-slate-700 rounded-lg overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700">
-                    <div className="text-sm text-slate-200">插入素材（多选）</div>
-                    <button onClick={p.onClose} className="p-1 text-slate-400 hover:text-slate-200"><X size={14} /></button>
+        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center" onClick={p.onClose}>
+            <div className="w-[600px] max-h-[80vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-3 py-2 border-b border-n40">
+                    <div className="text-sm text-n700">插入素材（多选）</div>
+                    <button onClick={p.onClose} className="p-1 text-n300 hover:text-n800"><X size={14} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
                     {Object.entries(grouped).map(([group, items]) => (
                         <div key={group}>
-                            <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{GROUP_LABELS[group] || group}</div>
+                            <div className="text-[10px] uppercase tracking-wide text-n100 mb-1">{GROUP_LABELS[group] || group}</div>
                             {group === 'ark_asset_id' ? (
                                 <div className="flex items-center gap-2">
                                     <input
@@ -69,7 +69,7 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
                                         value={arkRaw}
                                         onChange={e => setArkRaw(e.target.value)}
                                         placeholder="asset://abc-123"
-                                        className="flex-1 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded text-slate-200"
+                                        className="flex-1 px-2 py-1 text-xs bg-n0 border border-n40 rounded text-n700"
                                     />
                                     <button
                                         type="button"
@@ -79,7 +79,7 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
                                                 const ns = new Set(s); ns.has(id) ? ns.delete(id) : ns.add(id); return ns;
                                             });
                                         }}
-                                        className="px-2 py-1 text-[10px] bg-slate-800 hover:bg-slate-700 rounded text-slate-200"
+                                        className="px-2 py-1 text-[10px] bg-n0 hover:bg-n20 rounded text-n700"
                                     >
                                         {selected.has(items[0]?.id || '') ? '已勾选' : '勾选'}
                                     </button>
@@ -93,15 +93,15 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
                                             onClick={() => setSelected(s => {
                                                 const ns = new Set(s); ns.has(c.id) ? ns.delete(c.id) : ns.add(c.id); return ns;
                                             })}
-                                            className={`relative p-2 rounded border text-left ${selected.has(c.id) ? 'border-blue-500 bg-slate-800' : 'border-slate-700 hover:bg-slate-800'}`}
+                                            className={`relative p-2 rounded border text-left ${selected.has(c.id) ? 'border-primary bg-primary-light' : 'border-n40 hover:bg-n20'}`}
                                         >
                                             {c.thumbnailUrl && (
                                                 <img src={c.thumbnailUrl} alt="" className="w-full h-16 object-cover rounded mb-1" />
                                             )}
-                                            <div className="text-[11px] text-slate-200 truncate">{c.label}</div>
-                                            <div className="text-[9px] text-slate-500">{c.kind}</div>
+                                            <div className="text-[11px] text-n700 truncate">{c.label}</div>
+                                            <div className="text-[9px] text-n100">{c.kind}</div>
                                             {selected.has(c.id) && (
-                                                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                                                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
                                                     <Plus size={10} className="text-white rotate-45" />
                                                 </div>
                                             )}
@@ -112,9 +112,9 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
                         </div>
                     ))}
                 </div>
-                <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-slate-700">
-                    <button onClick={p.onClose} className="px-3 py-1 text-xs text-slate-300">取消</button>
-                    <button onClick={apply} disabled={selected.size === 0} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-40 rounded text-white">
+                <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-n40">
+                    <button onClick={p.onClose} className="px-3 py-1 text-xs text-n700">取消</button>
+                    <button onClick={apply} disabled={selected.size === 0} className="px-3 py-1 text-xs bg-primary hover:bg-primary-hover disabled:opacity-40 rounded text-white">
                         插入 {selected.size} 项
                     </button>
                 </div>

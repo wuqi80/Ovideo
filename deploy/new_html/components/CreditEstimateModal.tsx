@@ -54,33 +54,33 @@ export const CreditEstimateModal: React.FC<CreditEstimateModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-md mx-4 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl">
-        <div className="px-5 py-3 border-b border-zinc-800 flex items-center gap-2">
-          <Coins size={18} className="text-yellow-400" />
-          <h3 className="text-sm font-medium text-zinc-100">{title}</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50">
+      <div className="w-full max-w-md mx-4 bg-n0 border border-n40 rounded-lg shadow-bottom">
+        <div className="px-5 py-3 border-b border-n40 flex items-center gap-2">
+          <Coins size={18} className="text-warning" />
+          <h3 className="text-sm font-medium text-n800">{title}</h3>
         </div>
 
         <div className="px-5 py-4 space-y-3 text-sm">
-          {description && <p className="text-zinc-400">{description}</p>}
+          {description && <p className="text-n300">{description}</p>}
 
           {loading && (
-            <div className="flex items-center justify-center py-6 text-zinc-500">
+            <div className="flex items-center justify-center py-6 text-n100">
               <Loader2 size={18} className="animate-spin mr-2" /> 估算中…
             </div>
           )}
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-950/40 border border-red-900 rounded">
-              <AlertTriangle size={16} className="text-red-400 mt-0.5" />
-              <span className="text-xs text-red-300">{error}</span>
+            <div className="flex items-start gap-2 p-3 bg-r50 border border-r75 rounded">
+              <AlertTriangle size={16} className="text-danger mt-0.5" />
+              <span className="text-xs text-danger">{error}</span>
             </div>
           )}
 
           {estimate && !loading && (
             <div className="space-y-2.5">
               {!estimate.enabled && (
-                <div className="p-3 bg-emerald-950/40 border border-emerald-900 rounded text-xs text-emerald-200">
+                <div className="p-3 bg-g50 border border-g75 rounded text-xs text-success">
                   该功能未配置积分规则，可免费使用
                 </div>
               )}
@@ -98,11 +98,11 @@ export const CreditEstimateModal: React.FC<CreditEstimateModalProps> = ({
                   <Row
                     label="账户余额"
                     value={estimate.balance != null ? `${estimate.balance} 积分` : '-'}
-                    valueClass={estimate.enough ? 'text-emerald-300' : 'text-red-300'}
+                    valueClass={estimate.enough ? 'text-success' : 'text-danger'}
                   />
                   {!estimate.enough && (
-                    <div className="flex items-start gap-2 p-2 bg-red-950/40 border border-red-900 rounded text-xs text-red-200">
-                      <AlertTriangle size={14} className="text-red-400 mt-0.5" />
+                    <div className="flex items-start gap-2 p-2 bg-r50 border border-r75 rounded text-xs text-danger">
+                      <AlertTriangle size={14} className="text-danger mt-0.5" />
                       余额不足，无法继续
                     </div>
                   )}
@@ -112,17 +112,17 @@ export const CreditEstimateModal: React.FC<CreditEstimateModalProps> = ({
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-zinc-800 flex justify-end gap-2">
+        <div className="px-5 py-3 border-t border-n40 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700"
+            className="px-3 py-1.5 text-xs rounded bg-n0 hover:bg-n20"
           >
             {cancelLabel}
           </button>
           <button
             onClick={() => estimate && onConfirm(estimate)}
             disabled={!estimate || loading || (estimate?.enabled && !estimate?.enough)}
-            className="px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="px-3 py-1.5 text-xs rounded bg-success hover:bg-success text-white disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             {confirmLabel}
           </button>
@@ -136,8 +136,8 @@ const Row: React.FC<{ label: string; value: string; highlight?: boolean; mono?: 
   label, value, highlight, mono, valueClass,
 }) => (
   <div className="flex items-center justify-between text-xs">
-    <span className="text-zinc-500">{label}</span>
-    <span className={`${highlight ? 'text-yellow-300 text-base font-semibold' : 'text-zinc-200'} ${mono ? 'font-mono' : ''} ${valueClass || ''}`}>
+    <span className="text-n100">{label}</span>
+    <span className={`${highlight ? 'text-warning text-base font-semibold' : 'text-n700'} ${mono ? 'font-mono' : ''} ${valueClass || ''}`}>
       {value}
     </span>
   </div>

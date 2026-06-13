@@ -315,7 +315,7 @@ export const MaterialsPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex items-center justify-center h-full text-n300">
         <div className="animate-pulse flex items-center gap-2">
           <Loader className="w-5 h-5 animate-spin" />
           <span>加载素材数据...</span>
@@ -326,7 +326,7 @@ export const MaterialsPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full text-red-400 p-6">
+      <div className="flex items-center justify-center h-full text-danger p-6">
         <p>{error}</p>
       </div>
     );
@@ -334,11 +334,11 @@ export const MaterialsPage: React.FC = () => {
 
   if (!pseudoFile.storyboard || pseudoFile.storyboard.items.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-gray-400">
+      <div className="h-full flex items-center justify-center text-n300">
         <div className="text-center space-y-3">
-          <ImageIcon className="w-12 h-12 mx-auto text-indigo-500/50" />
-          <p className="text-xl font-medium text-gray-300">素材绑定</p>
-          <p className="text-sm text-gray-500">暂无分镜数据，请先在设计页面创建分镜</p>
+          <ImageIcon className="w-12 h-12 mx-auto text-primary" />
+          <p className="text-xl font-medium text-n700">素材绑定</p>
+          <p className="text-sm text-n100">暂无分镜数据，请先在设计页面创建分镜</p>
         </div>
       </div>
     );
@@ -362,7 +362,7 @@ export const MaterialsPage: React.FC = () => {
         assetNameToId={assetNameToId}
       />
       {toastMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-green-600 text-white text-sm rounded-lg shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-success text-white text-sm rounded-lg shadow-bottom">
           {toastMsg}
         </div>
       )}
@@ -375,17 +375,17 @@ export const MaterialsPage: React.FC = () => {
           message={`确定要解除当前镜头「${unbindDialog.tagName}」的素材绑定吗？`}
           detail={
             <div className="space-y-2">
-              <p className="text-xs text-amber-300/80 font-medium">
+              <p className="text-xs text-warning font-medium">
                 后续还有 {unbindDialog.cascadeTargets.length} 个镜头绑定了同一素材
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {unbindDialog.cascadeTargets.slice(0, 8).map((si, i) => (
-                  <span key={si.itemId} className="text-[10px] bg-amber-900/30 text-amber-200/70 px-2 py-0.5 rounded-md">
+                  <span key={si.itemId} className="text-[10px] bg-n30 text-warning px-2 py-0.5 rounded-md">
                     镜头 {storyboardItems.indexOf(si) + 1}
                   </span>
                 ))}
                 {unbindDialog.cascadeTargets.length > 8 && (
-                  <span className="text-[10px] text-amber-200/50">
+                  <span className="text-[10px] text-warning">
                     +{unbindDialog.cascadeTargets.length - 8} 个
                   </span>
                 )}

@@ -133,8 +133,8 @@ export const VoiceSidebar: React.FC<VoiceSidebarProps> = ({
   const [drawerRole, setDrawerRole] = useState<string | null>(null);
 
   return (
-    <div className="w-52 shrink-0 flex flex-col border-r border-gray-800 bg-gray-950">
-      <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 pt-4 pb-2">
+    <div className="w-52 shrink-0 flex flex-col border-r border-n40 bg-n20">
+      <h3 className="text-xs font-bold text-n100 uppercase tracking-wider px-3 pt-4 pb-2">
         角色声音
       </h3>
       <div className="flex-1 overflow-auto space-y-1 px-2">
@@ -144,27 +144,27 @@ export const VoiceSidebar: React.FC<VoiceSidebarProps> = ({
             <button
               key={role.name}
               onClick={() => setDrawerRole(role.name)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all hover:bg-gray-900 group"
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-all hover:bg-n20 group"
             >
               {thumb ? (
-                <img src={thumb} alt="" className="w-8 h-8 rounded-lg object-cover bg-gray-800"
+                <img src={thumb} alt="" className="w-8 h-8 rounded-lg object-cover bg-n0"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling && ((e.target as HTMLImageElement).nextElementSibling as HTMLElement).style.removeProperty('display'); }}
                 />
               ) : null}
-              <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center" style={thumb ? { display: 'none' } : undefined}>
-                <User size={14} className="text-gray-600" />
+              <div className="w-8 h-8 rounded-lg bg-n0 flex items-center justify-center" style={thumb ? { display: 'none' } : undefined}>
+                <User size={14} className="text-n100" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{role.name}</div>
                 {role.voice ? (
-                  <div className="text-[10px] text-emerald-400 truncate">
+                  <div className="text-[10px] text-success truncate">
                     {role.voice.voiceName || '已配音'}
                   </div>
                 ) : (
-                  <div className="text-[10px] text-gray-600">未配音</div>
+                  <div className="text-[10px] text-n100">未配音</div>
                 )}
               </div>
-              <ChevronRight size={12} className="text-gray-700 group-hover:text-gray-500 shrink-0" />
+              <ChevronRight size={12} className="text-n100 group-hover:text-n300 shrink-0" />
             </button>
           );
         })}
@@ -521,19 +521,19 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative ml-auto w-96 bg-gray-900 border-l border-gray-800 h-full overflow-auto p-6">
+      <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
+      <div className="relative ml-auto w-96 bg-n0 border-l border-n40 h-full overflow-auto p-6 shadow-bottom">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold flex items-center gap-2">
-            <Settings size={16} className="text-indigo-400" />
+            <Settings size={16} className="text-primary" />
             {roleName} — 声音配置
             {role?.voice && (
-              <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded ml-2">
+              <span className="text-xs text-success bg-success/10 px-2 py-0.5 rounded ml-2">
                 已配: {role.voice.voiceName}
               </span>
             )}
           </h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300">
+          <button onClick={onClose} className="text-n100 hover:text-n700">
             <X size={18} />
           </button>
         </div>
@@ -550,8 +550,8 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
               onClick={() => setVoiceSource(src.id)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                 voiceSource === src.id
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700'
+                  ? 'bg-primary text-white'
+                  : 'bg-n0 text-n300 hover:text-n700 border border-n40'
               }`}
             >
               <src.icon size={12} /> {src.label}
@@ -562,15 +562,15 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
         {/* System preset (MiniMax 海螺 预置音色) */}
         {voiceSource === 'system' && (
           <div className="space-y-3 mb-5">
-            <label className="block text-xs text-gray-500">
-              选择系统声音 <span className="text-gray-600">(MiniMax 海螺 T2A)</span>
+            <label className="block text-xs text-n100">
+              选择系统声音 <span className="text-n100">(MiniMax 海螺 T2A)</span>
             </label>
             {(['男声', '女声', '主持', '童声'] as const).map(group => {
               const items = SYSTEM_VOICES.filter(v => v.group === group);
               if (items.length === 0) return null;
               return (
                 <div key={group}>
-                  <div className="text-[10px] text-gray-600 mb-1.5">{group}</div>
+                  <div className="text-[10px] text-n100 mb-1.5">{group}</div>
                   <div className="flex flex-wrap gap-1.5">
                     {items.map(v => (
                       <button
@@ -578,8 +578,8 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
                         onClick={() => setSystemVoiceId(v.id)}
                         className={`px-2.5 py-1.5 rounded-md text-xs transition-all ${
                           systemVoiceId === v.id
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600'
+                            ? 'bg-primary text-white'
+                            : 'bg-n0 text-n300 border border-n40 hover:border-n40'
                         }`}
                       >
                         {v.label}
@@ -596,17 +596,17 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
         {voiceSource === 'clone' && (
           <div className="space-y-3 mb-5">
             {savedCloneMeta.filename && !cloneFile && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-success/10 border border-success/30 text-xs text-success">
                 <Volume2 size={12} />
                 <span className="flex-1 truncate">已配置克隆音色：{savedCloneMeta.filename}</span>
-                <span className="text-emerald-500/70 text-[10px]">复用已克隆</span>
+                <span className="text-success/70 text-[10px]">复用已克隆</span>
               </div>
             )}
-            <label className="block text-xs text-gray-500">
+            <label className="block text-xs text-n100">
               {savedCloneMeta.filename ? '重新上传参考音频（可选）' : '上传参考音频（10-300 秒清晰人声）'}
             </label>
             <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-sm text-gray-300 cursor-pointer hover:bg-gray-700 transition-all">
+              <label className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-n0 border border-n40 text-sm text-n700 cursor-pointer hover:bg-n20 transition-all">
                 <Upload size={14} />
                 {cloneFile ? cloneFile.name : '选择文件'}
                 <input
@@ -617,7 +617,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
                 />
               </label>
               {cloneFile && (
-                <span className="text-xs text-gray-500">{(cloneFile.size / 1024).toFixed(0)} KB</span>
+                <span className="text-xs text-n100">{(cloneFile.size / 1024).toFixed(0)} KB</span>
               )}
             </div>
           </div>
@@ -628,22 +628,22 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
           <div className="space-y-4 mb-5">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-500 mb-1">声音类型</label>
+                <label className="block text-xs text-n100 mb-1">声音类型</label>
                 <select
                   value={designSetting.voice_type}
                   onChange={e => setDesignSetting(p => ({ ...p, voice_type: e.target.value as any }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200"
+                  className="w-full bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n700"
                 >
                   <option value="male">男声</option>
                   <option value="female">女声</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">情绪</label>
+                <label className="block text-xs text-n100 mb-1">情绪</label>
                 <select
                   value={designSetting.emotion}
                   onChange={e => setDesignSetting(p => ({ ...p, emotion: e.target.value as any }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200"
+                  className="w-full bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n700"
                 >
                   <option value="neutral">中性</option>
                   <option value="happy">快乐</option>
@@ -653,7 +653,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">语速 ({designSetting.speed.toFixed(1)}x)</label>
+                <label className="block text-xs text-n100 mb-1">语速 ({designSetting.speed.toFixed(1)}x)</label>
                 <input
                   type="range" min="0.5" max="2.0" step="0.1"
                   value={designSetting.speed}
@@ -662,7 +662,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">音调 ({designSetting.pitch})</label>
+                <label className="block text-xs text-n100 mb-1">音调 ({designSetting.pitch})</label>
                 <input
                   type="range" min="-12" max="12" step="1"
                   value={designSetting.pitch}
@@ -672,33 +672,33 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">试听文本</label>
+              <label className="block text-xs text-n100 mb-1">试听文本</label>
               <textarea
                 value={designText}
                 onChange={e => setDesignText(e.target.value)}
                 rows={2}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 resize-none"
+                className="w-full bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n700 resize-none"
               />
             </div>
           </div>
         )}
 
         {/* Preview + Save —— 两行布局：上行 audio 全宽，下行操作按钮 */}
-        <div className="pt-4 border-t border-gray-800 space-y-3">
+        <div className="pt-4 border-t border-n40 space-y-3">
           {/* 试听音频卡片：独立全宽，避免被按钮挤成"白点" */}
           {previewUrl ? (
-            <div className="rounded-lg border p-3 transition-colors bg-gradient-to-br from-indigo-500/8 to-purple-500/5 border-indigo-500/20">
+            <div className="rounded-lg border p-3 transition-colors bg-primary-light border-primary/20">
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-[11px] text-indigo-300 font-medium">
+                <div className="flex items-center gap-1.5 text-[11px] text-primary font-medium">
                   <Volume2 size={11} />
                   试听音频
                 </div>
                 {previewIsPersisted ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success border border-success/30">
                     已永久缓存
                   </span>
                 ) : (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-light text-primary border border-primary/30">
                     新生成
                   </span>
                 )}
@@ -712,7 +712,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
               />
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-gray-700 p-3 text-center text-[11px] text-gray-500">
+            <div className="rounded-lg border border-dashed border-n40 p-3 text-center text-[11px] text-n100">
               {voiceSource === 'clone' && !cloneFile && !savedCloneMeta.filename
                 ? '请先上传参考音频后再试听'
                 : '点击"试听"生成预览音频'}
@@ -724,7 +724,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
             <button
               onClick={handlePreview}
               disabled={previewLoading}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-xs text-gray-300 hover:bg-gray-700 transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-n0 border border-n40 text-xs text-n700 hover:bg-n20 transition-all disabled:opacity-50"
             >
               {previewLoading ? <Loader size={13} className="animate-spin" /> : <Play size={13} />}
               {previewUrl && previewIsPersisted ? '重新生成' : '试听'}
@@ -732,7 +732,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition-all disabled:opacity-50 shadow-lg shadow-indigo-500/20"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all disabled:opacity-50 shadow-lg shadow-primary/20"
             >
               {saving ? <Loader size={13} className="animate-spin" /> : <Save size={13} />}
               保存配置
@@ -740,7 +740,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
             {role?.voice && (
               <button
                 onClick={() => handleDeleteVoice(role.voice!.voiceId)}
-                className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-red-400 hover:bg-red-600/10 text-xs transition-all"
+                className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-danger hover:bg-r50 text-xs transition-all"
                 title="删除当前角色配音"
               >
                 <Trash2 size={13} />
