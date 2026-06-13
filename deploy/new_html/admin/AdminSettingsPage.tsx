@@ -36,11 +36,15 @@ const PLACEHOLDERS: Record<string, { icon: React.ReactNode; title: string; desc:
     },
 };
 
+// 版本号：旧版静态资源（index/style/app）改动后手动 +1，强制 iframe 重新拉取、
+// 绕开浏览器对 iframe 子资源的缓存（刷新外层 SPA 未必会让 iframe 资源重新校验）。
+const LEGACY_VER = '20260613b';
+
 const LegacyEmbed: React.FC<{ page: string }> = ({ page }) => (
-    // 内嵌旧版控制台：?embed=1 隐藏其侧栏，#page 直达对应页
+    // 内嵌旧版控制台：?embed=1 隐藏其侧栏，#page 直达对应页，&v 击穿缓存
     <iframe
         title="legacy-admin"
-        src={`/admin-legacy/?embed=1#${page}`}
+        src={`/admin-legacy/?embed=1&v=${LEGACY_VER}#${page}`}
         className="w-full h-full border-0 block bg-n20"
     />
 );

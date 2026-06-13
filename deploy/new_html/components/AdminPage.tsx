@@ -1768,7 +1768,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                     <div className="bg-primary-light border border-primary rounded p-3 text-xs text-primary">
                                         <p className="mb-2 font-bold">Paste your connection string below.</p>
                                         <p className="opacity-70">Supported format:</p>
-                                        <code className="block bg-black/30 p-2 rounded mt-1 text-primary font-mono">
+                                        <code className="block bg-n0 border border-n40 p-2 rounded mt-1 text-n700 font-mono">
                                             通道：ssh -p 37174 root@connect.westd.seetacloud.com<br/>
                                             密码：D6JTE9P
                                         </code>
@@ -1782,7 +1782,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                             placeholder="Paste configuration here..."
                                         />
                                     ) : (
-                                        <div className="bg-black rounded-lg border border-n40 p-4 font-mono text-xs h-48 overflow-y-auto custom-scrollbar" ref={terminalRef}>
+                                        <div className="bg-n20 rounded-lg border border-n40 p-4 font-mono text-xs h-48 overflow-y-auto custom-scrollbar" ref={terminalRef}>
                                             {connectionLogs.map((log, i) => (
                                                 <div key={i} className="mb-1">
                                                     <span className="text-success">root@admin-console:~$</span> <span className="text-n700">{log}</span>
@@ -1910,7 +1910,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
                             <div className="flex flex-col h-full">
                                 <span className="text-xs font-bold text-n100 uppercase mb-2">Generation Result</span>
-                                <div className="flex-1 bg-black/40 rounded-lg border border-n40 flex items-center justify-center overflow-hidden relative">
+                                <div className="flex-1 bg-n30 rounded-lg border border-n40 flex items-center justify-center overflow-hidden relative">
                                     {/* 根据类型显示不同的结果 */}
                                     {inspectLog.type === 'video' && inspectLog.resultVideo ? (
                                         <video 
