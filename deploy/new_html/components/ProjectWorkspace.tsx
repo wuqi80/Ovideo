@@ -12,9 +12,9 @@ const WorkspaceContent: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="h-screen bg-gray-950 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-gray-400">
-                    <Loader2 className="w-8 h-8 animate-spin" />
+            <div className="h-screen bg-n20 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-n300">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     <span className="text-sm">加载项目中...</span>
                 </div>
             </div>
@@ -23,11 +23,11 @@ const WorkspaceContent: React.FC = () => {
 
     if (error) {
         return (
-            <div className="h-screen bg-gray-950 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-red-400">
+            <div className="h-screen bg-n20 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3 text-danger">
                     <AlertCircle className="w-10 h-10" />
                     <span className="text-sm">{error}</span>
-                    <a href="/projects" className="text-xs text-purple-400 hover:underline mt-2">
+                    <a href="/projects" className="text-xs text-primary hover:underline mt-2">
                         返回项目列表
                     </a>
                 </div>

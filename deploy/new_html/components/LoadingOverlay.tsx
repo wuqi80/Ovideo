@@ -28,7 +28,7 @@ export const LoadingOverlay: React.FC = () => {
   return (
     <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-n20 text-n800 overflow-hidden">
       {/* Background Effects */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-gray-950 to-gray-950 z-0"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary-light via-n20 to-n20 z-0"></div>
       <div className="absolute inset-0 z-0 opacity-20" 
            style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
       </div>
