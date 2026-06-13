@@ -42,3 +42,6 @@ deploy/history/
 .DS_Store
 Thumbs.db
 *.swp
+
+# 端到端成片生成的素材产物（不入库）
+deploy/output_film/
