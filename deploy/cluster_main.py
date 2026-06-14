@@ -244,6 +244,37 @@ async def seed_default_api_providers():
         logger.warning(f"⚠️ API 配置自检失败（不影响启动）：{e}", exc_info=True)
 
 
+async def seed_admin_roles():
+    """初次部署兜底：内置管理员账号首次登录时被懒创建，role 列默认 'user'，
+    导致后台 /api/admin/* 一律 403。这里启动时幂等地把它们的 role 纠正为
+    admin / super_admin，使后台开箱即用、且用户列表里角色显示正确。
+
+    注意：require_admin 已对 {admin, lllsdhr} 做内置白名单兜底（即便此处尚未跑、
+    或用户行还没创建，也能进后台）；本函数只负责让数据库的 role 列与之保持一致。
+    """
+    try:
+        from dao_user import UserDAO
+        # admin → 普通管理员；SUPER_ADMIN → 超级管理员
+        targets = [('admin', 'admin'), (SUPER_ADMIN, 'super_admin')]
+        for uname, want_role in targets:
+            try:
+                u = await UserDAO.get_user_by_username(uname)
+            except Exception:
+                u = None
+            if not u:
+                continue
+            cur = (u.get('role') if isinstance(u, dict) else None) or 'user'
+            # admin 只要已是 admin/super_admin 就不动；超管必须恰为 super_admin
+            ok = (cur in ('admin', 'super_admin')) if want_role == 'admin' else (cur == 'super_admin')
+            if not ok:
+                uid = u.get('user_id') if isinstance(u, dict) else None
+                if uid:
+                    await UserDAO.set_role(uid, want_role)
+                    logger.info(f"🌱 内置管理员角色校正：{uname} → {want_role}")
+    except Exception as e:
+        logger.warning(f"⚠️ seed_admin_roles 跳过（role 列可能尚未迁移，不影响启动）：{e}")
+
+
 # ============================================
 # Lifespan 事件处理
 # ============================================
@@ -278,6 +309,7 @@ async def lifespan(app: FastAPI):
         # 2026-05-21：先做 GPT Image 占位 seed + 化神 nano3→nano2 in-place 升级，
         # 再 load_api_configs_to_env，确保升级后的 endpoint/key 一并被注入环境变量。
         await seed_default_api_providers()
+        await seed_admin_roles()  # 初次部署：内置管理员 role 校正，后台开箱即用
         await load_api_configs_to_env()
     
     # ✅ 移除storage_manager，改用数据库文件管理

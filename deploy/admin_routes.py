@@ -53,14 +53,17 @@ async def require_admin(request: Request) -> str:
     # 兼容旧库未 ALTER：默认 'user'
     role = (user.get('role') if isinstance(user, dict) else None) or 'user'
     if role not in ('admin', 'super_admin'):
-        # 引导兜底：MY2_ADMIN_USERNAMES 环境变量（逗号分隔）允许在 role 列尚未配置时通过
+        # 初次部署兜底：用户行是首次登录时懒创建的，role 列默认 'user'。
+        # 内置管理员账号（admin / 超级管理员 lllsdhr）即便 role 尚未提升，也允许进入后台，
+        # 保证开箱即用（登录密码本身才是安全边界）。可用 MY2_ADMIN_USERNAMES 追加白名单。
         # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
         import os as _os
+        allowed = {'admin', 'lllsdhr'}
         boot = (_os.environ.get('MY2_ADMIN_USERNAMES') or '').strip()
         if boot:
-            allowed = {s.strip() for s in boot.split(',') if s.strip()}
-            if username in allowed:
-                return username
+            allowed |= {s.strip() for s in boot.split(',') if s.strip()}
+        if username in allowed:
+            return username
         raise HTTPException(status_code=403, detail=f"需要管理员权限（当前角色：{role}）")
     return username
 
