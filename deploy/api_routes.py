@@ -1668,12 +1668,22 @@ async def get_storyboard_items(episode_id: str, script_id: Optional[str] = None,
 
 @router.post("/api/episodes/{episode_id}/storyboard-items")
 async def create_storyboard_item(episode_id: str, data: StoryboardItemCreate, user_id: str = Depends(get_current_user)):
+    # 防孤儿兜底：未指定 script_id 时回退到本集最新脚本。
+    # 否则分镜会存成 script_id=NULL，被按脚本过滤的 get_by_episode 隐藏 → 「素材没到分镜」。
+    script_id = data.script_id
+    if not script_id:
+        try:
+            scripts = await EpisodeScriptDAO.list_by_episode(episode_id)
+            if scripts:
+                script_id = scripts[-1].get('script_id')  # 排序 sort_order,created_at → 取最新
+        except Exception as _e:
+            logger.warning(f"create_storyboard_item: 回退 script_id 失败 ep={episode_id}: {_e}")
     item = await StoryboardDAO.create(
         episode_id=episode_id, sort_order=data.sort_order,
         scene_heading=data.scene_heading, dialogue=data.dialogue,
         action_text=data.action_text, camera_movement=data.camera_movement,
         image_prompt=data.image_prompt, video_prompt=data.video_prompt,
-        script_id=data.script_id,
+        script_id=script_id,
     )
     if not item:
         raise HTTPException(status_code=500, detail="创建分镜失败")
