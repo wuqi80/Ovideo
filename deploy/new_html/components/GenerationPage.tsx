@@ -963,8 +963,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       try {
           console.log('🔄 重新生成 - 当前参考图片:', references.map(r => ({ id: r.id, url: r.url.substring(0, 50) + '...' })));
           await generateForShot(selectedShot, true, globalModel, references);
-      } catch (e) {
-          alert("生成失败，请检查网络或图片大小");
+      } catch (e: any) {
+          // 不再吞错：暴露真实原因（缺 key / 内容审查 / 参考图取不到 等），便于定位。
+          alert(`生成失败：${e?.message || e || '请检查网络或图片大小'}`);
       } finally {
           setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(shotId); return next; });
       }
