@@ -21,6 +21,10 @@ import type { RegisteredTask, GlobalTaskStatus, SourcePage, TaskKind } from '../
 const STORAGE_KEY = 'h-my2:task-registry:v1';
 // 已完成/失败任务在 sessionStorage 里保留 30 分钟（用于 reload 后能看到刚完成的任务）
 const COMPLETED_RETAIN_MS = 30 * 60 * 1000;
+// 2026-06-14：active（pending/queued/running）任务超过此时长仍未完成，视为僵尸/超时，
+// rehydrate 时自动判失败清出「运行中」。否则卡死的任务（如无 GPU agent 的 qwen 出图）
+// 会永远显示「运行中 0%」幽灵在通知面板里。
+const STALE_ACTIVE_MS = 15 * 60 * 1000;
 // listTasks 默认排序时，已完成 / 失败保留前 N 条（避免 store 无限增长）
 const MAX_COMPLETED_KEEP = 50;
 
@@ -400,12 +404,25 @@ class TaskRegistry {
             const data = JSON.parse(raw) as { active?: RegisteredTask[]; done?: RegisteredTask[] };
             const all = [...(data.active || []), ...(data.done || [])];
             this.tasks.clear();
-            // 自动清理过期完成任务
+            // 自动清理过期完成任务 + 自动判失败僵尸 active 任务
             const cutoff = Date.now() - COMPLETED_RETAIN_MS;
+            const staleCutoff = Date.now() - STALE_ACTIVE_MS;
+            let mutated = false;
             for (const t of all) {
-                if (!isActive(t.status) && t.completedAt && t.completedAt < cutoff) continue;
-                this.tasks.set(t.taskId, t);
+                if (!isActive(t.status)) {
+                    if (t.completedAt && t.completedAt < cutoff) { mutated = true; continue; }
+                    this.tasks.set(t.taskId, t);
+                    continue;
+                }
+                // active 但创建太久仍未完成 → 判为超时失败，清出「运行中」
+                if (t.createdAt < staleCutoff) {
+                    this.tasks.set(t.taskId, { ...t, status: 'failed', completedAt: Date.now(), error: '任务超时，已自动清理' });
+                    mutated = true;
+                } else {
+                    this.tasks.set(t.taskId, t);
+                }
             }
+            if (mutated) this.persist();
             const snapshot = this.list();
             this.emit({ type: 'rehydrate', tasks: snapshot });
             return snapshot;
