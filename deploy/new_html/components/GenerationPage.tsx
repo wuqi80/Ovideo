@@ -41,6 +41,7 @@ interface GenerationPageProps {
   onExportNext: (data: any) => void;
   onImportProject: () => void;
   onDeleteStoryboardItem?: (itemId: string) => void;  // 2026-06-14：删除分镜镜头
+  onBatchDeleteStoryboardItems?: (itemIds: string[]) => Promise<void> | void;  // 2026-06-14：批量删除选中镜头
 }
 
 export const GenerationPage: React.FC<GenerationPageProps> = ({
@@ -56,6 +57,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   onExportNext,
   onImportProject,
   onDeleteStoryboardItem,
+  onBatchDeleteStoryboardItems,
 }) => {
   const queryClient = useQueryClient();
   const selectedFile = files.find(f => f.id === selectedFileId);
@@ -1874,6 +1876,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               </div>
 
               <div className="flex items-center gap-3">
+                  {onBatchDeleteStoryboardItems && selectedShotIds.size > 0 && !batchProgress && (
+                      <button
+                          onClick={async () => {
+                              const ids = Array.from(selectedShotIds);
+                              await onBatchDeleteStoryboardItems(ids);
+                              setSelectedShotIds(new Set());
+                          }}
+                          disabled={isGenerating}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-n0 hover:bg-r50 text-danger border border-danger/30 rounded text-xs font-bold transition-colors disabled:opacity-50"
+                          title="删除选中的镜头"
+                      >
+                          <Trash2 className="w-3.5 h-3.5" /> 删除选中 ({selectedShotIds.size})
+                      </button>
+                  )}
                   {batchProgress ? (
                       <div className="flex items-center gap-2 bg-primary-light px-3 py-1.5 rounded text-xs text-primary border border-primary/20">
                           <CircleDashed className="w-3.5 h-3.5 animate-spin" />

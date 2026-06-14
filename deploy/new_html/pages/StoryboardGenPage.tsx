@@ -181,6 +181,19 @@ export const StoryboardGenPage: React.FC = () => {
     }
   }, [forceReloadSlices]);
 
+  // 2026-06-14：批量删除选中镜头（一次确认 + 循环删 + 刷新）
+  const handleBatchDeleteStoryboardItems = useCallback(async (itemIds: string[]) => {
+    if (!itemIds.length) return;
+    if (!await crmConfirm({ title: '批量删除镜头', message: `确认删除选中的 ${itemIds.length} 个镜头？此操作不可撤销。`, type: 'danger', confirmText: '删除' })) return;
+    let ok = 0;
+    for (const id of itemIds) {
+      try { await deleteStoryboardItem(id); ok++; } catch (e) { console.error('删除镜头失败', id, e); }
+    }
+    await forceReloadSlices('storyboardItems');
+    if (ok === itemIds.length) crmMessage.success(`已删除 ${ok} 个镜头`);
+    else crmMessage.warning(`已删除 ${ok}/${itemIds.length}，部分失败`);
+  }, [forceReloadSlices]);
+
   const noopSaveVersion = useCallback((_name: string) => {}, []);
   const noopRestoreVersion = useCallback((_v: FileVersion) => {}, []);
   const noopDeleteVersion = useCallback((_id: string) => {}, []);
@@ -384,6 +397,7 @@ export const StoryboardGenPage: React.FC = () => {
           materialLibrary={materialLibrary}
           onUpdateStoryboardItem={handleUpdateStoryboardItem}
           onDeleteStoryboardItem={handleDeleteStoryboardItem}
+          onBatchDeleteStoryboardItems={handleBatchDeleteStoryboardItems}
           onSaveVersion={noopSaveVersion}
           onRestoreVersion={noopRestoreVersion}
           onDeleteVersion={noopDeleteVersion}
