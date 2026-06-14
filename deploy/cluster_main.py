@@ -6363,6 +6363,7 @@ async def get_admin_logs(username: str = Depends(require_auth), limit: int = 100
 @app.post("/api/admin/users/create")
 async def create_user(
     user_data: dict,
+    request: Request,
     username: str = Depends(require_auth)
 ):
     """创建新用户（仅管理员）"""
@@ -6398,7 +6399,19 @@ async def create_user(
                 logger.info(f"✅ 用户 {new_username} 已创建（ID: {user['user_id'][:12]}...）")
             except Exception as e:
                 logger.warning(f"⚠️ 同步用户到数据库失败: {e}")
-        
+
+        # 审计留痕：新建用户（best-effort，失败不影响主流程）
+        try:
+            import admin_audit_service
+            await admin_audit_service.record(
+                request,
+                admin_user_id=username,
+                action='user_create', target_type='user', target_id=new_username,
+                after={'username': new_username, 'email': email, 'role': role},
+            )
+        except Exception as _audit_e:
+            logger.warning(f"⚠️ 审计记录失败(user_create): {_audit_e}")
+
         return {
             "success": True,
             "message": "用户创建成功",
