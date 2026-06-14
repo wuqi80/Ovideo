@@ -248,12 +248,24 @@ export const AudioStagePage: React.FC = () => {
 
       // 2026-05-24 (Task 7)：1. enqueue —— handler 立刻返回数据库 task_id，
       // 不再阻塞撞反代 5min idle timeout（recurring-pitfalls §Q）。
-      const submitted = await minimaxTTS({
+      const ttsArgs = {
         text: textToSpeak, voice_id: minimaxVoiceId, speed, emotion, pitch,
         entity_type: 'storyboard_item', entity_id: clip.itemId,
         file_role: clip.type === 'narration' ? 'narration_audio' : 'dialogue_audio',
         episode_id: episodeId,
-      }, controller.signal);
+      };
+      // 2026-06-14：入队对瞬时网络失败（Failed to fetch / TypeError，如后端重启空窗、
+      // 连接抖动）自动重试 1 次；主动 abort（用户切集/重点）不重试。
+      let submitted: { task_id: string };
+      try {
+        submitted = await minimaxTTS(ttsArgs, controller.signal);
+      } catch (enqErr: any) {
+        const isNetErr = enqErr instanceof TypeError
+          || /failed to fetch|networkerror|load failed|fetch/i.test(enqErr?.message || '');
+        if (!isNetErr || controller.signal.aborted || enqErr?.name === 'AbortError') throw enqErr;
+        await new Promise(r => setTimeout(r, 800));
+        submitted = await minimaxTTS(ttsArgs, controller.signal);
+      }
 
       // 2. poll —— worker 端进程内跑完整 MiniMax 轮询 + 下载 + 入库 + entity 同步。
       // timeoutMs=10min（配音页 worker 上限 600s + 缓冲），intervalMs=2s。
