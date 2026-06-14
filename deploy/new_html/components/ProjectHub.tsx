@@ -6,6 +6,7 @@ import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import ShareResourceDialog from './ShareResourceDialog';
 import { createShare } from '../services/shareService';
 import type { ProjectInfo } from '../types';
+import { crmMessage, crmConfirm } from '../admin/crmUI';
 
 const API_BASE = '';
 
@@ -130,20 +131,23 @@ const ProjectHub: React.FC = () => {
     };
 
     const handleDelete = async (projectId: string) => {
-        if (!confirm('确定删除此项目？此操作不可撤销。')) return;
+        setContextMenu(null);
+        if (!await crmConfirm({ title: '删除项目', message: '确定删除此项目？此操作不可撤销。', type: 'danger', confirmText: '删除' })) return;
         try {
             await fetch(`${API_BASE}/api/projects/${projectId}`, {
                 method: 'DELETE',
                 headers: getHeaders()
             });
+            crmMessage.success('已删除');
             loadProjects();
         } catch (e) {
             console.error('删除失败:', e);
+            crmMessage.error('删除失败，请检查网络');
         }
-        setContextMenu(null);
     };
 
     const handleArchive = async (projectId: string) => {
+        setContextMenu(null);
         try {
             const res = await fetch(`${API_BASE}/api/projects/${projectId}/archive`, {
                 method: 'POST',
@@ -151,18 +155,19 @@ const ProjectHub: React.FC = () => {
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                alert(`归档失败: ${err.detail || res.statusText}`);
+                crmMessage.error(`归档失败: ${err.detail || res.statusText}`);
                 return;
             }
+            crmMessage.success('已归档');
             loadProjects();
         } catch (e) {
             console.error('归档失败:', e);
-            alert('归档请求失败，请检查网络');
+            crmMessage.error('归档请求失败，请检查网络');
         }
-        setContextMenu(null);
     };
 
     const handleUnarchive = async (projectId: string) => {
+        setContextMenu(null);
         try {
             const res = await fetch(`${API_BASE}/api/projects/${projectId}/unarchive`, {
                 method: 'POST',
@@ -170,15 +175,15 @@ const ProjectHub: React.FC = () => {
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                alert(`取消归档失败: ${err.detail || res.statusText}`);
+                crmMessage.error(`取消归档失败: ${err.detail || res.statusText}`);
                 return;
             }
+            crmMessage.success('已取消归档');
             loadProjects();
         } catch (e) {
             console.error('取消归档失败:', e);
-            alert('请求失败，请检查网络');
+            crmMessage.error('请求失败，请检查网络');
         }
-        setContextMenu(null);
     };
 
     const formatTime = (ts: number) => {
