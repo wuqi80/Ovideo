@@ -326,9 +326,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const [globalModel, setGlobalModel] = usePersistedPageState<GenerationModel>({
     page: 'GenerationPage:globalModel',
     episodeId,
-    version: 1,
-    defaultValue: 'qwen',
+    // 2026-06-14：默认从 'qwen'（练气一阶，ComfyUI 需 GPU agent）改为 'nanobanana'（化神，走 API 网关，
+    // 开箱即用、就是出成片那 8 张图的通道）。version+1 让旧持久化的 'qwen' 失效、回落新默认。
+    version: 2,
+    defaultValue: 'nanobanana',
   });
+  // 2026-06-14：需 GPU agent 的 ComfyUI 档位（本机未接 agent 会永远卡 0% 超时）。
+  const COMFYUI_MODELS = React.useMemo(() => new Set<string>(['qwen', 'qwen_lora', 'qwenN', 'qwenN_lora', 'kontext']), []);
+  // 持久化里若残留 ComfyUI 模型（旧默认/手动选过），自动纠正到「化神」，避免一进来就是卡死的档。
+  useEffect(() => {
+    if (COMFYUI_MODELS.has(globalModel)) setGlobalModel('nanobanana' as GenerationModel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [shotModels, setShotModels] = usePersistedPageState<Record<string, GenerationModel>>({
     page: 'GenerationPage:shotModels',
     episodeId,
@@ -2154,6 +2163,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             天劫二阶
                         </button>
                     </div>
+                    {/* 2026-06-14：ComfyUI 档位需 GPU Agent，本机未接会卡死——选中即醒目提示 */}
+                    {COMFYUI_MODELS.has(globalModel) && (
+                        <div className="mt-2 flex items-start gap-1.5 text-[10px] text-danger bg-r50 border border-danger/30 rounded px-2 py-1.5 leading-relaxed">
+                            <span className="shrink-0 font-bold">⚠</span>
+                            <span>此档走 <b>ComfyUI，需 GPU Agent</b>。本机未接 Agent，生成会一直卡 0% 超时。请改用 <b>化神</b> 或 <b>天劫一阶 / 二阶</b>（走 API 网关，开箱即用）。</span>
+                        </div>
+                    )}
                     <p className="text-[9px] text-n100 mt-2">
                         {globalModel === 'nanobanana' && '化神境界 · 点击分镜列表中的模型标识可单独设置'}
                         {globalModel === 'qwen' && '练气一阶 · 点击分镜列表中的模型标识可单独设置'}
