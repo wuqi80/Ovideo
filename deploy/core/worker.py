@@ -1302,7 +1302,7 @@ class Worker:
         
         # 尝试从ComfyUI下载
         try:
-            node = self.cluster_manager.get_available_node()
+            node = self.cluster_manager.get_available_node() if self.cluster_manager else None
             if node:
                 url = f"{node.base_url}/view?filename={image_path}&type=input"
                 logger.info(f"从ComfyUI下载: {url}")
@@ -1314,7 +1314,24 @@ class Worker:
                     return temp_file.name
         except Exception as e:
             logger.warning(f"从ComfyUI下载失败: {e}")
-        
+
+        # 作为 file_id 从数据库解析（外部 API 模型 sora2/veo 前端传的是 file_id 而非
+        # uploads 文件名；本函数原只认 uploads/ComfyUI，导致 sora2/veo i2v 永远
+        # "无法下载图片"。与 wan26/dashscope 对齐，用 FileDAO 还原本地物理文件）
+        try:
+            rec = await FileDAO.get_file(image_path)
+            if not rec:
+                rec = await FileDAO.get_file_by_name(image_path)
+            fp = Path(rec['file_path']) if rec and rec.get('file_path') else None
+            if fp and fp.exists():
+                temp_file = tempfile.NamedTemporaryFile(suffix=(fp.suffix or '.png'), delete=False)
+                temp_file.write(fp.read_bytes())
+                temp_file.close()
+                logger.info(f"✅ 从 file_id 解析图片: {image_path} -> {fp.name}")
+                return temp_file.name
+        except Exception as e:
+            logger.warning(f"file_id 解析图片失败: {e}")
+
         raise FileNotFoundError(f"无法下载图片: {image_path}")
     
     async def _process_veo_task(self, task: Task) -> bool:
@@ -2271,11 +2288,16 @@ class Worker:
                 hh_watermark_final = hh_watermark_override if hh_watermark_override is not None else watermark
                 hh_seed_override = data.get('hh_seed')
                 hh_seed_final = int(hh_seed_override) if hh_seed_override is not None else seed
+                # GenerateRequest.ratio 默认 'adaptive'（Seedance 专用），会泄漏进来盖过
+                # happyhorse 的 '16:9'，而 DashScope 拒绝 'adaptive'。视作未设、回落 '16:9'。
+                hh_ratio_final = data.get('hh_ratio') or data.get('ratio') or '16:9'
+                if hh_ratio_final == 'adaptive':
+                    hh_ratio_final = '16:9'
                 create_result = await client.happyhorse_submit(
                     prompt=prompt,
                     reference_image_urls=ref_urls,
                     resolution=(data.get('hh_resolution') or data.get('resolution') or '720P'),
-                    ratio=(data.get('hh_ratio') or data.get('ratio') or '16:9'),
+                    ratio=hh_ratio_final,
                     duration=int(data.get('hh_duration') or duration),
                     watermark=bool(hh_watermark_final),
                     seed=hh_seed_final,
