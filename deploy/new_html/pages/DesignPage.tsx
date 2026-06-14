@@ -10,6 +10,7 @@ import { createAsset, deleteAsset, updateAsset } from '../services/apiService';
 import { generateGeminiImageVariant, adjustImageAngle, waitForComfyUITask, processMaterialImage, generateHumanMultiAngleQueued } from '../services/geminiService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { callAI } from '../services/aiService';
+import { crmMessage } from '../admin/crmUI';
 import { AiModel } from '../types';
 import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
 import type { AssetItem } from '../types';
@@ -283,7 +284,7 @@ export const DesignPage: React.FC = () => {
         await generateDoubaoImages({ prompt: payload.prompt, references: payload.references, size: payload.resolution, sequential: payload.sequential as any, count: payload.count, ...entityOpts });
       }
       await reload();
-    } catch (err: any) { console.error('AI生成失败:', err); alert(err?.message || 'AI生成失败'); }
+    } catch (err: any) { console.error('AI生成失败:', err); crmMessage.error(err?.message || 'AI生成失败'); }
     finally { setBusyAssetId(null); }
   }, [episodeId, reload]);
 
@@ -315,7 +316,7 @@ export const DesignPage: React.FC = () => {
         fileRole: 'reference_image',
       });
       await reload();
-    } catch (err: any) { console.error('角度调整失败:', err); alert(err?.message || '角度调整失败'); }
+    } catch (err: any) { console.error('角度调整失败:', err); crmMessage.error(err?.message || '角度调整失败'); }
     finally { setBusyAssetId(null); }
   }, [episodeId, projectId, reload]);
 
@@ -341,7 +342,7 @@ export const DesignPage: React.FC = () => {
         fileRole: 'reference_image',
       });
       await reload();
-    } catch (err: any) { console.error('处理失败:', err); alert(err?.message || '处理失败'); }
+    } catch (err: any) { console.error('处理失败:', err); crmMessage.error(err?.message || '处理失败'); }
     finally { setBusyAssetId(null); }
   }, [processModal, episodeId, projectId, reload]);
 
@@ -354,6 +355,8 @@ export const DesignPage: React.FC = () => {
     setBatchModal(false);
     savePrefs({ engine: config.engine, geminiModel: config.geminiModel, style: config.style, aspect: config.aspectRatio, resolution: config.resolution, refineModel: config.refineModel });
     const targets = assets.filter(a => config.assetIds.includes(a.assetId));
+    let okCount = 0;
+    const errors: string[] = [];
     for (let i = 0; i < targets.length; i++) {
       const asset = targets[i];
       setBusyAssetId(asset.assetId); setBusyLabel(`批量生成 ${i + 1}/${targets.length}...`);
@@ -376,10 +379,22 @@ export const DesignPage: React.FC = () => {
         } else {
           await generateDoubaoImages({ prompt, references: [], size: config.resolution, ...entityOpts });
         }
-      } catch (err: any) { console.error(`批量生成 ${asset.name} 失败:`, err); }
+        okCount++;
+      } catch (err: any) {
+        // 不再静默吞错：累计失败原因，循环结束后用 toast 汇总暴露给用户。
+        errors.push(`${asset.name}：${err?.message || String(err)}`);
+        console.error(`批量生成 ${asset.name} 失败:`, err);
+      }
     }
     await reload();
-    setBusyAssetId(null);
+    setBusyAssetId(null); setBusyLabel('');
+    if (!errors.length) {
+      crmMessage.success(`批量生成完成：成功 ${okCount} 项`);
+    } else if (okCount > 0) {
+      crmMessage.warning(`批量生成：成功 ${okCount}，失败 ${errors.length}。首个失败 → ${errors[0]}`);
+    } else {
+      crmMessage.error(`批量生成全部失败（${errors.length} 项）。原因 → ${errors[0]}`);
+    }
   }, [assets, scriptText, episodeId, reload]);
 
   const tabLabel = tab === 'character' ? '人物' : tab === 'scene' ? '场景' : '道具';
@@ -503,15 +518,15 @@ export const DesignPage: React.FC = () => {
                           <Upload size={11} /> 上传
                           <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadImage(asset.assetId, f); e.target.value = ''; }} />
                         </label>
-                        <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { alert('请先上传或生成图片'); return; } setCameraModal({ asset, materials: m }); }} disabled={busy}
+                        <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { crmMessage.error('请先上传或生成图片'); return; } setCameraModal({ asset, materials: m }); }} disabled={busy}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-n0 border border-n40 text-n300 hover:bg-n20 transition-all disabled:opacity-30">
                           <Camera size={11} /> 角度
                         </button>
-                        <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { alert('请先上传或生成图片'); return; } setProcessModal({ asset, materials: m, workflow: 'upscale_hd' }); }} disabled={busy}
+                        <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { crmMessage.error('请先上传或生成图片'); return; } setProcessModal({ asset, materials: m, workflow: 'upscale_hd' }); }} disabled={busy}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-n0 border border-n40 text-n300 hover:bg-n20 transition-all disabled:opacity-30">
                           <Maximize size={11} /> 高清放大
                         </button>
-                        <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { alert('请先上传或生成图片'); return; } setProcessModal({ asset, materials: m, workflow: 'remove_watermark' }); }} disabled={busy}
+                        <button onClick={() => { const m = assetToMaterials(asset); if (!m.length) { crmMessage.error('请先上传或生成图片'); return; } setProcessModal({ asset, materials: m, workflow: 'remove_watermark' }); }} disabled={busy}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] bg-n0 border border-n40 text-n300 hover:bg-n20 transition-all disabled:opacity-30">
                           <Scissors size={11} /> 去水印
                         </button>
@@ -586,7 +601,7 @@ const UnifiedAIModal: React.FC<{
     onClose();
   }, [persistPrompt, prompt, onClose]);
 
-  const toggleRef = (id: string) => setSelectedRefs(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { if (n.size >= maxRefs) { alert(`最多 ${maxRefs} 张`); return prev; } n.add(id); } return n; });
+  const toggleRef = (id: string) => setSelectedRefs(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { if (n.size >= maxRefs) { crmMessage.error(`最多 ${maxRefs} 张`); return prev; } n.add(id); } return n; });
 
   const appendStyle = (styleId: string, suffix: string) => {
     if (activeStyle === styleId) { const prev = STYLE_PRESETS.find(s => s.id === styleId); if (prev) setPrompt(p => p.replace(prev.suffix, '').trim()); setActiveStyle(''); }
@@ -604,7 +619,7 @@ const UnifiedAIModal: React.FC<{
         savePrefs({ refineModel });
         persistPrompt(refined);
       }
-    } catch (err) { console.error('AI润色失败:', err); alert('AI润色失败，请重试'); }
+    } catch (err) { console.error('AI润色失败:', err); crmMessage.error('AI润色失败，请重试'); }
     finally { setIsRefining(false); }
   };
 
@@ -678,7 +693,7 @@ const UnifiedAIModal: React.FC<{
         </div>
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
           <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button onClick={() => { if (!prompt.trim()) { alert('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: prompt.trim(), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio, resolution, sequential, count }); }}
+          <button onClick={() => { if (!prompt.trim()) { crmMessage.error('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: prompt.trim(), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio, resolution, sequential, count }); }}
             className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">开始生成</button>
         </div>
       </div>
@@ -786,7 +801,7 @@ const BatchGenerateModal: React.FC<{
         </div>
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
           <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button onClick={() => { if (!checked.size) { alert('请至少选择一个资产'); return; } onSubmit({ assetIds: Array.from(checked), engine, geminiModel, style, aspectRatio, resolution, threeView, refineModel }); }}
+          <button onClick={() => { if (!checked.size) { crmMessage.error('请至少选择一个资产'); return; } onSubmit({ assetIds: Array.from(checked), engine, geminiModel, style, aspectRatio, resolution, threeView, refineModel }); }}
             disabled={!checked.size} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50">
             开始批量生成 ({checked.size} 项)
           </button>
