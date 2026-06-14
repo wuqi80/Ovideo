@@ -9,7 +9,9 @@ import {
   // LEGACY_VOICE_ALIAS 转译成 MiniMax 官方音色 id。
   minimaxTTS,
   updateStoryboardItem as apiUpdateStoryboardItem,
+  createStoryboardItem as apiCreateStoryboardItem,
 } from '../services/apiService';
+import { crmMessage } from '../admin/crmUI';
 
 // MiniMax 默认音色（与 VoiceSidebar 的 SYSTEM_VOICE_DEFAULT 对齐）
 const MINIMAX_DEFAULT_VOICE = 'presenter_male';
@@ -53,9 +55,50 @@ export const AudioStagePage: React.FC = () => {
   const navigate = useNavigate();
   const {
     storyboardItems, assets, characterVoices, audioTracks,
-    projectId, episodeId, script, isLoading, error, reload, loadSlices,
+    projectId, episodeId, selectedScriptId, script, isLoading, error, reload, loadSlices,
     saveStoryboardItem, forceReloadSlices,
   } = useEpisode();
+  const [exporting, setExporting] = useState(false);
+
+  // 「导出到分镜」= 把当前脚本+素材绑定「导出」成一套**全新的分镜镜头**追加到分镜列表
+  // （复制场景/动作/台词/提示词 + 素材绑定，但不带已生成的图/音 → 新镜头待重新出图），
+  // 原有镜头不动。这样每改一次前面的素材，点一下就生成一套新分镜去重新生成画面。
+  const handleExportToStoryboard = useCallback(async () => {
+    if (exporting) return;
+    const items = [...storyboardItems].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    if (!items.length) {
+      navigate(`/projects/${projectId}/ep/${episodeId}/workflow/storyboard`);
+      return;
+    }
+    setExporting(true);
+    try {
+      let nextSort = items.reduce((m, it) => Math.max(m, it.sortOrder ?? 0), 0);
+      for (const it of items) {
+        nextSort += 1;
+        const res: any = await apiCreateStoryboardItem(episodeId, {
+          sort_order: nextSort,
+          script_id: selectedScriptId || undefined,
+          scene_heading: it.sceneHeading || '',
+          action_text: it.actionText || '',
+          dialogue: it.dialogue || '',
+          camera_movement: it.cameraMovement || '',
+          image_prompt: it.imagePrompt || '',
+          video_prompt: it.videoPrompt || '',
+        });
+        const newId = res?.item?.item_id || res?.item?.itemId;
+        // 复制素材绑定（create 接口不收 bound_assets，用 update 补）
+        if (newId && Array.isArray(it.boundAssets) && it.boundAssets.length) {
+          await apiUpdateStoryboardItem(newId, { bound_assets: it.boundAssets });
+        }
+      }
+      crmMessage.success(`已导出 ${items.length} 个新分镜，去分镜页生成画面`);
+      navigate(`/projects/${projectId}/ep/${episodeId}/workflow/storyboard`);
+    } catch (e: any) {
+      crmMessage.error(`导出到分镜失败：${e?.message || e}`);
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, storyboardItems, episodeId, selectedScriptId, projectId, navigate]);
 
   // 2026-06-14：进入配音页强制刷新，跨页改动可见。
   useEffect(() => {
@@ -402,10 +445,12 @@ export const AudioStagePage: React.FC = () => {
         <h1 className="text-lg font-bold tracking-tight">声音与配音</h1>
         <span className="flex-1" />
         <button
-          onClick={() => navigate(`/projects/${projectId}/ep/${episodeId}/workflow/storyboard`)}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-success hover:bg-success text-white text-sm font-semibold transition-all"
+          onClick={handleExportToStoryboard}
+          disabled={exporting}
+          title="把当前脚本+素材导出成一套全新分镜（原有镜头不动）"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-success hover:bg-success text-white text-sm font-semibold transition-all disabled:opacity-60"
         >
-          导出到分镜 <ArrowRight size={14} />
+          {exporting ? '导出中…' : <>导出到分镜 <ArrowRight size={14} /></>}
         </button>
       </header>
 
