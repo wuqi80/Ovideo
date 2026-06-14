@@ -364,7 +364,19 @@ export const DesignPage: React.FC = () => {
         let desc = asset.description || '';
         if (!desc.trim()) {
           const p = buildRefinePrompt(asset.assetType, asset.name, '', scriptText);
-          const result = await callAI(config.refineModel, { system: p.system, user: p.user });
+          let result: any;
+          try {
+            result = await callAI(config.refineModel, { system: p.system, user: p.user });
+          } catch (refineErr: any) {
+            // Gemini 文本对剧本内容常触发内容审查（PROHIBITED_CONTENT）而拒绝；
+            // 自动回退 DeepSeek 完成描述推断，避免整批静默失败。
+            if (config.refineModel !== AiModel.DeepseekChat) {
+              console.warn(`${asset.name} Gemini 推断被拦，回退 DeepSeek：`, refineErr?.message);
+              result = await callAI(AiModel.DeepseekChat, { system: p.system, user: p.user });
+            } else {
+              throw refineErr;
+            }
+          }
           if (result && typeof result === 'string') {
             desc = result.trim();
             await updateAsset(asset.assetId, { description: desc });

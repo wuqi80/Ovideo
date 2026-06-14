@@ -47,18 +47,21 @@ let _mid = 0;
 const emitMsg = () => _msgSubs.forEach(f => f());
 const emitDlg = () => _dlgSubs.forEach(f => f());
 
+function removeMsg(id: number) { _msgs = _msgs.filter(m => m.id !== id); emitMsg(); }
+
 function pushMsg(text: string, type: MsgType, duration = 3000) {
   const id = ++_mid;
   _msgs = [..._msgs, { id, text, type }];
   emitMsg();
-  setTimeout(() => { _msgs = _msgs.filter(m => m.id !== id); emitMsg(); }, duration);
+  setTimeout(() => removeMsg(id), duration);
 }
 
 export const crmMessage = {
+  // 错误/警告停留更久（用户需要时间读，尤其是带原因的失败汇总）；均可点击立即关闭。
   success: (t: string) => pushMsg(t, 'success'),
-  error: (t: string) => pushMsg(t, 'error', 4000),
+  error: (t: string) => pushMsg(t, 'error', 8000),
   info: (t: string) => pushMsg(t, 'info'),
-  warning: (t: string) => pushMsg(t, 'warning'),
+  warning: (t: string) => pushMsg(t, 'warning', 7000),
 };
 
 export function crmConfirm(opts: {
@@ -117,9 +120,12 @@ export const CrmHost: React.FC = () => {
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[10000] flex flex-col items-center gap-2 pointer-events-none">
         {_msgs.map(m => (
           <div key={m.id}
-               className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-md bg-n0 border border-n40 shadow-bottom text-sm text-n800 animate-slideDown">
-            {MSG_ICON[m.type]}
-            <span>{m.text}</span>
+               onClick={() => removeMsg(m.id)}
+               title="点击关闭"
+               className="pointer-events-auto flex items-center gap-2 px-4 py-2 rounded-md bg-n0 border border-n40 shadow-bottom text-sm text-n800 animate-slideDown cursor-pointer max-w-[560px]">
+            <span className="shrink-0">{MSG_ICON[m.type]}</span>
+            <span className="flex-1">{m.text}</span>
+            <X className="w-3.5 h-3.5 text-n100 shrink-0" />
           </div>
         ))}
       </div>
