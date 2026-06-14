@@ -22,11 +22,12 @@ function secureMediaUrl(url: string | null): string | null {
 
 export const VideoGenPage: React.FC = () => {
   const navigate = useNavigate();
-  const { episodeId, projectId, selectedScriptId, storyboardItems, isLoading, error, loadSlices } = useEpisode();
+  const { episodeId, projectId, selectedScriptId, storyboardItems, isLoading, error, loadSlices, forceReloadSlices } = useEpisode();
   useEffect(() => {
     // 2026-05-20 (Bug 3a)：视频页 @ 候选需要 character_voices + audio_tracks
-    loadSlices('storyboardItems', 'audioTracks', 'characterVoices', 'assets');
-  }, [loadSlices]);
+    // 2026-06-14：强制刷新，跨页改动（新分镜图/音频）可见。
+    forceReloadSlices('storyboardItems', 'audioTracks', 'characterVoices', 'assets');
+  }, [forceReloadSlices]);
   const [showImportPanel, setShowImportPanel] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);

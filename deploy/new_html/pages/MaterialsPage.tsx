@@ -22,12 +22,13 @@ export const MaterialsPage: React.FC = () => {
     episodeId, projectId, selectedScriptId,
     script, storyboardItems, assets,
     isLoading, error, reload,
-    loadSlices, saveStoryboardItem,
+    loadSlices, saveStoryboardItem, forceReloadSlices,
   } = useEpisode();
 
+  // 2026-06-14：进入素材页强制刷新，保证跨页（设计/分镜）改动能看到最新数据。
   useEffect(() => {
-    loadSlices('storyboardItems', 'assets', 'script');
-  }, [loadSlices]);
+    forceReloadSlices('storyboardItems', 'assets', 'script');
+  }, [forceReloadSlices]);
 
   const pseudoFile = useMemo(
     () => scriptToProjectFile(script, storyboardItems, assets, episodeId),

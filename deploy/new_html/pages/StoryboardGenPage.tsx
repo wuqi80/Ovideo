@@ -30,12 +30,15 @@ export const StoryboardGenPage: React.FC = () => {
     episodeId, projectId,
     script, storyboardItems, assets,
     isLoading, error, reload,
-    loadSlices,
+    loadSlices, forceReloadSlices,
   } = useEpisode();
 
+  // 2026-06-14：进入分镜页强制刷新——loadSlices 对已加载 slice 会跳过，
+  // 导致在「素材」改了人物绑定/在别处生成了新图后，跳到分镜仍显示会话缓存的旧数据
+  //（用户反馈「导入到分镜始终只有这 8 个、没有新的」的真因）。改用 forceReload 拉最新。
   useEffect(() => {
-    loadSlices('storyboardItems', 'assets', 'script');
-  }, [loadSlices]);
+    forceReloadSlices('storyboardItems', 'assets', 'script');
+  }, [forceReloadSlices]);
 
   const pseudoFile = useMemo(
     () => scriptToProjectFile(script, storyboardItems, assets, episodeId),

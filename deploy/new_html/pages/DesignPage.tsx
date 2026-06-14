@@ -177,10 +177,11 @@ const AssetImageRow: React.FC<{
 /* ======================== Main Component ======================== */
 export const DesignPage: React.FC = () => {
   const navigate = useNavigate();
-  const { episodeId, projectId, selectedScriptId, assets, script, isLoading, error, reload, loadSlices } = useEpisode();
+  const { episodeId, projectId, selectedScriptId, assets, script, isLoading, error, reload, loadSlices, forceReloadSlices } = useEpisode();
   useEffect(() => {
-    loadSlices('assets', 'script');
-  }, [loadSlices]);
+    // 2026-06-14：强制刷新资产，保证别处新生成的资产图在设计页可见。
+    forceReloadSlices('assets', 'script');
+  }, [forceReloadSlices]);
   // 2026-05-20 (Bug #3)：当前查看的素材分类 tab（人物/场景/道具）持久化，按 episodeId scope。
   // 切走再回 / 刷新都保留用户的查看位置；不同剧集互相隔离。
   const [tab, setTab] = usePersistedPageState<AssetTab>({

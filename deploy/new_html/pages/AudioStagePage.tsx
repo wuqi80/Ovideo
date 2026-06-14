@@ -54,12 +54,13 @@ export const AudioStagePage: React.FC = () => {
   const {
     storyboardItems, assets, characterVoices, audioTracks,
     projectId, episodeId, script, isLoading, error, reload, loadSlices,
-    saveStoryboardItem,
+    saveStoryboardItem, forceReloadSlices,
   } = useEpisode();
 
+  // 2026-06-14：进入配音页强制刷新，跨页改动可见。
   useEffect(() => {
-    loadSlices('storyboardItems', 'assets', 'characterVoices', 'script', 'audioTracks');
-  }, [loadSlices]);
+    forceReloadSlices('storyboardItems', 'assets', 'characterVoices', 'script', 'audioTracks');
+  }, [forceReloadSlices]);
 
   // ─── Derived data ──────────────────────────────────────────────
 
@@ -295,7 +296,8 @@ export const AudioStagePage: React.FC = () => {
       // 与 DB 一致——下次刷新页面音频不会消失。
       try {
         await apiUpdateStoryboardItem(clip.itemId, updateFields);
-        await loadSlices('storyboardItems');
+        // 必须 forceReload：loadSlices 对已加载 slice 会跳过，否则生成的音频不回写到 context。
+        await forceReloadSlices('storyboardItems');
         // 2026-05-20 (M3)：标记任务完成，铃铛会有完成提示
         try { taskRegistry.complete(registryTaskId, { resultUrls: [resolveUrl(url)], progress: 1 }); } catch { /* noop */ }
       } catch (e: any) {
