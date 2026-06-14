@@ -8,7 +8,8 @@ import {
   assetsToMaterialLibrary,
   storyboardItemToDbUpdate,
 } from '../utils/episodeAdapters';
-import { updateStoryboardItem } from '../services/apiService';
+import { updateStoryboardItem, createStoryboardItem, deleteStoryboardItem } from '../services/apiService';
+import { crmConfirm, crmMessage } from '../admin/crmUI';
 import { fetchEntityFiles } from '../services/entityFileService';
 import { useSelectFileMutation, useDeleteFileMutation } from '../hooks/useFilesMutation';
 import { LayoutGrid, Loader, ChevronDown, ChevronRight, GripHorizontal } from 'lucide-react';
@@ -27,7 +28,7 @@ function fmtTimeSimple(ms: number): string {
 export const StoryboardGenPage: React.FC = () => {
   const navigate = useNavigate();
   const {
-    episodeId, projectId,
+    episodeId, projectId, selectedScriptId,
     script, storyboardItems, assets,
     isLoading, error, reload,
     loadSlices, forceReloadSlices,
@@ -167,6 +168,18 @@ export const StoryboardGenPage: React.FC = () => {
   const handleForceSave = useCallback(() => {
     reload();
   }, [reload]);
+
+  // 2026-06-14：删除分镜镜头（列表项垃圾桶按钮）
+  const handleDeleteStoryboardItem = useCallback(async (itemId: string) => {
+    if (!await crmConfirm({ title: '删除镜头', message: '确认删除这个分镜镜头？此操作不可撤销。', type: 'danger', confirmText: '删除' })) return;
+    try {
+      await deleteStoryboardItem(itemId);
+      crmMessage.success('已删除镜头');
+      await forceReloadSlices('storyboardItems');
+    } catch (e: any) {
+      crmMessage.error(`删除失败：${e?.message || e}`);
+    }
+  }, [forceReloadSlices]);
 
   const noopSaveVersion = useCallback((_name: string) => {}, []);
   const noopRestoreVersion = useCallback((_v: FileVersion) => {}, []);
@@ -370,6 +383,7 @@ export const StoryboardGenPage: React.FC = () => {
           episodeId={episodeId}
           materialLibrary={materialLibrary}
           onUpdateStoryboardItem={handleUpdateStoryboardItem}
+          onDeleteStoryboardItem={handleDeleteStoryboardItem}
           onSaveVersion={noopSaveVersion}
           onRestoreVersion={noopRestoreVersion}
           onDeleteVersion={noopDeleteVersion}

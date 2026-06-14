@@ -40,6 +40,7 @@ interface GenerationPageProps {
   onForceSave: () => void;
   onExportNext: (data: any) => void;
   onImportProject: () => void;
+  onDeleteStoryboardItem?: (itemId: string) => void;  // 2026-06-14：删除分镜镜头
 }
 
 export const GenerationPage: React.FC<GenerationPageProps> = ({
@@ -53,7 +54,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   onDeleteVersion,
   onForceSave,
   onExportNext,
-  onImportProject
+  onImportProject,
+  onDeleteStoryboardItem,
 }) => {
   const queryClient = useQueryClient();
   const selectedFile = files.find(f => f.id === selectedFileId);
@@ -2025,6 +2027,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                </div>
                                            </div>
                                        {item.isConfigConfirmed && <CheckCircle2 className="w-3 h-3 text-success" />}
+                                       {onDeleteStoryboardItem && (
+                                           <button
+                                               onClick={(e) => { e.stopPropagation(); onDeleteStoryboardItem(item.id); }}
+                                               className="opacity-0 group-hover:opacity-100 text-n100 hover:text-danger transition-all p-0.5"
+                                               title="删除此镜头"
+                                           >
+                                               <Trash2 className="w-3 h-3" />
+                                           </button>
+                                       )}
                                        </div>
                                    </div>
                                    <p className="text-[9px] text-n100 line-clamp-1">{item.scriptSegment}</p>
