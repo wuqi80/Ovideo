@@ -1392,9 +1392,18 @@ async def gemini_text_chat(request: GeminiTextRequest, username: str = Depends(r
         return {"content": content}
         
     except Exception as e:
-        logger.error(f"文本生成失败: {e}")
-        # 🔒 不暴露技术细节
-        raise HTTPException(status_code=500, detail="文本生成失败，请稍后重试")
+        # laozhang 返回的 4xx/5xx 响应体里才有真正原因（模型名无效 / token 分组无权限 / 配额等）。
+        # 之前只记了 "400 Client Error" 把 body 丢了，导致无从定位。这里补回响应体并透传给前端。
+        upstream = ""
+        try:
+            import requests as _rq
+            if isinstance(e, _rq.HTTPError) and getattr(e, "response", None) is not None:
+                upstream = (e.response.text or "")[:500]
+        except Exception:
+            pass
+        logger.error(f"文本生成失败: {e} | laozhang响应: {upstream}")
+        detail = f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试"
+        raise HTTPException(status_code=500, detail=detail)
 
 @app.post("/api/gemini/image")
 async def gemini_image_generate(request: GeminiImageRequest, username: str = Depends(require_auth)):
