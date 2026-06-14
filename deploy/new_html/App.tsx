@@ -55,6 +55,7 @@ import { AudioStagePage } from './pages/AudioStagePage';
 import { DesignPage } from './pages/DesignPage';
 import { GenerationPage } from './pages/GenerationPage';
 import { EnhancePage } from './pages/EnhancePage';
+import { FinalProductPage } from './pages/FinalProductPage';
 import { StoryboardGenPage } from './pages/StoryboardGenPage';
 import { VideoGenPage } from './pages/VideoGenPage';
 import { HistoryPage } from './pages/HistoryPage';
@@ -148,6 +149,7 @@ const App: React.FC = () => {
                                 <Route path="generation" element={<GenerationPage />} />
                                 <Route path="video" element={<VideoGenPage />} />
                                 <Route path="enhance" element={<EnhancePage />} />
+                                <Route path="final" element={<FinalProductPage />} />
                                 {/* 2026-05-26 Slice 1：素材库（项目级页面，挂在 workflow 下复用顶部导航） */}
                                 <Route path="media-library" element={<MediaLibraryPage />} />
                                 <Route path="history" element={<HistoryPage />} />

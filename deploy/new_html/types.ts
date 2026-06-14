@@ -332,6 +332,7 @@ export type SourcePage =
   | 'canvas'        // 无限画布页
   | 'history'       // 历史页
   | 'media-library' // 2026-05-26 Slice 1：通用素材库
+  | 'final'         // 2026-06-14：成品页（汇总展示合成好的整片）
   | 'video-reverse' // 2026-05-26 Slice 3：视频反推工作台
   | 'global';       // 跨页/未指定
 

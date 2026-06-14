@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, useParams, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LogOut, LayoutGrid, Wand2, Library } from 'lucide-react';
+import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LogOut, LayoutGrid, Wand2, Library, Clapperboard } from 'lucide-react';
 import { EpisodeProvider } from '../contexts/EpisodeContext';
 import type { SourcePage } from '../types';
 import { TaskBadge } from '../components/TaskBadge';
@@ -17,6 +17,7 @@ const NAV_ITEMS: { path: string; label: string; icon: any; sourcePage: SourcePag
   { path: 'storyboard',     label: '分镜',     icon: LayoutGrid, sourcePage: 'storyboard' },
   { path: 'video',          label: '视频',     icon: Film,       sourcePage: 'video' },
   { path: 'enhance',        label: '美化',     icon: Sparkles,   sourcePage: 'enhance' },
+  { path: 'final',          label: '成品',     icon: Clapperboard, sourcePage: 'final' },
   { path: 'media-library',  label: '素材库',   icon: Library,    sourcePage: 'media-library' },
   { path: 'history',        label: '历史',     icon: Clock,      sourcePage: 'history' },
 ];
