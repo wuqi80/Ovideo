@@ -64,6 +64,7 @@ import { CreditsPage } from './pages/CreditsPage';
 import { VideoReversePage } from './pages/VideoReversePage';
 import { AdminPage } from './components/AdminPage';
 import { AdminFeatureTabs } from './components/AdminFeatureTabs';
+import { CrmHost } from './admin/crmUI';
 
 import PostProcessPage from './components/PostProcessPage';
 
@@ -110,6 +111,7 @@ const App: React.FC = () => {
             <WorkspaceProvider>
             <TaskProvider>
                 <GlobalToastWithNav />
+                <CrmHost />
                 <Routes>
                     {/* ========== 项目管理中心 ========== */}
                     <Route path="/projects" element={<ProjectHub />} />

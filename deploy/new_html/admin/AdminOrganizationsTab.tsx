@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Building2, Plus, RefreshCw, Trash2, ChevronDown, ChevronRight, UserPlus, X,
 } from 'lucide-react';
+import { crmMessage, crmConfirm } from './crmUI';
 
 import {
   adminListOrganizations,
@@ -95,8 +96,8 @@ export const AdminOrganizationsTab: React.FC = () => {
   useEffect(() => { reload(); }, [reload]);
 
   const handleCreate = async () => {
-    if (!newName.trim()) { alert('请填写组织名称'); return; }
-    if (!newOwner) { alert('请选择 owner'); return; }
+    if (!newName.trim()) { crmMessage.error('请填写组织名称'); return; }
+    if (!newOwner) { crmMessage.error('请选择 owner'); return; }
     setSubmitting(true);
     try {
       await adminCreateOrganization({
@@ -108,19 +109,19 @@ export const AdminOrganizationsTab: React.FC = () => {
       setNewName(''); setNewOwner(''); setNewDesc('');
       reload();
     } catch (e: any) {
-      alert(`创建失败：${await readApiErr(e)}`);
+      crmMessage.error(`创建失败：${await readApiErr(e)}`);
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (org: Organization) => {
-    if (!confirm(`删除组织 "${org.name}"？此操作会级联删除所有成员关系和资源共享，不可恢复。`)) return;
+    if (!await crmConfirm({ title: '删除组织', message: `删除组织「${org.name}」？此操作会级联删除所有成员关系和资源共享，不可恢复。`, type: 'danger', confirmText: '删除' })) return;
     try {
       await adminDeleteOrganization(org.org_id);
       reload();
     } catch (e: any) {
-      alert(`删除失败：${await readApiErr(e)}`);
+      crmMessage.error(`删除失败：${await readApiErr(e)}`);
     }
   };
 
@@ -301,14 +302,14 @@ const MembersPanel: React.FC<{
   useEffect(() => { reload(); }, [reload]);
 
   const handleAdd = async () => {
-    if (!newUserId) { alert('请选择用户'); return; }
+    if (!newUserId) { crmMessage.error('请选择用户'); return; }
     setSubmitting(true);
     try {
       await adminAddMember(orgId, { user_id: newUserId, role: newRole });
       setNewUserId('');
       reload();
     } catch (e: any) {
-      alert(`添加成员失败：${await readApiErr(e)}`);
+      crmMessage.error(`添加成员失败：${await readApiErr(e)}`);
     } finally {
       setSubmitting(false);
     }
@@ -316,15 +317,15 @@ const MembersPanel: React.FC<{
 
   const handleRemove = async (m: OrganizationMember) => {
     if (m.user_id === ownerUserId) {
-      alert('不能删除 owner — 请先转让 owner 角色');
+      crmMessage.error('不能删除 owner — 请先转让 owner 角色');
       return;
     }
-    if (!confirm(`移除成员 ${m.username || m.user_id}？`)) return;
+    if (!await crmConfirm({ title: '移除成员', message: `移除成员 ${m.username || m.user_id}？`, type: 'danger', confirmText: '移除' })) return;
     try {
       await adminRemoveMember(orgId, m.user_id);
       reload();
     } catch (e: any) {
-      alert(`删除失败：${await readApiErr(e)}`);
+      crmMessage.error(`删除失败：${await readApiErr(e)}`);
     }
   };
 
@@ -334,7 +335,7 @@ const MembersPanel: React.FC<{
       await adminSetMemberRole(orgId, m.user_id, role);
       reload();
     } catch (e: any) {
-      alert(`改 role 失败：${await readApiErr(e)}`);
+      crmMessage.error(`改 role 失败：${await readApiErr(e)}`);
     }
   };
 

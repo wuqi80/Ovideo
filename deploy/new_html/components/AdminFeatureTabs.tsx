@@ -23,6 +23,10 @@ import {
   CreditRule,
 } from '../services/creditService';
 import AdminOrganizationsTab from '../admin/AdminOrganizationsTab';
+import {
+  crmMessage, crmConfirm, crmPrompt,
+  CrmToolbar, CrmPrimaryButton, CrmTag, CrmActionLink, CrmActionSep, CrmPagination, CrmTable,
+} from '../admin/crmUI';
 
 const API_BASE = '';
 
@@ -156,13 +160,14 @@ export const AdminFeatureTabs: React.FC<{ embedTab?: SubTab }> = ({ embedTab }) 
 // ============================================
 // 1. 账号管理 (Slice 4)
 // ============================================
+const PAGE_SIZE = 10;
+
 const AccountsTab: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [pwUserId, setPwUserId] = useState<string | null>(null);
-  const [pwValue, setPwValue] = useState('');
+  const [page, setPage] = useState(1);
   // 新建用户
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -177,34 +182,37 @@ const AccountsTab: React.FC = () => {
       sp.set('limit', '200');
       const r = await apiGet<{ users: any[] }>(`/api/admin/users?${sp.toString()}`);
       setUsers(r.users || []);
+      setPage(1);
     } finally { setLoading(false); }
   }, [keyword, statusFilter]);
 
   useEffect(() => { reload(); }, [reload]);
 
   const handleDisable = async (uid: string) => {
-    const reason = prompt('禁用原因？');
+    const reason = await crmPrompt({ title: '禁用用户', label: '禁用原因', placeholder: '选填，将记录到账号' });
     if (reason === null) return;
-    await apiPost(`/api/admin/users/${uid}/disable`, { reason });
-    reload();
+    try { await apiPost(`/api/admin/users/${uid}/disable`, { reason }); crmMessage.success('已禁用'); reload(); }
+    catch (e: any) { crmMessage.error(`禁用失败：${await readApiError(e)}`); }
   };
   const handleEnable = async (uid: string) => {
-    await apiPost(`/api/admin/users/${uid}/enable`);
-    reload();
+    if (!await crmConfirm({ title: '启用用户', message: '确认启用该账号？', type: 'info', confirmText: '启用' })) return;
+    try { await apiPost(`/api/admin/users/${uid}/enable`); crmMessage.success('已启用'); reload(); }
+    catch (e: any) { crmMessage.error(`启用失败：${await readApiError(e)}`); }
   };
-  const handleResetPassword = async (uid: string) => {
-    if (!pwValue || pwValue.length < 4) { alert('密码至少 4 位'); return; }
-    await apiPost(`/api/admin/users/${uid}/reset-password`, { new_password: pwValue });
-    setPwUserId(null); setPwValue('');
-    alert('密码已重置');
+  const handleResetPassword = async (uid: string, uname: string) => {
+    const pw = await crmPrompt({ title: `重置密码 — ${uname}`, label: '新密码（至少 4 位）', inputType: 'text', required: true });
+    if (pw === null) return;
+    if (pw.length < 4) { crmMessage.error('密码至少 4 位'); return; }
+    try { await apiPost(`/api/admin/users/${uid}/reset-password`, { new_password: pw }); crmMessage.success('密码已重置'); }
+    catch (e: any) { crmMessage.error(`重置失败：${await readApiError(e)}`); }
   };
   const handleSetRole = async (uid: string, role: string) => {
-    await apiPut(`/api/admin/users/${uid}`, { role });
-    reload();
+    try { await apiPut(`/api/admin/users/${uid}`, { role }); crmMessage.success('角色已更新'); reload(); }
+    catch (e: any) { crmMessage.error(`更新失败：${await readApiError(e)}`); }
   };
   const handleCreate = async () => {
-    if (!cu.username.trim()) { alert('请输入用户名'); return; }
-    if (!cu.password || cu.password.length < 4) { alert('密码至少 4 位'); return; }
+    if (!cu.username.trim()) { crmMessage.error('请输入用户名'); return; }
+    if (!cu.password || cu.password.length < 4) { crmMessage.error('密码至少 4 位'); return; }
     setCreating(true);
     try {
       await apiPost('/api/admin/users/create', {
@@ -213,200 +221,127 @@ const AccountsTab: React.FC = () => {
         email: cu.email.trim() || undefined,
         role: cu.role,
       });
+      crmMessage.success('用户已创建');
       setCreateOpen(false);
       setCu({ username: '', password: '', email: '', role: 'user' });
       reload();
     } catch (e: any) {
-      alert(`创建用户失败：${await readApiError(e)}`);
+      crmMessage.error(`创建用户失败：${await readApiError(e)}`);
     } finally {
       setCreating(false);
     }
   };
 
+  const pageRows = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <input
-          value={keyword}
-          onChange={e => setKeyword(e.target.value)}
-          placeholder="搜索用户名/邮箱..."
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-64"
-        />
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value)}
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs"
-        >
-          <option value="">全部状态</option>
-          <option value="active">active</option>
-          <option value="disabled">disabled</option>
-        </select>
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20">
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs font-medium"
-        >
-          <Plus size={13} /> 新建用户
-        </button>
-        <span className="ml-auto text-xs text-n100">{users.length} 个用户</span>
-      </div>
+    <div>
+      <CrmToolbar
+        title="账号管理"
+        count={users.length}
+        filters={
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                  className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs focus:border-primary focus:outline-none">
+            <option value="">全部状态</option>
+            <option value="active">active</option>
+            <option value="disabled">disabled</option>
+          </select>
+        }
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜索用户名 / 邮箱', onSearch: reload }}
+        actions={<CrmPrimaryButton onClick={() => setCreateOpen(true)}><Plus size={13} /> 新建用户</CrmPrimaryButton>}
+      />
 
-      <div className="overflow-auto border border-n40 rounded">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="text-left p-2">用户</th>
-              <th className="text-left p-2">邮箱</th>
-              <th className="text-left p-2">角色</th>
-              <th className="text-left p-2">状态</th>
-              <th className="text-left p-2">最近登录</th>
-              <th className="text-left p-2">操作</th>
+      <CrmTable headers={
+        <tr>
+          <th className="text-left font-medium p-2.5">用户</th>
+          <th className="text-left font-medium p-2.5">邮箱</th>
+          <th className="text-left font-medium p-2.5">角色</th>
+          <th className="text-left font-medium p-2.5">状态</th>
+          <th className="text-left font-medium p-2.5">最近登录</th>
+          <th className="text-right font-medium p-2.5">操作</th>
+        </tr>
+      }>
+        {pageRows.map(u => {
+          const active = (u.status || 'active') === 'active';
+          return (
+            <tr key={u.user_id} className="hover:bg-n10">
+              <td className="p-2.5">
+                <div className="text-n800">{u.username}</div>
+                <div className="text-[10px] text-n100 font-mono">{u.user_id}</div>
+              </td>
+              <td className="p-2.5 text-n300">{u.email || '-'}</td>
+              <td className="p-2.5">
+                <select value={u.role || 'user'} onChange={e => handleSetRole(u.user_id, e.target.value)}
+                        className="bg-n0 border border-n40 rounded px-1.5 py-1 text-xs focus:border-primary focus:outline-none">
+                  <option value="user">user</option>
+                  <option value="admin">admin</option>
+                  <option value="super_admin">super_admin</option>
+                </select>
+              </td>
+              <td className="p-2.5">
+                <CrmTag type={active ? 'success' : 'danger'}>{u.status || 'active'}</CrmTag>
+                {u.disabled_reason && <div className="text-[10px] text-danger mt-0.5">{u.disabled_reason}</div>}
+              </td>
+              <td className="p-2.5 text-n100 text-[11px]">
+                {u.last_login_at ? new Date(u.last_login_at).toLocaleString('zh-CN') : '-'}
+              </td>
+              <td className="p-2.5 text-right whitespace-nowrap">
+                {active
+                  ? <CrmActionLink type="danger" onClick={() => handleDisable(u.user_id)}>禁用</CrmActionLink>
+                  : <CrmActionLink type="primary" onClick={() => handleEnable(u.user_id)}>启用</CrmActionLink>}
+                <CrmActionSep />
+                <CrmActionLink type="default" onClick={() => handleResetPassword(u.user_id, u.username)}>重置密码</CrmActionLink>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.user_id} className="border-t border-n40">
-                <td className="p-2">
-                  <div className="text-n700">{u.username}</div>
-                  <div className="text-[10px] text-n100 font-mono">{u.user_id}</div>
-                </td>
-                <td className="p-2 text-n300">{u.email || '-'}</td>
-                <td className="p-2">
-                  <select
-                    value={u.role || 'user'}
-                    onChange={e => handleSetRole(u.user_id, e.target.value)}
-                    className="bg-n0 border border-n40 rounded px-1 py-0.5 text-xs"
-                  >
-                    <option value="user">user</option>
-                    <option value="admin">admin</option>
-                    <option value="super_admin">super_admin</option>
-                  </select>
-                </td>
-                <td className="p-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                    (u.status || 'active') === 'active' ? 'bg-success-light text-success' : 'bg-r50 text-danger'
-                  }`}>
-                    {u.status || 'active'}
-                  </span>
-                  {u.disabled_reason && (
-                    <div className="text-[10px] text-danger mt-0.5">{u.disabled_reason}</div>
-                  )}
-                </td>
-                <td className="p-2 text-n100 text-[10px]">
-                  {u.last_login_at ? new Date(u.last_login_at).toLocaleString('zh-CN') : '-'}
-                </td>
-                <td className="p-2 space-x-1">
-                  {(u.status || 'active') === 'active' ? (
-                    <button onClick={() => handleDisable(u.user_id)} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">禁用</button>
-                  ) : (
-                    <button onClick={() => handleEnable(u.user_id)} className="px-2 py-0.5 text-[10px] rounded bg-success-light hover:bg-success-light text-success">启用</button>
-                  )}
-                  <button
-                    onClick={() => setPwUserId(u.user_id)}
-                    className="px-2 py-0.5 text-[10px] rounded bg-n0 hover:bg-n20 text-n700"
-                  >
-                    重置密码
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!users.length && (
-              <tr><td colSpan={6} className="text-center py-6 text-n100">暂无数据</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          );
+        })}
+        {!pageRows.length && (
+          <tr><td colSpan={6} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无数据'}</td></tr>
+        )}
+      </CrmTable>
 
-      {pwUserId && (
-        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
-          <div className="bg-n0 border border-n40 rounded-lg p-4 w-80 shadow-bottom">
-            <div className="flex justify-between items-center mb-3">
-              <div className="text-sm font-medium">重置密码 — {pwUserId}</div>
-              <button onClick={() => { setPwUserId(null); setPwValue(''); }} className="text-n100">×</button>
-            </div>
-            <input
-              type="text"
-              value={pwValue}
-              onChange={e => setPwValue(e.target.value)}
-              placeholder="新密码（至少 4 位）"
-              className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
-              autoFocus
-            />
-            <button
-              onClick={() => handleResetPassword(pwUserId)}
-              className="mt-3 w-full px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm"
-            >
-              确认重置
-            </button>
-          </div>
-        </div>
-      )}
+      <CrmPagination total={users.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
 
       {createOpen && (
-        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
-          <div className="bg-n0 border border-n40 rounded-lg p-5 w-96 shadow-bottom">
-            <div className="flex justify-between items-center mb-4">
-              <div className="text-sm font-semibold text-n800">新建用户</div>
-              <button onClick={() => setCreateOpen(false)} className="text-n100 hover:text-n700">×</button>
+        <div className="fixed inset-0 z-50 bg-n900/40 backdrop-blur-sm flex items-center justify-center"
+             onClick={e => { if (e.target === e.currentTarget) setCreateOpen(false); }}>
+          <div className="bg-n0 border border-n40 rounded-lg w-96 shadow-bottom animate-scaleIn">
+            <div className="flex justify-between items-center px-5 pt-4 pb-1">
+              <div className="text-[15px] font-semibold text-n800">新建用户</div>
+              <button onClick={() => setCreateOpen(false)} className="text-n100 hover:text-n700"><X className="w-4 h-4" /></button>
             </div>
-            <div className="space-y-3">
+            <div className="px-5 py-3 space-y-3">
               <div>
-                <label className="block text-[11px] text-n300 mb-1">用户名 *</label>
-                <input
-                  value={cu.username}
-                  onChange={e => setCu({ ...cu, username: e.target.value })}
-                  placeholder="登录用户名"
-                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
-                  autoFocus
-                />
+                <label className="block text-xs text-n300 mb-1">用户名 *</label>
+                <input value={cu.username} onChange={e => setCu({ ...cu, username: e.target.value })} placeholder="登录用户名"
+                       className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" autoFocus />
               </div>
               <div>
-                <label className="block text-[11px] text-n300 mb-1">密码 *</label>
-                <input
-                  type="text"
-                  value={cu.password}
-                  onChange={e => setCu({ ...cu, password: e.target.value })}
-                  placeholder="至少 4 位"
-                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
-                />
+                <label className="block text-xs text-n300 mb-1">密码 *</label>
+                <input type="text" value={cu.password} onChange={e => setCu({ ...cu, password: e.target.value })} placeholder="至少 4 位"
+                       className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" />
               </div>
               <div>
-                <label className="block text-[11px] text-n300 mb-1">邮箱（可选）</label>
-                <input
-                  value={cu.email}
-                  onChange={e => setCu({ ...cu, email: e.target.value })}
-                  placeholder="留空则自动生成 用户名@studio.com"
-                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
-                />
+                <label className="block text-xs text-n300 mb-1">邮箱（可选）</label>
+                <input value={cu.email} onChange={e => setCu({ ...cu, email: e.target.value })} placeholder="留空则自动生成 用户名@studio.com"
+                       className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" />
               </div>
               <div>
-                <label className="block text-[11px] text-n300 mb-1">角色</label>
-                <select
-                  value={cu.role}
-                  onChange={e => setCu({ ...cu, role: e.target.value })}
-                  className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
-                >
+                <label className="block text-xs text-n300 mb-1">角色</label>
+                <select value={cu.role} onChange={e => setCu({ ...cu, role: e.target.value })}
+                        className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none">
                   <option value="user">user</option>
                   <option value="admin">admin</option>
                   <option value="super_admin">super_admin</option>
                 </select>
               </div>
             </div>
-            <div className="flex gap-2 mt-5">
-              <button
-                onClick={() => setCreateOpen(false)}
-                className="flex-1 px-3 py-1.5 rounded border border-n40 text-n300 hover:bg-n20 text-sm"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={creating}
-                className="flex-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm disabled:opacity-60"
-              >
-                {creating ? '创建中…' : '确认创建'}
+            <div className="flex items-center justify-end gap-2 px-5 pb-4">
+              <button onClick={() => setCreateOpen(false)}
+                      className="px-3.5 py-1.5 rounded border border-n40 text-n700 hover:bg-n20 text-sm">取消</button>
+              <button onClick={handleCreate} disabled={creating}
+                      className="px-3.5 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm disabled:opacity-60">
+                {creating ? '创建中…' : '确定'}
               </button>
             </div>
           </div>
@@ -440,26 +375,26 @@ const GroupsTab: React.FC = () => {
   useEffect(() => { reload(); }, [reload]);
 
   const handleCreate = async () => {
-    if (!newUserId) { alert('请先在下拉中选择归属用户'); return; }
-    if (!newName.trim()) { alert('请输入分组名称'); return; }
+    if (!newUserId) { crmMessage.error('请先在下拉中选择归属用户'); return; }
+    if (!newName.trim()) { crmMessage.error('请输入分组名称'); return; }
     setSubmitting(true);
     try {
       await apiPost('/api/admin/project-groups', { user_id: newUserId, group_name: newName.trim(), description: newDesc });
       setNewName(''); setNewDesc('');
       reload();
     } catch (e: any) {
-      alert(`创建分组失败：${await readApiError(e)}`);
+      crmMessage.error(`创建分组失败：${await readApiError(e)}`);
     } finally {
       setSubmitting(false);
     }
   };
   const handleDelete = async (gid: string) => {
-    if (!confirm('删除后该分组内项目将变为"未分组"。继续？')) return;
+    if (!await crmConfirm({ title: '删除分组', message: '删除后该分组内项目将变为「未分组」。继续？', type: 'danger', confirmText: '删除' })) return;
     try {
       await apiDelete(`/api/admin/project-groups/${gid}`);
       reload();
     } catch (e: any) {
-      alert(`删除失败：${await readApiError(e)}`);
+      crmMessage.error(`删除失败：${await readApiError(e)}`);
     }
   };
 
@@ -550,17 +485,21 @@ const CreditRulesTab: React.FC = () => {
     reload();
   };
   const handleDelete = async (rule: CreditRule) => {
-    if (!confirm(`删除规则 ${rule.feature_key} ?`)) return;
-    await adminDeleteCreditRule(rule.rule_id);
-    reload();
+    if (!await crmConfirm({ title: '删除规则', message: `确认删除规则 ${rule.feature_key}？`, type: 'danger', confirmText: '删除' })) return;
+    try { await adminDeleteCreditRule(rule.rule_id); crmMessage.success('已删除'); reload(); }
+    catch (e: any) { crmMessage.error(`删除失败：${await readApiError(e)}`); }
   };
   const handleCreate = async () => {
-    const fk = prompt('feature_key', 'image_generation');
+    const fk = await crmPrompt({ title: '新建规则', label: 'feature_key', defaultValue: 'image_generation', required: true });
     if (!fk) return;
-    const fn = prompt('显示名称', fk) || fk;
-    const base = Number(prompt('base_cost', '10') || 10);
-    await adminCreateCreditRule({ feature_key: fk, feature_name: fn, base_cost: base });
-    reload();
+    const fn = await crmPrompt({ title: '新建规则', label: '显示名称', defaultValue: fk });
+    if (fn === null) return;
+    const baseStr = await crmPrompt({ title: '新建规则', label: 'base_cost（积分）', inputType: 'number', defaultValue: '10' });
+    if (baseStr === null) return;
+    try {
+      await adminCreateCreditRule({ feature_key: fk, feature_name: fn || fk, base_cost: Number(baseStr || 10) });
+      crmMessage.success('规则已创建'); reload();
+    } catch (e: any) { crmMessage.error(`创建失败：${await readApiError(e)}`); }
   };
 
   return (
@@ -650,7 +589,7 @@ const CreditAccountsTab: React.FC = () => {
   useEffect(() => { reload(); }, [reload]);
 
   const submitAdjust = async () => {
-    if (!adjustOpen || amount === 0 || !reason.trim()) { alert('需要金额（非 0）和理由'); return; }
+    if (!adjustOpen || amount === 0 || !reason.trim()) { crmMessage.error('需要金额（非 0）和理由'); return; }
     await apiPost(`/api/admin/credit-accounts/${adjustOpen.owner_id}/adjust`, { delta: amount, reason });
     setAdjustOpen(null); setAmount(0); setReason('');
     reload();
@@ -818,14 +757,14 @@ const MediaLibraryAdminTab: React.FC = () => {
   useEffect(() => { reload(); }, [reload]);
 
   const handleDelete = async (lid: string) => {
-    const reason = prompt('删除原因？');
+    const reason = await crmPrompt({ title: '删除素材', label: '删除原因', placeholder: '选填' });
     if (reason === null) return;
     const sp = new URLSearchParams({ reason });
     try {
       await apiDelete(`/api/admin/media-library/items/${lid}?${sp.toString()}`);
       reload();
     } catch (e: any) {
-      alert(`删除失败：${await readApiError(e)}`);
+      crmMessage.error(`删除失败：${await readApiError(e)}`);
     }
   };
 
