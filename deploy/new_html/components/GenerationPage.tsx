@@ -414,9 +414,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   }, [resize, stopResizing]);
 
   // Initialize first shot
+  // 2026-06-14：持久化的 selectedShotId 可能指向已被删除/改动的镜头（如分镜重建、版本合并后），
+  // 此时 find 不到会导致详情区空白（提示词/结果都没）。除了「未选」要回退到首镜，
+  // 「已选但当前镜头列表里不存在」也必须回退，否则卡在幽灵 id 上。
   useEffect(() => {
-      if (selectedFile?.storyboard?.items.length && !selectedShotId) {
-          setSelectedShotId(selectedFile.storyboard.items[0].id);
+      const items = selectedFile?.storyboard?.items;
+      if (!items?.length) return;
+      const exists = selectedShotId && items.some(s => s.id === selectedShotId);
+      if (!exists) {
+          setSelectedShotId(items[0].id);
       }
   }, [selectedFile, selectedShotId]);
 
