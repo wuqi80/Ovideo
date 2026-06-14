@@ -1,6 +1,8 @@
 # === Web Framework ===
 fastapi==0.109.0
-uvicorn[standard]==0.27.0
+# 2026-06-14：原 ==0.27.0 硬锁在 Ubuntu 24.04 + Python 3.12 下与 httpx/websockets
+# 解析冲突（ResolutionImpossible），放宽为 >=0.27 让 pip 自解，GCP 部署实测通过。
+uvicorn[standard]>=0.27
 python-multipart==0.0.9
 pydantic==2.5.3
 pydantic-settings==2.1.0
@@ -8,7 +10,8 @@ pydantic-settings==2.1.0
 # === HTTP / WebSocket ===
 aiohttp==3.9.1
 requests==2.31.0
-websockets==12.0
+# 2026-06-14：同上，原 ==12.0 放宽为 >=12（见 uvicorn 注释）。
+websockets>=12
 python-socketio==5.11.0
 
 # === Database ===
@@ -37,7 +40,8 @@ pyyaml>=6.0
 # === Testing ===
 pytest>=8.0
 pytest-asyncio>=0.23
-httpx>=0.27
+# 2026-06-14：上限 <0.28，避免与 uvicorn[standard]/websockets 在 Linux 下的依赖冲突。
+httpx>=0.27,<0.28
 
 # === Optional: MinIO storage ===
 # minio>=7.1.0

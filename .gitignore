@@ -2,12 +2,19 @@
 # 密钥安全：含真实 API 密钥/密码的文件【不入库】，仅提交 *.example 模板。
 # 同事 clone 后复制模板、填入团队负责人单独提供的密钥即可运行。
 # ============================================================
+# 本地一键启动脚本，内含全部真实 API key + DB/超管密码
 deploy/local_start.ps1
+# Linux 集群启动脚本，内含全部真实 API key
 deploy/scripts/start_cluster.sh
+# 前端环境变量配置说明，含真实 VITE_ key
 deploy/new_html/ENV_SETUP_GUIDE.md
+# 生成《API密钥配置清单》的脚本，硬编码全部真实 key
 gen_api_doc.py
+# 上述脚本产出的密钥清单文档
 Drama系统-API密钥配置清单.docx
+# 密钥清单（markdown 版）
 API密钥清单.md
+# 注：server_setup.sh 是脱敏模板（key 用 __FILL_ME__ 占位），故【已入库】，不在此排除。
 # 所有 .env，但保留 .env.example 模板
 .env
 .env.*
