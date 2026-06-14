@@ -358,6 +358,8 @@ const AccountsTab: React.FC = () => {
 const GroupsTab: React.FC = () => {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newUserId, setNewUserId] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -369,18 +371,20 @@ const GroupsTab: React.FC = () => {
     try {
       const r = await apiGet<{ groups: any[] }>('/api/admin/project-groups');
       setGroups(r.groups || []);
+      setPage(1);
     } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { reload(); }, [reload]);
 
   const handleCreate = async () => {
-    if (!newUserId) { crmMessage.error('请先在下拉中选择归属用户'); return; }
+    if (!newUserId) { crmMessage.error('请先选择归属用户'); return; }
     if (!newName.trim()) { crmMessage.error('请输入分组名称'); return; }
     setSubmitting(true);
     try {
       await apiPost('/api/admin/project-groups', { user_id: newUserId, group_name: newName.trim(), description: newDesc });
-      setNewName(''); setNewDesc('');
+      crmMessage.success('分组已创建');
+      setNewName(''); setNewDesc(''); setNewUserId(''); setCreateOpen(false);
       reload();
     } catch (e: any) {
       crmMessage.error(`创建分组失败：${await readApiError(e)}`);
@@ -392,70 +396,95 @@ const GroupsTab: React.FC = () => {
     if (!await crmConfirm({ title: '删除分组', message: '删除后该分组内项目将变为「未分组」。继续？', type: 'danger', confirmText: '删除' })) return;
     try {
       await apiDelete(`/api/admin/project-groups/${gid}`);
+      crmMessage.success('已删除');
       reload();
     } catch (e: any) {
       crmMessage.error(`删除失败：${await readApiError(e)}`);
     }
   };
 
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-n0 border border-n40 rounded">
-        <select
-          value={newUserId}
-          onChange={e => setNewUserId(e.target.value)}
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-56"
-        >
-          <option value="">— 选择归属用户 —</option>
-          {users.map(u => (
-            <option key={u.id || u.user_id} value={u.id || u.user_id}>
-              {u.username || u.email || u.user_id} · {(u.id || u.user_id || '').slice(0, 8)}…
-            </option>
-          ))}
-        </select>
-        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="分组名称" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
-        <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="描述（可选）" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs flex-1" />
-        <button
-          onClick={handleCreate}
-          disabled={submitting}
-          className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white disabled:bg-n0 disabled:cursor-not-allowed text-xs"
-        ><Plus size={12} />{submitting ? '创建中…' : '创建分组'}</button>
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-      </div>
+  const pageRows = groups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-      <div className="overflow-auto border border-n40 rounded">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="text-left p-2">分组</th>
-              <th className="text-left p-2">归属</th>
-              <th className="text-left p-2">项目数</th>
-              <th className="text-left p-2">创建</th>
-              <th className="text-left p-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map(g => (
-              <tr key={g.group_id} className="border-t border-n40">
-                <td className="p-2">
-                  <div className="text-n700">{g.group_name}</div>
-                  <div className="text-[10px] text-n100 font-mono">{g.group_id}</div>
-                  {g.description && <div className="text-[10px] text-n100">{g.description}</div>}
-                </td>
-                <td className="p-2 text-n300">
-                  {g.owner_name || g.user_id || '-'}
-                </td>
-                <td className="p-2 text-n700">{g.project_count ?? 0}</td>
-                <td className="p-2 text-n100">{g.created_at ? new Date(g.created_at).toLocaleString('zh-CN') : '-'}</td>
-                <td className="p-2">
-                  <button onClick={() => handleDelete(g.group_id)} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">删除</button>
-                </td>
-              </tr>
-            ))}
-            {!groups.length && <tr><td colSpan={5} className="text-center py-6 text-n100">暂无分组</td></tr>}
-          </tbody>
-        </table>
-      </div>
+  return (
+    <div>
+      <CrmToolbar
+        title="项目分组"
+        count={groups.length}
+        actions={<CrmPrimaryButton onClick={() => setCreateOpen(true)}><Plus size={13} /> 新建分组</CrmPrimaryButton>}
+      />
+
+      <CrmTable headers={
+        <tr>
+          <th className="text-left font-medium p-2.5">分组</th>
+          <th className="text-left font-medium p-2.5">归属</th>
+          <th className="text-left font-medium p-2.5">项目数</th>
+          <th className="text-left font-medium p-2.5">创建</th>
+          <th className="text-right font-medium p-2.5">操作</th>
+        </tr>
+      }>
+        {pageRows.map(g => (
+          <tr key={g.group_id} className="hover:bg-n10">
+            <td className="p-2.5">
+              <div className="text-n800">{g.group_name}</div>
+              <div className="text-[10px] text-n100 font-mono">{g.group_id}</div>
+              {g.description && <div className="text-[10px] text-n100">{g.description}</div>}
+            </td>
+            <td className="p-2.5 text-n300">{g.owner_name || g.user_id || '-'}</td>
+            <td className="p-2.5 text-n700">{g.project_count ?? 0}</td>
+            <td className="p-2.5 text-n100">{g.created_at ? new Date(g.created_at).toLocaleString('zh-CN') : '-'}</td>
+            <td className="p-2.5 text-right">
+              <CrmActionLink type="danger" onClick={() => handleDelete(g.group_id)}>删除</CrmActionLink>
+            </td>
+          </tr>
+        ))}
+        {!pageRows.length && <tr><td colSpan={5} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无分组'}</td></tr>}
+      </CrmTable>
+
+      <CrmPagination total={groups.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
+
+      {createOpen && (
+        <div className="fixed inset-0 z-50 bg-n900/40 backdrop-blur-sm flex items-center justify-center"
+             onClick={e => { if (e.target === e.currentTarget) setCreateOpen(false); }}>
+          <div className="bg-n0 border border-n40 rounded-lg w-96 shadow-bottom animate-scaleIn">
+            <div className="flex justify-between items-center px-5 pt-4 pb-1">
+              <div className="text-[15px] font-semibold text-n800">新建分组</div>
+              <button onClick={() => setCreateOpen(false)} className="text-n100 hover:text-n700"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-5 py-3 space-y-3">
+              <div>
+                <label className="block text-xs text-n300 mb-1">归属用户 *</label>
+                <select value={newUserId} onChange={e => setNewUserId(e.target.value)}
+                        className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none">
+                  <option value="">— 选择归属用户 —</option>
+                  {users.map(u => (
+                    <option key={u.id || u.user_id} value={u.id || u.user_id}>
+                      {u.username || u.email || u.user_id} · {(u.id || u.user_id || '').slice(0, 8)}…
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-n300 mb-1">分组名称 *</label>
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="分组名称"
+                       className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-n300 mb-1">描述（可选）</label>
+                <input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="描述"
+                       className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 pb-4">
+              <button onClick={() => setCreateOpen(false)}
+                      className="px-3.5 py-1.5 rounded border border-n40 text-n700 hover:bg-n20 text-sm">取消</button>
+              <button onClick={handleCreate} disabled={submitting}
+                      className="px-3.5 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm disabled:opacity-60">
+                {submitting ? '创建中…' : '确定'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -503,33 +532,29 @@ const CreditRulesTab: React.FC = () => {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <button onClick={handleCreate} className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs"><Plus size={12} />新建规则</button>
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-      </div>
-      <div className="overflow-auto border border-n40 rounded">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="text-left p-2">feature_key</th>
-              <th className="text-left p-2">名称</th>
-              <th className="text-left p-2">启用</th>
-              <th className="text-right p-2">base</th>
-              <th className="text-right p-2">min</th>
-              <th className="text-right p-2">max</th>
-              <th className="text-left p-2">version</th>
-              <th className="text-left p-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map(r => (
-              <CreditRuleRow key={r.rule_id} rule={r} onToggle={() => handleToggleEnabled(r)} onSave={handleSaveCost} onDelete={() => handleDelete(r)} />
-            ))}
-            {!rules.length && <tr><td colSpan={8} className="text-center py-6 text-n100">暂无规则</td></tr>}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      <CrmToolbar
+        title="积分规则"
+        count={rules.length}
+        actions={<CrmPrimaryButton onClick={handleCreate}><Plus size={13} /> 新建规则</CrmPrimaryButton>}
+      />
+      <CrmTable headers={
+        <tr>
+          <th className="text-left font-medium p-2.5">feature_key</th>
+          <th className="text-left font-medium p-2.5">名称</th>
+          <th className="text-left font-medium p-2.5">启用</th>
+          <th className="text-right font-medium p-2.5">base</th>
+          <th className="text-right font-medium p-2.5">min</th>
+          <th className="text-right font-medium p-2.5">max</th>
+          <th className="text-left font-medium p-2.5">version</th>
+          <th className="text-right font-medium p-2.5">操作</th>
+        </tr>
+      }>
+        {rules.map(r => (
+          <CreditRuleRow key={r.rule_id} rule={r} onToggle={() => handleToggleEnabled(r)} onSave={handleSaveCost} onDelete={() => handleDelete(r)} />
+        ))}
+        {!rules.length && <tr><td colSpan={8} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无规则'}</td></tr>}
+      </CrmTable>
     </div>
   );
 };
@@ -544,21 +569,22 @@ const CreditRuleRow: React.FC<{
   const [min_, setMin] = useState(rule.min_cost);
   const [max_, setMax] = useState<number | null>(rule.max_cost);
   return (
-    <tr className="border-t border-n40">
-      <td className="p-2 font-mono text-[10px] text-n700">{rule.feature_key}</td>
-      <td className="p-2 text-n700">{rule.feature_name}</td>
-      <td className="p-2">
+    <tr className="hover:bg-n10">
+      <td className="p-2.5 font-mono text-[10px] text-n700">{rule.feature_key}</td>
+      <td className="p-2.5 text-n800">{rule.feature_name}</td>
+      <td className="p-2.5">
         <button onClick={onToggle}>
           {rule.enabled ? <ToggleRight size={20} className="text-success" /> : <ToggleLeft size={20} className="text-n100" />}
         </button>
       </td>
-      <td className="p-2"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="w-16 bg-n0 border border-n40 rounded px-1 text-right text-xs" /></td>
-      <td className="p-2"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="w-14 bg-n0 border border-n40 rounded px-1 text-right text-xs" /></td>
-      <td className="p-2"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="w-14 bg-n0 border border-n40 rounded px-1 text-right text-xs" /></td>
-      <td className="p-2 text-n100 text-[10px]">{rule.rule_version}</td>
-      <td className="p-2 space-x-1">
-        <button onClick={() => onSave(rule, base, min_, max_)} className="px-2 py-0.5 text-[10px] rounded bg-success-light hover:bg-success-light text-success">保存</button>
-        <button onClick={onDelete} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">删除</button>
+      <td className="p-2.5"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="w-16 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
+      <td className="p-2.5"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
+      <td className="p-2.5"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
+      <td className="p-2.5 text-n100 text-[10px]">{rule.rule_version}</td>
+      <td className="p-2.5 text-right whitespace-nowrap">
+        <CrmActionLink type="primary" onClick={() => onSave(rule, base, min_, max_)}>保存</CrmActionLink>
+        <CrmActionSep />
+        <CrmActionLink type="danger" onClick={onDelete}>删除</CrmActionLink>
       </td>
     </tr>
   );
@@ -571,15 +597,18 @@ const CreditRuleRow: React.FC<{
 const CreditAccountsTab: React.FC = () => {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
   const [adjustOpen, setAdjustOpen] = useState<{ owner_id: string; owner: string } | null>(null);
   const [amount, setAmount] = useState(0);
   const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
       const r = await apiGet<{ accounts: any[] }>('/api/admin/credit-accounts');
       setAccounts(r.accounts || []);
+      setPage(1);
     } catch (e: any) {
       console.warn('Slice 5 admin credit-accounts 接口或许尚未上线:', e?.message);
       setAccounts([]);
@@ -590,65 +619,82 @@ const CreditAccountsTab: React.FC = () => {
 
   const submitAdjust = async () => {
     if (!adjustOpen || amount === 0 || !reason.trim()) { crmMessage.error('需要金额（非 0）和理由'); return; }
-    await apiPost(`/api/admin/credit-accounts/${adjustOpen.owner_id}/adjust`, { delta: amount, reason });
-    setAdjustOpen(null); setAmount(0); setReason('');
-    reload();
+    setSubmitting(true);
+    try {
+      await apiPost(`/api/admin/credit-accounts/${adjustOpen.owner_id}/adjust`, { delta: amount, reason });
+      crmMessage.success('调整成功');
+      setAdjustOpen(null); setAmount(0); setReason('');
+      reload();
+    } catch (e: any) {
+      crmMessage.error(`调整失败：${await readApiError(e)}`);
+    } finally { setSubmitting(false); }
   };
 
+  const pageRows = accounts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="text-xs text-n100">{accounts.length} 个账户</span>
-      </div>
-      <div className="overflow-auto border border-n40 rounded">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="text-left p-2">账户</th>
-              <th className="text-left p-2">归属</th>
-              <th className="text-right p-2">可用</th>
-              <th className="text-right p-2">冻结</th>
-              <th className="text-right p-2">累计消耗</th>
-              <th className="text-left p-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {accounts.map(a => (
-              <tr key={a.account_id} className="border-t border-n40">
-                <td className="p-2 font-mono text-[10px]">{a.account_id}</td>
-                <td className="p-2 text-n700">{a.owner_type}/{a.owner_id}</td>
-                <td className="p-2 text-right font-mono text-success">{a.available_credits}</td>
-                <td className="p-2 text-right font-mono text-warning">{a.frozen_credits}</td>
-                <td className="p-2 text-right font-mono text-n300">{a.total_used_credits}</td>
-                <td className="p-2">
-                  <button
-                    onClick={() => setAdjustOpen({ owner_id: a.owner_id, owner: `${a.owner_type}/${a.owner_id}` })}
-                    disabled={a.owner_type !== 'user'}
-                    title={a.owner_type !== 'user' ? '当前只支持调整 user 账户' : ''}
-                    className="px-2 py-0.5 text-[10px] rounded bg-primary-light hover:bg-primary-light text-primary disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    手动调整
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!accounts.length && <tr><td colSpan={6} className="text-center py-6 text-n100">暂无账户</td></tr>}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      <CrmToolbar title="积分账户" count={accounts.length} />
+      <CrmTable headers={
+        <tr>
+          <th className="text-left font-medium p-2.5">账户</th>
+          <th className="text-left font-medium p-2.5">归属</th>
+          <th className="text-right font-medium p-2.5">可用</th>
+          <th className="text-right font-medium p-2.5">冻结</th>
+          <th className="text-right font-medium p-2.5">累计消耗</th>
+          <th className="text-right font-medium p-2.5">操作</th>
+        </tr>
+      }>
+        {pageRows.map(a => (
+          <tr key={a.account_id} className="hover:bg-n10">
+            <td className="p-2.5 font-mono text-[10px]">{a.account_id}</td>
+            <td className="p-2.5 text-n800">{a.owner_type}/{a.owner_id}</td>
+            <td className="p-2.5 text-right font-mono text-success">{a.available_credits}</td>
+            <td className="p-2.5 text-right font-mono text-warning">{a.frozen_credits}</td>
+            <td className="p-2.5 text-right font-mono text-n300">{a.total_used_credits}</td>
+            <td className="p-2.5 text-right">
+              <CrmActionLink type="primary" disabled={a.owner_type !== 'user'}
+                title={a.owner_type !== 'user' ? '当前只支持调整 user 账户' : ''}
+                onClick={() => setAdjustOpen({ owner_id: a.owner_id, owner: `${a.owner_type}/${a.owner_id}` })}>
+                手动调整
+              </CrmActionLink>
+            </td>
+          </tr>
+        ))}
+        {!pageRows.length && <tr><td colSpan={6} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无账户'}</td></tr>}
+      </CrmTable>
+
+      <CrmPagination total={accounts.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
 
       {adjustOpen && (
-        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
-          <div className="bg-n0 border border-n40 rounded-lg p-4 w-96 space-y-3 shadow-bottom">
-            <div className="flex justify-between items-center">
-              <div className="text-sm font-medium">手动调整 — {adjustOpen.owner}</div>
-              <button onClick={() => setAdjustOpen(null)} className="text-n100"><X size={14} /></button>
+        <div className="fixed inset-0 z-50 bg-n900/40 backdrop-blur-sm flex items-center justify-center"
+             onClick={e => { if (e.target === e.currentTarget) setAdjustOpen(null); }}>
+          <div className="bg-n0 border border-n40 rounded-lg w-96 shadow-bottom animate-scaleIn">
+            <div className="flex justify-between items-center px-5 pt-4 pb-1">
+              <div className="text-[15px] font-semibold text-n800">手动调整 — {adjustOpen.owner}</div>
+              <button onClick={() => setAdjustOpen(null)} className="text-n100 hover:text-n700"><X className="w-4 h-4" /></button>
             </div>
-            <div className="text-xs text-n300">正数 = 充值/赠送，负数 = 扣减。需要管理员审计理由。</div>
-            <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} placeholder="amount" className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm" />
-            <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="调整理由（必填）" className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm h-20" />
-            <button onClick={submitAdjust} className="w-full px-3 py-1.5 rounded bg-success hover:bg-success text-white text-sm">提交调整</button>
+            <div className="px-5 py-3 space-y-3">
+              <div className="text-xs text-n300">正数 = 充值/赠送，负数 = 扣减。需要管理员审计理由。</div>
+              <div>
+                <label className="block text-xs text-n300 mb-1">金额 *</label>
+                <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} placeholder="正/负整数"
+                       className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-n300 mb-1">调整理由 *</label>
+                <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="必填，用于审计"
+                          className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm h-20 focus:border-primary focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 pb-4">
+              <button onClick={() => setAdjustOpen(null)}
+                      className="px-3.5 py-1.5 rounded border border-n40 text-n700 hover:bg-n20 text-sm">取消</button>
+              <button onClick={submitAdjust} disabled={submitting}
+                      className="px-3.5 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm disabled:opacity-60">
+                {submitting ? '提交中…' : '提交调整'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -663,6 +709,7 @@ const CreditAccountsTab: React.FC = () => {
 const CreditTransactionsTab: React.FC = () => {
   const [txns, setTxns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
   const [userFilter, setUserFilter] = useState('');
   const [featureFilter, setFeatureFilter] = useState('');
 
@@ -675,6 +722,7 @@ const CreditTransactionsTab: React.FC = () => {
       sp.set('limit', '300');
       const r = await apiGet<{ transactions: any[] }>(`/api/admin/credit-transactions?${sp.toString()}`);
       setTxns(r.transactions || []);
+      setPage(1);
     } catch (e: any) {
       console.warn('Slice 5 admin credit-transactions 接口或许尚未上线:', e?.message);
       setTxns([]);
@@ -683,43 +731,48 @@ const CreditTransactionsTab: React.FC = () => {
 
   useEffect(() => { reload(); }, [reload]);
 
+  const pageRows = txns.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <input value={userFilter} onChange={e => setUserFilter(e.target.value)} placeholder="user_id" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
-        <input value={featureFilter} onChange={e => setFeatureFilter(e.target.value)} placeholder="feature_key" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="ml-auto text-xs text-n100">{txns.length} 条</span>
-      </div>
-      <div className="overflow-auto border border-n40 rounded">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="text-left p-2">时间</th>
-              <th className="text-left p-2">类型</th>
-              <th className="text-left p-2">用户</th>
-              <th className="text-left p-2">功能</th>
-              <th className="text-right p-2">金额</th>
-              <th className="text-right p-2">余额前</th>
-              <th className="text-right p-2">余额后</th>
-            </tr>
-          </thead>
-          <tbody>
-            {txns.map(t => (
-              <tr key={t.transaction_id} className="border-t border-n40">
-                <td className="p-2 text-n300 text-[10px]">{new Date(t.created_at).toLocaleString('zh-CN')}</td>
-                <td className="p-2 text-n700">{t.change_type}</td>
-                <td className="p-2 font-mono text-[10px] text-n300">{t.user_id || '-'}</td>
-                <td className="p-2 text-n700">{t.feature_key || '-'}</td>
-                <td className="p-2 text-right font-mono text-n700">{t.amount}</td>
-                <td className="p-2 text-right font-mono text-n100">{t.balance_before}</td>
-                <td className="p-2 text-right font-mono text-n700">{t.balance_after}</td>
-              </tr>
-            ))}
-            {!txns.length && <tr><td colSpan={7} className="text-center py-6 text-n100">暂无流水</td></tr>}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      <CrmToolbar
+        title="积分流水"
+        count={txns.length}
+        filters={
+          <>
+            <input value={userFilter} onChange={e => setUserFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') reload(); }}
+                   placeholder="user_id" className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs w-36 focus:border-primary focus:outline-none" />
+            <input value={featureFilter} onChange={e => setFeatureFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') reload(); }}
+                   placeholder="feature_key" className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs w-36 focus:border-primary focus:outline-none" />
+          </>
+        }
+        actions={<button onClick={reload} className="p-1.5 rounded border border-n40 bg-n0 hover:bg-n20"><RefreshCw size={13} className={loading ? 'animate-spin text-primary' : 'text-n300'} /></button>}
+      />
+      <CrmTable headers={
+        <tr>
+          <th className="text-left font-medium p-2.5">时间</th>
+          <th className="text-left font-medium p-2.5">类型</th>
+          <th className="text-left font-medium p-2.5">用户</th>
+          <th className="text-left font-medium p-2.5">功能</th>
+          <th className="text-right font-medium p-2.5">金额</th>
+          <th className="text-right font-medium p-2.5">余额前</th>
+          <th className="text-right font-medium p-2.5">余额后</th>
+        </tr>
+      }>
+        {pageRows.map(t => (
+          <tr key={t.transaction_id} className="hover:bg-n10">
+            <td className="p-2.5 text-n300 text-[10px]">{new Date(t.created_at).toLocaleString('zh-CN')}</td>
+            <td className="p-2.5"><CrmTag type={Number(t.amount) >= 0 ? 'success' : 'warning'}>{t.change_type}</CrmTag></td>
+            <td className="p-2.5 font-mono text-[10px] text-n300">{t.user_id || '-'}</td>
+            <td className="p-2.5 text-n700">{t.feature_key || '-'}</td>
+            <td className={`p-2.5 text-right font-mono ${Number(t.amount) >= 0 ? 'text-success' : 'text-danger'}`}>{t.amount}</td>
+            <td className="p-2.5 text-right font-mono text-n100">{t.balance_before}</td>
+            <td className="p-2.5 text-right font-mono text-n700">{t.balance_after}</td>
+          </tr>
+        ))}
+        {!pageRows.length && <tr><td colSpan={7} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无流水'}</td></tr>}
+      </CrmTable>
+      <CrmPagination total={txns.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>
   );
 };
@@ -738,6 +791,8 @@ const MediaLibraryAdminTab: React.FC = () => {
   const [filterKeyword, setFilterKeyword] = useState('');
   const users = useAdminUsers();
 
+  const [page, setPage] = useState(1);
+
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -748,6 +803,7 @@ const MediaLibraryAdminTab: React.FC = () => {
       sp.set('limit', '300');
       const r = await apiGet<{ items: any[] }>(`/api/admin/media-library/items?${sp.toString()}`);
       setItems(r.items || []);
+      setPage(1);
     } catch (e: any) {
       console.warn('Slice 5 admin media-library 接口或许尚未上线:', e?.message);
       setItems([]);
@@ -762,90 +818,80 @@ const MediaLibraryAdminTab: React.FC = () => {
     const sp = new URLSearchParams({ reason });
     try {
       await apiDelete(`/api/admin/media-library/items/${lid}?${sp.toString()}`);
+      crmMessage.success('已删除');
       reload();
     } catch (e: any) {
       crmMessage.error(`删除失败：${await readApiError(e)}`);
     }
   };
 
+  const pageRows = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-n0 border border-n40 rounded">
-        <span className="text-[10px] text-n100 uppercase tracking-wider">筛选</span>
-        <select
-          value={filterUserId}
-          onChange={e => setFilterUserId(e.target.value)}
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-56"
-        >
-          <option value="">所有用户</option>
-          {users.map(u => (
-            <option key={u.id || u.user_id} value={u.id || u.user_id}>
-              {u.username || u.email || u.user_id} · {(u.id || u.user_id || '').slice(0, 8)}…
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterType}
-          onChange={e => setFilterType(e.target.value)}
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-32"
-        >
-          <option value="">所有类型</option>
-          <option value="image">图片</option>
-          <option value="video">视频</option>
-          <option value="audio">音频</option>
-          <option value="frame">抽帧</option>
-          <option value="text">文本</option>
-          <option value="other">其他</option>
-        </select>
-        <input
-          value={filterKeyword}
-          onChange={e => setFilterKeyword(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') reload(); }}
-          placeholder="搜索标题 / 文件名… (Enter)"
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs flex-1 min-w-[180px]"
-        />
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="text-xs text-n100 ml-1">{items.length} 个素材</span>
-      </div>
-      <div className="overflow-auto border border-n40 rounded">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="text-left p-2">素材</th>
-              <th className="text-left p-2">类型</th>
-              <th className="text-left p-2">所有者</th>
-              <th className="text-left p-2">项目</th>
-              <th className="text-left p-2">权限</th>
-              <th className="text-left p-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map(it => (
-              <tr key={it.library_item_id} className="border-t border-n40">
-                <td className="p-2">
-                  <div className="text-n700 truncate max-w-[300px]">{it.title || it.file_name}</div>
-                  <div className="text-[10px] text-n100 font-mono">{it.library_item_id}</div>
-                </td>
-                <td className="p-2 text-n700">{it.item_type}</td>
-                <td className="p-2 text-[11px] text-n700">
-                  {(() => {
-                    const u = users.find(x => (x.id || x.user_id) === it.user_id);
-                    return u
-                      ? (<><span className="text-n700">{u.username || u.email}</span><span className="ml-1 text-[9px] text-n100 font-mono">{(it.user_id || '').slice(0, 8)}…</span></>)
-                      : (<span className="font-mono text-n300">{it.user_id}</span>);
-                  })()}
-                </td>
-                <td className="p-2 font-mono text-[10px] text-n300">{it.project_id || '-'}</td>
-                <td className="p-2 text-n700">{it.permission_scope}</td>
-                <td className="p-2">
-                  <button onClick={() => handleDelete(it.library_item_id)} className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r50 text-danger">删除</button>
-                </td>
-              </tr>
-            ))}
-            {!items.length && <tr><td colSpan={6} className="text-center py-6 text-n100">暂无素材</td></tr>}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      <CrmToolbar
+        title="素材库管理"
+        count={items.length}
+        filters={
+          <>
+            <select value={filterUserId} onChange={e => setFilterUserId(e.target.value)}
+                    className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs w-44 focus:border-primary focus:outline-none">
+              <option value="">所有用户</option>
+              {users.map(u => (
+                <option key={u.id || u.user_id} value={u.id || u.user_id}>
+                  {u.username || u.email || u.user_id} · {(u.id || u.user_id || '').slice(0, 8)}…
+                </option>
+              ))}
+            </select>
+            <select value={filterType} onChange={e => setFilterType(e.target.value)}
+                    className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs w-28 focus:border-primary focus:outline-none">
+              <option value="">所有类型</option>
+              <option value="image">图片</option>
+              <option value="video">视频</option>
+              <option value="audio">音频</option>
+              <option value="frame">抽帧</option>
+              <option value="text">文本</option>
+              <option value="other">其他</option>
+            </select>
+          </>
+        }
+        search={{ value: filterKeyword, onChange: setFilterKeyword, placeholder: '搜索标题 / 文件名', onSearch: reload }}
+      />
+      <CrmTable headers={
+        <tr>
+          <th className="text-left font-medium p-2.5">素材</th>
+          <th className="text-left font-medium p-2.5">类型</th>
+          <th className="text-left font-medium p-2.5">所有者</th>
+          <th className="text-left font-medium p-2.5">项目</th>
+          <th className="text-left font-medium p-2.5">权限</th>
+          <th className="text-right font-medium p-2.5">操作</th>
+        </tr>
+      }>
+        {pageRows.map(it => (
+          <tr key={it.library_item_id} className="hover:bg-n10">
+            <td className="p-2.5">
+              <div className="text-n800 truncate max-w-[300px]">{it.title || it.file_name}</div>
+              <div className="text-[10px] text-n100 font-mono">{it.library_item_id}</div>
+            </td>
+            <td className="p-2.5"><CrmTag type="info">{it.item_type}</CrmTag></td>
+            <td className="p-2.5 text-[11px] text-n700">
+              {(() => {
+                const u = users.find(x => (x.id || x.user_id) === it.user_id);
+                return u
+                  ? (<><span className="text-n700">{u.username || u.email}</span><span className="ml-1 text-[9px] text-n100 font-mono">{(it.user_id || '').slice(0, 8)}…</span></>)
+                  : (<span className="font-mono text-n300">{it.user_id}</span>);
+              })()}
+            </td>
+            <td className="p-2.5 font-mono text-[10px] text-n300">{it.project_id || '-'}</td>
+            <td className="p-2.5 text-n700">{it.permission_scope}</td>
+            <td className="p-2.5 text-right">
+              <CrmActionLink type="danger" onClick={() => handleDelete(it.library_item_id)}>删除</CrmActionLink>
+            </td>
+          </tr>
+        ))}
+        {!pageRows.length && <tr><td colSpan={6} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无素材'}</td></tr>}
+      </CrmTable>
+      <CrmPagination total={items.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>
   );
 };
@@ -860,6 +906,8 @@ const AuditLogsTab: React.FC = () => {
   const [adminFilter, setAdminFilter] = useState('');
   const [actionFilter, setActionFilter] = useState('');
 
+  const [page, setPage] = useState(1);
+
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -869,6 +917,7 @@ const AuditLogsTab: React.FC = () => {
       sp.set('limit', '300');
       const r = await apiGet<{ logs: any[] }>(`/api/admin/audit-logs?${sp.toString()}`);
       setLogs(r.logs || []);
+      setPage(1);
     } catch (e: any) {
       console.warn('Slice 5 admin audit-logs 接口或许尚未上线:', e?.message);
       setLogs([]);
@@ -877,41 +926,46 @@ const AuditLogsTab: React.FC = () => {
 
   useEffect(() => { reload(); }, [reload]);
 
+  const pageRows = logs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <input value={adminFilter} onChange={e => setAdminFilter(e.target.value)} placeholder="admin_user_id" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
-        <input value={actionFilter} onChange={e => setActionFilter(e.target.value)} placeholder="action" className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-44" />
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20"><RefreshCw size={12} className={loading ? 'animate-spin' : ''} /></button>
-        <span className="ml-auto text-xs text-n100">{logs.length} 条</span>
-      </div>
-      <div className="overflow-auto border border-n40 rounded">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="text-left p-2">时间</th>
-              <th className="text-left p-2">管理员</th>
-              <th className="text-left p-2">操作</th>
-              <th className="text-left p-2">目标</th>
-              <th className="text-left p-2">IP</th>
-              <th className="text-left p-2">User-Agent</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map(l => (
-              <tr key={l.audit_id} className="border-t border-n40">
-                <td className="p-2 text-n300 text-[10px]">{new Date(l.created_at).toLocaleString('zh-CN')}</td>
-                <td className="p-2 font-mono text-[10px]">{l.admin_user_id}</td>
-                <td className="p-2 text-n700">{l.action}</td>
-                <td className="p-2 font-mono text-[10px] text-n300">{l.target_type}/{l.target_id}</td>
-                <td className="p-2 text-n100 text-[10px]">{l.ip || '-'}</td>
-                <td className="p-2 text-n100 text-[10px] truncate max-w-[200px]">{l.user_agent || '-'}</td>
-              </tr>
-            ))}
-            {!logs.length && <tr><td colSpan={6} className="text-center py-6 text-n100">暂无审计日志</td></tr>}
-          </tbody>
-        </table>
-      </div>
+    <div>
+      <CrmToolbar
+        title="审计日志"
+        count={logs.length}
+        filters={
+          <>
+            <input value={adminFilter} onChange={e => setAdminFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') reload(); }}
+                   placeholder="admin_user_id" className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs w-36 focus:border-primary focus:outline-none" />
+            <input value={actionFilter} onChange={e => setActionFilter(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') reload(); }}
+                   placeholder="action" className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs w-32 focus:border-primary focus:outline-none" />
+          </>
+        }
+        actions={<button onClick={reload} className="p-1.5 rounded border border-n40 bg-n0 hover:bg-n20"><RefreshCw size={13} className={loading ? 'animate-spin text-primary' : 'text-n300'} /></button>}
+      />
+      <CrmTable headers={
+        <tr>
+          <th className="text-left font-medium p-2.5">时间</th>
+          <th className="text-left font-medium p-2.5">管理员</th>
+          <th className="text-left font-medium p-2.5">操作</th>
+          <th className="text-left font-medium p-2.5">目标</th>
+          <th className="text-left font-medium p-2.5">IP</th>
+          <th className="text-left font-medium p-2.5">User-Agent</th>
+        </tr>
+      }>
+        {pageRows.map(l => (
+          <tr key={l.audit_id} className="hover:bg-n10">
+            <td className="p-2.5 text-n300 text-[10px]">{new Date(l.created_at).toLocaleString('zh-CN')}</td>
+            <td className="p-2.5 font-mono text-[10px]">{l.admin_user_id}</td>
+            <td className="p-2.5"><CrmTag type="info">{l.action}</CrmTag></td>
+            <td className="p-2.5 font-mono text-[10px] text-n300">{l.target_type}/{l.target_id}</td>
+            <td className="p-2.5 text-n100 text-[10px]">{l.ip || '-'}</td>
+            <td className="p-2.5 text-n100 text-[10px] truncate max-w-[200px]">{l.user_agent || '-'}</td>
+          </tr>
+        ))}
+        {!pageRows.length && <tr><td colSpan={6} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无审计日志'}</td></tr>}
+      </CrmTable>
+      <CrmPagination total={logs.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>
   );
 };

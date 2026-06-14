@@ -10,7 +10,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Building2, Plus, RefreshCw, Trash2, ChevronDown, ChevronRight, UserPlus, X,
 } from 'lucide-react';
-import { crmMessage, crmConfirm } from './crmUI';
+import {
+  crmMessage, crmConfirm,
+  CrmToolbar, CrmPrimaryButton, CrmTag, CrmActionLink, CrmTable,
+} from './crmUI';
 
 import {
   adminListOrganizations,
@@ -126,147 +129,113 @@ export const AdminOrganizationsTab: React.FC = () => {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 p-3 bg-n0 border border-n40 rounded shadow-card">
-        <Building2 size={14} className="text-primary" />
-        <input
-          value={keyword}
-          onChange={e => setKeyword(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') reload(); }}
-          placeholder="搜索名称 / 描述… (Enter)"
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs w-64 placeholder:text-n100"
-        />
-        <select
-          value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as any)}
-          className="bg-n0 border border-n40 rounded px-2 py-1 text-xs"
-        >
-          <option value="">全部状态</option>
-          <option value="active">active</option>
-          <option value="archived">archived</option>
-        </select>
-        <button onClick={reload} className="p-1.5 rounded bg-n0 hover:bg-n20">
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs"
-        ><Plus size={12} />创建组织</button>
-        <span className="text-xs text-n100">{orgs.length} 个组织</span>
-      </div>
+    <div>
+      <CrmToolbar
+        title="组织管理"
+        count={orgs.length}
+        filters={
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}
+                  className="bg-n0 border border-n40 rounded px-2 py-1.5 text-xs focus:border-primary focus:outline-none">
+            <option value="">全部状态</option>
+            <option value="active">active</option>
+            <option value="archived">archived</option>
+          </select>
+        }
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜索名称 / 描述', onSearch: reload }}
+        actions={<CrmPrimaryButton onClick={() => setShowCreate(true)}><Plus size={13} /> 创建组织</CrmPrimaryButton>}
+      />
 
-      <div className="overflow-auto border border-n40 rounded scrollbar-atlas">
-        <table className="w-full text-xs">
-          <thead className="bg-n0 text-n100">
-            <tr>
-              <th className="w-6"></th>
-              <th className="text-left p-2">组织</th>
-              <th className="text-left p-2">Owner</th>
-              <th className="text-left p-2">成员数</th>
-              <th className="text-left p-2">状态</th>
-              <th className="text-left p-2">创建时间</th>
-              <th className="text-left p-2">操作</th>
+      <CrmTable headers={
+        <tr>
+          <th className="w-6"></th>
+          <th className="text-left font-medium p-2.5">组织</th>
+          <th className="text-left font-medium p-2.5">Owner</th>
+          <th className="text-left font-medium p-2.5">成员数</th>
+          <th className="text-left font-medium p-2.5">状态</th>
+          <th className="text-left font-medium p-2.5">创建时间</th>
+          <th className="text-right font-medium p-2.5">操作</th>
+        </tr>
+      }>
+        {orgs.map(o => (
+          <React.Fragment key={o.org_id}>
+            <tr className="hover:bg-n10">
+              <td className="p-2.5">
+                <button onClick={() => setExpanded(expanded === o.org_id ? null : o.org_id)}
+                        className="text-n100 hover:text-n700">
+                  {expanded === o.org_id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+              </td>
+              <td className="p-2.5">
+                <div className="text-n800 font-medium">{o.name}</div>
+                <div className="text-[10px] text-n100 font-mono">{o.org_id}</div>
+                {o.description && <div className="text-[10px] text-n100">{o.description}</div>}
+              </td>
+              <td className="p-2.5 text-n700">{o.owner_name || o.owner_user_id}</td>
+              <td className="p-2.5 text-n700">{o.member_count ?? '-'}</td>
+              <td className="p-2.5"><CrmTag type={o.status === 'active' ? 'success' : 'default'}>{o.status}</CrmTag></td>
+              <td className="p-2.5 text-n100 text-[10px]">
+                {o.created_at ? new Date(o.created_at).toLocaleString('zh-CN') : '-'}
+              </td>
+              <td className="p-2.5 text-right">
+                <CrmActionLink type="danger" onClick={() => handleDelete(o)}>删除</CrmActionLink>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {orgs.map(o => (
-              <React.Fragment key={o.org_id}>
-                <tr className="border-t border-n40 hover:bg-n20">
-                  <td className="p-2">
-                    <button
-                      onClick={() => setExpanded(expanded === o.org_id ? null : o.org_id)}
-                      className="text-n100 hover:text-n700"
-                    >
-                      {expanded === o.org_id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-                  </td>
-                  <td className="p-2">
-                    <div className="text-n700 font-medium">{o.name}</div>
-                    <div className="text-[10px] text-n100 font-mono">{o.org_id}</div>
-                    {o.description && <div className="text-[10px] text-n100">{o.description}</div>}
-                  </td>
-                  <td className="p-2 text-n700">{o.owner_name || o.owner_user_id}</td>
-                  <td className="p-2 text-n700">{o.member_count ?? '-'}</td>
-                  <td className="p-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                      o.status === 'active'
-                        ? 'bg-success-light text-success'
-                        : 'bg-n30 text-n300'
-                    }`}>{o.status}</span>
-                  </td>
-                  <td className="p-2 text-n100 text-[10px]">
-                    {o.created_at ? new Date(o.created_at).toLocaleString('zh-CN') : '-'}
-                  </td>
-                  <td className="p-2">
-                    <button
-                      onClick={() => handleDelete(o)}
-                      className="px-2 py-0.5 text-[10px] rounded bg-r50 hover:bg-r75 text-danger"
-                    >删除</button>
-                  </td>
-                </tr>
-                {expanded === o.org_id && (
-                  <tr className="bg-n20">
-                    <td colSpan={7} className="p-3">
-                      <MembersPanel orgId={o.org_id} ownerUserId={o.owner_user_id} users={users} />
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-            {!orgs.length && (
-              <tr><td colSpan={7} className="text-center py-6 text-n100">
-                {loading ? '加载中…' : '暂无组织 — 点右上角「创建组织」'}
-              </td></tr>
+            {expanded === o.org_id && (
+              <tr className="bg-n20">
+                <td colSpan={7} className="p-3">
+                  <MembersPanel orgId={o.org_id} ownerUserId={o.owner_user_id} users={users} />
+                </td>
+              </tr>
             )}
-          </tbody>
-        </table>
-      </div>
+          </React.Fragment>
+        ))}
+        {!orgs.length && (
+          <tr><td colSpan={7} className="text-center py-8 text-n100">
+            {loading ? '加载中…' : '暂无组织 — 点右上角「创建组织」'}
+          </td></tr>
+        )}
+      </CrmTable>
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center">
-          <div className="bg-n0 border border-n40 rounded-lg p-4 w-96 space-y-3 shadow-bottom">
-            <div className="flex justify-between items-center">
-              <div className="text-sm font-medium">创建组织</div>
-              <button onClick={() => setShowCreate(false)} className="text-n100"><X size={14} /></button>
+        <div className="fixed inset-0 z-50 bg-n900/40 backdrop-blur-sm flex items-center justify-center"
+             onClick={e => { if (e.target === e.currentTarget) setShowCreate(false); }}>
+          <div className="bg-n0 border border-n40 rounded-lg w-96 shadow-bottom animate-scaleIn">
+            <div className="flex justify-between items-center px-5 pt-4 pb-1">
+              <div className="text-[15px] font-semibold text-n800">创建组织</div>
+              <button onClick={() => setShowCreate(false)} className="text-n100 hover:text-n700"><X className="w-4 h-4" /></button>
             </div>
-            <div>
-              <label className="text-[10px] text-n100 uppercase tracking-wider">组织名称</label>
-              <input
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="例如：内容运营组"
-                className="mt-1 w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm placeholder:text-n100"
-                autoFocus
-              />
+            <div className="px-5 py-3 space-y-3">
+              <div>
+                <label className="block text-xs text-n300 mb-1">组织名称 *</label>
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="例如：内容运营组"
+                       className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" autoFocus />
+              </div>
+              <div>
+                <label className="block text-xs text-n300 mb-1">Owner（成员管理员）*</label>
+                <select value={newOwner} onChange={e => setNewOwner(e.target.value)}
+                        className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none">
+                  <option value="">— 选择 owner —</option>
+                  {users.map(u => (
+                    <option key={u.id || u.user_id} value={u.id || u.user_id}>
+                      {u.username || u.email || u.user_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-n300 mb-1">描述（可选）</label>
+                <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)}
+                          className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm h-20 focus:border-primary focus:outline-none" />
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] text-n100 uppercase tracking-wider">Owner（成员管理员）</label>
-              <select
-                value={newOwner}
-                onChange={e => setNewOwner(e.target.value)}
-                className="mt-1 w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm"
-              >
-                <option value="">— 选择 owner —</option>
-                {users.map(u => (
-                  <option key={u.id || u.user_id} value={u.id || u.user_id}>
-                    {u.username || u.email || u.user_id}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center justify-end gap-2 px-5 pb-4">
+              <button onClick={() => setShowCreate(false)}
+                      className="px-3.5 py-1.5 rounded border border-n40 text-n700 hover:bg-n20 text-sm">取消</button>
+              <button onClick={handleCreate} disabled={submitting}
+                      className="px-3.5 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm disabled:opacity-60">
+                {submitting ? '创建中…' : '确定'}
+              </button>
             </div>
-            <div>
-              <label className="text-[10px] text-n100 uppercase tracking-wider">描述（可选）</label>
-              <textarea
-                value={newDesc}
-                onChange={e => setNewDesc(e.target.value)}
-                className="mt-1 w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-sm h-20 placeholder:text-n100"
-              />
-            </div>
-            <button
-              onClick={handleCreate}
-              disabled={submitting}
-              className="w-full px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white disabled:bg-n0 text-sm"
-            >{submitting ? '创建中…' : '创建'}</button>
           </div>
         </div>
       )}
