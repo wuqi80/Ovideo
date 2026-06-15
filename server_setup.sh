@@ -146,6 +146,17 @@ NGINX
 
 sudo ln -sf /etc/nginx/sites-available/drama /etc/nginx/sites-enabled/drama
 sudo rm -f /etc/nginx/sites-enabled/default
+
+# gzip 压缩前端静态资源（含反代后端的响应）。注意 gzip on 默认已在 nginx.conf 开启，
+# 这里只补 gzip_proxied/gzip_types（默认是注释掉的），不要重复写 gzip on（会 duplicate 报错）。
+sudo tee /etc/nginx/conf.d/gzip.conf > /dev/null <<'GZIP'
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 5;
+gzip_min_length 1024;
+gzip_types text/plain text/css text/javascript application/javascript application/json application/xml image/svg+xml font/woff2;
+GZIP
+
 sudo nginx -t && sudo systemctl restart nginx
 sudo systemctl enable nginx
 

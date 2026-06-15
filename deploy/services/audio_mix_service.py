@@ -24,7 +24,10 @@ from file_service import save_generated_file_to_db
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+# 本文件位于 deploy/services/，项目根是其上两级（deploy/）。
+# 重构移入 services/ 后未上调，曾导致 /storage 路径被解析成 deploy/services/persistent_storage
+# → 混音下载分镜音频报 FileNotFoundError（500）。
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 @dataclass(frozen=True)

@@ -1358,7 +1358,8 @@ async def gemini_text_chat(request: GeminiTextRequest, username: str = Depends(r
             "temperature": request.temperature
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
+        # 用线程池跑阻塞 requests，避免冻住 async 事件循环（单进程下会拖慢所有请求）
+        response = await asyncio.to_thread(requests.post, url, headers=headers, json=payload, timeout=120)
         response.raise_for_status()
         
         result = response.json()
@@ -1490,7 +1491,8 @@ async def gemini_image_generate(request: GeminiImageRequest, username: str = Dep
         if model in ("gemini-3.1-flash-image-preview", "gemini-3-pro-image-preview") and request.imageSize:
             payload["generationConfig"]["imageConfig"]["imageSize"] = request.imageSize
         
-        response = requests.post(url, headers=headers, json=payload, timeout=180)
+        # 用线程池跑阻塞 requests，避免冻住 async 事件循环（出图慢时尤其影响全站）
+        response = await asyncio.to_thread(requests.post, url, headers=headers, json=payload, timeout=180)
         response.raise_for_status()
         
         result = response.json()
@@ -1656,7 +1658,7 @@ async def gpt_image_generate(request: GptImageRequest, username: str = Depends(r
             headers = {"Authorization": f"Bearer {api_key}"}
             url = f"{base_url}/images/edits"
             logger.info(f"🎨 GPT Image edit → tier={tier} model={model} refs={len(ref_files)} size={data['size']} quality={data['quality']}")
-            resp = http_requests.post(url, headers=headers, data=data, files=ref_files, timeout=240)
+            resp = await asyncio.to_thread(http_requests.post, url, headers=headers, data=data, files=ref_files, timeout=240)
         else:
             # ============ 文生图：JSON ============
             payload = {
@@ -1669,7 +1671,7 @@ async def gpt_image_generate(request: GptImageRequest, username: str = Depends(r
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             url = f"{base_url}/images/generations"
             logger.info(f"🎨 GPT Image generate → tier={tier} model={model} size={payload['size']} quality={payload['quality']}")
-            resp = http_requests.post(url, headers=headers, json=payload, timeout=240)
+            resp = await asyncio.to_thread(http_requests.post, url, headers=headers, json=payload, timeout=240)
         
         if resp.status_code >= 400:
             logger.error(f"GPT Image 失败 ({resp.status_code}): {resp.text[:500]}")
@@ -1790,7 +1792,7 @@ async def generate_doubao_images(request: DoubaoImageRequest, username: str = De
             "Content-Type": "application/json",
             "Authorization": f"Bearer {ARK_API_KEY}"
         }
-        resp = requests.post(DOUBAO_ENDPOINT, headers=headers, json=payload, timeout=120)
+        resp = await asyncio.to_thread(requests.post, DOUBAO_ENDPOINT, headers=headers, json=payload, timeout=120)
         if resp.status_code != 200:
             logger.error(f"豆包生成失败: {resp.text}")
             raise HTTPException(status_code=500, detail=f"豆包生成失败: {resp.text[:200]}")
