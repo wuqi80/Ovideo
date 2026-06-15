@@ -432,6 +432,55 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // TDZ，会抛 `Cannot access 'buildPollCallbacks' before initialization`。
     // 实际定义见后文 reattachActiveVideoPollers useEffect。
 
+    // 🔒 双保险：从 DB(video_segments，worker 已落库) 兜底重载已完成视频。
+    // 即使 workspace session 丢失/未及时保存，只要 video_segments.video_url 有值，
+    // 视频页就能恢复出来（再配合美化页本就直接读 video_segments）。按 storyboard_item_id
+    // (=group.ids[0]) 匹配任务组；只补会话里没有的视频，不覆盖用户已有的多个 take。
+    useEffect(() => {
+        if (!episodeId || taskGroups.length === 0) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res: any = await getVideoSegments(episodeId);
+                const byItem: Record<string, string> = {};
+                for (const sg of (res?.segments || [])) {
+                    const item = sg.storyboard_item_id ?? sg.storyboardItemId;
+                    const url = sg.video_url ?? sg.videoUrl;
+                    if (item && url) byItem[item] = url;
+                }
+                if (cancelled || Object.keys(byItem).length === 0) return;
+                const token = localStorage.getItem('auth_token');
+                const bare = (u: any) => (typeof u === 'string' ? u.split('?')[0] : u);
+                setTasksStatus(prev => {
+                    const next = { ...prev };
+                    let changed = false;
+                    for (const g of taskGroups) {
+                        const item = g.ids && g.ids[0];
+                        const raw = item ? byItem[item] : undefined;
+                        if (!raw) continue;
+                        const url = raw.includes('token=') ? raw : raw + (raw.includes('?') ? '&' : '?') + `token=${token}`;
+                        const cur = next[g.uuid] || {};
+                        const curVideos = cur.videos || [];
+                        if (curVideos.some((v: any) => bare(v) === bare(url))) continue; // 已有，跳过
+                        next[g.uuid] = {
+                            ...cur,
+                            state: 'done',
+                            progress: 100,
+                            videos: [...curVideos, url],
+                            result: url,
+                            keepResult: true,
+                        };
+                        changed = true;
+                    }
+                    return changed ? next : prev;
+                });
+            } catch (e) {
+                console.warn('DB 兜底重载 video_segments 失败（不致命）:', e);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [episodeId, taskGroups]);
+
     // 🆕 当页面激活时检查是否有新导出的 video_tasks
     useEffect(() => {
         if (isActive) {
