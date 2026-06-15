@@ -73,7 +73,10 @@ class SeedanceClient:
 
         logger.info(f"Seedance 创建任务: sub_model={sub_model}, contents={len(contents)} 项")
         try:
-            resp = requests.post(self.BASE_URL, headers=self.headers, json=payload, timeout=30)
+            # timeout=(连接, 读/写)。图片以 base64 内联进 body，常达数 MB，且 ARK 在
+            # 中国大陆、本服务在 GCP 香港，跨境上传慢——原 30s 写超时扛不住大图
+            # （实测 3.3MB base64 触发 'write operation timed out'），放大到 180s。
+            resp = requests.post(self.BASE_URL, headers=self.headers, json=payload, timeout=(15, 180))
             if not resp.ok:
                 # 关键：raise_for_status() 只携带 URL，会丢掉 Ark 的错误体。
                 # Ark(OpenAI 兼容)对“模型未开通/无权限/模型名不存在”返回 404 NotFound，
