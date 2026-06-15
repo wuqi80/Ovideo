@@ -131,8 +131,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const [globalModel, setGlobalModel] = usePersistedPageState<videoService.VideoModel>({
         page: 'VideoPage:globalModel',
         episodeId: sessionScope ?? null,
-        version: 1,
-        defaultValue: 'Wan2',
+        // 2026-06-15：默认从 'Wan2'（练气/ComfyUI，需 GPU agent，本部署跑不了）改为
+        // 'HappyHorse'（炼虚，百炼外部 API，支持多参考图，实测稳定出片）。bump version
+        // 让已保存的旧偏好（含历史 episode 选中的飞升）一并重置到新默认。
+        version: 2,
+        defaultValue: 'HappyHorse',
     });
     
     // 拖拽状态
@@ -485,7 +488,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     newGroups.push({
                         uuid: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                         ids: [imgId],
-                        model: 'Wan2',
+                        model: 'HappyHorse',  // 默认炼虚（百炼，可用）；原 'Wan2' 需 GPU agent
                         createdAt: Date.now()
                     });
                 });
@@ -738,7 +741,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 newGroups.push({
                                     uuid: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                                     ids: [imgId],
-                                    model: 'Wan2',
+                                    model: 'HappyHorse',  // 默认炼虚（百炼，可用）；原 'Wan2' 需 GPU agent
                                     createdAt: Date.now()
                                 });
                             });
