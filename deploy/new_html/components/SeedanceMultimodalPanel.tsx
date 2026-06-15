@@ -1,10 +1,11 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Upload, X, AlertCircle, Info, Plus, Maximize2 } from 'lucide-react';
 import {
     SeedanceMediaInput, SeedanceMediaRole, SeedanceParams,
     uploadImage, uploadAudio, uploadVideoFile,
 } from '../services/videoService';
+import { fetchSeedanceOmni } from '../services/apiService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { SeedanceMentionPromptEditor } from './SeedanceMentionPromptEditor';
 import { SeedanceAssetPickerModal } from './SeedanceAssetPickerModal';
@@ -65,6 +66,16 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
         });
         onChange({ ...value, media_inputs: nextInputs });
     }, [mode, value, onChange]);
+
+    // 全能参考(r2v) 仅 Seedance 2.0 支持；账号若只开通 1.0 Pro，后端返回 false，
+    // 此处隐藏「全能参考」按钮并把已是 reference 的卡强制切回首尾帧。开通 2.0 后自动放开。
+    const [omniEnabled, setOmniEnabled] = useState<boolean>(false);
+    useEffect(() => { fetchSeedanceOmni().then(setOmniEnabled); }, []);
+    useEffect(() => {
+        if (!omniEnabled && mode === 'reference' && images.length > 0) {
+            setMode('first_last');
+        }
+    }, [omniEnabled, mode, images.length, setMode]);
 
     const validation = useMemo(() => {
         const hasFirst = images.some(m => m.role === 'first_frame');
@@ -165,6 +176,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
             <div className="flex items-center gap-2 -mt-1">
                 <span className="text-[10px] text-n300 shrink-0">模式</span>
                 <div className="inline-flex rounded-md border border-n40 bg-n30 overflow-hidden text-[10px]">
+                    {omniEnabled && (
                     <button
                         type="button"
                         aria-pressed={mode === 'reference'}
@@ -178,18 +190,19 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                     >
                         全能参考
                     </button>
+                    )}
                     <button
                         type="button"
-                        aria-pressed={mode === 'first_last'}
+                        aria-pressed={mode === 'first_last' || !omniEnabled}
                         onClick={() => setMode('first_last')}
                         disabled={disabled}
                         className={`px-2 py-1 transition-colors ${
-                            mode === 'first_last'
+                            (mode === 'first_last' || !omniEnabled)
                                 ? 'bg-primary text-white'
                                 : 'text-n300 hover:text-primary'
                         }`}
                     >
-                        首尾帧
+                        首尾帧{!omniEnabled && <span className="ml-1 opacity-70">（飞升仅支持）</span>}
                     </button>
                 </div>
             </div>

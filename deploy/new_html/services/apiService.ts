@@ -808,6 +808,24 @@ export async function deleteAudioTrack(trackId: string) {
     return handleResponse(response, 'deleteAudioTrack');
 }
 
+// ===== Video Capabilities =====
+
+// 模块级缓存：所有卡片共享一次查询，避免每个 SeedanceCard 各发一次。
+let _seedanceOmniCache: boolean | null = null;
+let _seedanceOmniPromise: Promise<boolean> | null = null;
+
+/** Seedance「全能参考」是否可用（后端按实际型号判断：仅 2.0 支持，1.0 Pro 不支持）。 */
+export function fetchSeedanceOmni(): Promise<boolean> {
+    if (_seedanceOmniCache !== null) return Promise.resolve(_seedanceOmniCache);
+    if (!_seedanceOmniPromise) {
+        _seedanceOmniPromise = fetch(`${API_BASE}/api/video/capabilities`, { headers: getHeaders() })
+            .then(r => (r.ok ? r.json() : { seedance_omni: false }))
+            .then(j => { _seedanceOmniCache = !!j.seedance_omni; return _seedanceOmniCache; })
+            .catch(() => { _seedanceOmniCache = false; return false; });
+    }
+    return _seedanceOmniPromise;
+}
+
 // ===== Audio Generation APIs =====
 
 export async function generateSpeech(data: {

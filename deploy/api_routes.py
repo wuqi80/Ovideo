@@ -320,6 +320,22 @@ async def get_user_profile(user_id: str = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/api/video/capabilities")
+async def video_capabilities():
+    """前端用于按后端实际能力开关 UI。
+
+    seedance_omni：Seedance「全能参考」(多参考图/r2v) 仅 2.0 支持；当前账号若只开通
+    1.0 Pro，该模式调用会被 ARK 拒（InvalidParameter task_type r2v）。据此让前端隐藏
+    全能参考、只留首尾帧。后续在火山方舟开通 2.0 并把 env SEEDANCE_MODEL_STANDARD
+    指向 2.0 型号后，此处自动返回 true，UI 无需改动。
+    """
+    try:
+        from external_api.video.seedance import SeedanceClient
+        std = (SeedanceClient.MODEL_MAP.get('standard') or '')
+    except Exception:
+        std = ''
+    return {"seedance_omni": ('2-0' in std) or ('2.0' in std)}
+
 # ============================================
 # 项目管理API
 # ============================================
