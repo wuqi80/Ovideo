@@ -6394,7 +6394,8 @@ async def create_user(
                 user = await UserDAO.create_user(
                     username=new_username,
                     password=password,
-                    email=email
+                    email=email,
+                    user_id=new_username,  # user_id 必须 == username（全站资源表外键约定）
                 )
                 logger.info(f"✅ 用户 {new_username} 已创建（ID: {user['user_id'][:12]}...）")
             except Exception as e:

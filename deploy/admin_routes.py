@@ -1105,8 +1105,13 @@ async def admin_create_user(body: AdminUserCreateBody, request: Request):
     existing = await UserDAO.get_user_by_username(body.username)
     if existing:
         raise HTTPException(status_code=400, detail="用户名已存在")
+    # user_id 必须 == username：全站约定如此（get_current_user 返回用户名，
+    # projects/episodes 等资源表 user_id 外键按用户名存）。登录自动建号路径也传
+    # user_id=username。若此处不传，DAO 会生成 user_xxx，导致该用户建项目等
+    # 写库时外键冲突 → 500（前端表现为「新建项目按钮无效」）。
     user = await UserDAO.create_user(
         username=body.username, password=body.password, email=body.email,
+        user_id=body.username,
     )
     if body.role and body.role != 'user':
         await UserDAO.set_role(user['user_id'], body.role)

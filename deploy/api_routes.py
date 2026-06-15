@@ -240,10 +240,14 @@ async def register_user(user_data: UserRegister):
             raise HTTPException(status_code=400, detail="用户名已存在")
         
         # 创建用户
+        # user_id 必须 == username：全站资源表（projects/episodes 等）user_id 外键按
+        # 用户名存，get_current_user 也返回用户名。不传会生成 user_xxx，导致该用户
+        # 建项目等写库外键冲突 500。
         user = await UserDAO.create_user(
             username=user_data.username,
             password=user_data.password,
-            email=user_data.email
+            email=user_data.email,
+            user_id=user_data.username,
         )
         
         return {
