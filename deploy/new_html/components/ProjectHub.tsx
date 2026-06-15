@@ -62,6 +62,7 @@ const ProjectHub: React.FC = () => {
                     memberRole: p.member_role,
                     visibility: p.visibility,
                     groupId: p.group_id,
+                    episodeCount: typeof p.episode_count === 'number' ? p.episode_count : Number(p.episode_count || 0),
                 })));
             }
         } catch (e) {
@@ -132,7 +133,14 @@ const ProjectHub: React.FC = () => {
 
     const handleDelete = async (projectId: string) => {
         setContextMenu(null);
-        if (!await crmConfirm({ title: '删除项目', message: '确定删除此项目？此操作不可撤销。', type: 'danger', confirmText: '删除' })) return;
+        // 删除确认显示项目名 + 集数；有内容时强警告，避免误删真实项目（曾因卡片同名误删）
+        const proj = projects.find(p => p.projectId === projectId);
+        const epCount = proj?.episodeCount ?? 0;
+        const name = proj?.projectName || projectId;
+        const message = epCount > 0
+            ? `⚠️ 项目「${name}」含 ${epCount} 集内容！\n\n删除将永久移除该项目的所有集、分镜、视频段，且不可恢复。\n\n确定要删除这个有内容的项目吗？`
+            : `确定删除空项目「${name}」？（无集内容）此操作不可撤销。`;
+        if (!await crmConfirm({ title: epCount > 0 ? '⚠️ 删除有内容的项目' : '删除空项目', message, type: 'danger', confirmText: epCount > 0 ? `仍要删除（含${epCount}集）` : '删除' })) return;
         try {
             await fetch(`${API_BASE}/api/projects/${projectId}`, {
                 method: 'DELETE',
@@ -306,6 +314,16 @@ const ProjectHub: React.FC = () => {
                                 {/* 项目信息 */}
                                 <h3 className="font-medium text-sm truncate mb-1 flex items-center gap-1.5 text-n800">
                                     <span className="truncate">{p.projectName}</span>
+                                    {/* 内容标识：一眼区分"有内容"和"空项目"，避免误删 */}
+                                    {(p.episodeCount ?? 0) > 0 ? (
+                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-300 font-semibold">
+                                            {p.episodeCount} 集
+                                        </span>
+                                    ) : (
+                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-n30 text-n200 border border-n40">
+                                            空
+                                        </span>
+                                    )}
                                     {/* 2026-05-26 组织管理 MVP — Slice 5: visibility badge */}
                                     {p.visibility && p.visibility !== 'private' && (
                                         <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-b50 text-b400 border border-b75">

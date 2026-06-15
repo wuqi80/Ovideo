@@ -40,21 +40,17 @@ class ProjectDAO:
     async def get_user_projects(user_id: str, include_archived: bool = False) -> List[Dict[str, Any]]:
         """获取用户的所有项目（不返回 settings 大字段以减少传输量）"""
         db = get_db_manager()
-        columns = "id, project_id, user_id, project_name, description, created_at, updated_at, last_accessed_at, is_archived"
-        
-        if include_archived:
-            query = f"""
-                SELECT {columns} FROM projects
-                WHERE user_id = $1
-                ORDER BY last_accessed_at DESC NULLS LAST, created_at DESC
-            """
-        else:
-            query = f"""
-                SELECT {columns} FROM projects
-                WHERE user_id = $1 AND is_archived = FALSE
-                ORDER BY last_accessed_at DESC NULLS LAST, created_at DESC
-            """
-        
+        # episode_count：每个项目的集数。前端用它区分"空项目"和"有内容的项目"，
+        # 并在删除确认里显示，避免误删有内容的项目（identical 命名时尤其重要）。
+        columns = ("p.id, p.project_id, p.user_id, p.project_name, p.description, "
+                   "p.created_at, p.updated_at, p.last_accessed_at, p.is_archived, "
+                   "(SELECT COUNT(*) FROM episodes e WHERE e.project_id = p.project_id) AS episode_count")
+        archived_filter = "" if include_archived else "AND p.is_archived = FALSE"
+        query = f"""
+            SELECT {columns} FROM projects p
+            WHERE p.user_id = $1 {archived_filter}
+            ORDER BY p.last_accessed_at DESC NULLS LAST, p.created_at DESC
+        """
         return await db.fetch(query, user_id)
 
     @staticmethod
@@ -699,7 +695,8 @@ class ProjectMemberDAO:
                    p.created_at, p.updated_at, p.last_accessed_at, p.is_archived,
                    pm.role as member_role, pm.responsibility,
                    u.username as owner_name,
-                   (SELECT COUNT(*) FROM project_members pm2 WHERE pm2.project_id = p.project_id) as member_count
+                   (SELECT COUNT(*) FROM project_members pm2 WHERE pm2.project_id = p.project_id) as member_count,
+                   (SELECT COUNT(*) FROM episodes e WHERE e.project_id = p.project_id) as episode_count
             FROM projects p
             JOIN project_members pm ON p.project_id = pm.project_id AND pm.user_id = $1
             JOIN users u ON p.user_id = u.user_id
