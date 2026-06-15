@@ -34,6 +34,7 @@ import { SeedanceDetailModal } from './video/SeedanceDetailModal';
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
 // DashScopeVideoCard 不再直接 import — 走 DashScopeCardWithCandidates 包装器以注入 mention candidates。
 import { makeDefaultDashScopeParams, type DashScopeVideoParams } from '../services/videoService';
+import { getVideoSegments, createVideoSegment } from '../services/apiService';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import { StoryboardSyncModal, type SyncMode } from './video/StoryboardSyncModal';
@@ -62,6 +63,9 @@ interface VideoPageProps {
     onUpdateNotification?: (id: string, updates: Partial<TaskNotification>) => void;
     isActive?: boolean;
     sessionScope?: string;
+    /** 纯 episodeId（sessionScope 可能带 :scriptId 后缀，不能用于 video-segments API）。
+     *  视频生成完成后需把 video_url 同步进该剧集的 video_segments，美化页才看得到。 */
+    episodeId?: string;
     /** Task 6：上层（VideoGenPage）下传的 storyboard 列表，用于 ↻ 同步分镜弹窗。 */
     storyboardItems?: any[];
     /** Task 6：full_reset 后回到上层重新触发 handleImportAll。 */
@@ -108,6 +112,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     onUpdateNotification,
     isActive = true,
     sessionScope,
+    episodeId,
     storyboardItems = [],
     onRequestReimport,
 }) => {
@@ -1414,9 +1419,46 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return img.filename || img.url.split('/').pop() || '';
     };
     
+    // uuid(任务组) → 真实 video_segments.segment_id 缓存，避免重跑任务重复建 segment 行。
+    const segmentIdByGroupRef = useRef<Record<string, string>>({});
+
+    // 取或建该任务组对应的 video_segment，返回真实 segment_id。
+    // 视频完成后 worker 执行 UPDATE video_segments SET video_url WHERE segment_id=entity_id，
+    // 美化页只读 video_segments.video_url —— 必须传真实 segment_id + episodeId，否则视频进不了美化。
+    const ensureVideoSegmentId = useCallback(async (group: videoService.TaskGroup): Promise<string | null> => {
+        if (!episodeId) return null;
+        if (segmentIdByGroupRef.current[group.uuid]) return segmentIdByGroupRef.current[group.uuid];
+        const sbItemId = (group.ids && group.ids[0]) || '';   // = storyboard_items.item_id
+        const sortOrder = Math.max(0, taskGroups.findIndex(g => g.uuid === group.uuid));
+        try {
+            // 先按 storyboard_item_id 复用现有 segment，避免重复建行
+            if (sbItemId) {
+                const res: any = await getVideoSegments(episodeId);
+                const hit = (res?.segments || []).find((s: any) => (s.storyboard_item_id ?? s.storyboardItemId) === sbItemId);
+                const sid = hit?.segment_id ?? hit?.segmentId;
+                if (sid) { segmentIdByGroupRef.current[group.uuid] = sid; return sid; }
+            }
+            const created: any = await createVideoSegment(episodeId, {
+                storyboard_item_id: sbItemId || null,
+                sort_order: sortOrder,
+                generation_mode: 'i2v',
+                model: group.model,
+            });
+            const sid = created?.segment?.segment_id ?? created?.segment?.segmentId;
+            if (sid) { segmentIdByGroupRef.current[group.uuid] = sid; return sid; }
+        } catch (e) {
+            console.warn('取/建 video_segment 失败（视频仍会生成，但可能进不了美化）:', e);
+        }
+        return null;
+    }, [episodeId, taskGroups]);
+
     const runTask = useCallback(async (uuid: string) => {
         const group = taskGroups.find(g => g.uuid === uuid);
         if (!group) return;
+
+        // 提交前先拿到真实 segment_id（取或建），供下方各分支作为 entity_id 写回 video_segments。
+        const segmentId = await ensureVideoSegmentId(group);
+        const entityId = segmentId || uuid;  // 拿不到 episodeId 时回退 uuid（至少不报错）
 
         // ==================== Seedance 2.0 早期分支 ====================
         // 飞升/渡劫 走多模态面板（params.media_inputs），完全跳过 prepareImage / submitTaskQueued
@@ -1451,9 +1493,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 console.log('Seedance 2.0 提交:', { uuid, sub_model: params.sub_model, media: params.media_inputs.length, prompt: params.prompt.substring(0, 40) });
                 const result = await videoService.submitSeedanceTask(params, {
                     entity_type: 'video_segment',
-                    entity_id: uuid,
+                    entity_id: entityId,
                     file_role: 'video',
-                    episode_id: undefined,
+                    episode_id: episodeId,
                 });
                 console.log('Seedance 任务提交成功:', result.task_id);
                 showToast('任务已提交');
@@ -1502,9 +1544,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 console.log('DashScope 视频任务提交:', { uuid, model: group.model, media: images.length, prompt: (params.prompt || '').substring(0, 40) });
                 const result = await videoService.submitDashScopeVideoTask(params, {
                     entity_type: 'video_segment',
-                    entity_id: uuid,
+                    entity_id: entityId,
                     file_role: 'video',
-                    episode_id: undefined,
+                    episode_id: episodeId,
                 });
                 console.log('DashScope 任务提交成功:', result.task_id);
                 showToast('任务已提交');
@@ -1580,10 +1622,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 group.shotType || 'multi',
                 {
                     entity_type: 'video_segment',
-                    entity_id: uuid,
+                    entity_id: entityId,
                     file_role: 'video',
-                    // TODO: episodeId 暂不可用，需从父组件传入
-                    episode_id: undefined,
+                    episode_id: episodeId,
                 }
             );
             
@@ -1599,7 +1640,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 [uuid]: { ...prev[uuid], state: 'failed', error: error.message }
             }));
         }
-    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams]);
+    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId]);
     
     // 2026-05-20 (M2)：startPolling 完全交给 videoTaskPoller。
     //   - 同 uuid 重复提交安全（poller 内部去重）

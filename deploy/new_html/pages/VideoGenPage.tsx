@@ -398,6 +398,7 @@ export const VideoGenPage: React.FC = () => {
         <VideoPage
           isActive={true}
           sessionScope={sessionScope}
+          episodeId={episodeId || ''}
           storyboardItems={allStoryboardItems}
           onRequestReimport={handleImportAll}
           key={`${sessionScope}-${importDone}`}
