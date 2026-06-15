@@ -334,7 +334,20 @@ async def video_capabilities():
         std = (SeedanceClient.MODEL_MAP.get('standard') or '')
     except Exception:
         std = ''
-    return {"seedance_omni": ('2-0' in std) or ('2.0' in std)}
+    # comfyui_available：是否有 ComfyUI agent 在线（GPU 节点类任务如 upscale 放大、
+    # ComfyUI 工作流依赖它）。AGENT_ONLY_MODE 下后端不自带 GPU，无 agent 时这些
+    # 必失败 → 前端据此禁用「放大」等按钮，避免点了必然报错。
+    comfyui_available = False
+    try:
+        from dao_agent import AgentDAO
+        online = await AgentDAO.get_online_agents()
+        comfyui_available = bool(online)
+    except Exception:
+        comfyui_available = False
+    return {
+        "seedance_omni": ('2-0' in std) or ('2.0' in std),
+        "comfyui_available": comfyui_available,
+    }
 
 # ============================================
 # 项目管理API

@@ -826,6 +826,20 @@ export function fetchSeedanceOmni(): Promise<boolean> {
     return _seedanceOmniPromise;
 }
 
+// ComfyUI agent 是否在线（GPU 节点类任务如 upscale 放大需要它；无则前端禁用相关按钮）。
+let _comfyAvailCache: boolean | null = null;
+let _comfyAvailPromise: Promise<boolean> | null = null;
+export function fetchComfyuiAvailable(): Promise<boolean> {
+    if (_comfyAvailCache !== null) return Promise.resolve(_comfyAvailCache);
+    if (!_comfyAvailPromise) {
+        _comfyAvailPromise = fetch(`${API_BASE}/api/video/capabilities`, { headers: getHeaders() })
+            .then(r => (r.ok ? r.json() : { comfyui_available: false }))
+            .then(j => { _comfyAvailCache = !!j.comfyui_available; return _comfyAvailCache; })
+            .catch(() => { _comfyAvailCache = false; return false; });
+    }
+    return _comfyAvailPromise;
+}
+
 // ===== Audio Generation APIs =====
 
 export async function generateSpeech(data: {

@@ -11,6 +11,7 @@ import type { VideoSegment, StoryboardItemDB } from '../types';
 // 到 taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
 // dub / lipSync）后端目前没 worker，明确提示用户而非用假进度误导。
 import * as videoService from '../services/videoService';
+import { fetchComfyuiAvailable } from '../services/apiService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
 
 interface MediaClip {
@@ -57,6 +58,10 @@ export const EnhancePage: React.FC = () => {
   const [dubVoiceStyle, setDubVoiceStyle] = useState<'neutral' | 'dramatic' | 'soft'>('neutral');
   const [processing, setProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
+  // GPU 类增强（放大/补帧/对口型）依赖 ComfyUI agent；无 agent 时禁用，避免点了必失败。
+  // 默认 true 避免加载瞬间误禁；确认无 agent 后置 false。配音(dub)走外部 API，不受影响。
+  const [comfyAvailable, setComfyAvailable] = useState<boolean>(true);
+  useEffect(() => { fetchComfyuiAvailable().then(setComfyAvailable); }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
@@ -255,6 +260,12 @@ export const EnhancePage: React.FC = () => {
   }, [reload]);
 
   const applyEnhancement = useCallback(async () => {
+    // GPU 类增强（放大/补帧/对口型）无 ComfyUI agent 时直接拦下，给清晰提示（双保险，
+    // 按钮已禁用，这里防止意外触发）。
+    if (enhancementKind !== 'dub' && !comfyAvailable) {
+      alert('该功能需要 GPU 节点（ComfyUI agent），当前 Agent-Only 模式下无在线 agent，暂不可用。\n\n请连接 ComfyUI agent 后再用，或使用不依赖 GPU 的功能。');
+      return;
+    }
     // === interpolate / dub / lipSync：后端目前没 worker ===
     if (enhancementKind !== 'upscale') {
       const labelMap: Record<EnhancementKind, string> = {
@@ -322,7 +333,7 @@ export const EnhancePage: React.FC = () => {
       setProcessProgress(0);
       alert(`提交放大任务失败：${e?.message || e}`);
     }
-  }, [enhancementKind, videoUnderPlayhead, videoClips, selectedClipId, targetResolution, projectId, episodeId, reload]);
+  }, [enhancementKind, videoUnderPlayhead, videoClips, selectedClipId, targetResolution, projectId, episodeId, reload, comfyAvailable]);
 
   return (
     <div className="flex flex-col h-full bg-n20 text-n800 overflow-hidden">
@@ -403,16 +414,19 @@ export const EnhancePage: React.FC = () => {
                       : opt.kind === 'lipSync' ? 'lipSync' as const
                       : opt.kind as 'upscale' | 'interpolate';
                     const checked = settingsKey ? (selectedClip.settings?.[settingsKey] ?? false) : false;
+                    // GPU 类增强（有 settingsKey 的 放大/补帧/对口型）无 ComfyUI agent 时锁定
+                    const gpuLocked = settingsKey !== null && !comfyAvailable;
 
                     return (
                       <label
                         key={opt.kind}
-                        className="flex items-center justify-between p-3 bg-n0 rounded-lg border border-n40 cursor-pointer hover:border-primary transition-all"
+                        className={`flex items-center justify-between p-3 bg-n0 rounded-lg border border-n40 transition-all ${gpuLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary'}`}
+                        title={gpuLocked ? '需 GPU 节点（ComfyUI agent），当前无在线 agent' : ''}
                       >
                         <div className="flex items-center gap-2.5">
                           <opt.Icon size={16} className="text-primary" />
                           <div>
-                            <div className="text-sm font-medium">{opt.label}</div>
+                            <div className="text-sm font-medium">{opt.label}{gpuLocked && <span className="ml-1 text-[10px] text-amber-600">需 GPU</span>}</div>
                             <div className="text-[11px] text-n100">{opt.desc}</div>
                           </div>
                         </div>
@@ -420,8 +434,9 @@ export const EnhancePage: React.FC = () => {
                           <input
                             type="checkbox"
                             checked={checked}
+                            disabled={gpuLocked}
                             onChange={e => updateClipSettings({ [settingsKey]: e.target.checked })}
-                            className="rounded bg-n0 border-n40 text-primary w-4 h-4"
+                            className="rounded bg-n0 border-n40 text-primary w-4 h-4 disabled:cursor-not-allowed"
                           />
                         ) : (
                           <button
@@ -472,7 +487,7 @@ export const EnhancePage: React.FC = () => {
 
                 <button
                   onClick={() => void applyEnhancement()}
-                  disabled={processing}
+                  disabled={processing || (enhancementKind !== 'dub' && !comfyAvailable)}
                   className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {processing ? (
@@ -481,6 +496,12 @@ export const EnhancePage: React.FC = () => {
                     <><Wand2 size={14} /> 提交处理任务</>
                   )}
                 </button>
+                {enhancementKind !== 'dub' && !comfyAvailable && (
+                  <div className="text-[11px] text-amber-600 text-center mt-1.5 leading-snug">
+                    「{ENHANCE_OPTIONS.find(o => o.kind === enhancementKind)?.label}」需 GPU 节点（ComfyUI agent），
+                    当前无在线 agent，暂不可用。
+                  </div>
+                )}
               </>
             ) : (
               <div className="text-sm text-n100 text-center py-10">
