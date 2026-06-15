@@ -121,6 +121,63 @@ export function stripDialogueMarkers(s: string): string {
         .trim();
 }
 
+const QUOTE_PAIRS: Array<[string, string]> = [
+    ['「', '」'], ['『', '』'], ['“', '”'], ['‘', '’'],
+    ['"', '"'], ["'", "'"], ['【', '】'], ['《', '》'],
+];
+
+/** 去掉成对包裹的引号（支持多层），如 「「内容」」 / "内容" → 内容 */
+function stripWrappingQuotes(s: string): string {
+    let t = (s || '').trim();
+    let changed = true;
+    while (changed && t.length >= 2) {
+        changed = false;
+        for (const [l, r] of QUOTE_PAIRS) {
+            if (t.startsWith(l) && t.endsWith(r) && t.length > l.length + r.length - 1) {
+                t = t.slice(l.length, t.length - r.length).trim();
+                changed = true;
+                break;
+            }
+        }
+    }
+    return t;
+}
+
+/**
+ * 从一行台词里提取「说话人」与「实际朗读内容」，供 TTS 使用。
+ *
+ * 例：`小悟：「别跟我说话……」` → { speaker:'小悟', text:'别跟我说话……' }
+ *
+ * 规则：① 优先匹配已知角色名/旁白前缀；② 兜底匹配任意「名字：」前缀（名字≤10 字、
+ * 不含引号/冒号/空白）；③ 去掉成对包裹引号。这样 TTS 只念引号内的台词，而不会把
+ * 「小悟：」和引号也念出来。解析为空时回退原文，绝不丢内容。
+ */
+export function extractSpokenDialogue(
+    raw: string,
+    charNames: string[] = [],
+): { speaker: string; text: string } {
+    const original = (raw || '').trim();
+    let speaker = '';
+    let text = original;
+    // ① 已知角色名 / 旁白前缀
+    for (const name of [...charNames, '旁白']) {
+        if (name && original.startsWith(name)) {
+            speaker = name;
+            text = original.slice(name.length).replace(/^[：:，,\s]+/, '');
+            break;
+        }
+    }
+    // ② 兜底：任意「名字：」前缀（仅当未匹配到已知角色名）
+    if (!speaker) {
+        const m = text.match(/^([^：:「」『』“”‘’"'【】《》\s]{1,10})[：:]\s*/);
+        if (m) { speaker = m[1]; text = text.slice(m[0].length); }
+    }
+    // ③ 去掉包裹引号
+    text = stripWrappingQuotes(text);
+    if (!text) { speaker = ''; text = original; }  // 解析空了：回退原文，不丢内容
+    return { speaker, text };
+}
+
 const STORYBOARD_LABELS: Array<{ key: keyof ExtractedStoryboardPrompt | 'shotNoRaw' | 'charactersRaw'; label: RegExp }> = [
     { key: 'shotNoRaw', label: /^镜头号\s*[:：]\s*(.*)$/ },
     { key: 'shotSize', label: /^景别\s*[:：]\s*(.*)$/ },

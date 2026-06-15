@@ -31,7 +31,7 @@ function resolveMinimaxVoiceId(modelId?: string | null): string {
   return LEGACY_VOICE_ALIAS[raw] || raw;
 }
 import { parseBoundAssetTags } from '../utils/episodeAdapters';
-import { stripDialogueMarkers } from '../utils/scriptPipelineParsers';
+import { stripDialogueMarkers, extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import { VoiceSidebar } from '../components/audio/VoiceSidebar';
 import { DubbingPanel, type DubbingPanelHandle } from '../components/audio/DubbingPanel';
 import { MultiTrackTimeline } from '../components/audio/MultiTrackTimeline';
@@ -148,17 +148,11 @@ export const AudioStagePage: React.FC = () => {
       const boundAssets = Array.isArray(item.boundAssets) ? item.boundAssets : [];
       const { charNames } = parseBoundAssetTags(boundAssets);
 
-      let speaker = '';
-      let text = raw;
-      const candidates = [...charNames, '旁白'];
-      for (const name of candidates) {
-        if (raw.startsWith(name)) {
-          speaker = name;
-          text = raw.slice(name.length).replace(/^[：:，,\s]+/, '').trim() || raw;
-          break;
-        }
-      }
-      if (!speaker) speaker = charNames[0] || '旁白';
+      // 提取说话人 + 实际朗读内容：剥掉「名字：」前缀和包裹引号，TTS 只念台词本身。
+      // 例：小悟：「别跟我说话……」→ speaker=小悟, text=别跟我说话……
+      const parsed = extractSpokenDialogue(raw, charNames);
+      let text = parsed.text;
+      let speaker = parsed.speaker || charNames[0] || '旁白';
 
       const type = speaker === '旁白' ? 'narration' as const : 'dialogue' as const;
       const audioField = type === 'narration' ? item.narrationAudioUrl : item.dialogueAudioUrl;
