@@ -13,9 +13,13 @@ logger = logging.getLogger(__name__)
 class SeedanceClient:
     BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
 
+    # 2026-06-15：账号 2101702750 未开通 Seedance 2.0（doubao-seedance-2-0-260128 实测
+    # ModelNotOpen 404），但已开通 Seedance 1.0 Pro（doubao-seedance-1-0-pro-250528 实测 200）。
+    # 默认指向 1.0 Pro 让飞升/渡劫可用；后续若在火山方舟开通 2.0，设 env
+    # SEEDANCE_MODEL_STANDARD / SEEDANCE_MODEL_FAST 覆盖即可，无需改代码。
     MODEL_MAP = {
-        'standard': 'doubao-seedance-2-0-260128',
-        'fast':     'doubao-seedance-2-0-fast-260128',
+        'standard': os.getenv('SEEDANCE_MODEL_STANDARD', 'doubao-seedance-1-0-pro-250528'),
+        'fast':     os.getenv('SEEDANCE_MODEL_FAST', 'doubao-seedance-1-0-pro-250528'),
     }
 
     def __init__(self, api_key: Optional[str] = None):
