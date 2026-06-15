@@ -2115,9 +2115,30 @@ class Worker:
         if not fp.exists():
             raise FileNotFoundError(f"{label} 物理文件不存在: {fp}")
         data = fp.read_bytes()
+        mime = file_record.get('mime_type') or 'image/png'
+        # 大图压缩：图片以 base64 内联进请求体，跨境上传 ARK/百炼时体积是瓶颈
+        # （3-6MB 常触发 write timeout / 批量更慢）。缩到长边≤1536 并重压 JPEG，
+        # 体积降到几百 KB，上传快且稳；视频首帧/参考图这个分辨率足够。失败则用原图。
+        if mime.startswith('image/') and len(data) > 800 * 1024:
+            try:
+                from PIL import Image
+                import io as _io
+                img = Image.open(_io.BytesIO(data)).convert('RGB')
+                w, h = img.size
+                longest = max(w, h)
+                if longest > 1536:
+                    scale = 1536 / longest
+                    img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+                buf = _io.BytesIO()
+                img.save(buf, format='JPEG', quality=85)
+                new_data = buf.getvalue()
+                if new_data and len(new_data) < len(data):
+                    logger.info(f"📦 {label} 压缩 {len(data)}→{len(new_data)} bytes (长边≤1536/JPEG)")
+                    data, mime = new_data, 'image/jpeg'
+            except Exception as e:
+                logger.warning(f"{label} 图片压缩失败，用原图: {e}")
         if len(data) > 20 * 1024 * 1024:
             raise ValueError(f"{label} 过大 {len(data)} bytes (DashScope 限制 20MB)")
-        mime = file_record.get('mime_type') or 'image/png'
         b64 = base64.b64encode(data).decode('utf-8')
         logger.info(f"📦 DashScope {label}: {fp.name} → Base64 {len(data)} bytes")
         return f"data:{mime};base64,{b64}"
