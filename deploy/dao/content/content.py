@@ -48,7 +48,7 @@ class ProjectDAO:
         archived_filter = "" if include_archived else "AND p.is_archived = FALSE"
         query = f"""
             SELECT {columns} FROM projects p
-            WHERE p.user_id = $1 {archived_filter}
+            WHERE p.user_id = $1 AND p.is_deleted IS NOT TRUE {archived_filter}
             ORDER BY p.last_accessed_at DESC NULLS LAST, p.created_at DESC
         """
         return await db.fetch(query, user_id)
@@ -169,37 +169,29 @@ class ProjectDAO:
     
     @staticmethod
     async def delete_project(project_id: str, user_id: str):
-        """删除项目"""
+        """软删除项目：仅标记 is_deleted=TRUE，保留所有版本/集/分镜/视频段/文件，可恢复。
+
+        2026-06-15：原实现硬删除项目并级联删除集/分镜/视频段（不可恢复），曾导致用户
+        误删后真实项目内容全丢。改为软删除——列表过滤掉已删项目，但数据完整保留，
+        可随时 restore_project 恢复。
+        """
         db = get_db_manager()
-        
-        # 软删除所有相关文件
         await db.execute("""
-            UPDATE files
+            UPDATE projects
             SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
-            WHERE user_id = $1 AND version_id IN (
-                SELECT version_id FROM versions WHERE project_id = $2
-            )
-        """, user_id, project_id)
-        
-        # 软删除所有相关文本
-        await db.execute("""
-            UPDATE text_contents
-            SET is_deleted = TRUE
-            WHERE user_id = $1 AND version_id IN (
-                SELECT version_id FROM versions WHERE project_id = $2
-            )
-        """, user_id, project_id)
-        
-        # 删除所有版本
-        await db.execute("""
-            DELETE FROM versions WHERE project_id = $1
-        """, project_id)
-        
-        # 删除项目
-        await db.execute("""
-            DELETE FROM projects WHERE project_id = $1 AND user_id = $2
+            WHERE project_id = $1 AND user_id = $2
         """, project_id, user_id)
-    
+
+    @staticmethod
+    async def restore_project(project_id: str, user_id: str):
+        """恢复软删除的项目。"""
+        db = get_db_manager()
+        await db.execute("""
+            UPDATE projects
+            SET is_deleted = FALSE, deleted_at = NULL
+            WHERE project_id = $1 AND user_id = $2
+        """, project_id, user_id)
+
     @staticmethod
     async def archive_project(project_id: str, user_id: str):
         """归档项目"""
@@ -700,7 +692,7 @@ class ProjectMemberDAO:
             FROM projects p
             JOIN project_members pm ON p.project_id = pm.project_id AND pm.user_id = $1
             JOIN users u ON p.user_id = u.user_id
-            WHERE 1=1 {archive_filter}
+            WHERE p.is_deleted IS NOT TRUE {archive_filter}
             ORDER BY p.last_accessed_at DESC NULLS LAST, p.updated_at DESC
         """
         return await db.fetch(query, user_id)
