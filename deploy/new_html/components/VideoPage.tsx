@@ -844,7 +844,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             dashscope_params: dashScopeParamsByUuid as any,
         } as any, sessionScope);
     }, [taskGroups, uploadedImages, imagePrompts, tasksStatus, sessionScope, seedanceParamsByUuid, storyboardMetaByItemId, dashScopeParamsByUuid]);
-    
+
+    // 始终指向最新 saveSession，供 video 完成回调等"非 deps 闭包"立即持久化时用，
+    // 避免 React 闭包陈旧（直接调旧 saveSession 会漏掉刚写入的视频）。
+    const saveSessionRef = useRef(saveSession);
+    saveSessionRef.current = saveSession;
+
     useEffect(() => {
         const timer = setTimeout(() => {
             if (taskGroups.length > 0 || uploadedImages.length > 0) {
@@ -1636,6 +1641,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 };
             });
 
+            // 🔒 关键：完成后立即持久化，不等 2s debounce。否则刚生成的视频在
+            // 自动刷新/整页重载时（会话仍是完成前的旧快照）会丢失。用 ref 拿最新
+            // saveSession（含刚写入的 videos），延后到 state 提交后再存。
+            setTimeout(() => { try { saveSessionRef.current?.(); } catch {} }, 250);
+
             // 兼容旧 WorkspaceApp 通知系统（M5 持久化任务列表后可移除）
             if (onAddNotification) {
                 onAddNotification({
@@ -2420,7 +2430,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         onChange={(e) => updateTaskModel(group.uuid, e.target.value as videoService.VideoModel)}
                         className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer"
                     >
-                        {videoService.ALL_MODELS.map(m => (
+                        {(videoService.SELECTABLE_MODELS.includes(group.model)
+                            ? videoService.SELECTABLE_MODELS
+                            : [group.model, ...videoService.SELECTABLE_MODELS]
+                        ).map(m => (
                             <option key={m} value={m}>{videoService.getModelDisplayName(m)}</option>
                         ))}
                     </select>

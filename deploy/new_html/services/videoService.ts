@@ -829,6 +829,14 @@ export const ALL_MODELS: VideoModel[] = [
     'Kling', 'Vidu', 'HappyHorse',
 ];
 
+// 2026-06-15：下拉只放开实测可用的模型，临时屏蔽：
+//   - Wan2/一阶~七阶（ComfyUI 档，需 GPU agent，本部署无）
+//   - Veo(筑基) / Sora2(化神)（laozhang 上游持续 503）
+// 上游恢复 / 接入 GPU agent 后，把对应项加回此列表即可。炼虚为默认，放首位。
+export const SELECTABLE_MODELS: VideoModel[] = [
+    'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI',
+];
+
 /**
  * 格式化时间
  */
