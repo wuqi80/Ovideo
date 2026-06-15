@@ -450,15 +450,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 }
                 if (cancelled || Object.keys(byItem).length === 0) return;
                 const token = localStorage.getItem('auth_token');
-                const bare = (u: any) => (typeof u === 'string' ? u.split('?')[0] : u);
+                // 归一化用于去重：去掉 ?query 和 origin，让 onComplete 存的绝对 URL
+                // 与本处 DB 的相对 URL 能对齐（否则同一视频会被重复加入 → 出现两个）。
+                const bare = (u: any) => (typeof u === 'string'
+                    ? u.split('?')[0].replace(/^https?:\/\/[^/]+/, '')
+                    : u);
                 setTasksStatus(prev => {
                     const next = { ...prev };
                     let changed = false;
                     for (const g of taskGroups) {
                         const item = g.ids && g.ids[0];
-                        const raw = item ? byItem[item] : undefined;
-                        if (!raw) continue;
-                        const url = raw.includes('token=') ? raw : raw + (raw.includes('?') ? '&' : '?') + `token=${token}`;
+                        const raw0 = item ? byItem[item] : undefined;
+                        if (!raw0) continue;
+                        // 与 onComplete 一致：相对路径补成绝对 URL，再附 token
+                        const absUrl = raw0.startsWith('http') ? raw0 : `${window.location.origin}${raw0}`;
+                        const url = absUrl.includes('token=') ? absUrl : absUrl + (absUrl.includes('?') ? '&' : '?') + `token=${token}`;
                         const cur = next[g.uuid] || {};
                         const curVideos = cur.videos || [];
                         if (curVideos.some((v: any) => bare(v) === bare(url))) continue; // 已有，跳过
