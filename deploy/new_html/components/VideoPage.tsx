@@ -105,6 +105,27 @@ const InsertEmptyCardSpacer: React.FC = () => (
     </button>
 );
 
+// 视频 URL 归一化键：去掉 ?query 和 origin，按路径/文件名比较。
+// 同一视频不论绝对(onComplete)还是相对(DB兜底/会话)形式都判为同一个。
+const normVideoKey = (u: any): any =>
+    typeof u === 'string' ? u.split('?')[0].replace(/^https?:\/\/[^/]+/, '') : u;
+
+// 对 videos 与并行的 videoGenerateTimes 同步去重（保留首次），修复同一视频被
+// onComplete/DB兜底/会话恢复重复追加导致"一个镜头两个一模一样"的问题。
+function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; times: any[] } {
+    const seen = new Set<any>();
+    const v: any[] = [];
+    const t: any[] = [];
+    for (let i = 0; i < (videos || []).length; i++) {
+        const k = normVideoKey(videos[i]);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        v.push(videos[i]);
+        t.push(times ? times[i] : undefined);
+    }
+    return { videos: v, times: t };
+}
+
 // ==================== 主组件 ====================
 
 export const VideoPage: React.FC<VideoPageProps> = ({ 
@@ -703,17 +724,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 Object.entries(session.tasks_status || {}).forEach(([uuid, status]) => {
                     if (!validGroupUuids.has(uuid)) return;
                     
-                    const videos = (status.videos || []).map(url => {
+                    const videosRaw = (status.videos || []).map(url => {
                         if (typeof url === 'string' && url && !url.includes('token=')) {
                             return url + (url.includes('?') ? '&' : '?') + `token=${token}`;
                         }
                         return url;
                     });
+                    // 去重：旧会话可能已存了重复视频（历史 bug 落盘的），恢复时清掉
+                    const dd = dedupVideosWithTimes(videosRaw, status.videoGenerateTimes || []);
+                    const videos = dd.videos;
                     let result = status.result || '';
                     if (result && !result.includes('token=')) {
                         result = result + (result.includes('?') ? '&' : '?') + `token=${token}`;
                     }
-                    statusWithToken[uuid] = { ...status, videos, result };
+                    statusWithToken[uuid] = { ...status, videos, videoGenerateTimes: dd.times, result };
                     
                     if (status.state === 'pending' && status.taskId) {
                         pendingTaskIds.push({ uuid, taskId: status.taskId });
@@ -1720,8 +1744,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 const oldStatus = prev[uuid] || {};
                 const oldVideos = oldStatus.videos || [];
                 const oldTimes = oldStatus.videoGenerateTimes || [];
-                const allVideos = [...oldVideos, ...videos].slice(-12);
-                const allTimes = [...oldTimes, ...videoTimes].slice(-12);
+                // 去重：oldVideos 里可能已有同一视频（DB兜底/会话恢复加过），盲目追加会出现两个一模一样
+                const deduped = dedupVideosWithTimes([...oldVideos, ...videos], [...oldTimes, ...videoTimes]);
+                const allVideos = deduped.videos.slice(-12);
+                const allTimes = deduped.times.slice(-12);
 
                 return {
                     ...prev,
