@@ -71,7 +71,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   
   // Batch Selection — 多选 Set 不持久化（运行时态，刷新清空合理）
   const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set());
-  
+  // 分镜列表默认只渲染前 N 个，避免镜头很多时（如 70+）一次性渲染卡顿；点"展开更多"按需加载
+  const SHOT_PAGE_SIZE = 20;
+  const [visibleShotCount, setVisibleShotCount] = useState<number>(SHOT_PAGE_SIZE);
+
   // Configuration State
   const [prompt, setPrompt] = useState<string>('');
   const [references, setReferences] = useState<GenerationReference[]>([]);
@@ -438,6 +441,16 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           setSelectedShotId(items[0].id);
       }
   }, [selectedFile, selectedShotId]);
+
+  // 选中的镜头若超出当前折叠范围（如从底部时间轴点选了靠后的镜头），自动展开到能显示它
+  useEffect(() => {
+      const items = selectedFile?.storyboard?.items;
+      if (!items?.length || !selectedShotId) return;
+      const idx = items.findIndex(s => s.id === selectedShotId);
+      if (idx >= visibleShotCount) {
+          setVisibleShotCount(Math.ceil((idx + 1) / SHOT_PAGE_SIZE) * SHOT_PAGE_SIZE);
+      }
+  }, [selectedShotId, selectedFile, visibleShotCount]);
 
 
   // 任务恢复：页面加载时检查 localStorage 中未完成的任务，恢复轮询
@@ -1945,7 +1958,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
              className="pt-[52px] border-r border-n40 bg-n0 flex flex-col z-10 flex-shrink-0 relative"
           >
                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
-                   {hasStoryboard && selectedFile?.storyboard?.items.map((item, index) => {
+                   {hasStoryboard && selectedFile?.storyboard?.items.slice(0, visibleShotCount).map((item, index) => {
                        const isSelected = item.id === selectedShotId;
                        const hasImage = (item.generatedImages && item.generatedImages.length > 0) || !!item.generatedImage;
                        const isChecked = selectedShotIds.has(item.id);
@@ -2059,6 +2072,23 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                            </div>
                        );
                    })}
+                   {/* 分批加载：镜头很多时默认只显示前 N 个，避免卡顿 */}
+                   {hasStoryboard && (selectedFile?.storyboard?.items.length || 0) > visibleShotCount && (
+                       <button
+                           onClick={() => setVisibleShotCount(c => c + SHOT_PAGE_SIZE)}
+                           className="w-full py-2 my-1 text-xs font-medium text-primary bg-primary-light/50 hover:bg-primary-light rounded-lg border border-primary/20 transition-colors"
+                       >
+                           展开更多（还有 {(selectedFile?.storyboard?.items.length || 0) - visibleShotCount} 个镜头）
+                       </button>
+                   )}
+                   {hasStoryboard && visibleShotCount > SHOT_PAGE_SIZE && (
+                       <button
+                           onClick={() => setVisibleShotCount(SHOT_PAGE_SIZE)}
+                           className="w-full py-1.5 text-[11px] text-n300 hover:text-n800 hover:bg-n20 rounded-lg transition-colors"
+                       >
+                           收起（只看前 {SHOT_PAGE_SIZE} 个）
+                       </button>
+                   )}
                </div>
                {/* Drag Handle */}
                <div
