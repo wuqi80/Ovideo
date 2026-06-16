@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { VideoPage } from '../components/VideoPage';
-import { ArrowRight, Film, Loader, Image as ImageIcon, Upload } from 'lucide-react';
+import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
 import * as videoService from '../services/videoService';
 import { estimateDurationMs } from '../utils/durationMapping';
 import { updateStoryboardItem as apiUpdateStoryboardItem } from '../services/apiService';
@@ -33,6 +33,11 @@ export const VideoGenPage: React.FC = () => {
   const [importDone, setImportDone] = useState(false);
   const [importMsg, setImportMsg] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const autoImported = useRef(false);
+  // 分镜图改了之后，视频页用的是缓存会话里的旧图——这里检测差异并提供"非破坏性同步"
+  // （只更新变化的图片 URL + 参考图，保留任务组和已生成视频），同步后重挂载 VideoPage 刷新。
+  const [syncNonce, setSyncNonce] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [changedCount, setChangedCount] = useState(0);
 
   const sessionScope = useMemo(
     () => selectedScriptId ? `${episodeId}:${selectedScriptId}` : episodeId || '',
@@ -303,6 +308,76 @@ export const VideoGenPage: React.FC = () => {
     })();
   }, [isLoading, allStoryboardItems, importing, importDone, handleImportAll, sessionScope]);
 
+  // 最新分镜图：item_id -> 去 query 的图片 URL
+  const latestImageById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const item of allStoryboardItems) {
+      const id = (item as any).item_id ?? (item as any).itemId;
+      const raw = ((item as any).generated_image_url ?? (item as any).generatedImageUrl ?? '').toString().split('?')[0];
+      if (id && raw && !raw.startsWith('data:') && !raw.startsWith('blob:')) m[id] = raw;
+    }
+    return m;
+  }, [allStoryboardItems]);
+
+  // 检测会话里缓存的图与最新分镜图有多少处不一致
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await videoService.loadWorkspaceSession(sessionScope);
+        if (!alive || !r.success || !r.session) { if (alive) setChangedCount(0); return; }
+        let n = 0;
+        for (const img of (r.session.uploaded_images || [])) {
+          const id = (img as any).storyboardItemId || img.id;
+          const lu = latestImageById[id];
+          if (lu && lu !== (img.url || '').split('?')[0]) n++;
+        }
+        if (alive) setChangedCount(n);
+      } catch { if (alive) setChangedCount(0); }
+    })();
+    return () => { alive = false; };
+  }, [sessionScope, latestImageById, importDone, syncNonce]);
+
+  // 非破坏性同步：把变化的分镜图更新进会话（图片 + seedance 参考图），保留任务组/已生成视频
+  const handleSyncImages = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const r = await videoService.loadWorkspaceSession(sessionScope);
+      if (!r.success || !r.session || !(r.session.task_groups?.length)) {
+        // 没有会话可同步 —— 退化为全量导入
+        handleImportAll();
+        return;
+      }
+      const sess = r.session;
+      const newImages = (sess.uploaded_images || []).map((img: any) => {
+        const id = img.storyboardItemId || img.id;
+        const lu = latestImageById[id];
+        return (lu && lu !== (img.url || '').split('?')[0]) ? { ...img, url: lu, isPlaceholder: false } : img;
+      });
+      const newSP: Record<string, any> = { ...(sess.seedance_params || {}) };
+      for (const g of (sess.task_groups || [])) {
+        const id = (g.ids || [])[0];
+        const lu = latestImageById[id];
+        const sp = newSP[g.uuid];
+        if (lu && sp) {
+          const cur = (sp.media_inputs || []).find((mi: any) => mi.kind === 'image' && mi.role === 'reference_image');
+          if (!cur || (cur.url || '').split('?')[0] !== lu) {
+            const others = (sp.media_inputs || []).filter((mi: any) => !(mi.kind === 'image' && mi.role === 'reference_image'));
+            newSP[g.uuid] = { ...sp, media_inputs: [{ kind: 'image', url: lu, role: 'reference_image' }, ...others] };
+          }
+        }
+      }
+      await videoService.patchWorkspaceSession(sessionScope, () => ({ uploaded_images: newImages, seedance_params: newSP }));
+      setChangedCount(0);
+      setSyncNonce(n => n + 1); // 重挂载 VideoPage，从更新后的会话重新加载
+      setImportMsg({ kind: 'info', text: '已同步最新分镜图（保留已生成的视频）' });
+    } catch {
+      setImportMsg({ kind: 'error', text: '同步失败，请重试' });
+    } finally {
+      setSyncing(false);
+    }
+  }, [sessionScope, latestImageById, handleImportAll]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full text-n300">
@@ -383,8 +458,26 @@ export const VideoGenPage: React.FC = () => {
         </div>
       )}
 
-      {/* Navigation to next step */}
-      <div className="shrink-0 flex justify-end px-4 py-1.5 border-b border-n40">
+      {/* Navigation + 同步最新分镜图 */}
+      <div className="shrink-0 flex justify-between items-center px-4 py-1.5 border-b border-n40">
+        <div className="flex items-center gap-2">
+          {changedCount > 0 && (
+            <span className="text-[11px] text-amber-600">⚠ {changedCount} 个分镜图已在分镜页更新</span>
+          )}
+          <button
+            onClick={handleSyncImages}
+            disabled={syncing}
+            title="把分镜页改过的最新画面同步到视频工作区（保留已生成的视频，不会清空）"
+            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border transition-colors disabled:opacity-50 ${
+              changedCount > 0
+                ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
+                : 'bg-n0 border-n40 text-n300 hover:text-n700'
+            }`}
+          >
+            {syncing ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            同步最新分镜图
+          </button>
+        </div>
         <button
           onClick={() => navigate(`/projects/${projectId}/ep/${episodeId}/workflow/enhance`)}
           className="flex items-center gap-2 px-3 py-1 bg-success hover:bg-success text-white text-xs rounded-lg transition-colors"
@@ -401,7 +494,7 @@ export const VideoGenPage: React.FC = () => {
           episodeId={episodeId || ''}
           storyboardItems={allStoryboardItems}
           onRequestReimport={handleImportAll}
-          key={`${sessionScope}-${importDone}`}
+          key={`${sessionScope}-${importDone}-${syncNonce}`}
         />
       </div>
     </div>
