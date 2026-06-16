@@ -840,6 +840,33 @@ export function fetchComfyuiAvailable(): Promise<boolean> {
     return _comfyAvailPromise;
 }
 
+// ===== 一键合成成片 =====
+// 后台把本集视频段+配音拼成完整 mp4 存入成品页；耗时较长，前端轮询 status。
+export interface ComposeStatus {
+    success?: boolean;
+    status: 'idle' | 'running' | 'done' | 'failed';
+    total: number;
+    done: number;
+    url?: string | null;
+    duration?: number;
+    error?: string | null;
+}
+
+export async function startCompose(episodeId: string): Promise<ComposeStatus> {
+    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/compose`, {
+        method: 'POST',
+        headers: getHeaders(),
+    });
+    return handleResponse(response, 'startCompose');
+}
+
+export async function getComposeStatus(episodeId: string): Promise<ComposeStatus> {
+    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/compose/status`, {
+        headers: getHeaders(),
+    });
+    return handleResponse(response, 'getComposeStatus');
+}
+
 // ===== Audio Generation APIs =====
 
 export async function generateSpeech(data: {

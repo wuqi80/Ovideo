@@ -11,7 +11,7 @@ import type { VideoSegment, StoryboardItemDB } from '../types';
 // 到 taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
 // dub / lipSync）后端目前没 worker，明确提示用户而非用假进度误导。
 import * as videoService from '../services/videoService';
-import { fetchComfyuiAvailable } from '../services/apiService';
+import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/apiService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
 
 interface MediaClip {
@@ -62,6 +62,39 @@ export const EnhancePage: React.FC = () => {
   // 默认 true 避免加载瞬间误禁；确认无 agent 后置 false。配音(dub)走外部 API，不受影响。
   const [comfyAvailable, setComfyAvailable] = useState<boolean>(true);
   useEffect(() => { fetchComfyuiAvailable().then(setComfyAvailable); }, []);
+
+  // 一键合成成片：后台拼接本集视频段+配音 → 完整 mp4 存入成品页，前端轮询进度。
+  const [compose, setCompose] = useState<ComposeStatus | null>(null);
+  const composeTimerRef = useRef<number | null>(null);
+  const pollCompose = useCallback(() => {
+    if (!episodeId) return;
+    getComposeStatus(episodeId).then(s => {
+      setCompose(s);
+      if (s.status === 'running') composeTimerRef.current = window.setTimeout(pollCompose, 4000);
+    }).catch(() => {});
+  }, [episodeId]);
+  const handleCompose = useCallback(async () => {
+    if (!episodeId) { alert('未找到当前集'); return; }
+    try {
+      const s = await startCompose(episodeId);
+      setCompose({ ...s, status: (s.status as any) || 'running' });
+      if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
+      composeTimerRef.current = window.setTimeout(pollCompose, 3000);
+    } catch (e: any) {
+      setCompose({ status: 'failed', total: 0, done: 0, error: e?.message || '启动失败' });
+    }
+  }, [episodeId, pollCompose]);
+  useEffect(() => () => { if (composeTimerRef.current) clearTimeout(composeTimerRef.current); }, []);
+  // 进入页面时恢复正在进行/已完成的合成状态
+  useEffect(() => {
+    if (!episodeId) return;
+    getComposeStatus(episodeId).then(s => {
+      if (s.status && s.status !== 'idle') {
+        setCompose(s);
+        if (s.status === 'running') composeTimerRef.current = window.setTimeout(pollCompose, 3000);
+      }
+    }).catch(() => {});
+  }, [episodeId]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
@@ -356,6 +389,30 @@ export const EnhancePage: React.FC = () => {
               >
                 刷新
               </button>
+              {/* 一键合成成片 */}
+              {compose?.status === 'running' ? (
+                <span className="flex items-center gap-1 px-2.5 py-1 bg-primary-light text-primary text-xs rounded-lg border border-primary/20">
+                  <Loader size={12} className="animate-spin" />
+                  合成中 {compose.done}/{compose.total || '…'}
+                </span>
+              ) : compose?.status === 'done' ? (
+                <span className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs rounded-lg border border-emerald-200">
+                  <CheckCircle size={12} /> 成片已生成（在「成品」页查看）
+                  <button onClick={handleCompose} className="ml-1 underline opacity-70 hover:opacity-100">重新合成</button>
+                </span>
+              ) : (
+                <button
+                  className="flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white text-xs rounded-lg transition-colors disabled:opacity-50"
+                  title="把本集所有视频段按分镜顺序拼接、对齐配音，合成一个完整成片（约数分钟，可离开页面）"
+                  onClick={handleCompose}
+                  disabled={!episodeId || videoClips.length === 0}
+                >
+                  <Film size={12} /> 合成成品
+                </button>
+              )}
+              {compose?.status === 'failed' && (
+                <span className="text-[10px] text-danger" title={compose.error || ''}>合成失败，点「合成成品」重试</span>
+              )}
               <button
                 className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors"
                 title="导出时间线配置"
