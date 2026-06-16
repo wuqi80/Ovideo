@@ -122,10 +122,14 @@ async def _compose(episode_id, user_id, project_id, job):
             for c in clips:
                 f.write(f"file '{c}'\n")
 
+        # 每次合成生成唯一文件名/ID（带时间戳），不覆盖历史——同一集可多次合成、全部保留并列出。
+        ts = datetime.now().strftime('%Y%m%d%H%M%S')
+        ts_label = datetime.now().strftime('%m-%d %H:%M')
         ym = datetime.now().strftime('%Y%m')
         rel_dir = os.path.join(_STORAGE, 'video', user_id, ym)
         os.makedirs(rel_dir, exist_ok=True)
-        out_path = os.path.join(rel_dir, f'composed_{episode_id}.mp4')
+        out_name = f'composed_{episode_id}_{ts}.mp4'
+        out_path = os.path.join(rel_dir, out_name)
         rc, _, err = await _run(['ffmpeg', '-nostdin', '-y', '-loglevel', 'error',
                                  '-f', 'concat', '-safe', '0', '-i', list_file,
                                  '-c', 'copy', out_path])
@@ -134,27 +138,25 @@ async def _compose(episode_id, user_id, project_id, job):
 
         dur = await _probe_dur(out_path)
         size = os.path.getsize(out_path)
-        file_url = f"/storage/video/{user_id}/{ym}/composed_{episode_id}.mp4"
-        file_path_rel = f"persistent_storage/video/{user_id}/{ym}/composed_{episode_id}.mp4"
-        short = episode_id[-12:]
-        file_id = f"file_compose_{short}"
-        mli_id = f"mli_compose_{short}"
+        file_url = f"/storage/video/{user_id}/{ym}/{out_name}"
+        file_path_rel = f"persistent_storage/video/{user_id}/{ym}/{out_name}"
+        short = episode_id[-8:]
+        file_id = f"file_cmp_{short}_{ts}"
+        mli_id = f"mli_cmp_{short}_{ts}"
+        title = f"全片成片 {ts_label}（{len(clips)}镜）"
 
         db = get_db_manager()
         await db.execute("""
             INSERT INTO files (file_id,user_id,file_type,file_name,file_path,file_url,
                                file_size_bytes,mime_type,duration_seconds,entity_type,entity_id,metadata,created_at)
             VALUES ($1,$2,'video',$3,$4,$5,$6,'video/mp4',$7,'episode',$8,$9::jsonb,now())
-            ON CONFLICT (file_id) DO UPDATE SET
-              file_size_bytes=EXCLUDED.file_size_bytes, duration_seconds=EXCLUDED.duration_seconds, updated_at=now()
-        """, file_id, user_id, f"composed_{episode_id}.mp4", file_path_rel, file_url,
+        """, file_id, user_id, out_name, file_path_rel, file_url,
              size, dur, episode_id, json.dumps({"source": "composed_final", "kind": "final_cut"}))
 
         await db.execute("""
             INSERT INTO media_library_items (library_item_id,file_id,user_id,item_type,source,title,project_id,episode_id,created_at)
             VALUES ($1,$2,$3,'video','composed_final',$4,$5,$6,now())
-            ON CONFLICT (library_item_id) DO UPDATE SET title=EXCLUDED.title, updated_at=now()
-        """, mli_id, file_id, user_id, "全片成片（自动合成）", project_id, episode_id)
+        """, mli_id, file_id, user_id, title, project_id, episode_id)
 
         job['url'] = file_url
         job['duration'] = round(dur, 1)
