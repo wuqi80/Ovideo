@@ -300,13 +300,20 @@ export const VideoGenPage: React.FC = () => {
     (async () => {
       try {
         const existing = await videoService.loadWorkspaceSession(sessionScope);
-        if (!existing.success || !existing.session?.task_groups?.length) {
+        const sess: any = existing.session;
+        const groupCount = sess?.task_groups?.length || 0;
+        // 真实图（非占位、有 url）数量。某些旧会话在分镜图生成前导入，全是占位符（url 空），
+        // 换设备/账号打开就只剩"点击上传图片"空卡 —— 此时自动重建以拉入最新分镜图，自愈。
+        const realImgCount = (sess?.uploaded_images || [])
+          .filter((i: any) => i.url && !i.isPlaceholder).length;
+        const placeholderBroken = groupCount > 0 && realImgCount === 0 && itemsWithImages.length > 0;
+        if (!existing.success || !groupCount || placeholderBroken) {
           autoImported.current = true;
           handleImportAll();
         }
       } catch {}
     })();
-  }, [isLoading, allStoryboardItems, importing, importDone, handleImportAll, sessionScope]);
+  }, [isLoading, allStoryboardItems, itemsWithImages, importing, importDone, handleImportAll, sessionScope]);
 
   // 最新分镜图：item_id -> 去 query 的图片 URL
   const latestImageById = useMemo(() => {
