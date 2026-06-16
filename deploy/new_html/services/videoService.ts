@@ -1280,9 +1280,17 @@ export async function submitDashScopeVideoTask(
         if (params.audio !== undefined) body.audio = !!params.audio;
         if (params.sub_model_vidu) body.sub_model = params.sub_model_vidu;
     } else {
-        // HappyHorse
-        body.resolution = params.resolution || '720P';
-        body.ratio = params.ratio || '16:9';
+        // HappyHorse — 面板参数存在 hh_* 字段（hh_ratio/hh_resolution/hh_duration/…），
+        // 此前误读通用 params.ratio 导致用户选的 9:16 被忽略、回落 16:9。显式透传 hh_*，
+        // worker 也优先读 hh_*；同时给通用字段兜底兼容。
+        body.hh_resolution = params.hh_resolution || params.resolution || '1080P';
+        body.hh_ratio = params.hh_ratio || params.ratio || '16:9';
+        body.hh_duration = params.hh_duration ?? params.duration ?? 5;
+        if (params.hh_watermark !== undefined) body.hh_watermark = !!params.hh_watermark;
+        if (params.hh_seed !== undefined) body.hh_seed = params.hh_seed;
+        body.resolution = body.hh_resolution;
+        body.ratio = body.hh_ratio;
+        body.duration = body.hh_duration;
     }
 
     if (entityOptions) {
