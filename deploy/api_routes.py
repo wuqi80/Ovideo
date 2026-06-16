@@ -1377,6 +1377,62 @@ async def delete_episode(episode_id: str, user_id: str = Depends(get_current_use
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/api/episodes/{episode_id}/duplicate")
+async def duplicate_episode(episode_id: str, user_id: str = Depends(get_current_user)):
+    """复制一个分集：新建「原名 副本」并整套拷贝剧本内容（episode_scripts）。
+    仅复制剧本，不复制分镜/视频/音频等重资产——用于基于已有剧本快速派生新版本。"""
+    try:
+        from dao_episode import EpisodeDAO
+        src = await EpisodeDAO.get_episode(episode_id)
+        if not src:
+            raise HTTPException(status_code=404, detail="集数不存在")
+
+        # settings 可能是 jsonb 字符串，容错解析
+        settings = src.get("settings")
+        if isinstance(settings, str):
+            try:
+                settings = json.loads(settings)
+            except (ValueError, TypeError):
+                settings = {}
+
+        project_id = src["project_id"]
+        ep_num = await EpisodeDAO.get_next_episode_number(project_id)
+        src_name = src.get("episode_name") or "未命名分集"
+        new_ep = await EpisodeDAO.create_episode(
+            project_id=project_id,
+            episode_number=ep_num,
+            episode_name=f"{src_name} 副本",
+            description=src.get("description") or "",
+            settings=settings or None,
+        )
+        if not new_ep:
+            raise HTTPException(status_code=500, detail="复制分集失败")
+        new_episode_id = new_ep["episode_id"]
+
+        # 拷贝全部剧本文件
+        scripts = await EpisodeScriptDAO.list_by_episode(episode_id)
+        for s in scripts:
+            meta = s.get("metadata")
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except (ValueError, TypeError):
+                    meta = {}
+            await EpisodeScriptDAO.create(
+                episode_id=new_episode_id,
+                file_name=s.get("file_name") or "未命名文件",
+                original_content=s.get("original_content") or "",
+                adapted_script=s.get("adapted_script") or "",
+                sort_order=s.get("sort_order") or 0,
+                metadata=meta or None,
+            )
+
+        return {"success": True, "episode": new_ep, "copied_scripts": len(scripts)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/api/projects/{project_id}/episodes/reorder")
 async def reorder_episodes(project_id: str, data: EpisodeReorder, user_id: str = Depends(get_current_user)):
     try:
@@ -1930,6 +1986,25 @@ class VideoSegmentUpdate(BaseModel):
 async def get_video_segments(episode_id: str, user_id: str = Depends(get_current_user)):
     segments = await VideoSegmentDAO.get_by_episode(episode_id)
     return {"success": True, "segments": [dict(s) for s in segments]}
+
+
+@router.post("/api/episodes/{episode_id}/compose")
+async def compose_episode_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
+    """一键合成成片：后台拼接本集视频段+配音→完整 mp4，存入成品页。立即返回，前端轮询 status。"""
+    db = get_db_manager()
+    row = await db.fetchrow("SELECT project_id FROM episodes WHERE episode_id = $1", episode_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="集不存在")
+    import compose_service
+    job = compose_service.start_compose(episode_id, user_id, row["project_id"])
+    return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
+
+
+@router.get("/api/episodes/{episode_id}/compose/status")
+async def compose_status_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
+    """合成进度：status=idle|running|done|failed，done/total 进度，url 成片地址。"""
+    import compose_service
+    return {"success": True, **compose_service.get_status(episode_id)}
 
 
 @router.post("/api/episodes/{episode_id}/video-segments")

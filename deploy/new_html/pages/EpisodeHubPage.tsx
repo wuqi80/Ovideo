@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, LogOut, Pencil } from 'lucide-react';
+import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, LogOut, Pencil, Copy } from 'lucide-react';
 import { getHeaders } from '../services/apiService';
 import type { Episode } from '../types';
 
@@ -82,6 +82,31 @@ export const EpisodeHubPage: React.FC = () => {
       console.error('Failed to delete episode:', e);
     }
     setMenuOpen(null);
+  };
+
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+
+  const duplicateEpisode = async (episodeId: string) => {
+    setMenuOpen(null);
+    if (duplicatingId) return;
+    setDuplicatingId(episodeId);
+    try {
+      const res = await fetch(`${API_BASE}/api/episodes/${episodeId}/duplicate`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        await loadEpisodes();
+      } else {
+        alert('复制失败：' + (data.detail || '未知错误'));
+      }
+    } catch (e) {
+      console.error('Failed to duplicate episode:', e);
+      alert('复制失败，请检查网络');
+    } finally {
+      setDuplicatingId(null);
+    }
   };
 
   const startRename = (ep: Episode) => {
@@ -247,6 +272,13 @@ export const EpisodeHubPage: React.FC = () => {
                             className="flex items-center gap-2 w-full px-3 py-2 text-sm text-n700 hover:bg-n20 transition-colors"
                           >
                             <Pencil size={14} /> 重命名
+                          </button>
+                          <button
+                            onClick={() => duplicateEpisode(ep.episodeId)}
+                            disabled={duplicatingId === ep.episodeId}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-n700 hover:bg-n20 transition-colors disabled:opacity-50"
+                          >
+                            <Copy size={14} /> {duplicatingId === ep.episodeId ? '复制中…' : '复制'}
                           </button>
                           <button
                             onClick={() => deleteEpisode(ep.episodeId)}
