@@ -17,7 +17,7 @@
 // 卡片不直接发起任务，调用方在 runTask 里调用 submitDashScopeVideoTask。
 // =============================================================================
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
     ImagePlus, X, Wand2, Layers, Sparkles, Move, RotateCcw,
     Film, Play, Volume2, Hash, Maximize2, Image as ImageIcon,
@@ -883,10 +883,46 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
 
 const HH_RATIOS: HappyHorseRatio[] = ['16:9', '9:16', '3:4', '4:3', '4:5', '5:4', '1:1', '9:21', '21:9'];
 
+// 按图片实际宽高选最接近的 HappyHorse 比例档（分镜竖图 → 9:16，横图 → 16:9）。
+function closestHhRatio(w: number, h: number): HappyHorseRatio {
+    if (!w || !h) return '16:9';
+    const target = w / h;
+    let best: HappyHorseRatio = '16:9';
+    let bestDiff = Infinity;
+    for (const r of HH_RATIOS) {
+        const [rw, rh] = r.split(':').map(Number);
+        const diff = Math.abs(rw / rh - target);
+        if (diff < bestDiff) { bestDiff = diff; best = r; }
+    }
+    return best;
+}
+
 export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
     const { params, onChange, onPickImage, onPreviewImage, disabled } = props;
     const theme = THEMES.HappyHorse;
     const { refs } = useMemo(() => splitMedia(params.media_inputs || []), [params.media_inputs]);
+
+    // HappyHorse 没有"自适应"档，默认写死 16:9 会让分镜的 9:16 竖图被强转横版。
+    // 这里按首张参考图的实际宽高自动推断比例（用户当前会话手动改过则不再覆盖）。
+    const userSetRatioRef = useRef(false);
+    const firstRefUrl = refs[0]?.url || '';
+    useEffect(() => {
+        if (userSetRatioRef.current || !firstRefUrl) return;
+        let src = firstRefUrl;
+        const token = (typeof localStorage !== 'undefined' && localStorage.getItem('auth_token')) || '';
+        if (token && !src.startsWith('data:') && !src.startsWith('blob:') && !src.includes('token=')) {
+            const abs = src.startsWith('http') ? src : `${window.location.origin}${src.startsWith('/') ? '' : '/'}${src}`;
+            src = `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+        }
+        const im = new Image();
+        im.onload = () => {
+            if (userSetRatioRef.current) return;
+            const r = closestHhRatio(im.naturalWidth, im.naturalHeight);
+            if (r && r !== (params.hh_ratio || '16:9')) onChange({ ...params, hh_ratio: r });
+        };
+        im.src = src;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [firstRefUrl]);
 
     const addRef = useCallback(() => {
         onPickImage((m) => {
@@ -968,7 +1004,7 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
                     <RotateCcw className="w-2.5 h-2.5" /> 比例
                     <select
                         value={params.hh_ratio || '16:9'}
-                        onChange={(e) => onChange({ ...params, hh_ratio: e.target.value as HhRatio })}
+                        onChange={(e) => { userSetRatioRef.current = true; onChange({ ...params, hh_ratio: e.target.value as HhRatio }); }}
                         disabled={disabled}
                         className={inputCls}
                         aria-label="比例"
