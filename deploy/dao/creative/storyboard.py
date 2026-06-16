@@ -29,6 +29,9 @@ class StoryboardDAO:
         video_script_block: str = '',
         shot_size: str = '',
         camera_angle: str = '',
+        # 2026-06-16：创建时也持久化已生成的画面/时长，否则"删旧建新"会丢图（#4/#5）。
+        generated_image_url: str = '',
+        planned_duration_ms: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
@@ -39,9 +42,10 @@ class StoryboardDAO:
                 (item_id, episode_id, sort_order, scene_heading, action_text,
                  dialogue, camera_movement, image_prompt, video_prompt, bound_assets,
                  script_id, script_segment_id, source_video_shot_no,
-                 video_script_block, shot_size, camera_angle)
+                 video_script_block, shot_size, camera_angle,
+                 generated_image_url, planned_duration_ms)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb,
-                    $11, $12, $13, $14, $15, $16)
+                    $11, $12, $13, $14, $15, $16, $17, $18)
             RETURNING *
         """
         return await db.fetchrow(
@@ -51,6 +55,7 @@ class StoryboardDAO:
             json.dumps(bound_assets or [], ensure_ascii=False),
             script_id, script_segment_id, source_video_shot_no,
             video_script_block, shot_size, camera_angle,
+            (generated_image_url or None), planned_duration_ms,
         )
 
     @staticmethod
@@ -77,6 +82,8 @@ class StoryboardDAO:
                 video_script_block=item.get('video_script_block', ''),
                 shot_size=item.get('shot_size', ''),
                 camera_angle=item.get('camera_angle', ''),
+                generated_image_url=item.get('generated_image_url', ''),
+                planned_duration_ms=item.get('planned_duration_ms'),
             )
             if row:
                 results.append(dict(row))

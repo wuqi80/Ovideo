@@ -361,7 +361,12 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         const hasNewItems = realItems.some(i => !i.id || !i.id.startsWith('sb_'));
         if (!hasNewItems) continue;
 
-        const dbItems = realItems.map((item: StoryboardItem, idx: number) => ({
+        const dbItems = realItems.map((item: StoryboardItem, idx: number) => {
+          // 持久化已生成的画面 URL（仅持久化协议，过滤 blob:/data:），避免"删旧建新"丢图。
+          const rawImg = ((item as any).generatedImage || (item as any).generated_image_url || '').toString();
+          const cleanImg = rawImg.split('?')[0];
+          const persistImg = (cleanImg.startsWith('http') || cleanImg.startsWith('/')) ? cleanImg : '';
+          return ({
           sort_order: idx,
           scene_heading: item.originalText || item.scene || '',
           action_text: item.scriptSegment || '',
@@ -369,6 +374,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           camera_movement: item.cameraMovement || '',
           image_prompt: item.imagePrompt || '',
           video_prompt: item.videoPrompt || '',
+          generated_image_url: persistImg,
           planned_duration_ms: item.plannedDurationMs || null,
           bound_assets: [
             ...(item.characters || []).map((c: string) => `char:${c}`),
@@ -379,7 +385,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           video_script_block: item.videoScriptBlock || '',
           shot_size: item.shotSize || '',
           camera_angle: item.cameraAngle || '',
-        }));
+        });
+        });
 
         await deleteAllStoryboardItems(propEpisodeId, file.id).catch(err =>
           console.warn(`清理旧分镜失败 (${file.id}):`, err)
