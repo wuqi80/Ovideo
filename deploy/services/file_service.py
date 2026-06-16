@@ -227,6 +227,23 @@ async def save_generated_file_to_db(
         except Exception as e:
             logger.warning(f"Legacy field sync failed (non-fatal): {e}")
 
+    # 兜底：在文件保存的统一入口同步进素材库，避免各生成路径（视频/图片/混音等）
+    # 各自漏调 create_from_file 导致"生成了却不在素材库"。幂等（按 file_id 去重）、
+    # best-effort 不影响主流程；project_id 由 episode_id 反查（素材库按项目过滤）。
+    if db_record and file_type in ('image', 'video', 'audio'):
+        try:
+            import media_library_service
+            await media_library_service.create_from_file(
+                file_record={**db_record, 'user_id': user_id, 'file_type': file_type},
+                source=source or f'generated_{file_type}',
+                item_type=file_type,
+                episode_id=episode_id,
+                source_entity_type=entity_type,
+                source_entity_id=entity_id,
+            )
+        except Exception as e:
+            logger.warning(f"media_library 兜底同步失败 (non-fatal): {e}")
+
     return {
         'file_id': db_record['file_id'] if db_record else None,
         'file_url': file_url,
