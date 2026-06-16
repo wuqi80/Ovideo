@@ -852,10 +852,33 @@ export interface ComposeStatus {
     error?: string | null;
 }
 
-export async function startCompose(episodeId: string): Promise<ComposeStatus> {
+export interface VideoTake {
+    segment_id: string;
+    video_url: string;
+    thumbnail_url?: string | null;
+    created_at?: string | null;
+}
+export interface VideoShot {
+    item_id: string;
+    sort_order: number;
+    scene?: string;
+    dialogue?: string;
+    takes: VideoTake[];
+}
+
+export async function getVideoTakes(episodeId: string): Promise<{ success: boolean; shots: VideoShot[] }> {
+    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/video-takes`, {
+        headers: getHeaders(),
+    });
+    return handleResponse(response, 'getVideoTakes');
+}
+
+// selections: { [item_id]: segment_id } 指定每镜用哪条 take；不传则后端用最新。
+export async function startCompose(episodeId: string, selections?: Record<string, string>): Promise<ComposeStatus> {
     const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/compose`, {
         method: 'POST',
         headers: getHeaders(),
+        body: JSON.stringify(selections ? { selections } : {}),
     });
     return handleResponse(response, 'startCompose');
 }

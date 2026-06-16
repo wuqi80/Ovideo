@@ -1,9 +1,10 @@
 
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, ReferenceType, GeneratedImage, FileVersion } from '../types';
-import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3 } from 'lucide-react';
+import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3, Clapperboard } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateFinalIllustration, generateWithComfyUIWorkflowQueued, generateHumanMultiAngleQueued, generateAroundAngleQueued, adjustImageAngleQueued, getComfyUIQueueStatus, generateMattingQueued, generateImageFusionQueued, generatePanorama360Queued, generatePanoramaFusionQueued, generateAutoStoryboardQueued, generateMultiGridStoryboard, waitForComfyUITaskAllImages } from '../services/geminiService';
 // 2026-05-21：分镜页 GPT Image 2 系列 + 化神参数面板
@@ -60,6 +61,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   onBatchDeleteStoryboardItems,
 }) => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const selectedFile = files.find(f => f.id === selectedFileId);
   // 2026-05-20 (Bug #3)：当前选中镜头持久化（按 episodeId scope）。刷新或切走再回都保持选中。
   const [selectedShotId, setSelectedShotId] = usePersistedPageState<string | null>({
@@ -1942,7 +1944,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         <span>历史</span>
                     </button>
 
-                    <button 
+                    <button
+                        onClick={() => {
+                            const pid = (() => { try { return localStorage.getItem('current_project_id') || ''; } catch { return ''; } })();
+                            if (pid && episodeId) navigate(`/projects/${pid}/ep/${episodeId}/workflow/final`);
+                            else navigate('final');
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-n700 hover:text-n800 bg-n0 hover:bg-n20 rounded border border-n40 transition-colors"
+                        title="去成品页合成完整成片"
+                    >
+                        <Clapperboard className="w-3.5 h-3.5" />
+                        <span>导出到成品</span>
+                    </button>
+
+                    <button
                         onClick={handleExport}
                         className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold shadow-lg shadow-emerald-900/30 ml-2"
                     >

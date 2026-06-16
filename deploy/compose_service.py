@@ -56,25 +56,64 @@ async def _probe_dur(path):
         return 0.0
 
 
-async def _get_shots(episode_id):
+async def _list_shot_takes(episode_id):
+    """按分镜顺序列出每镜的所有视频 take（含 audio 信息）。
+    返回 [{item_id, sort_order, scene, dialogue, audio_url, audio_ms,
+           takes:[{segment_id, video_url, thumbnail_url, created_at}]}]，按 take 新→旧。"""
     db = get_db_manager()
-    return await db.fetch("""
-        SELECT v.video_url AS video_url,
-               si.mixed_audio_url AS audio_url,
-               COALESCE(si.audio_duration_ms, 0) AS audio_ms
+    rows = await db.fetch("""
+        SELECT si.item_id, si.sort_order,
+               si.scene_heading, si.dialogue,
+               si.mixed_audio_url AS audio_url, COALESCE(si.audio_duration_ms,0) AS audio_ms,
+               vs.segment_id, vs.video_url, vs.created_at,
+               f.thumbnail_url
         FROM storyboard_items si
-        JOIN LATERAL (
-           SELECT vs.video_url FROM video_segments vs
-           WHERE vs.storyboard_item_id = si.item_id AND vs.video_url IS NOT NULL
-           ORDER BY vs.created_at DESC LIMIT 1
-        ) v ON TRUE
+        JOIN video_segments vs ON vs.storyboard_item_id = si.item_id AND vs.video_url IS NOT NULL
+        LEFT JOIN files f ON f.file_url = split_part(vs.video_url, '?', 1)
         WHERE si.episode_id = $1
-        ORDER BY si.sort_order
+        ORDER BY si.sort_order, vs.created_at DESC
     """, episode_id)
+    shots = {}
+    order = []
+    for r in rows:
+        iid = r['item_id']
+        if iid not in shots:
+            shots[iid] = {
+                'item_id': iid, 'sort_order': r['sort_order'],
+                'scene': r.get('scene_heading') or '', 'dialogue': r.get('dialogue') or '',
+                'audio_url': r['audio_url'], 'audio_ms': r['audio_ms'], 'takes': [],
+            }
+            order.append(iid)
+        shots[iid]['takes'].append({
+            'segment_id': r['segment_id'], 'video_url': r['video_url'],
+            'thumbnail_url': r.get('thumbnail_url'),
+            'created_at': r['created_at'].isoformat() if r.get('created_at') else None,
+        })
+    return [shots[i] for i in order]
 
 
-async def _compose(episode_id, user_id, project_id, job):
-    shots = await _get_shots(episode_id)
+async def get_takes(episode_id):
+    """供前端挑选面板：每镜所有 take（缺省第一条=最新）。"""
+    return await _list_shot_takes(episode_id)
+
+
+async def _get_shots(episode_id, selections=None):
+    """合成实际使用的镜头序列。selections: {item_id: segment_id} 指定每镜用哪条 take，
+    未指定则用最新（takes[0]）。"""
+    selections = selections or {}
+    shots = await _list_shot_takes(episode_id)
+    result = []
+    for s in shots:
+        if not s['takes']:
+            continue
+        sel_seg = selections.get(s['item_id'])
+        chosen = next((t for t in s['takes'] if t['segment_id'] == sel_seg), s['takes'][0])
+        result.append({'video_url': chosen['video_url'], 'audio_url': s['audio_url'], 'audio_ms': s['audio_ms']})
+    return result
+
+
+async def _compose(episode_id, user_id, project_id, job, selections=None):
+    shots = await _get_shots(episode_id, selections)
     job['total'] = len(shots)
     if not shots:
         raise RuntimeError("该集没有可合成的视频段")
@@ -166,8 +205,8 @@ async def _compose(episode_id, user_id, project_id, job):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def start_compose(episode_id, user_id, project_id):
-    """启动后台合成任务；若已在跑则返回现有 job。"""
+def start_compose(episode_id, user_id, project_id, selections=None):
+    """启动后台合成任务；若已在跑则返回现有 job。selections: {item_id: segment_id}。"""
     cur = _jobs.get(episode_id)
     if cur and cur.get('status') == 'running':
         return cur
@@ -176,7 +215,7 @@ def start_compose(episode_id, user_id, project_id):
 
     async def _runner():
         try:
-            await _compose(episode_id, user_id, project_id, job)
+            await _compose(episode_id, user_id, project_id, job, selections)
         except Exception as e:
             job['status'] = 'failed'
             job['error'] = str(e)[:300]

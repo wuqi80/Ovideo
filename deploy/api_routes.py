@@ -1988,15 +1988,30 @@ async def get_video_segments(episode_id: str, user_id: str = Depends(get_current
     return {"success": True, "segments": [dict(s) for s in segments]}
 
 
+@router.get("/api/episodes/{episode_id}/video-takes")
+async def video_takes_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
+    """合成挑选面板用：按分镜顺序列出每镜的所有视频 take（缩略图/段ID/时间）。"""
+    import compose_service
+    shots = await compose_service.get_takes(episode_id)
+    return {"success": True, "shots": shots}
+
+
 @router.post("/api/episodes/{episode_id}/compose")
-async def compose_episode_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
-    """一键合成成片：后台拼接本集视频段+配音→完整 mp4，存入成品页。立即返回，前端轮询 status。"""
+async def compose_episode_endpoint(episode_id: str, request: Request, user_id: str = Depends(get_current_user)):
+    """一键合成成片：后台拼接本集视频段+配音→完整 mp4，存入成品页。立即返回，前端轮询 status。
+    可选 body {selections: {item_id: segment_id}} 指定每镜用哪条 take，未指定用最新。"""
     db = get_db_manager()
     row = await db.fetchrow("SELECT project_id FROM episodes WHERE episode_id = $1", episode_id)
     if not row:
         raise HTTPException(status_code=404, detail="集不存在")
+    selections = None
+    try:
+        body = await request.json()
+        selections = (body or {}).get("selections")
+    except Exception:
+        selections = None
     import compose_service
-    job = compose_service.start_compose(episode_id, user_id, row["project_id"])
+    job = compose_service.start_compose(episode_id, user_id, row["project_id"], selections)
     return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
 
 
