@@ -130,6 +130,34 @@ function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; tim
 // （否则 <video preload="metadata"> 在未 hover 播放前可能是黑屏）。
 const withFirstFrame = (u: string): string => (!u || u.includes('#')) ? u : `${u}#t=0.1`;
 
+// 懒加载视频：分镜多时若所有 <video> 都立即 preload，会同时发几百个请求导致卡顿。
+// 仅当滚动进入视口附近(±300px)才设置 src 并 preload，未进入时 preload="none" 不发请求。
+const LazyVideo: React.FC<{ src: string; className?: string; onClick?: () => void }> = ({ src, className, onClick }) => {
+  const ref = useRef<HTMLVideoElement | null>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || inView) return;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) { setInView(true); io.disconnect(); }
+    }, { rootMargin: '300px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [inView]);
+  return (
+    <video
+      ref={ref}
+      src={inView ? withFirstFrame(src) : undefined}
+      preload={inView ? 'metadata' : 'none'}
+      muted
+      className={className}
+      onClick={onClick}
+      onMouseEnter={(e) => { if (inView) (e.target as HTMLVideoElement).play().catch(() => {}); }}
+      onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+    />
+  );
+};
+
 // ==================== 主组件 ====================
 
 export const VideoPage: React.FC<VideoPageProps> = ({
@@ -2313,14 +2341,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 {/* 视频缩略图/状态（与左侧 w-20 h-14 对齐） */}
                 <div className="w-20 h-14 shrink-0 bg-n800 rounded overflow-hidden border border-n40">
                     {status.state === 'done' && videos.length > 0 ? (
-                        <video
-                            src={withFirstFrame(videos[0])}
+                        <LazyVideo
+                            src={videos[0]}
                             className="w-full h-full object-cover cursor-pointer"
-                            muted
-                            preload="metadata"
                             onClick={() => { setLightboxUrl(videos[0]); setLightboxType('video'); }}
-                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                            onMouseLeave={(e) => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
                         />
                     ) : status.state === 'running' || status.state === 'processing' ? (
                         <div className="w-full h-full flex items-center justify-center bg-n20">
@@ -3005,13 +3029,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                         key={idx}
                                         className="relative bg-n800 rounded border border-n40 group/video overflow-hidden aspect-video"
                                     >
-                                        <video
-                                            src={withFirstFrame(videoUrl)}
+                                        <LazyVideo
+                                            src={videoUrl}
                                             className="w-full h-full object-contain cursor-pointer"
-                                            muted
-                                            preload="metadata"
-                                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                                            onMouseLeave={(e) => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
                                             onClick={() => { setLightboxUrl(videoUrl); setLightboxType('video'); }}
                                         />
                                         {/* 视频编号 - 左上角 */}
@@ -3062,13 +3082,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <div 
                         className={`relative w-full bg-n800 rounded-lg overflow-hidden border border-n40 ${videoHeight} group/video`}
                     >
-                        <video
-                            src={withFirstFrame(videos[0])}
+                        <LazyVideo
+                            src={videos[0]}
                             className="w-full h-full object-contain cursor-pointer"
-                            muted
-                            preload="metadata"
-                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                            onMouseLeave={(e) => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
                             onClick={() => { setLightboxUrl(videos[0]); setLightboxType('video'); }}
                         />
                         {status.videoGenerateTimes && status.videoGenerateTimes[0] && (
