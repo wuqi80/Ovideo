@@ -939,11 +939,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     saveSessionRef.current = saveSession;
 
     useEffect(() => {
+        // 6s 防抖：分镜多时整段 session 序列化较重，生成中每 1-2s 轮询会频繁触发。
+        // 完成时(saveSessionRef)与切后台(visibilitychange)另有即时保存兜底，调长不丢数据。
         const timer = setTimeout(() => {
             if (taskGroups.length > 0 || uploadedImages.length > 0) {
                 saveSession();
             }
-        }, 2000);
+        }, 6000);
         return () => clearTimeout(timer);
     }, [taskGroups, uploadedImages, imagePrompts, tasksStatus, seedanceParamsByUuid, storyboardMetaByItemId, dashScopeParamsByUuid, saveSession]);
     

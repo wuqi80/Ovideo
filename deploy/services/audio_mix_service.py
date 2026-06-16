@@ -228,6 +228,8 @@ async def mix_storyboard_audio(item_id: str, inp: MixInput, user_id: str) -> Mix
         item_id,
         mixed_audio_url=mixed_url,
         mixed_audio_hash=target_hash,
+        # 回写混音实际时长，否则合成读到 audio_duration_ms=0 会跳过音画对齐 → 音画不同步。
+        audio_duration_ms=duration_ms,
     )
 
     logger.info(

@@ -75,7 +75,12 @@ async def _list_shot_takes(episode_id):
     """, episode_id)
     shots = {}
     order = []
+    seen_segs = set()  # LEFT JOIN files 对同一 video_url 可能多行 → 同一 segment 去重，防成片里镜头重复
     for r in rows:
+        seg = r['segment_id']
+        if seg in seen_segs:
+            continue
+        seen_segs.add(seg)
         iid = r['item_id']
         if iid not in shots:
             shots[iid] = {
@@ -85,7 +90,7 @@ async def _list_shot_takes(episode_id):
             }
             order.append(iid)
         shots[iid]['takes'].append({
-            'segment_id': r['segment_id'], 'video_url': r['video_url'],
+            'segment_id': seg, 'video_url': r['video_url'],
             'thumbnail_url': r.get('thumbnail_url'),
             'created_at': r['created_at'].isoformat() if r.get('created_at') else None,
         })
@@ -132,6 +137,10 @@ async def _compose(episode_id, user_id, project_id, job, selections=None):
             vdur = await _probe_dur(vpath)
             apath = _local(r.get('audio_url'))
             ams = int(r.get('audio_ms') or 0)
+            # 防线：历史混音未回写时长 → audio_duration_ms=0。有音频文件但 ams=0 时直接探测，
+            # 否则会走"无音频"分支或对齐错误，导致音画不同步。
+            if apath and os.path.isfile(apath) and ams <= 0:
+                ams = int(await _probe_dur(apath) * 1000)
             common = ['-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p',
                       '-r', '30', '-video_track_timescale', '30000',
                       '-c:a', 'aac', '-ar', '48000', '-ac', '2', out]
