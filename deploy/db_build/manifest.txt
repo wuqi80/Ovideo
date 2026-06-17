@@ -1,0 +1,55 @@
+# Drama 全新空库建库清单 —— 严格按依赖顺序，从上到下执行
+# 行首 # 为注释；空行忽略。路径相对于 deploy/ 目录。
+# 由 build_fresh_db.py 读取执行。所有脚本均 IF NOT EXISTS 幂等，可重复跑。
+#
+# ⚠️ 顺序经过拓扑排序，解决了原本"按文件名字母序跑会因 FK/ALTER 目标未建而失败"的问题：
+#    - assets/audio_tracks/video_segments 引用 episodes → 必须在 episodes 之后
+#    - audio_tracks ALTER canvas_boards → 必须在 project_hub 之后
+#    - admin_extra ALTER credit_*/media_library_items → 必须在 credits/media_library 之后
+#    - visibility_columns ALTER project_groups + REF organizations → 必须在 admin_users_groups/organizations 之后
+
+# ---- 0. 基础 schema（10 张基础表：users/projects/versions/files/tasks/...）----
+database_schema.sql
+
+# ---- 1. 基础表的早期扩展（只需基础表）----
+db_migration_add_permissions.sql        # ALTER users
+db_migration_unified_files.sql          # ALTER files
+
+# ---- 2. 创作核心链：episodes → scripts → storyboard → assets ----
+db_migration_episodes.sql               # REF projects
+db_migration_episode_scripts.sql        # REF episodes
+db_migration_episode_script_segments.sql# REF episode_scripts, episodes
+db_migration_multi_scripts.sql          # ALTER episode_scripts
+db_migration_storyboard_items.sql       # REF episodes
+db_migration_assets.sql                 # REF episodes, projects
+db_migration_script_id.sql              # ALTER assets, storyboard_items
+db_migration_storyboard_audio_mix.sql   # ALTER storyboard_items
+db_migration_storyboard_pipeline_fields.sql # ALTER storyboard_items
+db_migration_clean_storyboard_data_urls.sql # 数据清理（storyboard_items 之后）
+db_migration_character_voices.sql       # REF assets, projects
+db_migration_video_segments.sql         # REF episodes, storyboard_items
+db_migration_timeline_tracks.sql        # REF episodes
+
+# ---- 3. 项目中心（建 canvas_boards）→ audio_tracks 依赖它 ----
+db_migration_project_hub.sql            # 建 project_members/canvas_boards/canvas_nodes/...
+db_migration_audio_tracks.sql           # REF episodes/storyboard_items; ALTER canvas_boards
+db_migration_admin_users_groups.sql     # 建 project_groups; ALTER projects/users
+
+# ---- 4. 用户维度业务表 ----
+db_migration_credits.sql                # REF users
+db_migration_notifications.sql          # REF users
+db_migration_organizations.sql          # REF users（建 organizations/resource_shares）
+
+# ---- 5. 素材库（需 files/projects/users）----
+db_migration_media_library.sql          # REF files, projects, users
+db_migration_media_library_folders.sql  # REF projects; ALTER media_library_items
+
+# ---- 6. 管理后台表 ----
+db_migration_admin.sql                  # 建 comfyui_agents/workflow_templates/api_configurations/system_settings
+db_migration_api_config_category.sql    # ALTER api_configurations
+db_migration_gpt_image_providers.sql    # INSERT api_configurations 预置
+
+# ---- 7. 跨切扩展（需多张前面建好的表）----
+db_migration_admin_extra.sql            # 建 admin_audit_logs; ALTER credit_*/media_library_items
+db_migration_visibility_columns.sql     # ALTER media_library_items/project_groups; REF organizations
+db_migration_video_reverse.sql          # REF files, projects, users

@@ -56,13 +56,12 @@ CREATE USER my2_user WITH PASSWORD '换成强密码';
 CREATE DATABASE my2_db OWNER my2_user;
 SQL
 
-# 跑基础 schema，再跑所有迁移（迁移均为 IF NOT EXISTS 守卫，顺序容错；某条因顺序报错就再跑一遍整轮）
-export PGPASSWORD='上面的强密码'
-psql -h 127.0.0.1 -U my2_user -d my2_db -f database_schema.sql
-for f in $(ls db_migration_*.sql | sort); do
-  echo ">> $f"; psql -h 127.0.0.1 -U my2_user -d my2_db -f "$f"
-done
+# 用有序建库 runner 一次跑通 schema + 全部迁移（已按依赖顺序拓扑排序，幂等可重复）
+export DB_HOST=127.0.0.1 DB_PORT=5432 DB_NAME=my2_db DB_USER=my2_user DB_PASSWORD='上面的强密码'
+.venv/bin/python db_build/build_fresh_db.py
 ```
+
+> ⚠️ **不要再用 `ls db_migration_*.sql | sort` 按文件名顺序跑**——迁移有 FK/ALTER 依赖，字母序会失败 12 处（如 assets 引用尚未建的 episodes、admin_extra ALTER 尚未建的 credit_accounts）。`db_build/build_fresh_db.py` 用 `db_build/manifest.txt` 里经拓扑排序的正确顺序执行，是唯一可靠的全新空库建库方式。失败会打印第一条出错的文件与原因，退出码非 0。
 
 迁移里的 `INSERT` 全是**必要配置默认值**（系统配置 / 积分规则 / API 占位卡）——**零用户内容**，这就是「完全干净」的库。
 
@@ -200,7 +199,7 @@ sudo ln -s /etc/nginx/sites-available/drama /etc/nginx/sites-enabled/ && sudo ng
 ```bash
 cd /home/ubuntu/Drama && git pull
 cd deploy && source .venv/bin/activate && pip install -r requirements.txt   # 依赖有变才需要
-# 若有新迁移：再跑一遍第 3 步的迁移循环（IF NOT EXISTS 幂等，安全）
+# 若有新迁移：再跑一遍建库 runner（IF NOT EXISTS 幂等，安全）：python db_build/build_fresh_db.py
 cd new_html && npm install && npm run build && cd ..
 sudo systemctl restart drama
 ```
