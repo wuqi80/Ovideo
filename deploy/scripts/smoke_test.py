@@ -68,18 +68,12 @@ def run():
     except Exception: ok = False
     check("项目列表 /api/projects 正常", ok, f"http={st}")
 
-    # 创建→列出→删除 一个临时项目（验证写库链路 + 清理不留脏数据）
-    pname = f"smoke_{int(time.time())}"
-    st, b = req("/api/projects", "POST", {"project_name": pname, "description": "smoke", "visibility": "private"}, token=tok)
-    pid = None
-    try: pid = json.loads(b).get("project", {}).get("project_id")
-    except Exception: pass
-    check("创建临时项目成功", st == 200 and bool(pid), f"http={st}")
-    if pid:
-        st, b = req(f"/api/projects/{pid}/episodes", token=tok)
-        check("分集列表可读(新项目空)", st == 200, f"http={st}")
-        st, _ = req(f"/api/projects/{pid}", "DELETE", token=tok)
-        check("删除临时项目(清理)", st in (200, 204), f"http={st}")
+    # 只读核查（不写库，避免软删除残留 cruft，保证冒烟可重复跑无副作用）
+    st, b = req("/api/projects?include_archived=false", token=tok)
+    ok = st == 200
+    try: ok = ok and isinstance(json.loads(b).get("projects"), list)
+    except Exception: ok = False
+    check("项目读路径(含过滤参数)正常", ok, f"http={st}")
 
     # 4. 首页/SPA
     st, _ = req("/projects")
