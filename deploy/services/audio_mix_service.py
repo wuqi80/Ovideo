@@ -21,6 +21,7 @@ import aiohttp
 
 from dao_storyboard import StoryboardDAO
 from file_service import save_generated_file_to_db
+from utils.net_guard import assert_public_http_url, safe_storage_path
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +68,10 @@ def _storage_url_to_disk(url: str) -> str:
 
     The project mounts ``persistent_storage/`` at ``/storage`` via FastAPI's
     StaticFiles (see ``cluster_main.py``); this is the inverse mapping.
+
+    安全：经 safe_storage_path 收敛，禁止 ``/storage/../..`` 类路径遍历越界读任意文件。
     """
-    if url.startswith("/storage/"):
-        rel = url[len("/storage/"):]
-        return os.path.join(_PROJECT_ROOT, "persistent_storage", rel)
-    return os.path.join(_PROJECT_ROOT, url.lstrip("/"))
+    return safe_storage_path(url, _PROJECT_ROOT)
 
 
 async def _download(url: str, dest: str) -> None:
@@ -80,6 +80,8 @@ async def _download(url: str, dest: str) -> None:
         local = _storage_url_to_disk(url)
         shutil.copy2(local, dest)
         return
+    # 安全：外部 URL 做 SSRF 防护，拒绝内网/回环/链路本地（含 GCP 元数据 169.254.169.254）
+    assert_public_http_url(url)
     async with aiohttp.ClientSession() as sess:
         async with sess.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             resp.raise_for_status()
