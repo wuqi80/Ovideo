@@ -225,6 +225,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         const boundAssets: string[] = Array.isArray(r.bound_assets ?? r.boundAssets)
           ? (r.bound_assets ?? r.boundAssets)
           : [];
+        const _imgUrl = r.generated_image_url ?? r.generatedImageUrl ?? null;
+        const _imgId = `img_${r.item_id ?? r.itemId ?? idx}`;
         return {
           id: r.item_id ?? r.itemId ?? uuidv4(),
           shotNumber: idx + 1,
@@ -234,7 +236,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
           imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
           videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
-          generatedImageUrl: r.generated_image_url ?? r.generatedImageUrl ?? null,
+          generatedImageUrl: _imgUrl,
+          // 同步填充分镜页显示用字段，否则从库加载后这些为空 → 分镜缩略图空白（图其实在库/磁盘）。
+          generatedImage: _imgUrl ?? undefined,
+          generatedImages: _imgUrl ? [{ id: _imgId, url: _imgUrl, thumbnail: _imgUrl, timestamp: Date.now() }] : [],
+          selectedImageId: _imgUrl ? _imgId : undefined,
           characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
           scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
           plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
