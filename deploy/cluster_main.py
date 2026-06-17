@@ -987,13 +987,28 @@ async def _save_text_result(task_id: str, text_content: str):
     except Exception as e:
         logger.error(f"⚠️ 保存文本结果失败: {e}", exc_info=True)
 
+from utils.net_guard import safe_storage_path as _safe_storage_path  # 安全：/storage 路径收敛防遍历
+_CM_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _storage_path_safe(url: str) -> Path:
+    """把 /storage/... 安全解析为磁盘 Path，强制收敛在 persistent_storage 内。
+    越界(路径遍历 ../)时返回一个保证不存在的路径，使下游 .exists() 判定为"未找到"，
+    既堵 LFI 又不改动原有控制流。"""
+    try:
+        return Path(_safe_storage_path(url, _CM_ROOT))
+    except ValueError:
+        logger.warning(f"拒绝越界 /storage 路径: {url!r}")
+        return Path(_CM_ROOT) / "persistent_storage" / "__blocked_nonexistent__"
+
+
 def data_url_to_base64(data_url: str) -> str:
     if not data_url:
         return ""
     if "base64," in data_url:
         return data_url.split("base64,", 1)[1]
     if data_url.startswith('/storage/'):
-        file_path = Path('persistent_storage') / data_url.replace('/storage/', '', 1)
+        file_path = _storage_path_safe(data_url)
         if file_path.exists():
             return base64.b64encode(file_path.read_bytes()).decode('utf-8')
         logger.warning(f"data_url_to_base64: file not found: {file_path}")
@@ -1023,7 +1038,7 @@ def to_doubao_image_input(ref: str) -> str:
         except Exception:
             return ref
     if ref.startswith("/storage/"):
-        file_path = Path("persistent_storage") / ref.replace("/storage/", "", 1)
+        file_path = _storage_path_safe(ref)
         if not file_path.exists():
             logger.warning(f"to_doubao_image_input: file not found: {file_path}")
             return ""
@@ -1429,7 +1444,7 @@ async def gemini_image_generate(request: GeminiImageRequest, username: str = Dep
                     parts.append({"inlineData": {"mimeType": mime_type, "data": b64_data}})
                     ref_count += 1
                 elif ref.startswith('/storage/'):
-                    file_path = Path('persistent_storage') / ref.replace('/storage/', '', 1)
+                    file_path = _storage_path_safe(ref)
                     if file_path.exists():
                         img_bytes = file_path.read_bytes()
                         ext = file_path.suffix.lower()
@@ -1634,7 +1649,7 @@ async def gpt_image_generate(request: GptImageRequest, username: str = Depends(r
                     b64_data = ref.split(",", 1)[1] if "," in ref else ref
                     img_bytes = base64.b64decode(b64_data)
                 elif ref.startswith("/storage/"):
-                    fp = Path("persistent_storage") / ref.replace("/storage/", "", 1)
+                    fp = _storage_path_safe(ref)
                     if fp.exists():
                         img_bytes = fp.read_bytes()
                         ext = fp.suffix.lstrip(".").lower() or "png"
@@ -3622,8 +3637,7 @@ async def get_thumbnail(
             file_path = os.path.join('temp', 'uploads', relative_path.split('?')[0])
         elif url.startswith('/storage/'):
             # /storage/images/admin/202512/xxx.png -> persistent_storage/images/admin/202512/xxx.png
-            relative_path = url.replace('/storage/', '')
-            file_path = os.path.join('persistent_storage', relative_path.split('?')[0])
+            file_path = str(_storage_path_safe(url.split('?')[0]))
         elif url.startswith('/api/files/'):
             # /api/files/{file_id}/download -> 从数据库获取文件路径
             parts = url.split('/')
@@ -5297,7 +5311,7 @@ async def generate_multi_grid_storyboard(
             b64_data = ref.split(',')[1] if ',' in ref else ref
             parts.append({"inlineData": {"mimeType": mime_type, "data": b64_data}})
         elif ref.startswith('/storage/'):
-            file_path = Path('persistent_storage') / ref.replace('/storage/', '', 1)
+            file_path = _storage_path_safe(ref)
             if file_path.exists():
                 img_bytes = file_path.read_bytes()
                 ext = file_path.suffix.lower()
