@@ -4,19 +4,64 @@ API configuration DAO -- api_configurations 表的增删改查
 """
 import base64
 import json
+import logging
+import os
 import uuid
 from typing import Any, Dict, List, Optional
 
 from db_manager import get_db_manager
 
+logger = logging.getLogger(__name__)
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+    _HAS_FERNET = True
+except ImportError:
+    _HAS_FERNET = False
+
+_FERNET_PREFIX = "fernet:"
+
+
+def _get_fernet():
+    """从环境变量 API_CONFIG_ENC_KEY 取 Fernet 实例。
+    未配置/无效则返回 None → 退回 base64（与历史一致，保证不破坏现有功能）。"""
+    key = os.getenv("API_CONFIG_ENC_KEY")
+    if not key or not _HAS_FERNET:
+        return None
+    try:
+        return Fernet(key.encode() if isinstance(key, str) else key)
+    except Exception as e:
+        logger.warning(f"API_CONFIG_ENC_KEY 无效，退回 base64：{e}")
+        return None
+
 
 class ApiConfigDAO:
     @staticmethod
     def _encrypt_key(key: str) -> str:
+        # 安全：DB 存 API key 改为 Fernet 真加密（原先只是 base64 伪加密，DB 泄露即明文）。
+        # 配置了 API_CONFIG_ENC_KEY 才真加密；未配置则退回 base64（不破坏本地/历史）。
+        if not key:
+            return ""
+        f = _get_fernet()
+        if f:
+            return _FERNET_PREFIX + f.encrypt(key.encode()).decode()
         return base64.b64encode(key.encode()).decode()
 
     @staticmethod
     def _decrypt_key(encrypted: str) -> str:
+        # 向后兼容：fernet: 前缀走 Fernet 解密；否则按旧 base64 值处理。
+        if not encrypted:
+            return ""
+        if encrypted.startswith(_FERNET_PREFIX):
+            f = _get_fernet()
+            if not f:
+                logger.error("遇到 Fernet 加密的 API key 但 API_CONFIG_ENC_KEY 未配置/无效，无法解密")
+                return ""
+            try:
+                return f.decrypt(encrypted[len(_FERNET_PREFIX):].encode()).decode()
+            except InvalidToken:
+                logger.error("API key Fernet 解密失败（密钥不匹配？）")
+                return ""
         try:
             return base64.b64decode(encrypted.encode()).decode()
         except Exception:
