@@ -167,6 +167,10 @@ async def get_current_user(request: Request) -> str:
 @router.post("/api/auth/register")
 async def register_user(user_data: UserRegister):
     """用户注册"""
+    # 安全：公开注册默认关闭（私有部署不应允许任何人自助注册 → 直达需登录的内部端点）。
+    # 需要开放时设环境变量 ALLOW_PUBLIC_REGISTRATION=true。
+    if os.getenv("ALLOW_PUBLIC_REGISTRATION", "false").lower() not in ("1", "true", "yes", "on"):
+        raise HTTPException(status_code=403, detail="公开注册已关闭，请联系管理员开通账号")
     try:
         # 检查用户名是否存在
         existing_user = await UserDAO.get_user_by_username(user_data.username)

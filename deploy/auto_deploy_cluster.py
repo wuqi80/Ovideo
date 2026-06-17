@@ -652,7 +652,7 @@ class SystemConfig:
         "description": "分布式图像生成服务",
         "version": "2.0.0"
     }}
-    ALLOW_ORIGINS = ["*"]
+    ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:6006,http://127.0.0.1:6006").split(",") if o.strip()]
     SESSION_TIMEOUT = 86400
     UPLOAD_DIR = "uploads"
     OUTPUT_DIR = "outputs"

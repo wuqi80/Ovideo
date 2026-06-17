@@ -184,7 +184,9 @@ class SystemConfig:
         "description": "分布式图像生成服务",
         "version": "2.0.0"
     }
-    ALLOW_ORIGINS = ["*"]
+    # 安全：禁止 ["*"] + allow_credentials=True 的危险组合（任意站点带凭据跨域）。
+    # 改为 env 可配白名单；应用是同源服务，默认本地不影响主站，生产用 CORS_ALLOW_ORIGINS 配域名。
+    ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:6006,http://127.0.0.1:6006").split(",") if o.strip()]
     SESSION_TIMEOUT = 86400
     UPLOAD_DIR = "uploads"
     OUTPUT_DIR = "outputs"
