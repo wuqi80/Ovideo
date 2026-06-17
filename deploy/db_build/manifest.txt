@@ -14,6 +14,7 @@ database_schema.sql
 # ---- 1. 基础表的早期扩展（只需基础表）----
 db_migration_add_permissions.sql        # ALTER users
 db_migration_unified_files.sql          # ALTER files
+db_migration_project_soft_delete.sql    # ALTER projects 加 is_deleted/deleted_at（补 commit 8fb3690 漏建）
 
 # ---- 2. 创作核心链：episodes → scripts → storyboard → assets ----
 db_migration_episodes.sql               # REF projects
