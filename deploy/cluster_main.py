@@ -662,14 +662,17 @@ jwt_auth.init()
 # 在线用户追踪（仅用于 admin 面板显示，不用于认证）
 _online_users: dict = {}
 
+# 安全(C2)：内置账号密码改为 env 可覆盖，默认值不变（本地/现状零破坏）。
+# 生产应设强密码环境变量覆盖弱默认（admin123 等）：ADMIN_PASSWORD / USER_PASSWORD /
+# DEMO_PASSWORD / MESSIAH0X_PASSWORD / SUPER_ADMIN_PASSWORD。未设则退回原默认。
 DEFAULT_USERS = {
-    'admin': 'admin123',
-    'user': 'user123',
-    'demo': 'demo123',
-    '米赛亚01': 'messiah2025@01',
-    '米赛亚02': 'messiah2025@02',
-    '米赛亚03': 'messiah2025@03',
-    '米赛亚04': 'messiah2025@04',
+    'admin': os.getenv('ADMIN_PASSWORD', 'admin123'),
+    'user': os.getenv('USER_PASSWORD', 'user123'),
+    'demo': os.getenv('DEMO_PASSWORD', 'demo123'),
+    '米赛亚01': os.getenv('MESSIAH01_PASSWORD', 'messiah2025@01'),
+    '米赛亚02': os.getenv('MESSIAH02_PASSWORD', 'messiah2025@02'),
+    '米赛亚03': os.getenv('MESSIAH03_PASSWORD', 'messiah2025@03'),
+    '米赛亚04': os.getenv('MESSIAH04_PASSWORD', 'messiah2025@04'),
     'lllsdhr': os.getenv('SUPER_ADMIN_PASSWORD', 'changeme')  # 🔐 超级管理员（对admin隐藏）
 }
 

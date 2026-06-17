@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""Drama 冒烟测试：登录 + 安全项 + 核心流程。参数化 base URL，可跑本地或线上。
+
+用法： python smoke_test.py [BASE_URL] [ADMIN_PASSWORD]
+  BASE_URL 默认 http://127.0.0.1:6006
+  ADMIN_PASSWORD 默认 admin123（线上设了强密码则传入）
+退出码 0=全过，非0=有失败。
+"""
+import sys, json, ssl, time, hmac, hashlib, base64, urllib.request, urllib.error
+
+BASE = sys.argv[1].rstrip('/') if len(sys.argv) > 1 else "http://127.0.0.1:6006"
+ADMIN_PW = sys.argv[2] if len(sys.argv) > 2 else "admin123"
+CTX = ssl.create_default_context()
+results = []
+
+def req(path, method="GET", body=None, token=None, timeout=15):
+    h = {"Content-Type": "application/json"}
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    data = json.dumps(body).encode() if body is not None else None
+    try:
+        r = urllib.request.urlopen(urllib.request.Request(BASE + path, method=method, data=data, headers=h), timeout=timeout, context=CTX)
+        return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+    except Exception as e:
+        return None, str(e).encode()
+
+def check(name, cond, detail=""):
+    results.append((name, cond, detail))
+    print(f"  {'✅' if cond else '❌'} {name}" + (f"  [{detail}]" if detail and not cond else ""))
+    return cond
+
+def forged_token():
+    OLD = "messiah-default-jwt-secret-2026"
+    now = int(time.time())
+    pb = base64.urlsafe_b64encode(json.dumps({"u": "admin", "exp": now + 3600, "iat": now}, separators=(',', ':')).encode()).decode().rstrip('=')
+    return f"{pb}.{hmac.new(OLD.encode(), pb.encode(), hashlib.sha256).hexdigest()}"
+
+def run():
+    print(f"=== 冒烟 {BASE} ===")
+    # 1. 登录
+    st, b = req("/api/login", "POST", {"username": "admin", "password": ADMIN_PW})
+    tok = None
+    if st == 200:
+        try: tok = json.loads(b).get("token")
+        except Exception: pass
+    check("登录 admin 成功并拿到 token", st == 200 and bool(tok), f"http={st}")
+    if not tok:
+        return  # 后续都依赖 token
+
+    # 2. 安全项
+    st, _ = req("/api/debug/auth-status")
+    check("debug 接口已移除(404)", st == 404, f"http={st}")
+    st, _ = req("/api/auth/register", "POST", {"username": "smoke_x", "password": "x"})
+    check("公开注册已关闭(403)", st == 403, f"http={st}")
+    st, _ = req("/api/admin/dashboard")
+    check("admin 无 token 被拒(401/403)", st in (401, 403), f"http={st}")
+    st, _ = req("/api/admin/dashboard", token=tok)
+    check("admin 带 token 可访问(200)", st == 200, f"http={st}")
+    st, _ = req("/api/projects", token=forged_token())
+    check("旧密钥伪造令牌被拒(401)", st == 401, f"http={st}")
+
+    # 3. 核心流程
+    st, b = req("/api/projects", token=tok)
+    ok = st == 200
+    try: ok = ok and json.loads(b).get("success", False)
+    except Exception: ok = False
+    check("项目列表 /api/projects 正常", ok, f"http={st}")
+
+    # 创建→列出→删除 一个临时项目（验证写库链路 + 清理不留脏数据）
+    pname = f"smoke_{int(time.time())}"
+    st, b = req("/api/projects", "POST", {"project_name": pname, "description": "smoke", "visibility": "private"}, token=tok)
+    pid = None
+    try: pid = json.loads(b).get("project", {}).get("project_id")
+    except Exception: pass
+    check("创建临时项目成功", st == 200 and bool(pid), f"http={st}")
+    if pid:
+        st, b = req(f"/api/projects/{pid}/episodes", token=tok)
+        check("分集列表可读(新项目空)", st == 200, f"http={st}")
+        st, _ = req(f"/api/projects/{pid}", "DELETE", token=tok)
+        check("删除临时项目(清理)", st in (200, 204), f"http={st}")
+
+    # 4. 首页/SPA
+    st, _ = req("/projects")
+    check("SPA 首页可达(200)", st == 200, f"http={st}")
+
+if __name__ == "__main__":
+    run()
+    passed = sum(1 for _, c, _ in results if c)
+    total = len(results)
+    print(f"=== 结果: {passed}/{total} 通过 ===")
+    sys.exit(0 if passed == total else 1)
