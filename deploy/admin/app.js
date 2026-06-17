@@ -40,8 +40,12 @@ function navigateTo(page) {
 
 async function apiCall(url, options = {}) {
   try {
+    // 安全(C3)：带上 admin JWT。本控制台作为 /admin-legacy 同源 iframe 嵌在 admin 壳里，
+    // 共享 sessionStorage，可读到壳登录时写入的 admin_session_token（与 AdminHubPage 一致）。
+    const token = sessionStorage.getItem('admin_session_token') || localStorage.getItem('auth_token');
+    const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
     const resp = await fetch(url, {
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers: { 'Content-Type': 'application/json', ...authHeader, ...options.headers },
       ...options,
     });
     const data = await resp.json();

@@ -68,12 +68,11 @@ async def require_admin(request: Request) -> str:
     return username
 
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
-# 注意：保留老 /admin/app.js 静态控制台的"无 JWT"行为兼容，
-# 不在 router 上挂全局 require_admin。
-# 仅对 2026-05-26 Slice 4/5 新增的 users/project-groups/credit-rules/
-# media-library/credit-accounts/credit-transactions/audit-logs 端点
-# 单独添加 Depends(require_admin)。
+# 安全(C3)：全部 /api/admin/* 强制 require_admin。
+# 原先为兼容旧 /admin/app.js 控制台「无 JWT」而不挂全局鉴权，导致 POST /agents 造 token、
+# api-configs 增删改等公网无鉴权可调（严重漏洞）。现旧控制台 app.js 已改为携带 admin JWT
+# （读同源 iframe 共享的 sessionStorage.admin_session_token），故可安全挂全局鉴权。
+router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
 
 async def _reload_api_env():
