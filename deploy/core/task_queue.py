@@ -203,7 +203,21 @@ class TaskQueue:
                 return None
             
             task_id = result[0][0] if isinstance(result[0], tuple) else result[0]
-            
+
+            # R5 防御：SmartApiRouter 投递的 api_call 任务，member 是整个 JSON dict（不写 task hash），
+            # 设计上只能由 GPU agent 的 /api/agent/poll 消费。若被本地 lite worker 先 zpopmin 取到，
+            # 下面的 get_task 会因查无 hash 返回 None → 任务被静默丢弃。
+            # 这里识别该格式则原样放回队列（保持 member 不变），交还给 agent 认领，本 worker 返回 None。
+            # 注意：普通 task_id 字符串不是合法 JSON dict，对现有任务此分支恒为 no-op，零行为变化。
+            try:
+                _parsed = json.loads(task_id)
+                if isinstance(_parsed, dict) and "task_id" in _parsed:
+                    await self.redis.zadd(RedisConfig.TASK_QUEUE_KEY, {task_id: 10})
+                    logger.info("dequeue: 识别到 api_call 任务（JSON member），放回队列交给 GPU agent")
+                    return None
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
             # 获取任务详情
             task = await self.get_task(task_id)
             if not task:
