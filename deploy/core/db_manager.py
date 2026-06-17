@@ -89,11 +89,6 @@ class DatabaseManager:
         """查询单个值"""
         async with self.acquire() as conn:
             return await conn.fetchval(query, *args)
-    
-    async def transaction(self):
-        """开始事务"""
-        async with self.acquire() as conn:
-            return conn.transaction()
 
 # 全局数据库管理器实例
 _db_manager: Optional[DatabaseManager] = None
