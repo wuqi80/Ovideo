@@ -152,6 +152,16 @@ EXPECTED_ENDPOINTS = {
     ("/api/episodes/{episode_id}/timeline-tracks", "GET"): ("routers.script_timeline", "get_timeline_tracks"),
     ("/api/episodes/{episode_id}/timeline-tracks", "POST"): ("routers.script_timeline", "create_timeline_track"),
     ("/api/timeline-tracks/{track_id}", "PUT"): ("routers.script_timeline", "update_timeline_track"),
+    ("/api/canvas/boards", "POST"): ("routers.canvas", "create_canvas_board"),
+    ("/api/canvas/boards", "GET"): ("routers.canvas", "get_canvas_boards"),
+    ("/api/canvas/boards/{board_id}", "GET"): ("routers.canvas", "get_canvas_board_detail"),
+    ("/api/canvas/boards/{board_id}", "PUT"): ("routers.canvas", "update_canvas_board"),
+    ("/api/canvas/boards/{board_id}", "DELETE"): ("routers.canvas", "delete_canvas_board"),
+    ("/api/canvas/nodes", "POST"): ("routers.canvas", "create_canvas_node"),
+    ("/api/canvas/nodes/{node_id}", "PUT"): ("routers.canvas", "update_canvas_node"),
+    ("/api/canvas/nodes/{node_id}", "DELETE"): ("routers.canvas", "delete_canvas_node"),
+    ("/api/canvas/connections", "POST"): ("routers.canvas", "create_canvas_connection"),
+    ("/api/canvas/connections/{connection_id}", "DELETE"): ("routers.canvas", "delete_canvas_connection"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -1023,6 +1033,47 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_canvas_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    canvas_path = root / "routers" / "canvas.py"
+    if not canvas_path.exists():
+        fail("routers/canvas.py is missing")
+
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value.startswith("/api/canvas/"):
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Canvas route handlers must live in routers/canvas.py:\n" + "\n".join(violations))
+
+    canvas_tree = parse_py_file(canvas_path)
+    route_count = 0
+    for node in ast.walk(canvas_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 10:
+        fail(f"routers/canvas.py should own 10 canvas route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -1058,6 +1109,7 @@ def main() -> int:
     project_route_handlers = check_project_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
     script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
+    canvas_route_handlers = check_canvas_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -1085,6 +1137,7 @@ def main() -> int:
     print(f"  project_route_handlers={project_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
     print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
+    print(f"  canvas_route_handlers={canvas_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 
