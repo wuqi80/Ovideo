@@ -549,6 +549,10 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
             response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
         elif path.startswith('/assets/'):
             response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+        elif path.startswith('/admin-legacy'):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
         return response
 
 app.add_middleware(CacheControlMiddleware)

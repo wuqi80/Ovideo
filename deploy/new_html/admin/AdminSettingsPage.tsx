@@ -25,7 +25,7 @@ import {
 import { pickTokenForCurrentRoute } from './adminAuth';
 import { crmConfirm, crmMessage } from './crmUI';
 
-const LEGACY_VER = '20260619a';
+const LEGACY_VER = '20260619b';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
     'legacy-apiconfig': 'apiconfig',
     cluster: 'cluster',
