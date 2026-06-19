@@ -881,6 +881,33 @@ def check_task_stale_cleanup_notification_contract(root: Path) -> int:
     return 2
 
 
+def check_lifespan_shutdown_contract(root: Path) -> int:
+    """Lifespan background workers must shut down without a long 502 window."""
+    cluster_main_text = (root / "cluster_main.py").read_text(encoding="utf-8")
+    required_snippets = {
+        "process_signal_handlers": "original process signal handler capture",
+        "loop_signal_handlers": "original event loop signal handler capture",
+        "_restore_process_signal_handlers": "process signal handler restore",
+        "add_signal_handler": "event loop signal handler restore",
+        "_suppress_worker_signal_registration": "worker signal override suppression",
+        "guarded_signal": "worker signal override guard",
+        "_create_background_task": "background task tracking helper",
+        "_create_worker_task": "worker task tracking helper",
+        "BACKGROUND_TASK_SHUTDOWN_TIMEOUT_SECONDS": "bounded background task shutdown",
+        "WORKER_STOP_TIMEOUT_SECONDS": "bounded Worker.stop shutdown",
+        "WORKER_TASK_CANCEL_TIMEOUT_SECONDS": "bounded worker task cancellation",
+        "workers.clear()": "worker registry cleanup",
+    }
+    missing = [
+        f"{label}: missing {snippet}"
+        for snippet, label in required_snippets.items()
+        if snippet not in cluster_main_text
+    ]
+    if missing:
+        fail("cluster_main lifespan shutdown contract failed:\n" + "\n".join(missing))
+    return len(required_snippets)
+
+
 def check_fallback_static_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     fallback_static_path = root / "routers" / "fallback_static.py"
@@ -1839,6 +1866,7 @@ def main() -> int:
     task_route_handlers = check_task_routes_extracted(root)
     task_notification_route_handlers = check_task_notification_routes_extracted(root)
     task_stale_cleanup_checks = check_task_stale_cleanup_notification_contract(root)
+    lifespan_shutdown_checks = check_lifespan_shutdown_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -1881,6 +1909,7 @@ def main() -> int:
     print(f"  task_route_handlers={task_route_handlers}")
     print(f"  task_notification_route_handlers={task_notification_route_handlers}")
     print(f"  task_stale_cleanup_checks={task_stale_cleanup_checks}")
+    print(f"  lifespan_shutdown_checks={lifespan_shutdown_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

@@ -9,6 +9,7 @@ sys.modules.setdefault('cluster_main', sys.modules[__name__])
 import asyncio
 import logging
 import os
+import signal
 import uuid
 import time
 import random
@@ -241,6 +242,87 @@ async def lifespan(app: FastAPI):
     # 那里没有 running loop。任何需要触达 asyncpg 池的 fire-and-forget 协程
     # 必须通过 asyncio.run_coroutine_threadsafe(coro, MAIN_EVENT_LOOP) 调度回主 loop。
     MAIN_EVENT_LOOP = asyncio.get_running_loop()
+    process_signal_handlers = {
+        signal.SIGINT: signal.getsignal(signal.SIGINT),
+        signal.SIGTERM: signal.getsignal(signal.SIGTERM),
+    }
+    loop_signal_handlers = {}
+    raw_loop_signal_handlers = getattr(MAIN_EVENT_LOOP, "_signal_handlers", None)
+    if raw_loop_signal_handlers:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            handle = raw_loop_signal_handlers.get(sig) or raw_loop_signal_handlers.get(int(sig))
+            if handle:
+                loop_signal_handlers[sig] = (handle._callback, handle._args)
+    background_tasks: List[asyncio.Task] = []
+    worker_tasks: List[asyncio.Task] = []
+    original_signal_setter = signal.signal
+    suppressing_worker_signal_registration = False
+
+    def _create_background_task(coro, name: str) -> asyncio.Task:
+        task = asyncio.create_task(coro, name=name)
+        background_tasks.append(task)
+        return task
+
+    def _is_worker_signal_handler(handler) -> bool:
+        owner = getattr(handler, "__self__", None)
+        return (
+            getattr(handler, "__name__", "") == "_signal_handler"
+            and owner is not None
+            and owner.__class__.__name__ == "Worker"
+        )
+
+    def _suppress_worker_signal_registration() -> None:
+        nonlocal suppressing_worker_signal_registration
+        if suppressing_worker_signal_registration:
+            return
+
+        def guarded_signal(sig, handler):
+            if sig in (signal.SIGINT, signal.SIGTERM) and _is_worker_signal_handler(handler):
+                worker = getattr(handler, "__self__", None)
+                worker_id = getattr(worker, "worker_id", "unknown")
+                sig_name = signal.Signals(sig).name
+                logger.info(
+                    "Skipped process signal override for Worker %s on %s; uvicorn owns service shutdown",
+                    worker_id,
+                    sig_name,
+                )
+                return signal.getsignal(sig)
+            return original_signal_setter(sig, handler)
+
+        signal.signal = guarded_signal
+        suppressing_worker_signal_registration = True
+
+    def _restore_signal_setter() -> None:
+        nonlocal suppressing_worker_signal_registration
+        if suppressing_worker_signal_registration:
+            signal.signal = original_signal_setter
+            suppressing_worker_signal_registration = False
+
+    def _create_worker_task(worker: Worker) -> asyncio.Task:
+        _suppress_worker_signal_registration()
+        task = asyncio.create_task(worker.start(), name=f"worker:{worker.worker_id}")
+        worker_tasks.append(task)
+        return task
+
+    async def _restore_process_signal_handlers() -> None:
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        _restore_signal_setter()
+        for sig, handler in process_signal_handlers.items():
+            try:
+                if sig in loop_signal_handlers:
+                    callback, args = loop_signal_handlers[sig]
+                    MAIN_EVENT_LOOP.add_signal_handler(sig, callback, *args)
+                    logger.info("Restored event loop signal handler for %s after worker startup", sig.name)
+                    continue
+            except Exception as exc:
+                logger.warning("Failed to restore event loop signal handler for %s: %s", sig, exc)
+            try:
+                if signal.getsignal(sig) != handler:
+                    signal.signal(sig, handler)
+                    logger.info("Restored process signal handler for %s after worker startup", sig.name)
+            except Exception as exc:
+                logger.warning("Failed to restore process signal handler for %s: %s", sig, exc)
 
     # ===== 启动事件 =====
     logger.info("=" * 60)
@@ -341,7 +423,7 @@ async def lifespan(app: FastAPI):
                 video_cluster_manager=video_cluster_manager  # 传入视频集群
             )
             workers.append(worker)
-            asyncio.create_task(worker.start())
+            _create_worker_task(worker)
             logger.info(f"✅ Worker {worker_id} 已启动")
 
         logger.info("=" * 60)
@@ -372,7 +454,7 @@ async def lifespan(app: FastAPI):
                     video_cluster_manager=None,  # 同上
                 )
                 workers.append(worker)
-                asyncio.create_task(worker.start())
+                _create_worker_task(worker)
                 logger.info(f"✅ lite Worker {worker_id} 已启动")
         else:
             logger.info("ℹ️ LITE_WORKERS_COUNT=0：不启动任何 lite Worker（外部 API 任务将无消费者）")
@@ -383,6 +465,8 @@ async def lifespan(app: FastAPI):
         logger.info("ℹ️ AGENT_ONLY_MODE: 集群健康检查为可选模式")
         logger.info("系统以Agent-Only + Lite Worker 模式启动完成！")
         logger.info("=" * 60)
+
+    await _restore_process_signal_handlers()
 
     # P5-2: 创建路径兼容符号链接（videos -> video, images -> image）
     try:
@@ -427,7 +511,7 @@ async def lifespan(app: FastAPI):
                 logger.error(f"文件健康检查异常: {e}")
             await asyncio.sleep(86400)
 
-    asyncio.create_task(file_health_checker())
+    _create_background_task(file_health_checker(), "file_health_checker")
 
     async def thumbnail_cache_cleaner():
         await asyncio.sleep(600)
@@ -445,7 +529,7 @@ async def lifespan(app: FastAPI):
                 logger.warning("Thumbnail cache cleanup failed: %s", e)
             await asyncio.sleep(86400)
 
-    asyncio.create_task(thumbnail_cache_cleaner())
+    _create_background_task(thumbnail_cache_cleaner(), "thumbnail_cache_cleaner")
 
     async def task_stale_reaper():
         settings = task_stale_reaper_settings()
@@ -466,9 +550,12 @@ async def lifespan(app: FastAPI):
                 logger.error("Task stale reaper failed: %s", e, exc_info=True)
             await asyncio.sleep(int(task_stale_reaper_settings()["interval_seconds"]))
 
-    asyncio.create_task(task_stale_reaper())
+    _create_background_task(task_stale_reaper(), "task_stale_reaper")
 
-    provider_health_monitor_task = asyncio.create_task(provider_health_monitor_loop(redis_client))
+    provider_health_monitor_task = _create_background_task(
+        provider_health_monitor_loop(redis_client),
+        "provider_health_monitor",
+    )
 
     # 🆕 Agent 超时检测后台任务
     async def agent_stale_checker():
@@ -484,23 +571,55 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Agent超时检测异常: {e}")
             await asyncio.sleep(30)
 
-    asyncio.create_task(agent_stale_checker())
+    _create_background_task(agent_stale_checker(), "agent_stale_checker")
 
     yield  # 应用运行期间
 
     # ===== 关闭事件 =====
     logger.info("正在关闭系统...")
 
-    if provider_health_monitor_task:
-        provider_health_monitor_task.cancel()
+    for task in background_tasks:
+        if not task.done():
+            task.cancel()
+    if background_tasks:
         try:
-            await provider_health_monitor_task
-        except asyncio.CancelledError:
-            pass
+            await asyncio.wait_for(
+                asyncio.gather(*background_tasks, return_exceptions=True),
+                timeout=_env_int_at_least("BACKGROUND_TASK_SHUTDOWN_TIMEOUT_SECONDS", 5, 1),
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Background task shutdown timed out; continuing service shutdown")
 
     # 停止 Workers（含 AGENT_ONLY_MODE=true 下启动的 lite Workers — 2026-05-26 Follow-up A）
-    for worker in workers:
-        await worker.stop()
+    worker_stop_timeout = _env_int_at_least("WORKER_STOP_TIMEOUT_SECONDS", 8, 1)
+
+    async def _stop_worker(worker: Worker):
+        try:
+            await asyncio.wait_for(worker.stop(), timeout=worker_stop_timeout)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Worker %s stop timed out after %ss; cancelling worker task",
+                worker.worker_id,
+                worker_stop_timeout,
+            )
+        except Exception as exc:
+            logger.warning("Worker %s stop failed: %s", worker.worker_id, exc, exc_info=True)
+
+    if workers:
+        await asyncio.gather(*(_stop_worker(worker) for worker in workers), return_exceptions=True)
+
+    for task in worker_tasks:
+        if not task.done():
+            task.cancel()
+    if worker_tasks:
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*worker_tasks, return_exceptions=True),
+                timeout=_env_int_at_least("WORKER_TASK_CANCEL_TIMEOUT_SECONDS", 5, 1),
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Worker task cancellation timed out; continuing service shutdown")
+    workers.clear()
 
     # 🆕 关闭数据库连接
     if db_manager:

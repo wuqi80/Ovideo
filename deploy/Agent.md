@@ -1,5 +1,49 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 Graceful Restart Timeout Fix
+
+### Incident
+
+- `systemctl restart drama` repeatedly waited for the systemd 90 second stop timeout before SIGKILL.
+- During that window `https://mecha.one/` could briefly return 502 while the service was being replaced.
+- Investigation showed two separate shutdown risks:
+  - `core.worker.Worker.start()` registers process-level `SIGINT`/`SIGTERM` handlers from worker tasks.
+  - uvicorn then waited on active HTTP tasks before entering FastAPI lifespan shutdown.
+
+### Changes
+
+- Updated `deploy/cluster_main.py` without modifying redline worker files:
+  - tracks background tasks and worker tasks created during lifespan startup
+  - temporarily suppresses worker process signal registration so uvicorn remains the service shutdown owner
+  - cancels background tasks and worker tasks with bounded timeouts during lifespan shutdown
+  - keeps worker shutdown concurrent and clears the worker registry
+- Updated `deploy/scripts/check_route_contract.py`:
+  - added `lifespan_shutdown_checks=12`
+  - contract verifies signal-guard, task tracking, and bounded shutdown snippets remain present
+- Added server-only systemd drop-in:
+  - `/etc/systemd/system/drama.service.d/90-graceful-timeout.conf`
+  - `ExecStart` now includes `--timeout-graceful-shutdown 8`
+  - `TimeoutStopSec=30`
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `scripts/check_route_contract.py` reports `lifespan_shutdown_checks=12`
+  - `scripts/check_provider_contract.py` passed
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` passed `9/9`
+- Restart verification:
+  - before fix: `RESTART_COMMAND_SECONDS=90`, `HEALTHY_SECONDS=92`
+  - after systemd graceful timeout: `RESTART_COMMAND_SECONDS=8`, `HEALTHY_SECONDS=10`
+  - logs now show `Waiting for application shutdown`, worker stop, and `Application shutdown complete`
+
+### Notes
+
+- `deploy/pipeline/**`, `deploy/agent_routes.py`, `deploy/workflows/*.json`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, and `deploy/core/worker.py` were not modified.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Stale Task Notification Storm Fix
 
 ### Incident
@@ -31,8 +75,8 @@
 
 ### Notes
 
-- `cluster_main.py` was intentionally not changed. The stale reaper startup loop remains there for now; this fix changes the DAO cleanup semantics and notification filtering.
-- Separate follow-up: `systemctl restart drama` currently waits 90 seconds before SIGKILL, causing a temporary 502 window. A graceful shutdown fix should be handled separately.
+- `cluster_main.py` was intentionally not changed for the stale-notification fix. The stale reaper startup loop remains there for now; this fix changes the DAO cleanup semantics and notification filtering.
+- Follow-up resolved above: `systemctl restart drama` no longer waits for the 90 second systemd timeout in normal verification.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
 ## 2026-06-19 Gemini Text Failover Response Metadata
