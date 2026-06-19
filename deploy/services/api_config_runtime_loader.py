@@ -45,6 +45,8 @@ GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash"}
 GEMINI_TTS_NEW_MODEL = "gemini-2.5-flash-preview-tts"
 SORA2_LEGACY_MODELS = {"sora-2"}
 SORA2_NEW_MODEL = "sora_video2-landscape-15s"
+VEO_LEGACY_MODELS = {"veo-3", "veo-3.1"}
+VEO_NEW_MODEL = "veo-3.1-landscape-fast-fl"
 
 
 def managed_api_env_keys() -> set[str]:
@@ -260,6 +262,24 @@ async def seed_default_api_providers() -> Dict[str, Any]:
                 old_name,
                 model_name,
                 SORA2_NEW_MODEL,
+            )
+
+        for row in existing:
+            provider = str(_config_get(row, "provider", "") or "").strip().lower()
+            if provider != "veo":
+                continue
+            model_name = str(_config_get(row, "model_name", "") or "").strip()
+            if model_name not in VEO_LEGACY_MODELS:
+                continue
+
+            old_name = str(_config_get(row, "name", "") or "")
+            await ApiConfigDAO.update(_config_get(row, "config_id", ""), model_name=VEO_NEW_MODEL)
+            upgraded += 1
+            logger.info(
+                "Upgraded Veo API config %r from %s to %s",
+                old_name,
+                model_name,
+                VEO_NEW_MODEL,
             )
 
         if created or upgraded:

@@ -2166,6 +2166,34 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_sora2_video_legacy_model_env_maps_to_callable_default",
         ),
+        (
+            root / "services" / "api_provider_registry.py",
+            '"model_name": "veo-3.1-landscape-fast-fl"',
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            'VEO_NEW_MODEL = "veo-3.1-landscape-fast-fl"',
+        ),
+        (
+            root / "external_api" / "video" / "veo.py",
+            "DEFAULT_VEO_VIDEO_MODEL =",
+        ),
+        (
+            root / "external_api" / "video" / "veo.py",
+            'config = resolve_provider("veo", model_override)',
+        ),
+        (
+            root / "external_api" / "video" / "veo.py",
+            "model: Optional[str] = None",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_veo_video_uses_runtime_model_env_when_request_omits_model",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_veo_video_legacy_model_env_maps_to_callable_default",
+        ),
     ]
     checks = 0
     for path, snippet in required_snippets:

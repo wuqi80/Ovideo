@@ -253,7 +253,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "Veo",
         "provider": "veo",
-        "model_name": "veo-3.1",
+        "model_name": "veo-3.1-landscape-fast-fl",
         "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "video",

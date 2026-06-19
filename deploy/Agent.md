@@ -3916,3 +3916,57 @@
 
 - This removes the Sora2 registry/payload model mismatch and moves Sora2 video selection into the same hot-reloadable admin API config/runtime resolver path.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Veo Video Runtime Model Wiring
+
+### Changes
+
+- Updated `deploy/external_api/video/veo.py` so Veo video creation resolves `provider=veo` through `resolve_provider()` and sends the resolved runtime model in the chat-completions payload.
+- Added `DEFAULT_VEO_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"` and maps legacy `veo-3` / `veo-3.1` values to that callable model, preserving the previously working request payload while allowing admin/DB/env `VEO_MODEL` to override it.
+- Updated `deploy/services/api_provider_registry.py` so the Veo preset imports the actual callable model `veo-3.1-landscape-fast-fl` instead of the old alias `veo-3.1`.
+- Updated `deploy/services/api_config_runtime_loader.py` so existing DB rows with `provider=veo` and `model_name in {"veo-3", "veo-3.1"}` are upgraded to `veo-3.1-landscape-fast-fl` during idempotent provider seeding.
+- Extended `deploy/scripts/check_api_config_runtime_loader.py` with Veo legacy model upgrade coverage.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with Veo runtime-model default, explicit override, and legacy alias normalization coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `33` to `40`
+  - contract now protects Veo preset/client/loader/test runtime model wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile external_api/video/veo.py services/api_provider_registry.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - From `deploy/`: `.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `17/17`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=40`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_veo_runtime_model_20260619_140146/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/external_api/video/veo.py`
+  - `/home/Administrator/deploy/services/api_provider_registry.py`
+  - `/home/Administrator/deploy/services/api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile external_api/video/veo.py services/api_provider_registry.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `17/17`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `VEO_MODEL` -> `veo-runtime-video-model-smoke`, source `VEO_MODEL`
+
+### Notes
+
+- This removes the Veo registry/payload model mismatch and moves Veo video selection into the same hot-reloadable admin API config/runtime resolver path.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

@@ -4,6 +4,7 @@ import pytest
 
 from external_api.video import minimax as minimax_video
 from external_api.video import sora2 as sora2_video
+from external_api.video import veo as veo_video
 from services import ai_proxy_service, video_reverse_service
 from services.api_provider_registry import get_endpoint_env_key, get_model_env_key, get_provider_env_key
 from services.api_provider_runtime import resolve_provider
@@ -173,6 +174,14 @@ class _Sora2TaskResponse:
 
     def json(self):
         return {"id": "sora2-video-1"}
+
+
+class _VeoTaskResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"id": "veo-video-1"}
 
 
 @pytest.mark.asyncio
@@ -369,6 +378,82 @@ def test_sora2_video_legacy_model_env_maps_to_callable_default(monkeypatch):
 
     assert calls[0]["url"] == "https://sora2-runtime.example.test/v1/videos"
     assert calls[0]["json"]["model"] == sora2_video.DEFAULT_SORA2_VIDEO_MODEL
+
+
+def test_veo_video_uses_runtime_model_env_when_request_omits_model(monkeypatch):
+    env_key = get_provider_env_key("veo")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-veo-key")
+    monkeypatch.setenv(endpoint_env, "https://veo-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "veo-runtime-video-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _VeoTaskResponse()
+
+    monkeypatch.setattr(veo_video.requests, "post", fake_post)
+
+    client = veo_video.VeoClient()
+    result = client.create_video_task(prompt="move gently")
+
+    assert result == {"id": "veo-video-1"}
+    assert calls[0]["url"] == "https://veo-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "veo-runtime-video-model"
+
+
+def test_veo_video_explicit_non_default_model_overrides_runtime_model(monkeypatch):
+    env_key = get_provider_env_key("veo")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-veo-key")
+    monkeypatch.setenv(endpoint_env, "https://veo-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "veo-runtime-video-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _VeoTaskResponse()
+
+    monkeypatch.setattr(veo_video.requests, "post", fake_post)
+
+    client = veo_video.VeoClient()
+    client.create_video_task(
+        prompt="move gently",
+        model="veo-explicit-video-model",
+    )
+
+    assert calls[0]["url"] == "https://veo-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "veo-explicit-video-model"
+
+
+def test_veo_video_legacy_model_env_maps_to_callable_default(monkeypatch):
+    env_key = get_provider_env_key("veo")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-veo-key")
+    monkeypatch.setenv(endpoint_env, "https://veo-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "veo-3.1")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _VeoTaskResponse()
+
+    monkeypatch.setattr(veo_video.requests, "post", fake_post)
+
+    client = veo_video.VeoClient()
+    client.create_video_task(prompt="move gently")
+
+    assert calls[0]["url"] == "https://veo-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == veo_video.DEFAULT_VEO_VIDEO_MODEL
 
 
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):

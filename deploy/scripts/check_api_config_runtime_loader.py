@@ -175,6 +175,15 @@ async def main() -> int:
                 "endpoint": "https://api.laozhang.ai/v1",
                 "api_key_encrypted": "",
                 "enabled": False,
+            },
+            {
+                "config_id": "legacy_veo",
+                "provider": "veo",
+                "name": "Veo",
+                "model_name": "veo-3.1",
+                "endpoint": "https://api.laozhang.ai/v1",
+                "api_key_encrypted": "",
+                "enabled": False,
             }
         ]
         creates.clear()
@@ -182,8 +191,8 @@ async def main() -> int:
         seed = await loader.seed_default_api_providers()
         if seed.get("created") != 2:
             fail(f"Expected two GPT Image placeholders from registry, got {seed}")
-        if seed.get("upgraded") != 2:
-            fail(f"Expected two legacy model upgrades, got {seed}")
+        if seed.get("upgraded") != 3:
+            fail(f"Expected three legacy model upgrades, got {seed}")
         created_providers = {item.get("provider") for item in creates}
         if created_providers != {"laozhang-gpt-image", "laozhang-sora2"}:
             fail(f"Unexpected seed providers: {created_providers}")
@@ -196,6 +205,9 @@ async def main() -> int:
         sora2_updates = [fields for _, fields in updates if fields.get("model_name") == loader.SORA2_NEW_MODEL]
         if len(sora2_updates) != 1:
             fail("Legacy Sora2 model was not upgraded")
+        veo_updates = [fields for _, fields in updates if fields.get("model_name") == loader.VEO_NEW_MODEL]
+        if len(veo_updates) != 1:
+            fail("Legacy Veo model was not upgraded")
 
     finally:
         loader.ApiConfigDAO = original_dao
@@ -213,7 +225,7 @@ async def main() -> int:
     print("  hot_reload_loaded_rows=1")
     print("  baseline_restore=1")
     print("  seed_registry_placeholders=2")
-    print("  legacy_model_upgrades=2")
+    print("  legacy_model_upgrades=3")
     print("  admin_routes_no_cluster_import=1")
     return 0
 

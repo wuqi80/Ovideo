@@ -11,6 +11,25 @@ from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_VEO_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
+LEGACY_VEO_VIDEO_MODELS = {"veo-3", "veo-3.1"}
+
+
+def _runtime_model_override(model: Optional[str]) -> Optional[str]:
+    """Treat legacy/default names as fallback so admin runtime config can win."""
+    normalized = (model or "").strip()
+    if not normalized or normalized == DEFAULT_VEO_VIDEO_MODEL or normalized in LEGACY_VEO_VIDEO_MODELS:
+        return None
+    return normalized
+
+
+def _normalize_veo_model(model: Optional[str]) -> str:
+    normalized = (model or "").strip()
+    if not normalized or normalized in LEGACY_VEO_VIDEO_MODELS:
+        return DEFAULT_VEO_VIDEO_MODEL
+    return normalized
+
+
 class VeoClient:
     """Veo-3.1 API 客户端"""
     
@@ -18,15 +37,18 @@ class VeoClient:
         self._explicit_api_key = api_key
         self.api_key = api_key or ""
         self.base_url = ""
+        self.model_name = DEFAULT_VEO_VIDEO_MODEL
         self._request_kwargs: Dict[str, Any] = {}
         self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("⚠️ VEO_API_KEY 未设置")
 
-    def _refresh_runtime_config(self, model: str = "veo-3.1") -> None:
-        config = resolve_provider("veo", model)
+    def _refresh_runtime_config(self, model: Optional[str] = None) -> None:
+        model_override = _runtime_model_override(model)
+        config = resolve_provider("veo", model_override)
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
+        self.model_name = _normalize_veo_model(config.model_name or model_override)
         self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -37,7 +59,7 @@ class VeoClient:
         self,
         prompt: str,
         image_urls: Optional[List[str]] = None,
-        model: str = "veo-3.1-landscape-fast-fl"
+        model: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         创建视频生成任务
@@ -51,6 +73,7 @@ class VeoClient:
             包含task_id的响应
         """
         self._refresh_runtime_config(model)
+        resolved_model = self.model_name or DEFAULT_VEO_VIDEO_MODEL
         url = f"{self.base_url}/chat/completions"
         
         try:
@@ -66,7 +89,7 @@ class VeoClient:
                     })
             
             data = {
-                "model": model,
+                "model": resolved_model,
                 "messages": [{
                     "role": "user",
                     "content": content
