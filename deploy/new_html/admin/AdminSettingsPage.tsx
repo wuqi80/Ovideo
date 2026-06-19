@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
     Activity,
     AlertCircle,
@@ -26,7 +26,7 @@ import { getAdminToken, pickTokenForCurrentRoute, setAdminPostLoginRedirect } fr
 import { crmConfirm, crmMessage } from './crmUI';
 
 const LEGACY_VER = '20260619c';
-const LEGACY_API_CONFIG_ROUTE = '/admin/settings?item=legacy-apiconfig';
+const LEGACY_API_CONFIG_ROUTE = '/admin-legacy/?page=apiconfig';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
     'legacy-apiconfig': 'apiconfig',
     cluster: 'cluster',
@@ -359,10 +359,10 @@ function statusView(status: HealthStatus) {
 
 function healthStatusFrom(health?: ProviderHealth, runtime?: RuntimeStatus, configHasKey?: boolean): HealthStatus {
     const hasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : configHasKey;
-    if (hasKey === false) return 'no_key';
     const status = String(health?.status || runtime?.health_status || '').toLowerCase();
     if (status === 'ok') return 'ok';
     if (status === 'error' || status === 'no_key') return status;
+    if (hasKey === false) return 'no_key';
     return 'unknown';
 }
 
@@ -937,20 +937,20 @@ const ApiConfigCard: React.FC<{
                                 onClick={() => onTestConfig(config)}
                                 disabled={testingConfig || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="只测试这条 DB 配置保存的 key 和 endpoint"
+                                title="只测试这条数据库记录保存的 Key 和 Endpoint"
                             >
                                 {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                                测试此条记录
+                                测试 DB 记录
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onCheck(provider)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试实际生成调用会使用的 provider key 和 endpoint"
+                                title="测试实际生成调用会使用的运行时 Key 和 Endpoint"
                             >
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                测试生效配置
+                                测试运行时
                             </button>
                             <button
                                 type="button"
@@ -958,7 +958,7 @@ const ApiConfigCard: React.FC<{
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                             >
                                 <Edit3 className="w-3.5 h-3.5" />
-                                配置 / 修改 API Key
+                                修改 Key / Endpoint
                             </button>
                             <button
                                 type="button"
@@ -1194,17 +1194,17 @@ const ProviderQuickCard: React.FC<{
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
                 >
                     <KeyRound className="w-3.5 h-3.5" />
-                    配置 / 修改 API Key
+                    填写 / 修改 Key
                 </button>
                 <button
                     type="button"
                     onClick={() => onCheck(provider)}
                     disabled={checking || !provider}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                    title="测试实际生成调用会使用的 provider key 和 endpoint"
+                    title="测试实际生成调用会使用的运行时 Key 和 Endpoint"
                 >
                     {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    测试生效配置
+                    测试运行时
                 </button>
             </div>
         </article>
@@ -1212,7 +1212,6 @@ const ProviderQuickCard: React.FC<{
 };
 
 const ApiConfigPanel: React.FC = () => {
-    const navigate = useNavigate();
     const [configs, setConfigs] = useState<ApiConfig[]>([]);
     const [providers, setProviders] = useState<ProviderMeta[]>([]);
     const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus[]>([]);
@@ -1695,8 +1694,8 @@ const ApiConfigPanel: React.FC = () => {
             window.location.assign(`/admin/login?redirect=${encodeURIComponent(LEGACY_API_CONFIG_ROUTE)}`);
             return;
         }
-        navigate(LEGACY_API_CONFIG_ROUTE);
-    }, [navigate]);
+        window.location.assign(LEGACY_API_CONFIG_ROUTE);
+    }, []);
 
     const categoryOrder = ['text', 'image', 'video', 'audio', 'other'];
 
@@ -1719,7 +1718,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
                         >
                             <Plus className="w-3.5 h-3.5" />
-                            手动添加 / 修改 API
+                            新增 API 配置 / 填写 Key
                         </button>
                         <button
                             type="button"
@@ -1737,7 +1736,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {refreshingHealth ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            查看健康缓存
+                            读取健康缓存
                         </button>
                         <button
                             type="button"
@@ -1755,7 +1754,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {sweeping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            批量测试生效配置
+                            刷新健康状态
                         </button>
                         <button
                             type="button"
@@ -1789,7 +1788,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
-                            旧版编辑
+                            打开旧版 API 编辑
                         </button>
                     </div>
                 </header>
@@ -1831,7 +1830,17 @@ const ApiConfigPanel: React.FC = () => {
                             <h2 className="text-sm font-semibold text-n800">厂商快速配置</h2>
                             <p className="mt-0.5 text-xs text-n100">每张卡片都可以直接配置或修改 API Key、Endpoint 和模型；状态以实际生效配置为准。</p>
                         </div>
-                        <span className="text-xs text-n100 font-mono">{quickProviders.length} providers</span>
+                        <div className="toolbar-actions">
+                            <span className="text-xs text-n100 font-mono">{quickProviders.length} providers</span>
+                            <button
+                                type="button"
+                                onClick={openCreate}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                            >
+                                <Plus className="w-3.5 h-3.5" />
+                                新增自定义 API
+                            </button>
+                        </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {quickProviders.map(meta => {

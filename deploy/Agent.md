@@ -1,5 +1,22 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Admin API Config UI Follow-up
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` so a freshly checked provider health result takes precedence over stale runtime `no_key` diagnostics. This prevents the UI from showing `未配置` when the latest runtime health check is `ok`.
+- Renamed API-management actions to make scopes explicit:
+  - `测试运行时` checks the effective provider key/endpoint used by generation calls.
+  - `测试 DB 记录` checks only the selected database row's saved key/endpoint.
+  - `新增 API 配置 / 填写 Key`, `填写 / 修改 Key`, and `修改 Key / Endpoint` make manual key editing easier to find.
+- Added a second `新增自定义 API` button beside the provider quick cards so manual configuration is not hidden in the crowded header toolbar.
+- Fixed the legacy editor link to open `/admin-legacy/?page=apiconfig` directly instead of routing back into the new settings page.
+
+### Notes
+
+- The confusing server behavior came from mixing DB-row tests with runtime provider health. A provider can be healthy from runtime/env while a preset DB row still has no saved key.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Frontend Admin/User Service Http Client Consolidation
 
 ### Changes
