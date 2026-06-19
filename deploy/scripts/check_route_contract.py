@@ -105,6 +105,13 @@ EXPECTED_ENDPOINTS = {
     ("/api/generate/auto-storyboard", "POST"): ("routers.generation", "generate_auto_storyboard"),
     ("/api/generate/multi-grid-storyboard", "POST"): ("routers.generation", "generate_multi_grid_storyboard"),
     ("/api/materials/process", "POST"): ("routers.generation", "process_material"),
+    ("/api/projects/save", "POST"): ("routers.projects", "save_project"),
+    ("/api/projects/list", "GET"): ("routers.projects", "list_projects"),
+    ("/api/projects/{project_id}", "GET"): ("routers.projects", "get_project"),
+    ("/api/projects/{project_id}", "DELETE"): ("routers.projects", "delete_project"),
+    ("/api/projects/{project_id}/images/{shot_id}", "GET"): ("routers.projects", "get_shot_images"),
+    ("/api/projects/{project_id}/export-to-video", "POST"): ("routers.projects", "export_to_video"),
+    ("/api/projects/{project_id}/clear-video-tasks", "POST"): ("routers.projects", "clear_video_tasks"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -255,6 +262,11 @@ def check_fallback_static_route_order(routes: dict[tuple[str, str], list[tuple[i
 def check_expected_endpoints(routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]]) -> None:
     for key, expected in EXPECTED_ENDPOINTS.items():
         found = routes.get(key, [])
+        if key in ALLOWED_DUPLICATES:
+            candidates = [(module, name) for _, module, name in found]
+            if expected not in candidates:
+                fail(f"{key} should include endpoint {expected}, found {found}")
+            continue
         if len(found) != 1:
             fail(f"{key} should be registered exactly once, found {found}")
         _, module, name = found[0]
@@ -690,6 +702,55 @@ def check_generation_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_project_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    projects_path = root / "routers" / "projects.py"
+    if not projects_path.exists():
+        fail("routers/projects.py is missing")
+
+    route_paths = {
+        "/api/projects/save",
+        "/api/projects/list",
+        "/api/projects/{project_id}",
+        "/api/projects/{project_id}/images/{shot_id}",
+        "/api/projects/{project_id}/export-to-video",
+        "/api/projects/{project_id}/clear-video-tasks",
+    }
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Project route handlers must live in routers/projects.py:\n" + "\n".join(violations))
+
+    projects_tree = parse_py_file(projects_path)
+    route_count = 0
+    for node in ast.walk(projects_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 7:
+        fail(f"routers/projects.py should own 7 project route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -719,6 +780,7 @@ def main() -> int:
     task_route_handlers = check_task_routes_extracted(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
+    project_route_handlers = check_project_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -741,6 +803,7 @@ def main() -> int:
     print(f"  task_route_handlers={task_route_handlers}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
+    print(f"  project_route_handlers={project_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 

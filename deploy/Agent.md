@@ -1658,3 +1658,62 @@
 ### Notes
 
 - Local Vite build could not run because this Windows workspace is missing Rollup's optional native package `@rollup/rollup-win32-x64-msvc`; the production Linux server build passed.
+
+## 2026-06-19 Project Router Extraction Increment
+
+### Changes
+
+- Extracted legacy project compatibility endpoints from `deploy/cluster_main.py` into `deploy/routers/projects.py`.
+- Preserved the existing public API surface:
+  - `POST /api/projects/save`
+  - `GET /api/projects/list`
+  - `GET /api/projects/{project_id}`
+  - `DELETE /api/projects/{project_id}`
+  - `GET /api/projects/{project_id}/images/{shot_id}`
+  - `POST /api/projects/{project_id}/export-to-video`
+  - `POST /api/projects/{project_id}/clear-video-tasks`
+- Moved the project Base64 image persistence helper with the save route so project storage behavior remains colocated with project HTTP handlers.
+- Injected existing dependencies into the router:
+  - `require_auth`
+  - `ProjectDAO`
+  - `FileDAO`
+  - `VersionDAO`
+  - `parse_jsonb_field`
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - these 7 project endpoints belong to `routers.projects`
+  - `cluster_main.py` no longer registers those project route decorators
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/projects.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `project_route_handlers=7`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_projects_router_20260619-043900`
+- Uploaded to server:
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/projects.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/projects.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `project_route_handlers=7`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `POST https://mecha.one/api/login` -> token returned
+  - `GET https://mecha.one/api/projects/list` -> success, project list returned
+  - `GET https://mecha.one/api/projects/list?limit=1` -> success
+  - `GET https://mecha.one/api/projects/{project_id}?thumbnail_only=true` -> success
+  - `GET https://mecha.one/api/projects/{project_id}?thumbnail_only=false` -> success
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; this moves project HTTP handlers only. Redline task queue/core/worker/pipeline/agent/workflow files were not modified.
