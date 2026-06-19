@@ -1819,3 +1819,63 @@
 ### Notes
 
 - No redline files were modified.
+
+## 2026-06-19 Admin Compatibility Router Extraction
+
+### Changes
+
+- Extracted the remaining live `cluster_main.py` admin compatibility endpoints into `deploy/routers/admin_compat.py`:
+  - `GET /api/admin/stats`
+  - `GET /api/admin/logs`
+  - `POST /api/admin/users/create`
+  - `DELETE /api/admin/users/{user_id}`
+- Preserved the legacy API surface used by the React admin shell.
+- `cluster_main.py` now has no direct `@app.get/post/put/delete/patch` route decorators.
+- Injected runtime dependencies into the router instead of importing global state:
+  - `require_auth`
+  - dynamic `get_db_manager()`
+  - `_online_users`
+  - `DEFAULT_USERS`
+  - `SUPER_ADMIN`
+  - `logger`
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - the 4 compatibility endpoints belong to `routers.admin_compat`
+  - `cluster_main.py` no longer owns those route decorators
+  - OpenAPI route counts stay unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/admin_compat.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `admin_compat_route_handlers=4`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_compat_router_20260619-060713`
+- Uploaded to server:
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/admin_compat.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/admin_compat.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `admin_compat_route_handlers=4`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online checks passed:
+  - `POST https://mecha.one/api/login` -> HTTP `200`, token returned
+  - `GET https://mecha.one/api/admin/stats` -> HTTP `200`
+  - `GET https://mecha.one/api/admin/logs?limit=1` -> HTTP `200`
+  - `POST https://mecha.one/api/admin/users/create` without token -> HTTP `401`
+  - `DELETE https://mecha.one/api/admin/users/codex_should_not_delete` without token -> HTTP `401`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No frontend build was required; this increment only moves backend route ownership.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

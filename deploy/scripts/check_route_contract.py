@@ -31,6 +31,10 @@ ALLOWED_DUPLICATES = {
 
 EXPECTED_ENDPOINTS = {
     ("/api/login", "POST"): ("routers.auth", "login"),
+    ("/api/admin/stats", "GET"): ("routers.admin_compat", "get_admin_stats"),
+    ("/api/admin/logs", "GET"): ("routers.admin_compat", "get_admin_logs"),
+    ("/api/admin/users/create", "POST"): ("routers.admin_compat", "create_user"),
+    ("/api/admin/users/{user_id}", "DELETE"): ("routers.admin_compat", "delete_user"),
     ("/api/video/crop", "POST"): ("routers.video", "crop_video"),
     ("/api/thumbnail", "GET"): ("routers.files", "get_thumbnail"),
     ("/api/upload", "POST"): ("routers.files", "upload_file"),
@@ -744,6 +748,53 @@ def check_auth_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_admin_compat_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    admin_compat_path = root / "routers" / "admin_compat.py"
+    if not admin_compat_path.exists():
+        fail("routers/admin_compat.py is missing")
+
+    route_paths = {
+        "/api/admin/stats",
+        "/api/admin/logs",
+        "/api/admin/users/create",
+        "/api/admin/users/{user_id}",
+    }
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Admin compatibility route handlers must live in routers/admin_compat.py:\n" + "\n".join(violations))
+
+    compat_tree = parse_py_file(admin_compat_path)
+    route_count = 0
+    for node in ast.walk(compat_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 4:
+        fail(f"routers/admin_compat.py should own 4 admin compatibility route registrations, found {route_count}")
+    return route_count
+
+
 def check_project_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     projects_path = root / "routers" / "projects.py"
@@ -823,6 +874,7 @@ def main() -> int:
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
+    admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
@@ -847,6 +899,7 @@ def main() -> int:
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")
+    print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
