@@ -4126,3 +4126,49 @@
 
 - This continues the DashScope shared-provider split by making Kling standard/omni model selection hot-reloadable without forcing the same runtime model onto Wan2.6, Vidu, or HappyHorse.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 MVC2 Live Deploy Script and Admin Health UI
+
+### Changes
+
+- Added `deploy/scripts/live_deploy_mvc2.sh` for the MVC2/API-management deployment bundle.
+  - Uses `Administrator@34.92.234.111`.
+  - Uses SSH/SCP key `~/.ssh/google_compute_engine` with `StrictHostKeyChecking=no`.
+  - Backs up `/home/Administrator/deploy/cluster_main.py` to `cluster_main.py.bak.$(date +%Y%m%d%H%M%S)`.
+  - Uploads the requested backend route/schema/service/external API files while preserving directory structure.
+  - Restarts `drama.service`, waits 8 seconds, checks `systemctl is-active drama.service`, and restores the latest `cluster_main.py.bak.*` if the service is not active.
+  - Does not contain API keys or passwords.
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` API provider cards:
+  - status indicator now follows the requested rule: green when keyed and health `ok`, yellow when keyed but unknown/unchecked, red when missing key or error.
+  - main card action is now `测试连通性`, calling `POST /api/admin/api-configs/{id}/test`.
+  - provider runtime status refresh remains available as `刷新健康`, calling `GET /api/admin/api-configs/{provider_id}/health`.
+  - `/test` results now show local response latency in milliseconds and immediately update the visible status dot.
+
+### Verification
+
+- Local checks:
+  - `C:\Program Files\Git\usr\bin\chmod.exe +x scripts/live_deploy_mvc2.sh`
+  - `C:\Program Files\Git\bin\bash.exe -n scripts/live_deploy_mvc2.sh`
+  - `node node_modules/typescript/bin/tsc --noEmit --pretty false | Select-String AdminSettingsPage.tsx` -> no `AdminSettingsPage.tsx` errors.
+- Local Vite build could not run because the Windows `node_modules` tree is missing Rollup optional package `@rollup/rollup-win32-x64-msvc`; this is an existing local dependency install issue, not caused by the code change.
+
+### Server Deployment
+
+- Executed from local `deploy/`:
+  - `scripts/live_deploy_mvc2.sh`
+- Script result:
+  - backup created: `/home/Administrator/deploy/cluster_main.py.bak.20260619154743`
+  - `drama.service` status: `active`
+  - deployment result: success
+- Server smoke:
+  - `/tmp/smoke_test.py` exists on server.
+  - The server `ADMIN_PASSWORD` environment variable did not match the current online admin password and returned HTTP `401`.
+  - Running smoke with the current online admin password succeeded: `9/9`.
+
+### Notes
+
+- The Admin health UI was synced to `/home/Administrator/deploy/new_html/admin/AdminSettingsPage.tsx` and built on the server into `/home/Administrator/deploy/dist`.
+- Post-build checks passed:
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `GET https://mecha.one/admin/settings?item=legacy-apiconfig` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one <current-admin-password>` -> `9/9`
