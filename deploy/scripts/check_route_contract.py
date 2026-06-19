@@ -2226,6 +2226,30 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_seedance_video_uses_callable_default_when_runtime_model_missing",
         ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_SUB_MODEL_ENV_MAP",
+        ),
+        (
+            root / "services" / "api_provider_runtime.py",
+            "def resolve_dashscope_model_name",
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            "get_dashscope_sub_model_env_key(\"wan26\")",
+        ),
+        (
+            root / "external_api" / "video" / "wan2.py",
+            "resolve_dashscope_model_name(\"wan26\", model)",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_wan26_video_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_wan26_video_uses_callable_default_when_runtime_model_missing",
+        ),
     ]
     checks = 0
     for path, snippet in required_snippets:

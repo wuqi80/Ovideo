@@ -4034,3 +4034,60 @@
 
 - This makes Seedance standard/fast model selection hot-reloadable while preserving the current account-compatible 1.0 Pro fallback when no admin model is configured.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Wan2.6 Runtime Model Wiring
+
+### Changes
+
+- Updated `deploy/services/api_provider_registry.py` with DashScope sub-model metadata:
+  - `DASHSCOPE_MODEL_WAN26`
+  - current callable fallback model `wan2.6-i2v`.
+- Updated `deploy/services/api_provider_runtime.py` with `resolve_dashscope_model_name()`, allowing DashScope family clients to resolve model names per sub-model without sharing one generic `DASHSCOPE_MODEL`.
+- Updated `deploy/services/api_config_runtime_loader.py` so enabled DB rows for `provider=dashscope` and Wan2.6 model names project into `DASHSCOPE_MODEL_WAN26`.
+- Rewrote `deploy/external_api/video/wan2.py` as an ASCII equivalent client that resolves Wan2.6 model names dynamically before calling `resolve_provider("dashscope", model)`.
+- Extended `deploy/scripts/check_api_config_runtime_loader.py` with Wan2.6 DB-to-env projection coverage.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with Wan2.6 runtime model and callable-default payload coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `49` to `55`
+  - contract now protects Wan2.6 DashScope sub-model env wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile external_api/video/wan2.py services/api_provider_registry.py services/api_provider_runtime.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - From `deploy/`: `.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `22/22`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=55`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_wan26_runtime_model_20260619_141802/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/external_api/video/wan2.py`
+  - `/home/Administrator/deploy/services/api_provider_registry.py`
+  - `/home/Administrator/deploy/services/api_provider_runtime.py`
+  - `/home/Administrator/deploy/services/api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile external_api/video/wan2.py services/api_provider_registry.py services/api_provider_runtime.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `22/22`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime helper check: `DASHSCOPE_MODEL_WAN26` -> `wan26-runtime-smoke`
+
+### Notes
+
+- This starts the DashScope shared-provider split by making Wan2.6 model selection hot-reloadable without forcing the same runtime model onto Kling/Vidu/HappyHorse.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

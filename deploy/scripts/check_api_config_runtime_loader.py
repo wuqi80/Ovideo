@@ -34,6 +34,7 @@ async def main() -> int:
         managed_keys.add(registry.get_custom_proxy_env_key(env_key))
         managed_keys.add(registry.get_model_env_key(env_key))
     managed_keys.update(registry.SEEDANCE_SUB_MODEL_ENV_MAP.values())
+    managed_keys.update(registry.DASHSCOPE_SUB_MODEL_ENV_MAP.values())
 
     saved_env = {key: os.environ.get(key) for key in managed_keys}
     for key in managed_keys:
@@ -80,6 +81,15 @@ async def main() -> int:
             "custom_proxy": "",
             "enabled": True,
         },
+        {
+            "provider": "dashscope",
+            "api_key_encrypted": "enc:db-dashscope-key",
+            "endpoint": "https://db.dashscope.example.test/api/v1/services/aigc/video-generation/video-synthesis",
+            "model_name": "wan2.6-runtime-i2v",
+            "proxy_mode": "direct",
+            "custom_proxy": "",
+            "enabled": True,
+        },
     ]
     creates: list[dict[str, Any]] = []
     updates: list[tuple[str, dict[str, Any]]] = []
@@ -121,8 +131,8 @@ async def main() -> int:
     loader.ApiConfigDAO = FakeDAO
     try:
         result = await loader.load_api_configs_to_env()
-        if result.get("loaded") != 3:
-            fail(f"Expected three loaded keyed rows, got {result}")
+        if result.get("loaded") != 4:
+            fail(f"Expected four loaded keyed rows, got {result}")
         if os.environ.get("DEEPSEEK_API_KEY") != "db-deepseek-key":
             fail("DB key did not override baseline env key")
         if os.environ.get("DEEPSEEK_ENDPOINT") != "https://db.deepseek.example.test":
@@ -139,6 +149,8 @@ async def main() -> int:
             fail("Seedance standard model was not projected to sub-model env")
         if os.environ.get("SEEDANCE_MODEL_FAST") != "doubao-seedance-fast-runtime":
             fail("Seedance fast model was not projected to sub-model env")
+        if os.environ.get("DASHSCOPE_MODEL_WAN26") != "wan2.6-runtime-i2v":
+            fail("DashScope Wan2.6 model was not projected to sub-model env")
 
         rows[:] = [
             {
@@ -181,6 +193,8 @@ async def main() -> int:
             fail("Empty DB reload did not clear DB-only custom proxy")
         if os.environ.get("SEEDANCE_MODEL_STANDARD") or os.environ.get("SEEDANCE_MODEL_FAST"):
             fail("Empty DB reload did not clear Seedance sub-model env values")
+        if os.environ.get("DASHSCOPE_MODEL_WAN26"):
+            fail("Empty DB reload did not clear DashScope Wan2.6 sub-model env value")
 
         rows[:] = [
             {
@@ -247,8 +261,9 @@ async def main() -> int:
         fail("admin_routes.py must not dynamically import cluster_main for API env reload")
 
     print("API config runtime loader contract OK")
-    print("  hot_reload_loaded_rows=3")
+    print("  hot_reload_loaded_rows=4")
     print("  seedance_sub_model_env_projection=2")
+    print("  dashscope_wan26_env_projection=1")
     print("  baseline_restore=1")
     print("  seed_registry_placeholders=2")
     print("  legacy_model_upgrades=3")

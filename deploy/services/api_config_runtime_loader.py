@@ -12,16 +12,19 @@ from typing import Any, Dict, List, Optional
 
 from dao_api_config import ApiConfigDAO
 from services.api_provider_registry import (
+    DASHSCOPE_SUB_MODEL_ENV_MAP,
     PROVIDER_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
     get_api_model_preset,
     get_custom_proxy_env_key,
+    get_dashscope_sub_model_env_key,
     get_endpoint_env_key,
     get_gpt_image_tiers,
     get_model_env_key,
     get_provider_env_key,
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
+    is_dashscope_wan26_model,
     is_seedance_fast_model,
 )
 from utils.config_helpers import _config_get
@@ -53,7 +56,7 @@ VEO_NEW_MODEL = "veo-3.1-landscape-fast-fl"
 
 
 def managed_api_env_keys() -> set[str]:
-    keys: set[str] = set(SEEDANCE_SUB_MODEL_ENV_MAP.values())
+    keys: set[str] = set(SEEDANCE_SUB_MODEL_ENV_MAP.values()) | set(DASHSCOPE_SUB_MODEL_ENV_MAP.values())
     for env_key in PROVIDER_ENV_MAP.values():
         keys.update(
             {
@@ -129,6 +132,8 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                 if provider.strip().lower() == "seedance":
                     sub_model = "fast" if is_seedance_fast_model(model_name) else "standard"
                     new_env[get_seedance_sub_model_env_key(sub_model)] = model_name
+                if provider.strip().lower() == "dashscope" and is_dashscope_wan26_model(model_name):
+                    new_env[get_dashscope_sub_model_env_key("wan26")] = model_name
             else:
                 new_env[model_env] = None
 

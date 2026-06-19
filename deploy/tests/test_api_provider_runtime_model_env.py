@@ -6,10 +6,13 @@ from external_api.video import minimax as minimax_video
 from external_api.video import seedance as seedance_video
 from external_api.video import sora2 as sora2_video
 from external_api.video import veo as veo_video
+from external_api.video import wan2 as wan2_video
 from services import ai_proxy_service, video_reverse_service
 from services.api_provider_registry import (
     SEEDANCE_DEFAULT_MODEL_MAP,
+    DASHSCOPE_DEFAULT_MODEL_MAP,
     get_endpoint_env_key,
+    get_dashscope_sub_model_env_key,
     get_model_env_key,
     get_provider_env_key,
     get_seedance_sub_model_env_key,
@@ -201,6 +204,14 @@ class _SeedanceTaskResponse:
 
     def json(self):
         return {"id": "seedance-task-1"}
+
+
+class _Wan26TaskResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"output": {"task_id": "wan26-task-1", "task_status": "PENDING"}}
 
 
 @pytest.mark.asyncio
@@ -549,6 +560,62 @@ def test_seedance_video_uses_callable_default_when_runtime_model_missing(monkeyp
 
     assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
     assert calls[0]["json"]["model"] == SEEDANCE_DEFAULT_MODEL_MAP["standard"]
+
+
+def test_wan26_video_uses_runtime_sub_model_env(monkeypatch):
+    env_key = get_provider_env_key("dashscope")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    wan26_env = get_dashscope_sub_model_env_key("wan26")
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-dashscope-key")
+    monkeypatch.setenv(
+        endpoint_env,
+        "https://dashscope-runtime.example.test/api/v1/services/aigc/video-generation/video-synthesis",
+    )
+    monkeypatch.setenv(wan26_env, "wan2.6-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _Wan26TaskResponse()
+
+    monkeypatch.setattr(wan2_video.requests, "post", fake_post)
+
+    client = wan2_video.Wan26Client()
+    result = client.create_video_task(prompt="move gently", img_url="https://cdn.example.test/frame.png")
+
+    assert result["output"]["task_id"] == "wan26-task-1"
+    assert calls[0]["url"] == "https://dashscope-runtime.example.test/api/v1/services/aigc/video-generation/video-synthesis"
+    assert calls[0]["json"]["model"] == "wan2.6-runtime-model"
+
+
+def test_wan26_video_uses_callable_default_when_runtime_model_missing(monkeypatch):
+    env_key = get_provider_env_key("dashscope")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-dashscope-key")
+    monkeypatch.setenv(
+        endpoint_env,
+        "https://dashscope-runtime.example.test/api/v1/services/aigc/video-generation/video-synthesis",
+    )
+    monkeypatch.delenv(model_env, raising=False)
+    monkeypatch.delenv(get_dashscope_sub_model_env_key("wan26"), raising=False)
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _Wan26TaskResponse()
+
+    monkeypatch.setattr(wan2_video.requests, "post", fake_post)
+
+    client = wan2_video.Wan26Client()
+    client.create_video_task(prompt="move gently", img_url="https://cdn.example.test/frame.png")
+
+    assert calls[0]["url"] == "https://dashscope-runtime.example.test/api/v1/services/aigc/video-generation/video-synthesis"
+    assert calls[0]["json"]["model"] == DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]
 
 
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):

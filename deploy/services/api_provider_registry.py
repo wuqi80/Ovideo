@@ -40,6 +40,14 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "fast": "SEEDANCE_MODEL_FAST",
 }
 
+DASHSCOPE_DEFAULT_MODEL_MAP: Dict[str, str] = {
+    "wan26": "wan2.6-i2v",
+}
+
+DASHSCOPE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
+    "wan26": "DASHSCOPE_MODEL_WAN26",
+}
+
 
 def normalize_seedance_sub_model(sub_model: Optional[str]) -> str:
     normalized = (sub_model or "standard").strip().lower()
@@ -54,6 +62,21 @@ def get_seedance_sub_model_env_key(sub_model: Optional[str]) -> str:
 
 def is_seedance_fast_model(model_name: Optional[str]) -> bool:
     return "fast" in (model_name or "").strip().lower()
+
+
+def normalize_dashscope_sub_model(sub_model: Optional[str]) -> str:
+    normalized = (sub_model or "wan26").strip().lower()
+    if normalized not in DASHSCOPE_SUB_MODEL_ENV_MAP:
+        raise ValueError(f"Unsupported DashScope sub_model: {sub_model}")
+    return normalized
+
+
+def get_dashscope_sub_model_env_key(sub_model: Optional[str]) -> str:
+    return DASHSCOPE_SUB_MODEL_ENV_MAP[normalize_dashscope_sub_model(sub_model)]
+
+
+def is_dashscope_wan26_model(model_name: Optional[str]) -> bool:
+    return (model_name or "").strip().lower().startswith("wan2.6")
 
 
 PROVIDER_CATALOG: Dict[str, dict] = {
