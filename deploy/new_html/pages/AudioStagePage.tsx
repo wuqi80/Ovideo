@@ -8,6 +8,7 @@ import {
   // 历史持久化里残留的 legacy persona 字符串（'narrator'/'male_young'/...）通过
   // LEGACY_VOICE_ALIAS 转译成 MiniMax 官方音色 id。
   minimaxTTS,
+  getStoryboardItems,
   updateStoryboardItem as apiUpdateStoryboardItem,
   createStoryboardItem as apiCreateStoryboardItem,
 } from '../services/apiService';
@@ -35,7 +36,7 @@ import { stripDialogueMarkers, extractSpokenDialogue } from '../utils/scriptPipe
 import { VoiceSidebar } from '../components/audio/VoiceSidebar';
 import { DubbingPanel, type DubbingPanelHandle } from '../components/audio/DubbingPanel';
 import { MultiTrackTimeline } from '../components/audio/MultiTrackTimeline';
-import type { AudioClipInfo, ClipOverride, CharacterVoice, AssetItem } from '../types';
+import type { AudioClipInfo, ClipOverride, CharacterVoice, AssetItem, StoryboardItemDB } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 // 2026-05-20 (Task System Overhaul M3)：把 TTS 任务注册到全局 taskRegistry，
 // 让铃铛 / TaskBadge / 跨页通知能感知配音页的 TTS 生成进度。
@@ -51,13 +52,70 @@ function resolveUrl(path: string) {
   return `/${path}`;
 }
 
+function safeBoundAssets(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string');
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === 'string');
+    } catch {}
+  }
+  return [];
+}
+
+function normalizeAudioStageStoryboardItem(r: any): StoryboardItemDB {
+  return {
+    itemId: r.item_id ?? r.itemId ?? '',
+    episodeId: r.episode_id ?? r.episodeId ?? '',
+    sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
+    sceneHeading: r.scene_heading ?? r.sceneHeading ?? '',
+    actionText: r.action_text ?? r.actionText ?? '',
+    dialogue: r.dialogue ?? '',
+    cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
+    imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
+    videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
+    generatedImageUrl: null,
+    boundAssets: safeBoundAssets(r.bound_assets ?? r.boundAssets),
+    status: r.status ?? 'draft',
+    dialogueAudioUrl: r.dialogue_audio_url ?? r.dialogueAudioUrl ?? null,
+    narrationAudioUrl: r.narration_audio_url ?? r.narrationAudioUrl ?? null,
+    sfxAudioUrl: r.sfx_audio_url ?? r.sfxAudioUrl ?? null,
+    audioDurationMs: r.audio_duration_ms ?? r.audioDurationMs ?? null,
+    plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
+  };
+}
+
+function applyAudioStageStoryboardPatch(item: StoryboardItemDB, patch: Record<string, any>): StoryboardItemDB {
+  return {
+    ...item,
+    sceneHeading: patch.scene_heading ?? patch.sceneHeading ?? item.sceneHeading,
+    actionText: patch.action_text ?? patch.actionText ?? item.actionText,
+    dialogue: patch.dialogue ?? item.dialogue,
+    cameraMovement: patch.camera_movement ?? patch.cameraMovement ?? item.cameraMovement,
+    imagePrompt: patch.image_prompt ?? patch.imagePrompt ?? item.imagePrompt,
+    videoPrompt: patch.video_prompt ?? patch.videoPrompt ?? item.videoPrompt,
+    boundAssets: patch.bound_assets !== undefined || patch.boundAssets !== undefined
+      ? safeBoundAssets(patch.bound_assets ?? patch.boundAssets)
+      : item.boundAssets,
+    dialogueAudioUrl: patch.dialogue_audio_url ?? patch.dialogueAudioUrl ?? item.dialogueAudioUrl,
+    narrationAudioUrl: patch.narration_audio_url ?? patch.narrationAudioUrl ?? item.narrationAudioUrl,
+    sfxAudioUrl: patch.sfx_audio_url ?? patch.sfxAudioUrl ?? item.sfxAudioUrl,
+    audioDurationMs: patch.audio_duration_ms ?? patch.audioDurationMs ?? item.audioDurationMs,
+    plannedDurationMs: patch.planned_duration_ms ?? patch.plannedDurationMs ?? item.plannedDurationMs,
+    status: patch.status ?? item.status,
+  };
+}
+
 export const AudioStagePage: React.FC = () => {
   const navigate = useNavigate();
   const {
-    storyboardItems, assets, characterVoices, audioTracks,
-    projectId, episodeId, selectedScriptId, script, isLoading, error, reload, loadSlices,
-    saveStoryboardItem, forceReloadSlices,
+    assets, characterVoices, audioTracks,
+    projectId, episodeId, selectedScriptId, script, isLoading, error, reload,
+    forceReloadSlices,
   } = useEpisode();
+  const [storyboardItems, setStoryboardItems] = useState<StoryboardItemDB[]>([]);
+  const [storyboardLoading, setStoryboardLoading] = useState(false);
+  const [storyboardError, setStoryboardError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   // 「导出到分镜」= 把当前脚本+素材绑定「导出」成一套**全新的分镜镜头**追加到分镜列表
@@ -100,10 +158,44 @@ export const AudioStagePage: React.FC = () => {
     }
   }, [exporting, storyboardItems, episodeId, selectedScriptId, projectId, navigate]);
 
+  const updateAudioStageStoryboardItem = useCallback(async (itemId: string, data: Record<string, any>) => {
+    await apiUpdateStoryboardItem(itemId, data);
+    setStoryboardItems(prev => prev.map(item =>
+      item.itemId === itemId ? applyAudioStageStoryboardPatch(item, data) : item
+    ));
+  }, []);
+
   // 2026-06-14：进入配音页强制刷新，跨页改动可见。
+  // 2026-06-19：storyboard 改为 fields=audio_stage 的轻量直拉，避免整行分镜数据进入 context。
   useEffect(() => {
-    forceReloadSlices('storyboardItems', 'assets', 'characterVoices', 'script', 'audioTracks');
+    forceReloadSlices('assets', 'characterVoices', 'script', 'audioTracks');
   }, [forceReloadSlices]);
+
+  useEffect(() => {
+    let active = true;
+    if (!episodeId) {
+      setStoryboardItems([]);
+      return () => { active = false; };
+    }
+    setStoryboardLoading(true);
+    setStoryboardError(null);
+    getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'audio_stage' })
+      .then(res => {
+        if (!active) return;
+        setStoryboardItems(res.success ? (res.items || []).map(normalizeAudioStageStoryboardItem) : []);
+      })
+      .catch(err => {
+        console.warn('storyboard audio-stage fields load failed:', err);
+        if (active) {
+          setStoryboardItems([]);
+          setStoryboardError(err?.message || '分镜配音数据加载失败');
+        }
+      })
+      .finally(() => {
+        if (active) setStoryboardLoading(false);
+      });
+    return () => { active = false; };
+  }, [episodeId, selectedScriptId]);
 
   // ─── Derived data ──────────────────────────────────────────────
 
@@ -178,7 +270,7 @@ export const AudioStagePage: React.FC = () => {
   // 2026-05-20 (Bug #3)：localOverrides 是用户编辑的草稿（对白文本/speaker/情绪/速度/音高
   // 的覆盖值），属于"未入库 transient state"。改用 usePersistedPageState 后，切页面 + 刷新
   // 都不会丢；按 episodeId 隔离避免不同剧集互相污染。
-  // localAudio 不持久化 —— 已通过 loadSlices('storyboardItems') 从 DB 重拉，刷新后 clips 自带 audioUrl。
+  // localAudio 不持久化 —— TTS 成功后会同步更新本页轻量 storyboard 状态，刷新后由 fields=audio_stage 重拉。
   const [localOverrides, setLocalOverrides] = usePersistedPageState<Record<string, ClipOverride>>({
     page: 'AudioStagePage:localOverrides',
     episodeId,
@@ -329,12 +421,9 @@ export const AudioStagePage: React.FC = () => {
 
       // 2026-05-20 (Bug 4)：之前 catch 静默吞错，导致 DB 写失败时用户看到 localAudio
       // 显示成功、刷新就丢了。改为：失败时记入 errors[key]、console.error、并提示重试。
-      // 同时成功后调 loadSlices('storyboardItems') 强制从 DB 重拉，保证 EpisodeContext
-      // 与 DB 一致——下次刷新页面音频不会消失。
+      // 同时成功后更新本页轻量 storyboard 状态，保证页面与 DB 一致——下次刷新页面音频不会消失。
       try {
-        await apiUpdateStoryboardItem(clip.itemId, updateFields);
-        // 必须 forceReload：loadSlices 对已加载 slice 会跳过，否则生成的音频不回写到 context。
-        await forceReloadSlices('storyboardItems');
+        await updateAudioStageStoryboardItem(clip.itemId, updateFields);
         // 2026-05-20 (M3)：标记任务完成，铃铛会有完成提示
         try { taskRegistry.complete(registryTaskId, { resultUrls: [resolveUrl(url)], progress: 1 }); } catch { /* noop */ }
       } catch (e: any) {
@@ -364,7 +453,7 @@ export const AudioStagePage: React.FC = () => {
         ttsAbortControllers.current.delete(key);
       }
     }
-  }, [voiceMap, localOverrides, clipKey, episodeId, projectId, loadSlices]);
+  }, [voiceMap, localOverrides, clipKey, episodeId, projectId, updateAudioStageStoryboardItem]);
 
   const handleBatchGenerate = useCallback(async () => {
     if (batchRunning || clips.length === 0) return;
@@ -379,11 +468,11 @@ export const AudioStagePage: React.FC = () => {
   const handleTextPersist = useCallback(async (itemId: string, speaker: string, newText: string) => {
     const fullDialogue = newText ? (speaker ? `${speaker}：${newText}` : newText) : '';
     try {
-      await saveStoryboardItem(itemId, { dialogue: fullDialogue });
+      await updateAudioStageStoryboardItem(itemId, { dialogue: fullDialogue });
     } catch (e) {
       console.error('持久化台词失败:', e);
     }
-  }, [saveStoryboardItem]);
+  }, [updateAudioStageStoryboardItem]);
 
   // ─── Playback ─────────────────────────────────────────────────
 
@@ -414,17 +503,17 @@ export const AudioStagePage: React.FC = () => {
 
   // ─── Loading / Error ──────────────────────────────────────────
 
-  if (isLoading) {
+  if (isLoading || storyboardLoading) {
     return (
       <div className="min-h-full bg-n20 flex items-center justify-center text-n100">
         加载中...
       </div>
     );
   }
-  if (error) {
+  if (error || storyboardError) {
     return (
       <div className="min-h-full bg-n20 text-danger p-6">
-        {error}
+        {error || storyboardError}
       </div>
     );
   }

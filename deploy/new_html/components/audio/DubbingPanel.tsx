@@ -1,9 +1,12 @@
-import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Volume2, Loader, Clock } from 'lucide-react';
 import { DubbingCard } from './DubbingCard';
 import type {
   AudioClipInfo, CharacterVoice, ClipOverride, AssetItem, StoryboardItemDB,
 } from '../../types';
+
+const DUBBING_INITIAL_ITEM_COUNT = 20;
+const DUBBING_ITEM_PAGE_SIZE = 20;
 
 export interface DubbingPanelHandle {
   scrollToItem: (itemId: string) => void;
@@ -40,18 +43,44 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
 
   const containerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-
-  useImperativeHandle(ref, () => ({
-    scrollToItem(itemId: string) {
-      const el = itemRefs.current.get(itemId);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    },
-  }));
+  const [visibleItemCount, setVisibleItemCount] = useState(DUBBING_INITIAL_ITEM_COUNT);
 
   const sortedItems = useMemo(
     () => [...storyboardItems].sort((a, b) => a.sortOrder - b.sortOrder),
     [storyboardItems],
   );
+
+  const itemIdSignature = useMemo(
+    () => sortedItems.map(item => item.itemId).join('|'),
+    [sortedItems],
+  );
+
+  useEffect(() => {
+    setVisibleItemCount(DUBBING_INITIAL_ITEM_COUNT);
+    itemRefs.current.clear();
+  }, [itemIdSignature]);
+
+  const visibleStoryboardItems = useMemo(
+    () => sortedItems.slice(0, visibleItemCount),
+    [sortedItems, visibleItemCount],
+  );
+
+  const hasMoreStoryboardItems = visibleItemCount < sortedItems.length;
+
+  const revealAndScrollToItem = useCallback((itemId: string) => {
+    const idx = sortedItems.findIndex(item => item.itemId === itemId);
+    if (idx >= visibleItemCount) {
+      setVisibleItemCount(Math.min(idx + 1, sortedItems.length));
+    }
+    window.setTimeout(() => {
+      const el = itemRefs.current.get(itemId);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
+  }, [sortedItems, visibleItemCount]);
+
+  useImperativeHandle(ref, () => ({
+    scrollToItem: revealAndScrollToItem,
+  }), [revealAndScrollToItem]);
 
   const clipsByItem = useMemo(() => {
     const m = new Map<string, AudioClipInfo[]>();
@@ -109,7 +138,7 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
           暂无分镜条目。请先在剧本流程中创建分镜。
         </div>
       ) : (
-        sortedItems.map(item => {
+        visibleStoryboardItems.map(item => {
           const itemClips = clipsByItem.get(item.itemId) || [];
           const hasDialogue = itemClips.length > 0;
           return (
@@ -179,6 +208,15 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
             </div>
           );
         })
+      )}
+      {hasMoreStoryboardItems && (
+        <button
+          type="button"
+          onClick={() => setVisibleItemCount(count => Math.min(count + DUBBING_ITEM_PAGE_SIZE, sortedItems.length))}
+          className="w-full px-3 py-2 rounded-lg border border-n40 bg-n0 hover:border-primary hover:text-primary text-xs text-n300 transition-colors"
+        >
+          加载更多台词（{Math.min(visibleItemCount, sortedItems.length)} / {sortedItems.length}）
+        </button>
       )}
     </div>
   );

@@ -706,7 +706,7 @@ export interface StoryboardItemsQueryOptions {
     limit?: number;
     offset?: number;
     includeTotal?: boolean;
-    fields?: 'audio' | 'video' | string;
+    fields?: 'audio' | 'video' | 'audio_stage' | string;
 }
 
 export async function getStoryboardItems(

@@ -3250,3 +3250,66 @@
 - This does not change full storyboard behavior for pages that need full text, asset bindings, generated-image history, or prompt editing.
 - The main remaining heavy workflow pages to audit next are `MaterialsPage` and `AudioStagePage`, both of which still force full storyboard refreshes for their specialized workflows.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Audio Stage Lightweight Storyboard Loading
+
+### Changes
+
+- Added a third optional lightweight storyboard field set for `GET /api/episodes/{episode_id}/storyboard-items`:
+  - new query parameter value: `fields=audio_stage`
+  - allowed field set remains server-side whitelisted in `deploy/dao/creative/storyboard.py`
+  - returned fields are limited to IDs, ordering, dialogue, asset bindings, audio URLs, duration, planned duration, script ID, status, and the text/prompt fields needed by "导出到分镜"
+- Updated `deploy/new_html/pages/AudioStagePage.tsx` so the audio workflow:
+  - no longer calls `forceReloadSlices('storyboardItems', ...)`
+  - force-refreshes only `assets`, `characterVoices`, `script`, and `audioTracks` from `EpisodeContext`
+  - fetches storyboard rows directly through `getStoryboardItems(..., { fields: 'audio_stage' })`
+  - keeps storyboard rows in page-local state
+  - patches page-local storyboard state after dialogue edits and TTS audio persistence, instead of reloading full storyboard rows after each generated clip
+- Updated `deploy/new_html/components/audio/DubbingPanel.tsx` so dubbing cards:
+  - render only the first 20 storyboard groups initially
+  - reveal 20 more groups per "加载更多台词" click
+  - automatically reveal hidden groups when the timeline asks the panel to scroll to a hidden item
+- Extended `deploy/new_html/services/apiService.ts` and the API service test for the `audio_stage` field set.
+- Extended `deploy/scripts/check_route_contract.py` with `audio_stage_lightweight_storyboard_checks=9` to prevent the audio page from regressing to full storyboard loading and unbounded dubbing-card rendering.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/dao/creative/storyboard.py deploy/routers/storyboard.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `audio_stage_lightweight_storyboard_checks=9`
+- Local frontend limitation:
+  - targeted TypeScript check was blocked by pre-existing errors in `services/videoService.ts` and `utils/episodeAdapters.ts`; neither error points at this increment's edited files.
+- Server checks passed:
+  - `.venv/bin/python -m py_compile dao/creative/storyboard.py routers/storyboard.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - generated frontend asset: `../dist/assets/AudioStagePage-Bkqbeq8K.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - live lightweight endpoint check:
+    - `GET /api/episodes/ep_2fc899a228f5/storyboard-items?fields=audio_stage&limit=1&include_total=true`
+    - HTTP `200`, `success=True`, `total=152`
+    - returned keys: `action_text`, `audio_duration_ms`, `bound_assets`, `camera_movement`, `dialogue`, `dialogue_audio_url`, `episode_id`, `image_prompt`, `item_id`, `narration_audio_url`, `planned_duration_ms`, `scene_heading`, `script_id`, `sfx_audio_url`, `sort_order`, `status`, `video_prompt`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_audio_stage_lightweight_storyboard_20260619_122002/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/dao/creative/storyboard.py`
+  - `/home/Administrator/deploy/routers/storyboard.py`
+  - `/home/Administrator/deploy/new_html/services/apiService.ts`
+  - `/home/Administrator/deploy/new_html/pages/AudioStagePage.tsx`
+  - `/home/Administrator/deploy/new_html/components/audio/DubbingPanel.tsx`
+  - `/home/Administrator/deploy/new_html/__tests__/services/apiService.test.ts`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- This reduces initial audio-page storyboard payload and avoids a full storyboard reload after each TTS clip persistence.
+- `MaterialsPage` remains the main workflow page with full storyboard refresh behavior; it likely needs a separate binding-focused field set because it genuinely depends on `bound_assets` and asset/name matching.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

@@ -36,6 +36,25 @@ class StoryboardDAO:
             "planned_duration_ms",
             "status",
         ),
+        "audio_stage": (
+            "item_id",
+            "episode_id",
+            "script_id",
+            "sort_order",
+            "scene_heading",
+            "action_text",
+            "dialogue",
+            "camera_movement",
+            "image_prompt",
+            "video_prompt",
+            "bound_assets",
+            "dialogue_audio_url",
+            "narration_audio_url",
+            "sfx_audio_url",
+            "audio_duration_ms",
+            "planned_duration_ms",
+            "status",
+        ),
     }
 
     @staticmethod

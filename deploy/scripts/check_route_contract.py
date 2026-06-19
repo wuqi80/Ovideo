@@ -988,7 +988,7 @@ def check_generation_lightweight_storyboard_contract(root: Path) -> int:
         "visibleStoryboardItems": "visible storyboard card list",
         "loading=\"lazy\"": "lazy storyboard image loading",
         "decoding=\"async\"": "async storyboard image decoding",
-        '{"audio", "video"}': "storyboard route allows only known lightweight field sets",
+        '{"audio", "video", "audio_stage"}': "storyboard route allows only known lightweight field sets",
         '"video": (': "StoryboardDAO video field set",
     }
     sources = "\n".join([page_text, router_text, dao_text])
@@ -999,6 +999,45 @@ def check_generation_lightweight_storyboard_contract(root: Path) -> int:
     ]
     if missing:
         fail("Generation lightweight storyboard contract failed:\n" + "\n".join(missing))
+    return len(required_snippets)
+
+
+def check_audio_stage_lightweight_storyboard_contract(root: Path) -> int:
+    """Audio workflow should use lightweight storyboard rows and bounded dubbing-card rendering."""
+    page_text = (root / "new_html" / "pages" / "AudioStagePage.tsx").read_text(encoding="utf-8")
+    panel_text = (root / "new_html" / "components" / "audio" / "DubbingPanel.tsx").read_text(encoding="utf-8")
+    router_text = (root / "routers" / "storyboard.py").read_text(encoding="utf-8")
+    dao_text = (root / "dao" / "creative" / "storyboard.py").read_text(encoding="utf-8")
+
+    forbidden_snippets = [
+        "forceReloadSlices('storyboardItems'",
+        'forceReloadSlices("storyboardItems"',
+        "loadSlices('storyboardItems'",
+        'loadSlices("storyboardItems"',
+    ]
+    forbidden = [snippet for snippet in forbidden_snippets if snippet in page_text]
+    if forbidden:
+        fail("AudioStagePage must not reload full storyboard rows:\n" + "\n".join(forbidden))
+
+    required_snippets = {
+        "fields: 'audio_stage'": "AudioStagePage lightweight audio-stage field query",
+        "normalizeAudioStageStoryboardItem": "AudioStagePage audio-stage normalizer",
+        "updateAudioStageStoryboardItem": "AudioStagePage local patch helper",
+        "forceReloadSlices('assets', 'characterVoices', 'script', 'audioTracks')": "AudioStagePage non-storyboard force refresh",
+        "DUBBING_INITIAL_ITEM_COUNT = 20": "bounded initial dubbing card render",
+        "visibleStoryboardItems": "visible dubbing card list",
+        "revealAndScrollToItem": "timeline jump reveals hidden dubbing cards",
+        '{"audio", "video", "audio_stage"}': "storyboard route allows audio-stage field set",
+        '"audio_stage": (': "StoryboardDAO audio-stage field set",
+    }
+    sources = "\n".join([page_text, panel_text, router_text, dao_text])
+    missing = [
+        f"{label}: missing {snippet}"
+        for snippet, label in required_snippets.items()
+        if snippet not in sources
+    ]
+    if missing:
+        fail("Audio-stage lightweight storyboard contract failed:\n" + "\n".join(missing))
     return len(required_snippets)
 
 
@@ -1964,6 +2003,7 @@ def main() -> int:
     storyboard_paged_reload_checks = check_storyboard_paged_reload_contract(root)
     enhance_lightweight_storyboard_checks = check_enhance_lightweight_storyboard_contract(root)
     generation_lightweight_storyboard_checks = check_generation_lightweight_storyboard_contract(root)
+    audio_stage_lightweight_storyboard_checks = check_audio_stage_lightweight_storyboard_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -2010,6 +2050,7 @@ def main() -> int:
     print(f"  storyboard_paged_reload_checks={storyboard_paged_reload_checks}")
     print(f"  enhance_lightweight_storyboard_checks={enhance_lightweight_storyboard_checks}")
     print(f"  generation_lightweight_storyboard_checks={generation_lightweight_storyboard_checks}")
+    print(f"  audio_stage_lightweight_storyboard_checks={audio_stage_lightweight_storyboard_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")
