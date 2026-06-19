@@ -314,6 +314,15 @@ THIRD_PARTY_ENDPOINT_MARKERS = (
     "https://api.deepseek.com",
 )
 
+PROVIDER_CONFIG_AUTHORITY_FILES = {
+    "services/api_provider_registry.py",
+    "services/api_provider_runtime.py",
+    "services/api_config_runtime_loader.py",
+    "services/api_config_health_service.py",
+    "services/api_config_import_service.py",
+}
+PROVIDER_CONTRACT_SKIP_DIRS = {"scripts", "tests", "docs", "__pycache__"}
+
 
 def dotted_call_name(node: ast.AST) -> str | None:
     if isinstance(node, ast.Name):
@@ -548,6 +557,80 @@ def check_cluster_main_has_no_provider_resolver_calls() -> int:
     return 1
 
 
+def check_runtime_code_has_no_managed_provider_env_reads(registry) -> int:
+    """Only provider config authority modules may read managed provider env vars directly."""
+    root = deploy_root()
+    forbidden_envs = managed_env_keys(registry)
+    violations: list[str] = []
+    scanned = 0
+
+    for path in iter_python_files(root):
+        relative = path.relative_to(root).as_posix()
+        if relative in PROVIDER_CONFIG_AUTHORITY_FILES:
+            continue
+        if any(part in PROVIDER_CONTRACT_SKIP_DIRS for part in path.relative_to(root).parts):
+            continue
+
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except Exception as exc:
+            fail(f"Unable to parse {relative}: {exc}")
+        scanned += 1
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = dotted_call_name(node.func)
+            if name not in {"os.getenv", "os.environ.get"}:
+                continue
+            env_key = string_arg(node, 0)
+            if env_key in forbidden_envs:
+                violations.append(f"{relative}:{node.lineno} reads managed provider env {env_key}")
+
+    if violations:
+        fail(
+            "Runtime code must use resolve_provider()/provider registry instead of direct managed env reads:\n"
+            + "\n".join(violations)
+        )
+    return scanned
+
+
+def check_runtime_code_has_no_third_party_endpoint_literals() -> int:
+    """Third-party endpoints belong in the provider registry/health config only."""
+    root = deploy_root()
+    violations: list[str] = []
+    scanned = 0
+
+    for path in iter_python_files(root):
+        relative = path.relative_to(root).as_posix()
+        if relative in PROVIDER_CONFIG_AUTHORITY_FILES:
+            continue
+        if any(part in PROVIDER_CONTRACT_SKIP_DIRS for part in path.relative_to(root).parts):
+            continue
+
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except Exception as exc:
+            fail(f"Unable to parse {relative}: {exc}")
+        scanned += 1
+
+        docstrings = docstring_constant_nodes(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            if node in docstrings:
+                continue
+            if any(marker in node.value for marker in THIRD_PARTY_ENDPOINT_MARKERS):
+                violations.append(f"{relative}:{node.lineno} hardcodes endpoint {node.value!r}")
+
+    if violations:
+        fail(
+            "Runtime code must not hardcode third-party provider endpoints; use provider registry presets:\n"
+            + "\n".join(violations)
+        )
+    return scanned
+
+
 def check_gpt_image_tier_wiring(registry) -> int:
     path = deploy_root() / "services" / "ai_proxy_service.py"
     try:
@@ -736,6 +819,8 @@ def main() -> int:
     endpoint_helper_checks = check_provider_endpoint_helpers()
     cluster_main_env_cache_checks = check_cluster_main_has_no_api_key_env_cache(registry)
     cluster_main_resolver_checks = check_cluster_main_has_no_provider_resolver_calls()
+    runtime_env_read_checks = check_runtime_code_has_no_managed_provider_env_reads(registry)
+    runtime_endpoint_literal_checks = check_runtime_code_has_no_third_party_endpoint_literals()
     gpt_image_tier_provider_count = check_gpt_image_tier_wiring(registry)
     derived_env_count = check_env_key_helpers(registry)
     runtime_status_count = check_runtime_status(
@@ -761,6 +846,8 @@ def main() -> int:
     print(f"  endpoint_helper_checks={endpoint_helper_checks}")
     print(f"  cluster_main_env_cache_checks={cluster_main_env_cache_checks}")
     print(f"  cluster_main_resolver_checks={cluster_main_resolver_checks}")
+    print(f"  runtime_env_read_checks={runtime_env_read_checks}")
+    print(f"  runtime_endpoint_literal_checks={runtime_endpoint_literal_checks}")
     print(f"  gpt_image_tier_providers={gpt_image_tier_provider_count}")
     print(f"  derived_env_keys={derived_env_count}")
     print(f"  runtime_status_rows={runtime_status_count}")

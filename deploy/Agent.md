@@ -1,5 +1,35 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 Provider Runtime Contract Guardrails
+
+### Changes
+
+- Extended `deploy/scripts/check_provider_contract.py` with two API management guardrails:
+  - runtime/business Python code may not read managed provider env vars such as `*_API_KEY` or `*_ENDPOINT` directly
+  - runtime/business Python code may not hardcode third-party provider endpoint literals outside provider configuration authority modules
+- Allowed direct provider configuration only in:
+  - `services/api_provider_registry.py`
+  - `services/api_provider_runtime.py`
+  - `services/api_config_runtime_loader.py`
+  - `services/api_config_health_service.py`
+  - `services/api_config_import_service.py`
+- Skipped non-runtime folders for this contract check: `scripts`, `tests`, `docs`, and `__pycache__`.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/scripts/check_provider_contract.py`
+  - `git diff --check -- deploy/scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - redline diff check confirmed no changes under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, `core/worker.py`, or `cluster_main.py`
+
+### Notes
+
+- `cluster_main.py` was intentionally left unchanged. It is now mainly startup, middleware, global exception handling, and router assembly, so further shrinking should only happen for concrete defects or ownership problems.
+- This guardrail protects the API management platform goal: provider keys/endpoints stay centralized in registry/runtime config instead of reappearing in business handlers.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 API Routes Assembly-Only Increment
 
 ### Changes
