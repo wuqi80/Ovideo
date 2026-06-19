@@ -22,7 +22,7 @@ import {
     Timer,
     Trash2,
 } from 'lucide-react';
-import { pickTokenForCurrentRoute, setAdminPostLoginRedirect } from './adminAuth';
+import { getAdminToken, pickTokenForCurrentRoute, setAdminPostLoginRedirect } from './adminAuth';
 import { crmConfirm, crmMessage } from './crmUI';
 
 const LEGACY_VER = '20260619c';
@@ -72,6 +72,9 @@ interface RuntimeStatus {
     endpoint?: string;
     endpoint_env?: string;
     endpoint_source?: string;
+    runtime_model_name?: string;
+    model_env?: string | null;
+    model_source?: string;
     api_key_env?: string;
     api_key_source?: string;
     proxy_mode?: string;
@@ -742,6 +745,12 @@ const ApiConfigCard: React.FC<{
                                     Endpoint: <span className="font-mono text-n700 break-all">{sourceText(runtime?.endpoint_source, runtime?.endpoint_env)}</span>
                                 </div>
                                 <div className="min-w-0">
+                                    Model: <span className="font-mono text-n700 break-all">{runtime?.runtime_model_name || config.model_name || '-'}</span>
+                                </div>
+                                <div className="min-w-0">
+                                    Model source: <span className="font-mono text-n700 break-all">{sourceText(runtime?.model_source, runtime?.model_env || undefined)}</span>
+                                </div>
+                                <div className="min-w-0">
                                     Proxy: <span className="font-mono text-n700">{config.proxy_mode || runtime?.proxy_mode || 'direct'}</span>
                                 </div>
                                 <div className="min-w-0">
@@ -1249,7 +1258,7 @@ const ApiConfigPanel: React.FC = () => {
 
     const openLegacyApiConfig = useCallback(() => {
         setAdminPostLoginRedirect(LEGACY_API_CONFIG_ROUTE);
-        if (!pickTokenForCurrentRoute()) {
+        if (!getAdminToken()) {
             window.location.assign(`/admin/login?redirect=${encodeURIComponent(LEGACY_API_CONFIG_ROUTE)}`);
             return;
         }

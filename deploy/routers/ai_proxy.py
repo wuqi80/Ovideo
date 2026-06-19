@@ -135,6 +135,7 @@ def create_ai_proxy_router(
                 prompt=request.prompt,
                 system_prompt=request.system_prompt,
                 temperature=request.temperature,
+                model=request.model,
             )
             content = text_result.content
 
@@ -150,6 +151,7 @@ def create_ai_proxy_router(
                         "prompt": request.prompt[:500],
                         "system_prompt": request.system_prompt[:200] if request.system_prompt else None,
                         "temperature": request.temperature,
+                        "model": request.model,
                     },
                 )
                 truncated_text = content[:2000] if len(content) > 2000 else content

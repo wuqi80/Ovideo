@@ -66,6 +66,7 @@ class GeminiTextRequest(BaseModel):
     prompt: str
     system_prompt: Optional[str] = None
     temperature: float = Field(1.0, ge=0, le=2)
+    model: Optional[str] = Field(None, description="Gemini text model override; omitted uses admin runtime config")
 
 
 class GeminiImageRequest(BaseModel):

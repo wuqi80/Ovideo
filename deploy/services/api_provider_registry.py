@@ -367,6 +367,10 @@ def get_custom_proxy_env_key(env_key: str) -> str:
     return env_key.replace("_API_KEY", "_CUSTOM_PROXY").replace("_KEY", "_CUSTOM_PROXY")
 
 
+def get_model_env_key(env_key: str) -> str:
+    return env_key.replace("_API_KEY", "_MODEL").replace("_KEY", "_MODEL")
+
+
 def _default_health_check_url(endpoint: str) -> str:
     base = (endpoint or "").strip().rstrip("/")
     if not base:
@@ -448,6 +452,9 @@ def get_api_provider_catalog() -> List[dict]:
                 if provider in PROVIDER_ENV_MAP
                 else None,
                 "custom_proxy_env_key": get_custom_proxy_env_key(PROVIDER_ENV_MAP[provider])
+                if provider in PROVIDER_ENV_MAP
+                else None,
+                "model_env_key": get_model_env_key(PROVIDER_ENV_MAP[provider])
                 if provider in PROVIDER_ENV_MAP
                 else None,
                 "health_check_url": PROVIDER_HEALTH_CHECK_URLS.get(provider),

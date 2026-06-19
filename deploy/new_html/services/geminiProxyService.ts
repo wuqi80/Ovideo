@@ -14,7 +14,8 @@ const getAuthToken = (): string => {
  */
 export const callGeminiProxy = async (
   prompt: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  model?: string
 ): Promise<string> => {
   try {
     const token = getAuthToken();
@@ -25,17 +26,22 @@ export const callGeminiProxy = async (
 
     console.log('📤 发送请求到后端Gemini代理');
 
+    const body: Record<string, unknown> = {
+      prompt,
+      system_prompt: systemPrompt,
+      temperature: 0.7
+    };
+    if (model?.trim()) {
+      body.model = model.trim();
+    }
+
     const response = await fetch('/api/gemini/text', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({
-        prompt,
-        system_prompt: systemPrompt,
-        temperature: 0.7
-      })
+      body: JSON.stringify(body)
     });
 
     console.log('📥 后端响应状态:', response.status, response.statusText);
@@ -68,13 +74,14 @@ export const callGeminiProxy = async (
 export const callGeminiProxyWithRetry = async (
   prompt: string,
   systemPrompt?: string,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  model?: string
 ): Promise<string> => {
   let lastError: Error | null = null;
   
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await callGeminiProxy(prompt, systemPrompt);
+      return await callGeminiProxy(prompt, systemPrompt, model);
     } catch (error) {
       lastError = error as Error;
       console.warn(`⚠️ Gemini中转站调用失败（第${i + 1}次），重试中...`);

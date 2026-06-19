@@ -32,6 +32,7 @@ async def main() -> int:
         managed_keys.add(registry.get_endpoint_env_key(env_key))
         managed_keys.add(registry.get_proxy_mode_env_key(env_key))
         managed_keys.add(registry.get_custom_proxy_env_key(env_key))
+        managed_keys.add(registry.get_model_env_key(env_key))
 
     saved_env = {key: os.environ.get(key) for key in managed_keys}
     for key in managed_keys:
@@ -47,6 +48,7 @@ async def main() -> int:
             "provider": "deepseek",
             "api_key_encrypted": "enc:db-deepseek-key",
             "endpoint": "https://db.deepseek.example.test",
+            "model_name": "deepseek-runtime-model",
             "proxy_mode": "custom",
             "custom_proxy": "http://proxy.example.test:7890",
             "enabled": True,
@@ -110,6 +112,8 @@ async def main() -> int:
             fail("DB proxy mode was not projected to env")
         if os.environ.get("DEEPSEEK_CUSTOM_PROXY") != "http://proxy.example.test:7890":
             fail("DB custom proxy was not projected to env")
+        if os.environ.get("DEEPSEEK_MODEL") != "deepseek-runtime-model":
+            fail("DB model_name was not projected to env")
         if os.environ.get("GEMINI_TEXT_API_KEY"):
             fail("Empty-key DB row should not load into env")
 

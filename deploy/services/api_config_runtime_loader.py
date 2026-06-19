@@ -17,6 +17,7 @@ from services.api_provider_registry import (
     get_custom_proxy_env_key,
     get_endpoint_env_key,
     get_gpt_image_tiers,
+    get_model_env_key,
     get_provider_env_key,
     get_proxy_mode_env_key,
 )
@@ -51,6 +52,7 @@ def managed_api_env_keys() -> set[str]:
                 get_endpoint_env_key(env_key),
                 get_proxy_mode_env_key(env_key),
                 get_custom_proxy_env_key(env_key),
+                get_model_env_key(env_key),
             }
         )
     return keys
@@ -110,6 +112,13 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                 new_env[custom_proxy_env] = custom_proxy
             else:
                 new_env[custom_proxy_env] = None
+
+            model_name = str(_config_get(config, "model_name", "") or "").strip()
+            model_env = get_model_env_key(env_key)
+            if model_name:
+                new_env[model_env] = model_name
+            else:
+                new_env[model_env] = None
 
         reset_managed_api_env_to_baseline()
         for key, value in new_env.items():

@@ -3434,3 +3434,86 @@
 - The live `/api/tasks/notifications` endpoint returned 20 historical terminal tasks before this fix. The UI should still show these in history, but they should no longer play as a burst of new toast notifications when SSE falls back to polling or the page reloads.
 - This does not hide real new failures; new terminal tasks after the polling baseline still emit notifications.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 API Provider Runtime Model Hot Update
+
+### Changes
+
+- Added provider-scoped model env projection:
+  - registry helper: `get_model_env_key()`
+  - examples: `GEMINI_TEXT_API_KEY` -> `GEMINI_TEXT_MODEL`, `DEEPSEEK_API_KEY` -> `DEEPSEEK_MODEL`
+  - provider catalog now exposes `model_env_key`
+- Updated `load_api_configs_to_env()` so enabled keyed DB rows project `model_name` into the matching `*_MODEL` env key in the same atomic env refresh pass as key/endpoint/proxy.
+- Updated `resolve_provider()` priority for model selection:
+  - explicit request model
+  - DB/env runtime model (`*_MODEL`)
+  - registry preset model
+- Updated provider runtime status payload and admin API config cards:
+  - new status fields: `runtime_model_name`, `model_env`, `model_source`
+  - admin cards now display the actual runtime model and source.
+- Updated `/api/gemini/text`:
+  - `GeminiTextRequest` accepts optional `model`
+  - route passes it into `generate_gemini_text_result()`
+  - omitted model now uses the admin runtime config before falling back to preset.
+- Fixed the API config "old editor" entry:
+  - the button now requires `admin_session_token`
+  - it no longer treats the main-site `auth_token` as sufficient for entering the legacy admin iframe.
+- Extended contracts/tests:
+  - new `tests/test_api_provider_runtime_model_env.py`
+  - `check_route_contract.py` now enforces `api_provider_runtime_model_checks=7`
+  - API config/import/health/failover contracts now include `*_MODEL` in managed env isolation.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile` for updated backend services, schema, route, and contract scripts
+  - `deploy/.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `2/2`
+  - `deploy/.venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - `deploy/.venv/Scripts/python.exe scripts/check_ai_proxy_failover.py`
+  - `deploy/.venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - `deploy/.venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=7`
+- Local frontend limitation:
+  - `vite build` and Vitest are still blocked locally by missing Rollup optional dependency `@rollup/rollup-win32-x64-msvc`
+  - full `tsc --noEmit` still reports pre-existing type errors in tests/admin/features/material/video/workspace modules; no remaining errors mention `AdminSettingsPage.tsx` or `geminiProxyService.ts`.
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_runtime_model_20260619_205330/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/new_html/admin/AdminSettingsPage.tsx`
+  - `/home/Administrator/deploy/new_html/services/geminiProxyService.ts`
+  - `/home/Administrator/deploy/routers/ai_proxy.py`
+  - `/home/Administrator/deploy/schemas/generation.py`
+  - `/home/Administrator/deploy/scripts/check_admin_api_config_health.py`
+  - `/home/Administrator/deploy/scripts/check_admin_api_config_import.py`
+  - `/home/Administrator/deploy/scripts/check_ai_proxy_failover.py`
+  - `/home/Administrator/deploy/scripts/check_api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_provider_contract.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/services/ai_proxy_service.py`
+  - `/home/Administrator/deploy/services/api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/services/api_provider_registry.py`
+  - `/home/Administrator/deploy/services/api_provider_runtime.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile services/api_provider_registry.py services/api_config_runtime_loader.py services/api_provider_runtime.py services/ai_proxy_service.py schemas/generation.py routers/ai_proxy.py scripts/check_route_contract.py scripts/check_provider_contract.py scripts/check_api_config_runtime_loader.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `2/2`
+  - `.venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `.venv/bin/python scripts/check_ai_proxy_failover.py`
+  - `.venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `GEMINI_TEXT_MODEL` -> `gemini-runtime-model-smoke`, source `GEMINI_TEXT_MODEL`
+
+### Notes
+
+- This closes a gap in the API management plan: DB `api_configs.model_name` now affects runtime calls without code changes or restart after env reload.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

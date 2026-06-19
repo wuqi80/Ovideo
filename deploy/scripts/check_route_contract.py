@@ -2035,6 +2035,48 @@ def check_canvas_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_api_provider_runtime_model_contract(root: Path) -> int:
+    required_snippets = [
+        (
+            root / "services" / "api_provider_registry.py",
+            "def get_model_env_key",
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            "get_model_env_key(env_key)",
+        ),
+        (
+            root / "services" / "api_provider_runtime.py",
+            "runtime_model_name, model_env = _first_env(model_envs)",
+        ),
+        (
+            root / "services" / "api_provider_runtime.py",
+            '"model": "request" if model_name else',
+        ),
+        (
+            root / "schemas" / "generation.py",
+            "model: Optional[str] = Field(None",
+        ),
+        (
+            root / "routers" / "ai_proxy.py",
+            "model=request.model",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_explicit_model_overrides_runtime_model_env",
+        ),
+    ]
+    checks = 0
+    for path, snippet in required_snippets:
+        if not path.exists():
+            fail(f"Missing API provider runtime model contract file: {path.relative_to(root)}")
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing API provider runtime model contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -2073,6 +2115,7 @@ def main() -> int:
     generation_lightweight_storyboard_checks = check_generation_lightweight_storyboard_contract(root)
     audio_stage_lightweight_storyboard_checks = check_audio_stage_lightweight_storyboard_contract(root)
     materials_lightweight_storyboard_checks = check_materials_lightweight_storyboard_contract(root)
+    api_provider_runtime_model_checks = check_api_provider_runtime_model_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -2122,6 +2165,7 @@ def main() -> int:
     print(f"  generation_lightweight_storyboard_checks={generation_lightweight_storyboard_checks}")
     print(f"  audio_stage_lightweight_storyboard_checks={audio_stage_lightweight_storyboard_checks}")
     print(f"  materials_lightweight_storyboard_checks={materials_lightweight_storyboard_checks}")
+    print(f"  api_provider_runtime_model_checks={api_provider_runtime_model_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

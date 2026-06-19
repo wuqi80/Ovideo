@@ -69,6 +69,7 @@ def managed_env_keys(registry) -> set[str]:
         keys.add(registry.get_endpoint_env_key(env_key))
         keys.add(registry.get_proxy_mode_env_key(env_key))
         keys.add(registry.get_custom_proxy_env_key(env_key))
+        keys.add(registry.get_model_env_key(env_key))
     return keys
 
 
@@ -786,6 +787,7 @@ def check_env_key_helpers(registry) -> int:
             registry.get_endpoint_env_key,
             registry.get_proxy_mode_env_key,
             registry.get_custom_proxy_env_key,
+            registry.get_model_env_key,
         ):
             value = helper(env_key)
             if value in derived:
@@ -807,6 +809,7 @@ def check_runtime_status(
     endpoint_env = registry.get_endpoint_env_key(env_key)
     proxy_mode_env = registry.get_proxy_mode_env_key(env_key)
     custom_proxy_env = registry.get_custom_proxy_env_key(env_key)
+    model_env = registry.get_model_env_key(env_key)
 
     class RecordLike:
         def __init__(self, data: dict[str, Any]):
@@ -845,6 +848,7 @@ def check_runtime_status(
         os.environ[endpoint_env] = "https://runtime.example.test/v1"
         os.environ[proxy_mode_env] = "custom"
         os.environ[custom_proxy_env] = custom_proxy
+        os.environ[model_env] = "gemini-runtime-from-env"
         statuses = build_provider_runtime_status(
             fake_configs,
             provider_health=[
@@ -879,6 +883,12 @@ def check_runtime_status(
         fail(f"Runtime api_key_source mismatch: {row.get('api_key_source')} != {env_key}")
     if row.get("endpoint_source") != endpoint_env:
         fail(f"Runtime endpoint_source mismatch: {row.get('endpoint_source')} != {endpoint_env}")
+    if row.get("runtime_model_name") != "gemini-runtime-from-env":
+        fail(f"Runtime model override mismatch: {row.get('runtime_model_name')}")
+    if row.get("model_source") != model_env:
+        fail(f"Runtime model_source mismatch: {row.get('model_source')} != {model_env}")
+    if row.get("model_env") != model_env:
+        fail(f"Runtime model_env mismatch: {row.get('model_env')} != {model_env}")
     if not row.get("custom_proxy_configured"):
         fail("Runtime status did not mark custom proxy as configured")
     if row.get("custom_proxy_env") != custom_proxy_env:

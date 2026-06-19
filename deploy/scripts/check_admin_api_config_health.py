@@ -89,6 +89,7 @@ async def main() -> int:
         managed_keys.add(registry.get_endpoint_env_key(env_key))
         managed_keys.add(registry.get_proxy_mode_env_key(env_key))
         managed_keys.add(registry.get_custom_proxy_env_key(env_key))
+        managed_keys.add(registry.get_model_env_key(env_key))
     saved_env = {key: os.environ.get(key) for key in managed_keys}
     for key in managed_keys:
         os.environ.pop(key, None)

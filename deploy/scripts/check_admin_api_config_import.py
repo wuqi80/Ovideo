@@ -26,6 +26,7 @@ def managed_env_keys(registry) -> set[str]:
         keys.add(registry.get_endpoint_env_key(env_key))
         keys.add(registry.get_proxy_mode_env_key(env_key))
         keys.add(registry.get_custom_proxy_env_key(env_key))
+        keys.add(registry.get_model_env_key(env_key))
     return keys
 
 

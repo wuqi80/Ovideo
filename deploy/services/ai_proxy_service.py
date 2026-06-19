@@ -343,7 +343,7 @@ async def generate_gemini_text_result(
     prompt: str,
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
-    model: str = "gemini-2.5-flash",
+    model: Optional[str] = None,
 ) -> TextGenerationResult:
     config, failover = await resolve_ai_proxy_provider(
         "gemini-text",
@@ -361,7 +361,7 @@ async def generate_gemini_text_result(
         "Content-Type": "application/json",
     }
     payload = build_chat_payload(
-        model=config.model_name or model,
+        model=config.model_name or model or "gemini-2.5-flash",
         prompt=prompt,
         system_prompt=system_prompt,
         temperature=temperature,
@@ -396,7 +396,7 @@ async def generate_gemini_text_result(
     return TextGenerationResult(
         content=content,
         provider=config.provider,
-        model_name=config.model_name or model,
+        model_name=config.model_name or model or "gemini-2.5-flash",
         failover=failover,
     )
 
@@ -406,7 +406,7 @@ async def generate_gemini_text(
     prompt: str,
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
-    model: str = "gemini-2.5-flash",
+    model: Optional[str] = None,
 ) -> str:
     result = await generate_gemini_text_result(
         prompt=prompt,

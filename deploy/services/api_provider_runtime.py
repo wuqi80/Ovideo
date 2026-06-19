@@ -16,6 +16,7 @@ from services.api_provider_registry import (
     get_api_model_presets,
     get_custom_proxy_env_key,
     get_endpoint_env_key,
+    get_model_env_key,
     get_provider_env_key,
     get_proxy_mode_env_key,
     normalize_provider,
@@ -31,6 +32,7 @@ class ResolvedProviderConfig:
     endpoint: str
     api_key_env: Optional[str]
     endpoint_env: Optional[str]
+    model_env: Optional[str]
     proxy_config: Dict[str, Any]
     source: Dict[str, str]
 
@@ -354,13 +356,22 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     )
     custom_proxy, custom_proxy_env = _first_env(custom_proxy_envs)
 
+    model_envs = _unique(
+        [
+            get_model_env_key(primary_env) if primary_env else None,
+        ]
+    )
+    runtime_model_name, model_env = _first_env(model_envs)
+    resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
+
     return ResolvedProviderConfig(
         provider=provider_id,
-        model_name=model_name or preset.get("model_name") or "",
+        model_name=resolved_model_name,
         api_key=api_key,
         endpoint=endpoint,
         api_key_env=api_key_env,
         endpoint_env=endpoint_env,
+        model_env=model_env,
         proxy_config={
             "mode": (proxy_mode or "direct").strip().lower(),
             "custom_proxy": custom_proxy,
@@ -371,6 +382,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
             "endpoint": endpoint_env or ("preset" if endpoint else "missing"),
             "proxy_mode": proxy_mode_env or "preset",
             "custom_proxy": custom_proxy_env or "",
+            "model": "request" if model_name else (model_env or ("preset" if resolved_model_name else "missing")),
         },
     )
 
@@ -393,10 +405,9 @@ def build_provider_runtime_status(
         provider = normalize_provider(preset.get("provider", ""))
         model_name = str(preset.get("model_name") or "")
         catalog = PROVIDER_CATALOG.get(provider, {})
-        resolved = resolve_provider(provider, model_name)
+        resolved = resolve_provider(provider)
         _, failover = resolve_provider_with_failover(
             provider,
-            model_name,
             provider_health=health_map,
         )
         health = health_map.get(provider) or {}
@@ -446,6 +457,9 @@ def build_provider_runtime_status(
                 "endpoint": resolved.endpoint,
                 "endpoint_env": resolved.endpoint_env,
                 "endpoint_source": resolved.source.get("endpoint") or "missing",
+                "runtime_model_name": resolved.model_name,
+                "model_env": resolved.model_env,
+                "model_source": resolved.source.get("model") or "missing",
                 "proxy_mode": proxy_mode,
                 "proxy_mode_source": resolved.source.get("proxy_mode") or "preset",
                 "custom_proxy_env": resolved.source.get("custom_proxy") or "",
