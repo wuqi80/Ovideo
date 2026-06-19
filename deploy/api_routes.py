@@ -44,6 +44,7 @@ from file_optimization import FileOptimizationService, FileDeduplicationService
 from file_service import save_generated_file_to_db
 from routers.audio import create_audio_router
 from routers.canvas import create_canvas_router
+from routers.content_versions import create_content_versions_router
 from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
 from routers.task_notifications import create_task_notifications_router
@@ -80,16 +81,6 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = ""
     visibility: Optional[str] = "private"
 
-class VersionCreate(BaseModel):
-    project_id: str
-    version_name: Optional[str] = ""
-    description: Optional[str] = ""
-
-class TextContentCreate(BaseModel):
-    version_id: str
-    content_type: str
-    title: Optional[str] = ""
-    content: str
 
 
 class ExportScriptRequest(BaseModel):
@@ -196,6 +187,17 @@ router.include_router(
         project_dao=ProjectDAO,
         project_member_dao=ProjectMemberDAO,
         get_db_manager_func=get_db_manager,
+    )
+)
+
+router.include_router(
+    create_content_versions_router(
+        get_current_user_dependency=get_current_user,
+        project_dao=ProjectDAO,
+        version_dao=VersionDAO,
+        file_dao=FileDAO,
+        text_content_dao=TextContentDAO,
+        activity_log_dao=ActivityLogDAO,
     )
 )
 
@@ -426,158 +428,14 @@ async def get_project_detail(
         
         versions = await VersionDAO.get_project_versions(project_id)
         members = await ProjectMemberDAO.get_project_members(project_id)
-        
+
         return {
             "success": True,
             "project": project,
             "versions": versions,
             "members": members
         }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================
-# 版本管理API
-# ============================================
-
-@router.post("/api/versions")
-async def create_version(
-    version_data: VersionCreate,
-    user_id: str = Depends(get_current_user)
-):
-    """创建新版本"""
-    try:
-        # 验证项目权限
-        project = await ProjectDAO.get_project(version_data.project_id)
-        if not project or project['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权操作")
-        
-        # 获取当前版本作为父版本
-        current_version = await VersionDAO.get_current_version(version_data.project_id)
-        parent_version_id = current_version['version_id'] if current_version else None
-        
-        # 创建新版本
-        version = await VersionDAO.create_version(
-            project_id=version_data.project_id,
-            user_id=user_id,
-            version_name=version_data.version_name,
-            description=version_data.description,
-            parent_version_id=parent_version_id
-        )
-        
-        # 记录活动
-        await ActivityLogDAO.log_activity(
-            user_id=user_id,
-            action='create_version',
-            resource_type='version',
-            resource_id=version['version_id']
-        )
-        
-        return {
-            "success": True,
-            "version": version
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/versions/{version_id}")
-async def get_version_detail(
-    version_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """获取版本详情"""
-    try:
-        version = await VersionDAO.get_version(version_id)
-        if not version:
-            raise HTTPException(status_code=404, detail="版本不存在")
-        
-        if version['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权访问")
-        
-        # 获取版本的文件和文本
-        files = await FileDAO.get_version_files(version_id)
-        texts = await TextContentDAO.get_version_texts(version_id)
-        
-        return {
-            "success": True,
-            "version": version,
-            "files": files,
-            "texts": texts
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/versions/{version_id}/restore")
-async def restore_version(
-    version_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """恢复到指定版本"""
-    try:
-        version = await VersionDAO.get_version(version_id)
-        if not version or version['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权操作")
-        
-        # 设置为当前版本
-        await VersionDAO.set_current_version(version_id)
-        
-        # 记录活动
-        await ActivityLogDAO.log_activity(
-            user_id=user_id,
-            action='restore_version',
-            resource_type='version',
-            resource_id=version_id
-        )
-        
-        return {
-            "success": True,
-            "message": "版本已恢复"
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/api/versions/{version_id}")
-async def delete_version(
-    version_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """删除版本"""
-    try:
-        version = await VersionDAO.get_version(version_id)
-        if not version or version['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权操作")
-        
-        if version['is_current']:
-            raise HTTPException(status_code=400, detail="无法删除当前版本")
-        
-        # 删除版本
-        await VersionDAO.delete_version(version_id)
-        
-        # 记录活动
-        await ActivityLogDAO.log_activity(
-            user_id=user_id,
-            action='delete_version',
-            resource_type='version',
-            resource_id=version_id
-        )
-        
-        return {
-            "success": True,
-            "message": "版本已删除"
-        }
-    
     except HTTPException:
         raise
     except Exception as e:
@@ -847,72 +705,6 @@ async def delete_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================
-# 文本内容API
-# ============================================
-
-@router.post("/api/texts")
-async def create_text(
-    text_data: TextContentCreate,
-    user_id: str = Depends(get_current_user)
-):
-    """创建文本内容"""
-    try:
-        # 验证版本权限
-        version = await VersionDAO.get_version(text_data.version_id)
-        if not version or version['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权操作")
-        
-        # 创建文本
-        text = await TextContentDAO.create_text_content(
-            version_id=text_data.version_id,
-            user_id=user_id,
-            content_type=text_data.content_type,
-            content=text_data.content,
-            title=text_data.title
-        )
-        
-        # 记录活动
-        await ActivityLogDAO.log_activity(
-            user_id=user_id,
-            action='create_text',
-            resource_type='text',
-            resource_id=text['content_id']
-        )
-        
-        return {
-            "success": True,
-            "text": text
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/texts/{content_id}")
-async def get_text(
-    content_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """获取文本内容"""
-    try:
-        text = await TextContentDAO.get_text_content(content_id)
-        if not text:
-            raise HTTPException(status_code=404, detail="文本不存在")
-        
-        if text['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权访问")
-        
-        return {
-            "success": True,
-            "text": text
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 

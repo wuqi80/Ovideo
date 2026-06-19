@@ -148,6 +148,12 @@ EXPECTED_ENDPOINTS = {
         "/api/projects/{project_id}/members/{member_user_id}",
         "DELETE",
     ): ("routers.project_admin", "remove_member"),
+    ("/api/versions", "POST"): ("routers.content_versions", "create_version"),
+    ("/api/versions/{version_id}", "GET"): ("routers.content_versions", "get_version_detail"),
+    ("/api/versions/{version_id}/restore", "POST"): ("routers.content_versions", "restore_version"),
+    ("/api/versions/{version_id}", "DELETE"): ("routers.content_versions", "delete_version"),
+    ("/api/texts", "POST"): ("routers.content_versions", "create_text"),
+    ("/api/texts/{content_id}", "GET"): ("routers.content_versions", "get_text"),
     ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
     ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
     ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
@@ -1061,6 +1067,61 @@ def check_project_admin_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_content_version_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    content_versions_path = root / "routers" / "content_versions.py"
+    if not content_versions_path.exists():
+        fail("routers/content_versions.py is missing")
+
+    route_pairs = {
+        ("/api/versions", "post"),
+        ("/api/versions/{version_id}", "get"),
+        ("/api/versions/{version_id}/restore", "post"),
+        ("/api/versions/{version_id}", "delete"),
+        ("/api/texts", "post"),
+        ("/api/texts/{content_id}", "get"),
+    }
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            name = ast_call_name(call.func)
+            _, _, method = name.rpartition(".") if name else ("", "", "")
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, str)
+                and (arg.value, method.lower()) in route_pairs
+            ):
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Version/text route handlers must live in routers/content_versions.py:\n" + "\n".join(violations))
+
+    content_tree = parse_py_file(content_versions_path)
+    route_count = 0
+    for node in ast.walk(content_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 6:
+        fail(f"routers/content_versions.py should own 6 version/text route registrations, found {route_count}")
+    return route_count
+
+
 def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
@@ -1249,6 +1310,7 @@ def main() -> int:
     admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
     project_admin_route_handlers = check_project_admin_routes_extracted(root)
+    content_version_route_handlers = check_content_version_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
     script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
     canvas_route_handlers = check_canvas_routes_extracted(root)
@@ -1279,6 +1341,7 @@ def main() -> int:
     print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
     print(f"  project_admin_route_handlers={project_admin_route_handlers}")
+    print(f"  content_version_route_handlers={content_version_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
     print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
     print(f"  canvas_route_handlers={canvas_route_handlers}")

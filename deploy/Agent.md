@@ -1968,6 +1968,55 @@
 - The first external `/health` check immediately after restart briefly returned `502`; a retry returned HTTP `200`.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
+## 2026-06-19 Content Version Router Extraction
+
+### Changes
+
+- Extracted 6 version and text-content route handlers from `deploy/api_routes.py` into `deploy/routers/content_versions.py`:
+  - version create/detail/restore/delete
+  - text create/detail
+- Kept `api_routes.py` as the compatibility registration point so the public API surface remains unchanged.
+- Reduced `api_routes.py` to 1619 lines.
+- Strengthened `deploy/scripts/check_route_contract.py`:
+  - runtime endpoints must resolve to `routers.content_versions`
+  - `api_routes.py` must not reintroduce direct handlers for the 6 migrated routes
+  - `routers/content_versions.py` must own exactly 6 route registrations
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/content_versions.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - route result remains `openapi_paths=231`, `openapi_operations=287`, `content_version_route_handlers=6`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_content_versions_router_20260619_073512`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/content_versions.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/content_versions.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No frontend build was required.
+- No existing version record was available during the live read-only endpoint probe, so `/api/versions/{version_id}` runtime behavior is covered by the route contract and smoke coverage rather than a specific version-detail response.
+- The first external `/health` check immediately after restart briefly returned `502`; a retry returned HTTP `200`.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Project Admin Router Extraction
 
 ### Changes
