@@ -50,8 +50,6 @@ from schemas.generation import (
     MultiGridStoryboardRequest,
     MaterialProcessRequest,
 )
-from schemas.video import SaveVideoTaskRequest
-from schemas.task import WorkspaceSessionRequest
 from schemas.project import ProjectData, ExportToVideoRequest
 import redis.asyncio as redis
 
@@ -98,6 +96,7 @@ from routers.frontend_pages import create_frontend_pages_router
 from routers.prompts import create_prompt_router
 from routers.user_session import create_user_session_router
 from routers.video import create_video_router
+from routers.workspace import create_workspace_router
 import task_service
 
 
@@ -846,6 +845,17 @@ app.include_router(
 )
 logger.info("✅ User Session API 路由已注册 (/api/logout, /api/user/info, /api/me/organizations)")
 
+app.include_router(
+    create_workspace_router(
+        require_auth_dependency=require_auth,
+        jwt_auth_module=jwt_auth,
+        project_dao=ProjectDAO,
+        workspace_session_dao=WorkspaceSessionDAO,
+        logger=logger,
+    )
+)
+logger.info("✅ Workspace API 路由已注册 (/api/workspace)")
+
 # ============================================
 # API 路由
 # ============================================
@@ -1219,127 +1229,6 @@ async def delete_task(task_id: str, username: str = Depends(require_auth)):
     except Exception as e:
         logger.error(f"删除任务失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
-
-
-@app.post("/api/workspace/save-task")
-async def save_video_task(request: SaveVideoTaskRequest, username: str = Depends(require_auth)):
-    """保存视频任务到数据库（已废弃，使用session保存）"""
-    try:
-        # 🔧 video_tasks表已废弃，所有数据都通过workspace/save-session保存
-        # 这个接口保留是为了兼容性
-        logger.info(f"⚠️ save-task已废弃，请使用save-session接口")
-        return {
-            "success": True,
-            "message": "任务保存已迁移到session系统"
-        }
-
-    except Exception as e:
-        logger.error(f"保存视频任务失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/workspace/tasks")
-async def get_workspace_tasks(username: str = Depends(require_auth)):
-    """获取用户的所有工作台任务（已废弃，数据迁移到projects.settings）"""
-    try:
-        # 🔧 video_tasks表已废弃，所有数据都保存在projects.settings的video_tasks字段中
-        # 这个接口保留是为了兼容性，返回空列表
-        logger.info(f"✅ workspace任务已迁移到项目系统（返回空列表）")
-        return {"tasks": []}
-
-    except Exception as e:
-        logger.error(f"获取工作台任务失败: {e}")
-        return {"tasks": []}
-
-@app.post("/api/workspace/save-session")
-async def save_workspace_session(request: WorkspaceSessionRequest, username: str = Depends(require_auth)):
-    """保存workspace会话数据到数据库（任务组、上传的图片、提示词）"""
-    try:
-        session_data = {
-            "task_groups": request.task_groups,
-            "uploaded_images": request.uploaded_images,
-            "image_prompts": request.image_prompts,
-            "tasks_status": request.tasks_status or {},
-            "updated_at": datetime.now().isoformat()
-        }
-        scope = request.scope or ""
-
-        await WorkspaceSessionDAO.save_session(username, session_data, scope=scope)
-
-        logger.info(f"✅ 保存workspace会话到数据库: {username}, scope={scope}, {len(request.task_groups)} 个任务组")
-
-        return {
-            "success": True,
-            "message": "会话已保存"
-        }
-
-    except Exception as e:
-        logger.error(f"保存workspace会话失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/workspace/save-beacon")
-async def save_workspace_beacon(request: Request, token: str = Query(...)):
-    """sendBeacon 保存端点（页面关闭时使用，比 fetch 更可靠）"""
-    try:
-        username = jwt_auth.verify_token(token)
-        if not username:
-            return {"success": False, "message": "token无效"}
-        body = await request.json()
-
-        # beacon保存项目数据（简化版，保留核心字段）
-        if body.get('project_id'):
-            project_data = {
-                "original_content": body.get('original_content'),
-                "script_content": body.get('script_content'),
-                "storyboard": body.get('storyboard'),
-                "material_library": body.get('material_library'),
-            }
-            await ProjectDAO.save_or_update_project(
-                user_id=username,
-                project_id=body['project_id'],
-                project_name=body.get('name', '未命名'),
-                project_data=project_data
-            )
-            logger.info(f"📡 Beacon保存项目成功: {username}/{body.get('project_id')}")
-
-        return {"success": True}
-    except Exception as e:
-        logger.warning(f"Beacon保存失败: {e}")
-        return {"success": False}
-
-@app.get("/api/workspace/load-session")
-async def load_workspace_session(username: str = Depends(require_auth), scope: str = ""):
-    """从数据库加载workspace会话数据"""
-    try:
-        session_data = await WorkspaceSessionDAO.load_session(username, scope=scope)
-
-        if not session_data:
-            logger.info(f"📭 用户 {username} 没有workspace会话数据")
-            return {
-                "success": False,
-                "session": None
-            }
-
-        session = {
-            "task_groups": session_data.get("task_groups", []),
-            "uploaded_images": session_data.get("uploaded_images", []),
-            "image_prompts": session_data.get("image_prompts", {}),
-            "tasks_status": session_data.get("tasks_status", {})
-        }
-
-        logger.info(f"✅ 从数据库加载workspace会话: {username}, {len(session['task_groups'])} 个任务组")
-
-        return {
-            "success": True,
-            "session": session
-        }
-
-    except Exception as e:
-        logger.error(f"加载workspace会话失败: {e}", exc_info=True)
-        return {
-            "success": False,
-            "session": None
-        }
 
 @app.get("/api/tasks/stream")
 async def task_event_stream(request: Request, token: str = Query(...)):

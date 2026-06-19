@@ -80,6 +80,11 @@ EXPECTED_ENDPOINTS = {
     ("/api/user/info", "GET"): ("routers.user_session", "get_user_info"),
     ("/api/me/organizations", "GET"): ("routers.user_session", "list_my_organizations"),
     ("/api/me/organizations/{org_id}/leave", "POST"): ("routers.user_session", "leave_organization"),
+    ("/api/workspace/save-task", "POST"): ("routers.workspace", "save_video_task"),
+    ("/api/workspace/tasks", "GET"): ("routers.workspace", "get_workspace_tasks"),
+    ("/api/workspace/save-session", "POST"): ("routers.workspace", "save_workspace_session"),
+    ("/api/workspace/save-beacon", "POST"): ("routers.workspace", "save_workspace_beacon"),
+    ("/api/workspace/load-session", "GET"): ("routers.workspace", "load_workspace_session"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -458,6 +463,54 @@ def check_user_session_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_workspace_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    workspace_path = root / "routers" / "workspace.py"
+    if not workspace_path.exists():
+        fail("routers/workspace.py is missing")
+
+    route_paths = {
+        "/api/workspace/save-task",
+        "/api/workspace/tasks",
+        "/api/workspace/save-session",
+        "/api/workspace/save-beacon",
+        "/api/workspace/load-session",
+    }
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Workspace route handlers must live in routers/workspace.py:\n" + "\n".join(violations))
+
+    workspace_tree = parse_py_file(workspace_path)
+    route_count = 0
+    for node in ast.walk(workspace_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 5:
+        fail(f"routers/workspace.py should own 5 workspace route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -483,6 +536,7 @@ def main() -> int:
     cluster_status_route_handlers = check_cluster_status_routes_extracted(root)
     frontend_page_route_handlers = check_frontend_pages_routes_extracted(root)
     user_session_route_handlers = check_user_session_routes_extracted(root)
+    workspace_route_handlers = check_workspace_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -500,6 +554,7 @@ def main() -> int:
     print(f"  cluster_status_route_handlers={cluster_status_route_handlers}")
     print(f"  frontend_page_route_handlers={frontend_page_route_handlers}")
     print(f"  user_session_route_handlers={user_session_route_handlers}")
+    print(f"  workspace_route_handlers={workspace_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 

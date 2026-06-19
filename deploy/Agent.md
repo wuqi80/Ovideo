@@ -1391,3 +1391,60 @@
 ### Notes
 
 - No behavior change is intended; this is a low-coupling MVC extraction step that makes auth/user self-service ownership explicit while leaving the more coupled login path for a later service extraction.
+
+## 2026-06-19 Workspace Router Extraction Increment
+
+### Changes
+
+- Extracted workspace compatibility/session endpoints from `deploy/cluster_main.py` into `deploy/routers/workspace.py`.
+- Preserved the existing public API surface:
+  - `POST /api/workspace/save-task`
+  - `GET /api/workspace/tasks`
+  - `POST /api/workspace/save-session`
+  - `POST /api/workspace/save-beacon`
+  - `GET /api/workspace/load-session`
+- Injected existing runtime dependencies into the router instead of reading hidden globals:
+  - `require_auth`
+  - `jwt_auth`
+  - `ProjectDAO`
+  - `WorkspaceSessionDAO`
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - these 5 workspace endpoints belong to `routers.workspace`
+  - `cluster_main.py` no longer registers those route decorators
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/workspace.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `workspace_route_handlers=5`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_workspace_router_20260619-034121`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/workspace.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/workspace.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `workspace_route_handlers=5`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `POST https://mecha.one/api/login` -> HTTP `200`, token returned
+  - `GET https://mecha.one/api/workspace/tasks` -> HTTP `200`, `tasks=list`
+  - `POST https://mecha.one/api/workspace/save-session` -> HTTP `200`, `message=会话已保存`
+  - `GET https://mecha.one/api/workspace/load-session?scope=codex-smoke-workspace-router` -> HTTP `200`, `session=dict`
+  - `POST https://mecha.one/api/workspace/save-task` with a valid compatibility payload -> HTTP `200`, `message=任务保存已迁移到session系统`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; `save-task` and `workspace/tasks` remain compatibility endpoints while active session persistence stays on `WorkspaceSessionDAO`.
