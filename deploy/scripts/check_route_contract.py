@@ -2062,6 +2062,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "Gemini image model override; omitted uses admin runtime config",
         ),
         (
+            root / "schemas" / "generation.py",
+            "DeepSeek model override; omitted uses admin runtime config",
+        ),
+        (
             root / "routers" / "ai_proxy.py",
             "model=request.model",
         ),
@@ -2072,6 +2076,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         (
             root / "services" / "ai_proxy_service.py",
             'config = resolve_provider("gemini-image", explicit_model)',
+        ),
+        (
+            root / "services" / "ai_proxy_service.py",
+            "def _deepseek_chat_url(model: Optional[str])",
         ),
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
@@ -2088,6 +2096,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_video_reverse_uses_runtime_gemini_text_model",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model",
         ),
     ]
     checks = 0

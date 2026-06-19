@@ -3618,3 +3618,51 @@
 
 - This removes another hidden hardcoded-model override from a runtime path that already used the provider resolver.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 DeepSeek Runtime Model Default
+
+### Changes
+
+- Updated `deploy/schemas/generation.py` so `DeepseekChatRequest.model` is optional.
+- Updated `deploy/services/ai_proxy_service.py` so DeepSeek chat resolves the runtime provider first, then writes the resolved model into the upstream payload.
+- Admin-configured `DEEPSEEK_MODEL` now becomes the default when the request omits `model`; explicit request models still override the runtime default.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with DeepSeek runtime-model coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `13` to `16`
+  - contract now protects DeepSeek schema/service/test runtime-model wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/services/ai_proxy_service.py deploy/schemas/generation.py deploy/routers/ai_proxy.py deploy/tests/test_api_provider_runtime_model_env.py deploy/scripts/check_route_contract.py`
+  - `deploy/.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `7/7`
+  - `deploy/.venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - `deploy/.venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=16`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_deepseek_runtime_model_20260619_211338/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/schemas/generation.py`
+  - `/home/Administrator/deploy/services/ai_proxy_service.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile services/ai_proxy_service.py schemas/generation.py routers/ai_proxy.py tests/test_api_provider_runtime_model_env.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `7/7`
+  - `.venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `DEEPSEEK_MODEL` -> `deepseek-runtime-model-smoke`, source `DEEPSEEK_MODEL`
+
+### Notes
+
+- This fixes the same hidden-default class as Gemini image and video reverse: schema/service defaults made admin model changes ineffective unless callers explicitly sent the new model.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

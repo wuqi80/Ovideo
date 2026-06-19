@@ -143,7 +143,7 @@ def build_chat_payload(
     }
 
 
-def ensure_deepseek_configured(model: str = "deepseek-reasoner") -> None:
+def ensure_deepseek_configured(model: Optional[str] = None) -> None:
     config = resolve_provider("deepseek", model)
     if not config.api_key:
         raise AIProxyConfigError(
@@ -157,9 +157,9 @@ def ensure_deepseek_configured(model: str = "deepseek-reasoner") -> None:
 def build_deepseek_payload(
     *,
     prompt: str,
+    model: str,
     response_format: str = "text",
     temperature: float = 0.2,
-    model: str = "deepseek-reasoner",
     stream: bool = False,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
@@ -180,7 +180,7 @@ def _sse_event(payload: Dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
-def _deepseek_chat_url(model: str) -> tuple[str, Dict[str, Any]]:
+def _deepseek_chat_url(model: Optional[str]) -> tuple[str, Dict[str, Any], str]:
     config = resolve_provider("deepseek", model)
     if not config.api_key:
         raise AIProxyConfigError(
@@ -189,13 +189,14 @@ def _deepseek_chat_url(model: str) -> tuple[str, Dict[str, Any]]:
         )
     if not config.endpoint:
         raise AIProxyConfigError("DeepSeek 服务 endpoint 未配置，请联系管理员", status_code=503)
+    resolved_model = config.model_name or model or "deepseek-reasoner"
     return config.url_for("chat/completions"), {
         "headers": {
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
         },
         **config.requests_kwargs(),
-    }
+    }, resolved_model
 
 
 def generate_deepseek_text(
@@ -203,14 +204,14 @@ def generate_deepseek_text(
     prompt: str,
     response_format: str = "text",
     temperature: float = 0.2,
-    model: str = "deepseek-reasoner",
+    model: Optional[str] = None,
 ) -> str:
-    url, request_kwargs = _deepseek_chat_url(model)
+    url, request_kwargs, resolved_model = _deepseek_chat_url(model)
     payload = build_deepseek_payload(
         prompt=prompt,
+        model=resolved_model,
         response_format=response_format,
         temperature=temperature,
-        model=model,
         stream=False,
     )
     try:
@@ -252,17 +253,17 @@ def stream_deepseek_chat(
     prompt: str,
     response_format: str = "text",
     temperature: float = 0.2,
-    model: str = "deepseek-reasoner",
+    model: Optional[str] = None,
     on_complete: Optional[Callable[[str], None]] = None,
 ) -> Iterator[str]:
     """Yield DeepSeek chat chunks in the route's existing SSE event format."""
     try:
-        url, request_kwargs = _deepseek_chat_url(model)
+        url, request_kwargs, resolved_model = _deepseek_chat_url(model)
         payload = build_deepseek_payload(
             prompt=prompt,
+            model=resolved_model,
             response_format=response_format,
             temperature=temperature,
-            model=model,
             stream=True,
         )
     except AIProxyError as e:

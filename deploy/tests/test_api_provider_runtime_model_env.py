@@ -141,6 +141,65 @@ class _ChatResponse:
         }
 
 
+class _DeepseekResponse:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {"choices": [{"message": {"content": "deepseek ok"}}]}
+
+
+def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):
+    env_key = get_provider_env_key("deepseek")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-deepseek-key")
+    monkeypatch.setenv(endpoint_env, "https://deepseek-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "deepseek-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _DeepseekResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    result = ai_proxy_service.generate_deepseek_text(prompt="hello")
+
+    assert result == "deepseek ok"
+    assert calls[0]["url"] == "https://deepseek-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "deepseek-runtime-model"
+
+
+def test_deepseek_generate_text_explicit_model_overrides_runtime_model(monkeypatch):
+    env_key = get_provider_env_key("deepseek")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-deepseek-key")
+    monkeypatch.setenv(endpoint_env, "https://deepseek-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "deepseek-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _DeepseekResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    result = ai_proxy_service.generate_deepseek_text(
+        prompt="hello",
+        model="deepseek-chat",
+    )
+
+    assert result == "deepseek ok"
+    assert calls[0]["url"] == "https://deepseek-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "deepseek-chat"
+
+
 @pytest.mark.asyncio
 async def test_video_reverse_uses_runtime_gemini_text_model(monkeypatch, tmp_path):
     env_key = get_provider_env_key("gemini-text")

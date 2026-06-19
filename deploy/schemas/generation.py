@@ -47,7 +47,7 @@ class DeepseekChatRequest(BaseModel):
     prompt: str = Field(..., description="要发送给 DeepSeek 的提示词")
     response_format: str = Field("text", pattern="^(text|json)$")
     temperature: float = Field(0.2, ge=0, le=1)
-    model: str = Field("deepseek-reasoner", description="DeepSeek模型名称: deepseek-reasoner 或 deepseek-chat")
+    model: Optional[str] = Field(None, description="DeepSeek model override; omitted uses admin runtime config")
 
 
 class DoubaoImageRequest(BaseModel):
