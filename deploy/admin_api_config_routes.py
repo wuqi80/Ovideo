@@ -43,13 +43,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _reload_api_env():
+async def _reload_api_env() -> bool:
     """Refresh DB-backed API config values into the runtime environment."""
     try:
-        await load_api_configs_to_env()
+        result = await load_api_configs_to_env()
+        refreshed = bool(result.get("success"))
+        if not refreshed:
+            logger.warning("API env reload returned unsuccessful result: %s", result)
+            return False
         logger.info("API env reload succeeded")
+        return True
     except Exception as e:
         logger.warning("API env reload failed: %s", e)
+        return False
 
 
 async def _clear_all_provider_health_cache() -> List[str]:

@@ -75,7 +75,7 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
     """Load enabled DB configs into managed env vars for resolve_provider()."""
     try:
         configs = await ApiConfigDAO.list_enabled()
-        reset_managed_api_env_to_baseline()
+        new_env: Dict[str, Optional[str]] = dict(_BASE_API_ENV_VALUES)
         loaded = 0
         loaded_providers: List[str] = []
         for config in configs:
@@ -86,30 +86,37 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
             enc = _config_get(config, "api_key_encrypted", "")
             if not enc:
                 continue
-            api_key = ApiConfigDAO._decrypt_key(enc)
+            api_key = ApiConfigDAO.decrypt_key(enc)
             if not api_key:
                 continue
 
-            os.environ[env_key] = api_key
+            new_env[env_key] = api_key
             loaded += 1
             loaded_providers.append(provider.strip().lower())
 
             endpoint = str(_config_get(config, "endpoint", "") or "").strip()
             endpoint_env = get_endpoint_env_key(env_key)
             if endpoint:
-                os.environ[endpoint_env] = endpoint
+                new_env[endpoint_env] = endpoint
             else:
-                os.environ.pop(endpoint_env, None)
+                new_env[endpoint_env] = None
 
             proxy_mode = str(_config_get(config, "proxy_mode", "direct") or "direct").strip()
-            os.environ[get_proxy_mode_env_key(env_key)] = proxy_mode
+            new_env[get_proxy_mode_env_key(env_key)] = proxy_mode
 
             custom_proxy = str(_config_get(config, "custom_proxy", "") or "").strip()
             custom_proxy_env = get_custom_proxy_env_key(env_key)
             if custom_proxy:
-                os.environ[custom_proxy_env] = custom_proxy
+                new_env[custom_proxy_env] = custom_proxy
             else:
-                os.environ.pop(custom_proxy_env, None)
+                new_env[custom_proxy_env] = None
+
+        reset_managed_api_env_to_baseline()
+        for key, value in new_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
         deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
         if deepseek_key:

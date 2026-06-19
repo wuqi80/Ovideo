@@ -757,7 +757,7 @@ async def admin_create_credit_rule(body: CreditRuleCreateBody, request: Request)
 async def admin_update_credit_rule(rule_id: str, body: CreditRuleUpdateBody, request: Request):
     _require_db()
     before = await CreditRuleDAO.get(rule_id)
-    fields = {k: v for k, v in body.dict().items() if v is not None}
+    fields = body.model_dump(exclude_unset=True)
     rule = await CreditRuleDAO.update(rule_id, fields)
     if not rule:
         raise HTTPException(status_code=404, detail="规则不存在")
@@ -903,7 +903,7 @@ async def admin_update_user(user_id: str, body: AdminUserUpdateBody, request: Re
     user = await UserDAO.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    fields = {k: v for k, v in body.dict().items() if v is not None}
+    fields = body.model_dump(exclude_unset=True)
     if 'role' in fields:
         await UserDAO.set_role(user_id, fields.pop('role'))
     if fields:
@@ -1058,7 +1058,7 @@ async def admin_create_project_group(body: ProjectGroupCreateBody, request: Requ
 async def admin_update_project_group(group_id: str, body: ProjectGroupUpdateBody, request: Request):
     _require_db()
     before = await ProjectGroupDAO.get(group_id)
-    fields = {k: v for k, v in body.dict().items() if v is not None}
+    fields = body.model_dump(exclude_unset=True)
     group = await ProjectGroupDAO.update(group_id, fields)
     if not group:
         raise HTTPException(status_code=404, detail="分组不存在")
@@ -1156,7 +1156,7 @@ async def admin_update_media_item(
     before = await MediaLibraryDAO.get(library_item_id)
     if not before:
         raise HTTPException(status_code=404, detail="素材不存在")
-    fields = {k: v for k, v in body.dict().items() if v is not None}
+    fields = body.model_dump(exclude_unset=True)
     if fields:
         await MediaLibraryDAO.update(library_item_id, fields)
     after = await MediaLibraryDAO.get(library_item_id)
@@ -1383,7 +1383,7 @@ async def admin_update_organization(org_id: str, body: OrganizationUpdateBody, r
     before = await OrganizationDAO.get(org_id)
     if not before:
         raise HTTPException(status_code=404, detail="组织不存在")
-    fields = {k: v for k, v in body.dict().items() if v is not None}
+    fields = body.model_dump(exclude_unset=True)
     if 'owner_user_id' in fields:
         target = await UserDAO.get_user_by_id(fields['owner_user_id'])
         if not target:

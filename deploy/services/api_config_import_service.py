@@ -21,7 +21,7 @@ class ApiConfigImportOptions:
     dry_run: bool = False
 
 
-ReloadCallback = Callable[[], Awaitable[None]]
+ReloadCallback = Callable[[], Awaitable[bool]]
 
 
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
@@ -207,8 +207,9 @@ async def import_preset_api_configs(
             env_keys_imported += 1
         imported += 1
 
+    env_refreshed = None
     if not options.dry_run and (imported or updated_existing) and reload_api_env:
-        await reload_api_env()
+        env_refreshed = await reload_api_env()
 
     health_cache_invalidated: List[str] = []
     if not options.dry_run and touched_providers:
@@ -230,6 +231,7 @@ async def import_preset_api_configs(
         "env_keys_skipped_provider_claimed": env_keys_skipped_provider_claimed,
         "updated_existing": updated_existing,
         "enabled_existing": enabled_existing,
+        "env_refreshed": env_refreshed,
         "health_cache_invalidated": health_cache_invalidated,
         "planned_actions": planned_actions,
     }

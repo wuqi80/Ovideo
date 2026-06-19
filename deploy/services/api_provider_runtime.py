@@ -67,7 +67,7 @@ def normalize_provider_health_map(provider_health: Optional[Any]) -> ProviderHea
     if not provider_health:
         return {}
     if isinstance(provider_health, dict):
-        items = provider_health.values() if all(isinstance(v, dict) for v in provider_health.values()) else []
+        items = [v for v in provider_health.values() if isinstance(v, dict)]
     elif isinstance(provider_health, list):
         items = provider_health
     else:

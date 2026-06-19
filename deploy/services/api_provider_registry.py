@@ -44,7 +44,7 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "vendor": "google",
         "capabilities": ["text"],
         "required_env": ["GEMINI_TEXT_API_KEY"],
-        "fallback_env": ["GEMINI_API_KEY"],
+        "fallback_env": [],
         "fallback": [
             {
                 "provider": "deepseek",
@@ -61,7 +61,7 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "vendor": "google",
         "capabilities": ["image"],
         "required_env": ["GEMINI_IMAGE_API_KEY"],
-        "fallback_env": ["GEMINI_API_KEY"],
+        "fallback_env": [],
         "default_proxy_mode": "direct",
         "supports_proxy": True,
         "notes": "Google Gemini image generation.",

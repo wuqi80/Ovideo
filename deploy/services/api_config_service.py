@@ -22,7 +22,7 @@ from services.api_provider_registry import (
 from services.api_provider_runtime import build_provider_runtime_status
 
 
-ReloadCallback = Callable[[], Awaitable[None]]
+ReloadCallback = Callable[[], Awaitable[bool]]
 logger = logging.getLogger(__name__)
 
 
@@ -193,12 +193,12 @@ async def create_api_config(
     if not row:
         raise ApiConfigCreateFailed("Failed to create API config")
     disabled_conflicts = await _disable_conflicting_provider_configs(row)
-    if reload_api_env:
-        await reload_api_env()
+    env_refreshed = await reload_api_env() if reload_api_env else None
     await _invalidate_provider_health([_row_provider(row)])
     return {
         "success": True,
         "api_config": mask_api_config_row(row),
+        "env_refreshed": env_refreshed,
         "disabled_conflicting_config_ids": disabled_conflicts,
     }
 
@@ -220,12 +220,12 @@ async def update_api_config(
     if not updated:
         raise ApiConfigNotFound("Config not found")
     disabled_conflicts = await _disable_conflicting_provider_configs(updated)
-    if reload_api_env:
-        await reload_api_env()
+    env_refreshed = await reload_api_env() if reload_api_env else None
     await _invalidate_provider_health([_row_provider(before), _row_provider(updated)])
     return {
         "success": True,
         "api_config": mask_api_config_row(updated),
+        "env_refreshed": env_refreshed,
         "disabled_conflicting_config_ids": disabled_conflicts,
     }
 
@@ -239,10 +239,9 @@ async def delete_api_config(
     ok = await ApiConfigDAO.delete(config_id)
     if not ok:
         raise ApiConfigNotFound("Config not found")
-    if reload_api_env:
-        await reload_api_env()
+    env_refreshed = await reload_api_env() if reload_api_env else None
     await _invalidate_provider_health([_row_provider(before)])
-    return {"success": True, "deleted": True}
+    return {"success": True, "deleted": True, "env_refreshed": env_refreshed}
 
 
 async def repair_api_config_provider_conflicts(
@@ -289,8 +288,9 @@ async def repair_api_config_provider_conflicts(
             }
         )
 
+    env_refreshed = None
     if total_disabled and not dry_run and reload_api_env:
-        await reload_api_env()
+        env_refreshed = await reload_api_env()
     if touched_providers and not dry_run:
         await _invalidate_provider_health(touched_providers)
 
@@ -301,6 +301,7 @@ async def repair_api_config_provider_conflicts(
         "total_conflicts": len(conflicts),
         "total_disabled": total_disabled if not dry_run else 0,
         "would_disable": total_disabled,
+        "env_refreshed": env_refreshed,
     }
 
 
