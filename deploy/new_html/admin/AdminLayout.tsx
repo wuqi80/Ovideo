@@ -29,9 +29,12 @@ export const AdminLayout: React.FC = () => {
         const token = getAdminToken();
         const username = getAdminUsername();
         if (!token || !isAdminWhitelisted(username)) {
-            navigate('/admin/login', { replace: true, state: { from: location.pathname } });
+            navigate('/admin/login', {
+                replace: true,
+                state: { from: `${location.pathname}${location.search}${location.hash}` },
+            });
         }
-    }, [navigate, location.pathname]);
+    }, [navigate, location.pathname, location.search, location.hash]);
 
     useEffect(() => {
         const t = window.setInterval(() => setNow(new Date()), 1000);

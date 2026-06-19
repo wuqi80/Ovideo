@@ -1172,7 +1172,63 @@
   - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
   - result remains `openapi_paths=231`, `openapi_operations=287`, `prompt_route_handlers=3`
 
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_prompt_router_extraction_20260619-025530`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/prompts.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/prompts.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `prompt_route_handlers=3`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+  - `GET https://mecha.one/api/prompts/rewrite` with admin token -> HTTP `200`, `success=True`, `template_type=rewrite`, `content_len=229`
+
 ### Notes
 
-- This is a local architecture increment only; it has not been deployed to the server yet.
-- The route count and request/response behavior are intended to stay unchanged.
+- The route count and request/response behavior stayed unchanged.
+
+## 2026-06-19 Legacy API Edit Link Fix
+
+### Changes
+
+- Fixed the API config page's "旧版编辑" action in `deploy/new_html/admin/AdminSettingsPage.tsx`.
+- The link now stays inside the React admin shell at `/admin/settings?item=legacy-apiconfig` instead of opening top-level `/admin-legacy/`.
+- `AdminSettingsPage` maps `item=legacy-apiconfig` to the legacy iframe source:
+  - `/admin-legacy/?embed=1&v=20260618h&page=apiconfig#apiconfig`
+- Updated `AdminLayout` login guard to preserve `pathname + search + hash` in the login redirect state, so deep links such as `/admin/settings?item=legacy-apiconfig` return to the intended page after login.
+- Updated `AdminSidebar` and `adminMenu` so the legacy API config view keeps the System Settings / API Config navigation context active.
+
+### Verification
+
+- Local checks:
+  - TypeScript filter check reported no errors for `AdminSettingsPage.tsx`, `AdminLayout.tsx`, `AdminSidebar.tsx`, or `adminMenu.ts`.
+  - Local Vite build could not run because the Windows node_modules install is missing Rollup optional package `@rollup/rollup-win32-x64-msvc`; server build was used as authoritative build proof.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_legacy_api_edit_link_20260619-030322`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - emitted `dist/assets/AdminSettingsPage-BwBr8hXR.js` and `dist/assets/AdminLayout-DdzrevSc.js`
+- Online build checks passed:
+  - `/admin/settings?item=apiconfig` loads `index-BSMP4Ry0.js`
+  - `AdminSettingsPage-BwBr8hXR.js` contains `legacy-apiconfig`
+  - `AdminSettingsPage-BwBr8hXR.js` contains `/admin/settings?item=legacy-apiconfig`
+  - `AdminSettingsPage-BwBr8hXR.js` contains `/admin-legacy/?embed=1`
+  - `AdminSettingsPage-BwBr8hXR.js` no longer contains the top-level `/admin-legacy/?v=` edit link
+  - Source check confirms `AdminLayout.tsx` preserves `location.search` and `location.hash` in login redirect state
+- Smoke test passed:
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This fixes the observed loop where the old edit link returned to the login page and then back to the same native API config page.
+- No backend route changes were required.

@@ -26,7 +26,12 @@ import { pickTokenForCurrentRoute } from './adminAuth';
 import { crmConfirm, crmMessage } from './crmUI';
 
 const LEGACY_VER = '20260618h';
-const LEGACY_PAGES = ['apiconfig', 'cluster', 'workflows', 'dashboard'];
+const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
+    'legacy-apiconfig': 'apiconfig',
+    cluster: 'cluster',
+    workflows: 'workflows',
+    dashboard: 'dashboard',
+};
 
 type HealthStatus = 'ok' | 'error' | 'no_key' | 'unknown';
 
@@ -1326,9 +1331,7 @@ const ApiConfigPanel: React.FC = () => {
                             导入预设
                         </button>
                         <a
-                            href={`/admin-legacy/?v=${LEGACY_VER}&page=apiconfig#apiconfig`}
-                            target="_blank"
-                            rel="noreferrer"
+                            href="/admin/settings?item=legacy-apiconfig"
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -1436,9 +1439,13 @@ const ApiConfigPanel: React.FC = () => {
 export const AdminSettingsPage: React.FC = () => {
     const [sp] = useSearchParams();
     const raw = sp.get('item') || 'apiconfig';
-    const page = LEGACY_PAGES.includes(raw) ? raw : 'apiconfig';
 
-    if (page === 'apiconfig') {
+    if (raw === 'apiconfig') {
+        return <ApiConfigPanel />;
+    }
+
+    const page = LEGACY_PAGE_BY_ITEM[raw];
+    if (!page) {
         return <ApiConfigPanel />;
     }
 

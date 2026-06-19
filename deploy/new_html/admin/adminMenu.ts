@@ -96,6 +96,11 @@ export const ADMIN_MENU: MenuSection[] = [
 
 /** 返回当前地址对应的菜单路径（用于顶栏面包屑），如 ['系统设置','API 与模型','API 厂商配置']。 */
 export function getActiveTrail(pathname: string, search: string): string[] {
+  const cur = new URLSearchParams(search);
+  if (pathname === '/admin/settings' && cur.get('item') === 'legacy-apiconfig') {
+    return ['系统设置', 'API 厂商配置', '旧版编辑'];
+  }
+
   for (const sec of ADMIN_MENU) {
     for (const item of sec.children) {
       if (item.to && isToActive(item.to, pathname, search)) return [sec.label, item.label];
