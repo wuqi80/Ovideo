@@ -55,6 +55,27 @@ EXPECTED_ENDPOINTS = {
     ("/api/cluster/stats", "GET"): ("routers.cluster_status", "get_cluster_stats"),
     ("/api/cluster/nodes", "GET"): ("routers.cluster_status", "list_nodes"),
     ("/health", "GET"): ("routers.cluster_status", "health_check"),
+    ("/", "GET"): ("routers.frontend_pages", "root"),
+    ("/login", "GET"): ("routers.frontend_pages", "login_page"),
+    ("/favicon.ico", "GET"): ("routers.frontend_pages", "favicon"),
+    ("/favicon.png", "GET"): ("routers.frontend_pages", "favicon_png"),
+    ("/editor", "GET"): ("routers.frontend_pages", "editor_page"),
+    ("/materials", "GET"): ("routers.frontend_pages", "materials_page"),
+    ("/generation", "GET"): ("routers.frontend_pages", "generation_page"),
+    ("/workspace", "GET"): ("routers.frontend_pages", "workspace_page"),
+    ("/app", "GET"): ("routers.frontend_pages", "app_page"),
+    ("/projects", "GET"): ("routers.frontend_pages", "projects_hub"),
+    ("/projects/{path:path}", "GET"): ("routers.frontend_pages", "projects_spa"),
+    ("/canvas", "GET"): ("routers.frontend_pages", "canvas_page"),
+    ("/canvas/{path:path}", "GET"): ("routers.frontend_pages", "canvas_spa"),
+    ("/admin", "GET"): ("routers.frontend_pages", "admin_spa_root"),
+    ("/admin/", "GET"): ("routers.frontend_pages", "admin_spa_root"),
+    ("/admin/login", "GET"): ("routers.frontend_pages", "admin_spa_named"),
+    ("/admin/operations", "GET"): ("routers.frontend_pages", "admin_spa_named"),
+    ("/admin/settings", "GET"): ("routers.frontend_pages", "admin_spa_named"),
+    ("/admin/login/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
+    ("/admin/operations/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
+    ("/admin/settings/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -322,6 +343,70 @@ def check_cluster_status_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_frontend_pages_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    frontend_pages_path = root / "routers" / "frontend_pages.py"
+    if not frontend_pages_path.exists():
+        fail("routers/frontend_pages.py is missing")
+
+    route_paths = {
+        "/",
+        "/login",
+        "/favicon.ico",
+        "/favicon.png",
+        "/editor",
+        "/materials",
+        "/generation",
+        "/workspace",
+        "/app",
+        "/projects",
+        "/projects/{path:path}",
+        "/canvas",
+        "/canvas/{path:path}",
+        "/admin",
+        "/admin/",
+        "/admin/login",
+        "/admin/operations",
+        "/admin/settings",
+        "/admin/login/{path:path}",
+        "/admin/operations/{path:path}",
+        "/admin/settings/{path:path}",
+    }
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Frontend page route handlers must live in routers/frontend_pages.py:\n" + "\n".join(violations))
+
+    frontend_tree = parse_py_file(frontend_pages_path)
+    route_count = 0
+    for node in ast.walk(frontend_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 21:
+        fail(f"routers/frontend_pages.py should own 21 frontend route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -345,6 +430,7 @@ def main() -> int:
     api_config_route_handlers = check_admin_api_config_routes_extracted(root)
     prompt_route_handlers = check_prompt_routes_extracted(root)
     cluster_status_route_handlers = check_cluster_status_routes_extracted(root)
+    frontend_page_route_handlers = check_frontend_pages_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -360,6 +446,7 @@ def main() -> int:
     print(f"  admin_api_config_route_handlers={api_config_route_handlers}")
     print(f"  prompt_route_handlers={prompt_route_handlers}")
     print(f"  cluster_status_route_handlers={cluster_status_route_handlers}")
+    print(f"  frontend_page_route_handlers={frontend_page_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 

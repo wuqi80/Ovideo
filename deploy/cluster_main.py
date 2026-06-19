@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -94,6 +94,7 @@ from routers.ai_proxy import create_ai_proxy_router
 from routers.cluster_status import create_cluster_status_router
 from routers.comfyui_files import create_comfyui_files_router
 from routers.files import cleanup_thumbnail_cache, create_files_router
+from routers.frontend_pages import create_frontend_pages_router
 from routers.prompts import create_prompt_router
 from routers.video import create_video_router
 import task_service
@@ -832,125 +833,14 @@ app.include_router(
 )
 logger.info("✅ Cluster Status API 路由已注册 (/api/cluster/stats, /api/cluster/nodes, /health)")
 
+app.include_router(create_frontend_pages_router())
+logger.info("✅ Frontend Pages 路由已注册 (/, /projects, /admin shell)")
+
 # ============================================
 # API 路由
 # ============================================
 
 # ==================== API 端点 ====================
-
-@app.get("/")
-async def root():
-    """返回登录页面"""
-    return FileResponse('login.html')
-
-@app.get("/login")
-async def login_page():
-    """返回登录页面"""
-    return FileResponse('login.html')
-
-@app.get("/favicon.ico")
-async def favicon():
-    """返回favicon图标"""
-    # 使用现有的图标文件
-    favicon_path = Path("static/image_1ca1c5.png")
-    if favicon_path.exists():
-        return FileResponse(favicon_path)
-    # 如果没有图标，返回204 No Content（正常情况）
-    return Response(status_code=204)
-
-@app.get("/favicon.png")
-async def favicon_png():
-    """返回favicon PNG图标"""
-    return await favicon()
-
-@app.get("/editor")
-async def editor_page():
-    """旧路由 → 重定向到项目管理"""
-    return RedirectResponse("/projects", status_code=301)
-
-@app.get("/materials")
-async def materials_page():
-    """旧路由 → 重定向到项目管理"""
-    return RedirectResponse("/projects", status_code=301)
-
-@app.get("/generation")
-async def generation_page():
-    """旧路由 → 重定向到项目管理"""
-    return RedirectResponse("/projects", status_code=301)
-
-@app.get("/workspace")
-async def workspace_page():
-    """旧路由 → 重定向到项目管理"""
-    return RedirectResponse("/projects", status_code=301)
-
-@app.get("/app")
-async def app_page():
-    """重定向到项目管理"""
-    return RedirectResponse(url="/projects")
-
-# ============================================
-# React SPA 路由（项目中心化）
-# ============================================
-
-def _serve_spa():
-    """返回 React SPA 入口文件（禁止缓存以确保获取最新构建哈希）"""
-    dist_index = Path("dist/index.html")
-    if dist_index.exists():
-        return FileResponse(
-            'dist/index.html',
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
-        )
-    return HTMLResponse("""
-        <html><body style="font-family: sans-serif; padding: 40px; text-align: center;">
-        <h1>应用未构建</h1>
-        <pre>cd new_html && npm run build</pre>
-        </body></html>
-    """)
-
-@app.get("/projects")
-async def projects_hub():
-    """项目管理中心"""
-    return _serve_spa()
-
-@app.get("/projects/{path:path}")
-async def projects_spa(path: str):
-    """项目工作区 SPA catch-all（/projects/{id}/editor, /video 等）"""
-    return _serve_spa()
-
-@app.get("/canvas")
-async def canvas_page():
-    """无限画布页面"""
-    return _serve_spa()
-
-@app.get("/canvas/{path:path}")
-async def canvas_spa(path: str):
-    """画布 SPA catch-all"""
-    return _serve_spa()
-
-# ============================================
-# 2026-05-26 React Admin Shell SPA 路由
-#  - /admin / /admin/login / /admin/operations / /admin/settings 全部返回 dist/index.html
-#  - 旧版 cluster_main 静态控制台已搬到 /admin-legacy/（见 app.mount("/admin-legacy", ...)）
-#  - 注意：必须把 /admin/* 各个具体路径都显式枚举（包含子路径），否则 SPA 子路由刷新会 404
-#  - 详见 docs/vertical-slices.md "Admin Shell（2026-05-26）" + docs/faq.md 2026-05-26 "/admin/login 404"
-# ============================================
-
-@app.get("/admin")
-@app.get("/admin/")
-async def admin_spa_root():
-    return _serve_spa()
-
-@app.get("/admin/login")
-@app.get("/admin/operations")
-@app.get("/admin/settings")
-async def admin_spa_named():
-    return _serve_spa()
-
-@app.get("/admin/login/{path:path}")
-@app.get("/admin/operations/{path:path}")
-@app.get("/admin/settings/{path:path}")
-async def admin_spa_subpath(path: str):
-    return _serve_spa()
 
 @app.post("/api/login")
 async def login(request: LoginRequest):

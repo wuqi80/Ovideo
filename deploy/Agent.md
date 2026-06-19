@@ -1288,3 +1288,55 @@
 ### Notes
 
 - No behavior change is intended; the work reduces `cluster_main.py` ownership and adds a route-contract guard for this domain.
+
+## 2026-06-19 Frontend Pages Router Extraction Increment
+
+### Changes
+
+- Extracted frontend shell/page routes from `deploy/cluster_main.py` into `deploy/routers/frontend_pages.py`.
+- Preserved the existing public page surface:
+  - `GET /`, `/login`, `/favicon.ico`, `/favicon.png`
+  - legacy redirects: `/editor`, `/materials`, `/generation`, `/workspace`, `/app`
+  - SPA entries: `/projects`, `/projects/{path:path}`, `/canvas`, `/canvas/{path:path}`
+  - React Admin shell entries: `/admin`, `/admin/`, `/admin/login`, `/admin/operations`, `/admin/settings` and their subpaths
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - these 21 frontend page registrations belong to `routers.frontend_pages`
+  - `cluster_main.py` no longer registers those page decorators
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/frontend_pages.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `frontend_page_route_handlers=21`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_frontend_pages_router_20260619-032334`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/frontend_pages.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/frontend_pages.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `frontend_page_route_handlers=21`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `GET https://mecha.one/login` -> HTTP `200`
+  - `GET https://mecha.one/projects` -> HTTP `200`
+  - `GET https://mecha.one/admin/settings?item=apiconfig` -> HTTP `200`
+  - `GET https://mecha.one/admin/settings?item=legacy-apiconfig` -> HTTP `200`
+  - `GET https://mecha.one/favicon.ico` -> HTTP `200`
+  - `GET https://mecha.one/editor` -> HTTP `301`, `Location=/projects`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; this only continues the MVC/router extraction and keeps the admin shell routes explicit so deep refreshes still return the React SPA entry.
