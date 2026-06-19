@@ -53,7 +53,6 @@ from schemas.generation import (
 from schemas.video import SaveVideoTaskRequest
 from schemas.task import WorkspaceSessionRequest
 from schemas.project import ProjectData, ExportToVideoRequest
-from schemas.misc import PromptTemplate
 import redis.asyncio as redis
 
 # 导入集群组件
@@ -71,7 +70,7 @@ from media_library_routes import router as media_library_router
 from credit_routes import router as credit_router
 from video_reverse_routes import router as video_reverse_router
 from dao_task import TaskDAO
-from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO, PromptTemplateDAO
+from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO
 from dao_user import UserDAO
 
 DB_AVAILABLE = True
@@ -94,6 +93,7 @@ from services.api_provider_runtime import build_provider_runtime_status
 from routers.ai_proxy import create_ai_proxy_router
 from routers.comfyui_files import create_comfyui_files_router
 from routers.files import cleanup_thumbnail_cache, create_files_router
+from routers.prompts import create_prompt_router
 from routers.video import create_video_router
 import task_service
 
@@ -813,6 +813,13 @@ app.include_router(
     )
 )
 logger.info("✅ File API 路由已注册 (/api/upload, /api/thumbnail)")
+
+app.include_router(
+    create_prompt_router(
+        require_auth_dependency=require_auth,
+    )
+)
+logger.info("✅ Prompt API 路由已注册 (/api/prompts)")
 
 # ============================================
 # API 路由
@@ -3269,117 +3276,6 @@ async def process_material(
     except Exception as e:
         logger.error(f"素材处理失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-# ==================== 提示词模板管理 API ====================
-
-@app.get("/api/prompts/{template_type}")
-async def get_prompt_template(template_type: str, username: str = Depends(require_auth)):
-    """从数据库获取用户的自定义提示词模板"""
-    try:
-        # 从数据库加载用户自定义提示词
-        custom_content = await PromptTemplateDAO.load_template(username, template_type)
-
-        # 如果用户自定义提示词存在，返回自定义的
-        if custom_content:
-            logger.info(f"✅ 用户 {username} 加载自定义提示词: {template_type}")
-            return {
-                "success": True,
-                "template_type": template_type,
-                "content": custom_content,
-                "is_custom": True
-            }
-
-        # 否则返回默认提示词
-        default_prompts = {
-            "rewrite": """你是一位专业的中文动画编剧。
-请将以下小说/文本内容改写成符合行业标准的动画剧本格式。
-
-要求：
-1. 准确识别场景（Scene）、角色（Character）、对话（Dialogue）和动作（Action）。
-2. 使用标准的剧本格式（场景标题加粗，角色名居中，对话清晰，包含必要的括弧指导）。
-3. 增加适合动画制作的视觉描述（画面感）。
-4. 保持原著的语气和情节，但要适应视听语言。
-5. **必须使用中文输出剧本内容**。
-
-输入文本:
-{text}""",
-            "storyboard": """请分析以下中文动画剧本，将其拆解为一系列关键镜头（Shot），并返回 JSON。
-
-JSON 结构必须为 {"items": [ ... ]}
-每个 item 需要包含以下字段：
-- originalText: 对应的原文段落（从剧本中直接复制，用于高亮匹配）
-- scriptSegment: AI提炼的场景描述（简洁的场景和动作描述，用于图像生成）
-- imagePrompt: 图像生成提示词（英文，适合Stable Diffusion）
-- videoPrompt: 视频生成提示词（中文，描述镜头运动和画面）
-- dialogue: 人物台词（如果有）
-- characters: 出现的角色列表（数组）
-- scene: 场景位置（字符串）
-
-重要：originalText 必须是剧本中的原始文本段落，scriptSegment 是你提炼的场景描述。
-
-剧本:
-{scriptText}"""
-        }
-
-        content = default_prompts.get(template_type, "")
-        return {
-            "success": True,
-            "template_type": template_type,
-            "content": content,
-            "is_custom": False
-        }
-
-    except Exception as e:
-        logger.error(f"获取提示词失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/prompts/{template_type}")
-async def save_prompt_template(
-    template_type: str,
-    request: PromptTemplate,
-    username: str = Depends(require_auth)
-):
-    """保存用户的自定义提示词模板到数据库"""
-    try:
-        # 保存到数据库
-        await PromptTemplateDAO.save_template(username, template_type, request.content)
-
-        logger.info(f"✅ 用户 {username} 保存提示词模板到数据库: {template_type}")
-
-        return {
-            "success": True,
-            "message": "提示词模板已保存",
-            "template_type": template_type
-        }
-
-    except Exception as e:
-        logger.error(f"保存提示词失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/api/prompts/{template_type}")
-async def delete_prompt_template(template_type: str, username: str = Depends(require_auth)):
-    """从数据库删除用户的自定义提示词模板（恢复默认）"""
-    try:
-        # 检查模板是否存在
-        existing_content = await PromptTemplateDAO.load_template(username, template_type)
-
-        if existing_content:
-            # 从数据库删除
-            await PromptTemplateDAO.delete_template(username, template_type)
-            logger.info(f"✅ 用户 {username} 删除提示词模板: {template_type}")
-            return {
-                "success": True,
-                "message": "提示词模板已删除，已恢复为默认"
-            }
-        else:
-            return {
-                "success": True,
-                "message": "提示词模板不存在（已是默认）"
-            }
-
-    except Exception as e:
-        logger.error(f"删除提示词失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
 # ==================== 管理员API ====================
 
 # Legacy implementation kept for reference only. The live route is provided by admin_routes.py.

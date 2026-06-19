@@ -1147,3 +1147,32 @@
 - This is a service-layer refactor only; it does not change public API routes, request payloads, response payloads, or provider registry data.
 - Future compatible provider substitutions can now share one health-aware resolver path instead of duplicating failover logic per handler.
 - No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Prompt Router Extraction Increment
+
+### Changes
+
+- Extracted the prompt template endpoints from `deploy/cluster_main.py` into `deploy/routers/prompts.py`.
+- Registered the new router through `create_prompt_router(require_auth_dependency=require_auth)`.
+- Preserved the existing public API surface:
+  - `GET /api/prompts/{template_type}`
+  - `POST /api/prompts/{template_type}`
+  - `DELETE /api/prompts/{template_type}`
+- Removed direct `PromptTemplate` / `PromptTemplateDAO` imports from `cluster_main.py`.
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - the three prompt endpoints belong to `routers.prompts`
+  - `cluster_main.py` does not re-register `/api/prompts/*`
+  - `routers/prompts.py` owns exactly 3 prompt handlers
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/prompts.py deploy/scripts/check_route_contract.py`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `prompt_route_handlers=3`
+
+### Notes
+
+- This is a local architecture increment only; it has not been deployed to the server yet.
+- The route count and request/response behavior are intended to stay unchanged.
