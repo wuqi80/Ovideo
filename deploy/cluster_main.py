@@ -96,6 +96,7 @@ from routers.comfyui_files import create_comfyui_files_router
 from routers.files import cleanup_thumbnail_cache, create_files_router
 from routers.frontend_pages import create_frontend_pages_router
 from routers.prompts import create_prompt_router
+from routers.user_session import create_user_session_router
 from routers.video import create_video_router
 import task_service
 
@@ -836,6 +837,15 @@ logger.info("✅ Cluster Status API 路由已注册 (/api/cluster/stats, /api/cl
 app.include_router(create_frontend_pages_router())
 logger.info("✅ Frontend Pages 路由已注册 (/, /projects, /admin shell)")
 
+app.include_router(
+    create_user_session_router(
+        require_auth_dependency=require_auth,
+        online_users=_online_users,
+        logger=logger,
+    )
+)
+logger.info("✅ User Session API 路由已注册 (/api/logout, /api/user/info, /api/me/organizations)")
+
 # ============================================
 # API 路由
 # ============================================
@@ -959,63 +969,6 @@ async def login(request: LoginRequest):
         "token": token,
         "username": request.username
     }
-
-@app.post("/api/logout")
-async def logout(username: str = Depends(require_auth)):
-    _online_users.pop(username, None)
-    return {"success": True, "message": "登出成功"}
-
-@app.get("/api/user/info")
-async def get_user_info(username: str = Depends(require_auth)):
-    return {
-        "username": username,
-        "login_time": datetime.now().isoformat()
-    }
-
-
-# ============================================
-# 2026-05-26 组织管理 MVP — 用户自服务
-# 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.2
-# ============================================
-@app.get("/api/me/organizations")
-async def list_my_organizations(username: str = Depends(require_auth)):
-    """返回当前用户加入的所有 active 组织（WorkspaceSwitcher 数据源）。
-
-    user_id 在本系统中与 username 同值（cluster_main.require_auth 自动注册时
-    user_id=username）。
-    """
-    try:
-        from dao_organization import OrganizationMemberDAO
-        orgs = await OrganizationMemberDAO.list_orgs_for_user(username)
-    except Exception as e:
-        logger.warning(f"list_my_organizations: DAO 调用失败 username={username} err={e}")
-        return {"success": True, "organizations": []}
-
-    def _serialize(o: dict) -> dict:
-        out = {}
-        for k, v in o.items():
-            if hasattr(v, 'isoformat'):
-                out[k] = v.isoformat()
-            else:
-                out[k] = v
-        return out
-
-    return {"success": True, "organizations": [_serialize(o) for o in orgs]}
-
-
-@app.post("/api/me/organizations/{org_id}/leave")
-async def leave_organization(org_id: str, username: str = Depends(require_auth)):
-    """主动退出组织。owner 不能退（要先转让 owner 角色）。"""
-    from dao_organization import OrganizationDAO, OrganizationMemberDAO
-    org = await OrganizationDAO.get(org_id)
-    if not org:
-        raise HTTPException(status_code=404, detail="组织不存在")
-    if org.get('owner_user_id') == username:
-        raise HTTPException(status_code=400, detail="owner 不能主动退出，请先转让 owner 角色")
-    if not await OrganizationMemberDAO.is_member(org_id, username):
-        raise HTTPException(status_code=400, detail="你不是该组织成员")
-    await OrganizationMemberDAO.remove_member(org_id, username)
-    return {"success": True}
 
 @app.post("/api/generate")
 async def create_generate_task(request: GenerateRequest, username: str = Depends(require_auth)):

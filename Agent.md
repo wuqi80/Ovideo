@@ -4491,3 +4491,54 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 ### Notes
 
 - No behavior change is intended; this only continues the MVC/router extraction and keeps the admin shell routes explicit so deep refreshes still return the React SPA entry.
+
+## 2026-06-19 User Session Router Extraction Increment
+
+### Changes
+
+- Extracted current-user session/self-service endpoints from `deploy/cluster_main.py` into `deploy/routers/user_session.py`.
+- Preserved the existing public API surface:
+  - `POST /api/logout`
+  - `GET /api/user/info`
+  - `GET /api/me/organizations`
+  - `POST /api/me/organizations/{org_id}/leave`
+- Kept `/api/login` in `cluster_main.py` for now because it is still coupled to hardcoded-user fallback and DB user auto-provisioning; this should be split into an auth service before moving.
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - these 4 current-user endpoints belong to `routers.user_session`
+  - `cluster_main.py` no longer registers those route decorators
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/user_session.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `user_session_route_handlers=4`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_user_session_router_20260619-033339`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/user_session.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/user_session.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `user_session_route_handlers=4`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `POST https://mecha.one/api/login` -> HTTP `200`, token returned
+  - `GET https://mecha.one/api/user/info` -> HTTP `200`, `username=admin`
+  - `GET https://mecha.one/api/me/organizations` -> HTTP `200`, `organizations=list`
+  - `POST https://mecha.one/api/logout` -> HTTP `200`, `message=登出成功`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; this is a low-coupling MVC extraction step that makes auth/user self-service ownership explicit while leaving the more coupled login path for a later service extraction.

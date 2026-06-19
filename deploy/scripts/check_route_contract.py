@@ -76,6 +76,10 @@ EXPECTED_ENDPOINTS = {
     ("/admin/login/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
     ("/admin/operations/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
     ("/admin/settings/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
+    ("/api/logout", "POST"): ("routers.user_session", "logout"),
+    ("/api/user/info", "GET"): ("routers.user_session", "get_user_info"),
+    ("/api/me/organizations", "GET"): ("routers.user_session", "list_my_organizations"),
+    ("/api/me/organizations/{org_id}/leave", "POST"): ("routers.user_session", "leave_organization"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -407,6 +411,53 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_user_session_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    user_session_path = root / "routers" / "user_session.py"
+    if not user_session_path.exists():
+        fail("routers/user_session.py is missing")
+
+    route_paths = {
+        "/api/logout",
+        "/api/user/info",
+        "/api/me/organizations",
+        "/api/me/organizations/{org_id}/leave",
+    }
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("User session route handlers must live in routers/user_session.py:\n" + "\n".join(violations))
+
+    user_session_tree = parse_py_file(user_session_path)
+    route_count = 0
+    for node in ast.walk(user_session_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 4:
+        fail(f"routers/user_session.py should own 4 user session route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -431,6 +482,7 @@ def main() -> int:
     prompt_route_handlers = check_prompt_routes_extracted(root)
     cluster_status_route_handlers = check_cluster_status_routes_extracted(root)
     frontend_page_route_handlers = check_frontend_pages_routes_extracted(root)
+    user_session_route_handlers = check_user_session_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -447,6 +499,7 @@ def main() -> int:
     print(f"  prompt_route_handlers={prompt_route_handlers}")
     print(f"  cluster_status_route_handlers={cluster_status_route_handlers}")
     print(f"  frontend_page_route_handlers={frontend_page_route_handlers}")
+    print(f"  user_session_route_handlers={user_session_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 
