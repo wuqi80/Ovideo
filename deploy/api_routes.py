@@ -45,6 +45,7 @@ from file_service import save_generated_file_to_db
 from routers.audio import create_audio_router
 from routers.canvas import create_canvas_router
 from routers.content_versions import create_content_versions_router
+from routers.episodes import create_episodes_router
 from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
 from routers.task_notifications import create_task_notifications_router
@@ -200,6 +201,20 @@ router.include_router(
         activity_log_dao=ActivityLogDAO,
     )
 )
+
+try:
+    from dao_episode import EpisodeDAO
+except ImportError:
+    EpisodeDAO = None
+
+if EpisodeDAO is not None:
+    router.include_router(
+        create_episodes_router(
+            get_current_user_dependency=get_current_user,
+            episode_dao=EpisodeDAO,
+            episode_script_dao=EpisodeScriptDAO,
+        )
+    )
 
 # ============================================
 # 用户相关API
@@ -702,155 +717,6 @@ async def delete_file(
     
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
-
-
-# ============================================
-# 集数管理 API
-# ============================================
-
-class EpisodeCreate(BaseModel):
-    episode_name: str = ''
-    description: str = ''
-
-class EpisodeUpdate(BaseModel):
-    episode_name: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[str] = None
-    settings: Optional[dict] = None
-    sort_order: Optional[int] = None
-
-class EpisodeReorder(BaseModel):
-    episode_ids: List[str]
-
-@router.get("/api/projects/{project_id}/episodes")
-async def list_episodes(project_id: str, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_episode import EpisodeDAO
-        episodes = await EpisodeDAO.get_episodes(project_id)
-        return {"success": True, "episodes": episodes}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/projects/{project_id}/episodes")
-async def create_episode(project_id: str, data: EpisodeCreate, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_episode import EpisodeDAO
-        ep_num = await EpisodeDAO.get_next_episode_number(project_id)
-        episode = await EpisodeDAO.create_episode(
-            project_id=project_id,
-            episode_number=ep_num,
-            episode_name=data.episode_name or f'第{ep_num}集',
-            description=data.description
-        )
-        return {"success": True, "episode": episode}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/episodes/{episode_id}")
-async def get_episode(episode_id: str, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_episode import EpisodeDAO
-        episode = await EpisodeDAO.get_episode(episode_id)
-        if not episode:
-            raise HTTPException(status_code=404, detail="集数不存在")
-        return {"success": True, "episode": episode}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.put("/api/episodes/{episode_id}")
-async def update_episode(episode_id: str, data: EpisodeUpdate, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_episode import EpisodeDAO
-        await EpisodeDAO.update_episode(
-            episode_id=episode_id,
-            episode_name=data.episode_name,
-            description=data.description,
-            status=data.status,
-            settings=data.settings,
-            sort_order=data.sort_order
-        )
-        return {"success": True}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/api/episodes/{episode_id}")
-async def delete_episode(episode_id: str, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_episode import EpisodeDAO
-        await EpisodeDAO.delete_episode(episode_id)
-        return {"success": True}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/episodes/{episode_id}/duplicate")
-async def duplicate_episode(episode_id: str, user_id: str = Depends(get_current_user)):
-    """复制一个分集：新建「原名 副本」并整套拷贝剧本内容（episode_scripts）。
-    仅复制剧本，不复制分镜/视频/音频等重资产——用于基于已有剧本快速派生新版本。"""
-    try:
-        from dao_episode import EpisodeDAO
-        src = await EpisodeDAO.get_episode(episode_id)
-        if not src:
-            raise HTTPException(status_code=404, detail="集数不存在")
-
-        # settings 可能是 jsonb 字符串，容错解析
-        settings = src.get("settings")
-        if isinstance(settings, str):
-            try:
-                settings = json.loads(settings)
-            except (ValueError, TypeError):
-                settings = {}
-
-        project_id = src["project_id"]
-        ep_num = await EpisodeDAO.get_next_episode_number(project_id)
-        src_name = src.get("episode_name") or "未命名分集"
-        new_ep = await EpisodeDAO.create_episode(
-            project_id=project_id,
-            episode_number=ep_num,
-            episode_name=f"{src_name} 副本",
-            description=src.get("description") or "",
-            settings=settings or None,
-        )
-        if not new_ep:
-            raise HTTPException(status_code=500, detail="复制分集失败")
-        new_episode_id = new_ep["episode_id"]
-
-        # 拷贝全部剧本文件
-        scripts = await EpisodeScriptDAO.list_by_episode(episode_id)
-        for s in scripts:
-            meta = s.get("metadata")
-            if isinstance(meta, str):
-                try:
-                    meta = json.loads(meta)
-                except (ValueError, TypeError):
-                    meta = {}
-            await EpisodeScriptDAO.create(
-                episode_id=new_episode_id,
-                file_name=s.get("file_name") or "未命名文件",
-                original_content=s.get("original_content") or "",
-                adapted_script=s.get("adapted_script") or "",
-                sort_order=s.get("sort_order") or 0,
-                metadata=meta or None,
-            )
-
-        return {"success": True, "episode": new_ep, "copied_scripts": len(scripts)}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/projects/{project_id}/episodes/reorder")
-async def reorder_episodes(project_id: str, data: EpisodeReorder, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_episode import EpisodeDAO
-        await EpisodeDAO.reorder_episodes(project_id, data.episode_ids)
-        return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
