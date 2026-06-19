@@ -1,5 +1,39 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 Storyboard Paged Mutation Reload Fix
+
+### Incident
+
+- The workflow storyboard page was optimized to initially load only 10 shots, but some mutations could still break the paged state.
+- Deleting one or more shots called `forceReloadSlices('storyboardItems')`, which uses the full storyboard API without `limit`.
+- On large episodes, one delete operation could therefore reload every shot and make the page slow again.
+
+### Changes
+
+- Updated `deploy/new_html/pages/StoryboardGenPage.tsx`:
+  - added `reloadVisibleStoryboardPage()`
+  - single delete and batch delete now reload only the current visible storyboard page
+  - current visible count and total count are still preserved through `loadStoryboardItemsPage({ limit, includeTotal: true })`
+- Updated `deploy/scripts/check_route_contract.py`:
+  - added `storyboard_paged_reload_checks=2`
+  - contract fails if `StoryboardGenPage` reintroduces `forceReloadSlices('storyboardItems')`
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `git diff --check -- deploy/new_html/pages/StoryboardGenPage.tsx deploy/scripts/check_route_contract.py`
+- Frontend build notes:
+  - `npm run build` could not run because `npm` is not on the local PATH.
+  - direct Vite build could not run because local `node_modules` is missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
+  - `tsc --noEmit` currently fails on pre-existing project-wide type issues outside this change.
+
+### Notes
+
+- This change is local only until the next server sync/deploy step.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Graceful Restart Timeout Fix
 
 ### Incident

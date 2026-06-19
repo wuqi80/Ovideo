@@ -197,17 +197,21 @@ export const StoryboardGenPage: React.FC = () => {
     reload();
   }, [loadStoryboardItemsPage, reload, visibleEntityShotCount]);
 
+  const reloadVisibleStoryboardPage = useCallback(async () => {
+    await loadStoryboardItemsPage({ limit: visibleEntityShotCount, includeTotal: true });
+  }, [loadStoryboardItemsPage, visibleEntityShotCount]);
+
   // 2026-06-14：删除分镜镜头（列表项垃圾桶按钮）
   const handleDeleteStoryboardItem = useCallback(async (itemId: string) => {
     if (!await crmConfirm({ title: '删除镜头', message: '确认删除这个分镜镜头？此操作不可撤销。', type: 'danger', confirmText: '删除' })) return;
     try {
       await deleteStoryboardItem(itemId);
       crmMessage.success('已删除镜头');
-      await forceReloadSlices('storyboardItems');
+      await reloadVisibleStoryboardPage();
     } catch (e: any) {
       crmMessage.error(`删除失败：${e?.message || e}`);
     }
-  }, [forceReloadSlices]);
+  }, [reloadVisibleStoryboardPage]);
 
   // 2026-06-14：批量删除选中镜头（一次确认 + 循环删 + 刷新）
   const handleBatchDeleteStoryboardItems = useCallback(async (itemIds: string[]) => {
@@ -217,10 +221,10 @@ export const StoryboardGenPage: React.FC = () => {
     for (const id of itemIds) {
       try { await deleteStoryboardItem(id); ok++; } catch (e) { console.error('删除镜头失败', id, e); }
     }
-    await forceReloadSlices('storyboardItems');
+    await reloadVisibleStoryboardPage();
     if (ok === itemIds.length) crmMessage.success(`已删除 ${ok} 个镜头`);
     else crmMessage.warning(`已删除 ${ok}/${itemIds.length}，部分失败`);
-  }, [forceReloadSlices]);
+  }, [reloadVisibleStoryboardPage]);
 
   const noopSaveVersion = useCallback((_name: string) => {}, []);
   const noopRestoreVersion = useCallback((_v: FileVersion) => {}, []);
