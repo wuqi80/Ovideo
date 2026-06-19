@@ -13,6 +13,7 @@
 export const ADMIN_TOKEN_KEY = 'admin_session_token';
 export const ADMIN_USERNAME_KEY = 'admin_session_username';
 export const ADMIN_LOGIN_AT_KEY = 'admin_session_login_at';
+export const ADMIN_POST_LOGIN_REDIRECT_KEY = 'admin_post_login_redirect';
 
 export function getAdminToken(): string | null {
     try {
@@ -46,6 +47,22 @@ export function clearAdminSession(): void {
         sessionStorage.removeItem(ADMIN_USERNAME_KEY);
         sessionStorage.removeItem(ADMIN_LOGIN_AT_KEY);
     } catch {}
+}
+
+export function setAdminPostLoginRedirect(target: string): void {
+    try {
+        sessionStorage.setItem(ADMIN_POST_LOGIN_REDIRECT_KEY, target);
+    } catch {}
+}
+
+export function getAndClearAdminPostLoginRedirect(): string | null {
+    try {
+        const target = sessionStorage.getItem(ADMIN_POST_LOGIN_REDIRECT_KEY);
+        sessionStorage.removeItem(ADMIN_POST_LOGIN_REDIRECT_KEY);
+        return target;
+    } catch {
+        return null;
+    }
 }
 
 export function isAdminWhitelisted(username: string | null): boolean {

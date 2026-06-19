@@ -1192,6 +1192,9 @@ function legacyShellItem(page) {
 
 function redirectToAdminLoginForLegacy() {
   const from = '/admin/settings?item=' + encodeURIComponent(legacyShellItem(targetPage()));
+  try {
+    sessionStorage.setItem('admin_post_login_redirect', from);
+  } catch (_) {}
   const loginUrl = '/admin/login?redirect=' + encodeURIComponent(from);
   if (window.top && window.top !== window.self) {
     window.top.location.href = loginUrl;

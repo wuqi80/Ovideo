@@ -11,13 +11,37 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldCheck, Lock, User as UserIcon, AlertTriangle, ArrowLeft } from 'lucide-react';
-import { setAdminSession, isAdminWhitelisted, getAdminToken, getAdminUsername } from './adminAuth';
+import {
+    setAdminSession,
+    isAdminWhitelisted,
+    getAdminToken,
+    getAdminUsername,
+    getAndClearAdminPostLoginRedirect,
+} from './adminAuth';
 
 function getLoginRedirect(location: ReturnType<typeof useLocation>): string {
     const redirect = new URLSearchParams(location.search).get('redirect');
     const from = (location.state as any)?.from;
-    const target = redirect || from || '/admin';
-    return target.startsWith('/admin') && !target.startsWith('/admin/login') ? target : '/admin';
+    const pending = getAndClearAdminPostLoginRedirect();
+    const candidates = [redirect, from, pending];
+
+    for (const rawTarget of candidates) {
+        const target = normalizeAdminRedirect(rawTarget);
+        if (target) return target;
+    }
+    return '/admin';
+}
+
+function normalizeAdminRedirect(rawTarget: unknown): string | null {
+    if (typeof rawTarget !== 'string' || !rawTarget.trim()) return null;
+    try {
+        const url = new URL(rawTarget, window.location.origin);
+        if (url.origin !== window.location.origin) return null;
+        if (!url.pathname.startsWith('/admin') || url.pathname.startsWith('/admin/login')) return null;
+        return `${url.pathname}${url.search}${url.hash}`;
+    } catch {
+        return null;
+    }
 }
 
 export const AdminLoginPage: React.FC = () => {

@@ -2218,6 +2218,44 @@
 - No frontend build was required.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
+## 2026-06-19 Admin Legacy API Config Redirect Fix
+
+### Changes
+
+- Fixed the `/admin/settings?item=apiconfig` "legacy edit" entry so it no longer loses the intended target when admin login is required.
+- Added a small admin-only post-login redirect handoff in `deploy/new_html/admin/adminAuth.ts`.
+- Updated `deploy/new_html/admin/AdminLoginPage.tsx` to accept same-origin admin redirects and fall back to the saved redirect target.
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so the legacy API config button saves `/admin/settings?item=legacy-apiconfig` before redirecting to login.
+- Updated `deploy/admin/app.js` so legacy iframe 401 redirects also save the same target before sending the top window to `/admin/login`.
+
+### Verification
+
+- Local focused TypeScript check passed for:
+  - `admin/AdminSettingsPage.tsx`
+  - `admin/AdminLoginPage.tsx`
+  - `admin/adminAuth.ts`
+- Local full Vite build was blocked because this Windows workspace is missing Rollup's optional native package; server build was used as the deploy validation.
+- Server `npm run build` in `/home/Administrator/deploy/new_html` passed.
+- Server `sudo systemctl restart drama` completed.
+- `systemctl is-active drama` -> `active`
+- `GET https://mecha.one/health` -> HTTP `200`
+- `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_legacy_redirect_20260619_155541`
+- Uploaded to server:
+  - `/home/Administrator/deploy/admin/app.js`
+  - `/home/Administrator/deploy/new_html/admin/AdminLoginPage.tsx`
+  - `/home/Administrator/deploy/new_html/admin/AdminSettingsPage.tsx`
+  - `/home/Administrator/deploy/new_html/admin/adminAuth.ts`
+
+### Notes
+
+- No backend routes or redline files were modified for this fix.
+- Existing unrelated local changes remain in `deploy/api_routes.py`, `deploy/routers/episode_video.py`, and `deploy/scripts/smoke_test.py`.
+
 ## 2026-06-19 Script Timeline Router Extraction
 
 ### Changes

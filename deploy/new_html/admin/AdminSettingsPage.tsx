@@ -22,10 +22,11 @@ import {
     Timer,
     Trash2,
 } from 'lucide-react';
-import { pickTokenForCurrentRoute } from './adminAuth';
+import { getAdminToken, pickTokenForCurrentRoute, setAdminPostLoginRedirect } from './adminAuth';
 import { crmConfirm, crmMessage } from './crmUI';
 
 const LEGACY_VER = '20260619b';
+const LEGACY_API_CONFIG_ROUTE = '/admin/settings?item=legacy-apiconfig';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
     'legacy-apiconfig': 'apiconfig',
     cluster: 'cluster',
@@ -1246,6 +1247,15 @@ const ApiConfigPanel: React.FC = () => {
         }
     }, [loadConfigs]);
 
+    const openLegacyApiConfig = useCallback(() => {
+        setAdminPostLoginRedirect(LEGACY_API_CONFIG_ROUTE);
+        if (!getAdminToken()) {
+            window.location.assign(`/admin/login?redirect=${encodeURIComponent(LEGACY_API_CONFIG_ROUTE)}`);
+            return;
+        }
+        navigate(LEGACY_API_CONFIG_ROUTE);
+    }, [navigate]);
+
     const categoryOrder = ['text', 'image', 'video', 'audio', 'other'];
 
     return (
@@ -1333,7 +1343,7 @@ const ApiConfigPanel: React.FC = () => {
                         </button>
                         <button
                             type="button"
-                            onClick={() => navigate('/admin/settings?item=legacy-apiconfig')}
+                            onClick={openLegacyApiConfig}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
