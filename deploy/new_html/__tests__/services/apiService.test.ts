@@ -101,6 +101,14 @@ describe('getStoryboardItems', () => {
     const [url] = mockFetch.mock.calls[0];
     expect(url).toBe('/api/episodes/ep_1/storyboard-items?fields=audio_stage');
   });
+
+  it('supports material-binding field sets', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, items: [] }));
+    const { getStoryboardItems } = await import('../../services/apiService');
+    await getStoryboardItems('ep_1', undefined, { fields: 'materials' });
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/storyboard-items?fields=materials');
+  });
 });
 
 describe('updateStoryboardItem', () => {

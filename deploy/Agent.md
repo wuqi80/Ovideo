@@ -3313,3 +3313,72 @@
 - This reduces initial audio-page storyboard payload and avoids a full storyboard reload after each TTS clip persistence.
 - `MaterialsPage` remains the main workflow page with full storyboard refresh behavior; it likely needs a separate binding-focused field set because it genuinely depends on `bound_assets` and asset/name matching.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Materials Page Lightweight Storyboard Loading
+
+### Changes
+
+- Added a fourth optional lightweight storyboard field set for `GET /api/episodes/{episode_id}/storyboard-items`:
+  - new query parameter value: `fields=materials`
+  - returned fields are limited to IDs, ordering, text/prompt fields, generated image URL, `bound_assets`, script ID, and status
+  - the route whitelist now allows only `audio`, `video`, `audio_stage`, and `materials`
+- Updated `deploy/new_html/pages/MaterialsPage.tsx` so the material binding workflow:
+  - no longer refreshes `storyboardItems` through `EpisodeContext`
+  - force-refreshes only `assets` and `script`
+  - fetches storyboard rows directly through `getStoryboardItems(..., { fields: 'materials' })`
+  - keeps storyboard rows in page-local state
+  - patches page-local storyboard state after bind/unbind/cascade/auto-patch operations instead of reloading full storyboard rows
+- Updated `deploy/new_html/components/MaterialPage.tsx` so the left storyboard list:
+  - renders only the first 20 shots initially
+  - reveals 20 more shots per "加载更多镜头" click
+  - keeps binding and cascade logic operating on the full storyboard array
+- Extended `deploy/new_html/services/apiService.ts` and the API service test for the `materials` field set.
+- Extended `deploy/scripts/check_route_contract.py` with `materials_lightweight_storyboard_checks=9` to prevent material binding from regressing to full storyboard loading and unbounded shot-card rendering.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/dao/creative/storyboard.py deploy/routers/storyboard.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `materials_lightweight_storyboard_checks=9`
+- Local frontend limitation:
+  - `vitest` and `vite build` were blocked by missing local Rollup optional dependency `@rollup/rollup-win32-x64-msvc` in `deploy/new_html/node_modules`
+  - targeted TypeScript check was blocked by pre-existing errors:
+    - `components/MaterialPage.tsx` imports non-exported `getAuthToken`
+    - material objects are missing `type/source/timestamp` fields in existing type contracts
+    - `utils/episodeAdapters.ts` emits `status` on `StoryboardItem`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile dao/creative/storyboard.py routers/storyboard.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - generated frontend assets:
+    - `../dist/assets/MaterialsPage-BIDO7lcQ.js`
+    - `../dist/assets/MaterialPage-DRO8-j2E.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - live lightweight endpoint check:
+    - `GET /api/episodes/ep_2fc899a228f5/storyboard-items?fields=materials&limit=1&include_total=true`
+    - HTTP `200`, `success=True`, `total=152`
+    - returned keys: `action_text`, `bound_assets`, `camera_movement`, `dialogue`, `episode_id`, `generated_image_url`, `image_prompt`, `item_id`, `scene_heading`, `script_id`, `sort_order`, `status`, `video_prompt`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_materials_lightweight_storyboard_20260619_123222/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/dao/creative/storyboard.py`
+  - `/home/Administrator/deploy/routers/storyboard.py`
+  - `/home/Administrator/deploy/new_html/services/apiService.ts`
+  - `/home/Administrator/deploy/new_html/pages/MaterialsPage.tsx`
+  - `/home/Administrator/deploy/new_html/components/MaterialPage.tsx`
+  - `/home/Administrator/deploy/new_html/__tests__/services/apiService.test.ts`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- This completes the first pass over the main workflow storyboard-loading hot spots: storyboard, enhance, generation, audio, and materials now all have bounded or specialized loading paths.
+- API provider replacement/management work is still ongoing and separate from this workflow performance increment.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

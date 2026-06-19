@@ -8,27 +8,115 @@ import {
   dbItemToStoryboardItem,
 } from '../utils/episodeAdapters';
 import {
+  getStoryboardItems,
   updateStoryboardItem as apiUpdateStoryboardItem,
   updateAsset as apiUpdateAsset,
   createAsset as apiCreateAsset,
 } from '../services/apiService';
 import { Image as ImageIcon, Loader } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import type { MaterialLibrary, Material, FileVersion } from '../types';
+import type { MaterialLibrary, Material, FileVersion, StoryboardItemDB } from '../types';
+
+function safeBoundAssets(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string');
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === 'string');
+    } catch {}
+  }
+  return [];
+}
+
+function normalizeMaterialsStoryboardItem(r: any): StoryboardItemDB {
+  return {
+    itemId: r.item_id ?? r.itemId ?? '',
+    episodeId: r.episode_id ?? r.episodeId ?? '',
+    sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
+    sceneHeading: r.scene_heading ?? r.sceneHeading ?? '',
+    actionText: r.action_text ?? r.actionText ?? '',
+    dialogue: r.dialogue ?? '',
+    cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
+    imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
+    videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
+    generatedImageUrl: r.generated_image_url ?? r.generatedImageUrl ?? null,
+    boundAssets: safeBoundAssets(r.bound_assets ?? r.boundAssets),
+    status: r.status ?? 'draft',
+    dialogueAudioUrl: null,
+    narrationAudioUrl: null,
+    sfxAudioUrl: null,
+    audioDurationMs: null,
+    plannedDurationMs: null,
+  };
+}
+
+function applyMaterialsStoryboardPatch(item: StoryboardItemDB, patch: Record<string, any>): StoryboardItemDB {
+  return {
+    ...item,
+    sceneHeading: patch.scene_heading ?? patch.sceneHeading ?? item.sceneHeading,
+    actionText: patch.action_text ?? patch.actionText ?? item.actionText,
+    dialogue: patch.dialogue ?? item.dialogue,
+    cameraMovement: patch.camera_movement ?? patch.cameraMovement ?? item.cameraMovement,
+    imagePrompt: patch.image_prompt ?? patch.imagePrompt ?? item.imagePrompt,
+    videoPrompt: patch.video_prompt ?? patch.videoPrompt ?? item.videoPrompt,
+    generatedImageUrl: patch.generated_image_url ?? patch.generatedImageUrl ?? item.generatedImageUrl,
+    boundAssets: patch.bound_assets !== undefined || patch.boundAssets !== undefined
+      ? safeBoundAssets(patch.bound_assets ?? patch.boundAssets)
+      : item.boundAssets,
+    status: patch.status ?? item.status,
+  };
+}
 
 export const MaterialsPage: React.FC = () => {
   const navigate = useNavigate();
   const {
     episodeId, projectId, selectedScriptId,
-    script, storyboardItems, assets,
-    isLoading, error, reload,
-    loadSlices, saveStoryboardItem, forceReloadSlices,
+    script, assets,
+    isLoading, error,
+    forceReloadSlices,
   } = useEpisode();
+  const [storyboardItems, setStoryboardItems] = useState<StoryboardItemDB[]>([]);
+  const [storyboardLoading, setStoryboardLoading] = useState(false);
+  const [storyboardError, setStoryboardError] = useState<string | null>(null);
 
   // 2026-06-14：进入素材页强制刷新，保证跨页（设计/分镜）改动能看到最新数据。
+  // 2026-06-19：storyboard 改为 fields=materials 的轻量直拉，避免整行分镜数据进入 context。
   useEffect(() => {
-    forceReloadSlices('storyboardItems', 'assets', 'script');
+    forceReloadSlices('assets', 'script');
   }, [forceReloadSlices]);
+
+  useEffect(() => {
+    let active = true;
+    if (!episodeId) {
+      setStoryboardItems([]);
+      return () => { active = false; };
+    }
+    setStoryboardLoading(true);
+    setStoryboardError(null);
+    getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'materials' })
+      .then(res => {
+        if (!active) return;
+        setStoryboardItems(res.success ? (res.items || []).map(normalizeMaterialsStoryboardItem) : []);
+      })
+      .catch(err => {
+        console.warn('storyboard material fields load failed:', err);
+        if (active) {
+          setStoryboardItems([]);
+          setStoryboardError(err?.message || '素材绑定分镜数据加载失败');
+        }
+      })
+      .finally(() => {
+        if (active) setStoryboardLoading(false);
+      });
+    return () => { active = false; };
+  }, [episodeId, selectedScriptId]);
+
+  const updateMaterialsStoryboardItem = useCallback(async (itemId: string, data: Record<string, any>) => {
+    await apiUpdateStoryboardItem(itemId, data);
+    setStoryboardItems(prev => prev.map(item =>
+      item.itemId === itemId ? applyMaterialsStoryboardPatch(item, data) : item
+    ));
+  }, []);
 
   const pseudoFile = useMemo(
     () => scriptToProjectFile(script, storyboardItems, assets, episodeId),
@@ -87,7 +175,7 @@ export const MaterialsPage: React.FC = () => {
 
         if (tags.length > existing.length) {
           try {
-            await apiUpdateStoryboardItem(item.itemId, { bound_assets: tags });
+            await updateMaterialsStoryboardItem(item.itemId, { bound_assets: tags, boundAssets: tags });
             patched++;
           } catch (e) {
             console.error('Auto-patch bound_assets failed:', e);
@@ -96,11 +184,10 @@ export const MaterialsPage: React.FC = () => {
       }
       if (patched > 0) {
         console.log(`Auto-patched ${patched} storyboard items with char/scene tags`);
-        reload();
       }
     };
     doPatch();
-  }, [storyboardItems, assets, reload]);
+  }, [storyboardItems, assets, updateMaterialsStoryboardItem]);
 
   const handleUpdateLibrary = useCallback(async (newLibrary: MaterialLibrary) => {
 
@@ -147,8 +234,8 @@ export const MaterialsPage: React.FC = () => {
       }
     }
 
-    reload();
-  }, [assetNameToId, assets, storyboardItems, projectId, episodeId, reload]);
+    await forceReloadSlices('assets');
+  }, [assetNameToId, assets, storyboardItems, projectId, episodeId, selectedScriptId, forceReloadSlices]);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<number>(0);
@@ -183,7 +270,7 @@ export const MaterialsPage: React.FC = () => {
 
     try {
       const cleaned = buildBoundAssets(item);
-      await saveStoryboardItem(shotId, { bound_assets: cleaned, boundAssets: cleaned });
+      await updateMaterialsStoryboardItem(shotId, { bound_assets: cleaned, boundAssets: cleaned });
     } catch (e) {
       console.error('绑定素材失败:', e);
       return;
@@ -200,7 +287,7 @@ export const MaterialsPage: React.FC = () => {
 
       try {
         const newBound = buildBoundAssets(si);
-        await saveStoryboardItem(si.itemId, { bound_assets: newBound, boundAssets: newBound });
+        await updateMaterialsStoryboardItem(si.itemId, { bound_assets: newBound, boundAssets: newBound });
         cascadeCount++;
       } catch (e) {
         console.error(`级联绑定镜头${i + 1}失败:`, e);
@@ -212,7 +299,7 @@ export const MaterialsPage: React.FC = () => {
       window.clearTimeout(toastTimer.current);
       toastTimer.current = window.setTimeout(() => setToastMsg(null), 3000);
     }
-  }, [storyboardItems, assets, assetNameToId, saveStoryboardItem]);
+  }, [storyboardItems, assets, assetNameToId, updateMaterialsStoryboardItem]);
 
   const handleUnbindMaterial = useCallback(async (shotId: string, tagName: string) => {
     const currentIndex = storyboardItems.findIndex(si => si.itemId === shotId);
@@ -242,11 +329,11 @@ export const MaterialsPage: React.FC = () => {
     );
     filtered.push(`nosel:${tagName}`);
     try {
-      await saveStoryboardItem(shotId, { bound_assets: filtered, boundAssets: filtered });
+      await updateMaterialsStoryboardItem(shotId, { bound_assets: filtered, boundAssets: filtered });
     } catch (e) {
       console.error('解绑素材失败:', e);
     }
-  }, [storyboardItems, assetNameToId, saveStoryboardItem]);
+  }, [storyboardItems, assetNameToId, updateMaterialsStoryboardItem]);
 
   const handleUnbindConfirm = useCallback(async () => {
     if (!unbindDialog) return;
@@ -261,7 +348,7 @@ export const MaterialsPage: React.FC = () => {
         id !== `nosel:${tagName}`
       );
       filtered.push(`nosel:${tagName}`);
-      await saveStoryboardItem(itemId, { bound_assets: filtered, boundAssets: filtered });
+      await updateMaterialsStoryboardItem(itemId, { bound_assets: filtered, boundAssets: filtered });
     };
 
     try {
@@ -279,7 +366,7 @@ export const MaterialsPage: React.FC = () => {
     } catch (e) {
       console.error('解绑素材失败:', e);
     }
-  }, [unbindDialog, storyboardItems, assetNameToId, saveStoryboardItem]);
+  }, [unbindDialog, storyboardItems, assetNameToId, updateMaterialsStoryboardItem]);
 
   const handleUnbindCancel = useCallback(async () => {
     if (!unbindDialog) return;
@@ -299,11 +386,11 @@ export const MaterialsPage: React.FC = () => {
     filtered.push(`nosel:${tagName}`);
 
     try {
-      await saveStoryboardItem(shotId, { bound_assets: filtered, boundAssets: filtered });
+      await updateMaterialsStoryboardItem(shotId, { bound_assets: filtered, boundAssets: filtered });
     } catch (e) {
       console.error('解绑素材失败:', e);
     }
-  }, [unbindDialog, storyboardItems, assetNameToId, saveStoryboardItem]);
+  }, [unbindDialog, storyboardItems, assetNameToId, updateMaterialsStoryboardItem]);
 
   const handleNextStep = useCallback(() => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/audio`);
@@ -314,7 +401,7 @@ export const MaterialsPage: React.FC = () => {
   const noopDeleteVersion = useCallback((_id: string) => {}, []);
   const noopImportProject = useCallback(() => {}, []);
 
-  if (isLoading) {
+  if (isLoading || storyboardLoading) {
     return (
       <div className="flex items-center justify-center h-full text-n300">
         <div className="animate-pulse flex items-center gap-2">
@@ -325,10 +412,10 @@ export const MaterialsPage: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (error || storyboardError) {
     return (
       <div className="flex items-center justify-center h-full text-danger p-6">
-        <p>{error}</p>
+        <p>{error || storyboardError}</p>
       </div>
     );
   }

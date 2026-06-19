@@ -1,6 +1,6 @@
 
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion } from '../types';
 import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -64,6 +64,8 @@ type ThreeViewModalConfig = {
 };
 
 const randomSeed = () => Math.floor(Math.random() * 900000000000000) + 100000000000000;
+const MATERIAL_INITIAL_SHOT_COUNT = 20;
+const MATERIAL_SHOT_PAGE_SIZE = 20;
 
 async function downloadImageAsDataUrl(url: string): Promise<string> {
   // 🔧 支持 Blob URL（本地素材库可能使用）
@@ -197,7 +199,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   assetNameToId,
 }) => {
   const selectedFile = files.find(f => f.id === selectedFileId);
+  const storyboardItems = selectedFile?.storyboard?.items || [];
   const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+  const [visibleShotCount, setVisibleShotCount] = useState(MATERIAL_INITIAL_SHOT_COUNT);
   const [aiGeneratingTag, setAIGeneratingTag] = useState<string | null>(null);
   const [cameraGeneratingTag, setCameraGeneratingTag] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -214,6 +218,20 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   // Resizable Sidebar State
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
+
+  const storyboardIdSignature = useMemo(
+    () => storyboardItems.map(item => item.id).join('|'),
+    [storyboardItems],
+  );
+  const visibleStoryboardItems = useMemo(
+    () => storyboardItems.slice(0, visibleShotCount),
+    [storyboardItems, visibleShotCount],
+  );
+  const hasMoreStoryboardItems = visibleShotCount < storyboardItems.length;
+
+  useEffect(() => {
+    setVisibleShotCount(MATERIAL_INITIAL_SHOT_COUNT);
+  }, [storyboardIdSignature]);
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -719,7 +737,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
               </button>
             )}
             {/* 🆕 移除追加镜头按钮 */}
-            {onRemoveAppendedStoryboard && selectedFile?.storyboard?.items?.some(item => item.sourceFileId) && (
+            {onRemoveAppendedStoryboard && storyboardItems.some(item => item.sourceFileId) && (
               <button
                 onClick={() => {
                   if (confirm('确定要移除所有追加的镜头吗？')) {
@@ -740,7 +758,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
           {/* 🆕 显示追加来源文件列表 */}
           {(() => {
             const appendedSources = new Map<string, string>();
-            selectedFile?.storyboard?.items.forEach(item => {
+            storyboardItems.forEach(item => {
               if (item.sourceFileId && item.sourceFileName) {
                 appendedSources.set(item.sourceFileId, item.sourceFileName);
               }
@@ -776,12 +794,13 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             return null;
           })()}
           
-          {selectedFile?.storyboard?.items.map((item, index) => {
+          {visibleStoryboardItems.map((item, index) => {
             const isSelected = item.id === selectedShot?.id;
             const tags = [...item.characters, item.scene].filter(t => t);
             const isBound = tags.length > 0 && tags.every(t => item.materialSelections?.[t]);
             const hasTags = tags.length > 0;
             const isAppended = !!item.sourceFileId;  // 🆕 是否为追加的镜头
+            const displayIndex = storyboardItems.indexOf(item);
 
             return (
               <div 
@@ -798,7 +817,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className={`text-xs font-bold ${isSelected ? 'text-primary' : isAppended ? 'text-warning' : 'text-n300'}`}>
-                      镜头 {String(index + 1).padStart(2, '0')}
+                      镜头 {String((displayIndex >= 0 ? displayIndex : index) + 1).padStart(2, '0')}
                     </span>
                     {/* 🆕 追加来源标记 */}
                     {isAppended && (
@@ -837,6 +856,15 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
               </div>
             );
           })}
+          {hasMoreStoryboardItems && (
+            <button
+              type="button"
+              onClick={() => setVisibleShotCount(count => Math.min(count + MATERIAL_SHOT_PAGE_SIZE, storyboardItems.length))}
+              className="w-full px-3 py-2 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/15 border border-primary/20 rounded-lg transition-colors"
+            >
+              加载更多镜头（{Math.min(visibleShotCount, storyboardItems.length)} / {storyboardItems.length}）
+            </button>
+          )}
         </div>
 
         {/* Drag Handle */}
@@ -858,7 +886,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 <h3 className="font-bold text-n700 text-sm flex items-center gap-2">
                     <span className="w-1.5 h-4 bg-primary rounded-full"></span>
                     {hasStoryboard && selectedFile && selectedShot 
-                      ? `镜头 ${String(selectedFile.storyboard!.items.findIndex(i => i.id === selectedShot.id) + 1).padStart(2, '0')}` 
+                      ? `镜头 ${String(storyboardItems.findIndex(i => i.id === selectedShot.id) + 1).padStart(2, '0')}` 
                       : '素材绑定工作区'}
                 </h3>
              </div>
