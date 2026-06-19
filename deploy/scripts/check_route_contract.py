@@ -2176,6 +2176,26 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "配置 / 修改 API Key",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "测试此条记录",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "测试生效配置",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "Key 来源",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "此条 DB 记录未保存 Key",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "applyExtraValuesToRecords(",
         ),
         (

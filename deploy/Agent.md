@@ -1,5 +1,22 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Admin API Config Status Clarification
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` so API provider cards clearly expose the main action as `配置 / 修改 API Key`.
+- Renamed connection tests to separate their scopes:
+  - `测试生效配置` checks the provider runtime config used by real generation calls.
+  - `测试此条记录` checks only that specific DB config row.
+- Added `Key 来源` display to show whether a provider is using a DB-saved key, a runtime environment key, or no key.
+- Changed DB-row `No API key configured` test results from red error styling to yellow warning styling when the runtime provider still has a key.
+- Updated `scripts/check_route_contract.py` so these API-management UI semantics are covered by contract checks.
+
+### Notes
+
+- The backend API-management CRUD, provider health, and hot-reload interfaces already exist; this fixes the confusing frontend state where a DB-row test could show `未配置` while the runtime provider health was `ok`.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Shared Lazy Video Component
 
 ### Changes

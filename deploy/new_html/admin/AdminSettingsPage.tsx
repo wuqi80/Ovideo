@@ -591,6 +591,19 @@ function sourceText(source?: string | null, env?: string | null): string {
     return env || source;
 }
 
+function keySourceText(runtime?: RuntimeStatus, configHasKey?: boolean): string {
+    if (configHasKey) return 'DB 已保存 Key';
+    if (runtime?.has_key) {
+        const source = sourceText(runtime.api_key_source, runtime.api_key_env);
+        return source && source !== '-' ? `运行时环境：${source}` : '运行时环境有 Key';
+    }
+    return '未配置 Key';
+}
+
+function isNoKeyTest(test?: ApiConfigTest): boolean {
+    return test?.error === 'No API key configured';
+}
+
 const HealthBadge: React.FC<{ status: HealthStatus }> = ({ status }) => {
     const view = statusView(status);
     return (
@@ -878,16 +891,19 @@ const ApiConfigCard: React.FC<{
         runtime?.failover_selected_model_name,
     ].filter(Boolean).join(' / ');
     const failoverActive = Boolean(runtime?.failover_active);
+    const configTestNoKey = isNoKeyTest(configTest);
     const configTestClass = configTest?.ok
         ? 'border-g75 bg-g50 text-g400'
+        : configTestNoKey
+            ? 'border-y200 bg-y50 text-y400'
         : 'border-r75 bg-r50 text-r400';
     const configTestLabel = !configTest
         ? ''
         : configTest.ok
-            ? '本配置正常'
-            : configTest.error === 'No API key configured'
-                ? '本配置未保存 Key'
-                : '本配置异常';
+            ? '此条记录连通正常'
+            : configTestNoKey
+                ? '此条 DB 记录未保存 Key'
+                : '此条记录异常';
 
     return (
         <article className="bg-n0 border border-n40 rounded-md shadow-card p-4 min-w-0">
@@ -902,10 +918,10 @@ const ApiConfigCard: React.FC<{
                                     <span className="rounded bg-r50 text-danger px-1.5 py-0.5 text-[10px] font-semibold">禁用</span>
                                 )}
                                 {!configHasKey && (
-                                    <span className="rounded bg-r50 text-r400 px-1.5 py-0.5 text-[10px] font-semibold">本配置无 Key</span>
+                                    <span className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">DB 记录未保存 Key</span>
                                 )}
                                 {runtimeHasKey && !configHasKey && (
-                                    <span className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">运行时有 Key</span>
+                                    <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">运行时有 Key</span>
                                 )}
                             </div>
                             <div className="mt-1 flex items-center gap-2 text-[11px] text-n100 flex-wrap">
@@ -921,20 +937,20 @@ const ApiConfigCard: React.FC<{
                                 onClick={() => onTestConfig(config)}
                                 disabled={testingConfig || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试这条 DB 配置保存的 key 和 endpoint"
+                                title="只测试这条 DB 配置保存的 key 和 endpoint"
                             >
                                 {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                                测试本配置
+                                测试此条记录
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onCheck(provider)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试当前运行时生效的 provider key 和 endpoint"
+                                title="测试实际生成调用会使用的 provider key 和 endpoint"
                             >
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                测试运行时
+                                测试生效配置
                             </button>
                             <button
                                 type="button"
@@ -942,7 +958,7 @@ const ApiConfigCard: React.FC<{
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                             >
                                 <Edit3 className="w-3.5 h-3.5" />
-                                {configHasKey ? '编辑 Key' : '配置 Key'}
+                                配置 / 修改 API Key
                             </button>
                             <button
                                 type="button"
@@ -969,6 +985,9 @@ const ApiConfigCard: React.FC<{
                             <div className="mt-2 grid gap-1 text-[11px] text-n100 sm:grid-cols-2">
                                 <div className="min-w-0">
                                     Key: <span className="font-mono text-n700 break-all">{sourceText(runtime?.api_key_source, runtime?.api_key_env)}</span>
+                                </div>
+                                <div className="min-w-0">
+                                    Key 状态: <span className="font-mono text-n700 break-all">{keySourceText(runtime, configHasKey)}</span>
                                 </div>
                                 <div className="min-w-0">
                                     Endpoint: <span className="font-mono text-n700 break-all">{sourceText(runtime?.endpoint_source, runtime?.endpoint_env)}</span>
@@ -1058,6 +1077,9 @@ const ApiConfigCard: React.FC<{
                         <div className={`mt-2 rounded border px-3 py-2 text-[11px] break-words ${configTestClass}`}>
                             <span className="font-semibold">配置测试：</span>
                             <span>{configTestLabel}</span>
+                            {configTestNoKey && runtimeHasKey && (
+                                <span className="ml-1">；生效配置仍可使用运行时环境里的 Key</span>
+                            )}
                             <span className="mx-1 text-n100">/</span>
                             <span className="font-mono text-n700">
                                 {typeof configTest.latency_ms === 'number' ? `${configTest.latency_ms} ms` : '- ms'}
@@ -1104,6 +1126,8 @@ const ProviderQuickCard: React.FC<{
     const endpoint = primaryConfig?.endpoint || runtime?.endpoint || meta.default_endpoint || '';
     const model = primaryConfig?.model_name || runtime?.runtime_model_name || meta.default_model_name || '';
     const enabledCount = configs.filter(config => config.enabled !== false).length;
+    const keySource = keySourceText(runtime, hasSavedKey);
+    const keySourceClass = runtimeHasKey || hasSavedKey ? 'text-g400' : 'text-r400';
 
     return (
         <article className={`bg-n0 border rounded-md shadow-card p-4 min-w-0 ${
@@ -1149,6 +1173,9 @@ const ProviderQuickCard: React.FC<{
                     </div>
                 </div>
                 <div className="text-[11px] text-n100">
+                    Key 来源：<span className={`font-mono break-words ${keySourceClass}`}>{keySource}</span>
+                </div>
+                <div className="text-[11px] text-n100">
                     最后检测：<span className="font-mono text-n700 break-words">{formatTime(checkedAt)}</span>
                 </div>
                 {runtime?.issues?.length ? (
@@ -1167,16 +1194,17 @@ const ProviderQuickCard: React.FC<{
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
                 >
                     <KeyRound className="w-3.5 h-3.5" />
-                    {primaryConfig ? (hasSavedKey ? '编辑 Key' : '配置 Key') : '新增配置'}
+                    配置 / 修改 API Key
                 </button>
                 <button
                     type="button"
                     onClick={() => onCheck(provider)}
                     disabled={checking || !provider}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                    title="测试实际生成调用会使用的 provider key 和 endpoint"
                 >
                     {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    测试运行时
+                    测试生效配置
                 </button>
             </div>
         </article>
@@ -1682,7 +1710,7 @@ const ApiConfigPanel: React.FC = () => {
                             <ServerCog className="w-3.5 h-3.5" />
                             API Providers
                         </div>
-                        <h1 className="mt-1 text-xl font-semibold text-n800">API 配置</h1>
+                        <h1 className="mt-1 text-xl font-semibold text-n800">厂商 API Key 与 Endpoint</h1>
                     </div>
                     <div className="toolbar-actions">
                         <button
@@ -1691,7 +1719,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
                         >
                             <Plus className="w-3.5 h-3.5" />
-                            手动添加 API
+                            手动添加 / 修改 API
                         </button>
                         <button
                             type="button"
@@ -1709,7 +1737,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {refreshingHealth ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            刷新健康缓存
+                            查看健康缓存
                         </button>
                         <button
                             type="button"
@@ -1727,7 +1755,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {sweeping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测试运行时
+                            批量测试生效配置
                         </button>
                         <button
                             type="button"
@@ -1745,7 +1773,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {testingAllConfigs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测试全部配置
+                            批量测试 DB 配置
                         </button>
                         <button
                             type="button"
@@ -1801,7 +1829,7 @@ const ApiConfigPanel: React.FC = () => {
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div>
                             <h2 className="text-sm font-semibold text-n800">厂商快速配置</h2>
-                            <p className="mt-0.5 text-xs text-n100">按 provider 直接配置 Key、Endpoint 和模型；新增厂商时这里会跟随注册表自动出现。</p>
+                            <p className="mt-0.5 text-xs text-n100">每张卡片都可以直接配置或修改 API Key、Endpoint 和模型；状态以实际生效配置为准。</p>
                         </div>
                         <span className="text-xs text-n100 font-mono">{quickProviders.length} providers</span>
                     </div>
