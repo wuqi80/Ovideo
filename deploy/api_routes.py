@@ -50,6 +50,7 @@ from routers.episodes import create_episodes_router
 from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
 from routers.task_notifications import create_task_notifications_router
+from routers.video_capabilities import create_video_capabilities_router
 
 # 2026-05-24：MiniMax TTS 改异步入队，handler 调 task_service.submit
 import task_service
@@ -225,6 +226,8 @@ router.include_router(
     )
 )
 
+router.include_router(create_video_capabilities_router())
+
 # ============================================
 # 用户相关API
 # ============================================
@@ -322,35 +325,6 @@ async def get_user_profile(user_id: str = Depends(get_current_user)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/video/capabilities")
-async def video_capabilities():
-    """前端用于按后端实际能力开关 UI。
-
-    seedance_omni：Seedance「全能参考」(多参考图/r2v) 仅 2.0 支持；当前账号若只开通
-    1.0 Pro，该模式调用会被 ARK 拒（InvalidParameter task_type r2v）。据此让前端隐藏
-    全能参考、只留首尾帧。后续在火山方舟开通 2.0 并把 env SEEDANCE_MODEL_STANDARD
-    指向 2.0 型号后，此处自动返回 true，UI 无需改动。
-    """
-    try:
-        from external_api.video.seedance import SeedanceClient
-        std = (SeedanceClient.MODEL_MAP.get('standard') or '')
-    except Exception:
-        std = ''
-    # comfyui_available：是否有 ComfyUI agent 在线（GPU 节点类任务如 upscale 放大、
-    # ComfyUI 工作流依赖它）。AGENT_ONLY_MODE 下后端不自带 GPU，无 agent 时这些
-    # 必失败 → 前端据此禁用「放大」等按钮，避免点了必然报错。
-    comfyui_available = False
-    try:
-        from dao_agent import AgentDAO
-        online = await AgentDAO.get_online_agents()
-        comfyui_available = bool(online)
-    except Exception:
-        comfyui_available = False
-    return {
-        "seedance_omni": ('2-0' in std) or ('2.0' in std),
-        "comfyui_available": comfyui_available,
-    }
 
 # ============================================
 # 项目管理API

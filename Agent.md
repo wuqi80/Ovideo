@@ -5761,3 +5761,46 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - This is frontend-only and does not change backend routes or API contracts.
 - A health check immediately after restart briefly returned `502` while the service was still coming up; a retry returned HTTP `200`, then smoke passed.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Video Capabilities Router Extraction
+
+### Changes
+
+- Extracted `GET /api/video/capabilities` from `deploy/api_routes.py` into `deploy/routers/video_capabilities.py`.
+- Registered the new router from `api_routes.py` while keeping the public path and response shape unchanged.
+- Extended `deploy/scripts/check_route_contract.py` to verify:
+  - `/api/video/capabilities` is served by `routers.video_capabilities.video_capabilities`
+  - `routers/video_capabilities.py` owns exactly 1 route
+  - `api_routes.py` no longer owns the video capabilities handler
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/video_capabilities.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - `video_capability_route_handlers=1`
+  - redline diff check: no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/video_capabilities.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `GET https://mecha.one/api/video/capabilities` -> HTTP `200`, `{"seedance_omni":false,"comfyui_available":false}`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_video_capabilities_router_20260619_083818`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/video_capabilities.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- No frontend build was required.
+- This is a router-composition refactor only; it keeps the API surface stable while shrinking the remaining mixed V2 route file.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
