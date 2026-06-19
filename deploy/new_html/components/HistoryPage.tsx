@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, HardDrive, ShieldAlert } from 'lucide-react';
 import { fetchUserFiles, deleteEntityFile, hardDeleteEntityFile, hardDeleteEntityFiles, type EntityFile } from '../services/entityFileService';
+import { LazyVideo } from './LazyVideo';
 
 interface HistoryPageProps {
   // 预留扩展
@@ -380,15 +381,12 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                     {mediaUrl ? (
                       <>
                         {isVideoFile ? (
-                          <video
+                          <LazyVideo
                             src={mediaUrl}
                             className="w-full h-full object-cover"
-                            preload="metadata"
                             muted
                             loop
                             playsInline
-                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                            onMouseLeave={(e) => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
                           />
                         ) : (
                           <img src={thumbnailUrl || mediaUrl} className="w-full h-full object-cover" loading="lazy" alt="" />

@@ -1,5 +1,28 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Shared Lazy Video Component
+
+### Changes
+
+- Added `new_html/components/LazyVideo.tsx`:
+  - uses `IntersectionObserver`
+  - does not attach `src` until the video is near the viewport
+  - keeps `preload="none"` before entry and switches to metadata/selected preload after entry
+  - supports hover preview for card thumbnails and normal controlled playback for detail players
+- Replaced eager video previews with `LazyVideo` in:
+  - `new_html/components/VideoPage.tsx`
+  - `new_html/pages/FinalProductPage.tsx`
+  - `new_html/components/HistoryPage.tsx`
+  - `new_html/pages/MediaLibraryPage.tsx`
+  - `new_html/pages/VideoReversePage.tsx`
+- Kept user-opened modal/lightbox players as native eager `<video>` where immediate playback or direct element refs are required.
+- Updated `scripts/check_route_contract.py` with `frontend_lazy_video_checks` so bulk video previews do not regress back to eager `src` loading.
+
+### Notes
+
+- This addresses the "many shots / many generated videos" loading bottleneck without changing backend APIs.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Frontend Gemini SDK Decommission
 
 ### Changes

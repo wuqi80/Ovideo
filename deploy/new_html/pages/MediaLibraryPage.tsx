@@ -38,6 +38,7 @@ import {
 import { buildFolderTree, flattenForSelect, type FolderNode } from '../utils/mediaFolderTree';
 import ShareResourceDialog from '../components/ShareResourceDialog';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
+import { LazyVideo } from '../components/LazyVideo';
 
 type CategoryKey = 'all' | 'mine' | 'shared' | 'image' | 'video' | 'audio' | 'frame' | 'favorite';
 
@@ -866,7 +867,14 @@ const MediaDetailPanel: React.FC<{
           <img src={item.file_url} alt={item.title || ''} loading="lazy" decoding="async" className="w-full max-h-72 object-contain" />
         )}
         {isVideo && item.file_url && (
-          <video src={item.file_url} controls preload="metadata" className="w-full max-h-72" />
+          <LazyVideo
+            src={item.file_url}
+            controls
+            muted={false}
+            firstFrame={false}
+            hoverPreview={false}
+            className="w-full max-h-72"
+          />
         )}
         {isAudio && item.file_url && (
           <audio src={item.file_url} controls className="w-full p-3" />

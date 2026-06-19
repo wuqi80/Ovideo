@@ -26,6 +26,7 @@ import {
 } from '../services/videoReverseService';
 import { uploadMediaItem } from '../services/mediaLibraryService';
 import { CreditEstimateModal } from '../components/CreditEstimateModal';
+import { LazyVideo } from '../components/LazyVideo';
 
 const STATUS_LABEL: Record<VideoReverseStatus, { label: string; color: string }> = {
   pending:          { label: '排队中',     color: 'bg-n50' },
@@ -298,7 +299,16 @@ const TaskDetail: React.FC<{
       <div className="stack-on-narrow flex items-start gap-4">
         <div className="w-72 shrink-0 rounded overflow-hidden bg-n0 border border-n40">
           {task.video_file_url
-            ? <video src={task.video_file_url} controls className="w-full" />
+            ? (
+              <LazyVideo
+                src={task.video_file_url}
+                controls
+                muted={false}
+                firstFrame={false}
+                hoverPreview={false}
+                className="w-full"
+              />
+            )
             : <div className="w-full h-40 flex items-center justify-center text-n100"><Film size={32} /></div>
           }
         </div>

@@ -11,9 +11,7 @@ import { Clapperboard, Download, Film, AlertCircle, Loader2, Wand2, Check, X, Re
 import { listMediaItems } from '../services/mediaLibraryService';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { getVideoTakes, startCompose, getComposeStatus, type VideoShot, type ComposeStatus } from '../services/apiService';
-
-// 给视频 URL 追加 #t=0.1 媒体片段，强制显示首帧封面（避免缩略图黑屏）。
-const withFirstFrame = (u: string): string => (!u || u.includes('#')) ? u : `${u}#t=0.1`;
+import { LazyVideo } from '../components/LazyVideo';
 
 const isFinalFilm = (title: string | null | undefined) =>
   !!title && /成片|完整|全片|整片|final\s*cut|finalcut/i.test(title);
@@ -164,7 +162,14 @@ export const FinalProductPage: React.FC = () => {
                   <Download className="w-3.5 h-3.5" /> 下载
                 </a>
               </div>
-              <video src={featured.file_url} controls preload="metadata" className="w-full max-h-[70vh] bg-black block" />
+              <LazyVideo
+                src={featured.file_url}
+                controls
+                muted={false}
+                firstFrame={false}
+                hoverPreview={false}
+                className="w-full max-h-[70vh] bg-black block"
+              />
             </div>
           ) : (
             <div className="bg-y50 border border-y200 rounded-md p-4 text-sm text-y400">
@@ -179,7 +184,14 @@ export const FinalProductPage: React.FC = () => {
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {rest.map(v => (
                   <div key={v.library_item_id} className="bg-n0 border border-n40 rounded-md overflow-hidden shadow-card">
-                    <video src={v.file_url} controls preload="metadata" className="w-full aspect-video bg-black block" />
+                    <LazyVideo
+                      src={v.file_url}
+                      controls
+                      muted={false}
+                      firstFrame={false}
+                      hoverPreview={false}
+                      className="w-full aspect-video bg-black block"
+                    />
                     <div className="px-2.5 py-2 flex items-center justify-between gap-2">
                       <span className="text-[11px] text-n700 truncate" title={v.title || ''}>{v.title || '未命名'}</span>
                       <a href={v.file_url} download className="text-n100 hover:text-primary shrink-0" title="下载">
@@ -232,7 +244,7 @@ export const FinalProductPage: React.FC = () => {
                           }`}
                           title={ti === 0 ? '最新' : `第 ${s.takes.length - ti} 次生成`}
                         >
-                          <video src={withFirstFrame(t.video_url)} muted preload="metadata" className="w-full h-full object-contain bg-black" />
+                          <LazyVideo src={t.video_url} className="w-full h-full object-contain bg-black" />
                           {ti === 0 && <span className="absolute top-0.5 left-0.5 bg-n800/70 text-white text-[9px] px-1 rounded">最新</span>}
                           {selected && (
                             <span className="absolute bottom-0.5 right-0.5 bg-primary text-white rounded-full p-0.5"><Check className="w-3 h-3" /></span>

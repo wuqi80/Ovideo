@@ -40,6 +40,7 @@ import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import { StoryboardSyncModal, type SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
+import { LazyVideo } from './LazyVideo';
 // 2026-05-20 (Task System Overhaul M2)：把视频任务的轮询提到模块级 service，
 // 实现「切页后台继续生成 + 完成时铃铛通知」。
 //   M2a：注册到 TaskRegistry，让铃铛 / TaskBadge 看到任务（之前已注入）。
@@ -126,38 +127,7 @@ function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; tim
     return { videos: v, times: t };
 }
 
-// 给视频 URL 追加 #t=0.1 媒体片段，强制浏览器渲染首帧作为静态封面
-// （否则 <video preload="metadata"> 在未 hover 播放前可能是黑屏）。
-const withFirstFrame = (u: string): string => (!u || u.includes('#')) ? u : `${u}#t=0.1`;
 const VIDEO_GROUP_PAGE_SIZE = 10;
-
-// 懒加载视频：分镜多时若所有 <video> 都立即 preload，会同时发几百个请求导致卡顿。
-// 仅当滚动进入视口附近(±300px)才设置 src 并 preload，未进入时 preload="none" 不发请求。
-const LazyVideo: React.FC<{ src: string; className?: string; onClick?: () => void }> = ({ src, className, onClick }) => {
-  const ref = useRef<HTMLVideoElement | null>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || inView) return;
-    const io = new IntersectionObserver((entries) => {
-      if (entries.some(e => e.isIntersecting)) { setInView(true); io.disconnect(); }
-    }, { rootMargin: '300px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [inView]);
-  return (
-    <video
-      ref={ref}
-      src={inView ? withFirstFrame(src) : undefined}
-      preload={inView ? 'metadata' : 'none'}
-      muted
-      className={className}
-      onClick={onClick}
-      onMouseEnter={(e) => { if (inView) (e.target as HTMLVideoElement).play().catch(() => {}); }}
-      onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
-    />
-  );
-};
 
 // ==================== 主组件 ====================
 

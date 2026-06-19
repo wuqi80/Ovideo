@@ -2492,6 +2492,49 @@ def check_frontend_ai_proxy_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_lazy_video_contract(root: Path) -> int:
+    lazy_video = root / "new_html" / "components" / "LazyVideo.tsx"
+    video_page = root / "new_html" / "components" / "VideoPage.tsx"
+    final_page = root / "new_html" / "pages" / "FinalProductPage.tsx"
+    history_page = root / "new_html" / "components" / "HistoryPage.tsx"
+    media_page = root / "new_html" / "pages" / "MediaLibraryPage.tsx"
+    reverse_page = root / "new_html" / "pages" / "VideoReversePage.tsx"
+
+    required_snippets = [
+        (lazy_video, "IntersectionObserver"),
+        (lazy_video, "src={videoSrc}"),
+        (lazy_video, "preload={inView ? preload : 'none'}"),
+        (lazy_video, "export const withVideoFirstFrame"),
+        (video_page, "import { LazyVideo } from './LazyVideo';"),
+        (final_page, "import { LazyVideo } from '../components/LazyVideo';"),
+        (history_page, "import { LazyVideo } from './LazyVideo';"),
+        (media_page, "import { LazyVideo } from '../components/LazyVideo';"),
+        (reverse_page, "import { LazyVideo } from '../components/LazyVideo';"),
+    ]
+    forbidden_snippets = [
+        (video_page, "const LazyVideo:"),
+        (final_page, '<video src={featured.file_url}'),
+        (final_page, '<video src={v.file_url}'),
+        (final_page, '<video src={withFirstFrame(t.video_url)}'),
+        (history_page, '<video\n                            src={mediaUrl}'),
+        (media_page, '<video src={item.file_url}'),
+        (reverse_page, '<video src={task.video_file_url}'),
+    ]
+
+    checks = 0
+    for path, snippet in required_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing frontend lazy-video contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    for path, snippet in forbidden_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet in text:
+            fail(f"Forbidden eager video snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -2532,6 +2575,7 @@ def main() -> int:
     materials_lightweight_storyboard_checks = check_materials_lightweight_storyboard_contract(root)
     api_provider_runtime_model_checks = check_api_provider_runtime_model_contract(root)
     frontend_ai_proxy_checks = check_frontend_ai_proxy_contract(root)
+    frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -2583,6 +2627,7 @@ def main() -> int:
     print(f"  materials_lightweight_storyboard_checks={materials_lightweight_storyboard_checks}")
     print(f"  api_provider_runtime_model_checks={api_provider_runtime_model_checks}")
     print(f"  frontend_ai_proxy_checks={frontend_ai_proxy_checks}")
+    print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")
