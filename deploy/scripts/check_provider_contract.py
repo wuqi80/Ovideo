@@ -346,6 +346,35 @@ def docstring_constant_nodes(tree: ast.AST) -> set[ast.Constant]:
     return nodes
 
 
+def function_by_name(tree: ast.AST, name: str) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    return None
+
+
+def return_dict_keys(node: ast.AST) -> set[str]:
+    keys: set[str] = set()
+    for item in ast.walk(node):
+        if not isinstance(item, ast.Return) or not isinstance(item.value, ast.Dict):
+            continue
+        for key_node in item.value.keys:
+            if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
+                keys.add(key_node.value)
+    return keys
+
+
+def call_uses_keyword(node: ast.AST, call_name: str, keyword_name: str) -> bool:
+    for item in ast.walk(node):
+        if not isinstance(item, ast.Call):
+            continue
+        if dotted_call_name(item.func) != call_name:
+            continue
+        if any(keyword.arg == keyword_name for keyword in item.keywords):
+            return True
+    return False
+
+
 def check_resolve_provider_references(registry) -> int:
     root = deploy_root()
     references: list[tuple[Path, int, str, str | None]] = []
@@ -631,6 +660,81 @@ def check_runtime_code_has_no_third_party_endpoint_literals() -> int:
     return scanned
 
 
+def check_api_config_write_env_refresh_contract() -> int:
+    """API config writes must expose whether the runtime env hot reload worked."""
+    root = deploy_root()
+    service_path = root / "services" / "api_config_service.py"
+    import_path = root / "services" / "api_config_import_service.py"
+    route_path = root / "admin_api_config_routes.py"
+
+    service_tree = ast.parse(service_path.read_text(encoding="utf-8"), filename=str(service_path))
+    import_tree = ast.parse(import_path.read_text(encoding="utf-8"), filename=str(import_path))
+    route_tree = ast.parse(route_path.read_text(encoding="utf-8"), filename=str(route_path))
+
+    violations: list[str] = []
+    service_write_functions = {
+        "create_api_config",
+        "update_api_config",
+        "delete_api_config",
+        "repair_api_config_provider_conflicts",
+    }
+    for name in service_write_functions:
+        func = function_by_name(service_tree, name)
+        if not func:
+            violations.append(f"services/api_config_service.py missing {name}()")
+            continue
+        if "env_refreshed" not in return_dict_keys(func):
+            violations.append(f"services/api_config_service.py:{func.lineno} {name}() response lacks env_refreshed")
+
+    import_func = function_by_name(import_tree, "import_preset_api_configs")
+    if not import_func:
+        violations.append("services/api_config_import_service.py missing import_preset_api_configs()")
+    elif "env_refreshed" not in return_dict_keys(import_func):
+        violations.append(
+            f"services/api_config_import_service.py:{import_func.lineno} import response lacks env_refreshed"
+        )
+
+    reload_func = function_by_name(route_tree, "_reload_api_env")
+    if not reload_func:
+        violations.append("admin_api_config_routes.py missing _reload_api_env()")
+    else:
+        returns_bool = any(
+            isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, bool)
+            for stmt in ast.walk(reload_func)
+        )
+        if not returns_bool:
+            violations.append(f"admin_api_config_routes.py:{reload_func.lineno} _reload_api_env() must return bool")
+
+    route_write_calls = {
+        "admin_create_api_config": "create_api_config",
+        "admin_import_preset_configs": "import_preset_api_configs",
+        "admin_repair_api_config_conflicts": "repair_api_config_provider_conflicts",
+        "admin_update_api_config": "update_api_config",
+        "admin_delete_api_config": "delete_api_config",
+    }
+    for route_name, service_call in route_write_calls.items():
+        func = function_by_name(route_tree, route_name)
+        if not func:
+            violations.append(f"admin_api_config_routes.py missing {route_name}()")
+            continue
+        if not call_uses_keyword(func, service_call, "reload_api_env"):
+            violations.append(
+                f"admin_api_config_routes.py:{func.lineno} {route_name}() must pass reload_api_env to {service_call}()"
+            )
+
+    manual_reload = function_by_name(route_tree, "admin_reload_api_env")
+    if not manual_reload:
+        violations.append("admin_api_config_routes.py missing admin_reload_api_env()")
+    elif "env_refreshed" not in return_dict_keys(manual_reload):
+        violations.append(
+            f"admin_api_config_routes.py:{manual_reload.lineno} manual reload response lacks env_refreshed"
+        )
+
+    if violations:
+        fail("API config write operations must expose hot-reload status:\n" + "\n".join(violations))
+    return len(service_write_functions) + 1 + len(route_write_calls) + 1
+
+
 def check_gpt_image_tier_wiring(registry) -> int:
     path = deploy_root() / "services" / "ai_proxy_service.py"
     try:
@@ -821,6 +925,7 @@ def main() -> int:
     cluster_main_resolver_checks = check_cluster_main_has_no_provider_resolver_calls()
     runtime_env_read_checks = check_runtime_code_has_no_managed_provider_env_reads(registry)
     runtime_endpoint_literal_checks = check_runtime_code_has_no_third_party_endpoint_literals()
+    api_config_env_refresh_checks = check_api_config_write_env_refresh_contract()
     gpt_image_tier_provider_count = check_gpt_image_tier_wiring(registry)
     derived_env_count = check_env_key_helpers(registry)
     runtime_status_count = check_runtime_status(
@@ -848,6 +953,7 @@ def main() -> int:
     print(f"  cluster_main_resolver_checks={cluster_main_resolver_checks}")
     print(f"  runtime_env_read_checks={runtime_env_read_checks}")
     print(f"  runtime_endpoint_literal_checks={runtime_endpoint_literal_checks}")
+    print(f"  api_config_env_refresh_checks={api_config_env_refresh_checks}")
     print(f"  gpt_image_tier_providers={gpt_image_tier_provider_count}")
     print(f"  derived_env_keys={derived_env_count}")
     print(f"  runtime_status_rows={runtime_status_count}")

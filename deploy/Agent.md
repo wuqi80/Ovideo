@@ -1,5 +1,30 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 API Config Hot-Reload Observability Contract
+
+### Changes
+
+- Extended `deploy/scripts/check_provider_contract.py` with an API config write contract:
+  - `create_api_config`, `update_api_config`, `delete_api_config`, `repair_api_config_provider_conflicts`, and `import_preset_api_configs` must expose `env_refreshed` in write responses
+  - admin write routes must pass `_reload_api_env` into the service layer
+  - manual reload response must also expose `env_refreshed`
+- This protects the admin API platform behavior where key/endpoint changes should be visible to callers immediately, without pretending a DB save automatically means runtime reload succeeded.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - provider contract now reports `api_config_env_refresh_checks=11`
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/scripts/check_provider_contract.py`
+  - `git diff --check -- deploy/scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - redline diff check confirmed no changes under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, `core/worker.py`, or `cluster_main.py`
+
+### Notes
+
+- No runtime Python handlers changed in this increment; it is a regression guard for the API management platform.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Provider Runtime Contract Guardrails
 
 ### Changes
