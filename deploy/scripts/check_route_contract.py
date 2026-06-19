@@ -2058,12 +2058,28 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "model: Optional[str] = Field(None",
         ),
         (
+            root / "schemas" / "generation.py",
+            "Gemini image model override; omitted uses admin runtime config",
+        ),
+        (
             root / "routers" / "ai_proxy.py",
             "model=request.model",
         ),
         (
+            root / "services" / "ai_proxy_service.py",
+            "requested_model: Optional[str]",
+        ),
+        (
+            root / "services" / "ai_proxy_service.py",
+            'config = resolve_provider("gemini-image", explicit_model)',
+        ),
+        (
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_explicit_model_overrides_runtime_model_env",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_gemini_image_uses_runtime_model_env_when_request_omits_model",
         ),
     ]
     checks = 0

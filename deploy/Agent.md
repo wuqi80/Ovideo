@@ -3517,3 +3517,58 @@
 
 - This closes a gap in the API management plan: DB `api_configs.model_name` now affects runtime calls without code changes or restart after env reload.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Gemini Image Runtime Model Hot Update
+
+### Changes
+
+- Updated `GeminiImageRequest.model` from a hard default to an optional override:
+  - omitted `model` now means "use admin runtime config"
+  - explicit frontend model selections still override runtime config
+- Updated `generate_gemini_images()`:
+  - no longer clamps unknown/custom image models back to `gemini-2.5-flash-image`
+  - only keeps legacy aliases such as `gemini-3-pro-image-preview` -> `gemini-3.1-flash-image-preview`
+  - calls `resolve_provider("gemini-image", explicit_model)` so DB/env `GEMINI_IMAGE_MODEL` can drive the actual upstream model when no explicit request model is sent
+- Extended `tests/test_api_provider_runtime_model_env.py`:
+  - runtime `GEMINI_IMAGE_MODEL` is used when request omits model
+  - explicit request model still wins and legacy aliases still normalize
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `7` to `11`
+  - contract now protects Gemini image schema/service/test wiring, not only Gemini text.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/services/ai_proxy_service.py deploy/schemas/generation.py deploy/routers/ai_proxy.py deploy/scripts/check_route_contract.py`
+  - `deploy/.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `4/4`
+  - `deploy/.venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - `deploy/.venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=11`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_gemini_image_runtime_model_20260619_210042/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/schemas/generation.py`
+  - `/home/Administrator/deploy/services/ai_proxy_service.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile services/ai_proxy_service.py schemas/generation.py routers/ai_proxy.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `4/4`
+  - `.venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `GEMINI_IMAGE_MODEL` -> `gemini-runtime-image-model-smoke`, source `GEMINI_IMAGE_MODEL`
+
+### Notes
+
+- This fixes the same class of issue as Gemini text for the image provider: a schema-level default was making the request look explicit, so admin model changes could not become the runtime default.
+- No frontend source change is required for this increment; existing pages that send a selected model keep that explicit behavior.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

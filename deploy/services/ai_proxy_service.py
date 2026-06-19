@@ -51,7 +51,6 @@ GEMINI_IMAGE_MODEL_ALIASES = {
     "gemini-3-pro-image-preview": "gemini-3.1-flash-image-preview",
     "nanobanana": "gemini-3.1-flash-image-preview",
 }
-GEMINI_IMAGE_ALLOWED_MODELS = {"gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"}
 
 
 @dataclass(frozen=True)
@@ -417,9 +416,11 @@ async def generate_gemini_text(
     return result.content
 
 
-def normalize_gemini_image_model(model: str) -> str:
-    requested = GEMINI_IMAGE_MODEL_ALIASES.get(model, model)
-    return requested if requested in GEMINI_IMAGE_ALLOWED_MODELS else "gemini-2.5-flash-image"
+def normalize_gemini_image_model(model: Optional[str]) -> Optional[str]:
+    requested = (model or "").strip()
+    if not requested:
+        return None
+    return GEMINI_IMAGE_MODEL_ALIASES.get(requested, requested)
 
 
 def build_gemini_image_payload(
@@ -446,12 +447,13 @@ def build_gemini_image_payload(
 async def generate_gemini_images(
     *,
     parts: List[Dict[str, Any]],
-    requested_model: str,
+    requested_model: Optional[str],
     aspect_ratio: str,
     image_size: Optional[str] = None,
 ) -> tuple[List[str], str]:
-    model = normalize_gemini_image_model(requested_model)
-    config = resolve_provider("gemini-image", model)
+    explicit_model = normalize_gemini_image_model(requested_model)
+    config = resolve_provider("gemini-image", explicit_model)
+    model = config.model_name or explicit_model or "gemini-2.5-flash-image"
     if not config.api_key:
         raise AIProxyConfigError("图像生成服务未配置，请联系管理员")
     if not config.endpoint:

@@ -71,7 +71,7 @@ class GeminiTextRequest(BaseModel):
 
 class GeminiImageRequest(BaseModel):
     prompt: str
-    model: str = Field("gemini-2.5-flash-image")
+    model: Optional[str] = Field(None, description="Gemini image model override; omitted uses admin runtime config")
     references: List[str] = Field(default_factory=list)
     aspectRatio: str = Field("1:1")
     imageSize: Optional[str] = None
