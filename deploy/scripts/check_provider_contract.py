@@ -64,6 +64,8 @@ def fail(message: str) -> None:
 
 def managed_env_keys(registry) -> set[str]:
     keys: set[str] = set()
+    for field_map in getattr(registry, "PROVIDER_EXTRA_ENV_MAP", {}).values():
+        keys.update(field_map.values())
     for env_key in registry.PROVIDER_ENV_MAP.values():
         keys.add(env_key)
         keys.add(registry.get_endpoint_env_key(env_key))
@@ -106,6 +108,16 @@ def check_registry_shape(registry) -> None:
     env_values = list(registry.PROVIDER_ENV_MAP.values())
     if len(env_values) != len(set(env_values)):
         fail("Duplicate provider env values found")
+    extra_env_values = [
+        value
+        for field_map in getattr(registry, "PROVIDER_EXTRA_ENV_MAP", {}).values()
+        for value in field_map.values()
+    ]
+    if len(extra_env_values) != len(set(extra_env_values)):
+        fail("Duplicate provider extra env values found")
+    for provider in getattr(registry, "PROVIDER_EXTRA_ENV_MAP", {}):
+        if provider not in registry.PROVIDER_CATALOG:
+            fail(f"Extra env map references unknown provider {provider}")
 
     for provider, meta in registry.PROVIDER_CATALOG.items():
         if not meta.get("label"):
@@ -793,7 +805,29 @@ def check_env_key_helpers(registry) -> int:
             if value in derived:
                 fail(f"Duplicate derived env key: {value}")
             derived.add(value)
+    for field_map in getattr(registry, "PROVIDER_EXTRA_ENV_MAP", {}).values():
+        for value in field_map.values():
+            if value in derived:
+                fail(f"Provider extra env key collides with derived env key: {value}")
+            derived.add(value)
     return len(derived)
+
+
+def check_provider_extra_env_contract(registry, resolve_provider) -> int:
+    minimax_extras = registry.get_provider_extra_env_keys("minimax")
+    if minimax_extras.get("group_id") != "MINIMAX_GROUP_ID":
+        fail(f"MiniMax group_id extra env mapping changed: {minimax_extras}")
+
+    with isolated_env(registry):
+        os.environ["MINIMAX_API_KEY"] = "minimax-test-key"
+        os.environ["MINIMAX_GROUP_ID"] = "minimax-runtime-group"
+        config = resolve_provider("minimax", "MiniMax-Hailuo-02")
+        if config.extra.get("group_id") != "minimax-runtime-group":
+            fail(f"Resolver did not expose MiniMax group_id extra config: {config.extra}")
+        if config.source.get("extra", {}).get("group_id") != "MINIMAX_GROUP_ID":
+            fail(f"Resolver did not report MiniMax group_id source: {config.source}")
+
+    return 1
 
 
 def check_runtime_status(
@@ -938,6 +972,7 @@ def main() -> int:
     api_config_env_refresh_checks = check_api_config_write_env_refresh_contract()
     gpt_image_tier_provider_count = check_gpt_image_tier_wiring(registry)
     derived_env_count = check_env_key_helpers(registry)
+    provider_extra_env_checks = check_provider_extra_env_contract(registry, resolve_provider)
     runtime_status_count = check_runtime_status(
         registry,
         build_provider_runtime_status,
@@ -966,6 +1001,7 @@ def main() -> int:
     print(f"  api_config_env_refresh_checks={api_config_env_refresh_checks}")
     print(f"  gpt_image_tier_providers={gpt_image_tier_provider_count}")
     print(f"  derived_env_keys={derived_env_count}")
+    print(f"  provider_extra_env_checks={provider_extra_env_checks}")
     print(f"  runtime_status_rows={runtime_status_count}")
     print(f"  failover_checks={failover_count}")
     print(f"  fallback_env_key_only_checks={fallback_env_key_only_checks}")

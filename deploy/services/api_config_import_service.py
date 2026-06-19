@@ -35,6 +35,25 @@ def _row_get(row: Any, key: str, default: Any = None) -> Any:
     return getattr(row, key, default)
 
 
+def _json_object(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
+def _runtime_request_template(provider: str, resolved: Any) -> Dict[str, Any]:
+    if provider != "minimax":
+        return {}
+    group_id = str((getattr(resolved, "extra", {}) or {}).get("group_id") or "").strip()
+    return {"group_id": group_id} if group_id else {}
+
+
+def _merge_request_template(row: Any, extra: Dict[str, Any]) -> Dict[str, Any]:
+    merged = _json_object(_row_get(row, "request_template", {}))
+    merged.update(extra)
+    return merged
+
+
 async def import_preset_api_configs(
     options: Optional[ApiConfigImportOptions] = None,
     *,
@@ -85,6 +104,11 @@ async def import_preset_api_configs(
         endpoint = resolved.endpoint or preset["endpoint"]
         proxy_mode = resolved.proxy_config.get("mode") or preset["proxy_mode"] or "direct"
         custom_proxy = (resolved.proxy_config.get("custom_proxy") or "") if options.copy_runtime_env_keys else ""
+        runtime_request_template = (
+            _runtime_request_template(provider, resolved)
+            if options.copy_runtime_env_keys
+            else {}
+        )
 
         if existing_row:
             has_db_key = bool(_row_get(existing_row, "api_key_encrypted", ""))
@@ -108,6 +132,11 @@ async def import_preset_api_configs(
                         "custom_proxy": custom_proxy,
                         "category": preset.get("category", ""),
                     }
+                    if runtime_request_template:
+                        update_fields["request_template"] = _merge_request_template(
+                            existing_row,
+                            runtime_request_template,
+                        )
                     if options.enable_copied_keys:
                         update_fields["enabled"] = True
                         if _row_get(existing_row, "enabled", True) is False:
@@ -122,6 +151,7 @@ async def import_preset_api_configs(
                             "endpoint": endpoint,
                             "will_enable": bool(update_fields.get("enabled")),
                             "will_copy_key": True,
+                            "will_copy_extra_fields": sorted(runtime_request_template),
                         }
                     )
                     if not options.dry_run:
@@ -165,6 +195,7 @@ async def import_preset_api_configs(
                     "name": preset["name"],
                     "endpoint": endpoint,
                     "will_copy_key": False,
+                    "will_copy_extra_fields": sorted(runtime_request_template),
                 }
             )
         elif options.copy_runtime_env_keys and not runtime_key:
@@ -177,6 +208,7 @@ async def import_preset_api_configs(
                     "name": preset["name"],
                     "endpoint": endpoint,
                     "will_copy_key": False,
+                    "will_copy_extra_fields": sorted(runtime_request_template),
                 }
             )
         else:
@@ -188,6 +220,7 @@ async def import_preset_api_configs(
                     "name": preset["name"],
                     "endpoint": endpoint,
                     "will_copy_key": bool(runtime_key),
+                    "will_copy_extra_fields": sorted(runtime_request_template),
                 }
             )
         if not options.dry_run:
@@ -200,6 +233,7 @@ async def import_preset_api_configs(
                 proxy_mode=proxy_mode,
                 custom_proxy=custom_proxy,
                 category=preset.get("category", ""),
+                request_template=runtime_request_template or None,
             )
             touched_providers.add(provider)
         if options.copy_runtime_env_keys and runtime_key:

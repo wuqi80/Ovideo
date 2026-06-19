@@ -27,6 +27,12 @@ PROVIDER_ENV_MAP: Dict[str, str] = {
     "laozhang-sora2": "SORA2_GPT_IMAGE_API_KEY",
 }
 
+PROVIDER_EXTRA_ENV_MAP: Dict[str, Dict[str, str]] = {
+    "minimax": {
+        "group_id": "MINIMAX_GROUP_ID",
+    },
+}
+
 
 SEEDANCE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     # Keep the currently opened-account fallback while allowing admin runtime
@@ -468,6 +474,14 @@ def normalize_provider(provider: str) -> str:
 
 def get_provider_env_key(provider: str) -> str | None:
     return PROVIDER_ENV_MAP.get(normalize_provider(provider))
+
+
+def get_provider_extra_env_keys(provider: str) -> Dict[str, str]:
+    return deepcopy(PROVIDER_EXTRA_ENV_MAP.get(normalize_provider(provider), {}))
+
+
+def get_provider_extra_env_key(provider: str, field: str) -> str | None:
+    return get_provider_extra_env_keys(provider).get((field or "").strip().lower())
 
 
 def get_endpoint_env_key(env_key: str) -> str:

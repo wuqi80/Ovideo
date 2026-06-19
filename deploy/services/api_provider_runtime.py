@@ -21,6 +21,7 @@ from services.api_provider_registry import (
     get_dashscope_sub_model_env_key,
     get_endpoint_env_key,
     get_model_env_key,
+    get_provider_extra_env_keys,
     get_provider_env_key,
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
@@ -40,6 +41,7 @@ class ResolvedProviderConfig:
     api_key_env: Optional[str]
     endpoint_env: Optional[str]
     model_env: Optional[str]
+    extra: Dict[str, str]
     proxy_config: Dict[str, Any]
     source: Dict[str, str]
 
@@ -413,6 +415,14 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     runtime_model_name, model_env = _first_env(model_envs)
     resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
 
+    extra: Dict[str, str] = {}
+    extra_sources: Dict[str, str] = {}
+    for field, env_key in get_provider_extra_env_keys(provider_id).items():
+        value = (os.getenv(env_key) or "").strip()
+        if value:
+            extra[field] = value
+            extra_sources[field] = env_key
+
     return ResolvedProviderConfig(
         provider=provider_id,
         model_name=resolved_model_name,
@@ -421,6 +431,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
         api_key_env=api_key_env,
         endpoint_env=endpoint_env,
         model_env=model_env,
+        extra=extra,
         proxy_config={
             "mode": (proxy_mode or "direct").strip().lower(),
             "custom_proxy": custom_proxy,
@@ -432,6 +443,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
             "proxy_mode": proxy_mode_env or "preset",
             "custom_proxy": custom_proxy_env or "",
             "model": "request" if model_name else (model_env or ("preset" if resolved_model_name else "missing")),
+            "extra": extra_sources,
         },
     )
 

@@ -2,7 +2,7 @@
 """Check audio provider runtime wiring without calling external APIs."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import sys
 
@@ -22,6 +22,7 @@ class FakeConfig:
     endpoint: str
     model_name: str = ""
     proxy: str = ""
+    extra: dict[str, str] = field(default_factory=dict)
 
     def aiohttp_proxy(self) -> str:
         return self.proxy
@@ -32,6 +33,7 @@ def main() -> int:
     sys.path.insert(0, str(root))
 
     import services.audio_provider as audio_provider  # noqa: PLC0415
+    import external_api.audio.minimax_audio as minimax_audio  # noqa: PLC0415
 
     default_base, default_version = audio_provider._derive_gemini_sdk_endpoint(
         "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -100,10 +102,53 @@ def main() -> int:
     }:
         fail(f"GeminiAudioProvider http_options mismatch: {provider._genai_http_options}")
 
+    minimax_calls: list[tuple[str, str]] = []
+
+    def fake_minimax_resolve_provider(provider: str, model_name: str | None = None) -> FakeConfig:
+        minimax_calls.append((provider, model_name or ""))
+        return FakeConfig(
+            api_key="minimax-runtime-key",
+            endpoint="https://runtime.example.test/minimax/v1",
+            model_name="MiniMax-Hailuo-02",
+            proxy="http://minimax-proxy.example.test:8080",
+            extra={"group_id": "runtime-group"},
+        )
+
+    original_minimax = minimax_audio.resolve_provider
+    minimax_audio.resolve_provider = fake_minimax_resolve_provider
+    try:
+        minimax_client = minimax_audio.MinimaxAudioClient()
+        explicit_group_client = minimax_audio.MinimaxAudioClient(group_id="explicit-group")
+    finally:
+        minimax_audio.resolve_provider = original_minimax
+
+    if minimax_calls != [
+        ("minimax", "MiniMax-Hailuo-02"),
+        ("minimax", "MiniMax-Hailuo-02"),
+    ]:
+        fail(f"MinimaxAudioClient did not resolve minimax runtime config: {minimax_calls}")
+    if minimax_client.api_key != "minimax-runtime-key":
+        fail("MinimaxAudioClient did not pick up resolved key")
+    if minimax_client.base_url != "https://runtime.example.test/minimax/v1":
+        fail("MinimaxAudioClient did not pick up resolved endpoint")
+    if minimax_client._aiohttp_proxy != "http://minimax-proxy.example.test:8080":
+        fail("MinimaxAudioClient did not pick up resolved proxy")
+    if minimax_client.group_id != "runtime-group":
+        fail(f"MinimaxAudioClient did not pick up runtime group_id: {minimax_client.group_id}")
+    if minimax_client._group_params({"task_id": "task-1"}) != {
+        "task_id": "task-1",
+        "GroupId": "runtime-group",
+    }:
+        fail(f"MinimaxAudioClient did not include GroupId params: {minimax_client._group_params({'task_id': 'task-1'})}")
+    if explicit_group_client.group_id != "explicit-group":
+        fail("Explicit MiniMax group_id should override runtime extra config")
+
     print("Audio provider runtime OK")
     print("  gemini_tts_endpoint_wired=1")
     print("  gemini_tts_proxy_wired=1")
     print("  gemini_tts_model_wired=1")
+    print("  minimax_audio_group_id_wired=1")
+    print("  minimax_audio_proxy_wired=1")
     return 0
 
 

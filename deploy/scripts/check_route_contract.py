@@ -2127,6 +2127,34 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             'config = resolve_provider("minimax", model_override)',
         ),
         (
+            root / "external_api" / "audio" / "minimax_audio.py",
+            'config = resolve_provider("minimax", "MiniMax-Hailuo-02")',
+        ),
+        (
+            root / "external_api" / "audio" / "minimax_audio.py",
+            'extra.get("group_id")',
+        ),
+        (
+            root / "external_api" / "audio" / "minimax_audio.py",
+            '"GroupId"',
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "PROVIDER_EXTRA_ENV_MAP",
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            "get_provider_extra_env_keys(provider)",
+        ),
+        (
+            root / "scripts" / "check_audio_provider_runtime.py",
+            "minimax_audio_group_id_wired=1",
+        ),
+        (
+            root / "tests" / "test_minimax_audio_runtime.py",
+            "test_minimax_audio_query_sends_group_id_param",
+        ),
+        (
             root / "external_api" / "video" / "minimax.py",
             "model: Optional[str] = None",
         ),

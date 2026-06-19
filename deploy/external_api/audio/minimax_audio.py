@@ -51,8 +51,9 @@ class MinimaxAudioClient:
 
     def __init__(self, api_key: Optional[str] = None, group_id: Optional[str] = None):
         self._explicit_api_key = api_key
+        self._explicit_group_id = group_id
         self.api_key = ""
-        self.group_id = group_id or os.getenv('MINIMAX_GROUP_ID', '')
+        self.group_id = ""
         self.base_url = ""
         self.headers: Dict[str, str] = {}
         self._aiohttp_proxy: Optional[str] = None
@@ -63,6 +64,8 @@ class MinimaxAudioClient:
     def _refresh_runtime_config(self) -> None:
         config = resolve_provider("minimax", "MiniMax-Hailuo-02")
         self.api_key = self._explicit_api_key or config.api_key or ""
+        extra = getattr(config, "extra", {}) or {}
+        self.group_id = self._explicit_group_id or extra.get("group_id") or ""
         self.base_url = config.endpoint.rstrip("/")
         self._aiohttp_proxy = config.aiohttp_proxy()
         self.headers = {
@@ -72,6 +75,12 @@ class MinimaxAudioClient:
 
     def _aiohttp_kwargs(self) -> Dict[str, Any]:
         return {"proxy": self._aiohttp_proxy} if self._aiohttp_proxy else {}
+
+    def _group_params(self, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        out = dict(params or {})
+        if self.group_id:
+            out.setdefault("GroupId", self.group_id)
+        return out
 
     def _url(self, path: str) -> str:
         self._refresh_runtime_config()
@@ -108,6 +117,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/voice_design"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
@@ -163,6 +173,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/voice_clone"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
@@ -200,6 +211,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/get_voice"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
@@ -228,6 +240,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/delete_voice"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
@@ -308,6 +321,7 @@ class MinimaxAudioClient:
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.post(
                         self._url("/t2a_v2"),
+                        params=self._group_params(),
                         json=payload,
                         headers=self.headers,
                         **self._aiohttp_kwargs(),
@@ -435,6 +449,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/t2a_async_v2"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
@@ -452,7 +467,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 self._url("/query/t2a_async_query_v2"),
-                params=params,
+                params=self._group_params(params),
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
             ) as resp:
@@ -565,6 +580,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/music_generation"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
@@ -604,6 +620,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/lyrics_generation"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
@@ -635,6 +652,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 self._url("/files/upload"),
+                params=self._group_params(),
                 data=form,
                 headers=headers,
                 **self._aiohttp_kwargs(),
@@ -652,7 +670,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 self._url("/files/retrieve"),
-                params=params,
+                params=self._group_params(params),
                 headers=self.headers,
                 **self._aiohttp_kwargs(),
             ) as resp:
@@ -667,6 +685,7 @@ class MinimaxAudioClient:
         async with aiohttp.ClientSession() as session:
             async with session.delete(
                 self._url("/files/delete"),
+                params=self._group_params(),
                 json=payload,
                 headers=self.headers,
                 **self._aiohttp_kwargs(),

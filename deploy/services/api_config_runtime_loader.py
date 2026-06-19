@@ -7,12 +7,14 @@ for the provider resolver.
 from __future__ import annotations
 
 import logging
+import json
 import os
 from typing import Any, Dict, List, Optional
 
 from dao_api_config import ApiConfigDAO
 from services.api_provider_registry import (
     DASHSCOPE_SUB_MODEL_ENV_MAP,
+    PROVIDER_EXTRA_ENV_MAP,
     PROVIDER_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
     dashscope_sub_model_for_model,
@@ -22,6 +24,7 @@ from services.api_provider_registry import (
     get_endpoint_env_key,
     get_gpt_image_tiers,
     get_model_env_key,
+    get_provider_extra_env_keys,
     get_provider_env_key,
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
@@ -57,6 +60,8 @@ VEO_NEW_MODEL = "veo-3.1-landscape-fast-fl"
 
 def managed_api_env_keys() -> set[str]:
     keys: set[str] = set(SEEDANCE_SUB_MODEL_ENV_MAP.values()) | set(DASHSCOPE_SUB_MODEL_ENV_MAP.values())
+    for field_map in PROVIDER_EXTRA_ENV_MAP.values():
+        keys.update(field_map.values())
     for env_key in PROVIDER_ENV_MAP.values():
         keys.update(
             {
@@ -83,6 +88,32 @@ def reset_managed_api_env_to_baseline() -> None:
 
 def runtime_api_key_globals() -> Dict[str, str | None]:
     return {key: os.environ.get(key) for key in LEGACY_API_KEY_GLOBALS}
+
+
+def _json_object(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _config_extra_value(config: Any, field: str) -> Optional[str]:
+    request_template = _json_object(_config_get(config, "request_template", {}))
+    value = request_template.get(field)
+    if value is None:
+        value = request_template.get(f"minimax_{field}")
+    if value is None:
+        headers = _json_object(_config_get(config, "headers", {}))
+        value = headers.get(f"X-MiniMax-{field.replace('_', '-').title()}")
+    if value is None:
+        return None
+    return str(value).strip()
 
 
 async def load_api_configs_to_env() -> Dict[str, Any]:
@@ -124,6 +155,11 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                 new_env[custom_proxy_env] = custom_proxy
             else:
                 new_env[custom_proxy_env] = None
+
+            for field, extra_env_key in get_provider_extra_env_keys(provider).items():
+                extra_value = _config_extra_value(config, field)
+                if extra_value is not None:
+                    new_env[extra_env_key] = extra_value or None
 
             model_name = str(_config_get(config, "model_name", "") or "").strip()
             model_env = get_model_env_key(env_key)

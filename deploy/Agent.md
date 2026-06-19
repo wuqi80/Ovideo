@@ -4245,3 +4245,47 @@
     - `DASHSCOPE_MODEL_VIDU_REFERENCE_Q3` -> `vidu-reference-smoke`
     - `DASHSCOPE_MODEL_VIDU_STARTEND_Q3_TURBO` -> `vidu-startend-smoke`
     - `DASHSCOPE_MODEL_HAPPYHORSE` -> `happyhorse-smoke`
+
+## 2026-06-20 MiniMax Audio Runtime Extra Config
+
+### Changes
+
+- Added provider extra-env metadata in `deploy/services/api_provider_registry.py`:
+  - `minimax.group_id` -> `MINIMAX_GROUP_ID`
+- Updated `deploy/services/api_provider_runtime.py` so `resolve_provider("minimax")` exposes `config.extra["group_id"]` and reports the source env key without caching.
+- Updated `deploy/services/api_config_runtime_loader.py`:
+  - `MINIMAX_GROUP_ID` is now part of managed API env keys.
+  - `api_configurations.request_template.group_id` projects to `MINIMAX_GROUP_ID` during DB -> env hot reload.
+  - failed reloads still leave existing env values untouched.
+- Updated `deploy/services/api_config_import_service.py`:
+  - preset import with `copy_runtime_env_keys=true` can copy the current MiniMax runtime `group_id` into `request_template`.
+  - import diagnostics only expose copied extra field names, not values.
+- Updated `deploy/external_api/audio/minimax_audio.py`:
+  - MiniMax audio no longer reads `MINIMAX_GROUP_ID` directly.
+  - voice design, voice clone, TTS, music, lyrics, file upload/retrieve/delete now include `GroupId` query params when a group id is configured.
+  - explicit `MinimaxAudioClient(group_id=...)` still overrides runtime config.
+- Added `deploy/tests/test_minimax_audio_runtime.py`.
+- Extended:
+  - `deploy/scripts/check_audio_provider_runtime.py`
+  - `deploy/scripts/check_api_config_runtime_loader.py`
+  - `deploy/scripts/check_provider_contract.py`
+  - `deploy/scripts/check_route_contract.py`
+
+### Verification
+
+- Local checks passed:
+  - `.venv/Scripts/python.exe -m py_compile services/api_provider_registry.py services/api_provider_runtime.py services/api_config_runtime_loader.py services/api_config_import_service.py external_api/audio/minimax_audio.py tests/test_minimax_audio_runtime.py scripts/check_audio_provider_runtime.py scripts/check_api_config_runtime_loader.py scripts/check_provider_contract.py scripts/check_route_contract.py`
+  - `.venv/Scripts/python.exe -m pytest tests/test_minimax_audio_runtime.py tests/test_minimax_tts_sync.py -q` -> `8/8`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_audio_provider_runtime.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - loader contract now reports `minimax_extra_env_projection=1`
+  - audio runtime contract now reports `minimax_audio_group_id_wired=1`
+
+### Notes
+
+- To manage MiniMax group id through the API platform, store it on the MiniMax API config row:
+  - `request_template: {"group_id": "<MiniMax group id>"}`
+- Existing server/systemd `MINIMAX_GROUP_ID` remains the baseline fallback when DB does not provide a group id.
