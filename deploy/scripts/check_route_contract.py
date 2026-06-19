@@ -85,6 +85,12 @@ EXPECTED_ENDPOINTS = {
     ("/api/workspace/save-session", "POST"): ("routers.workspace", "save_workspace_session"),
     ("/api/workspace/save-beacon", "POST"): ("routers.workspace", "save_workspace_beacon"),
     ("/api/workspace/load-session", "GET"): ("routers.workspace", "load_workspace_session"),
+    ("/api/generate", "POST"): ("routers.tasks", "create_generate_task"),
+    ("/api/task/{task_id}", "GET"): ("routers.tasks", "get_task_status"),
+    ("/api/task/{task_id}", "DELETE"): ("routers.tasks", "cancel_task"),
+    ("/api/task/{task_id}/delete", "DELETE"): ("routers.tasks", "delete_task"),
+    ("/api/tasks/stream", "GET"): ("routers.tasks", "task_event_stream"),
+    ("/api/tasks", "GET"): ("routers.tasks", "list_tasks"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -511,6 +517,54 @@ def check_workspace_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_task_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    tasks_path = root / "routers" / "tasks.py"
+    if not tasks_path.exists():
+        fail("routers/tasks.py is missing")
+
+    route_paths = {
+        "/api/generate",
+        "/api/task/{task_id}",
+        "/api/task/{task_id}/delete",
+        "/api/tasks/stream",
+        "/api/tasks",
+    }
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Task route handlers must live in routers/tasks.py:\n" + "\n".join(violations))
+
+    tasks_tree = parse_py_file(tasks_path)
+    route_count = 0
+    for node in ast.walk(tasks_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 6:
+        fail(f"routers/tasks.py should own 6 task route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -537,6 +591,7 @@ def main() -> int:
     frontend_page_route_handlers = check_frontend_pages_routes_extracted(root)
     user_session_route_handlers = check_user_session_routes_extracted(root)
     workspace_route_handlers = check_workspace_routes_extracted(root)
+    task_route_handlers = check_task_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -555,6 +610,7 @@ def main() -> int:
     print(f"  frontend_page_route_handlers={frontend_page_route_handlers}")
     print(f"  user_session_route_handlers={user_session_route_handlers}")
     print(f"  workspace_route_handlers={workspace_route_handlers}")
+    print(f"  task_route_handlers={task_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 

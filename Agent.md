@@ -4599,3 +4599,63 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 ### Notes
 
 - No behavior change is intended; `save-task` and `workspace/tasks` remain compatibility endpoints while active session persistence stays on `WorkspaceSessionDAO`.
+
+## 2026-06-19 Task Router Extraction Increment
+
+### Changes
+
+- Extracted task creation/status/deletion/list/SSE endpoints from `deploy/cluster_main.py` into `deploy/routers/tasks.py`.
+- Preserved the existing public API surface:
+  - `POST /api/generate`
+  - `GET /api/task/{task_id}`
+  - `DELETE /api/task/{task_id}`
+  - `DELETE /api/task/{task_id}/delete`
+  - `GET /api/tasks/stream`
+  - `GET /api/tasks`
+- Injected existing runtime dependencies into the router instead of reading hidden globals:
+  - `require_auth`
+  - `jwt_auth`
+  - `task_service`
+  - `TaskDAO`
+  - `db_manager`
+  - `pubsub_redis_client`
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - these 6 task endpoints belong to `routers.tasks`
+  - `cluster_main.py` no longer registers those route decorators
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/tasks.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `task_route_handlers=6`
+  - `cluster_main.py` line count reduced to `3541`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_task_router_20260619-035235`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/tasks.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/tasks.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `task_route_handlers=6`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `POST https://mecha.one/api/login` -> HTTP `200`, token returned
+  - `GET https://mecha.one/api/tasks?limit=3` -> HTTP `200`, `tasks=list`
+  - `GET https://mecha.one/api/task/codex-missing-task-router-check` -> HTTP `404`, `detail=任务不存在`
+  - `GET https://mecha.one/api/tasks/stream?token=...` -> HTTP `200`, `event: ready`, `data: {}`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; this only moves the FastAPI handlers. The task queue/core/worker redline files were not modified.
