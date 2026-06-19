@@ -2138,6 +2138,34 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_minimax_video_explicit_non_default_model_overrides_runtime_model",
         ),
+        (
+            root / "services" / "api_provider_registry.py",
+            '"model_name": "sora_video2-landscape-15s"',
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            'SORA2_NEW_MODEL = "sora_video2-landscape-15s"',
+        ),
+        (
+            root / "external_api" / "video" / "sora2.py",
+            "DEFAULT_SORA2_VIDEO_MODEL =",
+        ),
+        (
+            root / "external_api" / "video" / "sora2.py",
+            'config = resolve_provider("sora2", model_override)',
+        ),
+        (
+            root / "external_api" / "video" / "sora2.py",
+            "model: Optional[str] = None",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_sora2_video_uses_runtime_model_env_when_request_omits_model",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_sora2_video_legacy_model_env_maps_to_callable_default",
+        ),
     ]
     checks = 0
     for path, snippet in required_snippets:

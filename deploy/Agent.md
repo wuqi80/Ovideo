@@ -3862,3 +3862,57 @@
 
 - This moves MiniMax video selection into the same hot-reloadable admin API config/runtime resolver path used by text, image, Doubao, Gemini TTS, and video reverse.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Sora2 Video Runtime Model Wiring
+
+### Changes
+
+- Updated `deploy/external_api/video/sora2.py` so Sora2 video creation resolves `provider=sora2` through `resolve_provider()` and sends the resolved runtime model in both JSON and multipart payloads.
+- Added `DEFAULT_SORA2_VIDEO_MODEL = "sora_video2-landscape-15s"` and maps legacy `sora-2` values to that callable model, preserving the previously working request payload while allowing admin/DB/env `SORA2_MODEL` to override it.
+- Updated `deploy/services/api_provider_registry.py` so the Sora2 preset imports the actual callable model `sora_video2-landscape-15s` instead of the old alias `sora-2`.
+- Updated `deploy/services/api_config_runtime_loader.py` so existing DB rows with `provider=sora2` and `model_name=sora-2` are upgraded to `sora_video2-landscape-15s` during idempotent provider seeding.
+- Extended `deploy/scripts/check_api_config_runtime_loader.py` with Sora2 legacy model upgrade coverage.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with Sora2 runtime-model default, explicit override, and legacy alias normalization coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `26` to `33`
+  - contract now protects Sora2 preset/client/loader/test runtime model wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile external_api/video/sora2.py services/api_provider_registry.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - From `deploy/`: `.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `14/14`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=33`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_sora2_runtime_model_20260619_135505/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/external_api/video/sora2.py`
+  - `/home/Administrator/deploy/services/api_provider_registry.py`
+  - `/home/Administrator/deploy/services/api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile external_api/video/sora2.py services/api_provider_registry.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `14/14`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `SORA2_MODEL` -> `sora2-runtime-video-model-smoke`, source `SORA2_MODEL`
+
+### Notes
+
+- This removes the Sora2 registry/payload model mismatch and moves Sora2 video selection into the same hot-reloadable admin API config/runtime resolver path.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

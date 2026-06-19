@@ -13,6 +13,25 @@ from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_SORA2_VIDEO_MODEL = "sora_video2-landscape-15s"
+LEGACY_SORA2_VIDEO_MODELS = {"sora-2"}
+
+
+def _runtime_model_override(model: Optional[str]) -> Optional[str]:
+    """Treat legacy/default names as fallback so admin runtime config can win."""
+    normalized = (model or "").strip()
+    if not normalized or normalized == DEFAULT_SORA2_VIDEO_MODEL or normalized in LEGACY_SORA2_VIDEO_MODELS:
+        return None
+    return normalized
+
+
+def _normalize_sora2_model(model: Optional[str]) -> str:
+    normalized = (model or "").strip()
+    if not normalized or normalized in LEGACY_SORA2_VIDEO_MODELS:
+        return DEFAULT_SORA2_VIDEO_MODEL
+    return normalized
+
+
 class Sora2Client:
     """Sora2 API 客户端"""
     
@@ -20,15 +39,18 @@ class Sora2Client:
         self._explicit_api_key = api_key
         self.api_key = api_key or ""
         self.base_url = ""
+        self.model_name = DEFAULT_SORA2_VIDEO_MODEL
         self._request_kwargs: Dict[str, Any] = {}
         self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("⚠️ SORA2_API_KEY 未设置")
 
-    def _refresh_runtime_config(self):
-        config = resolve_provider("sora2", "sora-2")
+    def _refresh_runtime_config(self, model: Optional[str] = None):
+        model_override = _runtime_model_override(model)
+        config = resolve_provider("sora2", model_override)
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
+        self.model_name = _normalize_sora2_model(config.model_name or model_override)
         self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}"
@@ -94,7 +116,8 @@ class Sora2Client:
         prompt: str,
         image_path: Optional[str] = None,
         size: str = "1280x704",
-        seconds: str = "15"
+        seconds: str = "15",
+        model: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         创建视频生成任务
@@ -108,7 +131,8 @@ class Sora2Client:
         Returns:
             包含task_id的响应
         """
-        self._refresh_runtime_config()
+        self._refresh_runtime_config(model)
+        resolved_model = self.model_name or DEFAULT_SORA2_VIDEO_MODEL
         url = f"{self.base_url}/videos"
         
         try:
@@ -121,7 +145,7 @@ class Sora2Client:
                         'input_reference': ('image.png', image_file, 'image/png')
                     }
                     data = {
-                        'model': 'sora_video2-landscape-15s',
+                        'model': resolved_model,
                         'prompt': prompt,
                         'size': size,
                         'seconds': seconds
@@ -133,7 +157,7 @@ class Sora2Client:
                 
                 headers = {**self.headers, "Content-Type": "application/json"}
                 data = {
-                    "model": "sora_video2-landscape-15s",
+                    "model": resolved_model,
                     "prompt": prompt,
                     "size": size,
                     "seconds": seconds

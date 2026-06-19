@@ -166,6 +166,15 @@ async def main() -> int:
                 "endpoint": "https://api.laozhang.ai/v1beta",
                 "api_key_encrypted": "",
                 "enabled": False,
+            },
+            {
+                "config_id": "legacy_sora2",
+                "provider": "sora2",
+                "name": "Sora2",
+                "model_name": "sora-2",
+                "endpoint": "https://api.laozhang.ai/v1",
+                "api_key_encrypted": "",
+                "enabled": False,
             }
         ]
         creates.clear()
@@ -173,8 +182,8 @@ async def main() -> int:
         seed = await loader.seed_default_api_providers()
         if seed.get("created") != 2:
             fail(f"Expected two GPT Image placeholders from registry, got {seed}")
-        if seed.get("upgraded") != 1:
-            fail(f"Expected one legacy Gemini image upgrade, got {seed}")
+        if seed.get("upgraded") != 2:
+            fail(f"Expected two legacy model upgrades, got {seed}")
         created_providers = {item.get("provider") for item in creates}
         if created_providers != {"laozhang-gpt-image", "laozhang-sora2"}:
             fail(f"Unexpected seed providers: {created_providers}")
@@ -184,6 +193,9 @@ async def main() -> int:
         model_updates = [fields for _, fields in updates if fields.get("model_name") == loader.GEMINI_IMAGE_NEW_MODEL]
         if len(model_updates) != 1:
             fail("Legacy Gemini image model was not upgraded")
+        sora2_updates = [fields for _, fields in updates if fields.get("model_name") == loader.SORA2_NEW_MODEL]
+        if len(sora2_updates) != 1:
+            fail("Legacy Sora2 model was not upgraded")
 
     finally:
         loader.ApiConfigDAO = original_dao
@@ -201,6 +213,7 @@ async def main() -> int:
     print("  hot_reload_loaded_rows=1")
     print("  baseline_restore=1")
     print("  seed_registry_placeholders=2")
+    print("  legacy_model_upgrades=2")
     print("  admin_routes_no_cluster_import=1")
     return 0
 

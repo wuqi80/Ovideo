@@ -245,7 +245,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "Sora2",
         "provider": "sora2",
-        "model_name": "sora-2",
+        "model_name": "sora_video2-landscape-15s",
         "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "video",
