@@ -2704,3 +2704,51 @@
 - No frontend build was required.
 - This keeps the large-episode storyboard pagination behavior intact while moving the high-traffic storyboard domain out of the mixed V2 route file.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Assets Router Extraction
+
+### Changes
+
+- Extracted 5 asset-related route handlers from `deploy/api_routes.py` into `deploy/routers/assets.py`:
+  - `GET /api/projects/{project_id}/assets`
+  - `POST /api/assets`
+  - `PUT /api/assets/{asset_id}`
+  - `DELETE /api/assets/{asset_id}`
+  - `POST /api/assets/{asset_id}/share`
+- `api_routes.py` now composes `create_assets_router(...)` and no longer owns asset CRUD/share handler bodies.
+- Extended `deploy/scripts/check_route_contract.py` to verify:
+  - all 5 asset endpoints resolve to `routers.assets`
+  - `routers/assets.py` owns exactly 5 routes
+  - `api_routes.py` does not reintroduce those asset route decorators
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/assets.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - `asset_route_handlers=5`
+  - redline diff check: no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/assets.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - live asset endpoint check: `GET /api/projects/proj_05d34fc535e2/assets?episode_id=ep_2fc899a228f5` -> HTTP `200`, `assets=20`, `success=True`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_assets_router_20260619_085535`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/assets.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- No frontend build was required.
+- This moves another high-use project loading domain out of the mixed V2 route file while preserving public API behavior.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

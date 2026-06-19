@@ -191,6 +191,11 @@ EXPECTED_ENDPOINTS = {
         "batch_create_storyboard_items",
     ),
     ("/api/episodes/{episode_id}/extract-to-assets", "POST"): ("routers.storyboard", "extract_to_assets"),
+    ("/api/projects/{project_id}/assets", "GET"): ("routers.assets", "get_assets"),
+    ("/api/assets", "POST"): ("routers.assets", "create_asset"),
+    ("/api/assets/{asset_id}", "PUT"): ("routers.assets", "update_asset"),
+    ("/api/assets/{asset_id}", "DELETE"): ("routers.assets", "delete_asset"),
+    ("/api/assets/{asset_id}/share", "POST"): ("routers.assets", "share_asset"),
     ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
     ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
     ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
@@ -1372,6 +1377,61 @@ def check_storyboard_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_asset_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    assets_path = root / "routers" / "assets.py"
+    if not assets_path.exists():
+        fail("routers/assets.py is missing")
+
+    route_pairs = {
+        ("/api/projects/{project_id}/assets", "get"),
+        ("/api/assets", "post"),
+        ("/api/assets/{asset_id}", "put"),
+        ("/api/assets/{asset_id}", "delete"),
+        ("/api/assets/{asset_id}/share", "post"),
+    }
+
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            name = ast_call_name(call.func)
+            _, _, method = name.rpartition(".") if name else ("", "", "")
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, str)
+                and (arg.value, method.lower()) in route_pairs
+            ):
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Asset route handlers must live in routers/assets.py:\n" + "\n".join(violations))
+
+    assets_tree = parse_py_file(assets_path)
+    route_count = 0
+    for node in ast.walk(assets_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 5:
+        fail(f"routers/assets.py should own 5 asset route registrations, found {route_count}")
+    return route_count
+
+
 def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
@@ -1565,6 +1625,7 @@ def main() -> int:
     episode_video_route_handlers = check_episode_video_routes_extracted(root)
     video_capability_route_handlers = check_video_capabilities_routes_extracted(root)
     storyboard_route_handlers = check_storyboard_routes_extracted(root)
+    asset_route_handlers = check_asset_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
     script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
     canvas_route_handlers = check_canvas_routes_extracted(root)
@@ -1600,6 +1661,7 @@ def main() -> int:
     print(f"  episode_video_route_handlers={episode_video_route_handlers}")
     print(f"  video_capability_route_handlers={video_capability_route_handlers}")
     print(f"  storyboard_route_handlers={storyboard_route_handlers}")
+    print(f"  asset_route_handlers={asset_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
     print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
     print(f"  canvas_route_handlers={canvas_route_handlers}")
