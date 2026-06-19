@@ -706,6 +706,7 @@ export interface StoryboardItemsQueryOptions {
     limit?: number;
     offset?: number;
     includeTotal?: boolean;
+    fields?: 'audio' | string;
 }
 
 export async function getStoryboardItems(
@@ -718,6 +719,7 @@ export async function getStoryboardItems(
     if (typeof options.limit === 'number') params.set('limit', String(options.limit));
     if (typeof options.offset === 'number') params.set('offset', String(options.offset));
     if (options.includeTotal) params.set('include_total', 'true');
+    if (options.fields) params.set('fields', options.fields);
     const qs = params.toString() ? `?${params}` : '';
     const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/storyboard-items${qs}`, {
         headers: getHeaders()

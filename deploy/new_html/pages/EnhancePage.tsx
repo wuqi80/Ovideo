@@ -11,7 +11,7 @@ import type { VideoSegment, StoryboardItemDB } from '../types';
 // 到 taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
 // dub / lipSync）后端目前没 worker，明确提示用户而非用假进度误导。
 import * as videoService from '../services/videoService';
-import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/apiService';
+import { fetchComfyuiAvailable, getStoryboardItems, startCompose, getComposeStatus, type ComposeStatus } from '../services/apiService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
 
 interface MediaClip {
@@ -39,12 +39,59 @@ function formatTime(seconds: number): string {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+function normalizeStoryboardAudioItem(r: any): StoryboardItemDB {
+  return {
+    itemId: r.item_id ?? r.itemId ?? '',
+    episodeId: r.episode_id ?? r.episodeId ?? '',
+    sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
+    sceneHeading: '',
+    actionText: '',
+    dialogue: r.dialogue ?? '',
+    cameraMovement: '',
+    imagePrompt: '',
+    videoPrompt: '',
+    generatedImageUrl: null,
+    boundAssets: [],
+    status: r.status ?? 'draft',
+    dialogueAudioUrl: r.dialogue_audio_url ?? r.dialogueAudioUrl ?? null,
+    narrationAudioUrl: r.narration_audio_url ?? r.narrationAudioUrl ?? null,
+    sfxAudioUrl: r.sfx_audio_url ?? r.sfxAudioUrl ?? null,
+    audioDurationMs: r.audio_duration_ms ?? r.audioDurationMs ?? null,
+    plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
+  };
+}
+
 export const EnhancePage: React.FC = () => {
-  const { videoSegments, storyboardItems, audioTracks, isLoading, error, reload, loadSlices, projectId, episodeId } = useEpisode();
+  const { videoSegments, isLoading, error, reload, loadSlices, projectId, episodeId, selectedScriptId } = useEpisode();
+  const [storyboardAudioItems, setStoryboardAudioItems] = useState<StoryboardItemDB[]>([]);
+  const [storyboardAudioReloadKey, setStoryboardAudioReloadKey] = useState(0);
 
   useEffect(() => {
-    loadSlices('videoSegments', 'storyboardItems');
+    loadSlices('videoSegments');
   }, [loadSlices]);
+
+  useEffect(() => {
+    let active = true;
+    if (!episodeId) {
+      setStoryboardAudioItems([]);
+      return () => { active = false; };
+    }
+    getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'audio' })
+      .then(res => {
+        if (!active) return;
+        setStoryboardAudioItems(res.success ? (res.items || []).map(normalizeStoryboardAudioItem) : []);
+      })
+      .catch(err => {
+        console.warn('storyboard audio fields load failed:', err);
+        if (active) setStoryboardAudioItems([]);
+      });
+    return () => { active = false; };
+  }, [episodeId, selectedScriptId, storyboardAudioReloadKey]);
+
+  const reloadEnhanceData = useCallback(() => {
+    setStoryboardAudioReloadKey(key => key + 1);
+    reload();
+  }, [reload]);
 
   const [scale, setScale] = useState(20);
   const [currentTime, setCurrentTime] = useState(0);
@@ -101,7 +148,7 @@ export const EnhancePage: React.FC = () => {
   const playTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if ((videoSegments.length > 0 || storyboardItems.length > 0) && clips.length === 0) {
+    if ((videoSegments.length > 0 || storyboardAudioItems.length > 0) && clips.length === 0) {
       const allClips: MediaClip[] = [];
       let t = 0;
 
@@ -122,7 +169,7 @@ export const EnhancePage: React.FC = () => {
       }
 
       let audioTime = 0;
-      const sortedItems = [...storyboardItems]
+      const sortedItems = [...storyboardAudioItems]
         .sort((a, b) => ((a as any).sort_order ?? (a as any).sortOrder ?? 0) - ((b as any).sort_order ?? (b as any).sortOrder ?? 0));
       for (const item of sortedItems) {
         const audioUrl = (item as any).dialogue_audio_url ?? (item as any).dialogueAudioUrl;
@@ -145,7 +192,7 @@ export const EnhancePage: React.FC = () => {
       const firstVideo = allClips.find(c => c.type === 'video');
       if (firstVideo) setSelectedClipId(firstVideo.id);
     }
-  }, [videoSegments, storyboardItems]);
+  }, [videoSegments, storyboardAudioItems]);
 
   useEffect(() => {
     return () => { if (playTimerRef.current) clearInterval(playTimerRef.current); };
@@ -384,7 +431,7 @@ export const EnhancePage: React.FC = () => {
               <span className="text-[10px] text-n100">{videoClips.length}V · {audioClips.length}A</span>
               {isLoading && <Loader size={14} className="animate-spin text-primary" />}
               <button
-                onClick={() => reload()}
+                onClick={reloadEnhanceData}
                 className="text-xs text-n100 hover:text-n700 transition-colors"
               >
                 刷新

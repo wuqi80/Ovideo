@@ -935,6 +935,39 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
     return len(required_snippets)
 
 
+def check_enhance_lightweight_storyboard_contract(root: Path) -> int:
+    """Enhance workflow should not fetch full storyboard rows just to build audio clips."""
+    page_text = (root / "new_html" / "pages" / "EnhancePage.tsx").read_text(encoding="utf-8")
+    api_text = (root / "new_html" / "services" / "apiService.ts").read_text(encoding="utf-8")
+    router_text = (root / "routers" / "storyboard.py").read_text(encoding="utf-8")
+    dao_text = (root / "dao" / "creative" / "storyboard.py").read_text(encoding="utf-8")
+
+    forbidden_snippets = [
+        "loadSlices('videoSegments', 'storyboardItems')",
+        'loadSlices("videoSegments", "storyboardItems")',
+    ]
+    forbidden = [snippet for snippet in forbidden_snippets if snippet in page_text]
+    if forbidden:
+        fail("EnhancePage must not load full storyboard rows on mount:\n" + "\n".join(forbidden))
+
+    required_snippets = {
+        "fields: 'audio'": "EnhancePage lightweight audio field query",
+        "params.set('fields'": "apiService storyboard fields query option",
+        "fields: Optional[str]": "storyboard route fields query parameter",
+        "fields=selected_fields": "storyboard route passes selected fields to DAO",
+        '"audio": (': "StoryboardDAO audio field set",
+    }
+    sources = "\n".join([page_text, api_text, router_text, dao_text])
+    missing = [
+        f"{label}: missing {snippet}"
+        for snippet, label in required_snippets.items()
+        if snippet not in sources
+    ]
+    if missing:
+        fail("Enhance lightweight storyboard contract failed:\n" + "\n".join(missing))
+    return len(required_snippets)
+
+
 def check_fallback_static_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     fallback_static_path = root / "routers" / "fallback_static.py"
@@ -1895,6 +1928,7 @@ def main() -> int:
     task_stale_cleanup_checks = check_task_stale_cleanup_notification_contract(root)
     lifespan_shutdown_checks = check_lifespan_shutdown_contract(root)
     storyboard_paged_reload_checks = check_storyboard_paged_reload_contract(root)
+    enhance_lightweight_storyboard_checks = check_enhance_lightweight_storyboard_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -1939,6 +1973,7 @@ def main() -> int:
     print(f"  task_stale_cleanup_checks={task_stale_cleanup_checks}")
     print(f"  lifespan_shutdown_checks={lifespan_shutdown_checks}")
     print(f"  storyboard_paged_reload_checks={storyboard_paged_reload_checks}")
+    print(f"  enhance_lightweight_storyboard_checks={enhance_lightweight_storyboard_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

@@ -95,13 +95,18 @@ def create_storyboard_router(
         limit: Optional[int] = None,
         offset: int = 0,
         include_total: bool = False,
+        fields: Optional[str] = None,
         user_id: str = Depends(get_current_user),
     ):
+        selected_fields = (fields or "").strip().lower() or None
+        if selected_fields and selected_fields not in {"audio"}:
+            raise HTTPException(status_code=400, detail="unsupported storyboard fields")
         items = await StoryboardDAO.get_by_episode(
             episode_id,
             script_id=script_id,
             limit=limit,
             offset=offset,
+            fields=selected_fields,
         )
         result = []
         for i in items:

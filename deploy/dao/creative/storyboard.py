@@ -10,6 +10,30 @@ from db_manager import get_db_manager
 
 
 class StoryboardDAO:
+    FIELD_SETS = {
+        "audio": (
+            "item_id",
+            "episode_id",
+            "script_id",
+            "sort_order",
+            "dialogue",
+            "dialogue_audio_url",
+            "narration_audio_url",
+            "sfx_audio_url",
+            "audio_duration_ms",
+            "planned_duration_ms",
+            "status",
+        ),
+    }
+
+    @staticmethod
+    def _select_columns(fields: Optional[str] = None) -> str:
+        if not fields:
+            return "*"
+        columns = StoryboardDAO.FIELD_SETS.get(fields)
+        if not columns:
+            return "*"
+        return ", ".join(columns)
 
     @staticmethod
     async def create(
@@ -141,17 +165,19 @@ class StoryboardDAO:
         script_id: Optional[str] = None,
         limit: Optional[int] = None,
         offset: int = 0,
+        fields: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
             return []
         limit = max(1, min(int(limit), 500)) if limit is not None else None
         offset = max(0, int(offset or 0))
+        select_columns = StoryboardDAO._select_columns(fields)
         if script_id:
             if limit is not None:
                 return await db.fetch(
-                    """
-                    SELECT * FROM storyboard_items
+                    f"""
+                    SELECT {select_columns} FROM storyboard_items
                     WHERE episode_id = $1 AND script_id = $2
                     ORDER BY sort_order ASC
                     LIMIT $3 OFFSET $4
@@ -159,13 +185,13 @@ class StoryboardDAO:
                     episode_id, script_id, limit, offset
                 )
             return await db.fetch(
-                "SELECT * FROM storyboard_items WHERE episode_id = $1 AND script_id = $2 ORDER BY sort_order ASC",
+                f"SELECT {select_columns} FROM storyboard_items WHERE episode_id = $1 AND script_id = $2 ORDER BY sort_order ASC",
                 episode_id, script_id
             )
         if limit is not None:
             return await db.fetch(
-                """
-                SELECT * FROM storyboard_items
+                f"""
+                SELECT {select_columns} FROM storyboard_items
                 WHERE episode_id = $1
                 ORDER BY sort_order ASC
                 LIMIT $2 OFFSET $3
@@ -173,7 +199,7 @@ class StoryboardDAO:
                 episode_id, limit, offset
             )
         return await db.fetch(
-            "SELECT * FROM storyboard_items WHERE episode_id = $1 ORDER BY sort_order ASC",
+            f"SELECT {select_columns} FROM storyboard_items WHERE episode_id = $1 ORDER BY sort_order ASC",
             episode_id
         )
 

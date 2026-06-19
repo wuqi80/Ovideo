@@ -3135,3 +3135,60 @@
 - No frontend build was required.
 - This moves the cross-domain file binding layer out of the mixed V2 route file, making later media loading and file-management optimization safer to work on.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Enhance Page Lightweight Storyboard Audio Loading
+
+### Changes
+
+- Added an optional lightweight storyboard field set for `GET /api/episodes/{episode_id}/storyboard-items`:
+  - new query parameter: `fields=audio`
+  - allowed field set is server-side whitelisted in `deploy/dao/creative/storyboard.py`
+  - returned fields are limited to IDs, ordering, dialogue, audio URLs, duration, planned duration, script ID, and status
+- Updated `deploy/new_html/pages/EnhancePage.tsx` so the video enhancement workflow:
+  - loads only `videoSegments` from the episode context on mount
+  - fetches storyboard audio metadata directly through `getStoryboardItems(..., { fields: 'audio' })`
+  - refreshes the lightweight audio metadata when the page refresh button is clicked
+- Extended `deploy/new_html/services/apiService.ts` and its unit test coverage for the new `fields` query option.
+- Extended `deploy/scripts/check_route_contract.py` with `enhance_lightweight_storyboard_checks=5` to prevent `EnhancePage` from regressing to full storyboard loading on mount.
+
+### Verification
+
+- Local checks:
+  - `python -m py_compile deploy/dao/creative/storyboard.py deploy/routers/storyboard.py deploy/scripts/check_route_contract.py`
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `enhance_lightweight_storyboard_checks=5`
+- Local frontend limitations:
+  - local Vitest/build could not run because Windows `node_modules` is missing Rollup optional package `@rollup/rollup-win32-x64-msvc`
+  - targeted `tsc` check was blocked by a pre-existing imported error in `services/videoService.ts`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile dao/creative/storyboard.py routers/storyboard.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - generated frontend asset: `../dist/assets/EnhancePage-DtAfO5ge.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - live lightweight endpoint check:
+    - `GET /api/episodes/ep_2fc899a228f5/storyboard-items?fields=audio&limit=1&include_total=true`
+    - HTTP `200`, `success=True`, `total=152`
+    - returned keys: `audio_duration_ms`, `dialogue`, `dialogue_audio_url`, `episode_id`, `item_id`, `narration_audio_url`, `planned_duration_ms`, `script_id`, `sfx_audio_url`, `sort_order`, `status`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_enhance_lightweight_storyboard_20260619_120244/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/dao/creative/storyboard.py`
+  - `/home/Administrator/deploy/routers/storyboard.py`
+  - `/home/Administrator/deploy/new_html/services/apiService.ts`
+  - `/home/Administrator/deploy/new_html/pages/EnhancePage.tsx`
+  - `/home/Administrator/deploy/new_html/__tests__/services/apiService.test.ts`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- This does not change full storyboard behavior for pages that need image prompts, generated images, or bound assets.
+- The main remaining heavy workflow pages to audit next are `GenerationPage`, `MaterialsPage`, and `AudioStagePage`, which still have full-slice loading paths in some flows.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
