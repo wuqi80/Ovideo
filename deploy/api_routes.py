@@ -3,15 +3,11 @@
 新增API路由 - 用户管理、项目、版本、文件
 这个文件应该被导入到cluster_main.py中
 """
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 import os
-import uuid
 import logging
-from pathlib import Path
-from datetime import datetime
 
 from dao_user import UserDAO
 from dao_content import ProjectDAO, VersionDAO, FileDAO, TextContentDAO, ProjectMemberDAO
@@ -48,6 +44,7 @@ from routers.content_versions import create_content_versions_router
 from routers.entity_files import create_entity_files_router
 from routers.episode_video import create_episode_video_router
 from routers.episodes import create_episodes_router
+from routers.legacy_files import create_legacy_files_router
 from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
 from routers.storyboard import create_storyboard_router
@@ -240,6 +237,20 @@ router.include_router(
     )
 )
 
+router.include_router(
+    create_legacy_files_router(
+        get_current_user_dependency=get_current_user,
+        user_dao=UserDAO,
+        version_dao=VersionDAO,
+        file_dao=FileDAO,
+        activity_log_dao=ActivityLogDAO,
+        file_optimization_service=FileOptimizationService,
+        file_deduplication_service=FileDeduplicationService,
+        jwt_auth_module=jwt_auth,
+        logger=logger,
+    )
+)
+
 # ============================================
 # 用户相关API
 # ============================================
@@ -278,7 +289,6 @@ async def register_user(user_data: UserRegister):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 @router.post("/api/auth/login")
 async def login_user(login_data: UserLogin):
     """用户登录"""
@@ -315,7 +325,6 @@ async def login_user(login_data: UserLogin):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 @router.get("/api/user/profile")
 async def get_user_profile(user_id: str = Depends(get_current_user)):
     """获取用户资料"""
@@ -446,270 +455,6 @@ async def get_project_detail(
             "members": members
         }
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# 文件管理API
-# ============================================
-
-@router.post("/api/files/upload")
-async def upload_file(
-    version_id: str = Form(...),
-    file: UploadFile = File(...),
-    user_id: str = Depends(get_current_user)
-):
-    """上传文件"""
-    try:
-        # 验证版本权限
-        version = await VersionDAO.get_version(version_id)
-        if not version or version['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权操作")
-        
-        # 检查存储配额
-        user = await UserDAO.get_user_by_id(user_id)
-        if user['used_storage_bytes'] >= user['storage_quota_gb'] * 1024 * 1024 * 1024:
-            raise HTTPException(status_code=507, detail="存储空间不足")
-        
-        # 保存文件
-        file_id = f"file_{uuid.uuid4().hex[:12]}"
-        file_ext = Path(file.filename).suffix
-        file_type = 'image' if file_ext.lower() in ['.jpg', '.jpeg', '.png', '.gif', '.webp'] else \
-                   'video' if file_ext.lower() in ['.mp4', '.avi', '.mov', '.mkv'] else 'other'
-        
-        # 创建存储路径
-        storage_base = Path("persistent_storage") / file_type + 's' / user_id / datetime.now().strftime("%Y%m")
-        storage_base.mkdir(parents=True, exist_ok=True)
-        
-        file_path = storage_base / f"{file_id}{file_ext}"
-        
-        # 保存原始文件
-        content = await file.read()
-        async with aiofiles.open(file_path, 'wb') as f:
-            await f.write(content)
-        
-        file_size = len(content)
-        file_url = f"/storage/{file_type}s/{user_id}/{datetime.now().strftime('%Y%m')}/{file_id}{file_ext}"
-        
-        # 计算文件哈希(用于去重)
-        file_hash = await FileOptimizationService.calculate_file_hash(str(file_path))
-        
-        # 检查是否重复
-        duplicate = await FileDeduplicationService.check_duplicate(file_hash, user_id)
-        if duplicate:
-            # 链接已存在的文件
-            file_record = await FileDeduplicationService.link_duplicate_file(
-                duplicate, version_id, user_id
-            )
-        else:
-            # 创建新文件记录
-            file_record = await FileDAO.create_file(
-                version_id=version_id,
-                user_id=user_id,
-                file_type=file_type,
-                file_name=file.filename,
-                file_path=str(file_path),
-                file_url=file_url,
-                file_size_bytes=file_size,
-                mime_type=file.content_type,
-                metadata={'file_hash': file_hash}
-            )
-            
-            # 如果是图片,创建缩略图
-            if file_type == 'image':
-                thumbnail_path = storage_base / f"{file_id}_thumb.jpg"
-                await FileOptimizationService.create_thumbnail(
-                    str(file_path), str(thumbnail_path)
-                )
-        
-        # 记录活动
-        await ActivityLogDAO.log_activity(
-            user_id=user_id,
-            action='upload_file',
-            resource_type='file',
-            resource_id=file_record['file_id']
-        )
-        
-        return {
-            "success": True,
-            "file": file_record
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/files/{file_id}/download")
-async def download_file(file_id: str, request: Request, token: str = None):
-    """下载文件(使用分块传输)
-    
-    ⚡ 可选认证的文件下载
-    安全性说明：
-    - file_id 是随机生成的12位十六进制字符串 (68万亿种可能)，几乎不可能被猜到
-    - 只有登录用户才能访问项目API获取 file_id
-    - 这样设计使得 <img> 标签可以直接使用 URL，无需处理认证
-    - 类似于 AWS S3 的预签名 URL 机制
-    
-    🔒 可选增强安全性：
-    - 如果 URL 中包含 token 参数，将验证用户是否有权访问该文件
-    - 这提供了更严格的访问控制，同时保持向后兼容
-    """
-    try:
-        logger.info(f"📥 文件下载请求: file_id={file_id}, has_token={token is not None}")
-        
-        file_record = await FileDAO.get_file(file_id)
-        if not file_record:
-            logger.error(f"❌ 文件记录不存在: file_id={file_id}")
-            raise HTTPException(status_code=404, detail="文件不存在")
-        
-        # 🔒 可选的用户权限验证（如果提供了 token）
-        if token:
-            username = jwt_auth.verify_token(token)
-            if username:
-                file_owner = file_record.get('user_id')
-                if username and file_owner and username != file_owner:
-                    logger.warning(f"⚠️ 用户 {username} 尝试访问 {file_owner} 的文件 {file_id}")
-                    # 仅记录警告，不阻止访问（保持向后兼容）
-                    # 如需严格控制，可取消下面注释：
-                    # raise HTTPException(status_code=403, detail="无权访问此文件")
-        
-        logger.info(f"📄 找到文件: user={file_record['user_id']}, path={file_record['file_path']}")
-        
-        file_path = file_record['file_path']
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # 尝试多个可能的路径
-        possible_paths = []
-        
-        # 1. 原始路径（绝对路径）
-        if os.path.isabs(file_path):
-            possible_paths.append(file_path)
-        else:
-            # 2. 相对于项目根目录
-            possible_paths.append(os.path.join(base_dir, file_path))
-            
-            # 3. 尝试 temp/uploads/ 路径（如果原路径包含 persistent_storage）
-            if 'persistent_storage' in file_path:
-                # persistent_storage/images/user/202512/xxx.png -> temp/uploads/images/user/202512/xxx.png
-                temp_path = file_path.replace('persistent_storage/', 'temp/uploads/')
-                possible_paths.append(os.path.join(base_dir, temp_path))
-                
-                # persistent_storage/videos/user/202512/xxx.mp4 -> temp/uploads/video/user/202512/xxx.mp4
-                temp_path2 = file_path.replace('persistent_storage/videos/', 'temp/uploads/video/')
-                possible_paths.append(os.path.join(base_dir, temp_path2))
-                
-                temp_path3 = file_path.replace('persistent_storage/images/', 'temp/uploads/images/')
-                possible_paths.append(os.path.join(base_dir, temp_path3))
-        
-        # 查找存在的文件
-        actual_file_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                actual_file_path = path
-                logger.info(f"✅ 找到文件: {path}")
-                break
-            else:
-                logger.debug(f"❌ 路径不存在: {path}")
-        
-        if not actual_file_path:
-            logger.error(f"文件不存在于磁盘，尝试的路径:")
-            for path in possible_paths:
-                logger.error(f"  - {path}")
-            logger.error(f"当前工作目录: {os.getcwd()}")
-            logger.error(f"api_routes.py 位置: {os.path.abspath(__file__)}")
-            raise HTTPException(status_code=404, detail="文件不存在")
-        
-        logger.info(f"✅ 开始传输文件: {actual_file_path}")
-        
-        # 处理文件名编码（支持中文）
-        from urllib.parse import quote
-        import aiofiles
-        filename = file_record.get('file_name', 'download')
-        encoded_filename = quote(filename)
-        mime_type = file_record['mime_type'] or 'application/octet-stream'
-        file_size = os.path.getsize(actual_file_path)
-        
-        # Range请求支持（视频seek必须）
-        range_header = request.headers.get('range')
-        
-        if range_header and ('video' in mime_type or 'audio' in mime_type):
-            range_spec = range_header.replace('bytes=', '')
-            parts = range_spec.split('-')
-            start = int(parts[0]) if parts[0] else 0
-            end = int(parts[1]) if parts[1] else file_size - 1
-            end = min(end, file_size - 1)
-            content_length = end - start + 1
-            
-            async def ranged_reader():
-                async with aiofiles.open(actual_file_path, 'rb') as f:
-                    await f.seek(start)
-                    remaining = content_length
-                    while remaining > 0:
-                        chunk_size = min(65536, remaining)
-                        chunk = await f.read(chunk_size)
-                        if not chunk:
-                            break
-                        remaining -= len(chunk)
-                        yield chunk
-            
-            return StreamingResponse(
-                ranged_reader(),
-                status_code=206,
-                media_type=mime_type,
-                headers={
-                    'Content-Range': f'bytes {start}-{end}/{file_size}',
-                    'Accept-Ranges': 'bytes',
-                    'Content-Length': str(content_length),
-                    'Content-Disposition': f"inline; filename*=UTF-8''{encoded_filename}",
-                }
-            )
-        
-        return StreamingResponse(
-            FileOptimizationService.file_chunked_reader(actual_file_path),
-            media_type=mime_type,
-            headers={
-                'Content-Disposition': f"inline; filename*=UTF-8''{encoded_filename}",
-                'Accept-Ranges': 'bytes',
-                'Content-Length': str(file_size),
-            }
-        )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"下载文件失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/api/files/{file_id}")
-async def delete_file(
-    file_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """删除文件"""
-    try:
-        file_record = await FileDAO.get_file(file_id)
-        if not file_record or file_record['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权操作")
-        
-        # 软删除
-        await FileDAO.delete_file(file_id)
-        
-        # 记录活动
-        await ActivityLogDAO.log_activity(
-            user_id=user_id,
-            action='delete_file',
-            resource_type='file',
-            resource_id=file_id
-        )
-        
-        return {
-            "success": True,
-            "message": "文件已删除"
-        }
-    
     except HTTPException:
         raise
     except Exception as e:

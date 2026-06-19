@@ -208,6 +208,9 @@ EXPECTED_ENDPOINTS = {
         "hard_delete_entity_files_batch",
     ),
     ("/api/entity-files/migrate", "POST"): ("routers.entity_files", "run_entity_file_migration"),
+    ("/api/files/upload", "POST"): ("routers.legacy_files", "upload_file"),
+    ("/api/files/{file_id}/download", "GET"): ("routers.legacy_files", "download_file"),
+    ("/api/files/{file_id}", "DELETE"): ("routers.legacy_files", "delete_file"),
     ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
     ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
     ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
@@ -1503,6 +1506,59 @@ def check_entity_file_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_legacy_file_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    legacy_files_path = root / "routers" / "legacy_files.py"
+    if not legacy_files_path.exists():
+        fail("routers/legacy_files.py is missing")
+
+    route_pairs = {
+        ("/api/files/upload", "post"),
+        ("/api/files/{file_id}/download", "get"),
+        ("/api/files/{file_id}", "delete"),
+    }
+
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            name = ast_call_name(call.func)
+            _, _, method = name.rpartition(".") if name else ("", "", "")
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, str)
+                and (arg.value, method.lower()) in route_pairs
+            ):
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Legacy file route handlers must live in routers/legacy_files.py:\n" + "\n".join(violations))
+
+    legacy_tree = parse_py_file(legacy_files_path)
+    route_count = 0
+    for node in ast.walk(legacy_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 3:
+        fail(f"routers/legacy_files.py should own 3 legacy file route registrations, found {route_count}")
+    return route_count
+
+
 def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
@@ -1698,6 +1754,7 @@ def main() -> int:
     storyboard_route_handlers = check_storyboard_routes_extracted(root)
     asset_route_handlers = check_asset_routes_extracted(root)
     entity_file_route_handlers = check_entity_file_routes_extracted(root)
+    legacy_file_route_handlers = check_legacy_file_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
     script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
     canvas_route_handlers = check_canvas_routes_extracted(root)
@@ -1735,6 +1792,7 @@ def main() -> int:
     print(f"  storyboard_route_handlers={storyboard_route_handlers}")
     print(f"  asset_route_handlers={asset_route_handlers}")
     print(f"  entity_file_route_handlers={entity_file_route_handlers}")
+    print(f"  legacy_file_route_handlers={legacy_file_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
     print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
     print(f"  canvas_route_handlers={canvas_route_handlers}")

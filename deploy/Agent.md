@@ -1,5 +1,46 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 Legacy File Router Extraction
+
+### Changes
+
+- Extracted the remaining legacy file routes from `deploy/api_routes.py` into `deploy/routers/legacy_files.py`:
+  - `POST /api/files/upload`
+  - `GET /api/files/{file_id}/download`
+  - `DELETE /api/files/{file_id}`
+- Registered the new router through `create_legacy_files_router(...)`.
+- Added route-contract coverage so these routes must stay in `routers.legacy_files`.
+- Fixed the legacy upload storage path construction while moving the code:
+  - old expression could evaluate as `Path + str`
+  - new path uses `Path("persistent_storage") / f"{file_type}s" / user_id / YYYYMM`
+- Adjusted legacy download path resolution for the new module location so relative DB paths still resolve from the `deploy/` root.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `api_routes.py`, `routers/legacy_files.py`, and `scripts/check_route_contract.py`
+  - `scripts/check_route_contract.py`
+  - `git diff --check`
+  - redline diff check confirmed no changes under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_legacy_files_router_20260619-172539`
+- Server checks passed:
+  - `py_compile` for deployed files
+  - `scripts/check_route_contract.py` -> `openapi_paths=231`, `openapi_operations=287`, `legacy_file_route_handlers=3`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - `GET /api/files/file_nonexistent_smoke/download` -> HTTP `404`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- Public API route counts stayed unchanged.
+- `api_routes.py` now has 6 direct route handlers left: auth/register/login, user profile, and DAO-backed project create/list/detail.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-19 Admin Legacy API Editor Redirect Fix
 
 ### Changes
