@@ -643,8 +643,9 @@ const ApiConfigCard: React.FC<{
     onDelete: (config: ApiConfig) => void;
 }> = ({ config, meta, runtime, health, configTest, checking, testingConfig, onCheck, onTestConfig, onEdit, onToggle, onDelete }) => {
     const provider = normalizeProvider(config.provider);
-    const hasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.api_key_encrypted);
-    const status = healthStatusFrom(health, runtime, hasKey);
+    const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.api_key_encrypted);
+    const configHasKey = Boolean(config.api_key_encrypted);
+    const status = healthStatusFrom(health, runtime, runtimeHasKey);
     const view = statusView(status);
     const healthError = health?.health?.error || runtime?.health_error || '';
     const healthLatency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
@@ -665,6 +666,13 @@ const ApiConfigCard: React.FC<{
     const configTestClass = configTest?.ok
         ? 'border-g75 bg-g50 text-g400'
         : 'border-r75 bg-r50 text-r400';
+    const configTestLabel = !configTest
+        ? ''
+        : configTest.ok
+            ? '本配置正常'
+            : configTest.error === 'No API key configured'
+                ? '本配置未保存 Key'
+                : '本配置异常';
 
     return (
         <article className="bg-n0 border border-n40 rounded-md shadow-card p-4 min-w-0">
@@ -678,8 +686,11 @@ const ApiConfigCard: React.FC<{
                                 {!config.enabled && (
                                     <span className="rounded bg-r50 text-danger px-1.5 py-0.5 text-[10px] font-semibold">禁用</span>
                                 )}
-                                {!hasKey && (
-                                    <span className="rounded bg-r50 text-r400 px-1.5 py-0.5 text-[10px] font-semibold">待填 Key</span>
+                                {!configHasKey && (
+                                    <span className="rounded bg-r50 text-r400 px-1.5 py-0.5 text-[10px] font-semibold">本配置无 Key</span>
+                                )}
+                                {runtimeHasKey && !configHasKey && (
+                                    <span className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">运行时有 Key</span>
                                 )}
                             </div>
                             <div className="mt-1 flex items-center gap-2 text-[11px] text-n100 flex-wrap">
@@ -695,20 +706,20 @@ const ApiConfigCard: React.FC<{
                                 onClick={() => onTestConfig(config)}
                                 disabled={testingConfig || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试这条配置自身保存的 key 和 endpoint"
+                                title="测试这条 DB 配置保存的 key 和 endpoint"
                             >
                                 {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                                测试连通性
+                                测试本配置
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onCheck(provider)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试当前 provider 的运行时 key 和 endpoint"
+                                title="测试当前运行时生效的 provider key 和 endpoint"
                             >
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                刷新健康
+                                测试运行时
                             </button>
                             <button
                                 type="button"
@@ -716,7 +727,7 @@ const ApiConfigCard: React.FC<{
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                             >
                                 <Edit3 className="w-3.5 h-3.5" />
-                                编辑
+                                {configHasKey ? '编辑 Key' : '配置 Key'}
                             </button>
                             <button
                                 type="button"
@@ -831,7 +842,7 @@ const ApiConfigCard: React.FC<{
                     {configTest && (
                         <div className={`mt-2 rounded border px-3 py-2 text-[11px] break-words ${configTestClass}`}>
                             <span className="font-semibold">配置测试：</span>
-                            <span>{configTest.ok ? '正常' : '异常'}</span>
+                            <span>{configTestLabel}</span>
                             <span className="mx-1 text-n100">/</span>
                             <span className="font-mono text-n700">
                                 {typeof configTest.latency_ms === 'number' ? `${configTest.latency_ms} ms` : '- ms'}
@@ -1003,35 +1014,6 @@ const ApiConfigPanel: React.FC = () => {
             const latencyMs = Math.round(performance.now() - startedAt);
             const test = { ...(result.test || {}), latency_ms: latencyMs };
             setConfigTestMap(prev => ({ ...prev, [configId]: test }));
-            const provider = normalizeProvider(test.provider || config.provider);
-            if (provider) {
-                const status: HealthStatus = test.ok
-                    ? 'ok'
-                    : test.error === 'No API key configured'
-                        ? 'no_key'
-                        : 'error';
-                setHealthMap(prev => ({
-                    ...prev,
-                    [provider]: {
-                        ...(prev[provider] || {}),
-                        success: true,
-                        provider,
-                        model_name: test.model_name || config.model_name || null,
-                        status,
-                        latency_ms: latencyMs,
-                        checked_at: test.checked_at,
-                        health: {
-                            ok: test.ok,
-                            reachable: test.reachable,
-                            auth_ok: test.auth_ok,
-                            status_code: test.status_code,
-                            url: test.url,
-                            error: test.error,
-                            urls_tried: test.urls_tried,
-                        },
-                    },
-                }));
-            }
             if (test.ok) {
                 crmMessage.success(`${config.name || config.provider} 配置可用`);
             } else if (test.error === 'No API key configured') {
@@ -1324,7 +1306,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
                         >
                             <Plus className="w-3.5 h-3.5" />
-                            新增配置
+                            手动添加 API
                         </button>
                         <button
                             type="button"
@@ -1342,7 +1324,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {refreshingHealth ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            刷新状态
+                            刷新健康缓存
                         </button>
                         <button
                             type="button"
@@ -1360,7 +1342,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {sweeping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测试全部
+                            测试运行时
                         </button>
                         <button
                             type="button"
@@ -1378,7 +1360,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                         >
                             {testingAllConfigs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测全部配置
+                            测试全部配置
                         </button>
                         <button
                             type="button"
@@ -1386,7 +1368,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                         >
                             <ServerCog className="w-3.5 h-3.5" />
-                            导入预设
+                            导入预设模型
                         </button>
                         <button
                             type="button"

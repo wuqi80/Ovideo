@@ -4289,3 +4289,27 @@
 - To manage MiniMax group id through the API platform, store it on the MiniMax API config row:
   - `request_template: {"group_id": "<MiniMax group id>"}`
 - Existing server/systemd `MINIMAX_GROUP_ID` remains the baseline fallback when DB does not provide a group id.
+
+## 2026-06-20 Admin API Config UI Status Split
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` API provider cards:
+  - separated "single DB config test" from "runtime provider health".
+  - `POST /api/admin/api-configs/{config_id}/test` no longer overwrites provider health state.
+  - card status dot now remains based on runtime health/cache from `/health` and `/api-configs`.
+  - single-config test result is shown only in the card's config-test block.
+- Renamed controls to make the two test paths explicit:
+  - card: `测试本配置` for saved DB row key/endpoint.
+  - card: `测试运行时` for currently effective provider runtime key/endpoint.
+  - top toolbar: `手动添加 API`, `导入预设模型`, `刷新健康缓存`, `测试全部配置`.
+- Made key editing more discoverable:
+  - card edit action now shows `配置 Key` when the DB row has no saved key.
+  - card edit action shows `编辑 Key` when the row already has a saved key.
+  - cards distinguish `本配置无 Key` from `运行时有 Key`, which explains env/baseline-backed providers.
+
+### Verification
+
+- Local check:
+  - `node node_modules/typescript/bin/tsc --noEmit --pretty false | Select-String AdminSettingsPage` -> no `AdminSettingsPage.tsx` errors.
+  - The full local TypeScript command still exits non-zero because of existing unrelated project errors.
