@@ -2,6 +2,16 @@ import { getHeaders, handleResponse } from './apiService';
 
 type HeaderMap = Record<string, string>;
 
+interface HeaderOptions {
+  requireAuth?: boolean;
+  authErrorMessage?: string;
+  includeContentType?: boolean;
+}
+
+interface ApiFetchConfig extends HeaderOptions {
+  apiName?: string;
+}
+
 function normalizeHeaders(headers?: HeadersInit): HeaderMap {
   if (!headers) return {};
   if (headers instanceof Headers) {
@@ -24,12 +34,21 @@ function hasAuthorization(headers: HeaderMap): boolean {
   return Boolean(headers.Authorization || headers.authorization);
 }
 
-export function buildJsonHeaders(
+function withoutContentType(headers: HeaderMap): HeaderMap {
+  const out: HeaderMap = {};
+  Object.entries(headers).forEach(([key, value]) => {
+    if (key.toLowerCase() !== 'content-type') out[key] = value;
+  });
+  return out;
+}
+
+export function buildAuthHeaders(
   extraHeaders?: HeadersInit,
-  options: { requireAuth?: boolean; authErrorMessage?: string } = {},
+  options: HeaderOptions = {},
 ): HeaderMap {
+  const baseHeaders = normalizeHeaders(getHeaders());
   const headers = {
-    ...normalizeHeaders(getHeaders()),
+    ...(options.includeContentType === false ? withoutContentType(baseHeaders) : baseHeaders),
     ...normalizeHeaders(extraHeaders),
   };
 
@@ -40,16 +59,24 @@ export function buildJsonHeaders(
   return headers;
 }
 
+export function buildJsonHeaders(
+  extraHeaders?: HeadersInit,
+  options: HeaderOptions = {},
+): HeaderMap {
+  return buildAuthHeaders(extraHeaders, { ...options, includeContentType: true });
+}
+
 export async function apiFetch(
   url: string,
   options: RequestInit = {},
-  config: { apiName?: string; requireAuth?: boolean; authErrorMessage?: string } = {},
+  config: ApiFetchConfig = {},
 ): Promise<Response> {
   const response = await fetch(url, {
     ...options,
-    headers: buildJsonHeaders(options.headers, {
+    headers: buildAuthHeaders(options.headers, {
       requireAuth: config.requireAuth,
       authErrorMessage: config.authErrorMessage,
+      includeContentType: config.includeContentType,
     }),
   });
 
@@ -64,7 +91,21 @@ export async function apiJson<T>(
   url: string,
   options: RequestInit = {},
   apiName: string = 'API',
+  config: Omit<ApiFetchConfig, 'apiName'> = {},
 ): Promise<T> {
-  const response = await apiFetch(url, options, { apiName });
+  const response = await apiFetch(url, options, { ...config, apiName });
   return handleResponse(response, apiName) as Promise<T>;
+}
+
+export async function apiBlob(
+  url: string,
+  options: RequestInit = {},
+  apiName: string = 'API',
+  config: Omit<ApiFetchConfig, 'apiName'> = {},
+): Promise<Blob> {
+  const response = await apiFetch(url, options, { ...config, apiName });
+  if (!response.ok) {
+    await handleResponse(response, apiName);
+  }
+  return response.blob();
 }

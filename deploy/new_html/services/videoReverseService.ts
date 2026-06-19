@@ -4,9 +4,7 @@
  * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
  */
 
-import { handleResponse, getHeaders } from './apiService';
-
-const API_BASE = '';
+import { apiJson } from './httpClient';
 
 export type VideoReverseStatus =
   | 'pending' | 'splitting' | 'extracting_frames' | 'analyzing'
@@ -73,12 +71,10 @@ export async function estimateVideoReverse(payload: {
   enough: boolean;
   duration_seconds?: number;
 }> {
-  const resp = await fetch(`${API_BASE}/api/video-reverse/estimate`, {
+  return apiJson('/api/video-reverse/estimate', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'estimateVideoReverse');
+  }, 'estimateVideoReverse');
 }
 
 export async function createVideoReverseTask(payload: {
@@ -96,12 +92,10 @@ export async function createVideoReverseTask(payload: {
   duration_seconds: number;
   status: string;
 }> {
-  const resp = await fetch(`${API_BASE}/api/video-reverse/tasks`, {
+  return apiJson('/api/video-reverse/tasks', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'createVideoReverseTask');
+  }, 'createVideoReverseTask');
 }
 
 export async function listVideoReverseTasks(params: {
@@ -115,11 +109,9 @@ export async function listVideoReverseTasks(params: {
     if (v !== undefined && v !== null && v !== '') sp.set(k, String(v));
   }
   const qs = sp.toString() ? `?${sp.toString()}` : '';
-  const resp = await fetch(`${API_BASE}/api/video-reverse/tasks${qs}`, {
+  return apiJson(`/api/video-reverse/tasks${qs}`, {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'listVideoReverseTasks');
+  }, 'listVideoReverseTasks');
 }
 
 export async function getVideoReverseTask(reverseTaskId: string): Promise<{
@@ -127,19 +119,15 @@ export async function getVideoReverseTask(reverseTaskId: string): Promise<{
   task: VideoReverseTask;
   segments: VideoReverseSegment[];
 }> {
-  const resp = await fetch(`${API_BASE}/api/video-reverse/tasks/${reverseTaskId}`, {
+  return apiJson(`/api/video-reverse/tasks/${reverseTaskId}`, {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'getVideoReverseTask');
+  }, 'getVideoReverseTask');
 }
 
 export async function cancelVideoReverseTask(reverseTaskId: string): Promise<{ success: boolean }> {
-  const resp = await fetch(`${API_BASE}/api/video-reverse/tasks/${reverseTaskId}/cancel`, {
+  return apiJson(`/api/video-reverse/tasks/${reverseTaskId}/cancel`, {
     method: 'POST',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'cancelVideoReverseTask');
+  }, 'cancelVideoReverseTask');
 }
 
 export async function retryVideoReverseTask(reverseTaskId: string): Promise<{
@@ -147,9 +135,7 @@ export async function retryVideoReverseTask(reverseTaskId: string): Promise<{
   reverse_task_id: string;
   task_id: string;
 }> {
-  const resp = await fetch(`${API_BASE}/api/video-reverse/tasks/${reverseTaskId}/retry`, {
+  return apiJson(`/api/video-reverse/tasks/${reverseTaskId}/retry`, {
     method: 'POST',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'retryVideoReverseTask');
+  }, 'retryVideoReverseTask');
 }

@@ -1,3 +1,5 @@
+import { apiJson } from './httpClient';
+
 export interface EntityFile {
   fileId: string;
   fileUrl: string;
@@ -8,13 +10,6 @@ export interface EntityFile {
   metadata?: Record<string, unknown>;
   entityType?: string;
   entityId?: string;
-}
-
-function getHeaders(): Record<string, string> {
-  const token = localStorage.getItem('auth_token');
-  const h: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) h['Authorization'] = `Bearer ${token}`;
-  return h;
 }
 
 function normalize(row: any): EntityFile {
@@ -38,9 +33,11 @@ export async function fetchEntityFiles(
 ): Promise<{ items: EntityFile[]; total: number }> {
   const params = new URLSearchParams({ entity_type: entityType, entity_id: entityId });
   if (fileRole) params.set('file_role', fileRole);
-  const res = await fetch(`/api/entity-files?${params}`, { headers: getHeaders() });
-  if (!res.ok) throw new Error(`fetchEntityFiles failed: ${res.status}`);
-  const data = await res.json();
+  const data = await apiJson<{ items?: any[]; total?: number }>(
+    `/api/entity-files?${params}`,
+    { method: 'GET' },
+    'fetchEntityFiles',
+  );
   return {
     items: (data.items || []).map(normalize),
     total: data.total ?? 0,
@@ -56,9 +53,11 @@ export async function fetchUserFiles(
   if (fileType) params.set('file_type', fileType);
   params.set('limit', String(limit));
   params.set('offset', String(offset));
-  const res = await fetch(`/api/user-files?${params}`, { headers: getHeaders() });
-  if (!res.ok) throw new Error(`fetchUserFiles failed: ${res.status}`);
-  const data = await res.json();
+  const data = await apiJson<{ items?: any[]; total?: number }>(
+    `/api/user-files?${params}`,
+    { method: 'GET' },
+    'fetchUserFiles',
+  );
   return {
     items: (data.items || []).map(normalize),
     total: data.total ?? 0,
@@ -71,41 +70,30 @@ export async function selectEntityFile(
   entityId: string,
   fileRole: string,
 ): Promise<EntityFile> {
-  const res = await fetch(`/api/entity-files/${fileId}/select`, {
+  const data = await apiJson<{ file: any }>(`/api/entity-files/${fileId}/select`, {
     method: 'PUT',
-    headers: getHeaders(),
     body: JSON.stringify({ entity_type: entityType, entity_id: entityId, file_role: fileRole }),
-  });
-  if (!res.ok) throw new Error(`selectEntityFile failed: ${res.status}`);
-  const data = await res.json();
+  }, 'selectEntityFile');
   return normalize(data.file);
 }
 
 export async function deleteEntityFile(fileId: string): Promise<void> {
-  const res = await fetch(`/api/entity-files/${fileId}`, {
+  await apiJson<{ success: boolean }>(`/api/entity-files/${fileId}`, {
     method: 'DELETE',
-    headers: getHeaders(),
-  });
-  if (!res.ok) throw new Error(`deleteEntityFile failed: ${res.status}`);
+  }, 'deleteEntityFile');
 }
 
 export async function hardDeleteEntityFile(fileId: string): Promise<{ freed_bytes: number }> {
-  const res = await fetch(`/api/entity-files/${fileId}/hard`, {
+  return apiJson<{ freed_bytes: number }>(`/api/entity-files/${fileId}/hard`, {
     method: 'DELETE',
-    headers: getHeaders(),
-  });
-  if (!res.ok) throw new Error(`hardDeleteEntityFile failed: ${res.status}`);
-  return res.json();
+  }, 'hardDeleteEntityFile');
 }
 
 export async function hardDeleteEntityFiles(fileIds: string[]): Promise<{ deleted: number; freed_bytes: number; errors: string[] }> {
-  const res = await fetch('/api/entity-files/hard-delete-batch', {
+  return apiJson<{ deleted: number; freed_bytes: number; errors: string[] }>('/api/entity-files/hard-delete-batch', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify({ file_ids: fileIds }),
-  });
-  if (!res.ok) throw new Error(`hardDeleteEntityFiles failed: ${res.status}`);
-  return res.json();
+  }, 'hardDeleteEntityFiles');
 }
 
 export async function linkEntityFile(
@@ -115,16 +103,13 @@ export async function linkEntityFile(
   fileRole: string,
   isSelected: boolean = false,
 ): Promise<EntityFile> {
-  const res = await fetch('/api/entity-files/link', {
+  const data = await apiJson<{ file: any }>('/api/entity-files/link', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify({
       file_id: fileId, entity_type: entityType,
       entity_id: entityId, file_role: fileRole, is_selected: isSelected,
     }),
-  });
-  if (!res.ok) throw new Error(`linkEntityFile failed: ${res.status}`);
-  const data = await res.json();
+  }, 'linkEntityFile');
   return normalize(data.file);
 }
 
@@ -142,16 +127,9 @@ export async function uploadEntityFile(
   if (fileRole) formData.append('file_role', fileRole);
   if (episodeId) formData.append('episode_id', episodeId);
 
-  const token = localStorage.getItem('auth_token');
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const res = await fetch('/api/entity-files/upload', {
+  const data = await apiJson<{ file_id: string; file_url: string }>('/api/entity-files/upload', {
     method: 'POST',
-    headers,
     body: formData,
-  });
-  if (!res.ok) throw new Error(`uploadEntityFile failed: ${res.status}`);
-  const data = await res.json();
+  }, 'uploadEntityFile', { includeContentType: false });
   return { fileId: data.file_id, fileUrl: data.file_url };
 }

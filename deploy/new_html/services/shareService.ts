@@ -4,9 +4,7 @@
  * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.3
  */
 
-import { handleResponse, getHeaders } from './apiService';
-
-const API_BASE = '';
+import { apiJson } from './httpClient';
 
 export type ShareResourceType = 'project' | 'media' | 'group';
 export type ShareTargetType = 'org' | 'project';
@@ -27,10 +25,7 @@ export async function listShares(
   resource_id: string,
 ): Promise<{ success: boolean; shares: ResourceShare[] }> {
   const qs = new URLSearchParams({ resource_type, resource_id });
-  const resp = await fetch(`${API_BASE}/api/shares?${qs.toString()}`, {
-    method: 'GET', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'listShares');
+  return apiJson(`/api/shares?${qs.toString()}`, { method: 'GET' }, 'listShares');
 }
 
 export async function createShare(body: {
@@ -39,15 +34,12 @@ export async function createShare(body: {
   share_target_type: ShareTargetType;
   share_target_id: string;
 }): Promise<{ success: boolean; share: ResourceShare }> {
-  const resp = await fetch(`${API_BASE}/api/shares`, {
-    method: 'POST', headers: getHeaders(), body: JSON.stringify(body),
-  });
-  return handleResponse(resp, 'createShare');
+  return apiJson('/api/shares', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, 'createShare');
 }
 
 export async function deleteShare(share_id: string): Promise<{ success: boolean }> {
-  const resp = await fetch(`${API_BASE}/api/shares/${share_id}`, {
-    method: 'DELETE', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'deleteShare');
+  return apiJson(`/api/shares/${share_id}`, { method: 'DELETE' }, 'deleteShare');
 }

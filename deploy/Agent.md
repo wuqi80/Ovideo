@@ -1,5 +1,25 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Frontend Service Http Client Consolidation
+
+### Changes
+
+- Extended `new_html/services/httpClient.ts`:
+  - added `buildAuthHeaders()` for shared authenticated headers
+  - added `includeContentType: false` support so FormData uploads keep the browser-generated multipart boundary
+  - added `apiBlob()` for authenticated binary downloads
+- Migrated additional frontend business services to the shared client:
+  - `new_html/services/videoReverseService.ts`
+  - `new_html/services/shareService.ts`
+  - `new_html/services/entityFileService.ts`
+  - `new_html/services/mediaLibraryService.ts`
+- Updated `scripts/check_route_contract.py` with `frontend_http_client_checks` so migrated services cannot regress to local token reads, manual `Authorization` headers, direct `fetch()`, or duplicate `handleResponse` plumbing.
+
+### Notes
+
+- This continues reducing frontend API-call sprawl before provider/API replacement work. JSON calls, FormData uploads, and Blob downloads now share the same auth/error path for these services.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Frontend AI Provider Http Client Consolidation
 
 ### Changes

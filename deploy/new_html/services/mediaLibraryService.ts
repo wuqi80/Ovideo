@@ -4,9 +4,7 @@
  * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
  */
 
-import { handleResponse, getHeaders } from './apiService';
-
-const API_BASE = '';
+import { apiBlob, apiJson } from './httpClient';
 
 export type MediaItemType = 'image' | 'video' | 'audio' | 'text' | 'other';
 export type PermissionScope = 'private' | 'project' | 'team' | 'public_link';
@@ -131,19 +129,15 @@ function buildQuery(params: Record<string, any>): string {
 
 export async function listMediaItems(params: ListItemsParams = {}): Promise<ListItemsResponse> {
   const qs = buildQuery(params);
-  const resp = await fetch(`${API_BASE}/api/media-library/items${qs}`, {
+  return apiJson(`/api/media-library/items${qs}`, {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'listMediaItems');
+  }, 'listMediaItems');
 }
 
 export async function getMediaItem(libraryItemId: string): Promise<{ success: boolean; item: MediaLibraryItem }> {
-  const resp = await fetch(`${API_BASE}/api/media-library/items/${libraryItemId}`, {
+  return apiJson(`/api/media-library/items/${libraryItemId}`, {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'getMediaItem');
+  }, 'getMediaItem');
 }
 
 export async function uploadMediaItem(file: File, options: UploadOptions = {}): Promise<{
@@ -165,58 +159,41 @@ export async function uploadMediaItem(file: File, options: UploadOptions = {}): 
   if (options.orgId) form.append('org_id', options.orgId);
   if (options.folderId) form.append('folder_id', options.folderId);
 
-  const headers: HeadersInit = {};
-  const token = localStorage.getItem('auth_token');
-  if (token) (headers as any).Authorization = `Bearer ${token}`;
-
-  const resp = await fetch(`${API_BASE}/api/media-library/upload`, {
+  return apiJson('/api/media-library/upload', {
     method: 'POST',
-    headers,
     body: form,
-  });
-  return handleResponse(resp, 'uploadMediaItem');
+  }, 'uploadMediaItem', { includeContentType: false });
 }
 
 export async function updateMediaItem(
   libraryItemId: string,
   payload: UpdateItemPayload,
 ): Promise<{ success: boolean; item: MediaLibraryItem }> {
-  const resp = await fetch(`${API_BASE}/api/media-library/items/${libraryItemId}`, {
+  return apiJson(`/api/media-library/items/${libraryItemId}`, {
     method: 'PATCH',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'updateMediaItem');
+  }, 'updateMediaItem');
 }
 
 export async function deleteMediaItem(libraryItemId: string, reason?: string): Promise<{ success: boolean }> {
   const qs = reason ? `?${new URLSearchParams({ reason }).toString()}` : '';
-  const resp = await fetch(`${API_BASE}/api/media-library/items/${libraryItemId}${qs}`, {
+  return apiJson(`/api/media-library/items/${libraryItemId}${qs}`, {
     method: 'DELETE',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'deleteMediaItem');
+  }, 'deleteMediaItem');
 }
 
 export async function useMediaItem(libraryItemId: string, payload: UseItemPayload): Promise<{ success: boolean; usage: any }> {
-  const resp = await fetch(`${API_BASE}/api/media-library/items/${libraryItemId}/use`, {
+  return apiJson(`/api/media-library/items/${libraryItemId}/use`, {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'useMediaItem');
+  }, 'useMediaItem');
 }
 
 export async function batchDownloadMediaItems(libraryItemIds: string[]): Promise<Blob> {
-  const resp = await fetch(`${API_BASE}/api/media-library/batch-download`, {
+  return apiBlob('/api/media-library/batch-download', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify({ library_item_ids: libraryItemIds }),
-  });
-  if (!resp.ok) {
-    throw new Error(`batchDownloadMediaItems failed (${resp.status})`);
-  }
-  return await resp.blob();
+  }, 'batchDownloadMediaItems');
 }
 
 // ============================================
@@ -225,11 +202,9 @@ export async function batchDownloadMediaItems(libraryItemIds: string[]): Promise
 
 export async function listMediaFolders(projectId: string): Promise<{ success: boolean; folders: MediaFolder[] }> {
   const qs = buildQuery({ project_id: projectId });
-  const resp = await fetch(`${API_BASE}/api/media-library/folders${qs}`, {
+  return apiJson(`/api/media-library/folders${qs}`, {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'listMediaFolders');
+  }, 'listMediaFolders');
 }
 
 export async function createMediaFolder(payload: {
@@ -238,30 +213,24 @@ export async function createMediaFolder(payload: {
   parent_folder_id?: string | null;
   folder_order?: number;
 }): Promise<{ success: boolean; folder: MediaFolder }> {
-  const resp = await fetch(`${API_BASE}/api/media-library/folders`, {
+  return apiJson('/api/media-library/folders', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'createMediaFolder');
+  }, 'createMediaFolder');
 }
 
 export async function updateMediaFolder(
   folderId: string,
   payload: { name?: string; parent_folder_id?: string | null; folder_order?: number },
 ): Promise<{ success: boolean; folder: MediaFolder }> {
-  const resp = await fetch(`${API_BASE}/api/media-library/folders/${folderId}`, {
+  return apiJson(`/api/media-library/folders/${folderId}`, {
     method: 'PATCH',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'updateMediaFolder');
+  }, 'updateMediaFolder');
 }
 
 export async function deleteMediaFolder(folderId: string): Promise<{ success: boolean }> {
-  const resp = await fetch(`${API_BASE}/api/media-library/folders/${folderId}`, {
+  return apiJson(`/api/media-library/folders/${folderId}`, {
     method: 'DELETE',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'deleteMediaFolder');
+  }, 'deleteMediaFolder');
 }

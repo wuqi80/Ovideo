@@ -2532,6 +2532,57 @@ def check_frontend_ai_proxy_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_http_client_contract(root: Path) -> int:
+    """Selected frontend services should share auth/error handling via httpClient."""
+    new_html = root / "new_html"
+    http_client = new_html / "services" / "httpClient.ts"
+    migrated_services = [
+        new_html / "services" / "videoReverseService.ts",
+        new_html / "services" / "shareService.ts",
+        new_html / "services" / "entityFileService.ts",
+        new_html / "services" / "mediaLibraryService.ts",
+    ]
+
+    required_snippets = [
+        (http_client, "export function buildAuthHeaders("),
+        (http_client, "includeContentType?: boolean"),
+        (http_client, "export async function apiBlob("),
+        (new_html / "services" / "entityFileService.ts", "{ includeContentType: false }"),
+        (new_html / "services" / "mediaLibraryService.ts", "{ includeContentType: false }"),
+        (new_html / "services" / "mediaLibraryService.ts", "apiBlob('/api/media-library/batch-download'"),
+    ]
+    forbidden_snippets = [
+        "function getHeaders",
+        "const getHeaders",
+        "localStorage.getItem('auth_token')",
+        'localStorage.getItem("auth_token")',
+        "Authorization:",
+        "'Authorization'",
+        '"Authorization"',
+        "Bearer ",
+        "handleResponse",
+        "fetch(",
+    ]
+
+    checks = 0
+    for path, snippet in required_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing frontend httpClient contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+
+    for path in migrated_services:
+        text = path.read_text(encoding="utf-8")
+        if "./httpClient" not in text:
+            fail(f"Frontend service must use shared httpClient: {path.relative_to(root)}")
+        checks += 1
+        for snippet in forbidden_snippets:
+            if snippet in text:
+                fail(f"Frontend service has duplicated request/auth logic in {path.relative_to(root)}: {snippet}")
+            checks += 1
+    return checks
+
+
 def check_frontend_lazy_video_contract(root: Path) -> int:
     lazy_video = root / "new_html" / "components" / "LazyVideo.tsx"
     video_page = root / "new_html" / "components" / "VideoPage.tsx"
@@ -2615,6 +2666,7 @@ def main() -> int:
     materials_lightweight_storyboard_checks = check_materials_lightweight_storyboard_contract(root)
     api_provider_runtime_model_checks = check_api_provider_runtime_model_contract(root)
     frontend_ai_proxy_checks = check_frontend_ai_proxy_contract(root)
+    frontend_http_client_checks = check_frontend_http_client_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
@@ -2667,6 +2719,7 @@ def main() -> int:
     print(f"  materials_lightweight_storyboard_checks={materials_lightweight_storyboard_checks}")
     print(f"  api_provider_runtime_model_checks={api_provider_runtime_model_checks}")
     print(f"  frontend_ai_proxy_checks={frontend_ai_proxy_checks}")
+    print(f"  frontend_http_client_checks={frontend_http_client_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
