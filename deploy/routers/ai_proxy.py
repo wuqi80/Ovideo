@@ -30,7 +30,7 @@ from services.ai_proxy_service import (
     generate_doubao_images as proxy_generate_doubao_images,
     generate_gemini_images as proxy_generate_gemini_images,
     generate_gpt_images as proxy_generate_gpt_images,
-    generate_gemini_text,
+    generate_gemini_text_result,
     stream_deepseek_chat,
 )
 from utils.image_reference import storage_path_safe, to_doubao_image_input
@@ -131,11 +131,12 @@ def create_ai_proxy_router(
     async def gemini_text_chat(request: GeminiTextRequest, username: str = Depends(require_auth_dependency)):
         """Gemini文本生成接口（代理）"""
         try:
-            content = await generate_gemini_text(
+            text_result = await generate_gemini_text_result(
                 prompt=request.prompt,
                 system_prompt=request.system_prompt,
                 temperature=request.temperature,
             )
+            content = text_result.content
 
             try:
                 from dao_task import TaskDAO
@@ -161,7 +162,12 @@ def create_ai_proxy_router(
             except Exception as save_error:
                 logger.error("⚠️ 保存Gemini文本任务失败: %s", save_error, exc_info=True)
 
-            return {"content": content}
+            return {
+                "content": content,
+                "provider": text_result.provider,
+                "model": text_result.model_name,
+                "failover": text_result.failover,
+            }
 
         except AIProxyError as e:
             logger.error("文本生成失败: %s | upstream: %s", e, e.upstream)

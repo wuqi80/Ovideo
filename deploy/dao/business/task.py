@@ -317,18 +317,26 @@ class TaskDAO:
         )
 
     @staticmethod
-    async def cleanup_stale(hours: int = 24) -> int:
+    async def cleanup_stale(hours: int = 24, limit: int = 50) -> int:
         """将超时的 pending/queued/processing 任务标记为 failed"""
         db = get_db_manager()
         if not db:
             return 0
+        limit = max(1, min(int(limit or 50), 500))
         result = await db.execute("""
+            WITH stale_tasks AS (
+                SELECT task_id
+                FROM tasks
+                WHERE status IN ('pending', 'queued', 'processing')
+                  AND created_at < NOW() - INTERVAL '1 hour' * $1
+                ORDER BY created_at ASC
+                LIMIT $2
+            )
             UPDATE tasks SET status = 'failed',
                 error_message = 'Auto-cleanup: stale task exceeded timeout',
-                completed_at = NOW()
-            WHERE status IN ('pending', 'queued', 'processing')
-              AND created_at < NOW() - INTERVAL '1 hour' * $1
-        """, hours)
+                completed_at = COALESCE(started_at, created_at)
+            WHERE task_id IN (SELECT task_id FROM stale_tasks)
+        """, hours, limit)
         count = int(result.split()[-1]) if result else 0
         return count
 

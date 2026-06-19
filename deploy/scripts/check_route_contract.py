@@ -860,6 +860,27 @@ def check_task_notification_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_task_stale_cleanup_notification_contract(root: Path) -> int:
+    """Auto-cleaned stale tasks must not create a recent notification burst."""
+    task_dao_path = root / "dao" / "business" / "task.py"
+    task_notifications_path = root / "routers" / "task_notifications.py"
+    task_dao_text = task_dao_path.read_text(encoding="utf-8")
+    task_notifications_text = task_notifications_path.read_text(encoding="utf-8")
+
+    marker = "Auto-cleanup: stale task exceeded timeout"
+    if "async def cleanup_stale(hours: int = 24, limit: int = 50)" not in task_dao_text:
+        fail("TaskDAO.cleanup_stale must keep a bounded batch limit")
+    if "LIMIT $2" not in task_dao_text:
+        fail("TaskDAO.cleanup_stale must update stale tasks in bounded batches")
+    if "completed_at = NOW()" in task_dao_text:
+        fail("TaskDAO.cleanup_stale must not stamp stale tasks as recently completed")
+    if "completed_at = COALESCE(started_at, created_at)" not in task_dao_text:
+        fail("TaskDAO.cleanup_stale must preserve old completion time for auto-cleaned stale tasks")
+    if task_notifications_text.count(marker) < 2:
+        fail("/api/tasks/notifications must filter auto-cleaned stale task failures from both queries")
+    return 2
+
+
 def check_fallback_static_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     fallback_static_path = root / "routers" / "fallback_static.py"
@@ -1817,6 +1838,7 @@ def main() -> int:
     workspace_route_handlers = check_workspace_routes_extracted(root)
     task_route_handlers = check_task_routes_extracted(root)
     task_notification_route_handlers = check_task_notification_routes_extracted(root)
+    task_stale_cleanup_checks = check_task_stale_cleanup_notification_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -1858,6 +1880,7 @@ def main() -> int:
     print(f"  workspace_route_handlers={workspace_route_handlers}")
     print(f"  task_route_handlers={task_route_handlers}")
     print(f"  task_notification_route_handlers={task_notification_route_handlers}")
+    print(f"  task_stale_cleanup_checks={task_stale_cleanup_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

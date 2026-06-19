@@ -59,8 +59,10 @@ async def run_case(
     health_rows: list[dict[str, Any]],
     expected_health_scope: list[str],
     expected_url: str,
+    expected_provider: str,
     expected_model: str,
     expected_auth: str,
+    expected_failover_active: bool,
 ) -> None:
     calls: list[dict[str, Any]] = []
     health_scope_calls: list[list[str]] = []
@@ -80,13 +82,21 @@ async def run_case(
     try:
         for key, value in env.items():
             os.environ[key] = value
-        text = await proxy.generate_gemini_text(prompt="hello", system_prompt="system", temperature=0.3)
+        result = await proxy.generate_gemini_text_result(prompt="hello", system_prompt="system", temperature=0.3)
     finally:
         proxy.list_cached_provider_health = original_health
         proxy.requests.post = original_post
 
-    if text != "ok":
-        fail(f"Unexpected generated text: {text}")
+    if result.content != "ok":
+        fail(f"Unexpected generated text: {result.content}")
+    if result.provider != expected_provider:
+        fail(f"Unexpected provider metadata: {result.provider} != {expected_provider}")
+    if result.model_name != expected_model:
+        fail(f"Unexpected model metadata: {result.model_name} != {expected_model}")
+    if bool(result.failover.get("active")) is not expected_failover_active:
+        fail(f"Unexpected failover metadata: {result.failover}")
+    if result.failover.get("selected_provider") != expected_provider:
+        fail(f"Unexpected selected_provider metadata: {result.failover}")
     if len(calls) != 1:
         fail(f"Expected one HTTP call, got {len(calls)}")
     if health_scope_calls != [expected_health_scope]:
@@ -132,8 +142,10 @@ async def main() -> int:
             ],
             expected_health_scope=["gemini-text", "deepseek"],
             expected_url="https://api.deepseek.com/chat/completions",
+            expected_provider="deepseek",
             expected_model="deepseek-reasoner",
             expected_auth="Bearer deepseek-key",
+            expected_failover_active=True,
         )
 
     with EnvGuard(managed_env):
@@ -149,8 +161,10 @@ async def main() -> int:
             ],
             expected_health_scope=["gemini-text", "deepseek"],
             expected_url="https://api.laozhang.ai/v1/chat/completions",
+            expected_provider="gemini-text",
             expected_model="gemini-2.5-flash",
             expected_auth="Bearer gemini-key",
+            expected_failover_active=False,
         )
 
     print("AI proxy failover contract OK")

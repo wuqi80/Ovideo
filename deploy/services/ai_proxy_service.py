@@ -61,6 +61,14 @@ class GptImageReferenceInput:
     mime_type: str
 
 
+@dataclass(frozen=True)
+class TextGenerationResult:
+    content: str
+    provider: str
+    model_name: str
+    failover: Dict[str, Any]
+
+
 DEEPSEEK_SYSTEM_PROMPT = "You are a helpful assistant for storyboard generation tasks."
 
 
@@ -330,14 +338,14 @@ def stream_deepseek_chat(
         on_complete("".join(full_content))
 
 
-async def generate_gemini_text(
+async def generate_gemini_text_result(
     *,
     prompt: str,
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
     model: str = "gemini-2.5-flash",
-) -> str:
-    config, _failover = await resolve_ai_proxy_provider(
+) -> TextGenerationResult:
+    config, failover = await resolve_ai_proxy_provider(
         "gemini-text",
         model,
     )
@@ -384,7 +392,29 @@ async def generate_gemini_text(
         logger.error("Gemini text response JSON parse failed: %s", e, exc_info=True)
         raise AIProxyUpstreamError("文本生成服务响应格式异常") from e
 
-    return result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    return TextGenerationResult(
+        content=content,
+        provider=config.provider,
+        model_name=config.model_name or model,
+        failover=failover,
+    )
+
+
+async def generate_gemini_text(
+    *,
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    temperature: float = 1.0,
+    model: str = "gemini-2.5-flash",
+) -> str:
+    result = await generate_gemini_text_result(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        temperature=temperature,
+        model=model,
+    )
+    return result.content
 
 
 def normalize_gemini_image_model(model: str) -> str:

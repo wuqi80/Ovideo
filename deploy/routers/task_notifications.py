@@ -100,6 +100,7 @@ def create_task_notifications_router(
                     FROM tasks
                     WHERE user_id = $1 AND status IN ('completed', 'failed')
                       AND completed_at > $2
+                      AND COALESCE(error_message, '') <> 'Auto-cleanup: stale task exceeded timeout'
                     ORDER BY completed_at DESC
                     LIMIT 20
                 """
@@ -111,6 +112,7 @@ def create_task_notifications_router(
                            created_at, completed_at, result_data, task_data
                     FROM tasks
                     WHERE user_id = $1 AND status IN ('completed', 'failed')
+                      AND COALESCE(error_message, '') <> 'Auto-cleanup: stale task exceeded timeout'
                     ORDER BY completed_at DESC
                     LIMIT 20
                 """

@@ -1,5 +1,69 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 Stale Task Notification Storm Fix
+
+### Incident
+
+- A production user observed many model generation failure notifications appearing at once.
+- Server logs showed the direct cause:
+  - `2026-06-19 09:56:50 UTC`
+  - `Task stale reaper marked 131 stale tasks as failed (threshold=24h)`
+- The cleanup set old task `completed_at` to `NOW()`, so `/api/tasks/notifications` treated historical stale tasks as fresh failures.
+
+### Changes
+
+- Updated `deploy/dao/business/task.py`:
+  - `TaskDAO.cleanup_stale()` now runs in bounded batches (`limit=50`, capped at 500)
+  - auto-cleaned stale tasks keep an old completion timestamp via `COALESCE(started_at, created_at)` instead of `NOW()`
+- Updated `deploy/routers/task_notifications.py`:
+  - `/api/tasks/notifications` filters `Auto-cleanup: stale task exceeded timeout` rows from both initial and incremental notification queries
+- Updated `deploy/scripts/check_route_contract.py`:
+  - added `task_stale_cleanup_checks=2`
+  - contract prevents reintroducing recent-notification bursts from stale cleanup
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/dao/business/task.py deploy/routers/task_notifications.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - redline diff check confirmed no changes under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py`
+
+### Notes
+
+- `cluster_main.py` was intentionally not changed. The stale reaper startup loop remains there for now; this fix changes the DAO cleanup semantics and notification filtering.
+- Separate follow-up: `systemctl restart drama` currently waits 90 seconds before SIGKILL, causing a temporary 502 window. A graceful shutdown fix should be handled separately.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Gemini Text Failover Response Metadata
+
+### Changes
+
+- Added `TextGenerationResult` and `generate_gemini_text_result()` in `deploy/services/ai_proxy_service.py`.
+- Kept the old `generate_gemini_text()` string-return wrapper for compatibility.
+- Updated `POST /api/gemini/text` in `deploy/routers/ai_proxy.py` to keep returning `content` and additionally expose:
+  - `provider`
+  - `model`
+  - `failover`
+- Updated `deploy/scripts/check_ai_proxy_failover.py` to verify call-level metadata:
+  - missing/error `gemini-text` falls back to `deepseek`
+  - healthy primary stays on `gemini-text`
+  - response metadata matches the selected provider/model
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/services/ai_proxy_service.py deploy/routers/ai_proxy.py deploy/scripts/check_ai_proxy_failover.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_ai_proxy_failover.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - redline diff check confirmed no changes under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, `core/worker.py`, or `cluster_main.py`
+
+### Notes
+
+- This does not change frontend behavior because existing callers read `data.content`; the extra fields are diagnostic and backward-compatible.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 API Config Hot-Reload Observability Contract
 
 ### Changes
