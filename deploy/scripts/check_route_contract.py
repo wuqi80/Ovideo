@@ -320,6 +320,30 @@ def check_admin_api_config_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_cluster_main_has_no_direct_http_routes(root: Path) -> None:
+    cluster_main_path = root / "cluster_main.py"
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    legacy_reference_names = {"get_admin_users", "update_user_permissions"}
+
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name in legacy_reference_names:
+            violations.append(f"{cluster_main_path.name}:{node.lineno} legacy reference function {node.name}")
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "app" and method.lower() in OPENAPI_METHODS:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} direct route decorator @{name}")
+
+    if violations:
+        fail("cluster_main.py should only compose routers, not own direct HTTP routes or legacy admin references:\n" + "\n".join(violations))
+
+
 def check_prompt_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     prompt_routes_path = root / "routers" / "prompts.py"
@@ -864,6 +888,7 @@ def main() -> int:
 
     root = deploy_root()
     external_api_files, external_api_routes = check_external_api_has_no_fastapi_routes(root)
+    check_cluster_main_has_no_direct_http_routes(root)
     api_config_route_handlers = check_admin_api_config_routes_extracted(root)
     prompt_route_handlers = check_prompt_routes_extracted(root)
     cluster_status_route_handlers = check_cluster_status_routes_extracted(root)
