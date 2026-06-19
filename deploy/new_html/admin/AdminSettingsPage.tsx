@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     Activity,
     AlertCircle,
@@ -842,6 +842,7 @@ const ApiConfigCard: React.FC<{
 };
 
 const ApiConfigPanel: React.FC = () => {
+    const navigate = useNavigate();
     const [configs, setConfigs] = useState<ApiConfig[]>([]);
     const [providers, setProviders] = useState<ProviderMeta[]>([]);
     const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus[]>([]);
@@ -1330,13 +1331,14 @@ const ApiConfigPanel: React.FC = () => {
                             <ServerCog className="w-3.5 h-3.5" />
                             导入预设
                         </button>
-                        <a
-                            href="/admin/settings?item=legacy-apiconfig"
+                        <button
+                            type="button"
+                            onClick={() => navigate('/admin/settings?item=legacy-apiconfig')}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
                             旧版编辑
-                        </a>
+                        </button>
                     </div>
                 </header>
 

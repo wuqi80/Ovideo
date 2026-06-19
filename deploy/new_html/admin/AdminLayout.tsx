@@ -29,9 +29,10 @@ export const AdminLayout: React.FC = () => {
         const token = getAdminToken();
         const username = getAdminUsername();
         if (!token || !isAdminWhitelisted(username)) {
-            navigate('/admin/login', {
+            const from = `${location.pathname}${location.search}${location.hash}`;
+            navigate(`/admin/login?redirect=${encodeURIComponent(from)}`, {
                 replace: true,
-                state: { from: `${location.pathname}${location.search}${location.hash}` },
+                state: { from },
             });
         }
     }, [navigate, location.pathname, location.search, location.hash]);

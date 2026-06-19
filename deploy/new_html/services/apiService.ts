@@ -28,7 +28,10 @@ export async function handleResponse(response: Response, apiName: string = 'API'
                 sessionStorage.removeItem('admin_session_username');
                 sessionStorage.removeItem('admin_session_login_at');
             } catch {}
-            if (!isLoginPage) window.location.href = '/admin/login';
+            if (!isLoginPage) {
+                const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                window.location.href = `/admin/login?redirect=${encodeURIComponent(from)}`;
+            }
         } else {
             localStorage.removeItem('auth_token');
             localStorage.removeItem('username');

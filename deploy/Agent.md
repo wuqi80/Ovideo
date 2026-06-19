@@ -1599,8 +1599,62 @@
 
 ### Server Deployment
 
-- Pending deployment and online smoke verification.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_generation_router_20260619-041449`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/generation.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/generation.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `generation_route_handlers=12`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `POST https://mecha.one/api/login` -> HTTP `200`, token returned
+  - `POST https://mecha.one/api/generate/image` with `engine=gemini` -> HTTP `200`, existing frontend-direct message
+  - `POST https://mecha.one/api/generate/image` with `engine=comfyui` and no refs -> HTTP `400`, existing validation detail
+  - `POST https://mecha.one/api/generate/comfyui-workflow` with invalid workflow -> HTTP `400`
+  - `POST https://mecha.one/api/generate/matting` with invalid matting type -> HTTP `400`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
 
 ### Notes
 
 - No behavior change is intended; this moves the generation task HTTP handlers only. Redline task queue/core/worker/pipeline files were not modified.
+
+## 2026-06-19 Admin Legacy API Editor Redirect Fix
+
+### Changes
+
+- Fixed the API provider management page's `旧版编辑` action so it uses React Router navigation instead of a full-page anchor reload.
+- Admin auth redirects now preserve the attempted admin URL in `/admin/login?redirect=...`.
+- Admin login now reads `redirect` from the URL before falling back to React Router state, so deep links survive refreshes and expired sessions.
+- Shared admin 401 handling in `new_html/services/apiService.ts` now redirects to `/admin/login?redirect=...` instead of dropping the user at a generic admin login page.
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_legacy_redirect_20260619-042502`
+- Uploaded to server:
+  - `/home/Administrator/deploy/new_html/admin/AdminSettingsPage.tsx`
+  - `/home/Administrator/deploy/new_html/admin/AdminLayout.tsx`
+  - `/home/Administrator/deploy/new_html/admin/AdminLoginPage.tsx`
+  - `/home/Administrator/deploy/new_html/services/apiService.ts`
+- Server frontend build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - result: `vite build` completed successfully
+- Online checks passed:
+  - `GET https://mecha.one/admin/settings?item=apiconfig` -> HTTP `200`
+  - `GET https://mecha.one/admin/settings?item=legacy-apiconfig` -> HTTP `200`
+  - `GET https://mecha.one/admin/login?redirect=%2Fadmin%2Fsettings%3Fitem%3Dlegacy-apiconfig` -> HTTP `200`
+  - Built assets contain the new `redirect=` login flow and `legacy-apiconfig` navigation path.
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- Local Vite build could not run because this Windows workspace is missing Rollup's optional native package `@rollup/rollup-win32-x64-msvc`; the production Linux server build passed.

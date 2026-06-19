@@ -13,6 +13,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldCheck, Lock, User as UserIcon, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { setAdminSession, isAdminWhitelisted, getAdminToken, getAdminUsername } from './adminAuth';
 
+function getLoginRedirect(location: ReturnType<typeof useLocation>): string {
+    const redirect = new URLSearchParams(location.search).get('redirect');
+    const from = (location.state as any)?.from;
+    const target = redirect || from || '/admin';
+    return target.startsWith('/admin') && !target.startsWith('/admin/login') ? target : '/admin';
+}
+
 export const AdminLoginPage: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -26,10 +33,9 @@ export const AdminLoginPage: React.FC = () => {
         const token = getAdminToken();
         const u = getAdminUsername();
         if (token && isAdminWhitelisted(u)) {
-            const from = (location.state as any)?.from || '/admin';
-            navigate(from, { replace: true });
+            navigate(getLoginRedirect(location), { replace: true });
         }
-    }, [navigate, location.state]);
+    }, [navigate, location]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -61,8 +67,7 @@ export const AdminLoginPage: React.FC = () => {
                 return;
             }
             setAdminSession(data.token, respUsername);
-            const from = (location.state as any)?.from || '/admin';
-            navigate(from, { replace: true });
+            navigate(getLoginRedirect(location), { replace: true });
         } catch (err: any) {
             setError(err?.message || '网络异常');
         } finally {
