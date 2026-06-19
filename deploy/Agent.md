@@ -1925,6 +1925,99 @@
 - No frontend build was required.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
+## 2026-06-19 Admin Legacy API Editor Cache Refresh
+
+### Changes
+
+- Bumped the legacy API editor embed version in `deploy/new_html/admin/AdminSettingsPage.tsx` from `20260619a` to `20260619b`.
+- Bumped legacy static admin asset versions in `deploy/admin/index.html`:
+  - `style.css?v=20260619b`
+  - `app.js?v=20260619b`
+- Added no-cache headers for `/admin-legacy*` responses in `deploy/cluster_main.py` so cached legacy HTML/JS cannot keep sending users back through the old login flow.
+
+### Verification
+
+- Local backend compile passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py`
+- Local frontend build was not usable because the local Windows `node_modules` is missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package; server build was used instead.
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_legacy_cache_20260619-070923`
+- Uploaded to server:
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/admin/index.html`
+  - `/home/Administrator/deploy/new_html/admin/AdminSettingsPage.tsx`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile cluster_main.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - emitted `dist/assets/AdminSettingsPage-K3xr03qi.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `GET https://mecha.one/admin/settings?item=legacy-apiconfig` -> HTTP `200`
+  - `HEAD https://mecha.one/admin-legacy/?v=check` returns `cache-control: no-cache, no-store, must-revalidate`
+  - `AdminSettingsPage-K3xr03qi.js` contains `20260619b`, `/admin/settings?item=legacy-apiconfig`, and `/admin-legacy/?embed=1`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a cache hardening patch for the already-correct admin shell redirect path; it prevents stale legacy chunks from keeping the old behavior alive in browsers.
+- The first external `/health` check immediately after restart briefly returned `502`; a retry returned HTTP `200`.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Canvas Router Extraction
+
+### Changes
+
+- Extracted 10 canvas route handlers from `deploy/api_routes.py` into `deploy/routers/canvas.py`:
+  - canvas board CRUD
+  - canvas node CRUD
+  - canvas connection create/delete
+- Kept `api_routes.py` as the compatibility registration point so the public API surface remains unchanged.
+- Reduced `api_routes.py` to 2178 lines.
+- Strengthened `deploy/scripts/check_route_contract.py`:
+  - runtime endpoints must resolve to `routers.canvas`
+  - `api_routes.py` must not reintroduce direct `/api/canvas/*` handlers
+  - `routers/canvas.py` must own exactly 10 route registrations
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/canvas.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_audio_provider_runtime.py`
+  - route result remains `openapi_paths=231`, `openapi_operations=287`, `canvas_route_handlers=10`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_canvas_router_20260619_070025`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/canvas.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/canvas.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_audio_provider_runtime.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No frontend build was required.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Script Timeline Router Extraction
 
 ### Changes
