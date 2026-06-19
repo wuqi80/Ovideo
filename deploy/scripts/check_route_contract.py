@@ -886,6 +886,8 @@ def check_task_notification_toast_dedupe_contract(root: Path) -> int:
     manager_text = (root / "new_html" / "services" / "globalTaskManager.ts").read_text(encoding="utf-8")
     context_text = (root / "new_html" / "contexts" / "TaskContext.tsx").read_text(encoding="utf-8")
     test_text = (root / "new_html" / "__tests__" / "services" / "globalTaskManager.test.ts").read_text(encoding="utf-8")
+    toast_text = (root / "new_html" / "components" / "GlobalToast.tsx").read_text(encoding="utf-8")
+    toast_test_text = (root / "new_html" / "__tests__" / "components" / "GlobalToast.test.tsx").read_text(encoding="utf-8")
 
     required_snippets = {
         "notificationBaselineReady": "global task manager tracks notification baseline",
@@ -893,10 +895,13 @@ def check_task_notification_toast_dedupe_contract(root: Path) -> int:
         "!isBaselinePoll": "baseline poll does not emit toast notifications",
         "rememberNotificationId": "transport-level task notification id dedupe",
         "seenNotificationIdsRef": "TaskContext unread count dedupes notification events",
+        "FAILURE_BURST_INDIVIDUAL_LIMIT": "GlobalToast folds failure bursts instead of rendering every failed task",
+        "failure-burst-": "GlobalToast uses a synthetic id for folded failure bursts",
         "does not toast historical failures": "unit test covers historical failure burst",
         "emits only new notification ids": "unit test covers duplicate terminal task suppression",
+        "folds failed notification bursts": "unit test covers failure burst folding",
     }
-    sources = "\n".join([manager_text, context_text, test_text])
+    sources = "\n".join([manager_text, context_text, test_text, toast_text, toast_test_text])
     missing = [
         f"{label}: missing {snippet}"
         for snippet, label in required_snippets.items()

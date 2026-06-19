@@ -11,6 +11,14 @@ interface ToastItem {
 
 const TOAST_DURATION = 6000;
 const TOAST_MAX_VISIBLE = 4;
+const FAILURE_BURST_WINDOW_MS = 10_000;
+const FAILURE_BURST_INDIVIDUAL_LIMIT = 2;
+
+interface FailureBurstState {
+  windowStart: number;
+  count: number;
+  summaryId: string | null;
+}
 
 function requestDesktopPermission() {
   if ('Notification' in window && Notification.permission === 'default') {
@@ -54,48 +62,9 @@ export const GlobalToast: React.FC<{ onNavigate?: (view: string, projectId?: str
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const shownIdsRef = useRef<Set<string>>(new Set());
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const failureBurstRef = useRef<FailureBurstState>({ windowStart: 0, count: 0, summaryId: null });
 
   useEffect(() => { requestDesktopPermission(); }, []);
-
-  useEffect(() => {
-    for (const notif of notifications) {
-      if (notif.status !== 'completed' && notif.status !== 'failed') continue;
-      if (shownIdsRef.current.has(notif.id)) continue;
-      shownIdsRef.current.add(notif.id);
-
-      const isSuccess = notif.status === 'completed';
-      playNotificationSound(isSuccess);
-      sendDesktopNotification(
-        isSuccess ? '任务完成' : '任务失败',
-        notif.message,
-        isSuccess
-      );
-
-      setToasts(prev => {
-        const next = [{ notification: notif, entering: true, exiting: false }, ...prev];
-        return next.slice(0, TOAST_MAX_VISIBLE + 2);
-      });
-
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          setToasts(prev => prev.map(t =>
-            t.notification.id === notif.id ? { ...t, entering: false } : t
-          ));
-        }, 50);
-      });
-
-      const timer = setTimeout(() => {
-        dismissToast(notif.id);
-      }, TOAST_DURATION);
-      timersRef.current.set(notif.id, timer);
-    }
-  }, [notifications]);
-
-  useEffect(() => {
-    return () => {
-      timersRef.current.forEach(t => clearTimeout(t));
-    };
-  }, []);
 
   const dismissToast = useCallback((id: string) => {
     const timer = timersRef.current.get(id);
@@ -113,8 +82,120 @@ export const GlobalToast: React.FC<{ onNavigate?: (view: string, projectId?: str
     }, 300);
   }, []);
 
+  useEffect(() => {
+    const enqueueToast = (notif: TaskNotification, notify: boolean = true) => {
+      const isSuccess = notif.status === 'completed';
+      if (notify) {
+        playNotificationSound(isSuccess);
+        sendDesktopNotification(
+          isSuccess ? '任务完成' : '任务失败',
+          notif.message,
+          isSuccess
+        );
+      }
+
+      setToasts(prev => {
+        const next = [{ notification: notif, entering: true, exiting: false }, ...prev];
+        return next.slice(0, TOAST_MAX_VISIBLE + 2);
+      });
+
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          setToasts(prev => prev.map(t =>
+            t.notification.id === notif.id ? { ...t, entering: false } : t
+          ));
+        }, 50);
+      });
+
+      const oldTimer = timersRef.current.get(notif.id);
+      if (oldTimer) clearTimeout(oldTimer);
+      const timer = setTimeout(() => {
+        dismissToast(notif.id);
+      }, TOAST_DURATION);
+      timersRef.current.set(notif.id, timer);
+    };
+
+    const upsertFailureBurstToast = (count: number, sample: TaskNotification) => {
+      const burst = failureBurstRef.current;
+      const id = burst.summaryId || `failure-burst-${burst.windowStart}`;
+      const isNewSummary = !burst.summaryId;
+      burst.summaryId = id;
+
+      const summary: TaskNotification = {
+        ...sample,
+        id,
+        status: 'failed',
+        message: `${count} 个生成任务失败，已折叠显示，请在通知面板查看详情`,
+        timestamp: Date.now(),
+      };
+
+      if (isNewSummary) {
+        playNotificationSound(false);
+        sendDesktopNotification('任务失败', summary.message, false);
+      }
+
+      setToasts(prev => {
+        const existing = prev.find(t => t.notification.id === id);
+        if (existing) {
+          return prev.map(t =>
+            t.notification.id === id
+              ? { ...t, notification: summary, exiting: false }
+              : t
+          );
+        }
+        const next = [{ notification: summary, entering: true, exiting: false }, ...prev];
+        return next.slice(0, TOAST_MAX_VISIBLE + 2);
+      });
+
+      if (isNewSummary) {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            setToasts(prev => prev.map(t =>
+              t.notification.id === id ? { ...t, entering: false } : t
+            ));
+          }, 50);
+        });
+      }
+
+      const oldTimer = timersRef.current.get(id);
+      if (oldTimer) clearTimeout(oldTimer);
+      const timer = setTimeout(() => {
+        dismissToast(id);
+      }, TOAST_DURATION);
+      timersRef.current.set(id, timer);
+    };
+
+    for (const notif of notifications) {
+      if (notif.status !== 'completed' && notif.status !== 'failed') continue;
+      if (shownIdsRef.current.has(notif.id)) continue;
+      shownIdsRef.current.add(notif.id);
+
+      if (notif.status === 'failed') {
+        const now = Date.now();
+        const burst = failureBurstRef.current;
+        if (!burst.windowStart || now - burst.windowStart > FAILURE_BURST_WINDOW_MS) {
+          failureBurstRef.current = { windowStart: now, count: 0, summaryId: null };
+        }
+        failureBurstRef.current.count += 1;
+        if (failureBurstRef.current.count > FAILURE_BURST_INDIVIDUAL_LIMIT) {
+          upsertFailureBurstToast(failureBurstRef.current.count, notif);
+          continue;
+        }
+      }
+
+      enqueueToast(notif);
+    }
+  }, [notifications, dismissToast]);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach(t => clearTimeout(t));
+    };
+  }, []);
+
   const handleClick = useCallback((notif: TaskNotification) => {
     dismissToast(notif.id);
+    if (notif.id.startsWith('failure-burst-')) return;
     dismissNotification(notif.id);
     if (onNavigate && notif.targetView) {
       onNavigate(notif.targetView, notif.targetProjectId);
