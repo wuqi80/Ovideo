@@ -41,6 +41,8 @@ GEMINI_IMAGE_LEGACY_MODELS = {
     "nanobanana",
 }
 GEMINI_IMAGE_NEW_MODEL = "gemini-3.1-flash-image-preview"
+GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash"}
+GEMINI_TTS_NEW_MODEL = "gemini-2.5-flash-preview-tts"
 
 
 def managed_api_env_keys() -> set[str]:
@@ -220,6 +222,24 @@ async def seed_default_api_providers() -> Dict[str, Any]:
                 old_name,
                 model_name,
                 GEMINI_IMAGE_NEW_MODEL,
+            )
+
+        for row in existing:
+            provider = str(_config_get(row, "provider", "") or "").strip().lower()
+            if provider != "gemini-tts":
+                continue
+            model_name = str(_config_get(row, "model_name", "") or "").strip()
+            if model_name not in GEMINI_TTS_LEGACY_MODELS:
+                continue
+
+            old_name = str(_config_get(row, "name", "") or "")
+            await ApiConfigDAO.update(_config_get(row, "config_id", ""), model_name=GEMINI_TTS_NEW_MODEL)
+            upgraded += 1
+            logger.info(
+                "Upgraded Gemini TTS API config %r from %s to %s",
+                old_name,
+                model_name,
+                GEMINI_TTS_NEW_MODEL,
             )
 
         if created or upgraded:

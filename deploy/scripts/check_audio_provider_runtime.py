@@ -20,6 +20,7 @@ def fail(message: str) -> None:
 class FakeConfig:
     api_key: str
     endpoint: str
+    model_name: str = ""
     proxy: str = ""
 
     def aiohttp_proxy(self) -> str:
@@ -72,6 +73,7 @@ def main() -> int:
         return FakeConfig(
             api_key="runtime-key",
             endpoint="https://runtime.example.test/gemini/v1beta/openai",
+            model_name="gemini-runtime-tts-model",
             proxy="http://runtime-proxy.example.test:8080",
         )
 
@@ -82,12 +84,14 @@ def main() -> int:
     finally:
         audio_provider.resolve_provider = original
 
-    if calls != [("gemini-tts", "gemini-2.0-flash")]:
+    if calls != [("gemini-tts", "")]:
         fail(f"GeminiAudioProvider did not resolve gemini-tts runtime config: {calls}")
     if provider.api_key != "runtime-key":
         fail("GeminiAudioProvider did not pick up resolved key")
     if provider.endpoint != "https://runtime.example.test/gemini/v1beta/openai":
         fail("GeminiAudioProvider did not retain resolved endpoint")
+    if provider.model_name != "gemini-runtime-tts-model":
+        fail(f"GeminiAudioProvider did not pick up resolved runtime model: {provider.model_name}")
     if provider._genai_http_options != {
         "baseUrl": "https://runtime.example.test/gemini",
         "apiVersion": "v1beta",
@@ -99,6 +103,7 @@ def main() -> int:
     print("Audio provider runtime OK")
     print("  gemini_tts_endpoint_wired=1")
     print("  gemini_tts_proxy_wired=1")
+    print("  gemini_tts_model_wired=1")
     return 0
 
 

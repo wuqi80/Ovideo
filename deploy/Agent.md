@@ -3714,3 +3714,53 @@
 
 - This addresses the user-observed burst of many "model generation failed" floating notifications without hiding actual task failures from the notification panel.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Gemini TTS Runtime Model Wiring
+
+### Changes
+
+- Updated `deploy/services/audio_provider.py` so Gemini TTS resolves `provider=gemini-tts` without passing a hardcoded model override.
+- Gemini TTS generation now sends `provider.model_name` from the runtime resolver into `google-genai` instead of hardcoding `gemini-2.5-flash-preview-tts` at the SDK call site.
+- Updated `deploy/services/api_provider_registry.py` so the Gemini TTS preset default model is `gemini-2.5-flash-preview-tts`, matching the audio-capable TTS model already required by the implementation.
+- Updated `deploy/services/api_config_runtime_loader.py` so old DB configs using `gemini-2.0-flash` for `gemini-tts` are upgraded to `gemini-2.5-flash-preview-tts` during default provider seeding.
+- Extended `deploy/scripts/check_audio_provider_runtime.py` to verify endpoint, proxy, and runtime model wiring.
+- Extended `deploy/tests/test_audio_provider.py` with a no-network fake `google.genai` test proving `_call_gemini()` uses the resolved runtime model.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile services/audio_provider.py services/api_provider_registry.py services/api_config_runtime_loader.py scripts/check_audio_provider_runtime.py tests/test_audio_provider.py`
+  - `deploy/.venv/Scripts/python.exe -m pytest tests/test_audio_provider.py -q` -> `8/8`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe scripts/check_audio_provider_runtime.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - audio runtime contract now reports `gemini_tts_model_wired=1`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_gemini_tts_runtime_model_20260619_213253/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/services/audio_provider.py`
+  - `/home/Administrator/deploy/services/api_provider_registry.py`
+  - `/home/Administrator/deploy/services/api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_audio_provider_runtime.py`
+  - `/home/Administrator/deploy/tests/test_audio_provider.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile services/audio_provider.py services/api_provider_registry.py services/api_config_runtime_loader.py scripts/check_audio_provider_runtime.py tests/test_audio_provider.py`
+  - `.venv/bin/python -m pytest tests/test_audio_provider.py -q` -> `8/8`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_audio_provider_runtime.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `GEMINI_MODEL` -> `gemini-runtime-tts-model-smoke`, source `GEMINI_MODEL`
+
+### Notes
+
+- This continues the API management platform goal: Gemini TTS model selection is now controlled by the same backend API config/runtime resolver path as text/image providers.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

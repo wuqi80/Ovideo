@@ -3,6 +3,7 @@
 音频 Provider 测试
 """
 import pytest
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 
@@ -37,6 +38,69 @@ async def test_gemini_sfx_music_not_supported():
         await provider.generate_sfx("explosion")
     with pytest.raises(NotImplementedError):
         await provider.generate_music("紧张悬疑的背景音乐", duration_ms=30000)
+
+
+async def test_gemini_tts_uses_runtime_model(monkeypatch, tmp_path):
+    import sys
+    import services.audio_provider as audio_module
+    from audio_provider import GeminiAudioProvider
+
+    captured = {}
+
+    class FakeModels:
+        async def generate_content(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                candidates=[
+                    SimpleNamespace(
+                        content=SimpleNamespace(
+                            parts=[
+                                SimpleNamespace(
+                                    inline_data=SimpleNamespace(data=b"\x00" * 4800)
+                                )
+                            ]
+                        )
+                    )
+                ]
+            )
+
+    class FakeClient:
+        def __init__(self, api_key, http_options=None):
+            captured["api_key"] = api_key
+            captured["http_options"] = http_options
+            self.aio = SimpleNamespace(models=FakeModels())
+
+    fake_google = ModuleType("google")
+    fake_google.genai = SimpleNamespace(
+        Client=FakeClient,
+        types=SimpleNamespace(
+            GenerateContentConfig=lambda **kwargs: kwargs,
+            SpeechConfig=lambda **kwargs: kwargs,
+            VoiceConfig=lambda **kwargs: kwargs,
+            PrebuiltVoiceConfig=lambda **kwargs: kwargs,
+        ),
+    )
+
+    monkeypatch.setitem(sys.modules, "google", fake_google)
+    monkeypatch.setattr(audio_module, "AUDIO_UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        audio_module,
+        "resolve_provider",
+        lambda provider, model_name=None: SimpleNamespace(
+            api_key="runtime-gemini-key",
+            endpoint="https://runtime.example.test/gemini/v1beta/openai",
+            model_name="gemini-runtime-tts-model",
+            aiohttp_proxy=lambda: None,
+        ),
+    )
+
+    provider = GeminiAudioProvider()
+    result = await provider._call_gemini("hello", "speech")
+
+    assert result["audio_url"].startswith("/storage/audio/speech_")
+    assert provider.model_name == "gemini-runtime-tts-model"
+    assert captured["model"] == "gemini-runtime-tts-model"
+    assert captured["api_key"] == "runtime-gemini-key"
 
 
 async def test_minimax_generate_music_via_music_generate():

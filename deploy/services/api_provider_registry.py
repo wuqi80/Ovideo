@@ -325,7 +325,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "Gemini TTS (语音)",
         "provider": "gemini-tts",
-        "model_name": "gemini-2.0-flash",
+        "model_name": "gemini-2.5-flash-preview-tts",
         "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "proxy_mode": "direct",
         "category": "audio",
