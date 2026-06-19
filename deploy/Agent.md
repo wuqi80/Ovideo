@@ -28,10 +28,17 @@
   - `npm run build` could not run because `npm` is not on the local PATH.
   - direct Vite build could not run because local `node_modules` is missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
   - `tsc --noEmit` currently fails on pre-existing project-wide type issues outside this change.
+- Server deploy checks passed:
+  - synced `StoryboardGenPage.tsx`, `check_route_contract.py`, and `Agent.md` to `/home/Administrator/deploy`
+  - server `cd /home/Administrator/deploy/new_html && npm run build` succeeded
+  - generated deployed chunk `../dist/assets/StoryboardGenPage-DbNBvXf8.js`
+  - server `scripts/check_route_contract.py` reports `storyboard_paged_reload_checks=2`
+  - server `scripts/check_provider_contract.py` passed
+  - server smoke `/tmp/smoke_test.py https://mecha.one Liu3753650@` passed `9/9`
 
 ### Notes
 
-- This change is local only until the next server sync/deploy step.
+- This change is deployed on `https://mecha.one/`.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
 ## 2026-06-19 Graceful Restart Timeout Fix
