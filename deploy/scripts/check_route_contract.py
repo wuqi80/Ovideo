@@ -22,15 +22,19 @@ OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 DEFAULT_EXPECTED_PATHS = 231
 DEFAULT_EXPECTED_OPERATIONS = 287
 
-# Known legacy overlap: cluster_main still owns the old project JSON model while
-# api_routes exposes the newer DAO-backed project model. This is high coupling
-# and tracked as a later migration, so the checker allows it but reports it.
+# Known legacy overlap: routers.projects still owns the old project JSON model
+# while routers.project_core exposes the newer DAO-backed project model. This is
+# high coupling and tracked as a later migration, so the checker allows it but
+# reports it.
 ALLOWED_DUPLICATES = {
     ("/api/projects/{project_id}", "GET"),
 }
 
 EXPECTED_ENDPOINTS = {
     ("/api/login", "POST"): ("routers.auth", "login"),
+    ("/api/auth/register", "POST"): ("routers.auth_legacy", "register_user"),
+    ("/api/auth/login", "POST"): ("routers.auth_legacy", "login_user"),
+    ("/api/user/profile", "GET"): ("routers.auth_legacy", "get_user_profile"),
     ("/api/admin/stats", "GET"): ("routers.admin_compat", "get_admin_stats"),
     ("/api/admin/logs", "GET"): ("routers.admin_compat", "get_admin_logs"),
     ("/api/admin/users/create", "POST"): ("routers.admin_compat", "create_user"),
@@ -128,6 +132,8 @@ EXPECTED_ENDPOINTS = {
     ("/api/generate/auto-storyboard", "POST"): ("routers.generation", "generate_auto_storyboard"),
     ("/api/generate/multi-grid-storyboard", "POST"): ("routers.generation", "generate_multi_grid_storyboard"),
     ("/api/materials/process", "POST"): ("routers.generation", "process_material"),
+    ("/api/projects", "POST"): ("routers.project_core", "create_project"),
+    ("/api/projects", "GET"): ("routers.project_core", "get_user_projects"),
     ("/api/projects/save", "POST"): ("routers.projects", "save_project"),
     ("/api/projects/list", "GET"): ("routers.projects", "list_projects"),
     ("/api/projects/{project_id}", "GET"): ("routers.projects", "get_project"),
@@ -416,6 +422,27 @@ def check_expected_endpoints(routes: dict[tuple[str, str], list[tuple[int, str |
         _, module, name = found[0]
         if (module, name) != expected:
             fail(f"{key} endpoint changed: expected {expected}, got {(module, name)}")
+
+
+def check_api_routes_is_assembly_only(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    api_tree = parse_py_file(api_routes_path)
+    handlers: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call:
+                continue
+            name = ast_call_name(call.func)
+            owner, _, method = name.rpartition(".") if name else ("", "", "")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                handlers.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if handlers:
+        fail("api_routes.py should only assemble routers; direct route handlers remain:\n" + "\n".join(handlers))
+    return 0
 
 
 def check_admin_api_config_routes_extracted(root: Path) -> int:
@@ -971,6 +998,30 @@ def check_auth_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_auth_legacy_routes_extracted(root: Path) -> int:
+    auth_legacy_path = root / "routers" / "auth_legacy.py"
+    if not auth_legacy_path.exists():
+        fail("routers/auth_legacy.py is missing")
+
+    auth_legacy_tree = parse_py_file(auth_legacy_path)
+    route_count = 0
+    for node in ast.walk(auth_legacy_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 3:
+        fail(f"routers/auth_legacy.py should own 3 legacy auth route registrations, found {route_count}")
+    return route_count
+
+
 def check_admin_compat_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     admin_compat_path = root / "routers" / "admin_compat.py"
@@ -1064,6 +1115,30 @@ def check_project_routes_extracted(root: Path) -> int:
 
     if route_count != 7:
         fail(f"routers/projects.py should own 7 project route registrations, found {route_count}")
+    return route_count
+
+
+def check_project_core_routes_extracted(root: Path) -> int:
+    project_core_path = root / "routers" / "project_core.py"
+    if not project_core_path.exists():
+        fail("routers/project_core.py is missing")
+
+    project_core_tree = parse_py_file(project_core_path)
+    route_count = 0
+    for node in ast.walk(project_core_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 3:
+        fail(f"routers/project_core.py should own 3 DAO project route registrations, found {route_count}")
     return route_count
 
 
@@ -1733,6 +1808,7 @@ def main() -> int:
     root = deploy_root()
     external_api_files, external_api_routes = check_external_api_has_no_fastapi_routes(root)
     check_cluster_main_has_no_direct_http_routes(root)
+    api_routes_direct_handlers = check_api_routes_is_assembly_only(root)
     api_config_route_handlers = check_admin_api_config_routes_extracted(root)
     prompt_route_handlers = check_prompt_routes_extracted(root)
     cluster_status_route_handlers = check_cluster_status_routes_extracted(root)
@@ -1744,8 +1820,10 @@ def main() -> int:
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
+    auth_legacy_route_handlers = check_auth_legacy_routes_extracted(root)
     admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
+    project_core_route_handlers = check_project_core_routes_extracted(root)
     project_admin_route_handlers = check_project_admin_routes_extracted(root)
     content_version_route_handlers = check_content_version_routes_extracted(root)
     episode_route_handlers = check_episode_routes_extracted(root)
@@ -1771,6 +1849,7 @@ def main() -> int:
     print(f"  openapi_operations={operation_count}")
     print(f"  external_api_python_files={external_api_files}")
     print(f"  external_api_route_handlers={external_api_routes}")
+    print(f"  api_routes_direct_handlers={api_routes_direct_handlers}")
     print(f"  admin_api_config_route_handlers={api_config_route_handlers}")
     print(f"  prompt_route_handlers={prompt_route_handlers}")
     print(f"  cluster_status_route_handlers={cluster_status_route_handlers}")
@@ -1782,8 +1861,10 @@ def main() -> int:
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")
+    print(f"  auth_legacy_route_handlers={auth_legacy_route_handlers}")
     print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
+    print(f"  project_core_route_handlers={project_core_route_handlers}")
     print(f"  project_admin_route_handlers={project_admin_route_handlers}")
     print(f"  content_version_route_handlers={content_version_route_handlers}")
     print(f"  episode_route_handlers={episode_route_handlers}")

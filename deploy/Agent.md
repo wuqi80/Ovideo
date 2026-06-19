@@ -1,5 +1,52 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 API Routes Assembly-Only Increment
+
+### Changes
+
+- Extracted the final direct handlers from `deploy/api_routes.py`:
+  - `deploy/routers/auth_legacy.py`
+    - `POST /api/auth/register`
+    - `POST /api/auth/login`
+    - `GET /api/user/profile`
+  - `deploy/routers/project_core.py`
+    - `POST /api/projects`
+    - `GET /api/projects`
+    - `GET /api/projects/{project_id}`
+- Converted `api_routes.py` into an assembly-only router module:
+  - no direct `@router.*` route handlers remain
+  - it keeps shared auth dependency wiring and router registration
+- Updated `scripts/check_route_contract.py`:
+  - verifies `api_routes_direct_handlers=0`
+  - verifies `auth_legacy_route_handlers=3`
+  - verifies `project_core_route_handlers=3`
+  - keeps the known duplicate `GET /api/projects/{project_id}` explicit and reported
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for touched Python files
+  - `scripts/check_route_contract.py` -> `openapi_paths=231`, `openapi_operations=287`, `api_routes_direct_handlers=0`
+  - `git diff --check`
+  - redline diff check confirmed no changes under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, `core/worker.py`, or `cluster_main.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_routes_assembly_20260619-173858`
+- Server checks passed:
+  - `py_compile` for deployed files
+  - `scripts/check_route_contract.py` -> `openapi_paths=231`, `openapi_operations=287`, `api_routes_direct_handlers=0`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - `POST /api/auth/register` with public registration disabled -> HTTP `403`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- `cluster_main.py` was intentionally not modified. Its current role as startup/middleware/global exception wiring is a reasonable boundary and should not be split merely to reduce line count.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-19 Legacy File Router Extraction
 
 ### Changes

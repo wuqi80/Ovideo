@@ -4,9 +4,6 @@
 这个文件应该被导入到cluster_main.py中
 """
 from fastapi import APIRouter, HTTPException, Depends, Request
-from pydantic import BaseModel
-from typing import Optional
-import os
 import logging
 
 from dao_user import UserDAO
@@ -37,6 +34,7 @@ from file_optimization import FileOptimizationService, FileDeduplicationService
 # 让 tests 可以 patch('api_routes.save_generated_file_to_db', ...)。
 # 详见 docs/superpowers/plans/2026-05-25-minimax-tts-fastpath.md
 from file_service import save_generated_file_to_db
+from routers.auth_legacy import create_auth_legacy_router
 from routers.assets import create_assets_router
 from routers.audio import create_audio_router
 from routers.canvas import create_canvas_router
@@ -45,6 +43,7 @@ from routers.entity_files import create_entity_files_router
 from routers.episode_video import create_episode_video_router
 from routers.episodes import create_episodes_router
 from routers.legacy_files import create_legacy_files_router
+from routers.project_core import create_project_core_router
 from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
 from routers.storyboard import create_storyboard_router
@@ -64,26 +63,6 @@ router = APIRouter()
 # JWT 令牌认证
 # ============================================
 import jwt_auth
-
-# ============================================
-# 数据模型
-# ============================================
-
-class UserRegister(BaseModel):
-    username: str
-    password: str
-    email: Optional[str] = None
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-class ProjectCreate(BaseModel):
-    project_name: str
-    description: Optional[str] = ""
-    visibility: Optional[str] = "private"
-
-
 
 # ============================================
 # 依赖项 - 获取当前用户
@@ -251,211 +230,20 @@ router.include_router(
     )
 )
 
-# ============================================
-# 用户相关API
-# ============================================
+router.include_router(
+    create_auth_legacy_router(
+        get_current_user_dependency=get_current_user,
+        user_dao=UserDAO,
+        activity_log_dao=ActivityLogDAO,
+    )
+)
 
-@router.post("/api/auth/register")
-async def register_user(user_data: UserRegister):
-    """用户注册"""
-    # 安全：公开注册默认关闭（私有部署不应允许任何人自助注册 → 直达需登录的内部端点）。
-    # 需要开放时设环境变量 ALLOW_PUBLIC_REGISTRATION=true。
-    if os.getenv("ALLOW_PUBLIC_REGISTRATION", "false").lower() not in ("1", "true", "yes", "on"):
-        raise HTTPException(status_code=403, detail="公开注册已关闭，请联系管理员开通账号")
-    try:
-        # 检查用户名是否存在
-        existing_user = await UserDAO.get_user_by_username(user_data.username)
-        if existing_user:
-            raise HTTPException(status_code=400, detail="用户名已存在")
-        
-        # 创建用户
-        # user_id 必须 == username：全站资源表（projects/episodes 等）user_id 外键按
-        # 用户名存，get_current_user 也返回用户名。不传会生成 user_xxx，导致该用户
-        # 建项目等写库外键冲突 500。
-        user = await UserDAO.create_user(
-            username=user_data.username,
-            password=user_data.password,
-            email=user_data.email,
-            user_id=user_data.username,
-        )
-        
-        return {
-            "success": True,
-            "user_id": user['user_id'],
-            "username": user['username']
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-@router.post("/api/auth/login")
-async def login_user(login_data: UserLogin):
-    """用户登录"""
-    try:
-        user = await UserDAO.verify_password(
-            login_data.username,
-            login_data.password
-        )
-        
-        if not user:
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-
-        # 2026-05-26 Slice 4: 管理员禁用的账号不允许登录
-        # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
-        user_status = user.get('status') if isinstance(user, dict) else None
-        if user_status and user_status != 'active':
-            reason = (user.get('disabled_reason') if isinstance(user, dict) else None) or '账户已被管理员禁用'
-            raise HTTPException(status_code=403, detail=f"账户已被禁用：{reason}")
-
-        # 记录登录日志
-        await ActivityLogDAO.log_activity(
-            user_id=user['user_id'],
-            action='login'
-        )
-        
-        return {
-            "success": True,
-            "user_id": user['user_id'],
-            "username": user['username'],
-            "token": user['user_id']  # 简化版,生产环境应使用JWT
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-@router.get("/api/user/profile")
-async def get_user_profile(user_id: str = Depends(get_current_user)):
-    """获取用户资料"""
-    try:
-        user = await UserDAO.get_user_by_id(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="用户不存在")
-        
-        # 获取存储统计
-        storage_stats = await UserDAO.get_storage_stats(user_id)
-        
-        return {
-            "success": True,
-            "user": user,
-            "storage_stats": storage_stats
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# 项目管理API
-# ============================================
-
-@router.post("/api/projects")
-async def create_project(
-    project_data: ProjectCreate,
-    user_id: str = Depends(get_current_user)
-):
-    """创建新项目"""
-    try:
-        project = await ProjectDAO.create_project(
-            user_id=user_id,
-            project_name=project_data.project_name,
-            description=project_data.description,
-            visibility=project_data.visibility or 'private',
-        )
-        
-        # 创建初始版本
-        version = await VersionDAO.create_version(
-            project_id=project['project_id'],
-            user_id=user_id,
-            version_name="初始版本",
-            description="项目创建时的初始版本"
-        )
-        
-        # 添加创建者为项目 owner
-        await ProjectMemberDAO.add_member(
-            project_id=project['project_id'],
-            user_id=user_id,
-            role='owner'
-        )
-        
-        # 记录活动
-        await ActivityLogDAO.log_activity(
-            user_id=user_id,
-            action='create_project',
-            resource_type='project',
-            resource_id=project['project_id']
-        )
-        
-        return {
-            "success": True,
-            "project": project,
-            "initial_version": version
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/projects")
-async def get_user_projects(
-    include_archived: bool = False,
-    org_id: Optional[str] = None,
-    user_id: str = Depends(get_current_user)
-):
-    """获取用户可访问的所有项目。
-
-    org_id=None：旧行为（自有 + 被邀请）
-    org_id=X：组织 workspace — owner / project_members / share→org / group∈org
-    2026-05-26 组织管理 MVP — Slice 3
-    """
-    try:
-        if org_id:
-            from dao_organization import OrganizationMemberDAO
-            if not await OrganizationMemberDAO.is_member(org_id, user_id):
-                raise HTTPException(status_code=403, detail="不是该组织成员")
-            projects = await ProjectMemberDAO.get_org_accessible_projects(
-                user_id, org_id, include_archived,
-            )
-        else:
-            projects = await ProjectMemberDAO.get_user_accessible_projects(user_id, include_archived)
-        return {
-            "success": True,
-            "projects": projects
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/projects/{project_id}")
-async def get_project_detail(
-    project_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """获取项目详情"""
-    try:
-        project = await ProjectDAO.get_project(project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="项目不存在")
-        
-        has_access = await ProjectMemberDAO.check_permission(project_id, user_id, 'readonly')
-        if not has_access:
-            raise HTTPException(status_code=403, detail="无权访问")
-        
-        await ProjectDAO.update_project_access(project_id)
-        
-        versions = await VersionDAO.get_project_versions(project_id)
-        members = await ProjectMemberDAO.get_project_members(project_id)
-
-        return {
-            "success": True,
-            "project": project,
-            "versions": versions,
-            "members": members
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+router.include_router(
+    create_project_core_router(
+        get_current_user_dependency=get_current_user,
+        project_dao=ProjectDAO,
+        version_dao=VersionDAO,
+        project_member_dao=ProjectMemberDAO,
+        activity_log_dao=ActivityLogDAO,
+    )
+)
