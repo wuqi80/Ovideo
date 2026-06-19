@@ -24,7 +24,7 @@ export type TaskEventCallback = (
     }
 ) => void;
 
-class GlobalTaskManager {
+export class GlobalTaskManager {
     private listeners: TaskEventCallback[] = [];
     private pollingTimer: ReturnType<typeof setInterval> | null = null;
     private lastPollTime = 0;
@@ -33,6 +33,9 @@ class GlobalTaskManager {
     private eventSource: EventSource | null = null;
     private sseReconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private sseConnected = false;
+    private notificationBaselineReady = false;
+    private emittedNotificationIds: Set<string> = new Set();
+    private maxRememberedNotificationIds = 300;
 
     start() {
         if (this.eventSource || this.pollingTimer) return;
@@ -112,7 +115,9 @@ class GlobalTaskManager {
                 fileRole: data.file_role || undefined,
                 episodeId: data.episode_id || undefined,
             };
-            this.emit('notification', { notification });
+            if (this.rememberNotificationId(notification.id)) {
+                this.emit('notification', { notification });
+            }
             this.poll();
         } else {
             this.emit('progress', {
@@ -141,10 +146,14 @@ class GlobalTaskManager {
     }
 
     private async poll() {
+        const pollStartedAt = Date.now();
+        const isBaselinePoll = !this.notificationBaselineReady;
+        const since = this.lastPollTime || pollStartedAt;
+
         try {
             const [activeRes, notifRes] = await Promise.all([
                 getActiveTasks().catch(() => null),
-                getTaskNotifications(this.lastPollTime || undefined).catch(() => null)
+                getTaskNotifications(since).catch(() => null)
             ]);
 
             if (activeRes?.success && activeRes.tasks) {
@@ -162,7 +171,12 @@ class GlobalTaskManager {
                 this.emit('tasks_updated', { tasks: this.activeTasks });
             }
 
-            if (!this.sseConnected && notifRes?.success && notifRes.notifications?.length) {
+            if (notifRes?.success && Array.isArray(notifRes.notifications)) {
+                this.notificationBaselineReady = true;
+                this.lastPollTime = pollStartedAt;
+            }
+
+            if (!this.sseConnected && !isBaselinePoll && notifRes?.success && notifRes.notifications?.length) {
                 for (const n of notifRes.notifications) {
                     const notification: TaskNotification = {
                         id: n.task_id,
@@ -180,14 +194,29 @@ class GlobalTaskManager {
                         fileRole: n.file_role || undefined,
                         episodeId: n.episode_id || undefined,
                     };
-                    this.emit('notification', { notification });
+                    if (this.rememberNotificationId(notification.id)) {
+                        this.emit('notification', { notification });
+                    }
+                }
+            } else if (isBaselinePoll && notifRes?.success && notifRes.notifications?.length) {
+                for (const n of notifRes.notifications) {
+                    this.rememberNotificationId(n.task_id);
                 }
             }
-
-            this.lastPollTime = Date.now();
         } catch (e) {
             console.warn('[TaskManager] 轮询失败:', e);
         }
+    }
+
+    private rememberNotificationId(id: string | null | undefined): boolean {
+        if (!id) return true;
+        if (this.emittedNotificationIds.has(id)) return false;
+        this.emittedNotificationIds.add(id);
+        if (this.emittedNotificationIds.size > this.maxRememberedNotificationIds) {
+            const oldest = this.emittedNotificationIds.values().next().value;
+            if (oldest) this.emittedNotificationIds.delete(oldest);
+        }
+        return true;
     }
 
     private mapTaskType(taskType: string): 'video' | 'image' | 'material' | 'text' {

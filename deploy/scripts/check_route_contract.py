@@ -881,6 +881,32 @@ def check_task_stale_cleanup_notification_contract(root: Path) -> int:
     return 2
 
 
+def check_task_notification_toast_dedupe_contract(root: Path) -> int:
+    """Global toast polling must not replay historical terminal tasks as new failures."""
+    manager_text = (root / "new_html" / "services" / "globalTaskManager.ts").read_text(encoding="utf-8")
+    context_text = (root / "new_html" / "contexts" / "TaskContext.tsx").read_text(encoding="utf-8")
+    test_text = (root / "new_html" / "__tests__" / "services" / "globalTaskManager.test.ts").read_text(encoding="utf-8")
+
+    required_snippets = {
+        "notificationBaselineReady": "global task manager tracks notification baseline",
+        "const since = this.lastPollTime || pollStartedAt": "initial poll uses a timestamp baseline, not undefined",
+        "!isBaselinePoll": "baseline poll does not emit toast notifications",
+        "rememberNotificationId": "transport-level task notification id dedupe",
+        "seenNotificationIdsRef": "TaskContext unread count dedupes notification events",
+        "does not toast historical failures": "unit test covers historical failure burst",
+        "emits only new notification ids": "unit test covers duplicate terminal task suppression",
+    }
+    sources = "\n".join([manager_text, context_text, test_text])
+    missing = [
+        f"{label}: missing {snippet}"
+        for snippet, label in required_snippets.items()
+        if snippet not in sources
+    ]
+    if missing:
+        fail("Task notification toast dedupe contract failed:\n" + "\n".join(missing))
+    return len(required_snippets)
+
+
 def check_lifespan_shutdown_contract(root: Path) -> int:
     """Lifespan background workers must shut down without a long 502 window."""
     cluster_main_text = (root / "cluster_main.py").read_text(encoding="utf-8")
@@ -2040,6 +2066,7 @@ def main() -> int:
     task_route_handlers = check_task_routes_extracted(root)
     task_notification_route_handlers = check_task_notification_routes_extracted(root)
     task_stale_cleanup_checks = check_task_stale_cleanup_notification_contract(root)
+    task_notification_toast_dedupe_checks = check_task_notification_toast_dedupe_contract(root)
     lifespan_shutdown_checks = check_lifespan_shutdown_contract(root)
     storyboard_paged_reload_checks = check_storyboard_paged_reload_contract(root)
     enhance_lightweight_storyboard_checks = check_enhance_lightweight_storyboard_contract(root)
@@ -2088,6 +2115,7 @@ def main() -> int:
     print(f"  task_route_handlers={task_route_handlers}")
     print(f"  task_notification_route_handlers={task_notification_route_handlers}")
     print(f"  task_stale_cleanup_checks={task_stale_cleanup_checks}")
+    print(f"  task_notification_toast_dedupe_checks={task_notification_toast_dedupe_checks}")
     print(f"  lifespan_shutdown_checks={lifespan_shutdown_checks}")
     print(f"  storyboard_paged_reload_checks={storyboard_paged_reload_checks}")
     print(f"  enhance_lightweight_storyboard_checks={enhance_lightweight_storyboard_checks}")

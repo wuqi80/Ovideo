@@ -3382,3 +3382,55 @@
 - This completes the first pass over the main workflow storyboard-loading hot spots: storyboard, enhance, generation, audio, and materials now all have bounded or specialized loading paths.
 - API provider replacement/management work is still ongoing and separate from this workflow performance increment.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Task Notification Toast Deduplication
+
+### Changes
+
+- Fixed a notification burst issue in `deploy/new_html/services/globalTaskManager.ts`:
+  - initial HTTP polling now establishes a notification timestamp baseline instead of calling `/api/tasks/notifications` with `since=undefined`
+  - the baseline poll records terminal task IDs but does not emit toast notifications
+  - later polling emits only terminal task IDs that are new after the baseline
+  - SSE and polling notifications share a small remembered-ID set to avoid duplicate terminal-task toast events during reconnects
+- Added a second dedupe layer in `deploy/new_html/contexts/TaskContext.tsx`:
+  - repeated notification events with the same `id`/`taskId` no longer inflate unread count
+  - the notification panel can still show persisted history; only immediate toast/audio/browser notifications are suppressed for historical rows
+- Added `deploy/new_html/__tests__/services/globalTaskManager.test.ts`:
+  - covers "first poll does not toast historical failures"
+  - covers "only new notification IDs are emitted after baseline"
+- Extended `deploy/scripts/check_route_contract.py` with `task_notification_toast_dedupe_checks=7`.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `node node_modules/typescript/bin/tsc --noEmit ... services/globalTaskManager.ts __tests__/services/globalTaskManager.test.ts`
+- Local frontend limitation:
+  - running Vitest locally is still blocked by the missing Rollup optional dependency `@rollup/rollup-win32-x64-msvc` in `deploy/new_html/node_modules`
+  - targeted TypeScript including `TaskContext.tsx` is still blocked by the pre-existing `services/videoService.ts` result type error
+- Server checks passed:
+  - `.venv/bin/python -m py_compile scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run test:run -- __tests__/services/globalTaskManager.test.ts` -> `2/2`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_notification_toast_dedupe_20260619_124028/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/new_html/services/globalTaskManager.ts`
+  - `/home/Administrator/deploy/new_html/contexts/TaskContext.tsx`
+  - `/home/Administrator/deploy/new_html/__tests__/services/globalTaskManager.test.ts`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- The live `/api/tasks/notifications` endpoint returned 20 historical terminal tasks before this fix. The UI should still show these in history, but they should no longer play as a burst of new toast notifications when SSE falls back to polling or the page reloads.
+- This does not hide real new failures; new terminal tasks after the polling baseline still emit notifications.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

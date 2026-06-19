@@ -90,6 +90,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [notifications, setNotifications] = useState<TaskNotification[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const startedRef = useRef(false);
+    const seenNotificationIdsRef = useRef<Set<string>>(new Set());
 
     // ── 启动 + SSE 接入 ───────────────────────────────────────
     useEffect(() => {
@@ -198,7 +199,11 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const filtered = prev.filter(p => p.id !== n.id && p.taskId !== n.taskId);
                     return [n, ...filtered].slice(0, 50);
                 });
-                setUnreadCount(prev => prev + 1);
+                const key = n.id || n.taskId;
+                if (!key || !seenNotificationIdsRef.current.has(key)) {
+                    if (key) seenNotificationIdsRef.current.add(key);
+                    setUnreadCount(prev => prev + 1);
+                }
             }
         });
 
