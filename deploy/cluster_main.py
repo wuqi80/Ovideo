@@ -747,7 +747,6 @@ provider_health_monitor_task: Optional[asyncio.Task] = None
 # (StreamingResponse + sync generator)，那里没有事件循环；asyncpg 的连接池
 # 又必须在创建它的同一个 loop 上使用，所以必须显式持有主 loop 引用。
 MAIN_EVENT_LOOP: Optional[asyncio.AbstractEventLoop] = None
-DOUBAO_MODEL = os.environ.get("DOUBAO_IMAGE_MODEL", "doubao-seedream-4-0-250828")
 
 # 认证
 security = HTTPBearer(auto_error=False)
@@ -822,7 +821,6 @@ app.include_router(
     create_ai_proxy_router(
         require_auth_dependency=require_auth,
         get_main_event_loop=lambda: MAIN_EVENT_LOOP,
-        doubao_model_provider=lambda: DOUBAO_MODEL,
     )
 )
 logger.info("✅ AI Proxy API 路由已注册 (/api/deepseek, /api/gemini, /api/gpt-image, /api/materials/doubao)")

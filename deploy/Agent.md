@@ -3764,3 +3764,54 @@
 
 - This continues the API management platform goal: Gemini TTS model selection is now controlled by the same backend API config/runtime resolver path as text/image providers.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Doubao Image Runtime Model Wiring
+
+### Changes
+
+- Updated `deploy/schemas/generation.py` so `DoubaoImageRequest.model` is optional and can explicitly override the runtime model when needed.
+- Updated `deploy/services/ai_proxy_service.py` so Doubao image generation resolves `provider=doubao` with `model=None` by default, allowing `ARK_MODEL` from admin API config runtime projection to become the default image model.
+- Updated `deploy/routers/ai_proxy.py` so `/api/materials/doubao` passes `request.model` instead of an injected model provider.
+- Removed `DOUBAO_MODEL = os.environ.get("DOUBAO_IMAGE_MODEL", ...)` from `deploy/cluster_main.py`; Doubao no longer caches its model at import time.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with Doubao runtime-model default and explicit override coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `16` to `21`
+  - contract now protects Doubao schema/service/test wiring and fails if `DOUBAO_MODEL`/`doubao_model_provider` returns.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile cluster_main.py routers/ai_proxy.py services/ai_proxy_service.py schemas/generation.py tests/test_api_provider_runtime_model_env.py scripts/check_route_contract.py`
+  - `deploy/.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `9/9`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=21`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_doubao_runtime_model_20260619_213908/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/ai_proxy.py`
+  - `/home/Administrator/deploy/services/ai_proxy_service.py`
+  - `/home/Administrator/deploy/schemas/generation.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile cluster_main.py routers/ai_proxy.py services/ai_proxy_service.py schemas/generation.py tests/test_api_provider_runtime_model_env.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `9/9`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `ARK_MODEL` -> `doubao-runtime-image-model-smoke`, source `ARK_MODEL`
+
+### Notes
+
+- This removes another startup-time model cache and moves Doubao image selection into the same hot-reloadable admin API config/runtime resolver path.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

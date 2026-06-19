@@ -52,6 +52,7 @@ class DeepseekChatRequest(BaseModel):
 
 class DoubaoImageRequest(BaseModel):
     prompt: str
+    model: Optional[str] = Field(None, description="Doubao image model override; omitted uses admin runtime config")
     references: List[str] = Field(default_factory=list)
     size: str = Field("2K")
     sequential: str = Field("disabled", pattern="^(disabled|auto)$")

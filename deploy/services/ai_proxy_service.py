@@ -710,7 +710,7 @@ async def generate_doubao_images(
     size: str,
     sequential: str,
     count: int,
-    model: str = "doubao-seedream-4-0-250828",
+    model: Optional[str] = None,
 ) -> List[str]:
     config = resolve_provider("doubao", model)
     if not config.api_key:
@@ -720,7 +720,7 @@ async def generate_doubao_images(
 
     payload = build_doubao_image_payload(
         prompt=prompt,
-        model=config.model_name or model,
+        model=config.model_name or model or "doubao-seedream-4-0-250828",
         size=size,
         sequential=sequential,
         count=count,

@@ -2071,6 +2071,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "DeepSeek model override; omitted uses admin runtime config",
         ),
         (
+            root / "schemas" / "generation.py",
+            "Doubao image model override; omitted uses admin runtime config",
+        ),
+        (
             root / "routers" / "ai_proxy.py",
             "model=request.model",
         ),
@@ -2085,6 +2089,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         (
             root / "services" / "ai_proxy_service.py",
             "def _deepseek_chat_url(model: Optional[str])",
+        ),
+        (
+            root / "services" / "ai_proxy_service.py",
+            'config = resolve_provider("doubao", model)',
         ),
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
@@ -2106,6 +2114,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model",
         ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_doubao_image_uses_runtime_model_env_when_request_omits_model",
+        ),
     ]
     checks = 0
     for path, snippet in required_snippets:
@@ -2115,6 +2127,13 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         if snippet not in text:
             fail(f"Missing API provider runtime model contract snippet in {path.relative_to(root)}: {snippet}")
         checks += 1
+    cluster_text = (root / "cluster_main.py").read_text(encoding="utf-8")
+    router_text = (root / "routers" / "ai_proxy.py").read_text(encoding="utf-8")
+    if "DOUBAO_MODEL =" in cluster_text:
+        fail("cluster_main.py must not cache the Doubao image model at import time")
+    if "doubao_model_provider" in router_text or "doubao_model_provider" in cluster_text:
+        fail("Doubao route must resolve runtime model through services.ai_proxy_service, not injected model providers")
+    checks += 2
     return checks
 
 

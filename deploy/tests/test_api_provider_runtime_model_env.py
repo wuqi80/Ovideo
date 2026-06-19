@@ -149,6 +149,77 @@ class _DeepseekResponse:
         return {"choices": [{"message": {"content": "deepseek ok"}}]}
 
 
+class _DoubaoResponse:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {"data": [{"b64_json": "ZG91YmFv"}]}
+
+
+@pytest.mark.asyncio
+async def test_doubao_image_uses_runtime_model_env_when_request_omits_model(monkeypatch):
+    env_key = get_provider_env_key("doubao")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-ark-key")
+    monkeypatch.setenv(endpoint_env, "https://doubao-runtime.example.test/api/v3/images/generations")
+    monkeypatch.setenv(model_env, "doubao-runtime-image-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _DoubaoResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    images = await ai_proxy_service.generate_doubao_images(
+        prompt="draw",
+        reference_inputs=[],
+        size="2K",
+        sequential="disabled",
+        count=1,
+    )
+
+    assert images == ["data:image/png;base64,ZG91YmFv"]
+    assert calls[0]["url"] == "https://doubao-runtime.example.test/api/v3/images/generations"
+    assert calls[0]["json"]["model"] == "doubao-runtime-image-model"
+
+
+@pytest.mark.asyncio
+async def test_doubao_image_explicit_model_overrides_runtime_model(monkeypatch):
+    env_key = get_provider_env_key("doubao")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-ark-key")
+    monkeypatch.setenv(endpoint_env, "https://doubao-runtime.example.test/api/v3/images/generations")
+    monkeypatch.setenv(model_env, "doubao-runtime-image-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _DoubaoResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    images = await ai_proxy_service.generate_doubao_images(
+        prompt="draw",
+        reference_inputs=[],
+        size="2K",
+        sequential="disabled",
+        count=1,
+        model="doubao-explicit-image-model",
+    )
+
+    assert images == ["data:image/png;base64,ZG91YmFv"]
+    assert calls[0]["url"] == "https://doubao-runtime.example.test/api/v3/images/generations"
+    assert calls[0]["json"]["model"] == "doubao-explicit-image-model"
+
+
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):
     env_key = get_provider_env_key("deepseek")
     assert env_key

@@ -58,7 +58,6 @@ def create_ai_proxy_router(
     *,
     require_auth_dependency,
     get_main_event_loop: Callable[[], Optional[asyncio.AbstractEventLoop]],
-    doubao_model_provider: Callable[[], str],
 ) -> APIRouter:
     router = APIRouter()
 
@@ -461,7 +460,7 @@ def create_ai_proxy_router(
                 size=request.size,
                 sequential=request.sequential,
                 count=request.count,
-                model=doubao_model_provider(),
+                model=request.model,
             )
             logger.info("✅ 豆包生成 %s 张图片, 用户: %s", len(images), username)
 
