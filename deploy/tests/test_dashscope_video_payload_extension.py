@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import dashscope_video_api as ds
+from services.api_provider_registry import get_dashscope_sub_model_env_key
 
 
 # ─── helpers（沿用 test_minimax_tts_sync 的 fake aiohttp 范式） ───────────
@@ -104,6 +105,48 @@ async def test_kling_multi_shot_customize_multi_prompt_serialized(patch_http):
     assert isinstance(p["input"].get("multi_prompt"), list)
     assert len(p["input"]["multi_prompt"]) == 2
     assert p["input"]["multi_prompt"][0]["prompt"] == "雾岭镇黄昏"
+
+
+async def test_kling_standard_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("kling-standard"), "kling/runtime-standard")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="\u5408\u4f53",
+        params={
+            "prompt": "runtime standard",
+            "sub_model_kling": "standard",
+        },
+    )
+
+    assert patch_http["payload"]["model"] == "kling/runtime-standard"
+
+
+async def test_kling_omni_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("kling-omni"), "kling/runtime-omni")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="\u5408\u4f53",
+        params={
+            "prompt": "runtime omni",
+            "sub_model_kling": "omni",
+        },
+    )
+
+    assert patch_http["payload"]["model"] == "kling/runtime-omni"
+
+
+async def test_kling_submit_default_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("kling-standard"), "kling/runtime-direct-standard")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.kling_submit(
+        "runtime direct standard",
+        model=ds.DEFAULT_KLING_STANDARD_MODEL,
+    )
+
+    assert patch_http["payload"]["model"] == "kling/runtime-direct-standard"
 
 
 async def test_vidu_resolution_size_seed_audio_serialized(patch_http):

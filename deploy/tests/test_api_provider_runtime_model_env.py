@@ -17,7 +17,7 @@ from services.api_provider_registry import (
     get_provider_env_key,
     get_seedance_sub_model_env_key,
 )
-from services.api_provider_runtime import resolve_provider
+from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
 
 
 def test_resolve_provider_uses_runtime_model_env(monkeypatch):
@@ -616,6 +616,17 @@ def test_wan26_video_uses_callable_default_when_runtime_model_missing(monkeypatc
 
     assert calls[0]["url"] == "https://dashscope-runtime.example.test/api/v1/services/aigc/video-generation/video-synthesis"
     assert calls[0]["json"]["model"] == DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]
+
+
+def test_dashscope_kling_ignores_unrelated_generic_model_env(monkeypatch):
+    env_key = get_provider_env_key("dashscope")
+    assert env_key
+    model_env = get_model_env_key(env_key)
+
+    monkeypatch.setenv(model_env, "wan2.6-runtime-i2v")
+    monkeypatch.delenv(get_dashscope_sub_model_env_key("kling-standard"), raising=False)
+
+    assert resolve_dashscope_model_name("kling-standard") == DASHSCOPE_DEFAULT_MODEL_MAP["kling-standard"]
 
 
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):

@@ -42,10 +42,14 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
 
 DASHSCOPE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     "wan26": "wan2.6-i2v",
+    "kling-standard": "kling/kling-v3-video-generation",
+    "kling-omni": "kling/kling-v3-omni-video-generation",
 }
 
 DASHSCOPE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "wan26": "DASHSCOPE_MODEL_WAN26",
+    "kling-standard": "DASHSCOPE_MODEL_KLING_STANDARD",
+    "kling-omni": "DASHSCOPE_MODEL_KLING_OMNI",
 }
 
 
@@ -77,6 +81,26 @@ def get_dashscope_sub_model_env_key(sub_model: Optional[str]) -> str:
 
 def is_dashscope_wan26_model(model_name: Optional[str]) -> bool:
     return (model_name or "").strip().lower().startswith("wan2.6")
+
+
+def is_dashscope_kling_standard_model(model_name: Optional[str]) -> bool:
+    normalized = (model_name or "").strip().lower()
+    return "kling-v3-video-generation" in normalized and "omni" not in normalized
+
+
+def is_dashscope_kling_omni_model(model_name: Optional[str]) -> bool:
+    return "kling-v3-omni-video-generation" in (model_name or "").strip().lower()
+
+
+def dashscope_model_matches_sub_model(sub_model: str, model_name: Optional[str]) -> bool:
+    normalized_sub_model = normalize_dashscope_sub_model(sub_model)
+    if normalized_sub_model == "wan26":
+        return is_dashscope_wan26_model(model_name)
+    if normalized_sub_model == "kling-standard":
+        return is_dashscope_kling_standard_model(model_name)
+    if normalized_sub_model == "kling-omni":
+        return is_dashscope_kling_omni_model(model_name)
+    return False
 
 
 PROVIDER_CATALOG: Dict[str, dict] = {

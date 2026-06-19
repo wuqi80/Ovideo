@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from services.api_provider_endpoints import derive_dashscope_video_urls
-from services.api_provider_runtime import resolve_provider
+from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 # 终态判定（大小写不敏感，DashScope 返回 PENDING/RUNNING/SUCCEEDED/FAILED/CANCELED/UNKNOWN）
 _TERMINAL_SUCCESS = {"succeeded"}
 _TERMINAL_FAILED = {"failed", "canceled", "unknown"}
+DEFAULT_KLING_STANDARD_MODEL = "kling/kling-v3-video-generation"
+DEFAULT_KLING_OMNI_MODEL = "kling/kling-v3-omni-video-generation"
 
 
 def _normalize_status(s: Optional[str]) -> str:
@@ -232,11 +234,8 @@ class DashScopeVideoClient:
 
         if model_name == "合体":
             sub_kling = (params.get("sub_model_kling") or "standard").lower()
-            kling_model = (
-                "kling/kling-v3-omni-video-generation"
-                if sub_kling == "omni"
-                else "kling/kling-v3-video-generation"
-            )
+            kling_sub_model = "kling-omni" if sub_kling == "omni" else "kling-standard"
+            kling_model = resolve_dashscope_model_name(kling_sub_model)
             first = (_urls_by_role("first_frame") or [None])[0]
             last = (_urls_by_role("last_frame") or [None])[0]
             refs = _urls_by_role("reference_image") or None
@@ -405,6 +404,11 @@ class DashScopeVideoClient:
             params["aspect_ratio"] = aspect_ratio
         if seed is not None:
             params["seed"] = seed
+
+        if model == DEFAULT_KLING_OMNI_MODEL:
+            model = resolve_dashscope_model_name("kling-omni")
+        elif model == DEFAULT_KLING_STANDARD_MODEL:
+            model = resolve_dashscope_model_name("kling-standard")
 
         return await self.create_task(model, input_payload, params)
 

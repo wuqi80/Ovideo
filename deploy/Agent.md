@@ -4091,3 +4091,38 @@
 
 - This starts the DashScope shared-provider split by making Wan2.6 model selection hot-reloadable without forcing the same runtime model onto Kling/Vidu/HappyHorse.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Kling Runtime Model Wiring
+
+### Changes
+
+- Extended `deploy/services/api_provider_registry.py` with DashScope Kling sub-model metadata:
+  - `DASHSCOPE_MODEL_KLING_STANDARD`
+  - `DASHSCOPE_MODEL_KLING_OMNI`
+  - default models `kling/kling-v3-video-generation` and `kling/kling-v3-omni-video-generation`.
+- Added DashScope model-family matching so a generic `DASHSCOPE_MODEL` value is only used when it belongs to the requested sub-model family. This prevents Wan2.6 generic model values from being borrowed by Kling.
+- Updated `deploy/services/api_config_runtime_loader.py` so enabled DB rows for `provider=dashscope` and Kling standard/omni model names project into their dedicated runtime env keys.
+- Updated `deploy/external_api/video/dashscope.py`:
+  - the unified `"合体"` submit path now resolves `sub_model_kling=standard|omni` through `resolve_dashscope_model_name()`.
+  - direct `kling_submit()` calls with legacy default hardcoded model names now defer to runtime env, preserving old worker compatibility without touching `core/worker.py`.
+- Extended `deploy/scripts/check_api_config_runtime_loader.py` with Kling standard/omni DB-to-env projection coverage.
+- Extended `deploy/tests/test_dashscope_video_payload_extension.py` and `deploy/tests/test_api_provider_runtime_model_env.py` with Kling runtime model payload and anti-cross-family coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `55` to `67`
+  - contract now protects Kling DashScope sub-model env wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile external_api/video/dashscope.py services/api_provider_registry.py services/api_provider_runtime.py services/api_config_runtime_loader.py tests/test_dashscope_video_payload_extension.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - From `deploy/`: `.venv/Scripts/python.exe -m pytest tests/test_dashscope_video_payload_extension.py tests/test_api_provider_runtime_model_env.py -q` -> `30/30`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=67`
+
+### Notes
+
+- This continues the DashScope shared-provider split by making Kling standard/omni model selection hot-reloadable without forcing the same runtime model onto Wan2.6, Vidu, or HappyHorse.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

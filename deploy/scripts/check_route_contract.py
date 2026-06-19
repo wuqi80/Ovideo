@@ -2231,6 +2231,18 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "DASHSCOPE_SUB_MODEL_ENV_MAP",
         ),
         (
+            root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_MODEL_KLING_STANDARD",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_MODEL_KLING_OMNI",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "dashscope_model_matches_sub_model",
+        ),
+        (
             root / "services" / "api_provider_runtime.py",
             "def resolve_dashscope_model_name",
         ),
@@ -2239,8 +2251,28 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "get_dashscope_sub_model_env_key(\"wan26\")",
         ),
         (
+            root / "services" / "api_config_runtime_loader.py",
+            "get_dashscope_sub_model_env_key(\"kling-standard\")",
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            "get_dashscope_sub_model_env_key(\"kling-omni\")",
+        ),
+        (
             root / "external_api" / "video" / "wan2.py",
             "resolve_dashscope_model_name(\"wan26\", model)",
+        ),
+        (
+            root / "external_api" / "video" / "dashscope.py",
+            "resolve_dashscope_model_name(kling_sub_model)",
+        ),
+        (
+            root / "external_api" / "video" / "dashscope.py",
+            "resolve_dashscope_model_name(\"kling-standard\")",
+        ),
+        (
+            root / "external_api" / "video" / "dashscope.py",
+            "resolve_dashscope_model_name(\"kling-omni\")",
         ),
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
@@ -2249,6 +2281,22 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_wan26_video_uses_callable_default_when_runtime_model_missing",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_dashscope_kling_ignores_unrelated_generic_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_kling_standard_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_kling_omni_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_kling_submit_default_uses_runtime_sub_model_env",
         ),
     ]
     checks = 0

@@ -14,6 +14,7 @@ from services.api_provider_registry import (
     DASHSCOPE_DEFAULT_MODEL_MAP,
     PROVIDER_CATALOG,
     SEEDANCE_DEFAULT_MODEL_MAP,
+    dashscope_model_matches_sub_model,
     get_api_model_preset,
     get_api_model_presets,
     get_custom_proxy_env_key,
@@ -356,7 +357,7 @@ def resolve_dashscope_model_name(sub_model: str, model_name: Optional[str] = Non
     provider_env = get_provider_env_key("dashscope")
     generic_model_env = get_model_env_key(provider_env) if provider_env else ""
     generic_model = (os.getenv(generic_model_env) or "").strip() if generic_model_env else ""
-    if generic_model:
+    if generic_model and dashscope_model_matches_sub_model(normalized_sub_model, generic_model):
         return generic_model
 
     return DASHSCOPE_DEFAULT_MODEL_MAP[normalized_sub_model]
