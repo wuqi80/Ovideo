@@ -2752,3 +2752,56 @@
 - No frontend build was required.
 - This moves another high-use project loading domain out of the mixed V2 route file while preserving public API behavior.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Entity Files Router Extraction
+
+### Changes
+
+- Extracted 9 entity-file routes from `deploy/api_routes.py` into `deploy/routers/entity_files.py`:
+  - `GET /api/user-files`
+  - `GET /api/entity-files`
+  - `POST /api/entity-files/link`
+  - `PUT /api/entity-files/{file_id}/select`
+  - `POST /api/entity-files/upload`
+  - `DELETE /api/entity-files/{file_id}`
+  - `DELETE /api/entity-files/{file_id}/hard`
+  - `POST /api/entity-files/hard-delete-batch`
+  - `POST /api/entity-files/migrate`
+- Moved the legacy URL sync helper (`storyboard_item` / `asset` / `video_segment` URL backfill) into the entity-files router.
+- `api_routes.py` now composes `create_entity_files_router(...)` and no longer owns entity-file handler bodies.
+- Extended `deploy/scripts/check_route_contract.py` to verify:
+  - all 9 entity-file endpoints resolve to `routers.entity_files`
+  - `routers/entity_files.py` owns exactly 9 routes
+  - `api_routes.py` does not reintroduce those entity-file route decorators
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/entity_files.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - `entity_file_route_handlers=9`
+  - redline diff check: no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/entity_files.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - live entity-files endpoint check: `GET /api/entity-files?entity_type=asset&entity_id=asset_nonexistent_smoke` -> HTTP `200`, `success=True`, `items=0`, `total=0`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_entity_files_router_20260619_090412`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/entity_files.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- No frontend build was required.
+- This moves the cross-domain file binding layer out of the mixed V2 route file, making later media loading and file-management optimization safer to work on.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

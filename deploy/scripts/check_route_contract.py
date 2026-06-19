@@ -196,6 +196,18 @@ EXPECTED_ENDPOINTS = {
     ("/api/assets/{asset_id}", "PUT"): ("routers.assets", "update_asset"),
     ("/api/assets/{asset_id}", "DELETE"): ("routers.assets", "delete_asset"),
     ("/api/assets/{asset_id}/share", "POST"): ("routers.assets", "share_asset"),
+    ("/api/user-files", "GET"): ("routers.entity_files", "get_user_files"),
+    ("/api/entity-files", "GET"): ("routers.entity_files", "get_entity_files"),
+    ("/api/entity-files/link", "POST"): ("routers.entity_files", "link_entity_file"),
+    ("/api/entity-files/{file_id}/select", "PUT"): ("routers.entity_files", "select_entity_file"),
+    ("/api/entity-files/upload", "POST"): ("routers.entity_files", "upload_entity_file"),
+    ("/api/entity-files/{file_id}", "DELETE"): ("routers.entity_files", "delete_entity_file"),
+    ("/api/entity-files/{file_id}/hard", "DELETE"): ("routers.entity_files", "hard_delete_entity_file"),
+    ("/api/entity-files/hard-delete-batch", "POST"): (
+        "routers.entity_files",
+        "hard_delete_entity_files_batch",
+    ),
+    ("/api/entity-files/migrate", "POST"): ("routers.entity_files", "run_entity_file_migration"),
     ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
     ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
     ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
@@ -1432,6 +1444,65 @@ def check_asset_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_entity_file_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    entity_files_path = root / "routers" / "entity_files.py"
+    if not entity_files_path.exists():
+        fail("routers/entity_files.py is missing")
+
+    route_pairs = {
+        ("/api/user-files", "get"),
+        ("/api/entity-files", "get"),
+        ("/api/entity-files/link", "post"),
+        ("/api/entity-files/{file_id}/select", "put"),
+        ("/api/entity-files/upload", "post"),
+        ("/api/entity-files/{file_id}", "delete"),
+        ("/api/entity-files/{file_id}/hard", "delete"),
+        ("/api/entity-files/hard-delete-batch", "post"),
+        ("/api/entity-files/migrate", "post"),
+    }
+
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            name = ast_call_name(call.func)
+            _, _, method = name.rpartition(".") if name else ("", "", "")
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, str)
+                and (arg.value, method.lower()) in route_pairs
+            ):
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Entity file route handlers must live in routers/entity_files.py:\n" + "\n".join(violations))
+
+    entity_files_tree = parse_py_file(entity_files_path)
+    route_count = 0
+    for node in ast.walk(entity_files_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 9:
+        fail(f"routers/entity_files.py should own 9 entity-file route registrations, found {route_count}")
+    return route_count
+
+
 def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
@@ -1626,6 +1697,7 @@ def main() -> int:
     video_capability_route_handlers = check_video_capabilities_routes_extracted(root)
     storyboard_route_handlers = check_storyboard_routes_extracted(root)
     asset_route_handlers = check_asset_routes_extracted(root)
+    entity_file_route_handlers = check_entity_file_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
     script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
     canvas_route_handlers = check_canvas_routes_extracted(root)
@@ -1662,6 +1734,7 @@ def main() -> int:
     print(f"  video_capability_route_handlers={video_capability_route_handlers}")
     print(f"  storyboard_route_handlers={storyboard_route_handlers}")
     print(f"  asset_route_handlers={asset_route_handlers}")
+    print(f"  entity_file_route_handlers={entity_file_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
     print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
     print(f"  canvas_route_handlers={canvas_route_handlers}")
