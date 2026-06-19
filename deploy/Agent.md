@@ -1232,3 +1232,59 @@
 
 - This fixes the observed loop where the old edit link returned to the login page and then back to the same native API config page.
 - No backend route changes were required.
+
+## 2026-06-19 Cluster Status Router Extraction Increment
+
+### Changes
+
+- Extracted cluster status endpoints from `deploy/cluster_main.py` into `deploy/routers/cluster_status.py`.
+- Preserved the existing public API surface:
+  - `GET /api/cluster/stats`
+  - `GET /api/cluster/nodes`
+  - `GET /health`
+- Registered the router through `create_cluster_status_router(...)`, passing runtime dependencies from `cluster_main.py`:
+  - `require_auth`
+  - `cluster_manager`
+  - `workers`
+  - `redis_client`
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - the three status endpoints belong to `routers.cluster_status`
+  - `cluster_main.py` does not re-register those paths
+  - `routers/cluster_status.py` owns exactly 3 route handlers
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/cluster_status.py deploy/scripts/check_route_contract.py`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `cluster_status_route_handlers=3`
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_cluster_status_router_20260619-031131`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/cluster_status.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/cluster_status.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `cluster_status_route_handlers=3`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `GET https://mecha.one/health` -> HTTP `200`, `status=healthy`, `redis=healthy`, `agent_only_mode=True`
+  - `GET https://mecha.one/api/cluster/stats` with admin token -> HTTP `200`, `success=True`
+  - `GET https://mecha.one/api/cluster/nodes` with admin token -> HTTP `200`, `success=True`, `nodes=list`
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; the work reduces `cluster_main.py` ownership and adds a route-contract guard for this domain.

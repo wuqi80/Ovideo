@@ -91,6 +91,7 @@ from services.api_provider_health_monitor import (
 from services.ai_proxy_service import AIProxyError, generate_gemini_images
 from services.api_provider_runtime import build_provider_runtime_status
 from routers.ai_proxy import create_ai_proxy_router
+from routers.cluster_status import create_cluster_status_router
 from routers.comfyui_files import create_comfyui_files_router
 from routers.files import cleanup_thumbnail_cache, create_files_router
 from routers.prompts import create_prompt_router
@@ -820,6 +821,16 @@ app.include_router(
     )
 )
 logger.info("✅ Prompt API 路由已注册 (/api/prompts)")
+
+app.include_router(
+    create_cluster_status_router(
+        require_auth_dependency=require_auth,
+        get_cluster_manager=lambda: cluster_manager,
+        get_workers=lambda: workers,
+        get_redis_client=lambda: redis_client,
+    )
+)
+logger.info("✅ Cluster Status API 路由已注册 (/api/cluster/stats, /api/cluster/nodes, /health)")
 
 # ============================================
 # API 路由
@@ -1658,81 +1669,6 @@ async def list_tasks(
             "success": False,
             "tasks": []
         }
-
-@app.get("/api/cluster/stats")
-async def get_cluster_stats(username: str = Depends(require_auth)):
-    """获取集群统计信息。
-    2026-05-26 修复：AGENT_ONLY_MODE=true 时 cluster_manager 始终为 None（line 555），
-      不做 None-safe 会 AttributeError → FastAPI 返回 plain text "Internal Server Error"
-      → 前端 SyntaxError: Unexpected token 'I'。详见 docs/faq.md。
-    """
-    if cluster_manager is None:
-        stats = {
-            "nodes": [],
-            "healthy_nodes": 0,
-            "total_nodes": 0,
-            "agent_only_mode": True,
-        }
-    else:
-        stats = cluster_manager.get_cluster_stats()
-
-    try:
-        stats["queue_length"] = await task_service.get_queue().get_queue_length()
-        stats["processing_count"] = await task_service.get_queue().get_processing_count()
-    except Exception as e:
-        logger.warning(f"get_cluster_stats: queue stats failed ({e})")
-        stats.setdefault("queue_length", 0)
-        stats.setdefault("processing_count", 0)
-    stats["workers_count"] = len(workers)
-    stats["workers_active"] = sum(1 for w in workers if w.current_task)
-
-    return {
-        "success": True,
-        "stats": stats
-    }
-
-@app.get("/api/cluster/nodes")
-async def list_nodes(username: str = Depends(require_auth)):
-    """获取节点列表。AGENT_ONLY_MODE 下返回空数组（cluster_manager=None 是预期状态）。"""
-    if cluster_manager is None:
-        return {
-            "success": True,
-            "nodes": [],
-            "agent_only_mode": True,
-            "message": "Agent-Only 模式：本地无 ComfyUI 集群节点，任务由外部 Agent 处理",
-        }
-    stats = cluster_manager.get_cluster_stats()
-    return {
-        "success": True,
-        "nodes": stats["nodes"]
-    }
-
-@app.get("/health")
-async def health_check():
-    """健康检查（AGENT_ONLY_MODE 下 cluster_manager=None 仍正常返回 healthy）"""
-    try:
-        await redis_client.ping()
-        redis_status = "healthy"
-    except:
-        redis_status = "unhealthy"
-
-    if cluster_manager is None:
-        cluster_block = {"healthy_nodes": 0, "total_nodes": 0, "agent_only_mode": True}
-    else:
-        cs = cluster_manager.get_cluster_stats()
-        cluster_block = {"healthy_nodes": cs["healthy_nodes"], "total_nodes": cs["total_nodes"]}
-
-    return {
-        "status": "healthy" if redis_status == "healthy" else "degraded",
-        "service": SystemConfig.FRONTEND_CONFIG["title"],
-        "version": SystemConfig.FRONTEND_CONFIG["version"],
-        "redis": redis_status,
-        "cluster": cluster_block,
-        "workers": {
-            "total": len(workers),
-            "active": sum(1 for w in workers if w.current_task)
-        }
-    }
 
 # ⚠️ 已移除旧的 /uploads/{filename} 路由，因为我们使用 app.mount() 挂载静态文件目录
 # 这样可以支持多层路径，如 /uploads/image/admin/202512/xxx.png

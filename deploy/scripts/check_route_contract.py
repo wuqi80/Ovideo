@@ -52,6 +52,9 @@ EXPECTED_ENDPOINTS = {
     ("/api/prompts/{template_type}", "GET"): ("routers.prompts", "get_prompt_template"),
     ("/api/prompts/{template_type}", "POST"): ("routers.prompts", "save_prompt_template"),
     ("/api/prompts/{template_type}", "DELETE"): ("routers.prompts", "delete_prompt_template"),
+    ("/api/cluster/stats", "GET"): ("routers.cluster_status", "get_cluster_stats"),
+    ("/api/cluster/nodes", "GET"): ("routers.cluster_status", "list_nodes"),
+    ("/health", "GET"): ("routers.cluster_status", "health_check"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -277,6 +280,48 @@ def check_prompt_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_cluster_status_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    cluster_status_path = root / "routers" / "cluster_status.py"
+    if not cluster_status_path.exists():
+        fail("routers/cluster_status.py is missing")
+
+    route_paths = {"/api/cluster/stats", "/api/cluster/nodes", "/health"}
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Cluster status route handlers must live in routers/cluster_status.py:\n" + "\n".join(violations))
+
+    status_tree = parse_py_file(cluster_status_path)
+    route_count = 0
+    for node in ast.walk(status_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 3:
+        fail(f"routers/cluster_status.py should own 3 cluster status route handlers, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -299,6 +344,7 @@ def main() -> int:
     external_api_files, external_api_routes = check_external_api_has_no_fastapi_routes(root)
     api_config_route_handlers = check_admin_api_config_routes_extracted(root)
     prompt_route_handlers = check_prompt_routes_extracted(root)
+    cluster_status_route_handlers = check_cluster_status_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -313,6 +359,7 @@ def main() -> int:
     print(f"  external_api_route_handlers={external_api_routes}")
     print(f"  admin_api_config_route_handlers={api_config_route_handlers}")
     print(f"  prompt_route_handlers={prompt_route_handlers}")
+    print(f"  cluster_status_route_handlers={cluster_status_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 
