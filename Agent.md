@@ -5076,6 +5076,54 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - No frontend build was required.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
+## 2026-06-19 Gemini TTS Runtime Endpoint Wiring
+
+### Changes
+
+- Updated `deploy/services/audio_provider.py` so `GeminiAudioProvider` now uses the full runtime config from `resolve_provider("gemini-tts")`:
+  - API key
+  - endpoint
+  - custom proxy
+- Added endpoint normalization for Google GenAI SDK calls:
+  - admin endpoints like `https://generativelanguage.googleapis.com/v1beta/openai/` are converted to `baseUrl=https://generativelanguage.googleapis.com`, `apiVersion=v1beta`
+  - custom endpoints with `/v1` or `/v1beta` are converted into SDK `http_options`
+- Added `deploy/scripts/check_audio_provider_runtime.py` to verify Gemini TTS endpoint/proxy wiring without calling external APIs.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/services/audio_provider.py deploy/scripts/check_audio_provider_runtime.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_audio_provider_runtime.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route result remains `openapi_paths=231`, `openapi_operations=287`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_audio_provider_runtime_20260619_063649`
+- Uploaded to server:
+  - `/home/Administrator/deploy/services/audio_provider.py`
+  - `/home/Administrator/deploy/scripts/check_audio_provider_runtime.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile services/audio_provider.py scripts/check_audio_provider_runtime.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_audio_provider_runtime.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This closes a runtime gap where Gemini TTS used the managed key but ignored the managed endpoint/proxy.
+- No frontend build was required.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Shared Helper Extraction
 
 ### Changes

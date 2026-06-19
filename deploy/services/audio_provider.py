@@ -13,6 +13,48 @@ from services.api_provider_runtime import resolve_provider
 logger = logging.getLogger(__name__)
 
 AUDIO_UPLOAD_DIR = os.getenv("AUDIO_UPLOAD_DIR", "persistent_storage/audio")
+DEFAULT_GEMINI_API_VERSION = "v1beta"
+
+
+def _derive_gemini_sdk_endpoint(endpoint: str) -> tuple[str, str]:
+    """Convert admin endpoint config into google-genai http_options pieces."""
+    value = (endpoint or "").strip().rstrip("/")
+    if not value:
+        return "", DEFAULT_GEMINI_API_VERSION
+
+    parts = value.split("/")
+    api_version = DEFAULT_GEMINI_API_VERSION
+    version_index = -1
+    for idx, part in enumerate(parts):
+        if part in {"v1", "v1beta"}:
+            api_version = part
+            version_index = idx
+            break
+
+    if version_index >= 0:
+        base_url = "/".join(parts[:version_index]).rstrip("/")
+    else:
+        base_url = value
+
+    if base_url.endswith("/openai"):
+        base_url = base_url[: -len("/openai")]
+    return base_url, api_version
+
+
+def _build_gemini_http_options(config: Any) -> Optional[dict]:
+    base_url, api_version = _derive_gemini_sdk_endpoint(getattr(config, "endpoint", ""))
+    options: dict[str, Any] = {}
+    if base_url:
+        options["baseUrl"] = base_url
+    if api_version:
+        options["apiVersion"] = api_version
+
+    proxy = config.aiohttp_proxy() if hasattr(config, "aiohttp_proxy") else None
+    if proxy:
+        # google-genai uses httpx by default; pass both sync and async client args.
+        options["clientArgs"] = {"proxy": proxy}
+        options["asyncClientArgs"] = {"proxy": proxy}
+    return options or None
 
 
 class AudioProvider:
@@ -38,11 +80,15 @@ class GeminiAudioProvider(AudioProvider):
 
     def __init__(self):
         self.api_key = ""
+        self.endpoint = ""
+        self._genai_http_options: Optional[dict] = None
         self._refresh_runtime_config()
 
     def _refresh_runtime_config(self) -> None:
         config = resolve_provider("gemini-tts", "gemini-2.0-flash")
         self.api_key = config.api_key
+        self.endpoint = config.endpoint
+        self._genai_http_options = _build_gemini_http_options(config)
 
     async def _call_gemini(self, prompt: str, audio_type: str = 'speech') -> Dict[str, Any]:
         """调用 Gemini TTS 朗读文本（仅配音/语音）。
@@ -59,7 +105,7 @@ class GeminiAudioProvider(AudioProvider):
             )
         try:
             from google import genai
-            client = genai.Client(api_key=self.api_key)
+            client = genai.Client(api_key=self.api_key, http_options=self._genai_http_options)
 
             Path(AUDIO_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
             filename = f"{audio_type}_{uuid.uuid4().hex[:8]}.wav"
