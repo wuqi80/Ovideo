@@ -3192,3 +3192,61 @@
 - This does not change full storyboard behavior for pages that need image prompts, generated images, or bound assets.
 - The main remaining heavy workflow pages to audit next are `GenerationPage`, `MaterialsPage`, and `AudioStagePage`, which still have full-slice loading paths in some flows.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Generation Page Lightweight Storyboard Video Loading
+
+### Changes
+
+- Added a second optional lightweight storyboard field set for `GET /api/episodes/{episode_id}/storyboard-items`:
+  - new query parameter value: `fields=video`
+  - allowed field set remains server-side whitelisted in `deploy/dao/creative/storyboard.py`
+  - returned fields are limited to IDs, ordering, dialogue, video prompt, selected/generated image URL, duration, planned duration, script ID, and status
+- Updated `deploy/new_html/pages/GenerationPage.tsx` so the video generation workflow:
+  - loads only `audioTracks` and `videoSegments` from `EpisodeContext`
+  - fetches storyboard video metadata directly through `getStoryboardItems(..., { fields: 'video' })`
+  - keeps full lightweight metadata for timeline math, but renders only the first 10 storyboard cards initially
+  - adds a "加载更多镜头" control that reveals 10 more cards per click
+  - marks storyboard thumbnails with `loading="lazy"` and `decoding="async"`
+- Extended `deploy/new_html/services/apiService.ts` and the API service test for the `video` field set.
+- Extended `deploy/scripts/check_route_contract.py` with `generation_lightweight_storyboard_checks=7` to prevent the video generation page from regressing to full storyboard loading and unbounded card/image rendering.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/dao/creative/storyboard.py deploy/routers/storyboard.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `generation_lightweight_storyboard_checks=7`
+  - targeted TypeScript check:
+    - `node node_modules/typescript/bin/tsc --noEmit ... pages/GenerationPage.tsx services/apiService.ts __tests__/services/apiService.test.ts`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile dao/creative/storyboard.py routers/storyboard.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - generated frontend asset: `../dist/assets/GenerationPage-BfYzee_X.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - live lightweight endpoint check:
+    - `GET /api/episodes/ep_2fc899a228f5/storyboard-items?fields=video&limit=1&include_total=true`
+    - HTTP `200`, `success=True`, `total=152`
+    - returned keys: `audio_duration_ms`, `dialogue`, `episode_id`, `generated_image_url`, `item_id`, `planned_duration_ms`, `script_id`, `sort_order`, `status`, `video_prompt`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_generation_lightweight_storyboard_20260619_121215/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/dao/creative/storyboard.py`
+  - `/home/Administrator/deploy/routers/storyboard.py`
+  - `/home/Administrator/deploy/new_html/services/apiService.ts`
+  - `/home/Administrator/deploy/new_html/pages/GenerationPage.tsx`
+  - `/home/Administrator/deploy/new_html/__tests__/services/apiService.test.ts`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- This does not change full storyboard behavior for pages that need full text, asset bindings, generated-image history, or prompt editing.
+- The main remaining heavy workflow pages to audit next are `MaterialsPage` and `AudioStagePage`, both of which still force full storyboard refreshes for their specialized workflows.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

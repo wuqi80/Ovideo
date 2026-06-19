@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Play, Pause, Video, Image as ImageIcon, Clock, Film, Plus, Loader, RefreshCw } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { createVideoSegment, getVideoSegments } from '../services/apiService';
+import { createVideoSegment, getStoryboardItems, getVideoSegments } from '../services/apiService';
 import type { AudioTrack, StoryboardItemDB, VideoSegment } from '../types';
 import { MediaImage } from '../components/MediaImage';
+
+const GENERATION_INITIAL_STORYBOARD_COUNT = 10;
+const GENERATION_STORYBOARD_PAGE_SIZE = 10;
 
 type SegmentUiStatus = 'pending' | 'generating' | 'completed' | 'error';
 
@@ -114,19 +117,73 @@ function audioTrackColor(tt: string): string {
   }
 }
 
+function normalizeStoryboardVideoItem(r: any): StoryboardItemDB {
+  return {
+    itemId: r.item_id ?? r.itemId ?? '',
+    episodeId: r.episode_id ?? r.episodeId ?? '',
+    sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
+    sceneHeading: '',
+    actionText: '',
+    dialogue: r.dialogue ?? '',
+    cameraMovement: '',
+    imagePrompt: '',
+    videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
+    generatedImageUrl: r.generated_image_url ?? r.generatedImageUrl ?? null,
+    boundAssets: [],
+    status: r.status ?? 'draft',
+    dialogueAudioUrl: null,
+    narrationAudioUrl: null,
+    sfxAudioUrl: null,
+    audioDurationMs: r.audio_duration_ms ?? r.audioDurationMs ?? null,
+    plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
+  };
+}
+
 export const GenerationPage: React.FC = () => {
-  const { episodeId, isLoading, error, storyboardItems, audioTracks, videoSegments, reload, loadSlices } = useEpisode();
+  const { episodeId, selectedScriptId, isLoading, error, audioTracks, videoSegments, reload, loadSlices } = useEpisode();
+  const [storyboardVideoItems, setStoryboardVideoItems] = useState<StoryboardItemDB[]>([]);
+  const [storyboardVideoReloadKey, setStoryboardVideoReloadKey] = useState(0);
+  const [visibleStoryboardCount, setVisibleStoryboardCount] = useState(GENERATION_INITIAL_STORYBOARD_COUNT);
 
   useEffect(() => {
-    loadSlices('storyboardItems', 'audioTracks', 'videoSegments');
+    loadSlices('audioTracks', 'videoSegments');
   }, [loadSlices]);
 
+  useEffect(() => {
+    setVisibleStoryboardCount(GENERATION_INITIAL_STORYBOARD_COUNT);
+  }, [episodeId, selectedScriptId]);
+
+  useEffect(() => {
+    let active = true;
+    if (!episodeId) {
+      setStoryboardVideoItems([]);
+      return () => { active = false; };
+    }
+    getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'video' })
+      .then(res => {
+        if (!active) return;
+        setStoryboardVideoItems(res.success ? (res.items || []).map(normalizeStoryboardVideoItem) : []);
+      })
+      .catch(err => {
+        console.warn('storyboard video fields load failed:', err);
+        if (active) setStoryboardVideoItems([]);
+      });
+    return () => { active = false; };
+  }, [episodeId, selectedScriptId, storyboardVideoReloadKey]);
+
   const sortedItems = useMemo(
-    () => [...storyboardItems].sort(
+    () => [...storyboardVideoItems].sort(
       (a, b) => sbSort(a as StoryboardItemDB & Record<string, unknown>) - sbSort(b as StoryboardItemDB & Record<string, unknown>)
     ),
-    [storyboardItems]
+    [storyboardVideoItems]
   );
+
+  const visibleStoryboardItems = useMemo(
+    () => sortedItems.slice(0, visibleStoryboardCount),
+    [sortedItems, visibleStoryboardCount],
+  );
+
+  const hasMoreStoryboardItems = visibleStoryboardCount < sortedItems.length;
 
   const itemStartMs = useMemo(() => {
     const map = new Map<string, number>();
@@ -227,6 +284,11 @@ export const GenerationPage: React.FC = () => {
     } catch (e) { console.error(e); }
   }, [episodeId, reload]);
 
+  const refreshGenerationData = useCallback(async () => {
+    setStoryboardVideoReloadKey(key => key + 1);
+    await refreshSegmentsOnly();
+  }, [refreshSegmentsOnly]);
+
   useEffect(() => {
     const busy = videoSegments.some((seg) => {
       const s = segStatusRaw(seg as VideoSegment & Record<string, unknown>);
@@ -278,7 +340,7 @@ export const GenerationPage: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={() => void refreshSegmentsOnly()}
+          onClick={() => void refreshGenerationData()}
           className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-primary text-primary hover:bg-primary-light text-sm transition-all"
         >
           <RefreshCw size={14} /> 同步片段
@@ -301,7 +363,7 @@ export const GenerationPage: React.FC = () => {
                 <div>暂无分镜条目</div>
               </div>
             ) : (
-              sortedItems.map((raw, idx) => {
+              visibleStoryboardItems.map((raw, idx) => {
                 const item = raw as StoryboardItemDB & Record<string, unknown>;
                 const id = sbId(item);
                 const seg = id ? latestSegmentByStoryboardId.get(id) : undefined;
@@ -321,7 +383,13 @@ export const GenerationPage: React.FC = () => {
                     <div className="flex gap-2.5">
                       <div className="w-[72px] h-[72px] rounded-lg overflow-hidden shrink-0 bg-n30">
                         {img ? (
-                          <MediaImage src={withAuthParam(img)} alt="" className="w-full h-full object-cover" />
+                          <MediaImage
+                            src={withAuthParam(img)}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                          />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-n100">
                             <ImageIcon size={24} />
@@ -353,6 +421,15 @@ export const GenerationPage: React.FC = () => {
                   </div>
                 );
               })
+            )}
+            {hasMoreStoryboardItems && (
+              <button
+                type="button"
+                onClick={() => setVisibleStoryboardCount(count => Math.min(count + GENERATION_STORYBOARD_PAGE_SIZE, sortedItems.length))}
+                className="w-full mt-1.5 px-3 py-2 rounded-lg border border-n40 bg-n0 hover:border-primary hover:text-primary text-xs text-n300 transition-colors"
+              >
+                加载更多镜头（{Math.min(visibleStoryboardCount, sortedItems.length)} / {sortedItems.length}）
+              </button>
             )}
           </div>
         </aside>

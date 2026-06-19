@@ -85,6 +85,14 @@ describe('getStoryboardItems', () => {
     const [url] = mockFetch.mock.calls[0];
     expect(url).toBe('/api/episodes/ep_1/storyboard-items?fields=audio');
   });
+
+  it('supports video-generation field sets', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, items: [] }));
+    const { getStoryboardItems } = await import('../../services/apiService');
+    await getStoryboardItems('ep_1', undefined, { fields: 'video' });
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/storyboard-items?fields=video');
+  });
 });
 
 describe('updateStoryboardItem', () => {

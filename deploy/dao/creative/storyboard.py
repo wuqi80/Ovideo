@@ -24,6 +24,18 @@ class StoryboardDAO:
             "planned_duration_ms",
             "status",
         ),
+        "video": (
+            "item_id",
+            "episode_id",
+            "script_id",
+            "sort_order",
+            "dialogue",
+            "video_prompt",
+            "generated_image_url",
+            "audio_duration_ms",
+            "planned_duration_ms",
+            "status",
+        ),
     }
 
     @staticmethod
