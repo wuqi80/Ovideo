@@ -334,6 +334,15 @@ async function apiCall(url, options = {}) {
       headers: { 'Content-Type': 'application/json', ...authHeader, ...options.headers },
       ...options,
     });
+    if (resp.status === 401) {
+      try {
+        sessionStorage.removeItem('admin_session_token');
+        sessionStorage.removeItem('admin_session_username');
+        sessionStorage.removeItem('admin_session_login_at');
+      } catch (_) {}
+      redirectToAdminLoginForLegacy();
+      throw new Error('未授权，请重新登录');
+    }
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
     return data;
@@ -1176,13 +1185,27 @@ function targetPage() {
   const h = (location.hash || '').replace(/^#/, '');
   return VALID_PAGES.includes(h) ? h : 'dashboard';
 }
+
+function legacyShellItem(page) {
+  return page === 'apiconfig' ? 'legacy-apiconfig' : page;
+}
+
+function redirectToAdminLoginForLegacy() {
+  const from = '/admin/settings?item=' + encodeURIComponent(legacyShellItem(targetPage()));
+  const loginUrl = '/admin/login?redirect=' + encodeURIComponent(from);
+  if (window.top && window.top !== window.self) {
+    window.top.location.href = loginUrl;
+  } else {
+    window.location.href = loginUrl;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const embed = new URLSearchParams(location.search).get('embed') === '1';
   // 直接访问（非 iframe 内嵌）→ 折叠回统一后台壳，避免出现「第二个后台」独立形态；
   // 顺带享受壳的登录鉴权门（旧版静态页本身无鉴权）。被壳以 ?embed=1 嵌入时跳过此逻辑。
   if (!embed && window.self === window.top) {
-    const ITEM = { dashboard: 'dashboard', cluster: 'cluster', workflows: 'workflows', apiconfig: 'apiconfig' };
-    location.replace('/admin/settings?item=' + (ITEM[targetPage()] || 'apiconfig'));
+    location.replace('/admin/settings?item=' + legacyShellItem(targetPage()));
     return;
   }
   if (embed) document.body.classList.add('embedded');

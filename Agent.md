@@ -4922,3 +4922,51 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 ### Notes
 
 - No behavior change is intended; this moves the login HTTP handler only. Redline task queue/core/worker/pipeline/agent/workflow files were not modified.
+
+## 2026-06-19 Legacy API Editor Redirect Fix
+
+### Changes
+
+- Fixed the legacy admin API editor fallback route:
+  - direct `/admin-legacy/?page=apiconfig#apiconfig` access now folds into `/admin/settings?item=legacy-apiconfig`
+  - it no longer folds back into the native `/admin/settings?item=apiconfig` page
+- Added a legacy admin API 401 handler:
+  - clears stale `admin_session_*` values
+  - redirects the top-level window to `/admin/login`
+  - preserves the intended legacy admin shell target
+- Bumped legacy admin cache keys:
+  - `/admin-legacy/app.js?v=20260619a`
+  - `/admin-legacy/style.css?v=20260619a`
+  - React iframe `LEGACY_VER=20260619a`
+
+### Verification
+
+- Local checks:
+  - `node --check deploy/admin/app.js` passed with bundled Node
+  - single-file TypeScript JSX transpile for `deploy/new_html/admin/AdminSettingsPage.tsx` passed
+- Full local `new_html` build could not run because local `node_modules` is missing Rollup's Windows optional package `@rollup/rollup-win32-x64-msvc`; this is an environment dependency issue. Server build is required for final verification.
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_legacy_api_editor_redirect_20260619-055655`
+- Uploaded to server:
+  - `/home/Administrator/deploy/admin/app.js`
+  - `/home/Administrator/deploy/admin/index.html`
+  - `/home/Administrator/deploy/new_html/admin/AdminSettingsPage.tsx`
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+- Server checks passed:
+  - `node --check admin/app.js`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online checks passed:
+  - built React asset contains `LEGACY_VER=20260619a`
+  - legacy static `admin/app.js` contains `legacyShellItem()` mapping `apiconfig` to `legacy-apiconfig`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No redline files were modified.
