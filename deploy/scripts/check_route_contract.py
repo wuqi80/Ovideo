@@ -117,6 +117,29 @@ EXPECTED_ENDPOINTS = {
     ("/api/projects/{project_id}/images/{shot_id}", "GET"): ("routers.projects", "get_shot_images"),
     ("/api/projects/{project_id}/export-to-video", "POST"): ("routers.projects", "export_to_video"),
     ("/api/projects/{project_id}/clear-video-tasks", "POST"): ("routers.projects", "clear_video_tasks"),
+    ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
+    ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
+    ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
+    ("/api/audio/generate-speech", "POST"): ("routers.audio", "gen_speech"),
+    ("/api/audio/generate-sfx", "POST"): ("routers.audio", "gen_sfx"),
+    ("/api/audio/generate-music", "POST"): ("routers.audio", "gen_music"),
+    ("/api/minimax/voice-design", "POST"): ("routers.audio", "minimax_voice_design"),
+    ("/api/minimax/voice-clone", "POST"): ("routers.audio", "minimax_voice_clone"),
+    ("/api/minimax/voices", "GET"): ("routers.audio", "minimax_list_voices"),
+    ("/api/minimax/voices/{voice_id}", "GET"): ("routers.audio", "minimax_get_voice"),
+    ("/api/minimax/voices/{voice_id}", "DELETE"): ("routers.audio", "minimax_delete_voice"),
+    ("/api/minimax/tts", "POST"): ("routers.audio", "minimax_tts"),
+    ("/api/minimax/tts/sync", "POST"): ("routers.audio", "minimax_tts_sync"),
+    ("/api/minimax/tts/{task_id}", "GET"): ("routers.audio", "minimax_tts_query"),
+    ("/api/minimax/music", "POST"): ("routers.audio", "minimax_music"),
+    ("/api/minimax/lyrics", "POST"): ("routers.audio", "minimax_lyrics"),
+    ("/api/minimax/files/upload", "POST"): ("routers.audio", "minimax_file_upload"),
+    ("/api/minimax/files/{file_id}", "GET"): ("routers.audio", "minimax_file_retrieve"),
+    ("/api/minimax/files/{file_id}", "DELETE"): ("routers.audio", "minimax_file_delete"),
+    ("/api/character-voices", "POST"): ("routers.audio", "create_character_voice"),
+    ("/api/projects/{project_id}/character-voices", "GET"): ("routers.audio", "get_character_voices"),
+    ("/api/character-voices/{voice_id}", "PUT"): ("routers.audio", "update_character_voice"),
+    ("/api/character-voices/{voice_id}", "DELETE"): ("routers.audio", "delete_character_voice"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -876,6 +899,68 @@ def check_project_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_audio_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    audio_path = root / "routers" / "audio.py"
+    if not audio_path.exists():
+        fail("routers/audio.py is missing")
+
+    route_paths = {
+        "/api/episodes/{episode_id}/audio-tracks",
+        "/api/audio-tracks/{track_id}",
+        "/api/audio/generate-speech",
+        "/api/audio/generate-sfx",
+        "/api/audio/generate-music",
+        "/api/minimax/voice-design",
+        "/api/minimax/voice-clone",
+        "/api/minimax/voices",
+        "/api/minimax/voices/{voice_id}",
+        "/api/minimax/tts",
+        "/api/minimax/tts/sync",
+        "/api/minimax/tts/{task_id}",
+        "/api/minimax/music",
+        "/api/minimax/lyrics",
+        "/api/minimax/files/upload",
+        "/api/minimax/files/{file_id}",
+        "/api/character-voices",
+        "/api/projects/{project_id}/character-voices",
+        "/api/character-voices/{voice_id}",
+    }
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Audio/MiniMax route handlers must live in routers/audio.py:\n" + "\n".join(violations))
+
+    audio_tree = parse_py_file(audio_path)
+    route_count = 0
+    for node in ast.walk(audio_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 23:
+        fail(f"routers/audio.py should own 23 audio route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -909,6 +994,7 @@ def main() -> int:
     auth_route_handlers = check_auth_routes_extracted(root)
     admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
+    audio_route_handlers = check_audio_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -934,6 +1020,7 @@ def main() -> int:
     print(f"  auth_route_handlers={auth_route_handlers}")
     print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
+    print(f"  audio_route_handlers={audio_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 

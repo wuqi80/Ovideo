@@ -1925,6 +1925,63 @@
 - No frontend build was required.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
+## 2026-06-19 Audio Router Extraction
+
+### Changes
+
+- Extracted 23 audio-related route handlers from `deploy/api_routes.py` into `deploy/routers/audio.py`:
+  - audio tracks
+  - generated speech/SFX/music
+  - MiniMax voice design, voice clone, TTS, music, lyrics, file APIs
+  - character voice CRUD
+- Kept `api_routes.py` as the compatibility registration point so existing callers and tests that include `api_routes.router` continue to see the same routes.
+- Preserved the historical patch hooks used by MiniMax TTS tests:
+  - `api_routes._require_minimax_client`
+  - `api_routes.task_service.get`
+  - `api_routes.save_generated_file_to_db`
+- Reduced `api_routes.py` to 2526 lines.
+- Strengthened `deploy/scripts/check_route_contract.py`:
+  - runtime endpoints must resolve to `routers.audio`
+  - `api_routes.py` must not reintroduce direct audio/MiniMax/character-voice route handlers
+  - `routers/audio.py` must own exactly 23 route registrations
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/audio.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_audio_provider_runtime.py`
+  - direct MiniMax TTS endpoint compatibility probe passed
+  - route result remains `openapi_paths=231`, `openapi_operations=287`, `audio_route_handlers=23`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_audio_router_20260619_064648`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/audio.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/audio.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_audio_provider_runtime.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- The legacy `pytest tests/test_api_minimax_tts_enqueue.py` path is currently blocked locally by a Starlette `TestClient` / httpx version mismatch (`Client.__init__() got an unexpected keyword argument 'app'`), before it reaches application code.
+- No frontend build was required.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Gemini TTS Runtime Endpoint Wiring
 
 ### Changes
