@@ -32,7 +32,7 @@ def check(name, cond, detail=""):
     return cond
 
 def forged_token():
-    OLD = "messiah-default-jwt-secret-2026"
+    OLD = "mecha-default-jwt-secret-2026"
     now = int(time.time())
     pb = base64.urlsafe_b64encode(json.dumps({"u": "admin", "exp": now + 3600, "iat": now}, separators=(',', ':')).encode()).decode().rstrip('=')
     return f"{pb}.{hmac.new(OLD.encode(), pb.encode(), hashlib.sha256).hexdigest()}"
