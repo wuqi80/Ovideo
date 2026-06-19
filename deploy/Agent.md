@@ -1,5 +1,27 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Frontend Gemini SDK Decommission
+
+### Changes
+
+- Updated `new_html/services/geminiService.ts`:
+  - removed the browser-side `@google/genai` / `GoogleGenAI` client
+  - kept legacy exported function names, but routed text and JSON generation through `/api/gemini/text` via `callGeminiProxyWithRetry`
+  - added `callGeminiText()` as the compatibility text entrypoint
+- Updated `new_html/services/promptRewriter.ts`:
+  - kept `geminiSDK` as a legacy UI/backend option id
+  - changed it into a backend-managed Gemini Text alias instead of dynamically importing the old direct SDK path
+  - updated labels so the UI no longer claims a local/client key is needed
+- Updated `new_html/components/AIRewritePromptModal.tsx` comments and `new_html/vite.config.ts` safety comment.
+- Updated `scripts/check_route_contract.py` with `frontend_ai_proxy_checks`:
+  - fails if frontend business code reintroduces `@google/genai`, `GoogleGenAI`, `process.env.*` provider keys, or dynamic SDK import paths
+
+### Notes
+
+- This moves another legacy frontend AI path under the backend provider resolver/API management platform.
+- Vite still defines disabled placeholder `process.env.API_KEY`/`process.env.GEMINI_API_KEY` values as a defensive guard only; business code no longer reads them.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Provider Quick API Configuration
 
 ### Changes

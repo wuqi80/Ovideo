@@ -2440,6 +2440,58 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_ai_proxy_contract(root: Path) -> int:
+    """Frontend AI text calls must route through backend provider management."""
+    new_html = root / "new_html"
+    gemini_service = new_html / "services" / "geminiService.ts"
+    prompt_rewriter = new_html / "services" / "promptRewriter.ts"
+
+    required_snippets = [
+        (gemini_service, "import { callGeminiProxyWithRetry } from './geminiProxyService';"),
+        (gemini_service, "export const callGeminiText = async"),
+        (gemini_service, "return callGeminiProxyWithRetry(prompt, systemPrompt, 3, model);"),
+        (prompt_rewriter, "历史兼容别名"),
+        (prompt_rewriter, "result = await callGeminiProxyWithRetry(userPrompt, SYSTEM_PROMPT);"),
+    ]
+    forbidden_snippets = [
+        (gemini_service, "@google/genai"),
+        (gemini_service, "GoogleGenAI"),
+        (gemini_service, "process.env.API_KEY"),
+        (gemini_service, "process.env.GEMINI_API_KEY"),
+        (gemini_service, "ai.models.generateContent"),
+        (prompt_rewriter, "await import('./geminiService')"),
+        (prompt_rewriter, "直连 / 需本地 key"),
+    ]
+
+    checks = 0
+    for path, snippet in required_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing frontend AI proxy contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    for path, snippet in forbidden_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet in text:
+            fail(f"Forbidden frontend direct-AI snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+
+    violations: list[str] = []
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "node_modules" in path.parts or "__tests__" in path.parts or path.name == "vite.config.ts":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "process.env." in text:
+            violations.append(f"{path.relative_to(root)} uses process.env")
+        if "@google/genai" in text or "GoogleGenAI" in text:
+            violations.append(f"{path.relative_to(root)} imports direct Gemini SDK")
+    if violations:
+        fail("Frontend AI calls must use backend proxies:\n" + "\n".join(violations))
+    checks += 1
+    return checks
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -2479,6 +2531,7 @@ def main() -> int:
     audio_stage_lightweight_storyboard_checks = check_audio_stage_lightweight_storyboard_contract(root)
     materials_lightweight_storyboard_checks = check_materials_lightweight_storyboard_contract(root)
     api_provider_runtime_model_checks = check_api_provider_runtime_model_contract(root)
+    frontend_ai_proxy_checks = check_frontend_ai_proxy_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -2529,6 +2582,7 @@ def main() -> int:
     print(f"  audio_stage_lightweight_storyboard_checks={audio_stage_lightweight_storyboard_checks}")
     print(f"  materials_lightweight_storyboard_checks={materials_lightweight_storyboard_checks}")
     print(f"  api_provider_runtime_model_checks={api_provider_runtime_model_checks}")
+    print(f"  frontend_ai_proxy_checks={frontend_ai_proxy_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

@@ -1,12 +1,12 @@
 // new_html/services/promptRewriter.ts
 //
-// 2026-05-20 (Bug 2)：统一 3 个文字模型后端的「改写视频提示词」接口。
+// 2026-05-20 (Bug 2)：统一文字模型后端的「改写视频提示词」接口。
 // 上游组件（AIRewritePromptModal）只需要传 model + 原文 + 指令，由此层挑后端。
 //
 // 后端切换原因：
-// - geminiProxy（默认）：服务器中转，稳定，免本地 token；中文/英文皆 OK
-// - geminiSDK：直连，需要本地 GEMINI_API_KEY，速度更快但依赖配置
-// - deepseek：中文优化好，需要服务器有 DEEPSEEK_API_KEY 且额外计费
+// - geminiProxy（默认）：服务器中转，走后台 provider 配置；中文/英文皆 OK
+// - geminiSDK：历史兼容别名，现在同样走后端 Gemini Text provider，不再直连客户端 SDK
+// - deepseek：中文优化好，走后台 DeepSeek provider 配置
 
 import { callGeminiProxyWithRetry } from './geminiProxyService';
 import { callDeepseekChatWithRetry } from './deepseekService';
@@ -15,8 +15,8 @@ export type RewriteBackend = 'geminiProxy' | 'geminiSDK' | 'deepseek';
 
 export const REWRITE_BACKEND_LABELS: Record<RewriteBackend, string> = {
     geminiProxy: 'Gemini 中转（默认 / 稳定）',
-    geminiSDK:   'Gemini SDK（直连 / 需本地 key）',
-    deepseek:    'DeepSeek Chat（中文优化）',
+    geminiSDK:   'Gemini Text（后端配置 / 兼容旧选项）',
+    deepseek:    'DeepSeek Chat（后端配置 / 中文优化）',
 };
 
 /** 预设改写指令 — 选择后无需输入自定义文本即可生成 */
@@ -84,14 +84,7 @@ export async function rewritePrompt(req: RewriteRequest): Promise<string> {
     } else if (backend === 'deepseek') {
         result = await callDeepseekChatWithRetry(userPrompt, SYSTEM_PROMPT);
     } else if (backend === 'geminiSDK') {
-        // geminiService 直连 SDK 形式，按需懒加载（需要本地 GEMINI_API_KEY）
-        const mod = await import('./geminiService');
-        if (typeof (mod as any).callGeminiText === 'function') {
-            result = await (mod as any).callGeminiText(userPrompt, SYSTEM_PROMPT);
-        } else {
-            // 没有暴露通用入口时，回退到 Proxy
-            result = await callGeminiProxyWithRetry(userPrompt, SYSTEM_PROMPT);
-        }
+        result = await callGeminiProxyWithRetry(userPrompt, SYSTEM_PROMPT);
     } else {
         throw new Error(`未知 backend: ${backend}`);
     }

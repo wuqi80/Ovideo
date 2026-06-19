@@ -5,7 +5,7 @@
 // UI 流程：
 //   1. 顶部：原 prompt（只读，方便对照）
 //   2. 改写模式下拉：5 个预设 + "自定义..."；选自定义才出 instruction textarea
-//   3. 后端下拉：geminiProxy / geminiSDK / deepseek
+//   3. 后端下拉：geminiProxy / geminiSDK(兼容别名，实际走后端) / deepseek
 //   4. [生成] 按钮 → 异步调用 rewritePrompt → 结果区可编辑
 //   5. [接受] 把结果回写到原 textarea / [重新生成] / [取消]
 //

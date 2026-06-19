@@ -1,8 +1,8 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
 import { StoryboardData, RestructureResponse, StoryboardItem, SourcePage, TaskKind } from "../types";
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageViaProxy, GeminiImageOptions, GeneratedFileResult } from './geminiImageService';
+import { callGeminiProxyWithRetry } from './geminiProxyService';
 import { enqueueComfyUITask, getComfyUIQueueStatus } from './comfyuiTaskQueue';
 // 2026-05-20 (Task System Overhaul M3)：所有 ComfyUI 等待函数都把任务同步到全局
 // taskRegistry，让铃铛 / TaskBadge / 跨页通知都能感知。
@@ -58,8 +58,6 @@ function toQueueMeta(m: ComfyUITaskRegistryMeta): import('./comfyuiTaskQueue').C
     };
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // 重新导出队列状态查询函数（保持向后兼容）
 export { getComfyUIQueueStatus };
 
@@ -76,6 +74,38 @@ const MODEL_IMAGE_FLASH = 'gemini-2.5-flash-image';            // Nano Banana St
 const MODEL_IMAGE_NANO2 = 'gemini-3.1-flash-image-preview';    // 化神 - 主力生图模型
 const MODEL_IMAGE_PRO = MODEL_IMAGE_NANO2;                     // @deprecated 旧名兼容，现指向 nano2
 const MODEL_IMAGE = MODEL_IMAGE_NANO2;                         // 默认使用 nano2
+
+const stripJsonFences = (value: string): string => {
+    return (value || '')
+        .replace(/```json\n?/gi, '')
+        .replace(/```\n?/g, '')
+        .trim();
+};
+
+const parseJsonFromGemini = <T>(value: string): T => {
+    const clean = stripJsonFences(value);
+    const objectMatch = clean.match(/\{[\s\S]*\}/);
+    const arrayMatch = clean.match(/\[[\s\S]*\]/);
+    const json = objectMatch?.[0] || arrayMatch?.[0] || clean;
+    return JSON.parse(json) as T;
+};
+
+export const callGeminiText = async (
+    prompt: string,
+    systemPrompt?: string,
+    model: string = MODEL_TEXT,
+): Promise<string> => {
+    return callGeminiProxyWithRetry(prompt, systemPrompt, 3, model);
+};
+
+const callGeminiJson = async <T>(
+    prompt: string,
+    systemPrompt?: string,
+    model: string = MODEL_LOGIC,
+): Promise<T> => {
+    const response = await callGeminiText(prompt, systemPrompt, model);
+    return parseJsonFromGemini<T>(response);
+};
 
 /**
  * 图像生成（使用中转站API）
@@ -117,15 +147,7 @@ export const rewriteNovelToScript = async (text: string): Promise<string> => {
           ${text}
         `;
 
-        const response = await ai.models.generateContent({
-          model: MODEL_TEXT,
-          contents: prompt,
-          config: {
-            systemInstruction: "你是一个专业的中文动画编剧助手。",
-          }
-        });
-
-        return response.text || "";
+        return await callGeminiText(prompt, "你是一个专业的中文动画编剧助手。", MODEL_TEXT);
       } catch (error) {
         console.error("Rewrite Error:", error);
         throw new Error("Failed to rewrite script.");
@@ -145,34 +167,7 @@ export const extractScriptMetadata = async (scriptText: string): Promise<{ chara
           ${scriptText}
         `;
 
-        const response = await ai.models.generateContent({
-          model: MODEL_LOGIC,
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                characters: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: "List of character names found in the script"
-                },
-                scenes: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: "List of scene locations found in the script"
-                }
-              },
-              required: ["characters", "scenes"]
-            }
-          }
-        });
-
-        if (response.text) {
-          return JSON.parse(response.text) as { characters: string[], scenes: string[] };
-        }
-        return { characters: [], scenes: [] };
+        return await callGeminiJson<{ characters: string[], scenes: string[] }>(prompt, undefined, MODEL_LOGIC);
 
     } catch (error) {
         console.error("Extraction Error:", error);
@@ -202,44 +197,12 @@ export const generateStoryboards = async (scriptText: string): Promise<Storyboar
           ${scriptText}
         `;
 
-        const response = await ai.models.generateContent({
-          model: MODEL_LOGIC,
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                items: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      originalText: { type: Type.STRING, description: "Original text paragraph from the script for highlighting" },
-                      scriptSegment: { type: Type.STRING, description: "AI-refined scene description for image generation" },
-                      imagePrompt: { type: Type.STRING, description: "Chinese image prompt" },
-                      videoPrompt: { type: Type.STRING, description: "Chinese video prompt" },
-                      dialogue: { type: Type.STRING, description: "Character dialogue" },
-                      characters: { type: Type.ARRAY, items: { type: Type.STRING } },
-                      scene: { type: Type.STRING }
-                    },
-                    required: ["originalText", "scriptSegment", "imagePrompt", "videoPrompt", "dialogue", "characters", "scene"]
-                  }
-                }
-              }
-            }
-          }
-        });
-
-        if (response.text) {
-          const data = JSON.parse(response.text) as any;
-          const items = data.items.map((item: any) => ({
-            ...item,
-            id: uuidv4()
-          }));
-          return { items };
-        }
-        throw new Error("Empty response from AI");
+        const data = await callGeminiJson<any>(prompt, undefined, MODEL_LOGIC);
+        const items = (data.items || []).map((item: any) => ({
+          ...item,
+          id: uuidv4()
+        }));
+        return { items };
 
     } catch (error) {
         console.error("Storyboard Error:", error);
@@ -260,33 +223,11 @@ export const regenerateSingleShot = async (scriptSegment: string, instruction?: 
               请返回 JSON 包含 imagePrompt, videoPrompt, dialogue, characters, scene。
             `;
 
-            const response = await ai.models.generateContent({
-                model: MODEL_LOGIC,
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            imagePrompt: { type: Type.STRING },
-                            videoPrompt: { type: Type.STRING },
-                            dialogue: { type: Type.STRING },
-                            characters: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            scene: { type: Type.STRING }
-                        },
-                        required: ["imagePrompt", "videoPrompt", "dialogue", "characters", "scene"]
-                    }
-                }
-            });
-
-            if (response.text) {
-                const data = JSON.parse(response.text);
-                return {
-                    scriptSegment: scriptSegment,
-                    ...data
-                };
-            }
-            throw new Error("Empty logic response");
+            const data = await callGeminiJson<any>(prompt, undefined, MODEL_LOGIC);
+            return {
+                scriptSegment: scriptSegment,
+                ...data
+            };
 
         } catch (error) {
             console.error("Regenerate Shot Error:", error);
@@ -313,12 +254,7 @@ export const refineScriptSegment = async (originalSegment: string, instruction: 
           **只输出修改后的文本内容，不要包含任何解释或Markdown标记。**
         `;
 
-        const response = await ai.models.generateContent({
-          model: MODEL_TEXT,
-          contents: prompt,
-        });
-
-        return response.text || originalSegment;
+        return await callGeminiText(prompt, undefined, MODEL_TEXT) || originalSegment;
     } catch (error) {
         console.error("Refine Error:", error);
         throw new Error("Failed to refine script.");
@@ -373,40 +309,7 @@ export const restructureShot = async (
                 }
             `;
 
-            const response = await ai.models.generateContent({
-                model: MODEL_LOGIC,
-                contents: prompt,
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            newScriptSegment: { type: Type.STRING },
-                            newStoryboardItems: {
-                                type: Type.ARRAY,
-                                items: {
-                                    type: Type.OBJECT,
-                                    properties: {
-                                        scriptSegment: { type: Type.STRING },
-                                        imagePrompt: { type: Type.STRING },
-                                        videoPrompt: { type: Type.STRING },
-                                        dialogue: { type: Type.STRING },
-                                        characters: { type: Type.ARRAY, items: { type: Type.STRING } },
-                                        scene: { type: Type.STRING }
-                                    },
-                                    required: ["scriptSegment", "imagePrompt", "videoPrompt", "dialogue", "characters", "scene"]
-                                }
-                            }
-                        },
-                        required: ["newScriptSegment", "newStoryboardItems"]
-                    }
-                }
-            });
-
-            if (response.text) {
-                return JSON.parse(response.text) as RestructureResponse;
-            }
-            throw new Error("Empty logic response");
+            return await callGeminiJson<RestructureResponse>(prompt, undefined, MODEL_LOGIC);
 
         } catch (error) {
             console.error("Restructure Error:", error);
