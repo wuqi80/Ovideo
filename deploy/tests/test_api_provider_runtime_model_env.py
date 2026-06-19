@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from services import ai_proxy_service
+from services import ai_proxy_service, video_reverse_service
 from services.api_provider_registry import get_endpoint_env_key, get_model_env_key, get_provider_env_key
 from services.api_provider_runtime import resolve_provider
 
@@ -123,3 +123,46 @@ async def test_gemini_image_explicit_request_model_overrides_runtime_model(monke
     assert model == "gemini-3.1-flash-image-preview"
     assert calls[0]["url"] == "https://image-runtime.example.test/v1beta/models/gemini-3.1-flash-image-preview:generateContent"
     assert calls[0]["json"]["generationConfig"]["imageConfig"]["imageSize"] == "4K"
+
+
+class _ChatResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"description":"shot frame","camera_description":"eye level","motion_description":"slow push"}',
+                    }
+                }
+            ]
+        }
+
+
+@pytest.mark.asyncio
+async def test_video_reverse_uses_runtime_gemini_text_model(monkeypatch, tmp_path):
+    env_key = get_provider_env_key("gemini-text")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    frame = tmp_path / "frame.jpg"
+    frame.write_bytes(b"fake-jpeg")
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-text-key")
+    monkeypatch.setenv(endpoint_env, "https://text-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "gemini-video-reverse-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _ChatResponse()
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    result = await video_reverse_service.analyze_segment_frames([str(frame)])
+
+    assert result["description"] == "shot frame"
+    assert calls[0]["url"] == "https://text-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "gemini-video-reverse-runtime-model"

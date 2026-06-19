@@ -2081,6 +2081,14 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_gemini_image_uses_runtime_model_env_when_request_omits_model",
         ),
+        (
+            root / "services" / "video_reverse_service.py",
+            'gemini_config = resolve_provider("gemini-text")',
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_video_reverse_uses_runtime_gemini_text_model",
+        ),
     ]
     checks = 0
     for path, snippet in required_snippets:

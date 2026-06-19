@@ -3572,3 +3572,49 @@
 - This fixes the same class of issue as Gemini text for the image provider: a schema-level default was making the request look explicit, so admin model changes could not become the runtime default.
 - No frontend source change is required for this increment; existing pages that send a selected model keep that explicit behavior.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Video Reverse Gemini Text Runtime Model
+
+### Changes
+
+- Updated `deploy/services/video_reverse_service.py` so video reverse frame analysis no longer calls `resolve_provider("gemini-text", "gemini-2.5-flash")`.
+- The service now calls `resolve_provider("gemini-text")`, allowing `GEMINI_TEXT_MODEL` from the admin API config runtime projection to become the default model for video reverse analysis.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with `test_video_reverse_uses_runtime_gemini_text_model`.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `11` to `13`
+  - contract now protects video reverse Gemini text runtime-model wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/services/video_reverse_service.py deploy/tests/test_api_provider_runtime_model_env.py deploy/scripts/check_route_contract.py`
+  - `deploy/.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `5/5`
+  - `deploy/.venv/Scripts/python.exe scripts/check_route_contract.py`
+  - `deploy/.venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=13`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_video_reverse_runtime_model_20260619_210619/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/services/video_reverse_service.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile services/video_reverse_service.py tests/test_api_provider_runtime_model_env.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `5/5`
+  - `.venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `GEMINI_TEXT_MODEL` -> `gemini-video-reverse-runtime-model-smoke`, source `GEMINI_TEXT_MODEL`
+
+### Notes
+
+- This removes another hidden hardcoded-model override from a runtime path that already used the provider resolver.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

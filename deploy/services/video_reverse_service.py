@@ -185,7 +185,7 @@ async def analyze_segment_frames(
     给定一个分段的若干抽帧，调用视觉模型生成 description / camera / motion 文字。
     回退：API 不可用时返回结构化空字符串。
     """
-    gemini_config = resolve_provider("gemini-text", "gemini-2.5-flash")
+    gemini_config = resolve_provider("gemini-text")
     if not gemini_config.api_key or not frame_paths:
         return {'description': '', 'camera_description': '', 'motion_description': ''}
 
