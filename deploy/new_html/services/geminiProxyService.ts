@@ -3,11 +3,11 @@
  * 后端统一管理API Key，前端无需配置
  */
 
-// 获取认证token
-const getAuthToken = (): string => {
-  return localStorage.getItem('auth_token') || '';
-};
+import { apiJson } from './httpClient';
 
+interface GeminiTextResponse {
+  content?: string;
+}
 
 /**
  * 通过后端代理调用Gemini文本生成
@@ -18,12 +18,6 @@ export const callGeminiProxy = async (
   model?: string
 ): Promise<string> => {
   try {
-    const token = getAuthToken();
-    
-    if (!token) {
-      throw new Error('未登录，请先登录');
-    }
-
     console.log('📤 发送请求到后端Gemini代理');
 
     const body: Record<string, unknown> = {
@@ -35,24 +29,11 @@ export const callGeminiProxy = async (
       body.model = model.trim();
     }
 
-    const response = await fetch('/api/gemini/text', {
+    const data = await apiJson<GeminiTextResponse>('/api/gemini/text', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
       body: JSON.stringify(body)
-    });
+    }, 'Gemini 文本代理');
 
-    console.log('📥 后端响应状态:', response.status, response.statusText);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ 后端返回错误:', errorText);
-      throw new Error(`Gemini API调用失败: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
     const content = data.content;
     
     if (!content) {

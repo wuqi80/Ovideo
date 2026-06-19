@@ -13,8 +13,7 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   fetchMock.mockReset();
-  // @ts-expect-error - 测试环境下挂全局 fetch
-  globalThis.fetch = fetchMock;
+  vi.stubGlobal('fetch', fetchMock);
   // localStorage 必须有 token，否则 service 提前抛 "未登录"
   const store: Record<string, string> = { auth_token: 'test-token' };
   vi.stubGlobal('localStorage', {
@@ -22,13 +21,14 @@ beforeEach(() => {
     setItem: (k: string, v: string) => { store[k] = v; },
     removeItem: (k: string) => { delete store[k]; },
     clear: () => { Object.keys(store).forEach(k => delete store[k]); },
-  } as Storage);
+  } as unknown as Storage);
 });
 
 function okResp(images: string[] = ['data:image/png;base64,XXXX']) {
   return {
     ok: true,
     status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
     json: async () => ({
       success: true,
       images,
@@ -108,7 +108,7 @@ describe('generateGptImage', () => {
       setItem: () => {},
       removeItem: () => {},
       clear: () => {},
-    } as Storage);
+    } as unknown as Storage);
     await expect(generateGptImage({ tier: 'vip', prompt: 'p' })).rejects.toThrow(/登录/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -116,7 +116,8 @@ describe('generateGptImage', () => {
   it('后端 4xx 抛带 detail 的错误', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,
-      status: 401,
+      status: 503,
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ detail: 'API Key 未配置' }),
     });
     await expect(generateGptImage({ tier: 'vip', prompt: 'p' })).rejects.toThrow(/API Key 未配置/);
@@ -126,6 +127,7 @@ describe('generateGptImage', () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
       json: async () => ({ success: true, images: [], files: [], model: 'gpt-image-2-vip', tier: 'vip' }),
     });
     await expect(generateGptImage({ tier: 'vip', prompt: 'p' })).rejects.toThrow(/未返回图片/);

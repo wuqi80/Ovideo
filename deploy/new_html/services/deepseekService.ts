@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoryboardData, StoryboardItem } from '../types';
+import { apiFetch } from './httpClient';
 
 type ResponseFormat = 'text' | 'json';
 
@@ -47,19 +48,14 @@ const callDeepseek = async (
     onStream?: (chunk: string) => void,  // 🔧 流式回调
     model: string = 'deepseek-reasoner'  // 🆕 支持指定模型
 ): Promise<string> => {
-    const token = localStorage.getItem('auth_token');
-    const response = await fetch('/api/deepseek/chat', {
+    const response = await apiFetch('/api/deepseek/chat', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
         body: JSON.stringify({
             prompt,
             response_format: responseFormat,
             model  // 🆕 传递模型参数
         })
-    });
+    }, { apiName: 'DeepSeek', authErrorMessage: '未登录，无法调用 DeepSeek 服务' });
 
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));

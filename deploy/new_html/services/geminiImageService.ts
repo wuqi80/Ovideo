@@ -3,16 +3,13 @@
  * 后端统一管理API Key，前端无需配置
  */
 
+import { apiJson } from './httpClient';
+
 export interface GeneratedFileResult {
     url: string;
     fileId?: string;
     fileUrl?: string;
 }
-
-// 获取认证token
-const getAuthToken = (): string => {
-  return localStorage.getItem('auth_token') || '';
-};
 
 export interface GeminiImageOptions {
     model: string;
@@ -26,6 +23,15 @@ export interface GeminiImageOptions {
     episodeId?: string;
 }
 
+interface GeminiImageProxyResponse {
+    files?: Array<{
+        file_url?: string;
+        data_url?: string;
+        file_id?: string;
+    }>;
+    images?: string[];
+}
+
 const DEFAULT_ASPECT = '1:1';
 const DEFAULT_IMAGE_SIZE: '1K' | '2K' | '4K' = '2K';
 
@@ -34,22 +40,12 @@ const DEFAULT_IMAGE_SIZE: '1K' | '2K' | '4K' = '2K';
  */
 export const generateGeminiImageViaProxy = async (options: GeminiImageOptions): Promise<GeneratedFileResult[]> => {
     const { model, prompt, references = [], aspectRatio = DEFAULT_ASPECT, imageSize = DEFAULT_IMAGE_SIZE } = options;
-    
-    const token = getAuthToken();
-    
-    if (!token) {
-        throw new Error('未登录，请先登录');
-    }
-    
+
     console.log('📤 发送图像生成请求到后端');
     
     try {
-        const response = await fetch('/api/gemini/image', {
+        const result = await apiJson<GeminiImageProxyResponse>('/api/gemini/image', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify({
                 prompt,
                 model,
@@ -61,17 +57,7 @@ export const generateGeminiImageViaProxy = async (options: GeminiImageOptions): 
                 file_role: options.fileRole,
                 episode_id: options.episodeId,
             })
-        });
-        
-        console.log('📥 后端响应状态:', response.status, response.statusText);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ 后端返回错误:', errorText);
-            throw new Error(`Gemini图像生成失败: ${response.status} - ${errorText}`);
-        }
-        
-        const result = await response.json();
+        }, 'Gemini 图像生成');
 
         if (result.files && result.files.length > 0) {
             console.log('✅ 成功生成图片（files），数量:', result.files.length);

@@ -1,3 +1,5 @@
+import { apiJson } from './httpClient';
+
 export interface GeneratedFileResult {
     url: string;
     fileId?: string;
@@ -16,16 +18,18 @@ export interface DoubaoGenerationOptions {
     episodeId?: string;
 }
 
-export const generateDoubaoImages = async (options: DoubaoGenerationOptions): Promise<GeneratedFileResult[]> => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) throw new Error('未登录，无法调用AI生成服务');
+interface DoubaoResponse {
+    files?: Array<{
+        file_url?: string;
+        data_url?: string;
+        file_id?: string;
+    }>;
+    images?: string[];
+}
 
-    const response = await fetch('/api/materials/doubao', {
+export const generateDoubaoImages = async (options: DoubaoGenerationOptions): Promise<GeneratedFileResult[]> => {
+    const data = await apiJson<DoubaoResponse>('/api/materials/doubao', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify({
             prompt: options.prompt,
             references: options.references || [],
@@ -37,10 +41,7 @@ export const generateDoubaoImages = async (options: DoubaoGenerationOptions): Pr
             file_role: options.fileRole,
             episode_id: options.episodeId,
         })
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || '图像生成失败，请稍后再试');
+    }, '豆包图像生成');
 
     if (data.files && data.files.length > 0) {
         return data.files.map((f: any) => ({

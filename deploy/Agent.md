@@ -1,5 +1,26 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Frontend AI Provider Http Client Consolidation
+
+### Changes
+
+- Added `new_html/services/httpClient.ts`:
+  - reuses the existing `apiService.getHeaders()` auth behavior
+  - reuses `apiService.handleResponse()` for JSON error handling and 401 redirect semantics
+  - exposes `apiJson()` for normal JSON APIs and `apiFetch()` for streaming responses
+- Migrated frontend AI provider services to the shared client:
+  - `new_html/services/deepseekService.ts`
+  - `new_html/services/geminiProxyService.ts`
+  - `new_html/services/geminiImageService.ts`
+  - `new_html/services/doubaoService.ts`
+  - `new_html/services/gptImageService.ts`
+- Updated `scripts/check_route_contract.py` so these provider services cannot regress to duplicated `localStorage` token reads, manual `Authorization` headers, or direct `fetch()` calls.
+
+### Notes
+
+- This keeps external AI calls routed through backend provider management while reducing the number of frontend places that know about auth header construction.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Admin API Config Status Clarification
 
 ### Changes

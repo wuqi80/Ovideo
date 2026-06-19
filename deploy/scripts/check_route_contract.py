@@ -2463,10 +2463,20 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
 def check_frontend_ai_proxy_contract(root: Path) -> int:
     """Frontend AI text calls must route through backend provider management."""
     new_html = root / "new_html"
+    http_client = new_html / "services" / "httpClient.ts"
     gemini_service = new_html / "services" / "geminiService.ts"
     prompt_rewriter = new_html / "services" / "promptRewriter.ts"
+    ai_provider_services = [
+        new_html / "services" / "deepseekService.ts",
+        new_html / "services" / "geminiProxyService.ts",
+        new_html / "services" / "geminiImageService.ts",
+        new_html / "services" / "doubaoService.ts",
+        new_html / "services" / "gptImageService.ts",
+    ]
 
     required_snippets = [
+        (http_client, "export async function apiFetch("),
+        (http_client, "export async function apiJson<T>("),
         (gemini_service, "import { callGeminiProxyWithRetry } from './geminiProxyService';"),
         (gemini_service, "export const callGeminiText = async"),
         (gemini_service, "return callGeminiProxyWithRetry(prompt, systemPrompt, 3, model);"),
@@ -2509,6 +2519,16 @@ def check_frontend_ai_proxy_contract(root: Path) -> int:
     if violations:
         fail("Frontend AI calls must use backend proxies:\n" + "\n".join(violations))
     checks += 1
+
+    for path in ai_provider_services:
+        text = path.read_text(encoding="utf-8")
+        if "./httpClient" not in text:
+            fail(f"Frontend AI provider service must use shared httpClient: {path.relative_to(root)}")
+        for snippet in ["localStorage.getItem('auth_token')", 'localStorage.getItem("auth_token")', "Authorization:", "'Authorization'", '"Authorization"', "Bearer ", "fetch("]:
+            if snippet in text:
+                fail(f"Frontend AI provider service has duplicated request/auth logic in {path.relative_to(root)}: {snippet}")
+            checks += 1
+        checks += 1
     return checks
 
 

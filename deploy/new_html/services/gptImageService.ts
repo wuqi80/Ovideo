@@ -19,6 +19,7 @@ import {
   type GptImageRatio,
   type GptImageK,
 } from '../utils/gptImageSizeMap';
+import { apiJson } from './httpClient';
 
 export type GptImageTier = 'vip' | 'official';
 export type GptImageQuality = 'auto' | 'low' | 'medium' | 'high';
@@ -55,10 +56,6 @@ export interface GenerateGptImageResponse {
 export async function generateGptImage(
   opts: GenerateGptImageOptions
 ): Promise<GenerateGptImageResponse> {
-  const token = localStorage.getItem('auth_token');
-  if (!token) {
-    throw new Error('未登录，请先登录');
-  }
   if (!opts.prompt || !opts.prompt.trim()) {
     throw new Error('prompt 不能为空');
   }
@@ -85,27 +82,11 @@ export async function generateGptImage(
     episode_id: opts.episodeId,
   };
 
-  const resp = await fetch('/api/gpt-image/generate', {
+  const data = await apiJson<GenerateGptImageResponse>('/api/gpt-image/generate', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
     body: JSON.stringify(body),
-  });
+  }, 'GPT Image 生成');
 
-  if (!resp.ok) {
-    let detail = `HTTP ${resp.status}`;
-    try {
-      const j = await resp.json();
-      if (j && (j.detail || j.message)) detail = j.detail || j.message;
-    } catch {
-      // ignore parse error
-    }
-    throw new Error(`GPT Image 生成失败：${detail}`);
-  }
-
-  const data: GenerateGptImageResponse = await resp.json();
   if (!data || !Array.isArray(data.images) || data.images.length === 0) {
     throw new Error('GPT Image 未返回图片');
   }
