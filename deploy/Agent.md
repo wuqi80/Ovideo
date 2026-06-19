@@ -3970,3 +3970,67 @@
 
 - This removes the Veo registry/payload model mismatch and moves Veo video selection into the same hot-reloadable admin API config/runtime resolver path.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 Seedance Runtime Sub-Model Wiring
+
+### Changes
+
+- Updated `deploy/services/api_provider_registry.py` with Seedance sub-model metadata:
+  - `SEEDANCE_MODEL_STANDARD`
+  - `SEEDANCE_MODEL_FAST`
+  - current callable fallback model map for standard/fast.
+- Updated `deploy/services/api_provider_runtime.py` with `resolve_seedance_model_name()`, which resolves Seedance models per request with priority:
+  - explicit model
+  - sub-model env (`SEEDANCE_MODEL_STANDARD` / `SEEDANCE_MODEL_FAST`)
+  - generic provider env (`SEEDANCE_MODEL`)
+  - current callable fallback (`doubao-seedance-1-0-pro-250528`).
+- Updated `deploy/services/api_config_runtime_loader.py` so enabled DB rows for `provider=seedance` project model names into the matching standard/fast env key, preserving hot reload for both Seedance cards.
+- Rewrote `deploy/external_api/video/seedance.py` as an ASCII equivalent client that no longer reads/caches model env at import time. It resolves the sub-model dynamically before calling `resolve_provider("seedance", model)`.
+- Updated `deploy/routers/video_capabilities.py` so `seedance_omni` also uses runtime model resolution instead of the old static `SeedanceClient.MODEL_MAP`.
+- Extended `deploy/scripts/check_api_config_runtime_loader.py` with Seedance standard/fast DB-to-env projection coverage.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with Seedance standard env, fast env, and callable-default fallback payload coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `40` to `49`
+  - contract now rejects direct `os.getenv` / `import os` usage in `external_api/video/seedance.py`.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile external_api/video/seedance.py routers/video_capabilities.py services/api_provider_registry.py services/api_provider_runtime.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - From `deploy/`: `.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `20/20`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=49`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_seedance_runtime_submodels_20260619_141104/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/external_api/video/seedance.py`
+  - `/home/Administrator/deploy/routers/video_capabilities.py`
+  - `/home/Administrator/deploy/services/api_provider_registry.py`
+  - `/home/Administrator/deploy/services/api_provider_runtime.py`
+  - `/home/Administrator/deploy/services/api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile external_api/video/seedance.py routers/video_capabilities.py services/api_provider_registry.py services/api_provider_runtime.py services/api_config_runtime_loader.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `20/20`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime helper check: `SEEDANCE_MODEL_STANDARD` -> `seedance-standard-smoke`, `SEEDANCE_MODEL_FAST` -> `seedance-fast-smoke`
+
+### Notes
+
+- This makes Seedance standard/fast model selection hot-reloadable while preserving the current account-compatible 1.0 Pro fallback when no admin model is configured.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

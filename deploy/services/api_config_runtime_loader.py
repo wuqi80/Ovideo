@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from dao_api_config import ApiConfigDAO
 from services.api_provider_registry import (
     PROVIDER_ENV_MAP,
+    SEEDANCE_SUB_MODEL_ENV_MAP,
     get_api_model_preset,
     get_custom_proxy_env_key,
     get_endpoint_env_key,
@@ -20,6 +21,8 @@ from services.api_provider_registry import (
     get_model_env_key,
     get_provider_env_key,
     get_proxy_mode_env_key,
+    get_seedance_sub_model_env_key,
+    is_seedance_fast_model,
 )
 from utils.config_helpers import _config_get
 
@@ -50,7 +53,7 @@ VEO_NEW_MODEL = "veo-3.1-landscape-fast-fl"
 
 
 def managed_api_env_keys() -> set[str]:
-    keys: set[str] = set()
+    keys: set[str] = set(SEEDANCE_SUB_MODEL_ENV_MAP.values())
     for env_key in PROVIDER_ENV_MAP.values():
         keys.update(
             {
@@ -123,6 +126,9 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
             model_env = get_model_env_key(env_key)
             if model_name:
                 new_env[model_env] = model_name
+                if provider.strip().lower() == "seedance":
+                    sub_model = "fast" if is_seedance_fast_model(model_name) else "standard"
+                    new_env[get_seedance_sub_model_env_key(sub_model)] = model_name
             else:
                 new_env[model_env] = None
 

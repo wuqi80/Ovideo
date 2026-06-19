@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from services.api_provider_registry import (
     PROVIDER_CATALOG,
+    SEEDANCE_DEFAULT_MODEL_MAP,
     get_api_model_preset,
     get_api_model_presets,
     get_custom_proxy_env_key,
@@ -19,6 +20,8 @@ from services.api_provider_registry import (
     get_model_env_key,
     get_provider_env_key,
     get_proxy_mode_env_key,
+    get_seedance_sub_model_env_key,
+    normalize_seedance_sub_model,
     normalize_provider,
 )
 from utils.config_helpers import _config_get
@@ -312,6 +315,27 @@ def build_effective_provider_config_sources(configs: Optional[List[Any]]) -> Dic
             "candidate_names": [row["name"] for row in rows if row.get("name")],
         }
     return sources
+
+
+def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None) -> str:
+    """Resolve Seedance standard/fast model names without import-time env caching."""
+    normalized_sub_model = normalize_seedance_sub_model(sub_model)
+    explicit_model = (model_name or "").strip()
+    if explicit_model:
+        return explicit_model
+
+    sub_model_env = get_seedance_sub_model_env_key(normalized_sub_model)
+    sub_model_value = (os.getenv(sub_model_env) or "").strip()
+    if sub_model_value:
+        return sub_model_value
+
+    provider_env = get_provider_env_key("seedance")
+    generic_model_env = get_model_env_key(provider_env) if provider_env else ""
+    generic_model = (os.getenv(generic_model_env) or "").strip() if generic_model_env else ""
+    if generic_model:
+        return generic_model
+
+    return SEEDANCE_DEFAULT_MODEL_MAP[normalized_sub_model]
 
 
 def resolve_provider(provider: str, model_name: Optional[str] = None) -> ResolvedProviderConfig:

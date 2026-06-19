@@ -2194,6 +2194,38 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_veo_video_legacy_model_env_maps_to_callable_default",
         ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "SEEDANCE_SUB_MODEL_ENV_MAP",
+        ),
+        (
+            root / "services" / "api_provider_runtime.py",
+            "def resolve_seedance_model_name",
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            "get_seedance_sub_model_env_key(sub_model)",
+        ),
+        (
+            root / "external_api" / "video" / "seedance.py",
+            "resolve_seedance_model_name(normalized_sub_model)",
+        ),
+        (
+            root / "routers" / "video_capabilities.py",
+            "resolve_seedance_model_name(\"standard\")",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_seedance_video_uses_standard_sub_model_runtime_env",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_seedance_video_uses_fast_sub_model_runtime_env",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_seedance_video_uses_callable_default_when_runtime_model_missing",
+        ),
     ]
     checks = 0
     for path, snippet in required_snippets:
@@ -2209,7 +2241,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("cluster_main.py must not cache the Doubao image model at import time")
     if "doubao_model_provider" in router_text or "doubao_model_provider" in cluster_text:
         fail("Doubao route must resolve runtime model through services.ai_proxy_service, not injected model providers")
-    checks += 2
+    seedance_text = (root / "external_api" / "video" / "seedance.py").read_text(encoding="utf-8")
+    if "os.getenv" in seedance_text or "import os" in seedance_text:
+        fail("Seedance client must not cache/read model env directly; use runtime resolver helpers")
+    checks += 3
     return checks
 
 

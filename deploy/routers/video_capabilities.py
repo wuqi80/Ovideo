@@ -11,8 +11,8 @@ def create_video_capabilities_router() -> APIRouter:
     async def video_capabilities():
         """Expose backend feature flags that let the UI avoid unsupported flows."""
         try:
-            from external_api.video.seedance import SeedanceClient
-            std = SeedanceClient.MODEL_MAP.get("standard") or ""
+            from services.api_provider_runtime import resolve_seedance_model_name
+            std = resolve_seedance_model_name("standard")
         except Exception:
             std = ""
 

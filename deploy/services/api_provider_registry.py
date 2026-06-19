@@ -28,6 +28,34 @@ PROVIDER_ENV_MAP: Dict[str, str] = {
 }
 
 
+SEEDANCE_DEFAULT_MODEL_MAP: Dict[str, str] = {
+    # Keep the currently opened-account fallback while allowing admin runtime
+    # config to switch standard/fast to Seedance 2.0 without code changes.
+    "standard": "doubao-seedance-1-0-pro-250528",
+    "fast": "doubao-seedance-1-0-pro-250528",
+}
+
+SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
+    "standard": "SEEDANCE_MODEL_STANDARD",
+    "fast": "SEEDANCE_MODEL_FAST",
+}
+
+
+def normalize_seedance_sub_model(sub_model: Optional[str]) -> str:
+    normalized = (sub_model or "standard").strip().lower()
+    if normalized not in SEEDANCE_SUB_MODEL_ENV_MAP:
+        raise ValueError(f"Unsupported Seedance sub_model: {sub_model}")
+    return normalized
+
+
+def get_seedance_sub_model_env_key(sub_model: Optional[str]) -> str:
+    return SEEDANCE_SUB_MODEL_ENV_MAP[normalize_seedance_sub_model(sub_model)]
+
+
+def is_seedance_fast_model(model_name: Optional[str]) -> bool:
+    return "fast" in (model_name or "").strip().lower()
+
+
 PROVIDER_CATALOG: Dict[str, dict] = {
     "deepseek": {
         "label": "DeepSeek",

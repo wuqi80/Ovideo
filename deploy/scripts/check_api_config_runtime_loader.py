@@ -33,6 +33,7 @@ async def main() -> int:
         managed_keys.add(registry.get_proxy_mode_env_key(env_key))
         managed_keys.add(registry.get_custom_proxy_env_key(env_key))
         managed_keys.add(registry.get_model_env_key(env_key))
+    managed_keys.update(registry.SEEDANCE_SUB_MODEL_ENV_MAP.values())
 
     saved_env = {key: os.environ.get(key) for key in managed_keys}
     for key in managed_keys:
@@ -57,6 +58,24 @@ async def main() -> int:
             "provider": "gemini-text",
             "api_key_encrypted": "",
             "endpoint": "https://should-not-load.example.test",
+            "proxy_mode": "direct",
+            "custom_proxy": "",
+            "enabled": True,
+        },
+        {
+            "provider": "seedance",
+            "api_key_encrypted": "enc:db-seedance-key",
+            "endpoint": "https://db.seedance.example.test/tasks",
+            "model_name": "doubao-seedance-standard-runtime",
+            "proxy_mode": "direct",
+            "custom_proxy": "",
+            "enabled": True,
+        },
+        {
+            "provider": "seedance",
+            "api_key_encrypted": "enc:db-seedance-key",
+            "endpoint": "https://db.seedance.example.test/tasks",
+            "model_name": "doubao-seedance-fast-runtime",
             "proxy_mode": "direct",
             "custom_proxy": "",
             "enabled": True,
@@ -102,8 +121,8 @@ async def main() -> int:
     loader.ApiConfigDAO = FakeDAO
     try:
         result = await loader.load_api_configs_to_env()
-        if result.get("loaded") != 1:
-            fail(f"Expected one loaded keyed row, got {result}")
+        if result.get("loaded") != 3:
+            fail(f"Expected three loaded keyed rows, got {result}")
         if os.environ.get("DEEPSEEK_API_KEY") != "db-deepseek-key":
             fail("DB key did not override baseline env key")
         if os.environ.get("DEEPSEEK_ENDPOINT") != "https://db.deepseek.example.test":
@@ -116,6 +135,10 @@ async def main() -> int:
             fail("DB model_name was not projected to env")
         if os.environ.get("GEMINI_TEXT_API_KEY"):
             fail("Empty-key DB row should not load into env")
+        if os.environ.get("SEEDANCE_MODEL_STANDARD") != "doubao-seedance-standard-runtime":
+            fail("Seedance standard model was not projected to sub-model env")
+        if os.environ.get("SEEDANCE_MODEL_FAST") != "doubao-seedance-fast-runtime":
+            fail("Seedance fast model was not projected to sub-model env")
 
         rows[:] = [
             {
@@ -156,6 +179,8 @@ async def main() -> int:
             fail("Empty DB reload did not restore baseline endpoint")
         if os.environ.get("DEEPSEEK_CUSTOM_PROXY"):
             fail("Empty DB reload did not clear DB-only custom proxy")
+        if os.environ.get("SEEDANCE_MODEL_STANDARD") or os.environ.get("SEEDANCE_MODEL_FAST"):
+            fail("Empty DB reload did not clear Seedance sub-model env values")
 
         rows[:] = [
             {
@@ -222,7 +247,8 @@ async def main() -> int:
         fail("admin_routes.py must not dynamically import cluster_main for API env reload")
 
     print("API config runtime loader contract OK")
-    print("  hot_reload_loaded_rows=1")
+    print("  hot_reload_loaded_rows=3")
+    print("  seedance_sub_model_env_projection=2")
     print("  baseline_restore=1")
     print("  seed_registry_placeholders=2")
     print("  legacy_model_upgrades=3")

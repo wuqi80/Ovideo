@@ -3,10 +3,17 @@ from __future__ import annotations
 import pytest
 
 from external_api.video import minimax as minimax_video
+from external_api.video import seedance as seedance_video
 from external_api.video import sora2 as sora2_video
 from external_api.video import veo as veo_video
 from services import ai_proxy_service, video_reverse_service
-from services.api_provider_registry import get_endpoint_env_key, get_model_env_key, get_provider_env_key
+from services.api_provider_registry import (
+    SEEDANCE_DEFAULT_MODEL_MAP,
+    get_endpoint_env_key,
+    get_model_env_key,
+    get_provider_env_key,
+    get_seedance_sub_model_env_key,
+)
 from services.api_provider_runtime import resolve_provider
 
 
@@ -182,6 +189,18 @@ class _VeoTaskResponse:
 
     def json(self):
         return {"id": "veo-video-1"}
+
+
+class _SeedanceTaskResponse:
+    ok = True
+    status_code = 200
+    text = ""
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"id": "seedance-task-1"}
 
 
 @pytest.mark.asyncio
@@ -454,6 +473,82 @@ def test_veo_video_legacy_model_env_maps_to_callable_default(monkeypatch):
 
     assert calls[0]["url"] == "https://veo-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == veo_video.DEFAULT_VEO_VIDEO_MODEL
+
+
+def test_seedance_video_uses_standard_sub_model_runtime_env(monkeypatch):
+    env_key = get_provider_env_key("seedance")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    standard_env = get_seedance_sub_model_env_key("standard")
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-seedance-key")
+    monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.setenv(standard_env, "seedance-standard-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _SeedanceTaskResponse()
+
+    monkeypatch.setattr(seedance_video.requests, "post", fake_post)
+
+    client = seedance_video.SeedanceClient()
+    task_id = client.create_video_task("standard", [{"type": "text", "text": "move gently"}])
+
+    assert task_id == "seedance-task-1"
+    assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
+    assert calls[0]["json"]["model"] == "seedance-standard-runtime-model"
+
+
+def test_seedance_video_uses_fast_sub_model_runtime_env(monkeypatch):
+    env_key = get_provider_env_key("seedance")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    fast_env = get_seedance_sub_model_env_key("fast")
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-seedance-key")
+    monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.setenv(fast_env, "seedance-fast-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _SeedanceTaskResponse()
+
+    monkeypatch.setattr(seedance_video.requests, "post", fake_post)
+
+    client = seedance_video.SeedanceClient()
+    task_id = client.create_video_task("fast", [{"type": "text", "text": "move gently"}])
+
+    assert task_id == "seedance-task-1"
+    assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
+    assert calls[0]["json"]["model"] == "seedance-fast-runtime-model"
+
+
+def test_seedance_video_uses_callable_default_when_runtime_model_missing(monkeypatch):
+    env_key = get_provider_env_key("seedance")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-seedance-key")
+    monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.delenv(model_env, raising=False)
+    monkeypatch.delenv(get_seedance_sub_model_env_key("standard"), raising=False)
+    monkeypatch.delenv(get_seedance_sub_model_env_key("fast"), raising=False)
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _SeedanceTaskResponse()
+
+    monkeypatch.setattr(seedance_video.requests, "post", fake_post)
+
+    client = seedance_video.SeedanceClient()
+    client.create_video_task("standard", [{"type": "text", "text": "move gently"}])
+
+    assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
+    assert calls[0]["json"]["model"] == SEEDANCE_DEFAULT_MODEL_MAP["standard"]
 
 
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):
