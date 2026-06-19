@@ -4711,3 +4711,47 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 ### Notes
 
 - No behavior change is intended; the final 404/scanner guard is now contract-protected against accidental route-order regressions.
+
+## 2026-06-19 Generation Router Extraction Increment
+
+### Changes
+
+- Extracted image/material generation endpoints from `deploy/cluster_main.py` into `deploy/routers/generation.py`.
+- Preserved the existing public API surface:
+  - `POST /api/generate/image`
+  - `POST /api/generate/comfyui-workflow`
+  - `POST /api/generate/angle-adjust`
+  - `POST /api/generate/human-multi-angle`
+  - `POST /api/generate/around-angle`
+  - `POST /api/generate/matting`
+  - `POST /api/generate/image-fusion`
+  - `POST /api/generate/panorama-360`
+  - `POST /api/generate/panorama-fusion`
+  - `POST /api/generate/auto-storyboard`
+  - `POST /api/generate/multi-grid-storyboard`
+  - `POST /api/materials/process`
+- Injected existing runtime dependencies into the router:
+  - `require_auth`
+  - `task_service`
+  - `_storage_path_safe`
+  - `generate_gemini_images`
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - these 12 generation endpoints belong to `routers.generation`
+  - `cluster_main.py` no longer registers those route decorators
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/generation.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `generation_route_handlers=12`
+  - `cluster_main.py` line count reduced to `2802`
+
+### Server Deployment
+
+- Pending deployment and online smoke verification.
+
+### Notes
+
+- No behavior change is intended; this moves the generation task HTTP handlers only. Redline task queue/core/worker/pipeline files were not modified.

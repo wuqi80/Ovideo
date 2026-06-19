@@ -93,6 +93,18 @@ EXPECTED_ENDPOINTS = {
     ("/api/tasks", "GET"): ("routers.tasks", "list_tasks"),
     ("/{filename}", "GET"): ("routers.fallback_static", "serve_image_files"),
     ("/{path:path}", "GET"): ("routers.fallback_static", "catch_scanner_requests"),
+    ("/api/generate/image", "POST"): ("routers.generation", "generate_image"),
+    ("/api/generate/comfyui-workflow", "POST"): ("routers.generation", "generate_comfyui_workflow"),
+    ("/api/generate/angle-adjust", "POST"): ("routers.generation", "adjust_image_angle"),
+    ("/api/generate/human-multi-angle", "POST"): ("routers.generation", "generate_human_multi_angle"),
+    ("/api/generate/around-angle", "POST"): ("routers.generation", "generate_around_angle"),
+    ("/api/generate/matting", "POST"): ("routers.generation", "generate_matting"),
+    ("/api/generate/image-fusion", "POST"): ("routers.generation", "generate_image_fusion"),
+    ("/api/generate/panorama-360", "POST"): ("routers.generation", "generate_panorama_360"),
+    ("/api/generate/panorama-fusion", "POST"): ("routers.generation", "generate_panorama_fusion"),
+    ("/api/generate/auto-storyboard", "POST"): ("routers.generation", "generate_auto_storyboard"),
+    ("/api/generate/multi-grid-storyboard", "POST"): ("routers.generation", "generate_multi_grid_storyboard"),
+    ("/api/materials/process", "POST"): ("routers.generation", "process_material"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -623,6 +635,61 @@ def check_fallback_static_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_generation_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    generation_path = root / "routers" / "generation.py"
+    if not generation_path.exists():
+        fail("routers/generation.py is missing")
+
+    route_paths = {
+        "/api/generate/image",
+        "/api/generate/comfyui-workflow",
+        "/api/generate/angle-adjust",
+        "/api/generate/human-multi-angle",
+        "/api/generate/around-angle",
+        "/api/generate/matting",
+        "/api/generate/image-fusion",
+        "/api/generate/panorama-360",
+        "/api/generate/panorama-fusion",
+        "/api/generate/auto-storyboard",
+        "/api/generate/multi-grid-storyboard",
+        "/api/materials/process",
+    }
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Generation route handlers must live in routers/generation.py:\n" + "\n".join(violations))
+
+    generation_tree = parse_py_file(generation_path)
+    route_count = 0
+    for node in ast.walk(generation_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 12:
+        fail(f"routers/generation.py should own 12 generation route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -651,6 +718,7 @@ def main() -> int:
     workspace_route_handlers = check_workspace_routes_extracted(root)
     task_route_handlers = check_task_routes_extracted(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
+    generation_route_handlers = check_generation_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -672,6 +740,7 @@ def main() -> int:
     print(f"  workspace_route_handlers={workspace_route_handlers}")
     print(f"  task_route_handlers={task_route_handlers}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
+    print(f"  generation_route_handlers={generation_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 
