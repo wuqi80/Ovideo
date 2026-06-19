@@ -91,6 +91,8 @@ EXPECTED_ENDPOINTS = {
     ("/api/task/{task_id}/delete", "DELETE"): ("routers.tasks", "delete_task"),
     ("/api/tasks/stream", "GET"): ("routers.tasks", "task_event_stream"),
     ("/api/tasks", "GET"): ("routers.tasks", "list_tasks"),
+    ("/{filename}", "GET"): ("routers.fallback_static", "serve_image_files"),
+    ("/{path:path}", "GET"): ("routers.fallback_static", "catch_scanner_requests"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -222,6 +224,20 @@ def check_duplicates(routes: dict[tuple[str, str], list[tuple[int, str | None, s
             details.append(f"{key}: {routes[key]}")
         fail("Unexpected duplicate route registrations:\n" + "\n".join(details))
     return duplicates
+
+
+def check_fallback_static_route_order(routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]]) -> None:
+    catch_all = routes.get(("/{path:path}", "GET"))
+    if not catch_all:
+        fail("Missing final fallback route /{path:path}")
+
+    last_http_route_index = max(idx for entries in routes.values() for idx, _, _ in entries)
+    catch_all_index = catch_all[0][0]
+    if catch_all_index != last_http_route_index:
+        fail(
+            "Final fallback route /{path:path} must be the last HTTP route; "
+            f"found index {catch_all_index}, last index {last_http_route_index}"
+        )
 
 
 def check_expected_endpoints(routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]]) -> None:
@@ -565,6 +581,48 @@ def check_task_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_fallback_static_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    fallback_static_path = root / "routers" / "fallback_static.py"
+    if not fallback_static_path.exists():
+        fail("routers/fallback_static.py is missing")
+
+    route_paths = {"/{filename}", "/{path:path}"}
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Fallback/static route handlers must live in routers/fallback_static.py:\n" + "\n".join(violations))
+
+    fallback_tree = parse_py_file(fallback_static_path)
+    route_count = 0
+    for node in ast.walk(fallback_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 2:
+        fail(f"routers/fallback_static.py should own 2 fallback route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -592,11 +650,13 @@ def main() -> int:
     user_session_route_handlers = check_user_session_routes_extracted(root)
     workspace_route_handlers = check_workspace_routes_extracted(root)
     task_route_handlers = check_task_routes_extracted(root)
+    fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
     routes = runtime_routes(app)
     duplicates = check_duplicates(routes)
+    check_fallback_static_route_order(routes)
     check_expected_endpoints(routes)
 
     print("Route contract OK")
@@ -611,6 +671,7 @@ def main() -> int:
     print(f"  user_session_route_handlers={user_session_route_handlers}")
     print(f"  workspace_route_handlers={workspace_route_handlers}")
     print(f"  task_route_handlers={task_route_handlers}")
+    print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 

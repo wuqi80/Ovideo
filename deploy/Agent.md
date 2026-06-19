@@ -1508,3 +1508,55 @@
 ### Notes
 
 - No behavior change is intended; this only moves the FastAPI handlers. The task queue/core/worker redline files were not modified.
+
+## 2026-06-19 Fallback Static Router Extraction Increment
+
+### Changes
+
+- Extracted legacy one-segment static image serving and final unknown-path guard from `deploy/cluster_main.py` into `deploy/routers/fallback_static.py`.
+- Preserved the existing public route surface:
+  - `GET /{filename}`
+  - `GET /{path:path}`
+- Registered `create_fallback_static_router(...)` after all API routers so `/{path:path}` remains the final HTTP route.
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - the two fallback routes belong to `routers.fallback_static`
+  - `cluster_main.py` no longer registers those route decorators
+  - `/{path:path}` is the last HTTP route at runtime
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/fallback_static.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `fallback_static_route_handlers=2`
+  - `cluster_main.py` line count reduced to `3460`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_fallback_static_router_20260619-040227`
+- Uploaded to server:
+  - `/home/Administrator/Agent.md`
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/fallback_static.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/fallback_static.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `fallback_static_route_handlers=2`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `GET https://mecha.one/login` -> HTTP `200`
+  - `GET https://mecha.one/projects` -> HTTP `200`
+  - `GET https://mecha.one/favicon.ico` -> HTTP `200`, `content-type=image/png`
+  - `GET https://mecha.one/wp-login.php` -> HTTP `404`
+  - `GET https://mecha.one/codex-definitely-missing-route` -> HTTP `404`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; the final 404/scanner guard is now contract-protected against accidental route-order regressions.

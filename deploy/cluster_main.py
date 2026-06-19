@@ -22,7 +22,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -91,6 +90,7 @@ from services.api_provider_runtime import build_provider_runtime_status
 from routers.ai_proxy import create_ai_proxy_router
 from routers.cluster_status import create_cluster_status_router
 from routers.comfyui_files import create_comfyui_files_router
+from routers.fallback_static import create_fallback_static_router
 from routers.files import cleanup_thumbnail_cache, create_files_router
 from routers.frontend_pages import create_frontend_pages_router
 from routers.prompts import create_prompt_router
@@ -993,53 +993,6 @@ async def login(request: LoginRequest):
         "token": token,
         "username": request.username
     }
-
-# ⚠️ 已移除旧的 /uploads/{filename} 路由，因为我们使用 app.mount() 挂载静态文件目录
-# 这样可以支持多层路径，如 /uploads/image/admin/202512/xxx.png
-
-# ==================== 静态文件路由（必须放在最后） ====================
-
-@app.get("/{filename}")
-async def serve_image_files(filename: str, request: Request):
-    """提供图片文件 - 此路由必须放在最后"""
-    import os
-
-    # 排除 API 路径
-    if filename.startswith('api'):
-        raise HTTPException(status_code=404, detail="Not Found")
-
-    # 🔧 对于非图片文件，检查是否是React路由，返回index.html
-    if not any(filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico']):
-        # React路由：返回index.html让前端路由处理
-        index_path = os.path.join(os.path.dirname(__file__), "new_html", "dist", "index.html")
-        if os.path.exists(index_path):
-            logger.info(f"🔀 React路由: /{filename}, 返回 index.html")
-            return FileResponse(index_path, media_type="text/html")
-        else:
-            raise HTTPException(status_code=404, detail="Not Found")
-
-    # 处理图片文件
-    possible_paths = [
-        f"/root/{filename}",
-        filename,
-        f"static/{filename}",
-        f"uploads/{filename}",
-    ]
-
-    for path in possible_paths:
-        if os.path.exists(path):
-            logger.info(f"✅ 找到图片: {path}")
-            ext = filename.lower().split('.')[-1]
-            if ext == 'jpg':
-                media_type = "image/jpeg"
-            elif ext == 'svg':
-                media_type = "image/svg+xml"
-            else:
-                media_type = f"image/{ext}"
-            return FileResponse(path, media_type=media_type)
-
-    logger.warning(f"❌ 图片未找到: {filename}")
-    raise HTTPException(status_code=404, detail=f"图片未找到: {filename}")
 
 # ==================== 项目数据管理 API（四阶段数据打通） ====================
 
@@ -3491,6 +3444,9 @@ logger.info("✅ Credits API 路由已注册 (/api/credits)")
 app.include_router(video_reverse_router)
 logger.info("✅ Video Reverse API 路由已注册 (/api/video-reverse)")
 
+app.include_router(create_fallback_static_router(deploy_root=Path(__file__).resolve().parent, logger=logger))
+logger.info("✅ Fallback Static 路由已注册 (legacy image + final 404 guard)")
+
 # ==================== 主程序入口 ====================
 
 if __name__ == "__main__":
@@ -3502,40 +3458,3 @@ if __name__ == "__main__":
         port=SystemConfig.PORT,
         log_level=SystemConfig.LOG_LEVEL.lower()
     )
-
-
-# ============================================
-# 🛡️ 安全：捕获所有未定义路由（必须放在最后）
-#  - 注意：旧版 `@app.get("/admin")` 显式路由已删除（2026-05-26）
-#    — 原本被 line 533 `app.mount("/admin", StaticFiles)` 拦截，是死代码
-#  - 新版 React Admin Shell 走上方的 admin_spa_root / admin_spa_named / admin_spa_subpath
-# ============================================
-
-@app.get("/{path:path}")
-async def catch_scanner_requests(path: str):
-    """
-    捕获常见的扫描器和恶意请求，静默返回404避免日志污染
-    此路由必须放在所有其他路由之后
-    """
-    # 常见的扫描器/攻击路径模式
-    scanner_patterns = [
-        'wp-admin', 'wp-login', 'wp-content', 'wordpress', 'wp-includes',
-        'phpmyadmin', 'phpMyAdmin', 'pma', 'mysql',
-        'administrator', 'login.asp', 'login.php', 'admin.php',
-        'setup-config.php', 'config.php', 'configuration.php',
-        'geoserver', 'wfs', 'ows', 'wms',
-        'webui', 'console', 'manager',
-        '.env', '.git', '.svn', '.htaccess',
-        'shell', 'cmd', 'exec',
-        'XDEBUG_SESSION'
-    ]
-
-    path_lower = path.lower()
-
-    # 如果是扫描器路径，静默返回404（不记录日志）
-    if any(pattern in path_lower for pattern in scanner_patterns):
-        return Response(status_code=404)
-
-    # 其他未知路径，记录警告日志
-    logger.warning(f"⚠️ 未知路径访问: /{path}")
-    return Response(status_code=404)
