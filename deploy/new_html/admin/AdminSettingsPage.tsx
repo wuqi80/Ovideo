@@ -59,6 +59,19 @@ interface ProviderMeta {
     env_key?: string;
     notes?: string;
     capabilities?: string[];
+    extra_fields?: ProviderExtraField[];
+}
+
+interface ProviderExtraField {
+    field: string;
+    label?: string;
+    target?: 'request_template' | 'headers' | string;
+    env_key?: string;
+    input_type?: 'text' | 'password' | string;
+    placeholder?: string;
+    help?: string;
+    aliases?: string[];
+    secret?: boolean;
 }
 
 interface RuntimeFallbackEntry {
@@ -165,7 +178,7 @@ interface ApiConfigFormState {
     custom_proxy: string;
     request_template: string;
     headers: string;
-    minimax_group_id: string;
+    extra_values: Record<string, string>;
     category: string;
     enabled: boolean;
 }
@@ -390,6 +403,65 @@ function parseJsonText(value: string, label: string): JsonRecord {
     }
 }
 
+function extraFieldKeys(field: ProviderExtraField): string[] {
+    const keys = [field.field, ...(field.aliases || [])]
+        .map(item => String(item || '').trim())
+        .filter(Boolean);
+    return Array.from(new Set(keys));
+}
+
+function extraSourceForField(
+    field: ProviderExtraField,
+    requestTemplate: JsonRecord,
+    headers: JsonRecord,
+): JsonRecord {
+    return field.target === 'headers' ? headers : requestTemplate;
+}
+
+function extraValuesFromRecords(
+    fields: ProviderExtraField[] = [],
+    requestTemplate: JsonRecord = {},
+    headers: JsonRecord = {},
+): Record<string, string> {
+    const values: Record<string, string> = {};
+    fields.forEach(field => {
+        const source = extraSourceForField(field, requestTemplate, headers);
+        for (const key of extraFieldKeys(field)) {
+            if (source[key] !== undefined && source[key] !== null) {
+                values[field.field] = String(source[key]);
+                break;
+            }
+        }
+    });
+    return values;
+}
+
+function extraFieldValueFromForm(form: ApiConfigFormState, field: ProviderExtraField): string {
+    if (form.extra_values[field.field] !== undefined) return form.extra_values[field.field];
+    const requestTemplate = jsonRecordFrom(form.request_template);
+    const headers = jsonRecordFrom(form.headers);
+    return extraValuesFromRecords([field], requestTemplate, headers)[field.field] || '';
+}
+
+function applyExtraValuesToRecords(
+    fields: ProviderExtraField[] = [],
+    values: Record<string, string>,
+    requestTemplate: JsonRecord,
+    headers: JsonRecord,
+) {
+    fields.forEach(field => {
+        const source = extraSourceForField(field, requestTemplate, headers);
+        const value = String(values[field.field] || '').trim();
+        if (value) {
+            source[field.field] = value;
+            return;
+        }
+        extraFieldKeys(field).forEach(key => {
+            delete source[key];
+        });
+    });
+}
+
 function emptyConfigForm(): ApiConfigFormState {
     return {
         name: '',
@@ -401,14 +473,15 @@ function emptyConfigForm(): ApiConfigFormState {
         custom_proxy: '',
         request_template: '',
         headers: '',
-        minimax_group_id: '',
+        extra_values: {},
         category: 'text',
         enabled: true,
     };
 }
 
-function configToForm(config: ApiConfig): ApiConfigFormState {
+function configToForm(config: ApiConfig, extraFields: ProviderExtraField[] = []): ApiConfigFormState {
     const requestTemplate = jsonRecordFrom(config.request_template);
+    const headers = jsonRecordFrom(config.headers);
     return {
         config_id: config.config_id,
         name: config.name || '',
@@ -420,7 +493,7 @@ function configToForm(config: ApiConfig): ApiConfigFormState {
         custom_proxy: config.custom_proxy || '',
         request_template: jsonTextFrom(config.request_template),
         headers: jsonTextFrom(config.headers),
-        minimax_group_id: String(requestTemplate.group_id || requestTemplate.minimax_group_id || ''),
+        extra_values: extraValuesFromRecords(extraFields, requestTemplate, headers),
         category: config.category || groupCategory(config),
         enabled: config.enabled !== false,
     };
@@ -510,7 +583,9 @@ const ApiConfigEditorModal: React.FC<{
     }, [form.provider, providers]);
 
     const patch = (fields: Partial<ApiConfigFormState>) => onChange({ ...form, ...fields });
-    const isMinimax = normalizeProvider(form.provider) === 'minimax';
+    const selectedProvider = normalizeProvider(form.provider);
+    const selectedMeta = providers.find(item => normalizeProvider(item.provider) === selectedProvider);
+    const extraFields = selectedMeta?.extra_fields || [];
 
     return (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-n900/40 backdrop-blur-sm p-4">
@@ -651,19 +726,31 @@ const ApiConfigEditorModal: React.FC<{
                         </label>
                     )}
 
-                    {isMinimax && (
-                        <label className="block min-w-0">
-                            <span className="block text-xs font-medium text-n300 mb-1">MiniMax Group ID</span>
-                            <input
-                                value={form.minimax_group_id}
-                                onChange={event => patch({ minimax_group_id: event.target.value })}
-                                className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
-                                placeholder="MiniMax 控制台中的 GroupId"
-                            />
-                            <span className="mt-1 block text-[11px] text-n100">
-                                保存后会写入 request_template.group_id，并热更新到 MINIMAX_GROUP_ID，用于 TTS、声音设计和克隆声音。
-                            </span>
-                        </label>
+                    {extraFields.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {extraFields.map(field => (
+                                <label key={field.field} className="block min-w-0">
+                                    <span className="block text-xs font-medium text-n300 mb-1">{field.label || field.field}</span>
+                                    <input
+                                        type={field.secret || field.input_type === 'password' ? 'password' : 'text'}
+                                        value={extraFieldValueFromForm(form, field)}
+                                        onChange={event => patch({
+                                            extra_values: {
+                                                ...form.extra_values,
+                                                [field.field]: event.target.value,
+                                            },
+                                        })}
+                                        className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
+                                        placeholder={field.placeholder || field.env_key || field.field}
+                                    />
+                                    {(field.help || field.env_key) && (
+                                        <span className="mt-1 block text-[11px] text-n100">
+                                            {field.help || `Hot-reloads into ${field.env_key}`}
+                                        </span>
+                                    )}
+                                </label>
+                            ))}
+                        </div>
                     )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1232,8 +1319,10 @@ const ApiConfigPanel: React.FC = () => {
     }, []);
 
     const openEdit = useCallback((config: ApiConfig) => {
-        setEditingForm(configToForm(config));
-    }, []);
+        const provider = normalizeProvider(config.provider);
+        const extraFields = providerMetaMap.get(provider)?.extra_fields || [];
+        setEditingForm(configToForm(config, extraFields));
+    }, [providerMetaMap]);
 
     const saveConfig = useCallback(async () => {
         if (!editingForm) return;
@@ -1252,6 +1341,7 @@ const ApiConfigPanel: React.FC = () => {
 
         let requestTemplate: JsonRecord;
         let headers: JsonRecord;
+        const extraFields = providerMetaMap.get(provider)?.extra_fields || [];
         try {
             requestTemplate = parseJsonText(editingForm.request_template, 'Request Template');
             headers = parseJsonText(editingForm.headers, 'Headers');
@@ -1259,15 +1349,15 @@ const ApiConfigPanel: React.FC = () => {
             crmMessage.warning(err?.message || '高级配置 JSON 格式错误');
             return;
         }
-        if (provider === 'minimax') {
-            const groupId = editingForm.minimax_group_id.trim();
-            if (groupId) {
-                requestTemplate.group_id = groupId;
-            } else {
-                delete requestTemplate.group_id;
-                delete requestTemplate.minimax_group_id;
-            }
-        }
+        applyExtraValuesToRecords(
+            extraFields,
+            {
+                ...extraValuesFromRecords(extraFields, requestTemplate, headers),
+                ...editingForm.extra_values,
+            },
+            requestTemplate,
+            headers,
+        );
 
         setSaving(true);
         try {
@@ -1312,7 +1402,7 @@ const ApiConfigPanel: React.FC = () => {
         } finally {
             setSaving(false);
         }
-    }, [editingForm, loadConfigs]);
+    }, [editingForm, loadConfigs, providerMetaMap]);
 
     const toggleConfig = useCallback(async (config: ApiConfig) => {
         const nextEnabled = config.enabled === false;

@@ -4340,3 +4340,25 @@
   - save
 - Equivalent raw JSON:
   - `request_template: {"group_id": "<MiniMax GroupId>"}`
+
+## 2026-06-20 Provider Extra Fields Registry
+
+### Changes
+
+- Moved provider-specific advanced fields into the provider registry:
+  - `deploy/services/api_provider_registry.py`
+  - `PROVIDER_EXTRA_FIELD_CATALOG`
+  - `get_provider_extra_fields(provider)`
+- `get_api_provider_catalog()` now exposes `extra_fields` metadata for the admin UI.
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx`:
+  - removed hardcoded MiniMax-specific form state.
+  - renders advanced provider fields dynamically from `ProviderMeta.extra_fields`.
+  - saves dynamic field values back into `request_template` or `headers` based on registry metadata.
+- Extended contracts:
+  - `deploy/scripts/check_provider_contract.py`
+  - `deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- MiniMax `group_id` remains the first registered extra field.
+- Future provider-specific fields should be added to `PROVIDER_EXTRA_FIELD_CATALOG` instead of hardcoding new inputs in the admin page.

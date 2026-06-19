@@ -118,6 +118,22 @@ def check_registry_shape(registry) -> None:
     for provider in getattr(registry, "PROVIDER_EXTRA_ENV_MAP", {}):
         if provider not in registry.PROVIDER_CATALOG:
             fail(f"Extra env map references unknown provider {provider}")
+    for provider, fields in getattr(registry, "PROVIDER_EXTRA_FIELD_CATALOG", {}).items():
+        if provider not in registry.PROVIDER_CATALOG:
+            fail(f"Extra field catalog references unknown provider {provider}")
+        env_map = registry.get_provider_extra_env_keys(provider)
+        seen_fields: set[str] = set()
+        for item in fields:
+            field = str(item.get("field") or "").strip().lower()
+            if not field:
+                fail(f"{provider} extra field missing field id")
+            if field in seen_fields:
+                fail(f"{provider} duplicate extra field {field}")
+            seen_fields.add(field)
+            if field not in env_map:
+                fail(f"{provider} extra field {field} missing env mapping")
+            if item.get("target") not in {None, "request_template", "headers"}:
+                fail(f"{provider} extra field {field} has unsupported target {item.get('target')}")
 
     for provider, meta in registry.PROVIDER_CATALOG.items():
         if not meta.get("label"):
@@ -817,6 +833,13 @@ def check_provider_extra_env_contract(registry, resolve_provider) -> int:
     minimax_extras = registry.get_provider_extra_env_keys("minimax")
     if minimax_extras.get("group_id") != "MINIMAX_GROUP_ID":
         fail(f"MiniMax group_id extra env mapping changed: {minimax_extras}")
+    minimax_fields = registry.get_provider_extra_fields("minimax")
+    if not minimax_fields or minimax_fields[0].get("field") != "group_id":
+        fail(f"MiniMax group_id extra field metadata missing: {minimax_fields}")
+    catalog = {item["provider"]: item for item in registry.get_api_provider_catalog()}
+    catalog_fields = catalog.get("minimax", {}).get("extra_fields") or []
+    if not catalog_fields or catalog_fields[0].get("env_key") != "MINIMAX_GROUP_ID":
+        fail(f"Provider catalog did not expose MiniMax extra_fields metadata: {catalog_fields}")
 
     with isolated_env(registry):
         os.environ["MINIMAX_API_KEY"] = "minimax-test-key"

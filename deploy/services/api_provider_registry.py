@@ -33,6 +33,20 @@ PROVIDER_EXTRA_ENV_MAP: Dict[str, Dict[str, str]] = {
     },
 }
 
+PROVIDER_EXTRA_FIELD_CATALOG: Dict[str, List[Dict[str, Any]]] = {
+    "minimax": [
+        {
+            "field": "group_id",
+            "label": "MiniMax Group ID",
+            "target": "request_template",
+            "input_type": "text",
+            "placeholder": "MiniMax console GroupId",
+            "help": "Used by MiniMax TTS, voice design, and voice clone. Hot-reloads into MINIMAX_GROUP_ID.",
+            "aliases": ["minimax_group_id"],
+        }
+    ],
+}
+
 
 SEEDANCE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     # Keep the currently opened-account fallback while allowing admin runtime
@@ -484,6 +498,22 @@ def get_provider_extra_env_key(provider: str, field: str) -> str | None:
     return get_provider_extra_env_keys(provider).get((field or "").strip().lower())
 
 
+def get_provider_extra_fields(provider: str) -> List[Dict[str, Any]]:
+    provider_id = normalize_provider(provider)
+    env_keys = get_provider_extra_env_keys(provider_id)
+    fields = deepcopy(PROVIDER_EXTRA_FIELD_CATALOG.get(provider_id, []))
+    for item in fields:
+        field = str(item.get("field") or "").strip().lower()
+        if field:
+            item["field"] = field
+            item.setdefault("env_key", env_keys.get(field))
+        item.setdefault("target", "request_template")
+        item.setdefault("input_type", "text")
+        item.setdefault("secret", False)
+        item.setdefault("aliases", [])
+    return fields
+
+
 def get_endpoint_env_key(env_key: str) -> str:
     return env_key.replace("_API_KEY", "_ENDPOINT").replace("_KEY", "_ENDPOINT")
 
@@ -586,6 +616,7 @@ def get_api_provider_catalog() -> List[dict]:
                 "model_env_key": get_model_env_key(PROVIDER_ENV_MAP[provider])
                 if provider in PROVIDER_ENV_MAP
                 else None,
+                "extra_fields": get_provider_extra_fields(provider),
                 "health_check_url": PROVIDER_HEALTH_CHECK_URLS.get(provider),
                 "fallback": item.get("fallback", []),
                 "preset_count": counts.get(provider, 0),

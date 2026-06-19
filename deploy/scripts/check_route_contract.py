@@ -2143,6 +2143,22 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "PROVIDER_EXTRA_ENV_MAP",
         ),
         (
+            root / "services" / "api_provider_registry.py",
+            "PROVIDER_EXTRA_FIELD_CATALOG",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            '"extra_fields": get_provider_extra_fields(provider)',
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "extra_fields?: ProviderExtraField[]",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "applyExtraValuesToRecords(",
+        ),
+        (
             root / "services" / "api_config_runtime_loader.py",
             "get_provider_extra_env_keys(provider)",
         ),
