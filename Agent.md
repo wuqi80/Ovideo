@@ -5075,3 +5075,58 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - First smoke immediately after restart saw a transient HTTP `502` during service warm-up; `/health` returned `200` after a short wait, and the subsequent smoke passed `9/9`.
 - No frontend build was required.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Shared Helper Extraction
+
+### Changes
+
+- Moved shared helper logic out of `deploy/cluster_main.py`:
+  - JSON/JSONB parsing now lives in `deploy/utils/json_helpers.py`
+  - safe `/storage/...` resolution and image-reference conversion now live in `deploy/utils/image_reference.py`
+- Updated these routers to import the shared helpers directly instead of receiving them from `cluster_main.py`:
+  - `deploy/routers/ai_proxy.py`
+  - `deploy/routers/files.py`
+  - `deploy/routers/generation.py`
+  - `deploy/routers/projects.py`
+- Reduced `cluster_main.py` by another 85 lines.
+- Strengthened `deploy/scripts/check_route_contract.py`:
+  - `cluster_main.py` must not reintroduce `_storage_path_safe`, `data_url_to_base64`, `parse_jsonb_field`, or `to_doubao_image_input`
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/ai_proxy.py deploy/routers/files.py deploy/routers/generation.py deploy/routers/projects.py deploy/utils/json_helpers.py deploy/utils/image_reference.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - route result remains `openapi_paths=231`, `openapi_operations=287`
+  - provider result remains `providers=12`, `presets=17`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_helper_extraction_20260619_062823`
+- Uploaded to server:
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/ai_proxy.py`
+  - `/home/Administrator/deploy/routers/files.py`
+  - `/home/Administrator/deploy/routers/generation.py`
+  - `/home/Administrator/deploy/routers/projects.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/utils/image_reference.py`
+  - `/home/Administrator/deploy/utils/json_helpers.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No frontend build was required.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

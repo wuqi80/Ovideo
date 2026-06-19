@@ -16,6 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from cluster_config import SystemConfig
 from dao_content import FileDAO, ProjectDAO, VersionDAO
+from utils.image_reference import storage_path_safe
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +119,6 @@ def create_files_router(
     require_auth_dependency,
     security_dependency,
     verify_token: Callable[[str], Optional[str]],
-    storage_path_safe: Callable[[str], Path],
     get_db_manager: Callable[[], object],
 ) -> APIRouter:
     router = APIRouter()

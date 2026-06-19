@@ -10,7 +10,6 @@ import asyncio
 import base64
 import logging
 import time
-from pathlib import Path
 from typing import Callable, List, Optional
 
 import requests as download_requests
@@ -34,6 +33,7 @@ from services.ai_proxy_service import (
     generate_gemini_text,
     stream_deepseek_chat,
 )
+from utils.image_reference import storage_path_safe, to_doubao_image_input
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +57,6 @@ async def _save_text_result(task_id: str, text_content: str):
 def create_ai_proxy_router(
     *,
     require_auth_dependency,
-    storage_path_safe: Callable[[str], Path],
-    to_doubao_image_input: Callable[[str], str],
     get_main_event_loop: Callable[[], Optional[asyncio.AbstractEventLoop]],
     doubao_model_provider: Callable[[], str],
 ) -> APIRouter:

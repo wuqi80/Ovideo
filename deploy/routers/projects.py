@@ -12,6 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from schemas.project import ExportToVideoRequest, ProjectData
+from utils.json_helpers import parse_jsonb_field
 
 
 def create_projects_router(
@@ -20,7 +21,6 @@ def create_projects_router(
     project_dao: Any,
     file_dao: Any,
     version_dao: Any,
-    parse_jsonb_field: Any,
     logger: logging.Logger,
 ) -> APIRouter:
     router = APIRouter()

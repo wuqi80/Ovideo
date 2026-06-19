@@ -10,8 +10,6 @@ import asyncio
 import logging
 import os
 import uuid
-import json
-import base64
 import time
 import random
 import requests
@@ -646,18 +644,6 @@ DEFAULT_USERS = {
 SUPER_ADMIN = 'admin'
 
 
-# 辅助函数：解析JSONB字段
-def parse_jsonb_field(value):
-    """解析JSONB字段，处理字符串和字典两种情况"""
-    if value is None:
-        return {}
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except:
-            return {}
-    return value
-
 # 认证函数
 def verify_credentials(username: str, password: str) -> bool:
     """验证用户凭证（仅用于硬编码用户）"""
@@ -709,78 +695,9 @@ async def require_auth(username: Optional[str] = Depends(verify_session)) -> str
 
     return username
 
-from utils.net_guard import safe_storage_path as _safe_storage_path  # 安全：/storage 路径收敛防遍历
-_CM_ROOT = os.path.dirname(os.path.abspath(__file__))
-
-
-def _storage_path_safe(url: str) -> Path:
-    """把 /storage/... 安全解析为磁盘 Path，强制收敛在 persistent_storage 内。
-    越界(路径遍历 ../)时返回一个保证不存在的路径，使下游 .exists() 判定为"未找到"，
-    既堵 LFI 又不改动原有控制流。"""
-    try:
-        return Path(_safe_storage_path(url, _CM_ROOT))
-    except ValueError:
-        logger.warning(f"拒绝越界 /storage 路径: {url!r}")
-        return Path(_CM_ROOT) / "persistent_storage" / "__blocked_nonexistent__"
-
-
-def data_url_to_base64(data_url: str) -> str:
-    if not data_url:
-        return ""
-    if "base64," in data_url:
-        return data_url.split("base64,", 1)[1]
-    if data_url.startswith('/storage/'):
-        file_path = _storage_path_safe(data_url)
-        if file_path.exists():
-            return base64.b64encode(file_path.read_bytes()).decode('utf-8')
-        logger.warning(f"data_url_to_base64: file not found: {file_path}")
-        return ""
-    if "," in data_url:
-        return data_url.split(",", 1)[1]
-    return data_url
-
-
-def to_doubao_image_input(ref: str) -> str:
-    """
-    将各种来源的图片标识转成豆包 Ark images/generations 接口接受的 image 参数：
-      - 已是 data:image/<fmt>;base64,<b64> → 直接返回（仅小写 fmt 校正）
-      - /storage/... 路径 → 读文件转 data URL
-      - http(s)://... → 直接返回（豆包必须能外网访问该 URL）
-      - 其他 → 当作裸 base64，包成 data:image/png;base64,xxx
-    """
-    if not ref:
-        return ""
-    if ref.startswith("data:image/"):
-        try:
-            head, body = ref.split(";base64,", 1)
-            fmt = head.split("/", 1)[1].lower()
-            if fmt == "jpg":
-                fmt = "jpeg"
-            return f"data:image/{fmt};base64,{body}"
-        except Exception:
-            return ref
-    if ref.startswith("/storage/"):
-        file_path = _storage_path_safe(ref)
-        if not file_path.exists():
-            logger.warning(f"to_doubao_image_input: file not found: {file_path}")
-            return ""
-        ext = file_path.suffix.lower().lstrip(".")
-        if ext == "jpg":
-            ext = "jpeg"
-        if ext not in ("jpeg", "png", "webp", "bmp", "tiff", "gif"):
-            ext = "png"
-        b64 = base64.b64encode(file_path.read_bytes()).decode("utf-8")
-        return f"data:image/{ext};base64,{b64}"
-    if ref.startswith(("http://", "https://")):
-        return ref
-    return f"data:image/png;base64,{ref}"
-
-
 app.include_router(
     create_ai_proxy_router(
         require_auth_dependency=require_auth,
-        storage_path_safe=_storage_path_safe,
-        to_doubao_image_input=to_doubao_image_input,
         get_main_event_loop=lambda: MAIN_EVENT_LOOP,
         doubao_model_provider=lambda: DOUBAO_MODEL,
     )
@@ -814,7 +731,6 @@ app.include_router(
         require_auth_dependency=require_auth,
         security_dependency=security,
         verify_token=jwt_auth.verify_token,
-        storage_path_safe=_storage_path_safe,
         get_db_manager=lambda: db_manager,
     )
 )
@@ -877,7 +793,6 @@ app.include_router(
     create_generation_router(
         require_auth_dependency=require_auth,
         task_service_module=task_service,
-        storage_path_safe=_storage_path_safe,
         generate_gemini_images=generate_gemini_images,
         logger=logger,
     )
@@ -896,7 +811,6 @@ app.include_router(
         project_dao=ProjectDAO,
         file_dao=FileDAO,
         version_dao=VersionDAO,
-        parse_jsonb_field=parse_jsonb_field,
         logger=logger,
     )
 )

@@ -23,6 +23,7 @@ from schemas.generation import (
     PanoramaFusionRequest,
 )
 from services.ai_proxy_service import AIProxyError
+from utils.image_reference import storage_path_safe
 
 
 def _attach_entity_fields(task_data: dict, request: Any) -> None:
@@ -40,7 +41,6 @@ def create_generation_router(
     *,
     require_auth_dependency: Any,
     task_service_module: Any,
-    storage_path_safe: Any,
     generate_gemini_images: Any,
     logger: logging.Logger,
 ) -> APIRouter:

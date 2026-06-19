@@ -325,12 +325,20 @@ def check_cluster_main_has_no_direct_http_routes(root: Path) -> None:
     cluster_tree = parse_py_file(cluster_main_path)
     violations: list[str] = []
     legacy_reference_names = {"get_admin_users", "update_user_permissions"}
+    shared_helper_names = {
+        "_storage_path_safe",
+        "data_url_to_base64",
+        "parse_jsonb_field",
+        "to_doubao_image_input",
+    }
 
     for node in ast.walk(cluster_tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if node.name in legacy_reference_names:
             violations.append(f"{cluster_main_path.name}:{node.lineno} legacy reference function {node.name}")
+        if node.name in shared_helper_names:
+            violations.append(f"{cluster_main_path.name}:{node.lineno} shared helper should live outside cluster_main.py: {node.name}")
         for decorator in node.decorator_list:
             target = decorator.func if isinstance(decorator, ast.Call) else decorator
             name = ast_call_name(target)
