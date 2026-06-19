@@ -45,6 +45,7 @@ from file_service import save_generated_file_to_db
 from routers.audio import create_audio_router
 from routers.canvas import create_canvas_router
 from routers.content_versions import create_content_versions_router
+from routers.episode_video import create_episode_video_router
 from routers.episodes import create_episodes_router
 from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
@@ -215,6 +216,14 @@ if EpisodeDAO is not None:
             episode_script_dao=EpisodeScriptDAO,
         )
     )
+
+router.include_router(
+    create_episode_video_router(
+        get_current_user_dependency=get_current_user,
+        video_segment_dao=VideoSegmentDAO,
+        get_db_manager_func=get_db_manager,
+    )
+)
 
 # ============================================
 # 用户相关API
@@ -1042,7 +1051,6 @@ async def mix_storyboard_audio_endpoint(
         raise HTTPException(status_code=500, detail=msg)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
     return MixAudioResponse(
         success=result.success,
         mixed_audio_url=result.mixed_audio_url,
@@ -1051,96 +1059,6 @@ async def mix_storyboard_audio_endpoint(
     )
 
 
-# ============================================
-# 视频片段 API
-# ============================================
-
-class VideoSegmentCreate(BaseModel):
-    sort_order: int = 0
-    storyboard_item_id: Optional[str] = None
-    generation_mode: str = 'i2v'
-    model: str = ''
-    input_params: Optional[dict] = None
-
-class VideoSegmentUpdate(BaseModel):
-    sort_order: Optional[int] = None
-    generation_mode: Optional[str] = None
-    model: Optional[str] = None
-    video_url: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    duration_ms: Optional[int] = None
-    task_id: Optional[str] = None
-    status: Optional[str] = None
-    input_params: Optional[dict] = None
-
-
-@router.get("/api/episodes/{episode_id}/video-segments")
-async def get_video_segments(episode_id: str, user_id: str = Depends(get_current_user)):
-    segments = await VideoSegmentDAO.get_by_episode(episode_id)
-    return {"success": True, "segments": [dict(s) for s in segments]}
-
-
-@router.get("/api/episodes/{episode_id}/video-takes")
-async def video_takes_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
-    """合成挑选面板用：按分镜顺序列出每镜的所有视频 take（缩略图/段ID/时间）。"""
-    import compose_service
-    shots = await compose_service.get_takes(episode_id)
-    return {"success": True, "shots": shots}
-
-
-@router.post("/api/episodes/{episode_id}/compose")
-async def compose_episode_endpoint(episode_id: str, request: Request, user_id: str = Depends(get_current_user)):
-    """一键合成成片：后台拼接本集视频段+配音→完整 mp4，存入成品页。立即返回，前端轮询 status。
-    可选 body {selections: {item_id: segment_id}} 指定每镜用哪条 take，未指定用最新。"""
-    db = get_db_manager()
-    row = await db.fetchrow("SELECT project_id FROM episodes WHERE episode_id = $1", episode_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="集不存在")
-    selections = None
-    try:
-        body = await request.json()
-        selections = (body or {}).get("selections")
-    except Exception:
-        selections = None
-    import compose_service
-    job = compose_service.start_compose(episode_id, user_id, row["project_id"], selections)
-    return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
-
-
-@router.get("/api/episodes/{episode_id}/compose/status")
-async def compose_status_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
-    """合成进度：status=idle|running|done|failed，done/total 进度，url 成片地址。"""
-    import compose_service
-    return {"success": True, **compose_service.get_status(episode_id)}
-
-
-@router.post("/api/episodes/{episode_id}/video-segments")
-async def create_video_segment(episode_id: str, data: VideoSegmentCreate, user_id: str = Depends(get_current_user)):
-    seg = await VideoSegmentDAO.create(
-        episode_id=episode_id, sort_order=data.sort_order,
-        storyboard_item_id=data.storyboard_item_id,
-        generation_mode=data.generation_mode,
-        model=data.model, input_params=data.input_params
-    )
-    if not seg:
-        raise HTTPException(status_code=500, detail="创建视频片段失败")
-    return {"success": True, "segment": dict(seg)}
-
-
-@router.put("/api/video-segments/{segment_id}")
-async def update_video_segment(segment_id: str, data: VideoSegmentUpdate, user_id: str = Depends(get_current_user)):
-    seg = await VideoSegmentDAO.update(segment_id, **data.dict(exclude_none=True))
-    if not seg:
-        raise HTTPException(status_code=404, detail="视频片段不存在")
-    return {"success": True, "segment": dict(seg)}
-
-
-@router.delete("/api/video-segments/{segment_id}")
-async def delete_video_segment(segment_id: str, user_id: str = Depends(get_current_user)):
-    ok = await VideoSegmentDAO.delete(segment_id)
-    if not ok:
-        raise HTTPException(404, "视频段不存在")
-    return {"success": True}
 
 
 # ============================================

@@ -161,6 +161,16 @@ EXPECTED_ENDPOINTS = {
     ("/api/episodes/{episode_id}", "DELETE"): ("routers.episodes", "delete_episode"),
     ("/api/episodes/{episode_id}/duplicate", "POST"): ("routers.episodes", "duplicate_episode"),
     ("/api/projects/{project_id}/episodes/reorder", "POST"): ("routers.episodes", "reorder_episodes"),
+    ("/api/episodes/{episode_id}/video-segments", "GET"): ("routers.episode_video", "get_video_segments"),
+    ("/api/episodes/{episode_id}/video-takes", "GET"): ("routers.episode_video", "video_takes_endpoint"),
+    ("/api/episodes/{episode_id}/compose", "POST"): ("routers.episode_video", "compose_episode_endpoint"),
+    (
+        "/api/episodes/{episode_id}/compose/status",
+        "GET",
+    ): ("routers.episode_video", "compose_status_endpoint"),
+    ("/api/episodes/{episode_id}/video-segments", "POST"): ("routers.episode_video", "create_video_segment"),
+    ("/api/video-segments/{segment_id}", "PUT"): ("routers.episode_video", "update_video_segment"),
+    ("/api/video-segments/{segment_id}", "DELETE"): ("routers.episode_video", "delete_video_segment"),
     ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
     ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
     ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
@@ -1185,6 +1195,62 @@ def check_episode_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_episode_video_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    episode_video_path = root / "routers" / "episode_video.py"
+    if not episode_video_path.exists():
+        fail("routers/episode_video.py is missing")
+
+    route_pairs = {
+        ("/api/episodes/{episode_id}/video-segments", "get"),
+        ("/api/episodes/{episode_id}/video-takes", "get"),
+        ("/api/episodes/{episode_id}/compose", "post"),
+        ("/api/episodes/{episode_id}/compose/status", "get"),
+        ("/api/episodes/{episode_id}/video-segments", "post"),
+        ("/api/video-segments/{segment_id}", "put"),
+        ("/api/video-segments/{segment_id}", "delete"),
+    }
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            name = ast_call_name(call.func)
+            _, _, method = name.rpartition(".") if name else ("", "", "")
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, str)
+                and (arg.value, method.lower()) in route_pairs
+            ):
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Episode video route handlers must live in routers/episode_video.py:\n" + "\n".join(violations))
+
+    episode_video_tree = parse_py_file(episode_video_path)
+    route_count = 0
+    for node in ast.walk(episode_video_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 7:
+        fail(f"routers/episode_video.py should own 7 episode video route registrations, found {route_count}")
+    return route_count
+
+
 def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
@@ -1375,6 +1441,7 @@ def main() -> int:
     project_admin_route_handlers = check_project_admin_routes_extracted(root)
     content_version_route_handlers = check_content_version_routes_extracted(root)
     episode_route_handlers = check_episode_routes_extracted(root)
+    episode_video_route_handlers = check_episode_video_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
     script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
     canvas_route_handlers = check_canvas_routes_extracted(root)
@@ -1407,6 +1474,7 @@ def main() -> int:
     print(f"  project_admin_route_handlers={project_admin_route_handlers}")
     print(f"  content_version_route_handlers={content_version_route_handlers}")
     print(f"  episode_route_handlers={episode_route_handlers}")
+    print(f"  episode_video_route_handlers={episode_video_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
     print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
     print(f"  canvas_route_handlers={canvas_route_handlers}")

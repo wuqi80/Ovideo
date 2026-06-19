@@ -2466,3 +2466,58 @@
 
 - No frontend build was required.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Episode Video Router Extraction
+
+### Changes
+
+- Added `deploy/routers/episode_video.py` and moved 7 episode video/composition handlers out of `deploy/api_routes.py`:
+  - `GET /api/episodes/{episode_id}/video-segments`
+  - `GET /api/episodes/{episode_id}/video-takes`
+  - `POST /api/episodes/{episode_id}/compose`
+  - `GET /api/episodes/{episode_id}/compose/status`
+  - `POST /api/episodes/{episode_id}/video-segments`
+  - `PUT /api/video-segments/{segment_id}`
+  - `DELETE /api/video-segments/{segment_id}`
+- Fixed a deletion-boundary regression in `mix_storyboard_audio_endpoint`; it now returns `MixAudioResponse` again.
+- Updated `deploy/scripts/check_route_contract.py`:
+  - expected endpoint ownership now points the 7 routes at `routers.episode_video`
+  - added `check_episode_video_routes_extracted()`
+  - contract output now reports `episode_video_route_handlers=7`
+- `deploy/api_routes.py` is now 1261 lines, down from 1327 at the previous committed baseline.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/episode_video.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `git diff --check -- deploy/api_routes.py deploy/routers/episode_video.py deploy/scripts/check_route_contract.py`
+  - route result remains `openapi_paths=231`, `openapi_operations=287`
+  - provider result remains `providers=12`, `presets=17`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_episode_video_router_20260619_160357`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/episode_video.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/episode_video.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+  - live read-only endpoint check: `GET /api/episodes/ep_2fc899a228f5/video-segments` -> HTTP `200`, `segments=58`
+
+### Notes
+
+- No frontend build was required.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
