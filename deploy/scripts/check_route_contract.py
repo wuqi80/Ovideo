@@ -2151,8 +2151,28 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             '"extra_fields": get_provider_extra_fields(provider)',
         ),
         (
+            root / "services" / "api_provider_registry.py",
+            '"default_endpoint": default_preset.get("endpoint")',
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            '"default_model_name": default_preset.get("model_name")',
+        ),
+        (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "extra_fields?: ProviderExtraField[]",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "const ProviderQuickCard",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "providerMetaToForm(meta)",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "厂商快速配置",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",

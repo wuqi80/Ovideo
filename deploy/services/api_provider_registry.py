@@ -588,11 +588,13 @@ def get_api_provider_catalog() -> List[dict]:
     presets = get_api_model_presets()
     counts: Dict[str, int] = {}
     categories: Dict[str, set] = {}
+    defaults: Dict[str, dict] = {}
     for preset in presets:
         provider = normalize_provider(preset.get("provider", ""))
         if not provider:
             continue
         counts[provider] = counts.get(provider, 0) + 1
+        defaults.setdefault(provider, preset)
         cat = preset.get("category") or ""
         if cat:
             categories.setdefault(provider, set()).add(cat)
@@ -600,6 +602,7 @@ def get_api_provider_catalog() -> List[dict]:
     out: List[dict] = []
     for provider in sorted(set(PROVIDER_ENV_MAP) | set(PROVIDER_CATALOG)):
         item = deepcopy(PROVIDER_CATALOG.get(provider, {}))
+        default_preset = defaults.get(provider, {})
         item.update(
             {
                 "provider": provider,
@@ -619,6 +622,11 @@ def get_api_provider_catalog() -> List[dict]:
                 "extra_fields": get_provider_extra_fields(provider),
                 "health_check_url": PROVIDER_HEALTH_CHECK_URLS.get(provider),
                 "fallback": item.get("fallback", []),
+                "default_config_name": default_preset.get("name"),
+                "default_endpoint": default_preset.get("endpoint"),
+                "default_model_name": default_preset.get("model_name"),
+                "default_category": default_preset.get("category"),
+                "default_proxy_mode": default_preset.get("proxy_mode") or item.get("default_proxy_mode", "direct"),
                 "preset_count": counts.get(provider, 0),
                 "preset_categories": sorted(categories.get(provider, set())),
             }

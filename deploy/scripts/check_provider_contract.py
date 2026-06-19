@@ -853,6 +853,33 @@ def check_provider_extra_env_contract(registry, resolve_provider) -> int:
     return 1
 
 
+def check_provider_catalog_defaults(registry) -> int:
+    catalog = {item["provider"]: item for item in registry.get_api_provider_catalog()}
+    presets_by_provider: dict[str, dict] = {}
+    for preset in registry.get_api_model_presets():
+        provider = registry.normalize_provider(preset.get("provider", ""))
+        if provider:
+            presets_by_provider.setdefault(provider, preset)
+
+    missing: list[str] = []
+    for provider, preset in presets_by_provider.items():
+        item = catalog.get(provider) or {}
+        for field, preset_key in (
+            ("default_config_name", "name"),
+            ("default_endpoint", "endpoint"),
+            ("default_model_name", "model_name"),
+            ("default_category", "category"),
+        ):
+            if item.get(field) != preset.get(preset_key):
+                missing.append(f"{provider}.{field}")
+        if not item.get("default_proxy_mode"):
+            missing.append(f"{provider}.default_proxy_mode")
+
+    if missing:
+        fail(f"Provider catalog default fields missing or mismatched: {missing}")
+    return len(presets_by_provider)
+
+
 def check_runtime_status(
     registry,
     build_provider_runtime_status,
@@ -996,6 +1023,7 @@ def main() -> int:
     gpt_image_tier_provider_count = check_gpt_image_tier_wiring(registry)
     derived_env_count = check_env_key_helpers(registry)
     provider_extra_env_checks = check_provider_extra_env_contract(registry, resolve_provider)
+    provider_catalog_default_checks = check_provider_catalog_defaults(registry)
     runtime_status_count = check_runtime_status(
         registry,
         build_provider_runtime_status,
@@ -1025,6 +1053,7 @@ def main() -> int:
     print(f"  gpt_image_tier_providers={gpt_image_tier_provider_count}")
     print(f"  derived_env_keys={derived_env_count}")
     print(f"  provider_extra_env_checks={provider_extra_env_checks}")
+    print(f"  provider_catalog_default_checks={provider_catalog_default_checks}")
     print(f"  runtime_status_rows={runtime_status_count}")
     print(f"  failover_checks={failover_count}")
     print(f"  fallback_env_key_only_checks={fallback_env_key_only_checks}")

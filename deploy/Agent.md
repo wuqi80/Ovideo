@@ -1,5 +1,29 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Provider Quick API Configuration
+
+### Changes
+
+- Extended `services/api_provider_registry.py` so `get_api_provider_catalog()` now exposes provider-level defaults:
+  - `default_config_name`
+  - `default_endpoint`
+  - `default_model_name`
+  - `default_category`
+  - `default_proxy_mode`
+- Updated `new_html/admin/AdminSettingsPage.tsx` with a provider-level "厂商快速配置" section:
+  - renders every provider from the registry, even if no DB config row exists yet
+  - shows runtime health, latency, checked time, endpoint, model, and config counts
+  - opens the editor prefilled from registry defaults for new providers
+  - edits the currently effective provider config when one already exists
+- Updated contract scripts:
+  - `scripts/check_provider_contract.py` verifies provider catalog defaults match presets
+  - `scripts/check_route_contract.py` verifies the quick configuration UI remains present
+
+### Notes
+
+- This makes the admin API management surface registry-driven instead of forcing administrators to understand individual DB rows first.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-19 Storyboard Paged Mutation Reload Fix
 
 ### Incident

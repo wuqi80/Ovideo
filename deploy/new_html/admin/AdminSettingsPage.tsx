@@ -60,6 +60,13 @@ interface ProviderMeta {
     notes?: string;
     capabilities?: string[];
     extra_fields?: ProviderExtraField[];
+    default_config_name?: string;
+    default_endpoint?: string;
+    default_model_name?: string;
+    default_category?: string;
+    default_proxy_mode?: string;
+    preset_count?: number;
+    preset_categories?: string[];
 }
 
 interface ProviderExtraField {
@@ -370,6 +377,29 @@ function groupCategory(config: ApiConfig): string {
     return 'text';
 }
 
+function categoryFromProviderMeta(meta: ProviderMeta): string {
+    const direct = String(meta.default_category || '').toLowerCase();
+    if (CATEGORY_LABELS[direct]) return direct;
+    const fromPreset = (meta.preset_categories || [])
+        .map(item => String(item || '').toLowerCase())
+        .find(item => CATEGORY_LABELS[item]);
+    if (fromPreset) return fromPreset;
+    const capabilities = (meta.capabilities || []).map(item => String(item || '').toLowerCase());
+    if (capabilities.includes('audio')) return 'audio';
+    if (capabilities.includes('video')) return 'video';
+    if (capabilities.includes('image')) return 'image';
+    return 'text';
+}
+
+function bestConfigForProvider(configs: ApiConfig[], providerRaw: string): ApiConfig | undefined {
+    const provider = normalizeProvider(providerRaw);
+    const matches = configs.filter(config => normalizeProvider(config.provider) === provider);
+    return matches.find(config => config.enabled !== false && Boolean(config.api_key_encrypted))
+        || matches.find(config => Boolean(config.api_key_encrypted))
+        || matches.find(config => config.enabled !== false)
+        || matches[0];
+}
+
 function jsonRecordFrom(value: ApiConfig['request_template']): JsonRecord {
     if (!value) return {};
     if (typeof value === 'object' && !Array.isArray(value)) return { ...value };
@@ -476,6 +506,19 @@ function emptyConfigForm(): ApiConfigFormState {
         extra_values: {},
         category: 'text',
         enabled: true,
+    };
+}
+
+function providerMetaToForm(meta: ProviderMeta): ApiConfigFormState {
+    const provider = normalizeProvider(meta.provider);
+    return {
+        ...emptyConfigForm(),
+        name: meta.default_config_name || meta.label || provider,
+        provider,
+        endpoint: meta.default_endpoint || '',
+        model_name: meta.default_model_name || '',
+        proxy_mode: meta.default_proxy_mode || 'direct',
+        category: categoryFromProviderMeta(meta),
     };
 }
 
@@ -1041,6 +1084,105 @@ const ApiConfigCard: React.FC<{
     );
 };
 
+const ProviderQuickCard: React.FC<{
+    meta: ProviderMeta;
+    configs: ApiConfig[];
+    runtime?: RuntimeStatus;
+    health?: ProviderHealth;
+    checking: boolean;
+    onConfigure: (meta: ProviderMeta) => void;
+    onCheck: (provider: string) => void;
+}> = ({ meta, configs, runtime, health, checking, onConfigure, onCheck }) => {
+    const provider = normalizeProvider(meta.provider);
+    const primaryConfig = bestConfigForProvider(configs, provider);
+    const hasSavedKey = configs.some(config => Boolean(config.api_key_encrypted));
+    const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : hasSavedKey;
+    const status = healthStatusFrom(health, runtime, runtimeHasKey);
+    const view = statusView(status);
+    const latency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
+    const checkedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
+    const endpoint = primaryConfig?.endpoint || runtime?.endpoint || meta.default_endpoint || '';
+    const model = primaryConfig?.model_name || runtime?.runtime_model_name || meta.default_model_name || '';
+    const enabledCount = configs.filter(config => config.enabled !== false).length;
+
+    return (
+        <article className={`bg-n0 border rounded-md shadow-card p-4 min-w-0 ${
+            status === 'ok' ? 'border-g75' : status === 'no_key' || status === 'error' ? 'border-r75' : 'border-y200'
+        }`}>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`w-2.5 h-2.5 rounded-full ${view.dot}`} />
+                        <h3 className="text-sm font-semibold text-n800 break-words">{meta.label || provider}</h3>
+                        <span className="text-[10px] rounded bg-n20 border border-n40 px-1.5 py-0.5 text-n100 font-mono">
+                            {provider}
+                        </span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-n100 break-words">
+                        {meta.vendor || '-'} · {CATEGORY_LABELS[categoryFromProviderMeta(meta)] || '其他'}
+                    </div>
+                </div>
+                <HealthBadge status={status} />
+            </div>
+
+            <div className="mt-3 grid gap-2 text-[11px]">
+                <div className="min-w-0">
+                    <div className="text-n100">Endpoint</div>
+                    <div className="font-mono text-n700 break-all">{formatEndpoint(endpoint)}</div>
+                </div>
+                <div className="min-w-0">
+                    <div className="text-n100">Model</div>
+                    <div className="font-mono text-n700 break-all">{model || '-'}</div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                    <div>
+                        <div className="text-n100">配置</div>
+                        <div className="font-mono text-n700">{configs.length}</div>
+                    </div>
+                    <div>
+                        <div className="text-n100">启用</div>
+                        <div className="font-mono text-n700">{enabledCount}</div>
+                    </div>
+                    <div>
+                        <div className="text-n100">延迟</div>
+                        <div className="font-mono text-n700">{typeof latency === 'number' ? `${latency} ms` : '-'}</div>
+                    </div>
+                </div>
+                <div className="text-[11px] text-n100">
+                    最后检测：<span className="font-mono text-n700 break-words">{formatTime(checkedAt)}</span>
+                </div>
+                {runtime?.issues?.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                        {runtimeIssueText(runtime.issues).split('，').map(issue => (
+                            <span key={issue} className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">{issue}</span>
+                        ))}
+                    </div>
+                ) : null}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                    type="button"
+                    onClick={() => onConfigure(meta)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    {primaryConfig ? (hasSavedKey ? '编辑 Key' : '配置 Key') : '新增配置'}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => onCheck(provider)}
+                    disabled={checking || !provider}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                >
+                    {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    测试运行时
+                </button>
+            </div>
+        </article>
+    );
+};
+
 const ApiConfigPanel: React.FC = () => {
     const navigate = useNavigate();
     const [configs, setConfigs] = useState<ApiConfig[]>([]);
@@ -1135,6 +1277,42 @@ const ApiConfigPanel: React.FC = () => {
         });
         return out;
     }, [configs]);
+
+    const configsByProvider = useMemo(() => {
+        const out = new Map<string, ApiConfig[]>();
+        configs.forEach(config => {
+            const provider = normalizeProvider(config.provider);
+            if (!provider) return;
+            const existing = out.get(provider) || [];
+            existing.push(config);
+            out.set(provider, existing);
+        });
+        return out;
+    }, [configs]);
+
+    const quickProviders = useMemo(() => {
+        const known = new Set<string>();
+        const rows = providers
+            .filter(item => normalizeProvider(item.provider) && normalizeProvider(item.provider) !== 'comfyui')
+            .map(item => {
+                known.add(normalizeProvider(item.provider));
+                return item;
+            });
+        configs.forEach(config => {
+            const provider = normalizeProvider(config.provider);
+            if (!provider || provider === 'comfyui' || known.has(provider)) return;
+            known.add(provider);
+            rows.push({
+                provider,
+                label: provider,
+                default_endpoint: config.endpoint,
+                default_model_name: config.model_name,
+                default_category: groupCategory(config),
+                default_proxy_mode: config.proxy_mode || 'direct',
+            });
+        });
+        return rows.sort((a, b) => categoryFromProviderMeta(a).localeCompare(categoryFromProviderMeta(b)) || normalizeProvider(a.provider).localeCompare(normalizeProvider(b.provider)));
+    }, [configs, providers]);
 
     const summary = useMemo(() => {
         const providerIds = Array.from(new Set(configs.map(item => normalizeProvider(item.provider)).filter(Boolean)));
@@ -1323,6 +1501,17 @@ const ApiConfigPanel: React.FC = () => {
         const extraFields = providerMetaMap.get(provider)?.extra_fields || [];
         setEditingForm(configToForm(config, extraFields));
     }, [providerMetaMap]);
+
+    const openProviderConfig = useCallback((meta: ProviderMeta) => {
+        const provider = normalizeProvider(meta.provider);
+        const existing = bestConfigForProvider(configsByProvider.get(provider) || [], provider);
+        if (existing) {
+            const extraFields = providerMetaMap.get(provider)?.extra_fields || [];
+            setEditingForm(configToForm(existing, extraFields));
+            return;
+        }
+        setEditingForm(providerMetaToForm(meta));
+    }, [configsByProvider, providerMetaMap]);
 
     const saveConfig = useCallback(async () => {
         if (!editingForm) return;
@@ -1608,6 +1797,33 @@ const ApiConfigPanel: React.FC = () => {
                     <div className="rounded-md border border-r75 bg-r50 px-3 py-2 text-sm text-danger">{error}</div>
                 )}
 
+                <section className="space-y-2">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <h2 className="text-sm font-semibold text-n800">厂商快速配置</h2>
+                            <p className="mt-0.5 text-xs text-n100">按 provider 直接配置 Key、Endpoint 和模型；新增厂商时这里会跟随注册表自动出现。</p>
+                        </div>
+                        <span className="text-xs text-n100 font-mono">{quickProviders.length} providers</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {quickProviders.map(meta => {
+                            const provider = normalizeProvider(meta.provider);
+                            return (
+                                <ProviderQuickCard
+                                    key={provider}
+                                    meta={meta}
+                                    configs={configsByProvider.get(provider) || []}
+                                    runtime={runtimeMap.get(provider)}
+                                    health={healthMap[provider]}
+                                    checking={Boolean(checking[provider])}
+                                    onConfigure={openProviderConfig}
+                                    onCheck={testProvider}
+                                />
+                            );
+                        })}
+                    </div>
+                </section>
+
                 {loading ? (
                     <div className="flex items-center justify-center h-64 text-n100">
                         <Loader2 className="w-5 h-5 animate-spin mr-2" />
@@ -1615,7 +1831,7 @@ const ApiConfigPanel: React.FC = () => {
                     </div>
                 ) : configs.length === 0 ? (
                     <div className="bg-n0 border border-n40 rounded-md p-10 text-center text-n100">
-                        暂无 API 配置
+                        暂无 API 配置记录，可在上方选择厂商新增配置
                     </div>
                 ) : (
                     <div className="space-y-5">
