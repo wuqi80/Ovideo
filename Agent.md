@@ -5804,3 +5804,54 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - No frontend build was required.
 - This is a router-composition refactor only; it keeps the API surface stable while shrinking the remaining mixed V2 route file.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Storyboard Router Extraction
+
+### Changes
+
+- Extracted 10 storyboard-related route handlers from `deploy/api_routes.py` into `deploy/routers/storyboard.py`:
+  - `GET/POST /api/episodes/{episode_id}/storyboard-items`
+  - `PUT/DELETE /api/storyboard-items/{item_id}`
+  - `DELETE /api/episodes/{episode_id}/storyboard-items/all`
+  - `POST /api/episodes/{episode_id}/export-script`
+  - `POST /api/episodes/{episode_id}/storyboard-items/reorder`
+  - `POST /api/storyboard/mix-audio`
+  - `POST /api/episodes/{episode_id}/storyboard-items/batch`
+  - `POST /api/episodes/{episode_id}/extract-to-assets`
+- `api_routes.py` now composes `create_storyboard_router(...)` and no longer owns the storyboard handler bodies.
+- Extended `deploy/scripts/check_route_contract.py` to verify:
+  - all 10 storyboard endpoints resolve to `routers.storyboard`
+  - `routers/storyboard.py` owns exactly 10 routes
+  - `api_routes.py` does not reintroduce those storyboard route decorators
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/storyboard.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - `storyboard_route_handlers=10`
+  - redline diff check: no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/storyboard.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - paged storyboard endpoint check: `GET /api/episodes/ep_2fc899a228f5/storyboard-items?limit=10&include_total=true` -> HTTP `200`, `items=10`, `total=152`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_storyboard_router_20260619_084653`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/storyboard.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+
+### Notes
+
+- No frontend build was required.
+- This keeps the large-episode storyboard pagination behavior intact while moving the high-traffic storyboard domain out of the mixed V2 route file.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
