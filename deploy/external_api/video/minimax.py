@@ -11,6 +11,17 @@ from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MINIMAX_VIDEO_MODEL = "MiniMax-Hailuo-02"
+
+
+def _runtime_model_override(model: Optional[str]) -> Optional[str]:
+    """Treat the old worker default as fallback so admin runtime config can win."""
+    normalized = (model or "").strip()
+    if not normalized or normalized == DEFAULT_MINIMAX_VIDEO_MODEL:
+        return None
+    return normalized
+
+
 class MinimaxClient:
     """MiniMax API 客户端"""
     
@@ -18,15 +29,18 @@ class MinimaxClient:
         self._explicit_api_key = api_key
         self.api_key = api_key or ""
         self.base_url = ""
+        self.model_name = DEFAULT_MINIMAX_VIDEO_MODEL
         self._request_kwargs: Dict[str, Any] = {}
         self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("⚠️ MINIMAX_API_KEY 未设置")
 
-    def _refresh_runtime_config(self):
-        config = resolve_provider("minimax", "MiniMax-Hailuo-02")
+    def _refresh_runtime_config(self, model: Optional[str] = None):
+        model_override = _runtime_model_override(model)
+        config = resolve_provider("minimax", model_override)
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
+        self.model_name = config.model_name or model_override or DEFAULT_MINIMAX_VIDEO_MODEL
         self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Content-Type": "application/json",
@@ -38,7 +52,7 @@ class MinimaxClient:
         first_frame_image: str,
         prompt: str,
         last_frame_image: Optional[str] = None,
-        model: str = "MiniMax-Hailuo-02",
+        model: Optional[str] = None,
         duration: int = 6,
         resolution: str = "720P",
         prompt_optimizer: bool = True
@@ -58,11 +72,12 @@ class MinimaxClient:
         Returns:
             包含task_id的响应
         """
-        self._refresh_runtime_config()
+        self._refresh_runtime_config(model)
+        resolved_model = self.model_name or DEFAULT_MINIMAX_VIDEO_MODEL
         url = f"{self.base_url}/video_generation"
         
         payload = {
-            "model": model,
+            "model": resolved_model,
             "first_frame_image": first_frame_image,
             "prompt": prompt,
             "duration": duration,
@@ -76,7 +91,7 @@ class MinimaxClient:
             payload["last_frame_image"] = last_frame_image
         
         try:
-            logger.info(f"🎬 MiniMax 创建任务: {model}, {duration}s, {resolution}")
+            logger.info(f"🎬 MiniMax 创建任务: {resolved_model}, {duration}s, {resolution}")
             response = requests.post(url, json=payload, headers=self.headers, timeout=30, **self._request_kwargs)
             response.raise_for_status()
             

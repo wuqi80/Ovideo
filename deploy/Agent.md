@@ -3815,3 +3815,50 @@
 
 - This removes another startup-time model cache and moves Doubao image selection into the same hot-reloadable admin API config/runtime resolver path.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.
+
+## 2026-06-19 MiniMax Video Runtime Model Wiring
+
+### Changes
+
+- Updated `deploy/external_api/video/minimax.py` so MiniMax video creation resolves `provider=minimax` through `resolve_provider()` without forcing `MiniMax-Hailuo-02` as a request override.
+- Added `DEFAULT_MINIMAX_VIDEO_MODEL` as a fallback only. The old worker path still passes `MiniMax-Hailuo-02`, but the client treats that legacy default as "no explicit override", allowing admin/DB/env `MINIMAX_MODEL` to take effect without touching the redline `core/worker.py`.
+- Kept explicit non-default request models working: a caller-provided model other than the legacy default still overrides runtime config.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with MiniMax video payload coverage for runtime-model defaulting and explicit override behavior.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `21` to `26`
+  - contract now protects MiniMax video runtime model wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/external_api/video/minimax.py deploy/tests/test_api_provider_runtime_model_env.py deploy/scripts/check_route_contract.py`
+  - From `deploy/`: `.venv/Scripts/python.exe -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `11/11`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=26`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_minimax_runtime_model_20260619_134737/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/external_api/video/minimax.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile external_api/video/minimax.py tests/test_api_provider_runtime_model_env.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_api_provider_runtime_model_env.py -q` -> `11/11`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime resolver check: `MINIMAX_MODEL` -> `minimax-runtime-video-model-smoke`, source `MINIMAX_MODEL`
+
+### Notes
+
+- This moves MiniMax video selection into the same hot-reloadable admin API config/runtime resolver path used by text, image, Doubao, Gemini TTS, and video reverse.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and should not be staged with this change.

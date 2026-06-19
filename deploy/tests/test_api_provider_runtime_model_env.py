@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from external_api.video import minimax as minimax_video
 from services import ai_proxy_service, video_reverse_service
 from services.api_provider_registry import get_endpoint_env_key, get_model_env_key, get_provider_env_key
 from services.api_provider_runtime import resolve_provider
@@ -157,6 +158,14 @@ class _DoubaoResponse:
         return {"data": [{"b64_json": "ZG91YmFv"}]}
 
 
+class _MinimaxTaskResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"task_id": "minimax-task-1"}
+
+
 @pytest.mark.asyncio
 async def test_doubao_image_uses_runtime_model_env_when_request_omits_model(monkeypatch):
     env_key = get_provider_env_key("doubao")
@@ -218,6 +227,63 @@ async def test_doubao_image_explicit_model_overrides_runtime_model(monkeypatch):
     assert images == ["data:image/png;base64,ZG91YmFv"]
     assert calls[0]["url"] == "https://doubao-runtime.example.test/api/v3/images/generations"
     assert calls[0]["json"]["model"] == "doubao-explicit-image-model"
+
+
+def test_minimax_video_uses_runtime_model_when_worker_passes_legacy_default(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-minimax-key")
+    monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "minimax-runtime-video-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _MinimaxTaskResponse()
+
+    monkeypatch.setattr(minimax_video.requests, "post", fake_post)
+
+    client = minimax_video.MinimaxClient()
+    result = client.generate_video(
+        first_frame_image="https://cdn.example.test/frame.png",
+        prompt="move gently",
+        model=minimax_video.DEFAULT_MINIMAX_VIDEO_MODEL,
+    )
+
+    assert result == {"task_id": "minimax-task-1"}
+    assert calls[0]["url"] == "https://minimax-runtime.example.test/v1/video_generation"
+    assert calls[0]["json"]["model"] == "minimax-runtime-video-model"
+
+
+def test_minimax_video_explicit_non_default_model_overrides_runtime_model(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-minimax-key")
+    monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "minimax-runtime-video-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _MinimaxTaskResponse()
+
+    monkeypatch.setattr(minimax_video.requests, "post", fake_post)
+
+    client = minimax_video.MinimaxClient()
+    client.generate_video(
+        first_frame_image="https://cdn.example.test/frame.png",
+        prompt="move gently",
+        model="minimax-explicit-video-model",
+    )
+
+    assert calls[0]["url"] == "https://minimax-runtime.example.test/v1/video_generation"
+    assert calls[0]["json"]["model"] == "minimax-explicit-video-model"
 
 
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):

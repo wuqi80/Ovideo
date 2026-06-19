@@ -2118,6 +2118,26 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_doubao_image_uses_runtime_model_env_when_request_omits_model",
         ),
+        (
+            root / "external_api" / "video" / "minimax.py",
+            "DEFAULT_MINIMAX_VIDEO_MODEL =",
+        ),
+        (
+            root / "external_api" / "video" / "minimax.py",
+            'config = resolve_provider("minimax", model_override)',
+        ),
+        (
+            root / "external_api" / "video" / "minimax.py",
+            "model: Optional[str] = None",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_minimax_video_uses_runtime_model_when_worker_passes_legacy_default",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_minimax_video_explicit_non_default_model_overrides_runtime_model",
+        ),
     ]
     checks = 0
     for path, snippet in required_snippets:
