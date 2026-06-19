@@ -5119,6 +5119,56 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - The first external `/health` check immediately after restart briefly returned `502`; a retry returned HTTP `200`.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
 
+## 2026-06-19 Project Admin Router Extraction
+
+### Changes
+
+- Extracted 7 project settings and membership route handlers from `deploy/api_routes.py` into `deploy/routers/project_admin.py`:
+  - project update
+  - archive / unarchive
+  - project members list/add/update/remove
+- Kept `api_routes.py` as the compatibility registration point so the public API surface remains unchanged.
+- Reduced `api_routes.py` to 1827 lines.
+- Strengthened `deploy/scripts/check_route_contract.py`:
+  - runtime endpoints must resolve to `routers.project_admin`
+  - `api_routes.py` must not reintroduce direct handlers for the 7 migrated routes
+  - `routers/project_admin.py` must own exactly 7 route registrations
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/project_admin.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - route result remains `openapi_paths=231`, `openapi_operations=287`, `project_admin_route_handlers=7`
+- Redline diff check passed:
+  - no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_project_admin_router_20260619_072734`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/routers/project_admin.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py routers/project_admin.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `GET https://mecha.one/api/projects/{project_id}/members` with admin token -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No frontend build was required.
+- The first external `/health` check immediately after restart briefly returned `502`; a retry returned HTTP `200`.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
 ## 2026-06-19 Task Notification Router Extraction
 
 ### Changes

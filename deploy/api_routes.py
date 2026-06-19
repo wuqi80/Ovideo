@@ -44,6 +44,7 @@ from file_optimization import FileOptimizationService, FileDeduplicationService
 from file_service import save_generated_file_to_db
 from routers.audio import create_audio_router
 from routers.canvas import create_canvas_router
+from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
 from routers.task_notifications import create_task_notifications_router
 
@@ -90,20 +91,6 @@ class TextContentCreate(BaseModel):
     title: Optional[str] = ""
     content: str
 
-class MemberAdd(BaseModel):
-    user_id: str
-    role: Optional[str] = 'member'
-    responsibility: Optional[str] = 'all'
-
-class MemberUpdate(BaseModel):
-    role: Optional[str] = None
-    responsibility: Optional[str] = None
-
-class ProjectUpdate(BaseModel):
-    project_name: Optional[str] = None
-    description: Optional[str] = None
-    cover_url: Optional[str] = None
-    tags: Optional[List[str]] = None
 
 class ExportScriptRequest(BaseModel):
     project_id: str
@@ -198,6 +185,16 @@ router.include_router(
     create_task_notifications_router(
         get_current_user_dependency=get_current_user,
         task_dao=TaskDAO,
+        get_db_manager_func=get_db_manager,
+    )
+)
+
+router.include_router(
+    create_project_admin_router(
+        get_current_user_dependency=get_current_user,
+        user_dao=UserDAO,
+        project_dao=ProjectDAO,
+        project_member_dao=ProjectMemberDAO,
         get_db_manager_func=get_db_manager,
     )
 )
@@ -918,181 +915,6 @@ async def get_text(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ============================================
-# 项目更新 API
-# ============================================
-
-@router.put("/api/projects/{project_id}")
-async def update_project(
-    project_id: str,
-    data: ProjectUpdate,
-    user_id: str = Depends(get_current_user)
-):
-    """更新项目信息（名称/描述/封面/标签）"""
-    try:
-        has_perm = await ProjectMemberDAO.check_permission(project_id, user_id, 'admin')
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        
-        from db_manager import get_db_manager as _get_db
-        db = _get_db()
-        sets, vals = [], []
-        idx = 1
-        if data.project_name is not None:
-            sets.append(f"project_name = ${idx}")
-            vals.append(data.project_name)
-            idx += 1
-        if data.description is not None:
-            sets.append(f"description = ${idx}")
-            vals.append(data.description)
-            idx += 1
-        if data.cover_url is not None:
-            sets.append(f"cover_url = ${idx}")
-            vals.append(data.cover_url)
-            idx += 1
-        if data.tags is not None:
-            import json as _json
-            sets.append(f"tags = ${idx}::jsonb")
-            vals.append(_json.dumps(data.tags, ensure_ascii=False))
-            idx += 1
-        
-        if sets:
-            vals.append(project_id)
-            query = f"UPDATE projects SET {', '.join(sets)} WHERE project_id = ${idx}"
-            await db.execute(query, *vals)
-        
-        return {"success": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/projects/{project_id}/archive")
-async def archive_project(
-    project_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    try:
-        has_perm = await ProjectMemberDAO.check_permission(project_id, user_id, 'admin')
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        from dao_content import ProjectDAO
-        await ProjectDAO.archive_project(project_id, user_id)
-        return {"success": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/projects/{project_id}/unarchive")
-async def unarchive_project(
-    project_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    try:
-        has_perm = await ProjectMemberDAO.check_permission(project_id, user_id, 'admin')
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        from dao_content import ProjectDAO
-        await ProjectDAO.unarchive_project(project_id, user_id)
-        return {"success": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# 项目成员管理 API (Step 7)
-# ============================================
-
-@router.get("/api/projects/{project_id}/members")
-async def get_members(
-    project_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """获取项目成员列表"""
-    try:
-        has_access = await ProjectMemberDAO.check_permission(project_id, user_id, 'readonly')
-        if not has_access:
-            raise HTTPException(status_code=403, detail="无权访问")
-        members = await ProjectMemberDAO.get_project_members(project_id)
-        return {"success": True, "members": members}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/projects/{project_id}/members")
-async def add_member(
-    project_id: str,
-    data: MemberAdd,
-    user_id: str = Depends(get_current_user)
-):
-    """添加项目成员"""
-    try:
-        has_perm = await ProjectMemberDAO.check_permission(project_id, user_id, 'admin')
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        
-        target_user = await UserDAO.get_user_by_id(data.user_id)
-        if not target_user:
-            raise HTTPException(status_code=404, detail="用户不存在")
-        
-        member = await ProjectMemberDAO.add_member(
-            project_id, data.user_id, data.role, data.responsibility
-        )
-        return {"success": True, "member": member}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.put("/api/projects/{project_id}/members/{member_user_id}")
-async def update_member(
-    project_id: str,
-    member_user_id: str,
-    data: MemberUpdate,
-    user_id: str = Depends(get_current_user)
-):
-    """更新成员角色/职责"""
-    try:
-        has_perm = await ProjectMemberDAO.check_permission(project_id, user_id, 'admin')
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        
-        if data.role:
-            await ProjectMemberDAO.update_member_role(project_id, member_user_id, data.role)
-        if data.responsibility:
-            await ProjectMemberDAO.update_member_responsibility(project_id, member_user_id, data.responsibility)
-        
-        return {"success": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/api/projects/{project_id}/members/{member_user_id}")
-async def remove_member(
-    project_id: str,
-    member_user_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """移除项目成员"""
-    try:
-        has_perm = await ProjectMemberDAO.check_permission(project_id, user_id, 'admin')
-        if not has_perm:
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-        
-        member = await ProjectMemberDAO.get_member(project_id, member_user_id)
-        if member and member['role'] == 'owner':
-            raise HTTPException(status_code=400, detail="不能移除项目拥有者")
-        
-        await ProjectMemberDAO.remove_member(project_id, member_user_id)
-        return {"success": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================

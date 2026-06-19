@@ -135,6 +135,19 @@ EXPECTED_ENDPOINTS = {
     ("/api/projects/{project_id}/images/{shot_id}", "GET"): ("routers.projects", "get_shot_images"),
     ("/api/projects/{project_id}/export-to-video", "POST"): ("routers.projects", "export_to_video"),
     ("/api/projects/{project_id}/clear-video-tasks", "POST"): ("routers.projects", "clear_video_tasks"),
+    ("/api/projects/{project_id}", "PUT"): ("routers.project_admin", "update_project"),
+    ("/api/projects/{project_id}/archive", "POST"): ("routers.project_admin", "archive_project"),
+    ("/api/projects/{project_id}/unarchive", "POST"): ("routers.project_admin", "unarchive_project"),
+    ("/api/projects/{project_id}/members", "GET"): ("routers.project_admin", "get_members"),
+    ("/api/projects/{project_id}/members", "POST"): ("routers.project_admin", "add_member"),
+    (
+        "/api/projects/{project_id}/members/{member_user_id}",
+        "PUT",
+    ): ("routers.project_admin", "update_member"),
+    (
+        "/api/projects/{project_id}/members/{member_user_id}",
+        "DELETE",
+    ): ("routers.project_admin", "remove_member"),
     ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
     ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
     ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
@@ -991,6 +1004,63 @@ def check_project_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_project_admin_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    project_admin_path = root / "routers" / "project_admin.py"
+    if not project_admin_path.exists():
+        fail("routers/project_admin.py is missing")
+
+    route_pairs = {
+        ("/api/projects/{project_id}", "put"),
+        ("/api/projects/{project_id}/archive", "post"),
+        ("/api/projects/{project_id}/unarchive", "post"),
+        ("/api/projects/{project_id}/members", "get"),
+        ("/api/projects/{project_id}/members", "post"),
+        ("/api/projects/{project_id}/members/{member_user_id}", "put"),
+        ("/api/projects/{project_id}/members/{member_user_id}", "delete"),
+    }
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            target = call.func
+            name = ast_call_name(target)
+            _, _, method = name.rpartition(".") if name else ("", "", "")
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, str)
+                and (arg.value, method.lower()) in route_pairs
+            ):
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Project admin route handlers must live in routers/project_admin.py:\n" + "\n".join(violations))
+
+    project_admin_tree = parse_py_file(project_admin_path)
+    route_count = 0
+    for node in ast.walk(project_admin_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 7:
+        fail(f"routers/project_admin.py should own 7 project admin route registrations, found {route_count}")
+    return route_count
+
+
 def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
@@ -1178,6 +1248,7 @@ def main() -> int:
     auth_route_handlers = check_auth_routes_extracted(root)
     admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
+    project_admin_route_handlers = check_project_admin_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
     script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
     canvas_route_handlers = check_canvas_routes_extracted(root)
@@ -1207,6 +1278,7 @@ def main() -> int:
     print(f"  auth_route_handlers={auth_route_handlers}")
     print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
+    print(f"  project_admin_route_handlers={project_admin_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
     print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
     print(f"  canvas_route_handlers={canvas_route_handlers}")
