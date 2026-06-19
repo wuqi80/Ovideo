@@ -842,8 +842,20 @@ class ReorderRequest(BaseModel):
 
 
 @router.get("/api/episodes/{episode_id}/storyboard-items")
-async def get_storyboard_items(episode_id: str, script_id: Optional[str] = None, user_id: str = Depends(get_current_user)):
-    items = await StoryboardDAO.get_by_episode(episode_id, script_id=script_id)
+async def get_storyboard_items(
+    episode_id: str,
+    script_id: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+    include_total: bool = False,
+    user_id: str = Depends(get_current_user),
+):
+    items = await StoryboardDAO.get_by_episode(
+        episode_id,
+        script_id=script_id,
+        limit=limit,
+        offset=offset,
+    )
     result = []
     for i in items:
         d = dict(i)
@@ -853,7 +865,12 @@ async def get_storyboard_items(episode_id: str, script_id: Optional[str] = None,
             except Exception:
                 d["bound_assets"] = []
         result.append(d)
-    return {"success": True, "items": result}
+    payload = {"success": True, "items": result}
+    if include_total:
+        payload["total"] = await StoryboardDAO.count_by_episode(episode_id, script_id=script_id)
+        payload["limit"] = limit
+        payload["offset"] = max(0, int(offset or 0))
+    return payload
 
 
 @router.post("/api/episodes/{episode_id}/storyboard-items")

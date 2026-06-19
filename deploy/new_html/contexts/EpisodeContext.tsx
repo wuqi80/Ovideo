@@ -144,6 +144,7 @@ interface EpisodeContextValue {
   error: string | null;
   script: EpisodeScript | null;
   storyboardItems: StoryboardItemDB[];
+  storyboardTotalCount: number;
   assets: AssetItem[];
   audioTracks: AudioTrack[];
   videoSegments: VideoSegment[];
@@ -151,6 +152,7 @@ interface EpisodeContextValue {
   loadSlices: (...slices: DataSlice[]) => Promise<void>;
   loadSlicesQuiet: (...slices: DataSlice[]) => Promise<void>;
   forceReloadSlices: (...slices: DataSlice[]) => Promise<void>;
+  loadStoryboardItemsPage: (options: { limit: number; offset?: number; includeTotal?: boolean }) => Promise<void>;
   reload: () => Promise<void>;
   updateStoryboardDuration: (itemId: string, durationMs: number) => Promise<void>;
   saveScript: (data: { original_content?: string; adapted_script?: string; metadata?: Record<string, any> }) => Promise<void>;
@@ -168,6 +170,7 @@ const EpisodeContext = createContext<EpisodeContextValue>({
   error: null,
   script: null,
   storyboardItems: [],
+  storyboardTotalCount: 0,
   assets: [],
   audioTracks: [],
   videoSegments: [],
@@ -175,6 +178,7 @@ const EpisodeContext = createContext<EpisodeContextValue>({
   loadSlices: async () => {},
   loadSlicesQuiet: async () => {},
   forceReloadSlices: async () => {},
+  loadStoryboardItemsPage: async () => {},
   reload: async () => {},
   updateStoryboardDuration: async () => {},
   saveScript: async () => {},
@@ -201,6 +205,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [script, setScript] = useState<EpisodeScript | null>(null);
   const [storyboardItems, setStoryboardItems] = useState<StoryboardItemDB[]>([]);
+  const [storyboardTotalCount, setStoryboardTotalCount] = useState(0);
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [videoSegments, setVideoSegments] = useState<VideoSegment[]>([]);
@@ -227,7 +232,11 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       storyboardItems: async () => {
         const sid = selectedScriptIdRef.current || undefined;
         const res = await getStoryboardItems(episodeId, sid).catch(() => ({ success: false, items: [] }));
-        if (res.success) setStoryboardItems((res.items || []).map(normalizeStoryboardItem));
+        if (res.success) {
+          const items = (res.items || []).map(normalizeStoryboardItem);
+          setStoryboardItems(items);
+          setStoryboardTotalCount(typeof (res as any).total === 'number' ? (res as any).total : items.length);
+        }
       },
       assets: async () => {
         const sid = selectedScriptIdRef.current || undefined;
@@ -276,6 +285,31 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     await fetchSlices({ quiet: true }, ...newSlices);
   }, [fetchSlices]);
 
+  const loadStoryboardItemsPage = useCallback(async (options: { limit: number; offset?: number; includeTotal?: boolean }) => {
+    if (!episodeId) return;
+    const sid = selectedScriptIdRef.current || undefined;
+    const limit = Math.max(1, options.limit || 10);
+    const offset = Math.max(0, options.offset || 0);
+    const res = await getStoryboardItems(episodeId, sid, {
+      limit,
+      offset,
+      includeTotal: options.includeTotal !== false,
+    }).catch(() => ({ success: false, items: [], total: 0 }));
+    if (!res.success) return;
+
+    const nextItems = (res.items || []).map(normalizeStoryboardItem);
+    setStoryboardItems(prev => {
+      if (offset <= 0) return nextItems;
+      const byId = new Map(prev.map(item => [item.itemId, item]));
+      for (const item of nextItems) byId.set(item.itemId, item);
+      return Array.from(byId.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+    });
+    const total = (res as any).total;
+    setStoryboardTotalCount(prev =>
+      typeof total === 'number' ? total : Math.max(prev, offset + nextItems.length),
+    );
+  }, [episodeId]);
+
   const reload = useCallback(async () => {
     const slices = Array.from(loadedSlicesRef.current) as DataSlice[];
     if (slices.length > 0) {
@@ -289,6 +323,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     setSelectedScriptId(null);
     setScript(null);
     setStoryboardItems([]);
+    setStoryboardTotalCount(0);
     setAssets([]);
     setAudioTracks([]);
     setVideoSegments([]);
@@ -384,6 +419,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       error,
       script,
       storyboardItems,
+      storyboardTotalCount,
       assets,
       audioTracks,
       videoSegments: filteredVideoSegments,
@@ -391,6 +427,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       loadSlices,
       loadSlicesQuiet,
       forceReloadSlices: fetchSlices,
+      loadStoryboardItemsPage,
       reload,
       updateStoryboardDuration,
       saveScript,

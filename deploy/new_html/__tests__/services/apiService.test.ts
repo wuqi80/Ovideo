@@ -69,6 +69,14 @@ describe('getStoryboardItems', () => {
     const [url] = mockFetch.mock.calls[0];
     expect(url).toBe('/api/episodes/ep_1/storyboard-items');
   });
+
+  it('supports script filter and pagination query', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, items: [], total: 58 }));
+    const { getStoryboardItems } = await import('../../services/apiService');
+    await getStoryboardItems('ep_1', 'script_1', { limit: 10, offset: 20, includeTotal: true });
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/storyboard-items?script_id=script_1&limit=10&offset=20&include_total=true');
+  });
 });
 
 describe('updateStoryboardItem', () => {

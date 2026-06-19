@@ -702,9 +702,22 @@ export async function deleteAsset(assetId: string) {
 
 // ===== Storyboard Item APIs =====
 
-export async function getStoryboardItems(episodeId: string, scriptId?: string) {
+export interface StoryboardItemsQueryOptions {
+    limit?: number;
+    offset?: number;
+    includeTotal?: boolean;
+}
+
+export async function getStoryboardItems(
+    episodeId: string,
+    scriptId?: string,
+    options: StoryboardItemsQueryOptions = {},
+) {
     const params = new URLSearchParams();
     if (scriptId) params.set('script_id', scriptId);
+    if (typeof options.limit === 'number') params.set('limit', String(options.limit));
+    if (typeof options.offset === 'number') params.set('offset', String(options.offset));
+    if (options.includeTotal) params.set('include_total', 'true');
     const qs = params.toString() ? `?${params}` : '';
     const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/storyboard-items${qs}`, {
         headers: getHeaders()

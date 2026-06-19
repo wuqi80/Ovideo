@@ -5672,3 +5672,56 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 
 - No frontend build was required.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Storyboard Paged Initial Load
+
+### Changes
+
+- Added backend pagination support for `GET /api/episodes/{episode_id}/storyboard-items`:
+  - optional `limit`
+  - optional `offset`
+  - optional `include_total=true`
+  - default behavior remains full-list compatible when no pagination params are passed
+- Extended `StoryboardDAO.get_by_episode()` with bounded `limit/offset` and added `count_by_episode()`.
+- Updated `getStoryboardItems()` in `deploy/new_html/services/apiService.ts` to pass pagination query params.
+- Updated `EpisodeContext` with:
+  - `storyboardTotalCount`
+  - `loadStoryboardItemsPage()`
+- Updated `StoryboardGenPage` so `/workflow/storyboard` initially loads only the first 10 shots and fetches larger prefixes when the user expands more shots.
+- Added an `apiService` unit test for storyboard pagination URL construction.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/dao/creative/storyboard.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `git diff --check -- ...changed files...`
+- Local frontend TS/Vitest checks were blocked by the existing missing Rollup optional package in this Windows workspace (`@rollup/rollup-win32-x64-msvc`); server build was used as the authoritative frontend validation.
+- Server checks passed:
+  - `.venv/bin/python -m py_compile api_routes.py dao/creative/storyboard.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - provider contract remains `providers=12`, `presets=17`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - live paged endpoint check: `GET /api/episodes/ep_2fc899a228f5/storyboard-items?limit=10&include_total=true` -> HTTP `200`, `items=10`, `total=152`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_storyboard_paged_load_20260619_161634`
+- Uploaded to server:
+  - `/home/Administrator/deploy/api_routes.py`
+  - `/home/Administrator/deploy/dao/creative/storyboard.py`
+  - `/home/Administrator/deploy/new_html/services/apiService.ts`
+  - `/home/Administrator/deploy/new_html/contexts/EpisodeContext.tsx`
+  - `/home/Administrator/deploy/new_html/pages/StoryboardGenPage.tsx`
+  - `/home/Administrator/deploy/new_html/__tests__/services/apiService.test.ts`
+
+### Notes
+
+- This directly reduces storyboard first-screen data volume for large episodes while keeping full-list behavior available to other pages.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

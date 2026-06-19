@@ -32,15 +32,20 @@ export const StoryboardGenPage: React.FC = () => {
   const {
     episodeId, projectId, selectedScriptId,
     script, storyboardItems, assets,
+    storyboardTotalCount,
     isLoading, error, reload,
-    loadSlices, loadSlicesQuiet, forceReloadSlices,
+    loadSlices, loadSlicesQuiet, forceReloadSlices, loadStoryboardItemsPage,
   } = useEpisode();
 
   // 2026-06-14：进入分镜页强制刷新——loadSlices 对已加载 slice 会跳过，
   // 导致在「素材」改了人物绑定/在别处生成了新图后，跳到分镜仍显示会话缓存的旧数据
   //（用户反馈「导入到分镜始终只有这 8 个、没有新的」的真因）。改用 forceReload 拉最新。
   useEffect(() => {
-    forceReloadSlices('storyboardItems', 'script').then(() => {
+    setVisibleEntityShotCount(STORYBOARD_INITIAL_SHOT_COUNT);
+    Promise.all([
+      loadStoryboardItemsPage({ limit: STORYBOARD_INITIAL_SHOT_COUNT, includeTotal: true }),
+      forceReloadSlices('script'),
+    ]).then(() => {
       const run = () => loadSlicesQuiet('assets');
       if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
         (window as any).requestIdleCallback(run, { timeout: 1500 });
@@ -48,9 +53,15 @@ export const StoryboardGenPage: React.FC = () => {
         setTimeout(run, 0);
       }
     });
-  }, [forceReloadSlices, loadSlicesQuiet]);
+  }, [forceReloadSlices, loadSlicesQuiet, loadStoryboardItemsPage, selectedScriptId]);
 
   const [visibleEntityShotCount, setVisibleEntityShotCount] = useState(STORYBOARD_INITIAL_SHOT_COUNT);
+  const handleVisibleShotCountChange = useCallback((count: number) => {
+    setVisibleEntityShotCount(count);
+    if (count > STORYBOARD_INITIAL_SHOT_COUNT && count > storyboardItems.length) {
+      loadStoryboardItemsPage({ limit: count, includeTotal: true });
+    }
+  }, [loadStoryboardItemsPage, storyboardItems.length]);
 
   const visibleStoryboardItems = useMemo(
     () => storyboardItems.slice(0, visibleEntityShotCount),
@@ -182,8 +193,9 @@ export const StoryboardGenPage: React.FC = () => {
   );
 
   const handleForceSave = useCallback(() => {
+    loadStoryboardItemsPage({ limit: visibleEntityShotCount, includeTotal: true });
     reload();
-  }, [reload]);
+  }, [loadStoryboardItemsPage, reload, visibleEntityShotCount]);
 
   // 2026-06-14：删除分镜镜头（列表项垃圾桶按钮）
   const handleDeleteStoryboardItem = useCallback(async (itemId: string) => {
@@ -415,8 +427,8 @@ export const StoryboardGenPage: React.FC = () => {
           selectedFileId={episodeId}
           episodeId={episodeId}
           shotPageSize={STORYBOARD_INITIAL_SHOT_COUNT}
-          totalShotCount={storyboardItems.length}
-          onVisibleShotCountChange={setVisibleEntityShotCount}
+          totalShotCount={storyboardTotalCount || storyboardItems.length}
+          onVisibleShotCountChange={handleVisibleShotCountChange}
           materialLibrary={materialLibrary}
           onUpdateStoryboardItem={handleUpdateStoryboardItem}
           onDeleteStoryboardItem={handleDeleteStoryboardItem}

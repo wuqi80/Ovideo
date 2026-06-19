@@ -136,19 +136,63 @@ class StoryboardDAO:
         )
 
     @staticmethod
-    async def get_by_episode(episode_id: str, script_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_by_episode(
+        episode_id: str,
+        script_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
             return []
+        limit = max(1, min(int(limit), 500)) if limit is not None else None
+        offset = max(0, int(offset or 0))
         if script_id:
+            if limit is not None:
+                return await db.fetch(
+                    """
+                    SELECT * FROM storyboard_items
+                    WHERE episode_id = $1 AND script_id = $2
+                    ORDER BY sort_order ASC
+                    LIMIT $3 OFFSET $4
+                    """,
+                    episode_id, script_id, limit, offset
+                )
             return await db.fetch(
                 "SELECT * FROM storyboard_items WHERE episode_id = $1 AND script_id = $2 ORDER BY sort_order ASC",
                 episode_id, script_id
+            )
+        if limit is not None:
+            return await db.fetch(
+                """
+                SELECT * FROM storyboard_items
+                WHERE episode_id = $1
+                ORDER BY sort_order ASC
+                LIMIT $2 OFFSET $3
+                """,
+                episode_id, limit, offset
             )
         return await db.fetch(
             "SELECT * FROM storyboard_items WHERE episode_id = $1 ORDER BY sort_order ASC",
             episode_id
         )
+
+    @staticmethod
+    async def count_by_episode(episode_id: str, script_id: Optional[str] = None) -> int:
+        db = get_db_manager()
+        if not db:
+            return 0
+        if script_id:
+            value = await db.fetchval(
+                "SELECT COUNT(*) FROM storyboard_items WHERE episode_id = $1 AND script_id = $2",
+                episode_id, script_id
+            )
+        else:
+            value = await db.fetchval(
+                "SELECT COUNT(*) FROM storyboard_items WHERE episode_id = $1",
+                episode_id
+            )
+        return int(value or 0)
 
     @staticmethod
     async def update(item_id: str, **kwargs) -> Optional[Dict[str, Any]]:
