@@ -2111,7 +2111,7 @@ async def gen_speech(data: SpeechGenRequest, user_id: str = Depends(get_current_
         if 'Missing key inputs' in msg or 'api_key' in msg:
             raise HTTPException(
                 status_code=503,
-                detail="GEMINI_API_KEY 未配置：请在管理员后台 → API 配置 中添加 provider=gemini-tts 的密钥后重启后端。"
+                detail="GEMINI_API_KEY 未配置：请在管理员后台 → API 配置 中添加 provider=gemini-tts 的密钥；保存后会实时刷新，如仍未生效请点击“刷新运行时”。"
             )
         logger.error(f"generate_speech 失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=msg)
@@ -2221,11 +2221,14 @@ def _require_minimax_client():
     if get_minimax_audio_client is None:
         raise HTTPException(status_code=501, detail="MiniMax 音频模块未安装，请部署 minimax_audio.py")
     client = get_minimax_audio_client()
+    refresh = getattr(client, "_refresh_runtime_config", None)
+    if callable(refresh):
+        refresh()
     if not getattr(client, 'api_key', None):
         raise HTTPException(
             status_code=503,
             detail="MINIMAX_API_KEY 未配置：请在管理员后台 → API 配置 中添加 provider=minimax 的密钥，"
-                   "或在后端 .env 设置 MINIMAX_API_KEY 后重启服务。"
+                   "保存后会实时刷新；如仍未生效，请在后台点击“刷新运行时”。"
         )
     return client
 
@@ -2280,6 +2283,8 @@ async def minimax_voice_design(data: MinimaxVoiceDesignRequest, user_id: str = D
             voice_id=data.voice_id,
         )
         return {"success": True, **result}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"MiniMax voice_design 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -2297,9 +2302,11 @@ async def minimax_voice_clone(data: MinimaxVoiceCloneRequest, user_id: str = Dep
             voice_id_prefix=data.voice_id_prefix,
         )
         return {"success": True, **result}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"MiniMax voice_clone 失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.get("/api/minimax/voices")
@@ -2603,23 +2610,36 @@ async def minimax_file_upload(
     purpose: str = Form("voice_clone"),
     user_id: str = Depends(get_current_user),
 ):
+    tmp_path: Optional[Path] = None
     try:
+        original_filename = Path(file.filename or "audio").name
+        ext = Path(original_filename).suffix.lower()
+        if ext not in {".mp3", ".m4a", ".wav"}:
+            raise HTTPException(status_code=400, detail="声音克隆仅支持 mp3、m4a、wav 格式")
+
+        content = await file.read()
+        if len(content) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="声音克隆音频不能超过 20MB")
+
         tmp_dir = Path(AUDIO_UPLOAD_DIR)
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = tmp_dir / f"upload_{uuid.uuid4().hex[:8]}_{file.filename}"
-        content = await file.read()
+        tmp_path = tmp_dir / f"upload_{uuid.uuid4().hex[:8]}_{original_filename}"
         with open(tmp_path, "wb") as f:
             f.write(content)
         client = _require_minimax_client()
         result = await client.file_upload(str(tmp_path), purpose=purpose)
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
         return {"success": True, "file_id": result.get("file", {}).get("file_id", result.get("file_id", ""))}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"MiniMax file upload 失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e))
+    finally:
+        if tmp_path is not None:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 @router.get("/api/minimax/files/{file_id}")

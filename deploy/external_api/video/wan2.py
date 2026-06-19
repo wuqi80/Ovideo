@@ -3,24 +3,35 @@ Wan2.6 DashScope API 客户端
 用于调用阿里云 DashScope Wan2.6-i2v 视频生成 API
 """
 
-import os
 import requests
 import time
 import logging
 from typing import Optional, Dict, Any
 
+from services.api_provider_endpoints import derive_dashscope_video_urls
+from services.api_provider_runtime import resolve_provider
+
 logger = logging.getLogger(__name__)
+
 
 class Wan26Client:
     """Wan2.6 DashScope API 客户端"""
     
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv('DASHSCOPE_API_KEY')
+        self._explicit_api_key = api_key
+        self.api_key = ""
+        self.base_url = ""
+        self.create_endpoint = ""
+        self._requests_kwargs: Dict[str, Any] = {}
+        self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("⚠️ DASHSCOPE_API_KEY 未设置")
-        
-        # 北京地域
-        self.base_url = "https://dashscope.aliyuncs.com/api/v1"
+
+    def _refresh_runtime_config(self) -> None:
+        config = resolve_provider("dashscope", "wan2.6-i2v")
+        self.api_key = self._explicit_api_key or config.api_key or ""
+        self.base_url, self.create_endpoint = derive_dashscope_video_urls(config.endpoint)
+        self._requests_kwargs = config.requests_kwargs()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "X-DashScope-Async": "enable"
@@ -57,7 +68,8 @@ class Wan26Client:
         Returns:
             包含task_id的响应
         """
-        url = f"{self.base_url}/services/aigc/video-generation/video-synthesis"
+        self._refresh_runtime_config()
+        url = self.create_endpoint
         
         try:
             # 构建请求数据
@@ -88,7 +100,7 @@ class Wan26Client:
             logger.info(f"🎬 Wan2.6 创建任务: {duration}s, {resolution}, shot_type={shot_type}")
             
             headers = {**self.headers, "Content-Type": "application/json"}
-            response = requests.post(url, headers=headers, json=data, timeout=30)
+            response = requests.post(url, headers=headers, json=data, timeout=30, **self._requests_kwargs)
             response.raise_for_status()
             
             result = response.json()
@@ -112,10 +124,11 @@ class Wan26Client:
         Returns:
             任务状态信息
         """
+        self._refresh_runtime_config()
         url = f"{self.base_url}/tasks/{task_id}"
         
         try:
-            response = requests.get(url, headers=self.headers, timeout=30)
+            response = requests.get(url, headers=self.headers, timeout=30, **self._requests_kwargs)
             response.raise_for_status()
             return response.json()
         
@@ -134,8 +147,9 @@ class Wan26Client:
             视频文件内容（bytes）
         """
         try:
+            self._refresh_runtime_config()
             logger.info(f"📥 Wan2.6 下载视频: {video_url}")
-            response = requests.get(video_url, stream=True, timeout=120)
+            response = requests.get(video_url, stream=True, timeout=120, **self._requests_kwargs)
             response.raise_for_status()
             
             video_bytes = b''

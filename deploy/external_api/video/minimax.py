@@ -3,11 +3,11 @@ MiniMax API 客户端
 用于调用 MiniMax-Hailuo 视频生成 API
 """
 
-import os
 import requests
 import time
 import logging
 from typing import Optional, Dict, Any
+from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +15,19 @@ class MinimaxClient:
     """MiniMax API 客户端"""
     
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv('MINIMAX_API_KEY')
+        self._explicit_api_key = api_key
+        self.api_key = api_key or ""
+        self.base_url = ""
+        self._request_kwargs: Dict[str, Any] = {}
+        self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("⚠️ MINIMAX_API_KEY 未设置")
-        
-        self.base_url = "https://api.minimaxi.com/v1"
+
+    def _refresh_runtime_config(self):
+        config = resolve_provider("minimax", "MiniMax-Hailuo-02")
+        self.api_key = self._explicit_api_key or config.api_key
+        self.base_url = config.endpoint.rstrip("/")
+        self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
@@ -50,6 +58,7 @@ class MinimaxClient:
         Returns:
             包含task_id的响应
         """
+        self._refresh_runtime_config()
         url = f"{self.base_url}/video_generation"
         
         payload = {
@@ -68,7 +77,7 @@ class MinimaxClient:
         
         try:
             logger.info(f"🎬 MiniMax 创建任务: {model}, {duration}s, {resolution}")
-            response = requests.post(url, json=payload, headers=self.headers, timeout=30)
+            response = requests.post(url, json=payload, headers=self.headers, timeout=30, **self._request_kwargs)
             response.raise_for_status()
             
             result = response.json()
@@ -89,11 +98,12 @@ class MinimaxClient:
         Returns:
             任务状态信息
         """
+        self._refresh_runtime_config()
         url = f"{self.base_url}/query/video_generation"
         params = {"task_id": task_id}
         
         try:
-            response = requests.get(url, params=params, headers=self.headers, timeout=30)
+            response = requests.get(url, params=params, headers=self.headers, timeout=30, **self._request_kwargs)
             response.raise_for_status()
             return response.json()
         
@@ -111,11 +121,12 @@ class MinimaxClient:
         Returns:
             视频文件内容（bytes）
         """
+        self._refresh_runtime_config()
         url = f"{self.base_url}/files/retrieve"
         params = {"file_id": file_id}
         
         try:
-            response = requests.get(url, params=params, headers=self.headers, timeout=30)
+            response = requests.get(url, params=params, headers=self.headers, timeout=30, **self._request_kwargs)
             response.raise_for_status()
             
             result = response.json()
@@ -126,7 +137,7 @@ class MinimaxClient:
             
             # 下载视频文件
             logger.info(f"📥 MiniMax 下载视频: {download_url}")
-            video_response = requests.get(download_url, timeout=120)
+            video_response = requests.get(download_url, timeout=120, **self._request_kwargs)
             video_response.raise_for_status()
             
             logger.info(f"✅ MiniMax 视频下载完成: {len(video_response.content)} bytes")

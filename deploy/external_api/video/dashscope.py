@@ -27,10 +27,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 import aiohttp
+
+from services.api_provider_endpoints import derive_dashscope_video_urls
+from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -64,20 +66,29 @@ class DashScopeVideoError(RuntimeError):
 class DashScopeVideoClient:
     """阿里云百炼 DashScope 视频生成共享客户端（Kling / Vidu / HappyHorse）。"""
 
-    BASE_URL = "https://dashscope.aliyuncs.com/api/v1"
-
     def __init__(self, api_key: Optional[str] = None, timeout: int = 30):
-        self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY") or ""
+        self._explicit_api_key = api_key
+        self.api_key = ""
+        self.base_url = ""
+        self.create_endpoint = ""
+        self._aiohttp_proxy: Optional[str] = None
+        self.timeout = aiohttp.ClientTimeout(total=timeout)
+        self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("⚠️ DASHSCOPE_API_KEY 未设置，DashScope 视频生成将失败")
-        self.timeout = aiohttp.ClientTimeout(total=timeout)
+
+    def _refresh_runtime_config(self, model: Optional[str] = None) -> None:
+        config = resolve_provider("dashscope", model)
+        self.api_key = self._explicit_api_key or config.api_key or ""
+        self.base_url, self.create_endpoint = derive_dashscope_video_urls(config.endpoint)
+        self._aiohttp_proxy = config.aiohttp_proxy()
 
     @property
     def _create_url(self) -> str:
-        return f"{self.BASE_URL}/services/aigc/video-generation/video-synthesis"
+        return self.create_endpoint
 
     def _query_url(self, task_id: str) -> str:
-        return f"{self.BASE_URL}/tasks/{task_id}"
+        return f"{self.base_url}/tasks/{task_id}"
 
     @property
     def _headers_create(self) -> Dict[str, str]:
@@ -100,6 +111,7 @@ class DashScopeVideoClient:
         parameters: Dict[str, Any],
     ) -> Dict[str, Any]:
         """通用任务创建。三家共用此入口。"""
+        self._refresh_runtime_config(model)
         if not self.api_key:
             raise DashScopeVideoError("DASHSCOPE_API_KEY 未配置", code="MissingApiKey")
 
@@ -107,7 +119,12 @@ class DashScopeVideoClient:
         logger.info(f"🎬 DashScope 创建任务: model={model}, params={parameters}")
 
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            async with session.post(self._create_url, headers=self._headers_create, json=body) as resp:
+            async with session.post(
+                self._create_url,
+                headers=self._headers_create,
+                json=body,
+                proxy=self._aiohttp_proxy,
+            ) as resp:
                 data = await resp.json(content_type=None)
                 if resp.status >= 400:
                     code = data.get("code") if isinstance(data, dict) else None
@@ -125,11 +142,16 @@ class DashScopeVideoClient:
 
     async def query_task(self, task_id: str) -> Dict[str, Any]:
         """单次查询任务状态。"""
+        self._refresh_runtime_config()
         if not self.api_key:
             raise DashScopeVideoError("DASHSCOPE_API_KEY 未配置", code="MissingApiKey")
 
         async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            async with session.get(self._query_url(task_id), headers=self._headers_query) as resp:
+            async with session.get(
+                self._query_url(task_id),
+                headers=self._headers_query,
+                proxy=self._aiohttp_proxy,
+            ) as resp:
                 data = await resp.json(content_type=None)
                 if resp.status >= 400:
                     code = data.get("code") if isinstance(data, dict) else None
@@ -513,7 +535,6 @@ _default_client: Optional[DashScopeVideoClient] = None
 def get_dashscope_video_client() -> DashScopeVideoClient:
     """获取共享客户端实例（每次读取最新 env，免重启刷 admin Key）"""
     global _default_client
-    current_key = os.getenv("DASHSCOPE_API_KEY") or ""
-    if _default_client is None or _default_client.api_key != current_key:
-        _default_client = DashScopeVideoClient(api_key=current_key)
+    if _default_client is None:
+        _default_client = DashScopeVideoClient()
     return _default_client

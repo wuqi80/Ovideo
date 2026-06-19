@@ -24,6 +24,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from services.api_provider_runtime import resolve_provider
+
 logger = logging.getLogger(__name__)
 
 
@@ -183,8 +185,8 @@ async def analyze_segment_frames(
     给定一个分段的若干抽帧，调用视觉模型生成 description / camera / motion 文字。
     回退：API 不可用时返回结构化空字符串。
     """
-    api_key = os.getenv('GEMINI_TEXT_API_KEY') or os.getenv('GEMINI_API_KEY')
-    if not api_key or not frame_paths:
+    gemini_config = resolve_provider("gemini-text", "gemini-2.5-flash")
+    if not gemini_config.api_key or not frame_paths:
         return {'description': '', 'camera_description': '', 'motion_description': ''}
 
     try:
@@ -214,7 +216,7 @@ async def analyze_segment_frames(
                 logger.warning(f"读取抽帧 {fp} 失败: {e}")
 
         payload = {
-            'model': 'gemini-2.5-flash',
+            'model': gemini_config.model_name or 'gemini-2.5-flash',
             'messages': [{'role': 'user', 'content': content_parts}],
             'temperature': 0.3,
         }
@@ -223,13 +225,14 @@ async def analyze_segment_frames(
         import requests
         def _do_post():
             return requests.post(
-                'https://api.laozhang.ai/v1/chat/completions',
+                gemini_config.url_for('chat/completions'),
                 headers={
-                    'Authorization': f'Bearer {api_key}',
+                    'Authorization': f'Bearer {gemini_config.api_key}',
                     'Content-Type': 'application/json',
                 },
                 json=payload,
                 timeout=120,
+                **gemini_config.requests_kwargs(),
             )
         loop = asyncio.get_event_loop()
         resp = await loop.run_in_executor(None, _do_post)

@@ -369,17 +369,17 @@ export const EnhancePage: React.FC = () => {
   }, [enhancementKind, videoUnderPlayhead, videoClips, selectedClipId, targetResolution, projectId, episodeId, reload, comfyAvailable]);
 
   return (
-    <div className="flex flex-col h-full bg-n20 text-n800 overflow-hidden">
+    <div className="layout-safe flex flex-col h-full bg-n20 text-n800 overflow-hidden">
       {/* Top section: preview + settings */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      <div className="responsive-split flex-1 flex min-h-0 overflow-hidden">
         {/* Preview area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="h-12 px-4 border-b border-n40 flex items-center justify-between bg-n0 backdrop-blur-sm shrink-0">
-            <div className="flex items-center gap-2">
+        <div className="responsive-pane flex-1 flex flex-col min-w-0">
+          <div className="responsive-toolbar px-4 border-b border-n40 flex items-center justify-between bg-n0 backdrop-blur-sm shrink-0">
+            <div className="toolbar-group">
               <Wand2 size={16} className="text-primary" />
               <h2 className="text-sm font-semibold">视频美化</h2>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="toolbar-actions">
               <span className="text-xs font-mono text-n100">{formatTime(currentTime)}</span>
               <span className="text-[10px] text-n100">{videoClips.length}V · {audioClips.length}A</span>
               {isLoading && <Loader size={14} className="animate-spin text-primary" />}
@@ -455,7 +455,7 @@ export const EnhancePage: React.FC = () => {
         </div>
 
         {/* Right settings panel */}
-        <div className="w-72 border-l border-n40 bg-n0 flex flex-col shrink-0">
+        <div className="responsive-pane w-72 border-l border-n40 bg-n0 flex flex-col shrink-0">
           <div className="h-12 px-4 border-b border-n40 flex items-center shrink-0">
             <h2 className="text-sm font-semibold">片段美化选项</h2>
           </div>
@@ -572,8 +572,8 @@ export const EnhancePage: React.FC = () => {
       {/* Bottom Timeline */}
       <div className="h-56 bg-n0 border-t border-n40 flex flex-col shrink-0 z-20">
         {/* Toolbar */}
-        <div className="px-4 py-1.5 border-b border-n40 flex justify-between items-center shrink-0 bg-n0">
-          <div className="flex items-center gap-1.5">
+        <div className="responsive-toolbar px-4 py-1.5 border-b border-n40 flex justify-between items-center shrink-0 bg-n0">
+          <div className="toolbar-group">
             <button
               onClick={togglePlay}
               className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"
@@ -608,7 +608,7 @@ export const EnhancePage: React.FC = () => {
             <input type="file" accept="audio/*" className="hidden" ref={fileInputRef} onChange={handleAudioUpload} />
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="toolbar-actions">
             <button
               onClick={() => setScale(Math.max(5, scale - 5))}
               className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"

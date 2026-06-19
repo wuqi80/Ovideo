@@ -76,9 +76,9 @@ export const Header: React.FC<HeaderProps> = ({
           <a href="/projects" className="flex items-center gap-1.5 text-n300 hover:text-primary transition-colors" title="返回项目列表">
             <FolderOpen className="w-4 h-4" />
           </a>
-          <img src="/static/image_1ca1c5.png" alt="MESSIAH" className="h-7 object-contain invert" />
+          <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-label="MECHA"><rect width="28" height="28" rx="6" fill="#0052CC"/><text x="14" y="20" fontFamily="system-ui,sans-serif" fontWeight="800" fontSize="16" fill="white" textAnchor="middle">M</text></svg>
           <div className="flex flex-col leading-tight">
-            <span className="font-bold text-lg tracking-tight text-n800">MESSIAH</span>
+            <span className="font-bold text-lg tracking-tight text-n800">MECHA</span>
             <span className="text-[10px] text-slate-400 uppercase">Storyboard AI</span>
           </div>
         </div>

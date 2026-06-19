@@ -175,3 +175,4126 @@ cd D:\Codex\Drama\deploy
 powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 ```
 
+## 2026-06-18 本轮部署/重构记录
+
+### 已修改内容
+
+- 分镜页性能：
+  - `deploy/new_html/pages/StoryboardGenPage.tsx`
+    - 分镜首屏默认只处理 10 个镜头。
+    - `entityFiles` 查询只针对当前可见镜头发起，避免一次性拉取全部镜头图片。
+    - `assets` slice 改为首屏后 `requestIdleCallback`/`setTimeout` 静默加载，避免阻塞分镜主体加载。
+    - 时间线预览只取当前可见镜头。
+  - `deploy/new_html/components/GenerationPage.tsx`
+    - 支持 `shotPageSize`、`totalShotCount`、`onVisibleShotCountChange`。
+    - 缩略图生成只处理当前可见镜头。
+    - 镜头列表默认 10 个，按需“展开更多”。
+  - `deploy/new_html/contexts/EpisodeContext.tsx`
+    - 新增 `loadSlicesQuiet()`，用于后台静默加载非首屏数据。
+  - `deploy/new_html/components/TimelineTrack.tsx`
+    - 预览图片增加 `loading="lazy"`。
+
+- 视频页性能：
+  - `deploy/new_html/components/VideoPage.tsx`
+    - 视频任务默认只渲染前 10 组。
+    - 已生成视频卡片使用 `LazyVideo`，仅进入视口附近后才设置 `src` 和 `preload="metadata"`。
+  - `deploy/new_html/pages/VideoGenPage.tsx`
+    - 导入面板图片增加 `loading="lazy"`。
+
+- API 配置管理：
+  - 新增 `deploy/services/api_provider_registry.py`
+    - 统一维护 provider -> env key、endpoint env key、预设模型、fallback key 和能力目录。
+  - `deploy/admin_routes.py`
+    - `/api/admin/api-configs/presets` 现在返回 `presets` + `providers`。
+    - 导入预设模型继续使用同一份 registry 数据。
+  - `deploy/cluster_main.py`
+    - `load_api_configs_to_env()` 改为从 registry 解析 env key，避免 provider 映射散落。
+  - `deploy/admin/app.js`
+    - 旧后台 API 密钥页读取 provider catalog。
+    - 卡片显示 vendor、key、endpoint env、fallback、capability。
+    - Provider 下拉会根据后端 catalog 自动补选项。
+  - `deploy/admin/index.html`
+    - 静态脚本版本更新为 `app.js?v=20260618a`，避免浏览器缓存旧后台脚本。
+
+### 验证结果
+
+- 后端语法：
+  - `python -m py_compile deploy/services/api_provider_registry.py deploy/admin_routes.py deploy/cluster_main.py` 通过。
+- 旧后台 JS：
+  - `node --check deploy/admin/app.js` 通过。
+- Provider registry 抽查：
+  - 12 个 provider，15 个预设。
+  - 已确认 `deepseek`、`gemini-text`、`seedance`、`dashscope`、`laozhang-gpt-image` 能返回对应 env key/fallback 信息。
+- 前端 TypeScript：
+  - `GenerationPage.tsx` 本轮相关的 `shotId` / `Material.name` 两处类型问题已修正。
+  - 全项目 `tsc --noEmit` 仍失败，剩余为既有旧债：测试 fixture 缺失、Admin tabs never 类型、VideoPage 旧 TaskGroup/TaskStatus 类型不一致、部分 WorkspaceApp props 不完整等。
+
+### 仍需生产部署处理
+
+- 服务器上线需要同步本轮修改文件到 `/home/Administrator/deploy`。
+- 同步后在服务器执行：
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 若服务器仍感觉卡顿，下一步建议做真正的列表虚拟化：
+  - 分镜左侧列表替换为虚拟滚动窗口。
+  - 图片/视频卡片统一使用 IntersectionObserver 挂载媒体源。
+  - 后端 `entityFiles` 增加批量接口，首屏一次取 10 个镜头的图片元数据，而不是 10 个并发请求。
+
+### 生产服务器部署结果
+
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_patch_20260618-043122`。
+- 已在服务器执行：
+  - `python3 -m py_compile /home/Administrator/deploy/services/api_provider_registry.py /home/Administrator/deploy/admin_routes.py /home/Administrator/deploy/cluster_main.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - 前端生产构建通过，产物 `../dist/assets/index-WQcuv05j.js`。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 API 管理平台增强记录
+
+### 已修改内容
+
+- `deploy/services/api_provider_registry.py`
+  - 新增 `summarize_api_provider_configs()`。
+  - 输出 provider 级别的 `ready` / `missing_key` / `disabled` / `not_imported` 状态。
+  - 输出配置数量、启用数量、已填 key 数量、缺 key 数量、重复模型、共享 env key、endpoint 冲突等摘要。
+  - 不返回任何明文密钥。
+- `deploy/admin_routes.py`
+  - `/api/admin/api-configs` 保持原路由不变，新增返回字段：
+    - `providers`
+    - `provider_status`
+  - 未新增路由，避免影响路由数量约束。
+- `deploy/admin/app.js`
+  - API 密钥页读取 provider 状态摘要。
+  - 顶部摘要显示 provider ready / missing / disabled / not imported。
+  - 每张模型卡显示 provider-level readiness badge。
+  - 继续显示 env key、endpoint env、fallback、capability 和 issues。
+- `deploy/admin/index.html`
+  - 旧后台脚本版本更新到 `app.js?v=20260618b`。
+- `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - iframe 缓存版本更新到 `20260618b`。
+
+### 验证结果
+
+- 本地：
+  - `node --check deploy/admin/app.js` 通过。
+  - `python -m py_compile deploy/services/api_provider_registry.py deploy/admin_routes.py deploy/cluster_main.py` 通过。
+- 服务器：
+  - 备份目录：`/home/Administrator/deploy_backups/mecha_api_mgmt_20260618-044213`。
+  - `cd /home/Administrator/deploy/new_html && npm run build` 通过，产物 `../dist/assets/index-C1DsCoqt.js`。
+  - `sudo systemctl restart drama` 后服务状态 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`：`9/9` 通过。
+  - 线上抽查：
+    - `/api/admin/api-configs` 返回 `api_configs=2`、`providers=12`、`provider_status=12`。
+    - `seedance` 当前状态为 `not_imported`，预设数量 `2`。
+    - `/admin-legacy/` 已引用 `app.js?v=20260618b`。
+
+## 2026-06-18 Provider Resolver 增量记录
+
+### 已修改内容
+- `deploy/services/api_provider_registry.py`
+  - 预设模型现在会统一补充 `supports_proxy`、`health_check_url`、`required_key`。
+  - 新增 `get_api_model_preset()`，供运行时按 `provider + model` 查默认 endpoint/model。
+  - 新增 endpoint/proxy 对应 env key helper：`get_endpoint_env_key()`、`get_proxy_mode_env_key()`、`get_custom_proxy_env_key()`。
+  - `gemini-text` 默认 endpoint 调整为当前线上实际使用的 `https://api.laozhang.ai/v1`，避免 resolver 接入后无 DB endpoint 时改变现有行为。
+- 新增 `deploy/services/api_provider_runtime.py`
+  - 新增 `resolve_provider(provider, model)`。
+  - 每次调用实时读取 `os.getenv()`，不缓存 key，支持后台保存后热更新。
+  - 返回 key、endpoint、model、proxy_config、来源信息；不读取数据库，不暴露明文密钥。
+- `deploy/cluster_main.py`
+  - `load_api_configs_to_env()` 继续作为 DB -> env 的唯一入口。
+  - DB 配置加载前会把受管理 API env 恢复到 systemd/env 启动基线，再叠加 DB 配置，符合“DB 优先，删除/禁用 DB 配置后回退 env”的规则。
+  - DB 的 `endpoint`、`proxy_mode`、`custom_proxy` 现在也会注入对应 env。
+  - `/api/gemini/text` 已从硬编码 `https://api.laozhang.ai/v1/chat/completions` 改为 `resolve_provider("gemini-text", "gemini-2.5-flash")`。
+  - DeepSeek client 初始化和懒加载已改为 `resolve_provider("deepseek", "deepseek-reasoner")`，不再在 handler 侧重复查 DB/解密，也不再写死 base_url。
+- `deploy/admin_routes.py`
+  - 删除旧 `_LEGACY_PRESET_API_MODELS` 影子列表，预设导入只使用 registry。
+
+### 仍未接入 resolver 的范围
+- `cluster_main.py` 内以下外部模型 handler 仍有独立硬编码 endpoint/key 逻辑，待后续按同一模式逐个替换：
+  - `/api/video/*` 相关 MiniMax / Seedance / DashScope / Sora2 / Veo 逻辑
+- `agent_routes.py` 和 ComfyUI provider 配置未触碰，继续保持红线约束。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/api_provider_registry.py deploy/services/api_provider_runtime.py deploy/admin_routes.py deploy/cluster_main.py` 通过。
+- resolver 抽查通过：
+  - `GEMINI_TEXT_API_KEY` 无 `GEMINI_TEXT_ENDPOINT` 时，默认解析到 `https://api.laozhang.ai/v1/chat/completions`。
+  - 设置 `GEMINI_TEXT_ENDPOINT=https://self.example/v1` 后，解析到 `https://self.example/v1/chat/completions`。
+  - `DEEPSEEK_ENDPOINT` 可覆盖 DeepSeek base_url。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_resolver_20260618-130032`。
+- 已在服务器执行：
+  - `python3 -m py_compile services/api_provider_registry.py services/api_provider_runtime.py admin_routes.py cluster_main.py`
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 图像 API Resolver 增量记录
+
+### 已修改内容
+- `deploy/services/api_provider_registry.py`
+  - `gemini-image` 预设 model/endpoint 对齐当前运行时实际调用：`gemini-2.5-flash-image`、`gemini-3.1-flash-image-preview`，endpoint 为 `https://api.laozhang.ai/v1beta`。
+  - 新增 `laozhang-gpt-image` / `laozhang-sora2` 两个 GPT Image preset，避免仅通过 systemd env 注入 key 时 resolver 缺少默认 endpoint。
+- `deploy/cluster_main.py`
+  - `/api/gemini/image` 已改为 `resolve_provider("gemini-image", request.model)`，不再直接读取 `GEMINI_IMAGE_API_KEY` 或硬编码 laozhang `v1beta` URL。
+  - `/api/gpt-image/generate` 已按 `tier` 映射到 `laozhang-gpt-image` / `laozhang-sora2`，key 和 base_url 都由 resolver 返回。
+  - `/api/materials/doubao` 已改为 `resolve_provider("doubao", DOUBAO_MODEL)`，并移除旧的 `DOUBAO_ENDPOINT` 常量使用。
+  - `/api/generate/multi-grid-storyboard` 已改为复用 Gemini Image resolver。
+  - 各调用保留原 payload、入库、素材库同步逻辑，只替换 key/endpoint/proxy 来源。
+
+### 仍未接入 resolver 的范围
+- `/api/video/*` 相关 MiniMax / Seedance / DashScope / Sora2 / Veo 逻辑仍待下一轮替换。
+- `agent_routes.py` 和 ComfyUI provider 配置未触碰，继续保持红线约束。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/api_provider_registry.py deploy/services/api_provider_runtime.py deploy/admin_routes.py deploy/cluster_main.py` 通过。
+- resolver 抽查通过：
+  - `GEMINI_IMAGE_ENDPOINT` 可覆盖 Gemini Image `generateContent` base。
+  - `GPT_IMAGE_ENDPOINT` 可覆盖 `laozhang-gpt-image` base。
+  - `SORA2_GPT_IMAGE_ENDPOINT` 可覆盖 official GPT Image base。
+  - `ARK_ENDPOINT` 可覆盖 Doubao image endpoint。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_image_resolver_20260618-130923`。
+- 已在服务器执行：
+  - `python3 -m py_compile services/api_provider_registry.py services/api_provider_runtime.py admin_routes.py cluster_main.py`
+  - resolver 图像 provider 抽查。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - 登录后读取 `/api/admin/api-configs/presets`。
+- 结果：
+  - Python 编译通过。
+  - resolver 解析通过：Gemini Image、GPT Image VIP、GPT Image Official、Doubao 均有默认 endpoint。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+  - 线上 presets：`17` 条，已包含 `gemini-image`、`laozhang-gpt-image`、`laozhang-sora2`、`doubao`。
+
+## 2026-06-18 视频 Client Resolver 增量记录
+
+### 已修改内容
+- `deploy/external_api/video/minimax.py`
+  - `MinimaxClient` 改为通过 `resolve_provider("minimax", "MiniMax-Hailuo-02")` 获取 key、endpoint、proxy。
+  - 每次 `generate_video()`、`query_task()`、`download_video()` 前都会刷新 runtime 配置，避免全局 client 缓存导致后台 key/endpoint 更新不生效。
+- `deploy/external_api/video/sora2.py`
+  - `Sora2Client` 改为通过 `resolve_provider("sora2", "sora-2")` 获取 key、endpoint、proxy。
+- `deploy/external_api/video/veo.py`
+  - `VeoClient` 改为通过 `resolve_provider("veo", model)` 获取 key、endpoint、proxy。
+  - 保留 `VEO_API_KEY` 缺省回退 `SORA2_API_KEY` 的语义，由 registry fallback 统一承载。
+- `deploy/external_api/video/seedance.py`
+  - `SeedanceClient` 改为通过 `resolve_provider("seedance", model_name)` 获取 key、endpoint、proxy。
+  - 保留 `SEEDANCE_API_KEY` 缺省回退 `ARK_API_KEY` 的语义，由 registry fallback 统一承载。
+- 本轮没有修改 `core/worker.py`、`agent_routes.py`、ComfyUI pipeline 或 Redis 任务契约。
+
+### 仍未接入 resolver 的范围
+- `deploy/external_api/video/dashscope.py`
+- `deploy/wan2_dashscope_api.py`
+- `deploy/external_api/audio/minimax_audio.py` 和 `deploy/minimax_audio.py`
+- `deploy/services/video_reverse_service.py` 中的 laozhang 文本代理调用。
+
+### 本地验证结果
+- `python -m py_compile deploy/external_api/video/minimax.py deploy/external_api/video/sora2.py deploy/external_api/video/veo.py deploy/external_api/video/seedance.py deploy/services/api_provider_registry.py deploy/services/api_provider_runtime.py deploy/cluster_main.py` 通过。
+- 使用 `deploy/.venv/Scripts/python.exe` 构造 client 并设置 endpoint env 覆盖，确认：
+  - `MINIMAX_ENDPOINT` 可覆盖 MiniMax base。
+  - `SORA2_ENDPOINT` 可覆盖 Sora2 base。
+  - `VEO_ENDPOINT` 可覆盖 Veo base。
+  - `SEEDANCE_ENDPOINT` 可覆盖 Seedance task endpoint。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_video_clients_20260618-131741`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile external_api/video/minimax.py external_api/video/sora2.py external_api/video/veo.py external_api/video/seedance.py services/api_provider_registry.py services/api_provider_runtime.py`
+  - 使用服务同款 venv 构造 MiniMax/Sora2/Veo/Seedance client，并验证 endpoint env 覆盖。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - client resolver 覆盖检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 DashScope / Audio / Reverse Resolver 增量记录
+
+### 已修改内容
+- `deploy/external_api/video/dashscope.py`
+  - `DashScopeVideoClient` 改为通过 `resolve_provider("dashscope", model)` 获取 key、endpoint、proxy。
+  - 全局单例不再按 env key 重建；每次 `create_task()` / `query_task()` 前刷新 runtime 配置，支持后台热更新。
+  - 新增 DashScope video endpoint 归一化：
+    - 旧 `https://dashscope.aliyuncs.com/compatible-mode/v1` 自动落回当前可用的 `api/v1/services/aigc/video-generation/video-synthesis`。
+    - 自定义 root endpoint 会自动拼接 video-synthesis 路径。
+    - 自定义完整 `/services/.../video-synthesis` endpoint 会保留原值，并推导查询任务用的 `/tasks/{task_id}` root。
+  - aiohttp 请求接入 resolver 返回的 custom proxy。
+- `deploy/external_api/video/wan2.py`
+  - `Wan26Client` 改为通过 `resolve_provider("dashscope", "wan2.6-i2v")` 获取 key、endpoint、proxy。
+  - 保留旧 compatible-mode endpoint 的兼容落回逻辑，避免旧 DB 预设导致 Wan2.6 任务接口失效。
+  - `create_video_task()`、`query_task()`、`download_video()` 均刷新 runtime 配置并透传 requests proxy。
+- `deploy/external_api/audio/minimax_audio.py`
+  - `MinimaxAudioClient` 改为通过 `resolve_provider("minimax", "MiniMax-Hailuo-02")` 获取 key、endpoint、proxy。
+  - voice design / voice clone / list voices / delete voice / TTS / music / lyrics / files upload-retrieve-delete 等调用点均使用最新 runtime 配置。
+  - 保留 `MINIMAX_GROUP_ID` 的现有 env 逻辑。
+- `deploy/services/video_reverse_service.py`
+  - 视频反推视觉理解从硬编码 `https://api.laozhang.ai/v1/chat/completions` 改为 `resolve_provider("gemini-text", "gemini-2.5-flash")`。
+  - 请求 URL、key、proxy 均由 resolver 返回。
+- `deploy/services/audio_provider.py`
+  - `GeminiAudioProvider` 至少从 `resolve_provider("gemini-tts", "gemini-2.0-flash")` 取 key。
+  - Google SDK 路径暂未强接 endpoint，避免破坏 SDK 默认调用方式。
+- `deploy/services/api_provider_registry.py`
+  - Wan2.6 DashScope 预设 endpoint 调整为当前代码实际使用的 video-synthesis 任务端点。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/api_provider_registry.py deploy/services/api_provider_runtime.py deploy/external_api/video/dashscope.py deploy/external_api/video/wan2.py deploy/external_api/audio/minimax_audio.py deploy/services/video_reverse_service.py deploy/services/audio_provider.py` 通过。
+- 使用 `deploy/.venv/Scripts/python.exe` 运行 runtime 检查通过：
+  - DashScope 默认 endpoint、旧 `compatible-mode/v1` endpoint、自定义 root endpoint 均能解析。
+  - DashScope custom proxy 能传入 aiohttp。
+  - Wan2.6 custom endpoint/proxy 能传入 requests。
+  - MiniMax 音频 custom endpoint/proxy 能解析。
+  - Gemini Text `chat/completions` URL 由 resolver 生成。
+
+### 本轮仍未处理或需后续观察
+- `cluster_main.py` 顶部仍保留少量历史全局变量和启动期 warning，用于兼容现有启动流程；实际已迁移的 handler/client 不再依赖硬编码调用 URL。
+- `agent_routes.py` 与 ComfyUI provider 配置未修改，继续遵守红线。
+- Google Gemini TTS SDK 尚未接入自定义 endpoint，仅统一 key 来源；如后续改成自建兼容端点，需要单独替换 SDK 调用层。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_dashscope_audio_resolver_20260618-053919`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/api_provider_registry.py services/api_provider_runtime.py external_api/video/dashscope.py external_api/video/wan2.py external_api/audio/minimax_audio.py services/video_reverse_service.py services/audio_provider.py`
+  - resolver runtime 检查：DashScope / Wan2.6 / MiniMax Audio / Gemini Text endpoint-proxy 覆盖均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - 服务器 resolver runtime 检查通过。
+  - `drama` 服务状态：`active`。
+  - 首次 smoke 在重启窗口期登录接口短暂 `502`；等待服务稳定后重跑，线上 smoke：`9/9` 通过。
+
+## 2026-06-18 API 配置健康检查增强记录
+
+### 已修改内容
+- `deploy/admin_routes.py`
+  - 保持原有 `/api/admin/api-configs/{config_id}/test` 路径不变，升级返回语义。
+  - 新增 provider/model/endpoint 对应的健康检查 URL 派生逻辑：
+    - `doubao` / `seedance` 从具体生成任务 endpoint 派生到 Ark `/api/v3/models`。
+    - `dashscope` 从 video-synthesis endpoint 派生到 `/compatible-mode/v1/models`。
+    - OpenAI-compatible base endpoint 统一尝试 `/models`。
+    - 同时融合 registry preset / provider catalog 的 `health_check_url`。
+  - 2xx 才算 `test.ok=true`；401/403 明确返回 `auth_ok=false`；404/405 等返回 `reachable=true` 但 `ok=false`。
+  - 返回体新增 `reachable`、`auth_ok`、`provider`、`model_name`、`urls_tried`、`checked_at`，不返回明文 key。
+- `deploy/admin/app.js`
+  - API 卡片按钮从“测试”调整为“健康”。
+  - Toast 区分：
+    - 健康检查通过
+    - 认证失败
+    - 端点可达但校验未通过
+    - 健康检查失败
+- `deploy/admin/index.html`
+  - 旧后台脚本版本更新到 `app.js?v=20260618c`。
+- `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - legacy iframe 版本更新到 `20260618c`，避免继续使用旧缓存。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_provider_registry.py` 通过。
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+- 使用 `deploy/.venv/Scripts/python.exe` 验证健康检查 URL 派生通过：
+  - Doubao image endpoint → `https://ark.cn-beijing.volces.com/api/v3/models`
+  - Seedance task endpoint → `https://ark.cn-beijing.volces.com/api/v3/models`
+  - DashScope video-synthesis endpoint → `https://dashscope.aliyuncs.com/compatible-mode/v1/models`
+  - Gemini / laozhang v1 endpoint → `/models`
+
+### 本轮仍未处理或需后续观察
+- 当前健康检查仍是轻量 GET 模型/健康端点，不会发起真实生成任务；部分第三方网关可能没有标准 `/models`，这类情况会显示“端点可达但校验未通过”，后续可为 provider 增加专用 check adapter。
+- 本轮未拆分 `cluster_main.py` 路由；原因是当前 AI proxy 路由仍依赖主文件内的 auth、DeepSeek 流式生成器和保存逻辑。后续建议先抽 service 层，再抽 `routers/ai_proxy.py`。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_api_healthcheck_20260618-055032`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_provider_registry.py`
+  - `node --check admin/app.js`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - 管理员登录后调用 `/api/admin/api-configs/{config_id}/test`，确认返回 `ok/reachable/auth_ok/provider/model_name/urls_tried/checked_at`。
+- 结果：
+  - Python 编译通过。
+  - 旧后台 JS 语法检查通过。
+  - 前端构建通过，产物 `../dist/assets/index-ZSqlaURx.js`。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+  - 健康检查接口结构验证通过。
+
+## 2026-06-18 AI Proxy Service 抽取增量记录
+
+### 已修改内容
+- 新增 `deploy/services/ai_proxy_service.py`
+  - 新增 `generate_gemini_text()`，负责 Gemini Text 的 provider resolver、HTTP 请求、proxy 透传、上游错误提取。
+  - 新增 `build_chat_payload()`，集中构造 OpenAI-compatible chat payload。
+  - 新增 `AIProxyError` / `AIProxyConfigError` / `AIProxyUpstreamError`，供路由层映射 HTTP 响应。
+- `deploy/cluster_main.py`
+  - `/api/gemini/text` 不再直接拼 headers/payload/url，也不再直接 `requests.post`。
+  - handler 仅保留鉴权后的业务壳、任务入库和返回格式，外部 API 调用改为 `generate_gemini_text()`。
+  - 保留原有 `/api/gemini/text` 路由路径和响应 `{content}`，未新增/删除路由。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/ai_proxy_service.py deploy/cluster_main.py` 通过。
+- 使用 `deploy/.venv/Scripts/python.exe` 进行 mock 检查通过：
+  - 缺少 `GEMINI_TEXT_API_KEY` 时抛出 `AIProxyConfigError`。
+  - `GEMINI_TEXT_ENDPOINT=https://example.test/v1` 时请求 URL 为 `/chat/completions`。
+  - `GEMINI_TEXT_PROXY_MODE=custom` + `GEMINI_TEXT_CUSTOM_PROXY` 能传入 requests `proxies`。
+  - payload 中 system/user messages、temperature、model 均按预期生成。
+- 路由 decorator 扫描当前为 `282` 条；本轮没有新增或删除路由 decorator。
+
+### 本轮仍未处理或需后续观察
+- DeepSeek 流式调用仍留在 `cluster_main.py`，因为它涉及 sync generator、SSE、`MAIN_EVENT_LOOP` 回调保存任务。建议下一轮先抽 `DeepSeekTextService`，保留 generator 行为后再迁 router。
+- Gemini Image / GPT Image / Doubao 已接 resolver，但仍在 `cluster_main.py` handler 内；后续可按同样方式迁入 `ai_proxy_service.py`，再整体拆到 `routers/ai_proxy.py`。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_ai_proxy_service_20260618-055735`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/ai_proxy_service.py cluster_main.py`
+  - 使用服务器 venv 进行 mock 行为检查：缺 key 抛错、endpoint 拼接、custom proxy 透传、payload 构造均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - `generate_gemini_text()` runtime mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 Gemini Image / Doubao AI Proxy Service 抽取增量记录
+
+### 已修改内容
+- `deploy/services/ai_proxy_service.py`
+  - 新增 `normalize_gemini_image_model()`，集中处理历史模型别名：`nanobanana` / `gemini-3-pro-image-preview` 统一路由到 `gemini-3.1-flash-image-preview`。
+  - 新增 `build_gemini_image_payload()` / `generate_gemini_images()`，负责 Gemini Image 的 provider resolver、payload 构造、HTTP 请求、proxy 透传和返回图片解析。
+  - 新增 `build_doubao_image_payload()` / `generate_doubao_images()`，负责 Doubao/Ark 图像生成的 provider resolver、参考图限制、顺序生成参数、HTTP 请求、proxy 透传和返回图片解析。
+- `deploy/cluster_main.py`
+  - `/api/gemini/image` 不再直接拼 laozhang URL、headers、payload，也不再直接调用 `requests.post`；外部调用改为 `proxy_generate_gemini_images()`。
+  - `/api/materials/doubao` 不再直接拼 Ark URL、headers、payload，也不再直接调用 `requests.post`；外部调用改为 `proxy_generate_doubao_images()`。
+  - 两个 handler 保留原有鉴权、参考图读取、任务入库、素材库写入和响应格式；未新增或删除路由。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/ai_proxy_service.py deploy/cluster_main.py` 通过。
+- 使用 `deploy/.venv/Scripts/python.exe` 进行 mock 检查通过：
+  - Gemini Image 历史模型别名归一、未知模型 fallback、3.1 模型 `imageSize` 传递逻辑均符合预期。
+  - 缺少 `GEMINI_IMAGE_API_KEY` 时抛出 `AIProxyConfigError`。
+  - Gemini Image endpoint 拼接为 `.../models/{model}:generateContent`，custom proxy 能透传到 requests。
+  - Doubao 参考图和 `sequential_image_generation_options.max_images` 限制逻辑符合旧 handler 行为。
+  - Doubao endpoint、Authorization、payload、custom proxy 均按 resolver 返回值使用。
+- 路由 decorator 扫描当前为 `282` 条；本轮没有新增或删除路由 decorator。
+
+### 本轮仍未处理或需后续观察
+- GPT Image handler 目前已经接入 resolver，但还没有迁入 `ai_proxy_service.py`；建议下一轮继续迁移 GPT Image，之后再处理 DeepSeek 流式 generator。
+- `agent_routes.py` 和 ComfyUI provider 配置未修改，继续遵守红线。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器回滚备份目录（首次替换前）：`/home/Administrator/deploy_backups/mecha_image_ai_proxy_service_20260618-060654`。
+- 成功部署脚本备份目录：`/home/Administrator/deploy_backups/mecha_image_ai_proxy_service_20260618-060835`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/ai_proxy_service.py cluster_main.py`
+  - 使用服务器 venv 进行 mock 行为检查：Gemini Image 模型归一、payload 构造、缺 key 抛错、endpoint 拼接、custom proxy 透传、Doubao 参考图和顺序生成参数均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - `generate_gemini_images()` / `generate_doubao_images()` runtime mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 GPT Image AI Proxy Service 抽取增量记录
+
+### 已修改内容
+- `deploy/services/ai_proxy_service.py`
+  - 新增 `GptImageReferenceInput`，用于把路由层读取到的参考图二进制传入 service。
+  - 新增 `normalize_gpt_image_tier()`，集中处理 `vip` / `official` 到 provider、model、key hint 的映射。
+  - 新增 `build_gpt_image_generation_payload()` / `build_gpt_image_edit_data()`，集中构造 OpenAI Images-compatible 文生图和图改图 payload。
+  - 新增 `generate_gpt_images()`，负责 GPT Image 的 provider resolver、endpoint 拼接、JSON/multipart 请求、proxy 透传、上游错误映射和返回图片解析。
+- `deploy/cluster_main.py`
+  - `/api/gpt-image/generate` 不再直接拼 laozhang URL、headers、JSON/multipart payload，也不再直接调用 `requests.post`。
+  - handler 保留鉴权、prompt 校验、参考图读取、文件入库、素材库同步和响应格式；外部模型调用改为 `proxy_generate_gpt_images()`。
+  - 原有路由路径、入参和返回结构保持不变；未新增或删除路由 decorator。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/ai_proxy_service.py deploy/cluster_main.py` 通过。
+- `git diff --check -- deploy/services/ai_proxy_service.py deploy/cluster_main.py Agent.md` 通过。
+- 使用 `deploy/.venv/Scripts/python.exe` 进行 mock 检查通过：
+  - `vip` 文生图走 `/images/generations`，model 为 `gpt-image-2-vip`。
+  - `official` 图改图走 `/images/edits`，model 为 `gpt-image-2`，multipart 字段为 `image[]`。
+  - `GPT_IMAGE_*` / `SORA2_GPT_IMAGE_*` endpoint、custom proxy 均按 resolver 返回值透传。
+  - 缺 key 抛出 `AIProxyConfigError`，无效 tier 返回 400，上游 401 映射为 502。
+- `git diff -U0 -- deploy/cluster_main.py deploy/services/ai_proxy_service.py | rg "^[+-]@(app|router)\."` 未发现路由 decorator 变化。
+
+### 本轮仍未处理或需后续观察
+- DeepSeek 流式调用仍在 `cluster_main.py`，下一步建议抽 `DeepSeekTextService`，重点保持 SSE generator、任务保存回调和错误透传不变。
+- `agent_routes.py` 和 ComfyUI provider 配置未修改，继续遵守红线。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_gpt_image_ai_proxy_service_20260618-061813`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/ai_proxy_service.py cluster_main.py`
+  - 使用服务器 venv 进行 mock 行为检查：VIP 文生图、Official 图改图、endpoint 拼接、multipart 字段、custom proxy、缺 key、无效 tier、上游 401 映射均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - `generate_gpt_images()` runtime mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 DeepSeek AI Proxy Service 抽取增量记录
+
+### 已修改内容
+- `deploy/services/ai_proxy_service.py`
+  - 新增 `ensure_deepseek_configured()`，用于路由返回 `StreamingResponse` 前做配置预检。
+  - 新增 `build_deepseek_payload()` / `generate_deepseek_text()`，集中构造 DeepSeek OpenAI-compatible payload 和非流式调用。
+  - 新增 `stream_deepseek_chat()`，使用 resolver 返回的 key、endpoint、proxy 发起 DeepSeek SSE 流式请求，并保持原有前端事件格式：`reasoning` / `content` / `error` / `[DONE]`。
+  - DeepSeek 调用不再依赖模块级 OpenAI client；每次调用都会重新通过 `resolve_provider("deepseek", model)` 读取当前 env/DB 合并后的配置，支持后台热更新。
+- `deploy/cluster_main.py`
+  - 移除 `OpenAI` SDK client 初始化和 `deepseek_client` 全局缓存。
+  - `load_api_configs_to_env()` 仅刷新 env 和日志，不再构造 DeepSeek client。
+  - `/api/deepseek/chat` 保留原有路由、鉴权、任务入库、`StreamingResponse`、Nginx 禁缓冲 header 和完成后保存任务结果逻辑。
+  - 旧 helper 名 `ensure_deepseek_client()` / `call_deepseek()` / `call_deepseek_stream()` 保留为薄包装，内部转调 `ai_proxy_service.py`，降低文件内历史引用风险。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/ai_proxy_service.py deploy/cluster_main.py` 通过。
+- `git diff --check -- deploy/services/ai_proxy_service.py deploy/cluster_main.py Agent.md` 通过。
+- 使用 `deploy/.venv/Scripts/python.exe` 进行 mock 检查通过：
+  - 缺少 `DEEPSEEK_API_KEY` 时 `ensure_deepseek_configured()` 返回 503 配置错误。
+  - 非流式请求走 `{endpoint}/chat/completions`，payload 中 `stream=false`，custom proxy 透传到 requests。
+  - 流式请求走 `{endpoint}/chat/completions`，payload 中 `stream=true`，`response_format=json_object` 仅在 JSON 模式传递。
+  - DeepSeek SSE 中 `reasoning_content` 仍映射为前端 `reasoning` 事件，`content` 仍映射为前端 `content` 事件。
+  - 流式完成后 `on_complete` 收到拼接后的正文，用于沿用原有任务结果保存逻辑。
+  - 上游 401 映射为 SSE `error` 事件并正常输出 `[DONE]`。
+- `git diff -U0 -- deploy/cluster_main.py deploy/services/ai_proxy_service.py | rg "^[+-]@(app|router)\."` 未发现路由 decorator 变化。
+
+### 本轮仍未处理或需后续观察
+- `/api/deepseek/chat` 仍留在 `cluster_main.py`，但外部调用已经抽到 service；下一步可在路由更薄后迁入 `routers/ai_proxy.py`。
+- `agent_routes.py` 和 ComfyUI provider 配置未修改，继续遵守红线。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_deepseek_ai_proxy_service_20260618-062746`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/ai_proxy_service.py cluster_main.py`
+  - 使用服务器 venv 进行 mock 行为检查：缺 key 配置错误、非流式请求、SSE reasoning/content、完整文本回调、custom proxy、上游 401 SSE 错误事件均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - `generate_deepseek_text()` / `stream_deepseek_chat()` runtime mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 AI Proxy Router 拆分增量记录
+
+### 已修改内容
+- 新增 `deploy/routers/__init__.py`。
+- 新增 `deploy/routers/ai_proxy.py`
+  - 新增 `create_ai_proxy_router()` router factory，避免 router 反向 import `cluster_main.py` 造成循环依赖。
+  - 迁入 5 个现有 AI proxy 路由：
+    - `POST /api/deepseek/chat`
+    - `POST /api/gemini/text`
+    - `POST /api/gemini/image`
+    - `POST /api/gpt-image/generate`
+    - `POST /api/materials/doubao`
+  - 路由层继续负责鉴权、任务入库、参考图读取、文件入库、素材库同步、SSE header 和响应结构。
+  - 外部 provider 调用继续统一走 `services/ai_proxy_service.py`。
+- `deploy/cluster_main.py`
+  - 移除上述 5 个 AI proxy handler 及已无外部引用的 DeepSeek helper 包装。
+  - 在 `to_doubao_image_input()` 后注册 `create_ai_proxy_router()`，向 router 注入：
+    - `require_auth`
+    - `_storage_path_safe`
+    - `to_doubao_image_input`
+    - `MAIN_EVENT_LOOP` getter
+    - `DOUBAO_MODEL` getter
+  - 保留原有 URL、入参、返回格式；未修改 `agent_routes.py` 和 ComfyUI pipeline 红线文件。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/ai_proxy.py deploy/services/ai_proxy_service.py deploy/cluster_main.py` 通过。
+- `git diff --check -- deploy/cluster_main.py deploy/routers/ai_proxy.py Agent.md` 通过。
+- 源码扫描确认 5 个目标路由只在 `deploy/routers/ai_proxy.py` 中注册。
+- 加载 `cluster_main.app` 后检查：
+  - `/api/deepseek/chat` 注册数为 1。
+  - `/api/gemini/text` 注册数为 1。
+  - `/api/gemini/image` 注册数为 1。
+  - `/api/gpt-image/generate` 注册数为 1。
+  - `/api/materials/doubao` 注册数为 1。
+- 使用 `httpx.ASGITransport` 进行 router 行为 mock 检查通过：
+  - `POST /api/gemini/text` 在 mock service 下返回 `{content}`。
+  - `POST /api/deepseek/chat` 在 mock stream 下返回 SSE `[DONE]`，并保留 `X-Accel-Buffering: no`。
+- 当前源码路由 decorator 宽口径扫描为 `311` 条；本轮对 5 个 AI proxy 路由做迁移，未引入重复注册。
+
+### 本轮仍未处理或需后续观察
+- `cluster_main.py` 仍包含大量项目、素材、视频、管理类旧路由；本轮只完成开发计划中的 MVC 增量2首批 AI proxy 路由迁移。
+- 后续建议继续按计划抽 `routers/video.py` 或把剩余 AI proxy 相关工具函数进一步归并到 service/helper 层。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_ai_proxy_router_20260618-063917`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/ai_proxy.py services/ai_proxy_service.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 5 个目标路由均为单一注册。
+  - 使用服务器 venv + `httpx.ASGITransport` 进行 router mock：`/api/gemini/text` 返回 `{content}`，`/api/deepseek/chat` 返回 SSE `[DONE]` 且保留 `X-Accel-Buffering: no`。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - AI Proxy router 路由唯一性检查通过。
+  - AI Proxy router 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 Video Router 拆分增量记录
+
+### 已修改内容
+- 新增 `deploy/routers/video.py`
+  - 新增 `create_video_router()` router factory，避免 router 反向 import `cluster_main.py`。
+  - 迁入 `POST /api/video/crop` 视频裁剪路由。
+  - 路由层保留原有 FFmpeg 剪辑、文件查找、临时文件清理、数据库文件记录、返回结构。
+  - 通过 factory 注入 `require_auth`、`video_cluster_manager` getter、`cluster_manager` getter。
+- `deploy/cluster_main.py`
+  - 注册 `create_video_router()`。
+  - 删除旧的 `@app.post("/api/video/crop")` handler，避免重复注册。
+  - 不修改 worker、任务队列、ComfyUI pipeline 或 `agent_routes.py` 红线文件。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/video.py deploy/cluster_main.py` 通过。
+- `git diff --check -- deploy/cluster_main.py deploy/routers/video.py Agent.md` 通过。
+- 源码扫描确认 `POST /api/video/crop` 只在 `deploy/routers/video.py` 中注册。
+- 加载 `cluster_main.app` 后检查 `/api/video/crop` 注册数为 1。
+- 使用 `httpx.ASGITransport` 进行 router 行为 mock 检查通过：
+  - 模拟 FFmpeg 不存在时，`POST /api/video/crop` 返回 500，错误语义仍为“服务器未安装FFmpeg，无法进行视频剪辑”。
+- 当前源码路由 decorator 宽口径扫描为 `311` 条；本轮为一进一出迁移，未引入重复注册。
+
+### 本轮仍未处理或需后续观察
+- `GET /api/proxy/comfyui/view`、`POST /api/comfyui/upload/video` 和 `POST /api/comfyui/reupload/video` 已由后续章节补齐迁移。
+- 视频生成任务调度和 worker/Redis 契约未修改。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_video_router_20260618-064712`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 `/api/video/crop` 为单一注册。
+  - 使用服务器 venv + `httpx.ASGITransport` 进行 video router mock：模拟 FFmpeg 不存在时，`/api/video/crop` 返回 500 且保留原错误语义。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - Video router 路由唯一性检查通过。
+  - Video router 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 Video Router ComfyUI View 代理拆分增量记录
+
+### 已修改内容
+- `deploy/routers/video.py`
+  - 将 `GET /api/proxy/comfyui/view` 从 `cluster_main.py` 迁入 `create_video_router()`。
+  - 保留原有 query token / Bearer token 双入口鉴权逻辑。
+  - 保留按 `node_id` 命中绑定 ComfyUI 节点的逻辑；未指定或未命中时继续使用可用节点或 `http://127.0.0.1:8188`。
+  - 保留 `output` / `temp` / `input` 的 404 fallback 顺序。
+  - 保留 `StreamingResponse` 文件流返回、`Content-Disposition` UTF-8 文件名和 `Accept-Ranges` header。
+- `deploy/cluster_main.py`
+  - `create_video_router()` 注入 `security`、`jwt_auth.verify_token`、`video_cluster_manager` getter 和 `cluster_manager` getter。
+  - 删除旧的 `@app.get("/api/proxy/comfyui/view")` handler，避免重复注册。
+  - `POST /api/comfyui/upload/video` 和 `POST /api/comfyui/reupload/video` 已由后续章节迁入 video router。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/video.py deploy/cluster_main.py` 通过。
+- 加载 `cluster_main.app` 后检查：
+  - `/api/video/crop` 注册数为 1。
+  - `/api/proxy/comfyui/view` 注册数为 1。
+- 使用项目 venv 直接调用 router endpoint 进行 mock 检查通过：
+  - 模拟 FFmpeg 不存在时，`POST /api/video/crop` 仍返回 500 且错误包含 `FFmpeg`。
+  - `GET /api/proxy/comfyui/view` 在 `output` 返回 404 时会 fallback 到 `temp`。
+  - 成功响应保留 `video/mp4`、`inline; filename*=UTF-8''x.mp4` 和 `Accept-Ranges: bytes`。
+  - 无效 token 返回 401。
+
+### 本轮仍未处理或需后续观察
+- ComfyUI 视频上传和重传路由仍在 `cluster_main.py`。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_video_view_router_20260618-065843`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 `/api/video/crop` 和 `/api/proxy/comfyui/view` 均为单一注册。
+  - 使用服务器 venv 直接调用 video router endpoint mock：FFmpeg 缺失分支、ComfyUI `output` -> `temp` fallback、流式响应 header、无效 token 401 均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - Video router ComfyUI view 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 Video Router 上传/重传代理拆分增量记录
+
+### 已修改内容
+- `deploy/routers/video.py`
+  - 将 `POST /api/comfyui/upload/video` 从 `cluster_main.py` 迁入 `create_video_router()`。
+  - 将 `POST /api/comfyui/reupload/video` 从 `cluster_main.py` 迁入 `create_video_router()`。
+  - 新增内部 `select_video_comfyui_server()` helper，统一处理指定 `comfyui_server`、视频集群节点和单机默认 `http://127.0.0.1:8188`。
+  - 上传视频继续保留 ComfyUI `/upload/image` 转发、本地 `persistent_storage/videos` 备份、默认项目/版本创建、`FileDAO.create_file()` 入库和原返回字段。
+  - 重传视频继续保留持久化存储优先读取、ComfyUI `file_type/temp/output/input` 轮询下载、UUID 新文件名和重新上传到 input 的逻辑。
+- `deploy/cluster_main.py`
+  - 删除旧的两个 video upload/reupload handler，避免重复注册。
+  - `create_video_router()` 注册日志补充到 4 条视频路由。
+  - 移除已不再使用的 `CropVideoRequest` 导入。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/video.py deploy/cluster_main.py` 通过。
+- `git diff --check -- deploy/cluster_main.py deploy/routers/video.py Agent.md` 通过。
+- 加载 `cluster_main.app` 后检查 4 条路由均为单一注册：
+  - `/api/video/crop`
+  - `/api/proxy/comfyui/view`
+  - `/api/comfyui/upload/video`
+  - `/api/comfyui/reupload/video`
+- 使用项目 venv 直接调用 router endpoint mock 检查通过：
+  - 上传视频会选择视频节点、转发到 `{server}/upload/image`、保留 `overwrite=true`、写入数据库记录并返回原结构。
+  - 重传视频在 `output` 下载 404 时会 fallback 到 `temp`，随后重新上传并返回原结构。
+
+### 本轮仍未处理或需后续观察
+- 通用图片上传 `POST /api/comfyui/upload` 已由后续章节迁入 `routers/comfyui_files.py`。
+- 音频上传 `POST /api/upload/audio` 已由后续章节迁入 video router。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_video_upload_router_20260618-070822`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 4 条 video router 路由均为单一注册。
+  - 使用服务器 venv 直接调用 video router endpoint mock：上传视频节点选择、ComfyUI `/upload/image` 转发、数据库入库字段、重传视频 `output` -> `temp` fallback 和重新上传均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - Video upload/reupload router 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 Video Router 音频上传代理拆分增量记录
+
+### 已修改内容
+- `deploy/routers/video.py`
+  - 将 `POST /api/upload/audio` 从 `cluster_main.py` 迁入 `create_video_router()`。
+  - 复用 `select_video_comfyui_server()`，保持指定 `comfyui_server`、视频集群节点和单机默认节点逻辑一致。
+  - 保留 ComfyUI `/upload/image` 转发、`overwrite=true`、音频本地 `persistent_storage/audio` 备份、`start_time` / `duration` 返回字段和原错误语义。
+- `deploy/cluster_main.py`
+  - 删除旧的 `@app.post("/api/upload/audio")` handler，避免重复注册。
+  - `create_video_router()` 注册日志补充 `/api/upload/audio`。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/video.py deploy/cluster_main.py` 通过。
+- 加载 `cluster_main.app` 后检查 5 条 video router 路由均为单一注册：
+  - `/api/video/crop`
+  - `/api/proxy/comfyui/view`
+  - `/api/comfyui/upload/video`
+  - `/api/upload/audio`
+  - `/api/comfyui/reupload/video`
+- 使用项目 venv 直接调用 router endpoint mock 检查通过：
+  - 音频上传会选择视频节点、转发到 `{server}/upload/image`、保留 `overwrite=true`。
+  - multipart 字段继续使用 ComfyUI 兼容的 `image` 字段，mime type 保持 `audio/mpeg`。
+  - 本地备份写入被调用，返回结构保持 `success`、`filename`、`original_filename`、`size`、`server`、`start_time`、`duration`。
+
+### 本轮仍未处理或需后续观察
+- 通用图片上传 `POST /api/comfyui/upload` 已由后续章节迁入 `routers/comfyui_files.py`。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_audio_upload_router_20260618-071517`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 5 条 video router 路由均为单一注册。
+  - 使用服务器 venv 直接调用 `/api/upload/audio` endpoint mock：视频节点选择、ComfyUI `/upload/image` 转发、音频 mime type、`overwrite=true`、本地备份写入和返回结构均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - Audio upload router 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 ComfyUI File Router 通用上传拆分增量记录
+
+### 已修改内容
+- 新增 `deploy/routers/comfyui_files.py`
+  - 新增 `create_comfyui_files_router()` router factory。
+  - 将 `POST /api/comfyui/upload` 从 `cluster_main.py` 迁入新 router。
+  - 通过 getter 注入 default/image/video cluster manager 和 redis client，避免 router 反向 import `cluster_main.py`。
+  - 保留本地 `persistent_storage/image` primary 持久化、可选 ComfyUI `/upload/image` 转发、SQL 文件记录、Redis `comfyui:file:{filename}` 映射和原返回字段。
+- `deploy/cluster_main.py`
+  - 注册 `create_comfyui_files_router()`。
+  - 删除旧的 `@app.post("/api/comfyui/upload")` handler，避免重复注册。
+  - 保留前端和现有工作流调用 URL 不变。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/comfyui_files.py deploy/routers/video.py deploy/cluster_main.py` 通过。
+- 加载 `cluster_main.app` 后检查以下路由均为单一注册：
+  - `/api/comfyui/upload`
+  - `/api/video/crop`
+  - `/api/proxy/comfyui/view`
+  - `/api/comfyui/upload/video`
+  - `/api/upload/audio`
+  - `/api/comfyui/reupload/video`
+- 使用项目 venv 直接调用 `/api/comfyui/upload` endpoint mock 检查通过：
+  - `node_type=image` 会选择 image cluster 节点。
+  - ComfyUI `/upload/image` 转发保留 `overwrite=true` 和 multipart `image` 字段。
+  - SQL `FileDAO.create_file()` 写入 `file_url=/storage/image/...`、`metadata.source=comfyui_upload`、`comfyui_filename/server/node_id`。
+  - Redis `comfyui:file:{filename}` 映射写入并设置 `ex=86400`。
+  - 空文件返回 400 `上传的是空文件`。
+
+### 本轮仍未处理或需后续观察
+- `routers/video.py` 中仍包含视频/音频 ComfyUI 文件代理；后续可继续迁入 `routers/comfyui_files.py`，让 `routers/video.py` 只保留视频裁剪等视频处理路由。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_comfyui_files_router_20260618-072537`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/comfyui_files.py routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 `/api/comfyui/upload` 和 5 条 video router 路由均为单一注册。
+  - 使用服务器 venv 直接调用 `/api/comfyui/upload` endpoint mock：image 节点选择、ComfyUI `/upload/image` 转发、SQL 入库字段、Redis 映射和空文件 400 均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - ComfyUI upload router 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 ComfyUI File Router View 代理归并增量记录
+
+### 已修改内容
+- `deploy/routers/comfyui_files.py`
+  - 将 `GET /api/proxy/comfyui/view` 从 `routers/video.py` 迁入 `create_comfyui_files_router()`。
+  - 新增 `security_dependency` 和 `verify_token` 注入，保留 query token / Bearer token 双入口鉴权。
+  - 保留原有按 `node_id` 命中绑定节点、默认 cluster node fallback、`output/temp/input` 404 fallback、`StreamingResponse`、UTF-8 文件名和 `Accept-Ranges` header。
+- `deploy/routers/video.py`
+  - 删除 `GET /api/proxy/comfyui/view` handler。
+  - 删除不再需要的 `security_dependency`、`verify_token`、`HTTPAuthorizationCredentials`、`StreamingResponse` 和 `quote` 依赖。
+  - `create_video_router()` 现在只保留视频处理和视频/音频上传重传相关参数。
+- `deploy/cluster_main.py`
+  - `create_comfyui_files_router()` 注入 `security` 和 `jwt_auth.verify_token`。
+  - `create_video_router()` 不再接收 view 代理的鉴权依赖。
+  - 启动日志按真实职责拆分为 `Video API` 和 `ComfyUI File API`。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/comfyui_files.py deploy/routers/video.py deploy/cluster_main.py` 通过。
+- 加载 `cluster_main.app` 后检查以下路由均为单一注册：
+  - `/api/proxy/comfyui/view`
+  - `/api/comfyui/upload`
+  - `/api/video/crop`
+  - `/api/comfyui/upload/video`
+  - `/api/upload/audio`
+  - `/api/comfyui/reupload/video`
+- 使用项目 venv 直接调用 router endpoint mock 检查通过：
+  - `/api/proxy/comfyui/view` 无效 token 返回 401。
+  - `output` 返回 404 时会 fallback 到 `temp`。
+  - 成功响应保留 `video/mp4`、`inline; filename*=UTF-8''x.mp4` 和 `Accept-Ranges: bytes`。
+  - `/api/video/crop` 在 FFmpeg 缺失时仍返回 500 且错误包含 `FFmpeg`。
+
+### 本轮仍未处理或需后续观察
+- `POST /api/comfyui/upload/video`、`POST /api/upload/audio` 和 `POST /api/comfyui/reupload/video` 已由后续章节迁入 `routers/comfyui_files.py`。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_comfyui_view_router_20260618-073306`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/comfyui_files.py routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 `/api/proxy/comfyui/view`、`/api/comfyui/upload` 和 video router 路由均为单一注册。
+  - 使用服务器 venv 直接调用 `/api/proxy/comfyui/view` endpoint mock：无效 token 401、`output` -> `temp` fallback、流式响应 header 均通过。
+  - 同时验证 `/api/video/crop` FFmpeg 缺失分支仍返回 500 且错误包含 `FFmpeg`。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - ComfyUI view router 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 ComfyUI File Router 上传/重传归并增量记录
+
+### 已修改内容
+- `deploy/routers/comfyui_files.py`
+  - 将 `POST /api/comfyui/upload/video` 从 `routers/video.py` 迁入 `create_comfyui_files_router()`。
+  - 将 `POST /api/upload/audio` 从 `routers/video.py` 迁入 `create_comfyui_files_router()`。
+  - 将 `POST /api/comfyui/reupload/video` 从 `routers/video.py` 迁入 `create_comfyui_files_router()`。
+  - 新增 `select_video_comfyui_server()` helper，统一处理指定 `comfyui_server`、视频集群节点和单机默认节点。
+  - 保留视频上传入库、音频本地备份、视频重传 `file_type/temp/output/input` fallback 和原返回结构。
+- `deploy/routers/video.py`
+  - 删除上述三个文件代理 handler。
+  - 删除不再使用的 `File`、`Form`、`UploadFile` 和视频节点选择 helper。
+  - 当前只保留 `POST /api/video/crop` 视频处理路由。
+- `deploy/cluster_main.py`
+  - 启动日志调整为 `Video API` 只注册 `/api/video/crop`。
+  - `ComfyUI File API` 日志列出 `/api/comfyui/upload`、`/api/proxy/comfyui/view`、`/api/comfyui/upload/video`、`/api/upload/audio`、`/api/comfyui/reupload/video`。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/comfyui_files.py deploy/routers/video.py deploy/cluster_main.py` 通过。
+- 加载 `cluster_main.app` 后检查以下路由均为单一注册：
+  - `/api/video/crop`
+  - `/api/proxy/comfyui/view`
+  - `/api/comfyui/upload`
+  - `/api/comfyui/upload/video`
+  - `/api/upload/audio`
+  - `/api/comfyui/reupload/video`
+- 使用项目 venv 直接调用 router endpoint mock 检查通过：
+  - 视频上传会选择视频节点、转发到 `{server}/upload/image`、保留 `overwrite=true`、写入数据库记录并返回原结构。
+  - 音频上传会选择视频节点、保留 `audio/mpeg`、写入本地备份并返回原结构。
+  - 视频重传在 `output` 下载 404 时 fallback 到 `temp`，随后重新上传并返回原结构。
+  - `/api/video/crop` 在 FFmpeg 缺失时仍返回 500 且错误包含 `FFmpeg`。
+
+### 本轮仍未处理或需后续观察
+- `routers/video.py` 已基本收敛到视频处理；后续可继续拆 `cluster_main.py` 中其他视频生成/任务调度类路由，但需避开 worker、Redis 和 agent 红线。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_comfyui_file_proxy_20260618-074228`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/comfyui_files.py routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 6 条目标路由均为单一注册。
+  - 使用服务器 venv 直接调用 router endpoint mock：视频上传、音频上传、视频重传 `output` -> `temp` fallback 和 `/api/video/crop` FFmpeg 缺失分支均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - ComfyUI file proxy consolidation 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 Files Router 通用上传拆分增量记录
+
+### 已修改内容
+- 新增 `deploy/routers/files.py`
+  - 新增 `create_files_router()` router factory。
+  - 将 `POST /api/upload` 从 `cluster_main.py` 迁入新 router。
+  - 保留图片/视频类型判断、`SystemConfig.MAX_UPLOAD_SIZE` 限制、本地 `persistent_storage/{images|videos}` 写入、默认项目/版本创建、`FileDAO.create_file()` 入库和 DB 失败回滚物理文件逻辑。
+  - 保留原返回字段：`success`、`file_id`、`filename`、`original_filename`、`storage_url`、`url`、`path`、`file_type`、`size`。
+- `deploy/cluster_main.py`
+  - 注册 `create_files_router()`。
+  - 删除旧的 `@app.post("/api/upload")` handler，避免重复注册。
+  - 删除已不再使用的 `File`、`UploadFile`、`Form` 顶层导入。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/files.py deploy/routers/comfyui_files.py deploy/routers/video.py deploy/cluster_main.py` 通过。
+- 加载 `cluster_main.app` 后检查以下路由均为单一注册：
+  - `/api/upload`
+  - `/api/video/crop`
+  - `/api/comfyui/upload`
+- 使用项目 venv 直接调用 `/api/upload` endpoint mock 检查通过：
+  - 图片上传会写入本地路径、创建/使用默认 version、调用 `FileDAO.create_file()` 并返回原结构。
+  - 不支持的 `text/plain` 文件会返回 400 `不支持的文件类型`。
+
+### 本轮仍未处理或需后续观察
+- `cluster_main.py` 仍保留任务、工作区、项目、生成和旧 admin 路由；后续建议继续按低耦合优先迁移。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_files_router_20260618-075045`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/files.py routers/comfyui_files.py routers/video.py cluster_main.py`
+  - 加载 `cluster_main.app` 检查 `/api/upload`、`/api/video/crop`、`/api/comfyui/upload` 均为单一注册。
+  - 使用服务器 venv 直接调用 `/api/upload` endpoint mock：图片上传入库字段和不支持类型 400 均通过。
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - Files router 行为 mock 检查通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 声音克隆功能修复记录
+
+### 问题判断
+- 线上日志中有 MiniMax TTS 和 voice-design 成功记录，但没有真实的 `/api/minimax/files/upload` 或 `/api/minimax/voice-clone` 请求记录。
+- 前端 `VoiceSidebar` 的 clone 模式原逻辑是：点击“试听”只提示“先选择并保存克隆音频”，真正上传和克隆藏在“保存配置”里；这会让用户在测试声音克隆时感觉功能不可用。
+- 后端 MiniMax 路由会把 `_require_minimax_client()` 抛出的 `HTTPException` 包进普通 500，导致 key 缺失或上游错误在前端表现不清楚。
+
+### 已修改内容
+- `deploy/new_html/components/audio/VoiceSidebar.tsx`
+  - clone 模式新增 `generateClonePreview()`：选择音频后点击“生成试听”会先调用 `/api/minimax/files/upload`，再调用 `/api/minimax/voice-clone`。
+  - 克隆成功后把 `voice_id`、`file_id`、试听音频 URL 暂存在 `cloneDraft`，保存配置时直接复用本次克隆结果，避免重复上传和重复克隆。
+  - 切换/重新选择克隆音频时清空旧预览，避免用户看到旧音频误判。
+  - 文件选择限制为 MiniMax 支持的 `mp3/m4a/wav`。
+  - 试听和保存按钮互斥 loading，防止并发提交。
+- `deploy/new_html/__tests__/components/VoiceSidebar.handlePreview.test.tsx`
+  - 新增 clone 分支测试：选择音频后点击“生成试听”必须调用 `minimaxFileUpload()` 和 `minimaxVoiceClone()`，并把返回音频放进 `<audio>`。
+- `deploy/api_routes.py`
+  - `_require_minimax_client()` 在检查 key 前刷新 resolver，兼容后台热更新后的 env 注入。
+  - `voice-design`、`voice-clone`、`files/upload` 保留 `HTTPException` 原状态码，不再误包装成 500。
+  - `voice-clone` 和上传上游异常返回 502，前端能看到更准确的上游失败原因。
+  - `/api/minimax/files/upload` 增加格式和大小早期校验：仅支持 `mp3/m4a/wav`，不超过 20MB。
+  - 上传到 MiniMax 的临时音频无论成功或失败都会清理。
+
+### 本地验证结果
+- `python -m py_compile deploy/api_routes.py deploy/external_api/audio/minimax_audio.py` 通过。
+- `git diff --check -- deploy/api_routes.py deploy/new_html/components/audio/VoiceSidebar.tsx deploy/new_html/__tests__/components/VoiceSidebar.handlePreview.test.tsx Agent.md` 通过。
+- 本地 `vite build` / `vitest` 未能执行完成，原因是本机 `deploy/new_html/node_modules` 缺少 Rollup Windows 可选原生包 `@rollup/rollup-win32-x64-msvc`；需在服务器 Linux Node 环境继续验证。
+- `tsc --noEmit` 仍有项目既有类型错误，但没有指向本次修改的 `VoiceSidebar.tsx`。
+
+### 本轮仍未处理或需后续观察
+- 未修改 MiniMax API key 配置本身；当前线上 TTS 和 voice-design 已可调用，说明运行中的 uvicorn 进程能从 DB/env 拿到 MiniMax 配置。
+- 声音克隆仍依赖 MiniMax 官方限制：上传音频格式 `mp3/m4a/wav`，时长 10 秒到 5 分钟，大小不超过 20MB。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器：`drama-project`，zone `asia-east2-c`，project `drama-project-499403`。
+- 服务器备份目录：`/home/Administrator/deploy_backups/mecha_voice_clone_fix_20260618-080947`。
+- 已在服务器执行：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile api_routes.py external_api/audio/minimax_audio.py cluster_main.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `npx vitest run __tests__/components/VoiceSidebar.handlePreview.test.tsx __tests__/services/minimaxTTSSync.test.ts`
+  - `sudo systemctl restart drama`
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+- 结果：
+  - Python 编译通过。
+  - Vite production build 通过。
+  - 目标 Vitest：`2` 个测试文件、`6` 个测试全部通过。
+  - `drama` 服务状态：`active`。
+  - 线上 smoke：`9/9` 通过。
+
+## 2026-06-18 Files Router Thumbnail 拆分增量记录
+
+### 已修改内容
+- `deploy/routers/files.py`
+  - 将 `GET /api/thumbnail` 从 `cluster_main.py` 迁入 `create_files_router()`。
+  - 保留原鉴权兼容：支持 `Authorization: Bearer ...` 和 query `token` 两种方式。
+  - 保留原 URL 解析分支：
+    - `/uploads/...` -> `temp/uploads/...`
+    - `/storage/...` -> 注入的 `storage_path_safe()`
+    - `/api/files/{file_id}/download` -> `FileDAO.get_file(file_id)` 查询数据库文件路径
+  - 保留 PIL 缩略图逻辑：RGBA/P 转 RGB，按 `width/height` 等比压缩，输出 JPEG。
+  - 保留响应头：`Cache-Control: public, max-age=86400`、`Content-Disposition: inline`。
+- `deploy/cluster_main.py`
+  - `create_files_router()` 注册时注入 `security`、`jwt_auth.verify_token`、`_storage_path_safe`、`db_manager`。
+  - 删除旧 `@app.get("/api/thumbnail")` handler，避免重复注册。
+  - File API 注册日志更新为 `/api/upload, /api/thumbnail`。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/files.py deploy/routers/comfyui_files.py deploy/routers/video.py deploy/cluster_main.py` 通过。
+- `git diff --check -- deploy/cluster_main.py deploy/routers/files.py Agent.md` 通过。
+- 使用项目 venv 直接调用 `/api/thumbnail` endpoint mock 检查通过：
+  - `/storage/...` 分支返回 `image/jpeg`，body 为 JPEG，缓存和 inline header 保留。
+  - `/api/files/{file_id}/download` 分支通过 mock `FileDAO.get_file()` 返回 JPEG。
+  - 无效 token 返回 401。
+  - 缺失文件返回 404。
+- 加载 `cluster_main.app` 后检查以下路由均为单一注册：
+  - `/api/thumbnail`
+  - `/api/upload`
+  - `/api/comfyui/upload`
+
+### 本轮仍未处理或需后续观察
+- `GET /api/thumbnail` 仍然是请求时动态生成缩略图；后续如需进一步减轻图片列表负载，可增加磁盘/对象存储缩略图缓存层。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`，部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_thumbnail_router_20260618-081916`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile cluster_main.py routers/files.py routers/comfyui_files.py routers/video.py`
+  - 直接调用 `/api/thumbnail` endpoint mock：`/storage/...`、`/api/files/{file_id}/download`、无效 token、缺失文件、路由单一注册检查均通过。
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+
+## 2026-06-18 Thumbnail Cache 加速增量记录
+
+### 已修改内容
+- `deploy/routers/files.py`
+  - 在 `GET /api/thumbnail` 中新增磁盘缓存层。
+  - 缓存 key 由源文件绝对路径、源文件 `mtime_ns`、文件大小、请求的 `width/height` 共同生成，源图变更或缩略尺寸变化会自动生成新缓存。
+  - 未命中时仍使用原 PIL 逻辑生成 JPEG，并通过临时文件 + `os.replace()` 原子写入 `temp/thumbnail_cache/*.jpg`。
+  - 命中时直接返回 `FileResponse`，避免重复打开源图和重复执行 PIL 缩放。
+  - 保留原鉴权、URL 解析、404/401 行为与响应头：`Cache-Control: public, max-age=86400`、`Content-Disposition: inline`。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/files.py` 通过。
+- 使用项目 venv 直接调用 `/api/thumbnail` endpoint mock 检查通过：
+  - 第一次请求生成并写入 1 个 `.jpg` 缓存文件。
+  - 第二次相同源图与尺寸请求命中同一缓存文件，文件 `mtime` 不变化。
+  - 返回仍为 `image/jpeg`，缓存和 inline header 保留。
+  - 无效 token 返回 401。
+  - 缺失文件返回 404。
+- `external_api/` 静态扫描未发现任何 `@app.*` 或 `@router.*` FastAPI 路由装饰器；`/api/video/crop` 只在 `deploy/routers/video.py` 注册，`cluster_main.py` 仅负责 `include_router(create_video_router(...))`。
+- 加载 `cluster_main.app` 后 OpenAPI 数量检查通过：
+  - `len(openapi["paths"]) == 225`
+  - HTTP operation 数量为 `281`
+  - `/api/video/crop`、`/api/thumbnail`、`/api/upload`、`/api/comfyui/upload` 均为单一注册。
+
+### 本轮仍未处理或需后续观察
+- 当前缓存目录为 `temp/thumbnail_cache`，未增加后台清理策略；后续如缩略图数量很大，可增加按 mtime/总大小的清理任务。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`，部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_thumbnail_cache_20260618-103349`
+- 服务器验证通过：
+  - `external_api/` 静态扫描未发现 FastAPI route decorator 残留。
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile routers/files.py routers/comfyui_files.py routers/video.py cluster_main.py`
+  - 直接调用 `/api/thumbnail` endpoint mock：首次生成缓存、二次命中同一缓存、401、404、header 保留均通过。
+  - 加载 `cluster_main.app` 后 OpenAPI 检查：`paths=225`、HTTP operations=`281`，且 `/api/video/crop`、`/api/thumbnail`、`/api/upload`、`/api/comfyui/upload` 均为单一注册。
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - 线上 `https://mecha.one/openapi.json` 检查：`paths=225`、HTTP operations=`281`。
+
+## 2026-06-18 Route Contract Checker 增量记录
+
+### 已修改内容
+- 新增 `deploy/scripts/check_route_contract.py`
+  - 导入 `cluster_main.app`，不启动 uvicorn。
+  - 检查 OpenAPI 公开面：
+    - `len(openapi["paths"]) == 225`
+    - HTTP operation 数量为 `281`
+  - 扫描运行时重复路由注册，当前只允许已知高耦合遗留项：
+    - `GET /api/projects/{project_id}`：`cluster_main.get_project` 与 `api_routes.get_project_detail` 双模型并存，按项目接口重构计划后置处理。
+  - 检查已拆分接口的 endpoint 归属：
+    - `/api/video/crop` -> `routers.video.crop_video`
+    - `/api/thumbnail`、`/api/upload` -> `routers.files`
+    - `/api/comfyui/upload` -> `routers.comfyui_files`
+    - `/api/admin/users`、`/api/admin/users/{user_id}/permissions` -> `admin_routes`
+
+### 本地验证结果
+- `python -m py_compile deploy/scripts/check_route_contract.py deploy/cluster_main.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py --show-routes` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - 当前唯一允许重复为 `GET /api/projects/{project_id}`。
+  - 目标 router endpoint 归属检查全部通过。
+
+### 本轮仍未处理或需后续观察
+- `GET /api/projects/{project_id}` 的 V1/V2 双模型重复仍保留，属于高耦合项目接口，后续需要专门设计迁移。
+- 本轮未修改运行时业务逻辑，未重启本地服务，未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy/scripts/check_route_contract.py`，部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_route_contract_checker_20260618-104459`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py --show-routes`
+  - 检查结果：`openapi_paths=225`、`openapi_operations=281`。
+  - 当前唯一允许重复：`GET /api/projects/{project_id}`。
+  - 已拆分 endpoint 归属检查全部通过。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - 线上 `https://mecha.one/openapi.json` 检查：`paths=225`、HTTP operations=`281`。
+
+## 2026-06-18 Thumbnail Cache Cleanup 增量记录
+
+### 已修改内容
+- `deploy/routers/files.py`
+  - 新增 `cleanup_thumbnail_cache()`，负责清理 `temp/thumbnail_cache`。
+  - 默认保留 7 天内缓存，默认总量上限 2GB。
+  - 支持环境变量调整：
+    - `THUMBNAIL_CACHE_MAX_AGE_SECONDS`
+    - `THUMBNAIL_CACHE_MAX_BYTES`
+  - 清理策略：
+    - 删除过期 `.jpg` 缓存。
+    - 删除超过 1 小时的 `.tmp` 残留文件。
+    - 总量超过上限时按最旧 mtime 继续裁剪。
+  - `GET /api/thumbnail` 仍使用原缓存 key 和响应行为。
+- `deploy/cluster_main.py`
+  - 在 lifespan 中新增 `thumbnail_cache_cleaner()` 后台任务。
+  - 启动后延迟 10 分钟首次执行，之后每 24 小时执行一次。
+  - 仅记录清理结果，不影响请求路径或路由注册。
+
+### 本地验证结果
+- `python -m py_compile deploy/routers/files.py deploy/cluster_main.py` 通过。
+- `cleanup_thumbnail_cache()` 行为 mock 通过：
+  - 过期 `.jpg` 被删除。
+  - 超过 1 小时的 `.tmp` 被删除。
+  - 未过期 `.jpg` 和较新的 `.tmp` 保留。
+  - 总量超过 `max_bytes` 时按最旧文件裁剪。
+- `/api/thumbnail` endpoint mock 通过：
+  - 首次请求生成缓存。
+  - 二次相同请求命中同一缓存文件且 mtime 不变化。
+  - 无效 token 返回 401。
+  - 缺失文件返回 404。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - 当前唯一允许重复为 `GET /api/projects/{project_id}`。
+
+### 本轮仍未处理或需后续观察
+- 缩略图缓存清理以本地磁盘为目标；如果未来迁移到对象存储，需要把清理策略迁移到对象存储生命周期规则。
+- 本轮未修改公开 API、worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`，部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_thumbnail_cache_cleanup_20260618-104948`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile cluster_main.py routers/files.py scripts/check_route_contract.py`
+  - `cleanup_thumbnail_cache()` 行为 mock：过期 `.jpg`、过期 `.tmp`、总量裁剪均通过。
+  - `/api/thumbnail` endpoint mock：首次生成缓存、二次命中同一缓存、401、404、header 保留均通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py` 通过：`paths=225`、HTTP operations=`281`。
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - 线上 `https://mecha.one/openapi.json` 检查：`paths=225`、HTTP operations=`281`。
+
+## 2026-06-18 Task Stale Reaper 后台调度增量记录
+
+### 已修改内容
+- `deploy/cluster_main.py`
+  - 新增 `task_stale_reaper_settings()` 和 `run_task_stale_reaper_once()`。
+  - 在 lifespan 中新增 `task_stale_reaper()` 后台任务。
+  - 默认启用，调用现有 `TaskDAO.cleanup_stale(hours)`，将超时的 `pending/queued/processing` 任务标记为 `failed`。
+  - 默认配置：
+    - `TASK_STALE_REAPER_ENABLED=true`
+    - `TASK_STALE_REAPER_HOURS=24`
+    - `TASK_STALE_REAPER_INITIAL_DELAY_SECONDS=900`
+    - `TASK_STALE_REAPER_INTERVAL_SECONDS=3600`
+  - 保留 admin 手工入口 `/api/admin/tasks/cleanup` 不变。
+
+### 本地验证结果
+- `python -m py_compile deploy/cluster_main.py deploy/scripts/check_route_contract.py` 通过。
+- 使用 mock cleanup 函数直接验证：
+  - 默认配置为启用、24 小时阈值、900 秒首延迟、3600 秒周期。
+  - `TASK_STALE_REAPER_HOURS=5` 时传入 cleanup 的阈值为 5。
+  - `TASK_STALE_REAPER_ENABLED=false` 时不调用 cleanup。
+  - `hours/initial_delay/interval` 均有最小值保护，避免配置为 0 或过短导致误清理/高频循环。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - 当前唯一允许重复为 `GET /api/projects/{project_id}`。
+
+### 本轮仍未处理或需后续观察
+- 本轮只增加已有 DAO 清理方法的后台调度，不改变 `TaskDAO.cleanup_stale()` SQL。
+- 仍未处理审计文档中的第二项：`core/task_queue.py` dequeue 对 api_call JSON member 的防御；该项涉及 Redis 队列契约，需单独谨慎处理。
+- 本轮未修改公开 API、worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`，部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_task_stale_reaper_20260618-105612`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile cluster_main.py scripts/check_route_contract.py`
+  - `task_stale_reaper_settings()` 和 `run_task_stale_reaper_once()` mock：默认配置、`TASK_STALE_REAPER_HOURS=5`、禁用开关、最小值保护均通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py` 通过：`paths=225`、HTTP operations=`281`。
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - 线上 `https://mecha.one/openapi.json` 检查：`paths=225`、HTTP operations=`281`。
+
+## 2026-06-18 Provider Contract Checker 增量记录
+
+### 已修改内容
+- 新增 `deploy/scripts/check_provider_contract.py`
+  - 检查 `services/api_provider_registry.py` 的 provider catalog、env map、preset 是否一致。
+  - 在隔离的 managed env 下调用 `resolve_provider()`，确认默认 endpoint、model、provider 能从 preset 正确解析。
+  - 扫描代码中 `resolve_provider("...")` 的字面量 provider 引用，确认都存在于 registry。
+  - 检查 endpoint/proxy/custom proxy 派生 env key 不重复。
+
+### 本地验证结果
+- `python -m py_compile deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `derived_env_keys=36`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - 当前唯一允许重复为 `GET /api/projects/{project_id}`。
+
+### 本轮仍未处理或需后续观察
+- 本轮只新增 provider 注册表/解析器契约检查脚本，不改运行时 API 调用路径。
+- `SEEDANCE_MODEL_STANDARD` / `SEEDANCE_MODEL_FAST` 等模型名 override 仍是 env 配置，后续可考虑纳入后台标准模型配置。
+- 本轮未修改公开 API、worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy/scripts/check_provider_contract.py`，部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_provider_contract_checker_20260618-110145`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`：
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `derived_env_keys=36`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py` 通过：`paths=225`、HTTP operations=`281`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - 线上 `https://mecha.one/openapi.json` 检查：`paths=225`、HTTP operations=`281`。
+
+## 2026-06-18 Admin Users 路由去重增量记录
+
+### 已修改内容
+- `deploy/cluster_main.py`
+  - 取消旧版 `get_admin_users()` 的 `@app.get("/api/admin/users")` 装饰器。
+  - 取消旧版 `update_user_permissions()` 的 `@app.put("/api/admin/users/{user_id}/permissions")` 装饰器。
+  - 两个函数体暂时保留并标注为 legacy reference，避免一次性删除大段旧逻辑导致审计困难。
+- 当前实际生效的接口统一由 `deploy/admin_routes.py` 提供：
+  - `GET /api/admin/users` -> `admin_routes.admin_list_users`
+  - `PUT /api/admin/users/{user_id}/permissions` -> `admin_routes.admin_update_permissions`
+
+### 本地验证结果
+- `python -m py_compile deploy/cluster_main.py deploy/admin_routes.py` 通过。
+- 加载 `cluster_main.app` 后 OpenAPI 数量保持不变：
+  - `len(openapi["paths"]) == 225`
+  - HTTP operation 数量为 `281`
+- 运行时路由检查通过：
+  - `GET /api/admin/users` 仅注册 1 次，endpoint 为 `admin_routes.admin_list_users`。
+  - `PUT /api/admin/users/{user_id}/permissions` 仅注册 1 次，endpoint 为 `admin_routes.admin_update_permissions`。
+
+### 本轮仍未处理或需后续观察
+- `cluster_main.py` 中仍保留未注册的 legacy admin user 函数体；后续确认无人引用后可彻底删除。
+- `POST /api/admin/users/create` 和 `DELETE /api/admin/users/{user_id}` 仍是旧路径兼容入口，本轮未迁移。
+- `GET /api/projects/{project_id}` 仍存在 V1/V2 双模型重复，属于高耦合项目接口，按计划后置处理。
+- 本轮未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`，部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_admin_route_dedupe_20260618-104002`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile cluster_main.py admin_routes.py`
+  - 加载 `cluster_main.app` 后 OpenAPI 检查：`paths=225`、HTTP operations=`281`。
+  - 运行时路由检查：`GET /api/admin/users` 和 `PUT /api/admin/users/{user_id}/permissions` 均只注册 1 次，endpoint 均来自 `admin_routes.py`。
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - 线上 `https://mecha.one/openapi.json` 检查：`paths=225`、HTTP operations=`281`。
+## 2026-06-18 Video Router Ownership Recheck
+
+### Checked items
+- Rechecked local route ownership for `/api/video/crop`.
+- Rechecked production route ownership on `/home/Administrator/deploy`.
+- Confirmed `external_api/` only contains external provider/client modules and does not register FastAPI routes.
+- Confirmed the effective video crop route is `routers.video.crop_video`, not a legacy `cluster_main.py` handler.
+
+### Local verification
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py --show-routes` passed.
+- Local OpenAPI contract remained unchanged:
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+- Expected endpoint check:
+  - `POST /api/video/crop -> routers.video.crop_video`
+- Local readonly scan found `/api/video/crop` only in `deploy/routers/video.py` plus the registration log line in `deploy/cluster_main.py`.
+
+### Production verification
+- `/home/Administrator/deploy/.venv/bin/python scripts/check_route_contract.py --show-routes` passed on the server.
+- Production OpenAPI contract remained unchanged:
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+- Public `https://mecha.one/openapi.json` check:
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - `/api/video/crop` exposes `POST`.
+- Production readonly scan found `/api/video/crop` only in `routers/video.py` plus the registration log line in `cluster_main.py`.
+
+### Deployment note
+- No runtime code change was needed in this pass because production already matched the local route contract.
+- No service restart was performed.
+- Only this documentation entry needs to be synced to the server.
+## 2026-06-18 API Runtime Status Admin Increment
+
+### 已修改内容
+- `deploy/services/api_provider_runtime.py`
+  - 新增 `build_provider_runtime_status()`。
+  - 基于现有 `resolve_provider(provider, model)` 逐个 preset 计算运行时实际解析结果。
+  - 返回 provider、model、category、endpoint、endpoint_source、api_key_env/api_key_source、proxy_mode、custom_proxy_configured、health_check_url、status/issues 等脱敏字段。
+  - 不返回 API key 明文，不返回 custom proxy 明文。
+- `deploy/admin_routes.py`
+  - `GET /api/admin/api-configs` 响应新增 `runtime_status`。
+  - 不新增路由，不改变现有 `api_configs/providers/provider_status` 字段。
+- `deploy/admin/app.js`
+  - 旧后台 API 密钥页读取 `runtime_status`。
+  - 顶部摘要新增 runtime ready 计数。
+  - 每张 API 卡新增 runtime badge，并展示实际 key source、endpoint source、endpoint、proxy mode。
+- `deploy/scripts/check_provider_contract.py`
+  - 新增 runtime status 契约检查。
+  - 校验 preset 数量、runtime rows 数量、env override 来源识别、custom proxy configured 标记。
+  - 校验假 API key 和假 proxy 明文不会出现在 runtime JSON 中。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_provider_runtime.py deploy/services/api_provider_registry.py deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+- mock 直接调用 `admin_list_api_configs()` 通过：
+  - 响应包含 `runtime_status`
+  - `runtime_rows=17`
+  - 假密钥 `SECRET_ADMIN_RESPONSE_KEY_SHOULD_NOT_LEAK` 未泄露
+  - `gemini-text` runtime endpoint override 识别为 `GEMINI_TEXT_ENDPOINT`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_runtime_status_20260618-1918`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_provider_runtime.py scripts/check_provider_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+  - `node --check /home/Administrator/deploy/admin/app.js`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后请求 `GET https://mecha.one/api/admin/api-configs`：
+    - `runtime_status_rows=17`
+    - `runtime_ready=15`
+    - `has_api_key_field=false`
+    - `has_custom_proxy_value=false`
+
+### 本轮仍未处理或需后续观察
+- 本轮只增强现有后台 API 配置页的运行时可见性，还没有新建完整独立的新版 API 管理平台页面。
+- `GET /api/projects/{project_id}` 的 V1/V2 双模型重复仍按计划后置。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+## 2026-06-18 API Effective DB Source Increment
+
+### 已修改内容
+- `deploy/services/api_provider_runtime.py`
+  - 新增 `build_effective_provider_config_sources(configs)`。
+  - 按 `load_api_configs_to_env()` 的现有行为镜像判断：同 provider 的多条 enabled 且 keyed 配置共享一个 env key，列表顺序中最后一条会覆盖前面的配置。
+  - 返回脱敏的 effective DB 来源：`config_id/name/model_name/endpoint/proxy_mode/category`，不返回明文 key，也不返回 `api_key_encrypted`。
+  - `_config_get()` 同时支持 dict、asyncpg.Record 风格的 `__getitem__`、对象属性读取。
+  - `build_provider_runtime_status(configs=None)` 支持接收 DB rows，并新增字段：
+    - `runtime_source`
+    - `db_effective_config_id`
+    - `db_effective_config_name`
+    - `db_effective_model_name`
+    - `db_keyed_enabled_config_count`
+    - `db_enabled_endpoint_count`
+    - `db_candidate_config_ids`
+  - 当同 provider 存在多条 enabled keyed 配置时，`issues` 增加 `db_multiple_keyed_enabled_configs`；endpoint 不同时增加 `db_endpoint_conflict`。
+- `deploy/admin_routes.py`
+  - `GET /api/admin/api-configs` 现在调用 `build_provider_runtime_status(rows)`，把当前 DB 配置来源并入 runtime status。
+- `deploy/admin/app.js`
+  - 旧后台 API 卡片 runtime 行新增 `source` 与 `db config` 展示。
+  - 当一个 provider 有多条 keyed enabled 配置时，卡片会显示 `(+N)` 和 issues，便于定位覆盖冲突。
+- `deploy/scripts/check_provider_contract.py`
+  - 新增 effective DB source 契约检查。
+  - 用两条同 provider 的 asyncpg.Record-like 假配置验证最后一条 `apicfg_new` 是生效来源。
+  - 校验明文 fake key、custom proxy、`api_key_encrypted` 均不会泄露到 runtime status JSON。
+- `deploy/services/api_provider_registry.py`
+  - 同步加固 `_config_get()`，避免 `provider_status` 在 asyncpg.Record 行上读不到字段。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_provider_runtime.py deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+- mock 直接调用 `admin_list_api_configs()` 通过：
+  - `runtime_rows=17`
+  - `db_effective_config_id=apicfg_new`
+  - `db_keyed_enabled_config_count=2`
+  - `runtime_source=db`
+  - `has_conflict_issue=True`
+  - `plain_secret_leaked=False`
+  - `encrypted_secret_leaked=False`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_effective_source_20260618-1926`
+  - `/home/Administrator/deploy_backups/mecha_api_effective_source_asyncpg_fix_20260618-1930`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_provider_runtime.py services/api_provider_registry.py scripts/check_provider_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+  - `node --check /home/Administrator/deploy/admin/app.js`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后请求 `GET https://mecha.one/api/admin/api-configs`：
+    - `runtime_status_rows=17`
+    - `runtime_ready=15`
+    - `has_db_effective_field=True`
+    - `db_sourced_rows=0`
+    - `rows_with_db_config=0`
+    - `api_key_field=false`
+    - `api_key_encrypted_field=false`
+- 线上现状确认：
+  - `api_configs=2`
+  - `masked_key_configs=0`
+  - `enabled_configs=0`
+  - 这说明当前生产可用 runtime key 仍来自 systemd/env 注入；DB `api_configurations` 里只有 2 条禁用占位配置，后台 DB 尚未接管生产 key。
+
+### 本轮仍未处理或需后续观察
+- 本轮只显式暴露“现有覆盖行为”的来源，没有改变覆盖规则；后续可以再加“每 provider 只允许一个 active config”的强约束或后台冲突修复按钮。
+- 线上当前 `db_sourced_rows=0`，后续正式切到后台配置平台时，需要把 systemd/env 中的 key 迁移/录入 DB，或明确保留 env 为生产一级来源。
+- 仍未新建完整新版 API 管理页面。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+## 2026-06-18 Runtime Env Key Import Increment
+
+### 已修改内容
+- `deploy/admin_routes.py`
+  - `POST /api/admin/api-configs/import-presets` 复用原路由，新增可选请求体 `ApiConfigImportPresetsBody`，不新增路由。
+  - 默认 `copy_runtime_env_keys=false`，普通“导入预置模型”仍只导入预置行，不复制任何运行时密钥。
+  - 当管理员显式传入 `copy_runtime_env_keys=true` 时：
+    - 使用 `resolve_provider(provider, model)` 读取当前运行时已生效的 env key / endpoint / proxy mode。
+    - 对缺 key 的既有 DB 配置写入密钥并可自动启用。
+    - 对缺失的 preset 创建 DB 配置，若运行时存在 key 则加密写入。
+    - 写入/更新后调用 `_reload_api_env()`，无需重启即可刷新进程内配置。
+  - 响应新增计数：`env_keys_imported`、`env_keys_missing`、`env_keys_existing`、`updated_existing`、`enabled_existing`。
+- `deploy/admin/index.html`
+  - API 密钥页新增独立按钮“导入运行时 Key”。
+- `deploy/admin/app.js`
+  - 新增 `importRuntimeEnvKeys()`。
+  - 点击前二次确认，只在确认后调用 `copy_runtime_env_keys=true`。
+  - toast 展示新增、更新、写入 key、缺失 key 数量。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_provider_runtime.py deploy/services/api_provider_registry.py deploy/scripts/check_provider_contract.py` 通过。
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+- mock 调用 `admin_import_preset_configs()` 通过：
+  - 普通导入：`plain_copy_runtime=False`、`plain_updates=0`、`plain_env_keys_imported=0`
+  - 显式 env 导入：`copy_runtime=True`、`updated_existing=1`、`enabled_existing=1`、`env_keys_imported=1`
+  - 既有占位配置被启用并刷新 endpoint：`target_enabled=True`、`target_endpoint=https://env-db.example.test/v1`
+  - `_reload_api_env()` 被调用：`reload_calls=1`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_runtime_env_key_import_20260618-1940`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_provider_runtime.py services/api_provider_registry.py scripts/check_provider_contract.py`
+  - `node --check /home/Administrator/deploy/admin/app.js`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后请求 `GET https://mecha.one/api/admin/api-configs`：
+    - `runtime_status_rows=17`
+    - `configs=2`
+- 注意：本轮部署没有在生产上触发 `copy_runtime_env_keys=true`，因此没有把线上 systemd/env key 写入 DB；该动作必须由管理员在后台点击“导入运行时 Key”显式执行。
+
+### 本轮仍未处理或需后续观察
+- 本轮新增的是安全迁移入口，尚未在生产上实际点击执行迁移；线上 key 仍保留在 systemd/env，除非管理员在后台点击“导入运行时 Key”。
+- 如果迁移后希望完全由 DB 接管，需要再决定是否从 systemd override 中移除对应 key，避免双来源长期并存。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+## 2026-06-18 Provider-Scoped Runtime Key Import Increment
+
+### 已修改内容
+- `deploy/admin_routes.py`
+  - 调整 `copy_runtime_env_keys=true` 的导入策略。
+  - 同一个 provider 只允许导入/复用一个 enabled keyed DB 来源，避免多 preset provider（如 DashScope、Gemini Image）为每个模型都写入同一个 key，导致 `load_api_configs_to_env()` 反复覆盖同一个 env key。
+  - 新增响应计数 `env_keys_skipped_provider_claimed`，表示该 provider 已有 key 来源，因此其它 preset 跳过重复写 key。
+  - 普通预设导入仍保持 `copy_runtime_env_keys=false`，不复制任何密钥。
+- `deploy/admin/app.js`
+  - “导入运行时 Key” toast 新增“已有/复用”和“跳过重复”计数。
+- `deploy/scripts/check_admin_api_config_import.py`
+  - 新增无真实 DB 的契约检查脚本。
+  - 覆盖三类导入行为：
+    - 普通导入不复制 key。
+    - DashScope 多 preset 只创建 1 条 keyed row，其它 preset 跳过 provider 重复 key。
+    - 既有空 key 且禁用的占位配置会被显式 env 导入更新、启用并刷新 endpoint。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/scripts/check_admin_api_config_import.py deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过：
+  - `plain_import_copies_keys=0`
+  - `dashscope_keyed_rows=1`
+  - `existing_empty_key_update=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_provider_scoped_env_import_20260618-1947`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py scripts/check_admin_api_config_import.py scripts/check_provider_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py`
+    - `plain_import_copies_keys=0`
+    - `dashscope_keyed_rows=1`
+    - `existing_empty_key_update=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+  - `node --check /home/Administrator/deploy/admin/app.js`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后请求 `GET https://mecha.one/api/admin/api-configs`：
+    - `runtime_status_rows=17`
+    - `configs=2`
+- 注意：本轮仍未触发生产 `copy_runtime_env_keys=true`，不会自动把 systemd/env key 写入 DB。
+
+### 本轮仍未处理或需后续观察
+- 本轮只改“显式导入运行时 Key”时的 DB 写入策略；生产环境仍不会自动迁移 key。
+- 后续可以继续加一个后台“冲突修复”动作：保留当前 effective config，自动禁用同 provider 其它 keyed enabled rows。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+## 2026-06-18 Runtime Key Import Dry-Run Preview Increment
+
+### 已修改内容
+- `deploy/admin_routes.py`
+  - `ApiConfigImportPresetsBody` 新增 `dry_run`。
+  - `POST /api/admin/api-configs/import-presets` 在 `dry_run=true` 时只计算导入计划，不写 DB、不调用 `_reload_api_env()`。
+  - 响应新增 `dry_run` 和 `planned_actions`，用于后台预览将新增、更新、跳过或缺失的配置；不包含明文 key 或加密 key。
+- `deploy/admin/app.js`
+  - “导入运行时 Key”现在会先调用 `dry_run=true` 预览。
+  - 弹窗展示新增、更新、写入 key、已有/复用、跳过重复 provider、缺失 key 数量。
+  - 用户二次确认后才执行真实写入。
+- `deploy/scripts/check_admin_api_config_import.py`
+  - 增加 dry-run 契约检查：
+    - dry-run 响应必须标记 `dry_run=true`。
+    - dry-run 能计算出可导入 key。
+    - dry-run 不应 mutate fake DB。
+    - dry-run 不应触发 `_reload_api_env()`。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/scripts/check_admin_api_config_import.py deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过：
+  - `plain_import_copies_keys=0`
+  - `dashscope_keyed_rows=1`
+  - `existing_empty_key_update=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_runtime_key_import_dryrun_20260618-1955`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py scripts/check_admin_api_config_import.py scripts/check_provider_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py`
+    - `plain_import_copies_keys=0`
+    - `dashscope_keyed_rows=1`
+    - `existing_empty_key_update=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+  - `node --check /home/Administrator/deploy/admin/app.js`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后请求 `GET https://mecha.one/api/admin/api-configs`：
+    - `runtime_status_rows=17`
+    - `configs=2`
+- 注意：本轮只增加 dry-run 预览和二次确认，未执行真实 key 导入。
+
+### 本轮仍未处理或需后续观察
+- 本轮只增加导入预览和二次确认，仍未在生产上实际迁移 key。
+- 后续如果正式执行迁移，建议先截图/记录 dry-run 预览结果，再执行真实导入。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 API Architecture Contract Guard Increment
+
+### 已修改内容
+- `deploy/scripts/check_route_contract.py`
+  - 新增 `external_api/` 静态 AST 契约检查。
+  - 要求 `external_api/` 只保留 provider/client 代码，不能导入或构造 `FastAPI`/`APIRouter`，也不能出现 `@app.*` 或 `@router.*` 路由装饰器。
+  - 验证输出新增：
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+- `deploy/scripts/check_provider_contract.py`
+  - 新增关键 provider 客户端 resolver 覆盖检查。
+  - 要求以下运行时调用层继续通过 `resolve_provider()` 读取 key/endpoint/proxy：
+    - `services/ai_proxy_service.py`
+    - `services/audio_provider.py`
+    - `services/video_reverse_service.py`
+    - `external_api/audio/minimax_audio.py`
+    - `external_api/video/{minimax,sora2,veo,seedance,dashscope,wan2}.py`
+  - 对 GPT Image 的动态 tier 注册表 `GPT_IMAGE_TIERS` 单独校验，确认 `laozhang-gpt-image` 与 `laozhang-sora2` 都仍然挂在 provider registry 上。
+
+### 本地验证结果
+- `python -m py_compile deploy/scripts/check_route_contract.py deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `runtime_wired_files=10`
+  - `gpt_image_tier_providers=2`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_arch_contract_20260618-120716`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile scripts/check_route_contract.py scripts/check_provider_contract.py scripts/check_admin_api_config_import.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `runtime_wired_files=10`
+    - `gpt_image_tier_providers=2`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+- 本轮只更新验证脚本和文档，未重启服务；服务器 `drama` 状态保持 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+
+### 本轮仍未处理或需后续观察
+- 本轮是架构契约护栏，不改变生产业务行为。
+- 后续继续拆分 MVC 或替换自建 API 时，需要把这两个 contract 脚本纳入每次部署验证。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 API Config Import Service Extraction Increment
+
+### 已修改内容
+- 新增 `deploy/services/api_config_import_service.py`
+  - 抽出 API 预设导入和“导入运行时 Key”的策略逻辑。
+  - 保留原有响应字段和计数：`dry_run`、`planned_actions`、`env_keys_imported`、`env_keys_skipped_provider_claimed`、`updated_existing` 等。
+  - 继续通过 `resolve_provider()` 读取运行时 key/endpoint/proxy，不在路由里直接处理 provider 细节。
+  - 支持注入 `reload_api_env` 回调，dry-run 不写 DB、不刷新环境变量。
+- `deploy/admin_routes.py`
+  - `/api/admin/api-configs/import-presets` 路由改为薄包装，只做 DB 检查、请求体转换和调用服务层。
+  - 路由路径、HTTP method、请求体和响应结构保持不变。
+- `deploy/scripts/check_admin_api_config_import.py`
+  - 改为直接验证 `services.api_config_import_service`，不再依赖 FastAPI route wrapper。
+  - 保留三类契约：普通导入不复制 key、DashScope 多 preset 只写一条 keyed row、已有空 key 配置可被运行时 key 更新并启用。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_config_import_service.py deploy/scripts/check_admin_api_config_import.py deploy/scripts/check_provider_contract.py deploy/scripts/check_route_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过：
+  - `plain_import_copies_keys=0`
+  - `dashscope_keyed_rows=1`
+  - `existing_empty_key_update=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `runtime_wired_files=10`
+  - `gpt_image_tier_providers=2`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_config_import_service_20260618-121332`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_config_import_service.py scripts/check_admin_api_config_import.py scripts/check_provider_contract.py scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py`
+    - `plain_import_copies_keys=0`
+    - `dashscope_keyed_rows=1`
+    - `existing_empty_key_update=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `runtime_wired_files=10`
+    - `gpt_image_tier_providers=2`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后调用 `POST /api/admin/api-configs/import-presets` dry-run：
+    - `dry_run_http=200`
+    - `dry_run=True`
+    - `planned_actions=17`
+    - `imported=15`
+    - `skipped=2`
+    - `env_keys_imported=10`
+    - `env_keys_skipped_provider_claimed=5`
+
+### 本轮仍未处理或需后续观察
+- 本轮只拆出 API config import 服务层，不改变后台 UI 和生产业务行为。
+- 后续可继续把 API config health test 也抽到服务层，让 `admin_routes.py` 只保留 HTTP 边界。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 API Config Health Service Extraction Increment
+
+### 已修改内容
+- 新增 `deploy/services/api_config_health_service.py`
+  - 抽出 `/api/admin/api-configs/{config_id}/test` 的健康检查逻辑。
+  - 统一处理 health URL 派生、provider preset/catalog fallback、Bearer header、custom/system proxy、aiohttp 请求和响应归一化。
+  - 支持注入 `session_factory` 和 `proxy_settings_loader`，方便无真实外部 API 的契约测试。
+- `deploy/admin_routes.py`
+  - `/api/admin/api-configs/{config_id}/test` 路由改为薄包装：只查 DB、解密 key、调用 `test_api_config_health()`。
+  - 路由路径、HTTP method 和响应结构保持不变。
+- 新增 `deploy/scripts/check_admin_api_config_health.py`
+  - 验证 DashScope video endpoint 能派生到 compatible-mode `/models` 健康检查 URL。
+  - 验证无 key 时不会发起外部请求，并返回标准 `No API key configured`。
+  - 验证 system/custom proxy、Authorization header、custom headers 和多 URL fallback 行为。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_config_health_service.py deploy/services/api_config_import_service.py deploy/scripts/check_admin_api_config_health.py deploy/scripts/check_admin_api_config_import.py deploy/scripts/check_provider_contract.py deploy/scripts/check_route_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过：
+  - `dashscope_health_urls=2`
+  - `no_key_result_ok=1`
+  - `fake_http_calls=2`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过：
+  - `plain_import_copies_keys=0`
+  - `dashscope_keyed_rows=1`
+  - `existing_empty_key_update=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `runtime_wired_files=10`
+  - `gpt_image_tier_providers=2`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_config_health_service_20260618-122146`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_config_health_service.py services/api_config_import_service.py scripts/check_admin_api_config_health.py scripts/check_admin_api_config_import.py scripts/check_provider_contract.py scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_health.py`
+    - `dashscope_health_urls=2`
+    - `no_key_result_ok=1`
+    - `fake_http_calls=2`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py`
+    - `plain_import_copies_keys=0`
+    - `dashscope_keyed_rows=1`
+    - `existing_empty_key_update=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `runtime_wired_files=10`
+    - `gpt_image_tier_providers=2`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后调用无 key 配置的 `POST /api/admin/api-configs/{config_id}/test`：
+    - `health_http=200`
+    - `config_id=apicfg_seed_gptimg_v`
+    - `ok=False`
+    - `error=No API key configured`
+    - `urls_tried=1`
+
+### 本轮仍未处理或需后续观察
+- 本轮只拆出 API config health check 服务层，不改变后台 UI 或真实 provider 请求策略。
+- 后续可继续把 API config CRUD 的 create/update/delete 也抽到服务层，让 `admin_routes.py` 进一步只保留 HTTP 边界。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 API Config CRUD Service Extraction Increment
+
+### 已修改内容
+- 新增 `deploy/services/api_config_service.py`
+  - 抽出 API config 的 list/create/update/delete 以及 saved-config health wrapper。
+  - 统一处理 API key 遮罩、provider/runtime 状态摘要、create/update/delete 后的 `_reload_api_env()` 回调。
+  - 使用 `ApiConfigNotFound` / `ApiConfigCreateFailed` 作为服务层异常，路由层只转换为 HTTP 404/500。
+- `deploy/admin_routes.py`
+  - `/api/admin/api-configs` 的 GET/POST/PUT/DELETE 和 `/api-configs/{config_id}/test` 改为薄包装。
+  - 移除 route 内部对 `ApiConfigDAO` 的直接 CRUD 调用、旧 `_mask_api_config_row()` 和旧 `_row_get()`。
+  - 路由路径、HTTP method 和响应结构保持不变。
+- 新增 `deploy/scripts/check_admin_api_config_crud.py`
+  - 使用 fake DAO 验证 list 遮罩 key、create/update/delete reload 次数、空 update 不 reload、missing delete 抛 `ApiConfigNotFound`、health wrapper 无 key 结果。
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_config_service.py deploy/services/api_config_health_service.py deploy/services/api_config_import_service.py deploy/scripts/check_admin_api_config_crud.py deploy/scripts/check_admin_api_config_health.py deploy/scripts/check_admin_api_config_import.py deploy/scripts/check_provider_contract.py deploy/scripts/check_route_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_crud.py` 通过：
+  - `list_masks_key=1`
+  - `create_update_delete_reload_calls=3`
+  - `empty_update_reload_calls=0`
+  - `health_wrapper_no_key=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过：
+  - `dashscope_health_urls=2`
+  - `no_key_result_ok=1`
+  - `fake_http_calls=2`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过：
+  - `plain_import_copies_keys=0`
+  - `dashscope_keyed_rows=1`
+  - `existing_empty_key_update=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `runtime_wired_files=10`
+  - `gpt_image_tier_providers=2`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_config_crud_service_20260618-122929`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_config_service.py services/api_config_health_service.py services/api_config_import_service.py scripts/check_admin_api_config_crud.py scripts/check_admin_api_config_health.py scripts/check_admin_api_config_import.py scripts/check_provider_contract.py scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_crud.py`
+    - `list_masks_key=1`
+    - `create_update_delete_reload_calls=3`
+    - `empty_update_reload_calls=0`
+    - `health_wrapper_no_key=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_health.py`
+    - `dashscope_health_urls=2`
+    - `no_key_result_ok=1`
+    - `fake_http_calls=2`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py`
+    - `plain_import_copies_keys=0`
+    - `dashscope_keyed_rows=1`
+    - `existing_empty_key_update=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `runtime_wired_files=10`
+    - `gpt_image_tier_providers=2`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后请求 `GET /api/admin/api-configs`：
+    - `configs_http=200`
+    - `configs=2`
+    - `providers=12`
+    - `provider_status=12`
+    - `runtime_status=17`
+    - `masked_rows=2`
+  - 登录后调用无 key 配置的 `POST /api/admin/api-configs/{config_id}/test`：
+    - `health_http=200`
+    - `health_config_id=apicfg_seed_gptimg_v`
+    - `health_ok=False`
+    - `health_error=No API key configured`
+
+### 本轮仍未处理或需后续观察
+- 本轮只拆出 API config CRUD 服务层，不改变后台 UI 或真实 provider 请求策略。
+- 后续可继续把 `api-configs/presets` 也做成服务层 facade，或开始把 `routers/ai_proxy.py` 与 API registry 的自建 provider 切换模式打通。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 API Config Presets Facade Increment
+
+### 已修改内容
+- `deploy/services/api_config_service.py`
+  - 新增 `get_api_config_presets()` facade。
+  - 将 presets + providers 的组合响应收进 API config 服务层。
+- `deploy/admin_routes.py`
+  - `/api/admin/api-configs/presets` 改为调用 `get_api_config_presets()`。
+  - `/api/admin/api-configs/import-presets` 不再持有 `PRESET_API_MODELS`，由 `import_preset_api_configs()` 自行读取 registry。
+  - `admin_routes.py` 不再直接 import `services.api_provider_registry`，API config 区域进一步只保留 HTTP 边界。
+- `deploy/scripts/check_admin_api_config_crud.py`
+  - 增加 presets facade 契约检查：
+    - `presets=17`
+    - `providers=12`
+
+### 本地验证结果
+- `python -m py_compile deploy/admin_routes.py deploy/services/api_config_service.py deploy/services/api_config_health_service.py deploy/services/api_config_import_service.py deploy/scripts/check_admin_api_config_crud.py deploy/scripts/check_admin_api_config_health.py deploy/scripts/check_admin_api_config_import.py deploy/scripts/check_provider_contract.py deploy/scripts/check_route_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_crud.py` 通过：
+  - `list_masks_key=1`
+  - `presets_facade=17/12`
+  - `create_update_delete_reload_calls=3`
+  - `empty_update_reload_calls=0`
+  - `health_wrapper_no_key=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过：
+  - `plain_import_copies_keys=0`
+  - `dashscope_keyed_rows=1`
+  - `existing_empty_key_update=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过：
+  - `dashscope_health_urls=2`
+  - `no_key_result_ok=1`
+  - `fake_http_calls=2`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `runtime_wired_files=10`
+  - `gpt_image_tier_providers=2`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_config_presets_facade_20260618-123519`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile admin_routes.py services/api_config_service.py services/api_config_health_service.py services/api_config_import_service.py scripts/check_admin_api_config_crud.py scripts/check_admin_api_config_health.py scripts/check_admin_api_config_import.py scripts/check_provider_contract.py scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_crud.py`
+    - `list_masks_key=1`
+    - `presets_facade=17/12`
+    - `create_update_delete_reload_calls=3`
+    - `empty_update_reload_calls=0`
+    - `health_wrapper_no_key=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py`
+    - `plain_import_copies_keys=0`
+    - `dashscope_keyed_rows=1`
+    - `existing_empty_key_update=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_health.py`
+    - `dashscope_health_urls=2`
+    - `no_key_result_ok=1`
+    - `fake_http_calls=2`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `runtime_wired_files=10`
+    - `gpt_image_tier_providers=2`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+  - 登录后请求 `GET /api/admin/api-configs/presets`：
+    - `presets_http=200`
+    - `presets=17`
+    - `providers=12`
+  - 登录后调用 `POST /api/admin/api-configs/import-presets` dry-run：
+    - `dry_run_http=200`
+    - `dry_run=True`
+    - `total=17`
+    - `planned_actions=17`
+
+### 本轮仍未处理或需后续观察
+- 本轮只收拢 API config presets facade，不改变后台 UI 或真实 provider 请求策略。
+- 后续可开始把 `routers/ai_proxy.py` 与 API registry 的自建 provider 切换模式进一步打通。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 GPT Image Tier Registry Increment
+
+### 已修改内容
+- `deploy/services/api_provider_registry.py`
+  - 新增 `GPT_IMAGE_TIERS`，统一记录 GPT Image 的 `tier -> provider/model/key_hint` 映射。
+  - 新增 `normalize_gpt_image_tier()`、`get_gpt_image_tier()`、`get_gpt_image_tiers()`。
+- `deploy/services/ai_proxy_service.py`
+  - 移除本地 `GPT_IMAGE_TIERS` 常量。
+  - GPT Image 生成逻辑改为通过 registry 解析 tier 配置，再调用 `resolve_provider(provider, model)`。
+- `deploy/scripts/check_provider_contract.py`
+  - 契约检查改为读取 registry 中的 GPT Image tier 映射。
+  - 新增防回退检查：`services/ai_proxy_service.py` 不允许重新定义 `GPT_IMAGE_TIERS`。
+  - 校验每个 tier 指向的 provider/model 都存在对应 preset。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/api_provider_registry.py deploy/services/ai_proxy_service.py deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `runtime_wired_files=10`
+  - `gpt_image_tier_providers=2`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=225`
+  - `openapi_operations=281`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_crud.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_gpt_image_tier_registry_20260618-204420`
+- 已同步最新 `Agent.md` 到：
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/Agent.md`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/api_provider_registry.py services/ai_proxy_service.py scripts/check_provider_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `runtime_wired_files=10`
+    - `gpt_image_tier_providers=2`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=225`
+    - `openapi_operations=281`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_crud.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_health.py` 通过。
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=225`，`openapi_operations=281`
+
+### 本轮仍未处理或需后续观察
+- 本轮只迁移 GPT Image tier 元数据来源，不改变真实 GPT Image 请求路径或请求体。
+- `external_api/` 当前没有旧 FastAPI route handler，视频裁剪入口已切到 `routers/video.py`。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 API Platform Hot Reload + Provider Health Increment
+
+### 已修改内容
+- `deploy/services/api_config_runtime_loader.py`
+  - 新增 API 配置热更新服务层，统一承载 DB -> env 投影逻辑。
+  - `load_api_configs_to_env()` 每次从 DB enabled/keyed rows 刷新 key、endpoint、proxy_mode、custom_proxy。
+  - 空 DB/禁用后会恢复到进程启动时的 env baseline，实现 DB 优先、删除/禁用后回退 env。
+  - `seed_default_api_providers()` 改为从 registry 派生 GPT Image placeholder，不再在 `cluster_main.py` 维护第二份 provider 列表。
+- `deploy/cluster_main.py`
+  - 保留 `load_api_configs_to_env()` / `seed_default_api_providers()` 旧函数名作为兼容 wrapper。
+  - 启动期直接调用 `services.api_config_runtime_loader`。
+  - 移除主入口里的旧 DB -> env 实现和 GPT Image seed 常量。
+- `deploy/admin_routes.py`
+  - `_reload_api_env()` 不再动态 import `cluster_main`，改为直接调用服务层 loader。
+  - 新增 `GET /api/admin/api-configs/{provider_id}/health`。
+- `deploy/services/api_config_health_service.py`
+  - 新增 `check_provider_health(provider_id)`，基于 `resolve_provider()` 检查当前运行时生效的 key/endpoint。
+  - 返回 `status`（`ok` / `error` / `no_key`）、`latency_ms`、`checked_at` 和详细 health 信息。
+- `deploy/services/api_provider_registry.py`
+  - Provider catalog 增加 `health_check` 元数据，默认使用非计费 GET models 探测。
+- `deploy/admin/app.js`
+  - API 配置卡新增 provider runtime health 状态灯、延迟、最后检测时间、探测 URL。
+  - 新增“运行时”按钮，调用 provider 级 health 接口。
+- `deploy/admin/index.html`
+  - 静态脚本版本更新到 `app.js?v=20260618d`。
+- `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - iframe 旧后台版本更新到 `20260618d`。
+- `deploy/scripts/check_api_config_runtime_loader.py`
+  - 新增热更新契约测试。
+- `deploy/scripts/check_admin_api_config_health.py`
+  - 增加 provider runtime health 覆盖。
+- `deploy/scripts/check_route_contract.py`
+  - 路由契约更新为本轮新增接口后的 `226 paths / 282 operations`。
+
+### 本地验证结果
+- `python -m py_compile ...` 通过。
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_api_config_runtime_loader.py` 通过：
+  - `hot_reload_loaded_rows=1`
+  - `baseline_restore=1`
+  - `seed_registry_placeholders=2`
+  - `admin_routes_no_cluster_import=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过：
+  - `dashscope_health_urls=2`
+  - `no_key_result_ok=1`
+  - `fake_http_calls=2`
+  - `provider_runtime_health=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=226`
+  - `openapi_operations=282`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_crud.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_api_platform_health_20260618-210014`
+- 已同步最新 `Agent.md` 到：
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/Agent.md`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/api_config_runtime_loader.py services/api_config_health_service.py services/api_provider_registry.py admin_routes.py cluster_main.py scripts/check_api_config_runtime_loader.py scripts/check_admin_api_config_health.py scripts/check_provider_contract.py scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_api_config_runtime_loader.py`
+    - `hot_reload_loaded_rows=1`
+    - `baseline_restore=1`
+    - `seed_registry_placeholders=2`
+    - `admin_routes_no_cluster_import=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_health.py`
+    - `dashscope_health_urls=2`
+    - `no_key_result_ok=1`
+    - `fake_http_calls=2`
+    - `provider_runtime_health=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `resolve_provider_references=15`
+    - `runtime_wired_files=10`
+    - `gpt_image_tier_providers=2`
+    - `derived_env_keys=36`
+    - `runtime_status_rows=17`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=226`
+    - `openapi_operations=282`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_crud.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py` 通过。
+  - `cd /home/Administrator/deploy/new_html && npm run build` 通过，产物 `../dist/assets/index-I92ncyps.js`。
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=226`，`openapi_operations=282`
+  - 登录后请求 `GET /api/admin/api-configs/deepseek/health`：
+    - `health_status=ok`
+    - `health_provider=deepseek`
+    - `health_latency_ms=177`
+  - `/admin-legacy/?embed=1&v=20260618d&page=apiconfig#apiconfig` 已引用 `app.js?v=20260618d`。
+
+### 本轮仍未处理或需后续观察
+- 已完成计划 Step 1 热更新通路、Step 2 provider 健康检查接口、Step 3 的旧后台可见状态展示。
+- Step 4 定时巡检和 Step 5 failover 尚未实现。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 API Provider Health Monitor Increment
+
+### 已修改内容
+- `deploy/services/api_provider_health_monitor.py`
+  - 新增 provider 健康巡检后台服务。
+  - 默认每 5 分钟巡检全部 registry provider，结果写入 Redis：`provider:health:{provider_id}`。
+  - 支持环境变量：
+    - `API_PROVIDER_HEALTH_MONITOR_ENABLED`
+    - `API_PROVIDER_HEALTH_INITIAL_DELAY_SECONDS`
+    - `API_PROVIDER_HEALTH_INTERVAL_SECONDS`
+    - `API_PROVIDER_HEALTH_TTL_SECONDS`
+    - `API_PROVIDER_HEALTH_CONCURRENCY`
+  - 缓存内容不包含明文 API Key 或代理地址。
+- `deploy/cluster_main.py`
+  - Redis 初始化成功后调用 `set_provider_health_redis(redis_client)`。
+  - 启动 `provider_health_monitor_loop(redis_client)` 后台任务。
+  - shutdown 时取消 provider health monitor task。
+- `deploy/services/api_config_service.py`
+  - `/api/admin/api-configs` 响应新增 `provider_health`，返回 Redis 中最近一次巡检结果。
+- `deploy/admin_routes.py`
+  - 手动调用 `GET /api/admin/api-configs/{provider_id}/health` 后，会把结果写入同一份 Redis 缓存。
+- `deploy/admin/app.js`
+  - `fetchApiConfigs()` 会读取后端返回的 `provider_health`。
+  - API 配置页打开后可显示最近一次后台巡检状态；手动“运行时”测试仍保留。
+- `deploy/admin/index.html`
+  - 静态脚本版本更新到 `app.js?v=20260618e`。
+- `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - iframe 旧后台版本更新到 `20260618e`。
+- `deploy/scripts/check_provider_health_monitor.py`
+  - 新增 provider health monitor 契约测试。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/api_provider_health_monitor.py deploy/services/api_config_service.py deploy/admin_routes.py deploy/cluster_main.py deploy/scripts/check_provider_health_monitor.py` 通过。
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_health_monitor.py` 通过：
+  - `cached_provider_health=2`
+  - `sweep_results=2`
+  - `api_config_response_provider_health=2`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_api_config_runtime_loader.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=226`
+  - `openapi_operations=282`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_crud.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过。
+
+### 生产服务器部署结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_provider_health_monitor_20260618-210950`
+- 已同步最新 `Agent.md` 到：
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/Agent.md`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/api_provider_health_monitor.py services/api_config_service.py admin_routes.py cluster_main.py scripts/check_provider_health_monitor.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_health_monitor.py`
+    - `cached_provider_health=2`
+    - `sweep_results=2`
+    - `api_config_response_provider_health=2`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_api_config_runtime_loader.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_health.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=226`
+    - `openapi_operations=282`
+    - `external_api_python_files=10`
+    - `external_api_route_handlers=0`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_crud.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_admin_api_config_import.py` 通过。
+  - `cd /home/Administrator/deploy/new_html && npm run build` 通过，产物 `../dist/assets/index-D1okB5Dg.js`。
+- `sudo systemctl restart drama` 后服务状态为 `active`。
+- 线上验证通过：
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`
+  - `https://mecha.one/openapi.json`：`openapi_paths=226`，`openapi_operations=282`
+  - 登录后请求 `GET /api/admin/api-configs`：
+    - `provider_health_count=12`
+    - 示例：`dashscope:ok:215`、`deepseek:ok:154`、`doubao:ok:285`、`gemini-image:ok:634`、`gemini-text:ok:578`
+  - `/admin-legacy/?embed=1&v=20260618e&page=apiconfig#apiconfig` 已引用 `app.js?v=20260618e`。
+
+### 本轮仍未处理或需后续观察
+- 已完成计划 Step 4 定时健康巡检。
+- Step 5 failover 自动切换尚未实现。
+- 未修改 worker、任务队列、ComfyUI pipeline、`agent_routes.py` 或 Redis 契约。
+
+## 2026-06-18 Frontend Overflow / Admin Layout Pass
+
+### 已修改内容
+- `deploy/new_html/styles/design-tokens.css`
+  - 增加全局 `box-sizing`、`min-width: 0`、`overflow-x: hidden`、媒体元素最大宽度和长文本换行工具类，降低页面被长 URL、长模型名、表格内容横向撑爆的概率。
+- `deploy/new_html/admin/AdminLayout.tsx`
+  - 后台 React 外壳从 `w-screen` 调整为 `w-full min-w-0`，主区补充 `min-h-0/min-w-0`，避免 iframe 或内部页面撑出横向滚动。
+- `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - iframe 容器增加 `min-h-0/min-w-0/overflow-hidden`。
+  - legacy 资源版本升级到 `20260618f`。
+- `deploy/new_html/admin/AdminSidebar.tsx`
+  - 后台侧栏补充 `min-h-0/min-w-0`，菜单文字可截断，避免长菜单名挤压内容区。
+- `deploy/new_html/layouts/WorkflowLayout.tsx`
+  - 流程页顶部导航改为横向可滚动的中间导航区，右侧通知/退出区域不再被导航项挤出。
+  - 主内容区补充 `min-h-0/min-w-0`。
+- `deploy/admin/style.css`
+  - legacy 后台增加全局防横向溢出、页面自适应 padding、统计卡片 `auto-fit`、表格长文本换行。
+  - API 配置卡片改为 grid 布局，endpoint/key/model 等长文本可换行；操作按钮允许换行。
+  - 工作流卡片、节点卡片、代理配置网格和 toast 都补充响应式换行。
+  - 工作流编辑弹窗在桌面使用更宽布局，小屏自动变单列，减少左右栏小区域滚动。
+- `deploy/admin/app.js`
+  - API 配置卡片中的 endpoint 展示去掉硬编码 `max-width:200px;overflow:hidden;white-space:nowrap`，改为可换行展示。
+- `deploy/admin/index.html`
+  - `style.css` / `app.js` 静态资源版本升级到 `20260618f`。
+
+### 本地验证结果
+- `node --check deploy/admin/app.js` 通过（使用 Codex bundled Node）。
+- 本地 `vite build` 未完成：Windows 本地 `node_modules` 缺少 Rollup 可选包 `@rollup/rollup-win32-x64-msvc`，这是本地依赖安装问题；生产验收以服务器 `cd /home/Administrator/deploy/new_html && npm run build` 为准。
+
+### 生产服务器部署与验证结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_frontend_overflow_20260618-132806`
+- 服务器验证通过：
+  - `node --check admin/app.js` 通过。
+  - `cd /home/Administrator/deploy/new_html && npm run build` 通过，生成产物 `../dist/assets/index-xTD1L-a0.js`。
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - `https://mecha.one/openapi.json`：`openapi_paths=226`，`openapi_operations=282`。
+  - `https://mecha.one/admin-legacy/` 已引用 `style.css?v=20260618f` 和 `app.js?v=20260618f`。
+
+### 本轮仍未处理或需后续观察
+- 本轮是全局布局/溢出治理，不改变分镜和视频的数据加载策略。
+- 分镜页和视频页已经存在 10 条分页/懒加载基础；如果线上仍卡，需要下一轮继续做更深的虚拟列表或按视口预取重构。
+- Step 5 failover 自动切换尚未实现。
+
+## 2026-06-18 API Provider Failover Foundation Increment
+
+### 已修改内容
+- `deploy/services/api_provider_registry.py`
+  - Provider catalog 新增 provider 级 `fallback` 元数据。
+  - 当前仅启用低风险链路：`gemini-text -> deepseek`，触发条件为 `missing_key` 或 `health_error`。
+  - `get_api_provider_catalog()` 返回 fallback provider 元数据，供后台展示。
+- `deploy/services/api_provider_runtime.py`
+  - 新增 `resolve_provider_with_failover(provider, model_name, provider_health=...)`。
+  - 新增 provider 健康状态标准化、`provider_is_down()`、`provider_is_usable()`、`provider_fallback_chain()`。
+  - `build_provider_runtime_status()` 新增 `fallback`、`failover`、`failover_active`、`failover_selected_provider`、`failover_reason` 等诊断字段。
+  - 设计上缺失健康缓存不视为 down，只有明确 `status=error` 或缺 key 才进入 fallback 判断。
+- `deploy/services/api_config_service.py`
+  - `/api/admin/api-configs` 构建 runtime status 时传入 Redis 缓存的 provider health，使后台能看到当前 failover 诊断。
+- `deploy/admin/app.js`
+  - API 配置卡片展示 fallback env 与 fallback provider。
+  - runtime 行展示当前是否触发 failover，以及切到了哪个 provider。
+- `deploy/admin/index.html` / `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - legacy 静态资源版本升级到 `20260618g`，确保后台 iframe 拉取新的 `app.js`。
+- `deploy/scripts/check_provider_contract.py`
+  - 增加 fallback provider 合约校验：不能引用未知 provider，能力类别必须兼容。
+  - 增加 failover 行为测试：`gemini-text` 缺 key 或健康错误时可选 `deepseek`，主 provider 健康时不切换。
+
+### 本地验证结果
+- `python -m py_compile ...` 通过。
+- `node --check deploy/admin/app.js` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=15`
+  - `runtime_wired_files=10`
+  - `gpt_image_tier_providers=2`
+  - `derived_env_keys=36`
+  - `runtime_status_rows=17`
+  - `failover_checks=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_health_monitor.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_api_config_runtime_loader.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_crud.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=226`
+  - `openapi_operations=282`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+
+### 生产服务器部署与验证结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_provider_failover_20260618-133859`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/api_provider_registry.py services/api_provider_runtime.py services/api_config_service.py scripts/check_provider_contract.py`
+  - `node --check admin/app.js`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `providers=12`
+    - `presets=17`
+    - `runtime_status_rows=17`
+    - `failover_checks=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_health_monitor.py` 通过。
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=226`
+    - `openapi_operations=282`
+  - `cd /home/Administrator/deploy/new_html && npm run build` 通过，生成产物 `../dist/assets/index-B5PBo_Nc.js`。
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - `https://mecha.one/openapi.json`：`openapi_paths=226`，`openapi_operations=282`。
+  - `https://mecha.one/admin-legacy/` 已引用 `style.css?v=20260618g` 和 `app.js?v=20260618g`。
+  - 登录后请求 `GET /api/admin/api-configs`：
+    - `runtime_rows=17`
+    - `provider_health_count=12`
+    - `gemini_fallback_provider=deepseek`
+    - `gemini_runtime_has_failover=True`
+    - 当前健康状态下 `gemini_failover_active=False`，`gemini_failover_selected=gemini-text`。
+
+### 本轮仍未处理或需后续观察
+- 本轮先完成 failover 的注册表、resolver 和后台诊断基础；生成 handler 尚未全面自动切到 `resolve_provider_with_failover()`。
+- 继续保持保守：图像/视频 provider 由于调用协议差异较大，暂未声明跨 provider fallback。
+- 下一轮可优先将 `/api/gemini/text` 的调用层接入 failover resolver，并在真实请求失败时按同协议 fallback 重试。
+
+## 2026-06-18 Gemini Text Call-Level Failover Increment
+
+### 已修改内容
+- `deploy/services/ai_proxy_service.py`
+  - `/api/gemini/text` 的真实调用路径接入 `resolve_provider_with_failover("gemini-text")`。
+  - 每次请求前读取 Redis 中最近的 `gemini-text` / `deepseek` provider health 缓存。
+  - 当 `gemini-text` 缺 key 或健康状态为 `error`，且 `deepseek` 有可用 key/endpoint 时，实际请求会切到 DeepSeek chat-completions。
+  - 当 `gemini-text` 健康时保持原 Gemini 路径，不触发切换。
+  - 若健康缓存读取失败，仅记录 warning 并继续按 resolver 默认逻辑运行，不阻塞文本生成。
+- `deploy/scripts/check_provider_contract.py`
+  - 运行时 provider wiring 检查同时识别 `resolve_provider()` 和 `resolve_provider_with_failover()`。
+- `deploy/scripts/check_ai_proxy_failover.py`
+  - 新增调用层 failover 契约测试，不发真实 HTTP。
+  - 验证 Gemini text 主 provider 不可用时请求 DeepSeek endpoint/model/key。
+  - 验证 Gemini text 主 provider 健康时仍请求 Gemini endpoint/model/key。
+
+### 本地验证结果
+- `python -m py_compile deploy/services/ai_proxy_service.py deploy/scripts/check_ai_proxy_failover.py deploy/scripts/check_provider_contract.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_ai_proxy_failover.py` 通过：
+  - `gemini_text_failover_to_deepseek=1`
+  - `gemini_text_primary_stays_when_healthy=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_contract.py` 通过：
+  - `providers=12`
+  - `presets=17`
+  - `resolve_provider_references=18`
+  - `runtime_wired_files=10`
+  - `runtime_status_rows=17`
+  - `failover_checks=1`
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_api_config_runtime_loader.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_health.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_crud.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_admin_api_config_import.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_provider_health_monitor.py` 通过。
+- `deploy/.venv/Scripts/python.exe -X utf8 deploy/scripts/check_route_contract.py` 通过：
+  - `openapi_paths=226`
+  - `openapi_operations=282`
+  - `external_api_python_files=10`
+  - `external_api_route_handlers=0`
+
+### 本轮仍未处理或需后续观察
+- `/api/gemini/text` 已完成调用层 failover；DeepSeek 流式 `/api/deepseek/chat` 暂不反向切 Gemini。
+- 图像/视频 provider 由于协议差异，仍只保留 registry/runtime 诊断，不自动跨 provider 切换。
+- 后续可以继续把文本类调用统一成更完整的 provider adapter，再推进 `routers/ai_proxy.py` 的 MVC 拆分。
+
+### 生产服务器部署与验证结果
+- 已同步到服务器 `/home/Administrator/deploy`。
+- 部署前备份目录：
+  - `/home/Administrator/deploy_backups/mecha_gemini_text_failover_20260618-134821`
+- 服务器验证通过：
+  - `/home/Administrator/deploy/.venv/bin/python -m py_compile services/ai_proxy_service.py scripts/check_ai_proxy_failover.py scripts/check_provider_contract.py`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_ai_proxy_failover.py`
+    - `gemini_text_failover_to_deepseek=1`
+    - `gemini_text_primary_stays_when_healthy=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_provider_contract.py`
+    - `resolve_provider_references=18`
+    - `runtime_wired_files=10`
+    - `runtime_status_rows=17`
+    - `failover_checks=1`
+  - `/home/Administrator/deploy/.venv/bin/python -X utf8 scripts/check_route_contract.py`
+    - `openapi_paths=226`
+    - `openapi_operations=282`
+  - `sudo systemctl restart drama` 后服务状态为 `active`。
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@` 冒烟通过：`9/9`。
+  - 线上真实请求 `POST https://mecha.one/api/gemini/text` 返回 `HTTP 200`，短提示词返回文本内容样例：`Okay`。
+## 2026-06-18 Frontend Overflow / Small Scroll Area Usability Pass
+
+### Problem
+
+- Several front-end pages could exceed their containers or force users to read important content inside very small nested scroll boxes.
+- The storyboard/video/material/workspace pages were especially sensitive because they mix sidebars, toolbars, cards, media previews, long prompts, and generated assets.
+
+### Changes
+
+- Added global layout guardrails in `deploy/new_html/styles/design-tokens.css`:
+  - `box-sizing: border-box` everywhere.
+  - Root/body horizontal overflow protection.
+  - Safe wrapping for long text, code, model IDs, URLs, and prompt content.
+  - Responsive helper classes for toolbars, split panes, modal surfaces, media details, storyboard generation, video workbench, and workspace frames.
+- Changed `deploy/new_html/index.html` body from full hidden overflow to horizontal-only overflow protection so pages can scroll normally.
+- Updated major shell/layout pages to use the new responsive helpers:
+  - `layouts/WorkflowLayout.tsx`
+  - `admin/AdminLayout.tsx`
+  - `components/ProjectHub.tsx`
+  - `WorkspaceApp.tsx`
+  - `pages/ScriptPage.tsx`
+- Updated media-heavy and workflow-heavy pages so wide panes stack on narrower screens instead of creating cramped nested scroll areas:
+  - `components/VideoPage.tsx`
+  - `pages/VideoGenPage.tsx`
+  - `pages/MediaLibraryPage.tsx`
+  - `components/GenerationPage.tsx`
+  - `pages/GenerationPage.tsx`
+  - `pages/StoryboardGenPage.tsx`
+  - `pages/VideoReversePage.tsx`
+  - `pages/EnhancePage.tsx`
+  - `pages/FinalProductPage.tsx`
+  - `components/MaterialPage.tsx`
+- Removed tiny fixed-height prompt boxes in material cards, replacing them with normal wrapping text so users do not need to drag inside a 100px-high inner scroll area.
+- Capped the storyboard timeline expanded height against viewport height so it does not dominate the page on smaller screens.
+
+### Verification
+
+- Server backup created before sync:
+  - `/home/Administrator/deploy_backups/mecha_frontend_overflow_20260618-140309`
+- Server front-end build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server service restart passed:
+  - `sudo systemctl restart drama`
+  - service status: `active`
+- Server smoke test passed:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Local TypeScript check was attempted with bundled Node, but the repository still has unrelated pre-existing type errors, so `tsc --noEmit` is not currently a clean validation signal.
+- Browser visual verification was attempted against the storyboard URL, but Chrome automation timed out during the logged-in page check. The unauthenticated login page showed no horizontal overflow in the quick metric check.
+
+### Notes
+
+- This is a UI usability/layout pass only. It does not change API routing, provider keys, generation logic, task queue contracts, or ComfyUI/agent redline files.
+
+## 2026-06-18 Backend Code Quality Fixes / API Config Runtime Safety
+
+### Problems Fixed
+
+- Fixed five admin update handlers that previously built update fields with `body.dict()` and `v is not None`; they now use `body.model_dump(exclude_unset=True)` so explicitly supplied `False`, `0`, and `None` are not confused with missing fields.
+- Fixed `normalize_provider_health_map()` so mixed dict payloads keep valid provider health rows instead of dropping the whole map when one value is not a dict.
+- Removed shared `GEMINI_API_KEY` fallback env from `gemini-text` and `gemini-image`; those providers now require their dedicated `GEMINI_TEXT_API_KEY` / `GEMINI_IMAGE_API_KEY` values and cannot accidentally inherit a Gemini TTS endpoint.
+- Made `load_api_configs_to_env()` build a complete `new_env` first, then reset/apply only after successful construction. A decrypt failure no longer leaves the process env half-cleared.
+- Added public `ApiConfigDAO.decrypt_key()` and changed the runtime loader to use it instead of calling the private `_decrypt_key()` across class boundaries.
+- Changed `_reload_api_env()` to return `bool`; API config create/update/delete/import responses now include `env_refreshed` so the admin UI/API can tell whether runtime env refresh actually succeeded.
+- Moved duplicated `_config_get()` helper into `deploy/utils/config_helpers.py` and imported it from registry/runtime/loader modules.
+
+### Files Changed
+
+- `deploy/admin_routes.py`
+- `deploy/dao/admin/api_config.py`
+- `deploy/services/api_provider_runtime.py`
+- `deploy/services/api_provider_registry.py`
+- `deploy/services/api_config_runtime_loader.py`
+- `deploy/services/api_config_service.py`
+- `deploy/services/api_config_import_service.py`
+- `deploy/utils/config_helpers.py`
+- Contract scripts under `deploy/scripts/check_*`.
+
+### Verification
+
+- Local py_compile passed for all changed Python files.
+- Local contract tests passed with `deploy/.venv`:
+  - `check_admin_api_config_crud.py`
+  - `check_admin_api_config_import.py`
+  - `check_api_config_runtime_loader.py`
+  - `check_provider_contract.py`
+  - `check_route_contract.py`
+  - `check_provider_health_monitor.py`
+  - `check_admin_api_config_health.py`
+- Server backup created before sync:
+  - `/home/Administrator/deploy_backups/mecha_code_quality_20260618-154054`
+- Server contract tests passed with `/home/Administrator/deploy/.venv/bin/python -X utf8`.
+- Server service restarted successfully:
+  - `sudo systemctl restart drama`
+  - service status: `active`
+- Server smoke test passed:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No `pipeline/`, `agent_routes.py`, or `workflows/*.json` files were modified.
+- The `decrypt exploded` stack trace in the runtime loader contract output is intentional failure injection; the script passes only if env values remain unchanged after that simulated decrypt failure.
+
+## 2026-06-18 Admin API Config Health UI Increment
+
+### Changes
+
+- Migrated `/admin/settings?item=apiconfig` from a pure legacy iframe into a native React API config panel in `deploy/new_html/admin/AdminSettingsPage.tsx`.
+- Each API config card now shows provider runtime health:
+  - status indicator: `ok`, `error`, `no_key`, or `unknown`
+  - latest latency in milliseconds
+  - last checked time
+  - health status code / runtime issue detail when available
+- Added a per-card `测试连接` button that calls:
+  - `GET /api/admin/api-configs/{provider_id}/health`
+  - The returned health result updates the card immediately.
+- Initial card state uses cached `provider_health` from:
+  - `GET /api/admin/api-configs`
+- Added a React `导入预设` action and a `旧版编辑` link so the old editor remains reachable while this admin page is migrated incrementally.
+- Non-API settings pages (`cluster`, `workflows`, `dashboard`) still use the legacy iframe.
+
+### Verification
+
+- Local TypeScript check was run; the project still has unrelated pre-existing TS errors, and no new `AdminSettingsPage.tsx` errors appeared.
+- Server backup created before sync:
+  - `/home/Administrator/deploy_backups/mecha_admin_api_health_ui_20260618-155104`
+- Server front-end build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server service restart passed:
+  - `sudo systemctl restart drama`
+  - service status: `active`
+- Server smoke test passed after the restart window settled:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- API config endpoint verification passed:
+  - login HTTP `200`
+  - `GET /api/admin/api-configs` HTTP `200`
+  - configs: `17`
+  - providers: `12`
+  - cached health rows: `12`
+  - `GET /api/admin/api-configs/laozhang-gpt-image/health` HTTP `200`, status `no_key`
+
+### Notes
+
+- The first smoke run immediately after `systemctl restart drama` saw a transient login `502`; `/health` returned `200` shortly after, and the repeated smoke passed `9/9`.
+- No backend API contract changes were required for this UI increment.
+
+## 2026-06-18 Admin API Config Native Edit Increment
+
+### Changes
+
+- Extended the native React API config panel in `deploy/new_html/admin/AdminSettingsPage.tsx`.
+- API config cards now have native actions:
+  - `测试连接`
+  - `编辑`
+  - `启用` / `禁用`
+  - `删除`
+- Added a native edit/create modal:
+  - name
+  - provider
+  - endpoint
+  - model name
+  - API key
+  - category
+  - proxy mode
+  - custom proxy
+  - enabled flag
+- Edit mode leaves the key blank by default; blank key keeps the existing encrypted key.
+- Save/toggle/delete call the standard admin API config endpoints:
+  - `POST /api/admin/api-configs`
+  - `PUT /api/admin/api-configs/{config_id}`
+  - `DELETE /api/admin/api-configs/{config_id}`
+- UI displays runtime refresh outcome through the `env_refreshed` field returned by the backend.
+- Legacy edit link remains available as a fallback while the admin platform migration continues.
+
+### Verification
+
+- Local TypeScript check was run; the repository still has unrelated pre-existing TS errors, and no new `AdminSettingsPage.tsx` errors appeared.
+- Server backup created before sync:
+  - `/home/Administrator/deploy_backups/mecha_admin_api_native_edit_20260618-160217`
+- Server front-end build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server service restart passed:
+  - `sudo systemctl restart drama`
+  - service status: `active`
+- Server smoke test passed:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- API config data source verification passed:
+  - login HTTP `200`
+  - `GET /api/admin/api-configs` HTTP `200`
+  - configs: `17`
+  - providers: `12`
+  - cached health rows: `12`
+  - runtime status rows: `17`
+
+### Notes
+
+- This increment replaces the most common API config operations in the React admin page, but it does not remove the legacy admin implementation yet.
+- No `pipeline/`, `agent_routes.py`, or `workflows/*.json` files were modified.
+
+## 2026-06-19 Code Quality Fix Verification
+
+### Scope
+
+- Verified the 5 admin update endpoints in `deploy/admin_routes.py` now use `body.model_dump(exclude_unset=True)`, so explicit `False`, `0`, and `None` updates are preserved.
+- Verified `deploy/services/api_provider_runtime.py` now filters mixed provider health maps per item instead of discarding the whole map.
+- Verified `deploy/services/api_provider_registry.py` keeps `gemini-text` and `gemini-image` on dedicated keys with empty `fallback_env`.
+- Verified `deploy/services/api_config_runtime_loader.py` builds the complete env projection before resetting/writing `os.environ`, and uses `ApiConfigDAO.decrypt_key()`.
+- Verified `_reload_api_env()` returns a boolean and API config write responses expose `env_refreshed`.
+- Verified the shared `_config_get` helper lives in `deploy/utils/config_helpers.py`.
+
+### Verification
+
+- Local compile passed:
+  - `python -X utf8 -m py_compile deploy/admin_routes.py deploy/services/api_provider_runtime.py deploy/services/api_provider_registry.py deploy/services/api_config_runtime_loader.py deploy/dao/admin/api_config.py deploy/utils/config_helpers.py`
+- Local contract checks passed:
+  - `deploy/scripts/check_provider_contract.py`
+  - `deploy/scripts/check_api_config_runtime_loader.py`
+  - `deploy/scripts/check_admin_api_config_crud.py`
+  - `deploy/scripts/check_admin_api_config_import.py`
+- Server source check found no old patterns and confirmed `utils/config_helpers.py` exists.
+- Server compile and the same four contract checks passed.
+- Smoke test passed:
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+- No new deployment gap was found in this verification pass.
+
+## 2026-06-19 Admin API Provider Health Sweep Increment
+
+### Changes
+
+- Added a batch provider health sweep endpoint:
+  - `POST /api/admin/api-configs/health/sweep`
+  - Request body supports optional `providers` and `concurrency`.
+  - Response returns `provider_health` rows plus `summary.total/ok/error/no_key`.
+- Extended the React admin API config page:
+  - Added a `测试全部` button on the API config toolbar.
+  - The button calls the sweep endpoint and updates each provider card health state from the returned rows.
+- Updated the route contract baseline:
+  - OpenAPI paths: `227`
+  - OpenAPI operations: `283`
+- Updated `deploy/docs/api.md` with the provider health routes.
+
+### Verification
+
+- Local backend checks passed:
+  - `py_compile` for touched backend/scripts files
+  - `deploy/scripts/check_route_contract.py`
+  - `deploy/scripts/check_provider_health_monitor.py`
+- Local frontend build could not run because local Windows `node_modules` is missing Rollup's optional native package; server build is the authoritative build for this deployment.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_provider_health_sweep_20260619-001838`
+- Server checks passed:
+  - `py_compile`
+  - `scripts/check_route_contract.py` -> `openapi_paths=227`, `openapi_operations=283`
+  - `scripts/check_provider_health_monitor.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server service restart passed:
+  - `sudo systemctl restart drama`
+  - service status: `active`
+- Live endpoint verification passed:
+  - `POST https://mecha.one/api/admin/api-configs/health/sweep`
+  - provider tested: `laozhang-gpt-image`
+  - HTTP `200`
+  - summary: `total=1`, `ok=0`, `error=0`, `no_key=1`
+- Smoke test passed:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a low-risk API management platform increment: the sweep endpoint can refresh all configured provider cards without forcing admins to test each card one by one.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Import Presets Runtime Key Reuse Increment
+
+### Changes
+
+- Changed the HTTP import-presets default in `deploy/admin_routes.py`:
+  - `copy_runtime_env_keys` now defaults to `true` for `POST /api/admin/api-configs/import-presets`.
+  - The lower-level service default remains unchanged, so tests and custom callers can still opt out explicitly.
+- Updated the native React API config page in `deploy/new_html/admin/AdminSettingsPage.tsx`:
+  - The `导入预设` action now explicitly sends:
+    - `copy_runtime_env_keys: true`
+    - `update_existing_empty_keys: true`
+    - `enable_copied_keys: true`
+  - The success toast now reports imported rows, updated empty-key rows, copied keys, and missing keys.
+- Updated `deploy/scripts/check_admin_api_config_import.py`:
+  - Added a contract check that the HTTP route default copies runtime env keys.
+- Updated `deploy/docs/api.md`:
+  - Documented that import-presets defaults to copying current runtime env keys into DB configs.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `admin_routes.py` and `check_admin_api_config_import.py`
+  - `scripts/check_admin_api_config_import.py`
+  - `scripts/check_route_contract.py` -> `openapi_paths=227`, `openapi_operations=283`
+- Local TypeScript check still reports unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_import_presets_copy_keys_20260619-002657`
+- Server checks passed:
+  - `py_compile`
+  - `scripts/check_admin_api_config_import.py`
+  - `scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server service restart passed:
+  - `sudo systemctl restart drama`
+  - service status: `active`
+- Live dry-run verification passed:
+  - `POST https://mecha.one/api/admin/api-configs/import-presets` with body `{"dry_run": true}`
+  - HTTP `200`
+  - `dry_run=True`
+  - `copy_runtime_env_keys=True`
+  - `env_refreshed=None`
+- Smoke test passed:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This makes the admin import flow match the intended “existing keys can keep being used” behavior: if systemd/env already has usable keys, import can encrypt them into DB-backed API configs and hot-refresh runtime state.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin Runtime Diagnostics UI Increment
+
+### Changes
+
+- Extended the native React API config card in `deploy/new_html/admin/AdminSettingsPage.tsx`.
+- Each provider card now surfaces runtime diagnostics already returned by `GET /api/admin/api-configs`:
+  - API key source (`api_key_env` / `api_key_source`)
+  - endpoint source (`endpoint_env` / `endpoint_source`)
+  - proxy mode
+  - runtime source (`db` / `env` / `missing`)
+  - effective DB config name/id
+  - keyed enabled config count
+  - enabled endpoint count
+  - failover target and reason
+- Runtime issue codes are now shown as readable labels:
+  - `missing_key` -> `缺少 Key`
+  - `missing_endpoint` -> `缺少 Endpoint`
+  - `db_multiple_keyed_enabled_configs` -> `多条启用配置共享同一 Key`
+  - `db_endpoint_conflict` -> `启用配置 Endpoint 冲突`
+  - `custom_proxy_missing` -> `自定义代理未填写`
+
+### Verification
+
+- Local checks:
+  - Full TypeScript check still reports unrelated pre-existing project errors.
+  - No `AdminSettingsPage.tsx` errors after the JSX fix.
+  - `scripts/check_admin_api_config_crud.py` passed.
+  - `scripts/check_provider_contract.py` passed.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_runtime_diagnostics_20260619-003428`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server service health remained OK:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Built asset verification passed:
+  - asset contains `生效配置`
+  - asset contains `多条启用配置`
+  - asset contains `Endpoint`
+- Smoke test passed:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This does not add backend routes; it exposes existing runtime_status diagnostics in the admin UI so endpoint/key conflicts are visible before swapping providers or moving to self-hosted APIs.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Manual API Runtime Reload Increment
+
+### Changes
+
+- Added a manual runtime reload endpoint:
+  - `POST /api/admin/api-configs/reload-env`
+  - Calls the existing `load_api_configs_to_env()` path.
+  - Returns only safe metadata: `success`, `env_refreshed`, `loaded`, `loaded_providers`, and `error`.
+- Updated the native React API config page:
+  - Added a `刷新运行时` button next to the API config refresh controls.
+  - On success it reloads `/api/admin/api-configs` so runtime diagnostics update immediately.
+- Updated route contract:
+  - OpenAPI paths: `228`
+  - OpenAPI operations: `284`
+- Updated `deploy/docs/api.md` with the new endpoint.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `admin_routes.py` and `check_route_contract.py`
+  - `scripts/check_route_contract.py` -> `openapi_paths=228`, `openapi_operations=284`
+- Local TypeScript check still reports unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_reload_env_20260619-003948`
+- Server checks passed:
+  - `py_compile`
+  - `scripts/check_route_contract.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server restart passed:
+  - `sudo systemctl restart drama`
+  - service status: `active`
+- Live endpoint verification passed:
+  - `POST https://mecha.one/api/admin/api-configs/reload-env`
+  - HTTP `200`
+  - `env_refreshed=True`
+- Built asset verification passed:
+  - asset contains `刷新运行时`
+  - asset contains `/api/admin/api-configs/reload-env`
+- Smoke test passed:
+  - `python3 /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This supports the no-restart API management workflow: an admin can force DB-backed API config projection into process env and immediately refresh runtime diagnostics.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 API Config Quality Fix Verification
+
+### Changes
+
+- Fixed admin update payload handling so explicit `False`, `0`, and `None` values are preserved with `model_dump(exclude_unset=True)`.
+- Fixed provider health normalization so mixed health maps keep valid provider dict rows instead of dropping all health data.
+- Removed shared `GEMINI_API_KEY` fallback from `gemini-text` and `gemini-image`; both now require dedicated keys.
+- Made DB-to-env API config reload atomic by building the full environment projection before resetting managed env keys.
+- Added and used the public `ApiConfigDAO.decrypt_key()` wrapper instead of calling the private decrypt method from the runtime loader.
+- Updated API config reload callbacks so write responses expose `env_refreshed`.
+- Moved duplicated `_config_get` helper into `deploy/utils/config_helpers.py`.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for touched Python files
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_api_config_runtime_loader.py`
+  - `scripts/check_admin_api_config_crud.py`
+  - `scripts/check_admin_api_config_health.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_quality_fixes_20260618-164830`
+- Server checks passed:
+  - `py_compile` for touched Python files
+  - `scripts/check_route_contract.py` -> `openapi_paths=228`, `openapi_operations=284`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke tests passed:
+  - `deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Workflow Media Lazy Decode Increment
+
+### Changes
+
+- Added `loading="lazy"` and `decoding="async"` to remaining heavy workflow images in:
+  - `deploy/new_html/components/GenerationPage.tsx`
+  - `deploy/new_html/components/VideoPage.tsx`
+  - `deploy/new_html/pages/VideoGenPage.tsx`
+- Added lazy/async image decoding and metadata-only video preload to the media library preview/detail surfaces:
+  - `deploy/new_html/pages/MediaLibraryPage.tsx`
+- Kept the existing first-screen batching behavior:
+  - storyboard list renders the first 10 shots by default
+  - video task groups render the first 10 groups by default
+  - video results continue using `LazyVideo` with `IntersectionObserver`
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for touched frontend files.
+  - Local Vite build is blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`.
+  - Local full TypeScript check still reports unrelated pre-existing project errors, including missing test fixtures and old `VideoPage` task-status typing issues.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_media_lazy_decode_20260618-165652`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server checks passed:
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Built asset verification passed:
+  - generated JS contains lazy/async image decode attributes and metadata video preload.
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a low-risk rendering increment. It reduces eager image decode/network pressure in visible workflow/media surfaces without changing API calls or persisted data.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Route-Level Lazy Chunk Increment
+
+### Changes
+
+- Converted route page imports in `deploy/new_html/App.tsx` from static imports to `React.lazy()` dynamic imports.
+- Added a single `React.Suspense` boundary around the route tree with a lightweight loading fallback.
+- Preserved existing route paths and component behavior; this only changes when route code is downloaded and parsed.
+
+### Performance Effect
+
+- Before this increment, the production build emitted a single large app entry chunk:
+  - `index-*.js`: about `2,255 KB` minified (`596 KB` gzip)
+- After route-level lazy loading, the main app entry is much smaller and page code is split into route chunks:
+  - `index-D4I_AtZ6.js`: `321.16 KB` minified (`100.84 KB` gzip)
+  - route/page chunks now include `ProjectHub`, `StoryboardGenPage`, `VideoGenPage`, `VideoPage`, `AdminSettingsPage`, etc.
+- Remaining large chunk:
+  - `GenerationPage-BQY_wV5G.js`: `651.87 KB` minified (`166.54 KB` gzip)
+  - This is now isolated to the workflow pages that actually need it and is a good next target for internal component splitting.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/App.tsx`.
+  - Local full TypeScript check still reports unrelated pre-existing project errors; no new `App.tsx` errors were reported.
+  - Local Vite build is still blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_route_lazy_chunks_20260618-170558`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server checks passed:
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - built main entry asset is now about `314K` on disk
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This improves first-route load and parse time without touching backend APIs or data contracts.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Generation Tool Modal Chunk Increment
+
+### Changes
+
+- Converted low-frequency heavy tools inside `deploy/new_html/components/GenerationPage.tsx` to lazy chunks:
+  - `MattingModal`
+  - `ImageFusionModal`
+  - `StoryboardToolModal`
+  - `MultiAngle3DController`
+- Added Suspense fallbacks for tool modals and the 3D controller area.
+- Kept the main Generation workflow behavior unchanged; tools still load when the user opens the relevant modal.
+
+### Performance Effect
+
+- Before this increment, the main generation workflow chunk was:
+  - `GenerationPage-BQY_wV5G.js`: `651.87 KB` minified (`166.54 KB` gzip)
+- After lazy-loading low-frequency tools, the generation workflow is split into:
+  - `GenerationPage-DA8kw22X.js`: `91.61 KB` minified (`24.14 KB` gzip)
+  - `MattingModal-BYCcRAFb.js`: `4.02 KB` minified (`1.35 KB` gzip)
+  - `ImageFusionModal-DM7Ke4gH.js`: `13.50 KB` minified (`4.15 KB` gzip)
+  - `StoryboardToolModal-Brw5Qr-X.js`: `19.13 KB` minified (`4.90 KB` gzip)
+  - `MultiAngle3DController-BpKFsaX6.js`: `523.88 KB` minified (`134.49 KB` gzip), now loaded only when opening the 3D image editor.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/App.tsx` and `deploy/new_html/components/GenerationPage.tsx`.
+  - Local full TypeScript check still reports unrelated pre-existing project errors; no new `App.tsx` or `components/GenerationPage.tsx` errors were reported.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_generation_modal_chunks_20260618-171251`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server checks passed:
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - built assets confirmed:
+    - `GenerationPage-DA8kw22X.js` around `90K` on disk
+    - `MultiAngle3DController-BpKFsaX6.js` around `512K` on disk
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This materially reduces the load/parse cost of entering the generation workflow while preserving the heavy 3D tool for users who actually open it.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Audio Provider Runtime Refresh Messaging Increment
+
+### Changes
+
+- Updated `deploy/services/audio_provider.py` so `GeminiAudioProvider` refreshes `resolve_provider("gemini-tts")` immediately before each Gemini TTS request.
+- Updated missing-key messages in `deploy/services/audio_provider.py` and `deploy/api_routes.py` so admin users are directed to the API config page and the runtime refresh action, not a backend restart.
+- Kept MiniMax audio's existing runtime refresh call path intact.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `deploy/services/audio_provider.py` and `deploy/api_routes.py`
+  - `deploy/scripts/check_provider_contract.py`
+  - `deploy/scripts/check_admin_api_config_crud.py`
+  - `deploy/scripts/check_api_config_runtime_loader.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_audio_runtime_messages_20260618-172221`
+- Server checks passed:
+  - `py_compile` for `api_routes.py` and `services/audio_provider.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This aligns Gemini TTS behavior with the provider registry/runtime model: admin config changes can take effect without requiring a service restart.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 MiniMax Audio Runtime Refresh Increment
+
+### Changes
+
+- Updated `deploy/external_api/audio/minimax_audio.py` so `get_minimax_audio_client()` refreshes the existing singleton from `resolve_provider("minimax")` before returning it.
+- Updated `deploy/services/audio_provider.py` so `MinimaxAudioProvider` fetches the current MiniMax client at call time instead of holding a stale instance reference.
+- Replaced the root compatibility shim `deploy/minimax_audio.py` with a module alias to `external_api.audio.minimax_audio`, preventing duplicated module-level state such as `AUDIO_UPLOAD_DIR`.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `minimax_audio.py`, `external_api/audio/minimax_audio.py`, `services/audio_provider.py`, and `api_routes.py`
+  - `tests/test_audio_provider.py` -> `7/7`
+  - `tests/test_minimax_tts_sync.py` -> `4/4`
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `scripts/check_api_config_runtime_loader.py`
+- Local runtime probe passed:
+  - a live singleton picked up changed `MINIMAX_API_KEY` and `MINIMAX_ENDPOINT` without being recreated.
+- Local known test environment issue:
+  - `tests/test_api_minimax_tts_enqueue.py` is currently blocked by the existing local `starlette.testclient` / `httpx` incompatibility: `Client.__init__() got an unexpected keyword argument 'app'`.
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_minimax_audio_runtime_refresh_20260618-173003`
+- Server checks passed:
+  - `py_compile` for `minimax_audio.py`, `external_api/audio/minimax_audio.py`, and `services/audio_provider.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - MiniMax runtime refresh probe
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This tightens the no-restart API management path for MiniMax audio features: voice design, voice clone, sync TTS, music, lyrics, and file operations share the same refreshed provider runtime.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Config Layout Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` API config editor:
+  - widened the modal from `max-w-2xl` to `max-w-3xl`
+  - changed `Endpoint` from a single-line input to a wrapping textarea
+  - changed `自定义代理` from a single-line input to a wrapping textarea
+  - forced the modal body to hide horizontal overflow while keeping vertical scrolling
+- Updated API config cards so long config names wrap naturally instead of being truncated.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - local Vite build is still blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`
+  - local `tsc --noEmit` still has unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_api_config_layout_20260618-173714`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-B2Oxjze4.js`
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a UI ergonomics increment for the API management platform. It reduces horizontal scrolling when viewing or editing long endpoints and proxy URLs.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 API Provider Health Cache Invalidation Increment
+
+### Changes
+
+- Added provider health cache deletion helpers in `deploy/services/api_provider_health_monitor.py`.
+- Updated `deploy/services/api_config_service.py` so API config create/update/delete invalidates cached provider health for affected providers.
+- Updated `deploy/services/api_config_import_service.py` so preset import invalidates provider health cache for all providers it creates or updates.
+- Updated `deploy/admin_routes.py` so manual runtime reload clears cached health for the full provider catalog and returns `health_cache_invalidated`.
+- Updated contract scripts to cover health cache invalidation:
+  - `deploy/scripts/check_admin_api_config_crud.py`
+  - `deploy/scripts/check_admin_api_config_import.py`
+  - `deploy/scripts/check_provider_health_monitor.py`
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_crud.py`
+  - `scripts/check_admin_api_config_import.py`
+  - `scripts/check_provider_health_monitor.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_api_config_runtime_loader.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_health_cache_invalidation_20260618-174415`
+- Server checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_crud.py`
+  - `scripts/check_admin_api_config_import.py`
+  - `scripts/check_provider_health_monitor.py`
+  - `scripts/check_api_config_runtime_loader.py`
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Live endpoint check passed:
+  - `POST /api/admin/api-configs/reload-env`
+  - HTTP `200`
+  - response included `health_cache_invalidated` with `12` providers
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This prevents stale green/red status badges after changing an API key or endpoint in the admin API management platform.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Failover Diagnostics Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` runtime diagnostics:
+  - added typed failover/fallback metadata from backend runtime status
+  - translated failover reasons such as `missing_key` and `health_error` into Chinese
+  - shows inactive fallback chains as `备用链路`
+  - shows active fallback selection as `已切换备用` with selected provider/model and reason
+- Added `health_cache_invalidated` to the reload-env response type used by the admin UI.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - local `tsc --noEmit` still has unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported
+  - local Vite build remains blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_failover_diagnostics_20260618-175153`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-CLajXhE6.js`
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This makes the provider registry failover behavior visible in the API management UI before swapping providers or moving traffic to self-hosted APIs.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Config Row Test Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so each API config row now has two distinct checks:
+  - `测运行时`: calls `GET /api/admin/api-configs/{provider}/health` and reports provider runtime health.
+  - `测配置`: calls `POST /api/admin/api-configs/{config_id}/test` and reports the saved row's direct endpoint/key validation result.
+- Added per-row display for config test status, HTTP status, checked time, tested endpoint label, and error message.
+- Clear stale row test result after save, toggle, or delete operations for that API config.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - local `tsc --noEmit` still has unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_config_row_test_20260618-175628`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-WeZPlu5O.js`
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Live endpoint check passed:
+  - `GET /api/admin/api-configs` -> HTTP `200`, `17` configs returned
+  - `POST /api/admin/api-configs/apicfg_b87253712b90/test` -> HTTP `200`, response included `checked_at`
+  - sampled config currently reports `No API key configured`, which is handled by the UI warning branch
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This separates "provider runtime health" from "this exact saved config row works", making the API management page easier to diagnose.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Config Batch Test Increment
+
+### Changes
+
+- Added `POST /api/admin/api-configs/test-all` to batch-test saved API config rows without returning API keys.
+- Added `test_all_saved_api_config_health()` and `summarize_config_test_results()` in `deploy/services/api_config_service.py`.
+- Added a `测全部配置` button to `deploy/new_html/admin/AdminSettingsPage.tsx`.
+  - The existing provider sweep still checks runtime/provider health.
+  - The new button checks each saved config row and writes results back into the cards.
+- Updated `deploy/scripts/check_route_contract.py` for the intentional route increase:
+  - `229` OpenAPI paths
+  - `285` OpenAPI operations
+- Extended `deploy/scripts/check_admin_api_config_health.py` with batch summary contract coverage.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_health.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `git diff --check` for touched files
+- Local frontend TypeScript check could not run because this Windows shell has no `npm` on PATH; server build was used as the frontend gate.
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_config_batch_test_20260618-181020`
+- Server checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_health.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-CRfEcQry.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Live endpoint check passed:
+  - `POST /api/admin/api-configs/test-all` with one selected config id
+  - HTTP `200`
+  - summary returned `total=1`, `no_key=1`
+  - row result included `checked_at`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- First external health probe immediately after restart briefly returned `502`; local backend was already healthy on `127.0.0.1:6006`, and a retry returned external HTTP `200` with smoke `9/9`.
+- This makes provider replacement safer because the admin can now test exact saved rows in bulk, not only the effective runtime provider.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Cluster API Runtime Summary Increment
+
+### Changes
+
+- Updated `deploy/cluster_main.py` startup behavior:
+  - removed legacy module-level caching of provider API key env vars such as `DEEPSEEK_API_KEY`, `ARK_API_KEY`, `GEMINI_TEXT_API_KEY`, `GEMINI_IMAGE_API_KEY`, `GPT_IMAGE_API_KEY`, and `SORA2_GPT_IMAGE_API_KEY`
+  - removed import-time "missing key" warnings that ran before DB-backed API configs were loaded
+  - added resolver-backed startup summary after `load_api_configs_to_env()`
+- Updated `deploy/scripts/check_provider_contract.py`:
+  - added `cluster_main_env_cache_checks`
+  - contract now fails if `cluster_main.py` directly reads managed provider API key/endpoint/proxy env vars instead of using the runtime loader/resolver path
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `deploy/cluster_main.py` and `deploy/scripts/check_provider_contract.py`
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `git diff --check` for touched files
+  - direct grep found no legacy provider API key env reads in `cluster_main.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_cluster_provider_runtime_summary_20260618-182020`
+- Server checks passed:
+  - `py_compile` for touched files
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Runtime log evidence:
+  - `logs/backend.log` and `logs/cluster.log` include `API provider runtime summary: total=17 ready=15 missing_key=2 incomplete=0`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This removes another legacy source of misleading API configuration state. Startup no longer reports provider keys as missing before DB configs have had a chance to load into runtime env.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin Runtime Diagnostics Refresh Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so provider health actions refresh runtime diagnostics without showing the full-page loading state.
+- `loadConfigs()` now accepts `{ showLoading: false }` for silent refreshes.
+- After `测运行时` and provider `测试全部`/health sweep:
+  - provider health cache updates as before
+  - the page immediately reloads `runtime_status`
+  - failover/备用链路 diagnostics no longer require a manual refresh to become accurate
+
+### Verification
+
+- Local checks passed:
+  - `git diff --check` for `deploy/new_html/admin/AdminSettingsPage.tsx`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_runtime_refresh_after_health_20260618-183045`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-C52CLYf4.js`
+- Server source check:
+  - confirmed `loadConfigs({ showLoading: false })` exists after single provider health and provider health sweep
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This keeps the API management UI honest after health checks: health status and failover diagnostics now update together.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin Import Clears Config Tests Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so `导入预设` clears all cached per-row config test results before reloading API configs.
+- This prevents stale `No API key configured` or previous error results from staying visible after preset import copies runtime env keys or updates existing empty-key rows.
+
+### Verification
+
+- Local checks passed:
+  - `git diff --check` for `deploy/new_html/admin/AdminSettingsPage.tsx`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_import_clear_config_tests_20260618-184020`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-DkYU5_78.js`
+- Server source check:
+  - confirmed `setConfigTestMap({})` in the preset import callback
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This keeps the admin API config page from showing stale direct-config test results after a batch import/update.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Route Contract API Config Test Coverage Increment
+
+### Changes
+
+- Updated `deploy/scripts/check_route_contract.py` so the route contract explicitly pins the API config direct-test endpoints:
+  - `POST /api/admin/api-configs/{config_id}/test` -> `admin_routes.admin_test_api_config`
+  - `POST /api/admin/api-configs/test-all` -> `admin_routes.admin_test_all_api_configs`
+- No route count change: expected contract remains `229` OpenAPI paths and `285` operations.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - result: `Route contract OK`, `openapi_paths=229`, `openapi_operations=285`
+  - `git diff --check` for `deploy/scripts/check_route_contract.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_route_contract_api_config_tests_20260619-023207`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - result: `Route contract OK`, `openapi_paths=229`, `openapi_operations=285`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This prevents future router refactors from accidentally dropping either direct API config test endpoint.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Provider Fallback Env Key-Only Increment
+
+### Changes
+
+- Updated `deploy/services/api_provider_runtime.py` so `fallback_env` only borrows API key material.
+- Endpoint/proxy resolution now remains provider-scoped:
+  - `SEEDANCE_ENDPOINT`, `SEEDANCE_PROXY_MODE`, `SEEDANCE_CUSTOM_PROXY` for Seedance
+  - `VEO_ENDPOINT`, `VEO_PROXY_MODE`, `VEO_CUSTOM_PROXY` for Veo
+  - fallback key envs such as `ARK_API_KEY` or `SORA2_API_KEY` no longer cause `ARK_ENDPOINT` / `SORA2_ENDPOINT` / proxy settings to be inherited by the requesting provider
+- Added provider contract coverage in `deploy/scripts/check_provider_contract.py`:
+  - Seedance can borrow `ARK_API_KEY` but must keep its own preset video endpoint
+  - Veo can borrow `SORA2_API_KEY` but must keep its own preset endpoint
+  - fallback envs must not borrow custom proxy settings from the fallback provider
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/services/api_provider_runtime.py deploy/scripts/check_provider_contract.py`
+  - `python deploy/scripts/check_provider_contract.py`
+  - result includes `fallback_env_key_only_checks=2`
+  - `python deploy/scripts/check_api_config_runtime_loader.py`
+  - `python deploy/scripts/check_ai_proxy_failover.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_provider_fallback_key_only_20260619-023727`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile services/api_provider_runtime.py scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `fallback_env_key_only_checks=2`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_ai_proxy_failover.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This closes the generic version of the earlier Gemini fallback bug: shared/fallback credentials no longer drag another provider's endpoint into the active provider.
+- This is especially important for Seedance because `ARK_ENDPOINT` may point at the Doubao image-generation API while Seedance video must use the contents/generation task endpoint.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 External API Endpoint Registry-Only Increment
+
+### Changes
+
+- Removed duplicated third-party default endpoint literals from runtime clients under `deploy/external_api/`:
+  - `external_api/video/minimax.py`
+  - `external_api/audio/minimax_audio.py`
+  - `external_api/video/sora2.py`
+  - `external_api/video/veo.py`
+  - `external_api/video/seedance.py`
+  - `external_api/video/dashscope.py`
+  - `external_api/video/wan2.py`
+- These clients now rely on `resolve_provider()` for endpoint defaults. `resolve_provider()` reads admin DB-projected env first, then registry presets.
+- DashScope/Wan2 URL derivation now starts from the configured endpoint:
+  - full `/services/aigc/video-generation/video-synthesis` endpoint is used directly
+  - `/api/v1` endpoint appends the video synthesis path
+  - `/compatible-mode/v1` endpoint derives the same host's `/api/v1` root
+- Added provider contract coverage in `deploy/scripts/check_provider_contract.py`:
+  - `external_api/` runtime code must not contain non-docstring third-party endpoint URL literals
+  - current result: `external_endpoint_literal_checks=10`
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile` for all touched external API clients and `scripts/check_provider_contract.py`
+  - `python deploy/scripts/check_provider_contract.py`
+  - result includes `external_endpoint_literal_checks=10`
+  - `python deploy/scripts/check_api_config_runtime_loader.py`
+  - `python deploy/scripts/check_ai_proxy_failover.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_external_api_endpoint_registry_only_20260619-024550`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `external_endpoint_literal_checks=10`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_ai_proxy_failover.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This makes the registry/admin configuration the single runtime source for third-party endpoint defaults in `external_api/`.
+- Future provider swaps to self-hosted endpoints should not require editing these clients if the admin config/registry preset is updated.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 API Config Single Active Provider Increment
+
+### Changes
+
+- Updated `deploy/services/api_config_service.py` so API config CRUD enforces one active keyed runtime config per provider.
+- When a config becomes enabled and has a key, the service automatically disables other enabled keyed rows with the same provider.
+- Write responses now include:
+  - `disabled_conflicting_config_ids`
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so save/toggle toast messages mention when same-provider conflicts were automatically disabled.
+- Updated `deploy/scripts/check_admin_api_config_crud.py` to contract-test both create and update conflict disabling.
+
+### Why
+
+- Runtime env has one key/endpoint slot per provider.
+- Before this change, multiple enabled keyed rows for one provider could appear active in the admin UI, but only one row actually won when projected to env.
+- The admin UI already diagnosed this as `db_multiple_keyed_enabled_configs`; this change prevents new conflicts from being introduced through CRUD.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/services/api_config_service.py deploy/scripts/check_admin_api_config_crud.py`
+  - `python deploy/scripts/check_admin_api_config_crud.py`
+  - result includes `same_provider_conflict_disabled=1`
+  - `python deploy/scripts/check_provider_contract.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Local frontend build note:
+  - local PowerShell has no global `npm`
+  - direct Vite invocation failed because local `node_modules` is missing Rollup's Windows optional package `@rollup/rollup-win32-x64-msvc`
+  - server build is the authoritative frontend build for this deployment and passed
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_config_single_active_provider_20260619-025347`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile services/api_config_service.py scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_crud.py`
+  - result includes `same_provider_conflict_disabled=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-J6euWVkz.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- Existing historical duplicate enabled keyed rows are still reported by runtime diagnostics; CRUD now prevents adding or re-enabling a new conflict.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Admin/API Config Quality Fix Increment
+
+### Changes
+
+- Fixed five admin update handlers in `deploy/admin_routes.py` to use `body.model_dump(exclude_unset=True)` so explicit `False`, `0`, and `None` updates are preserved.
+- Fixed `normalize_provider_health_map()` in `deploy/services/api_provider_runtime.py` so mixed health payload maps only skip non-dict entries instead of dropping every provider health row.
+- Removed shared `GEMINI_API_KEY` fallback from `gemini-text` and `gemini-image` in `deploy/services/api_provider_registry.py`; these providers now require their own keys and no longer inherit a Gemini TTS endpoint.
+- Made `deploy/services/api_config_runtime_loader.py` build a complete env projection first, then atomically reset/write env only after decrypt/projection succeeds.
+- Added public `ApiConfigDAO.decrypt_key()` in `deploy/dao/admin/api_config.py` and switched runtime loading away from direct private `_decrypt_key()` calls.
+- Moved duplicated `_config_get()` helper to `deploy/utils/config_helpers.py`.
+- Updated API config write responses to expose `env_refreshed` and added backend repair support for historical duplicate enabled keyed provider rows:
+  - `POST /api/admin/api-configs/repair-conflicts`
+  - dry-run mode returns `would_disable`
+  - real run disables older duplicate rows and preserves the current runtime winner
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile ...`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_crud.py`
+  - result includes `historical_conflict_repair=1` and `provider_health_invalidations=4`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_contract.py`
+  - result includes `health_map_checks=1` and `fallback_env_key_only_checks=2`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - route contract is now `230` OpenAPI paths and `286` operations because of the new repair endpoint
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_quality_fixes_20260618-190348`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract: `230` OpenAPI paths and `286` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No frontend files were changed in this increment, so no frontend rebuild was required.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 API Config Conflict Repair UI Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` to expose the backend historical conflict repair endpoint in the native API config page.
+- Added a `修复冲突` toolbar action beside provider health/testing controls.
+- The action first calls:
+  - `POST /api/admin/api-configs/repair-conflicts` with `{"dry_run": true}`
+- If no duplicate enabled keyed provider configs are found, it shows a no-op success message.
+- If conflicts are found, it opens a CRM confirm dialog showing:
+  - number of affected providers
+  - number of old duplicate configs that will be disabled
+  - that the current runtime winner will be preserved
+- On confirmation it calls the same endpoint with `{"dry_run": false}`, clears stale config test badges, refreshes the list, and reports whether env refresh succeeded.
+
+### Verification
+
+- Local checks passed:
+  - `git diff --check -- deploy/new_html/admin/AdminSettingsPage.tsx`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Local frontend build note:
+  - local Vite build is still blocked by Rollup's missing Windows optional package `@rollup/rollup-win32-x64-msvc`
+  - server build remains the authoritative frontend build for this project
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_conflict_repair_ui_20260618-191029`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-BFI2DBeS.js`
+- Server runtime checks passed:
+  - `https://mecha.one/health` -> HTTP `200`
+  - `https://mecha.one/admin?item=apiconfig` -> HTTP `200`
+  - `POST /api/admin/api-configs/repair-conflicts {"dry_run": true}` -> HTTP `200`, no current conflicts
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This was frontend-only plus static build output, so no service restart was required.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 DashScope Endpoint Helper Increment
+
+### Changes
+
+- Added `deploy/services/api_provider_endpoints.py` as the shared home for provider-specific endpoint URL derivation.
+- Moved DashScope video endpoint derivation out of individual clients into:
+  - `derive_dashscope_video_urls(endpoint)`
+- Updated both clients to use the shared helper:
+  - `deploy/external_api/video/dashscope.py`
+  - `deploy/external_api/video/wan2.py`
+- Supported admin-configured DashScope endpoint shapes now remain consistent across both clients:
+  - `.../compatible-mode/v1`
+  - `.../api/v1`
+  - full `.../api/v1/services/aigc/video-generation/video-synthesis`
+  - self-hosted roots following the same task URL contract
+- Updated `deploy/scripts/check_provider_contract.py` to prevent reintroducing duplicate DashScope URL derivation inside external clients.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile services/api_provider_endpoints.py external_api/video/dashscope.py external_api/video/wan2.py scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_provider_contract.py`
+  - result includes `endpoint_helper_checks=4`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - `PYTHONIOENCODING=utf-8 python -m pytest tests/test_dashscope_video_payload_extension.py tests/test_dashscope_wiring_e2e.py -q`
+  - result: `8 passed`
+  - `python scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_dashscope_endpoint_helper_20260618-191635`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `endpoint_helper_checks=4`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python -m pytest tests/test_dashscope_video_payload_extension.py tests/test_dashscope_wiring_e2e.py -q`
+  - result: `8 passed`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This reduces drift between DashScope shared video and Wan2.6 clients while preserving the same runtime behavior.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Provider Health Endpoint Helper Increment
+
+### Changes
+
+- Extended `deploy/services/api_provider_endpoints.py` with shared health-check URL helpers:
+  - `dedupe_urls(urls)`
+  - `derive_models_health_urls(endpoint, provider)`
+- Updated `deploy/services/api_config_health_service.py` so admin provider health checks reuse the shared endpoint helper instead of maintaining local `/models` derivation rules.
+- Kept the old `models_url_from_endpoint()` function as a compatibility wrapper around the shared helper.
+- Added health URL derivation coverage in `deploy/scripts/check_admin_api_config_health.py` for:
+  - DeepSeek/base endpoints
+  - OpenAI-compatible `chat/completions`
+  - Ark image generation endpoint
+  - Seedance task endpoint
+  - self-hosted OpenAI-compatible roots
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile services/api_provider_endpoints.py services/api_config_health_service.py scripts/check_admin_api_config_health.py scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_admin_api_config_health.py`
+  - result includes `derived_health_url_cases=5`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - `python scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_health_endpoint_helper_20260618-192247`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_health.py`
+  - result includes `derived_health_url_cases=5`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- Provider endpoint shape handling now lives in one helper module for both runtime clients and admin health checks.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Cluster Main AI Proxy Decoupling Increment
+
+### Changes
+
+- Updated `deploy/cluster_main.py` so `/api/generate/multi-grid-storyboard` no longer calls `resolve_provider()` or builds Gemini HTTP requests directly.
+- The route now reuses `services.ai_proxy_service.generate_gemini_images()`, keeping provider resolution, endpoint selection, proxy config, and upstream request handling in the AI proxy service layer.
+- Updated saved metadata for multi-grid storyboard output to record the actual resolved Gemini image model plus `feature=gemini-multi-grid`.
+- Updated `deploy/services/ai_proxy_service.py` module comment to reflect the current router/service split.
+- Updated `deploy/scripts/check_provider_contract.py` with a `cluster_main_resolver_checks` guard so `cluster_main.py` cannot reintroduce direct provider runtime resolver calls.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile cluster_main.py services/ai_proxy_service.py scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_provider_contract.py`
+  - result includes `cluster_main_resolver_checks=1`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - `python scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_cluster_main_ai_proxy_decouple_20260618-192922`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py services/ai_proxy_service.py scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `cluster_main_resolver_checks=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- `cluster_main.py` no longer directly calls provider runtime resolvers; provider HTTP details are centralized in service/router layers.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Admin API Config Routes Split Increment
+
+### Changes
+
+- Added `deploy/admin_api_config_routes.py` to own the admin API provider configuration route set.
+- Moved 12 `/api/admin/api-configs*` handlers out of `deploy/admin_routes.py`; the public paths and handler names remain unchanged.
+- Kept compatibility exports in `admin_routes.py` for legacy scripts/tests that import API config body models or handler functions from the old module.
+- Updated `deploy/scripts/check_route_contract.py` so the expected API config endpoints now resolve to `admin_api_config_routes`, and added a guard preventing `/api-configs` route decorators from returning to `admin_routes.py`.
+- Updated `deploy/scripts/check_admin_api_config_import.py` to verify the import-presets HTTP body default in `admin_api_config_routes.py`.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/admin_routes.py deploy/admin_api_config_routes.py deploy/scripts/check_route_contract.py deploy/scripts/check_admin_api_config_import.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - result includes `admin_api_config_route_handlers=12`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_import.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_api_config_routes_split_20260619-100405`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile admin_routes.py admin_api_config_routes.py scripts/check_route_contract.py scripts/check_admin_api_config_import.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - result includes `admin_api_config_route_handlers=12`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_import.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is an MVC cleanup increment only; it does not change provider resolution behavior or API key semantics.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Provider Health Cache Endpoint Increment
+
+### Changes
+
+- Added `GET /api/admin/api-configs/health/cache` in `deploy/admin_api_config_routes.py`.
+- The new endpoint is admin-authenticated, read-only, and returns cached provider health rows from Redis without calling external providers.
+- Added `summarize_provider_health_results()` in `deploy/services/api_provider_health_monitor.py` so manual sweeps and cache reads share the same summary fields: `total`, `ok`, `error`, `no_key`, `unknown`.
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` with a lightweight "刷新状态" action that refreshes health indicators from the cache endpoint without reloading the full API config list.
+- Fixed the API config toolbar's `loadConfigs` click handler to avoid passing the click event as loader options.
+- Updated `deploy/scripts/check_route_contract.py` for the new public API surface:
+  - OpenAPI paths: `231`
+  - OpenAPI operations: `287`
+  - admin API config handlers: `13`
+- Extended `deploy/scripts/check_provider_health_monitor.py` to call the new admin health cache handler with fake Redis and verify summary/settings output.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/admin_api_config_routes.py deploy/services/api_provider_health_monitor.py deploy/scripts/check_route_contract.py deploy/scripts/check_provider_health_monitor.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - result: `openapi_paths=231`, `openapi_operations=287`, `admin_api_config_route_handlers=13`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_health_monitor.py`
+  - result includes `admin_health_cache_endpoint=1`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_import.py`
+- Local frontend build note:
+  - `vite build` could not be used as local proof because the Windows node_modules install is missing Rollup's optional package `@rollup/rollup-win32-x64-msvc`.
+  - `tsc --noEmit` still reports unrelated existing project-wide type errors; after the local fix, it reports no `AdminSettingsPage.tsx` errors.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_provider_health_cache_endpoint_20260619-101334`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile admin_api_config_routes.py services/api_provider_health_monitor.py scripts/check_route_contract.py scripts/check_provider_health_monitor.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - result: `openapi_paths=231`, `openapi_operations=287`, `admin_api_config_route_handlers=13`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_health_monitor.py`
+  - result includes `admin_health_cache_endpoint=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_health.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - server build emitted `dist/assets/AdminSettingsPage-BJG9uMJv.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Smoke and endpoint checks passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+  - `GET https://mecha.one/api/admin/api-configs/health/cache` with admin token -> HTTP `200`
+  - response includes `success=True`, summary keys `error/no_key/ok/total/unknown`, monitor settings keys, and `provider_health_count=12`
+
+### Notes
+
+- This improves the API management platform's status refresh path and reduces unnecessary full config reloads in the admin UI.
+- No external provider calls are made by the new cache endpoint.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 AI Proxy Failover Helper Increment
+
+### Changes
+
+- Added reusable failover helpers in `deploy/services/ai_proxy_service.py`:
+  - `provider_health_scope_for_failover(provider)`
+  - `resolve_ai_proxy_provider(provider, model)`
+- The helper derives health-cache scope from the registry fallback chain instead of hardcoding provider pairs in each handler.
+- Updated `generate_gemini_text()` to use `resolve_ai_proxy_provider("gemini-text", model)` while preserving existing Gemini-text-to-DeepSeek behavior.
+- Updated `deploy/scripts/check_ai_proxy_failover.py` to verify:
+  - failover health scope is derived from the registry (`gemini-text` -> `deepseek`)
+  - Gemini text still falls back to DeepSeek when Gemini is unhealthy/missing key
+  - Gemini text stays on primary when Gemini is healthy
+- Updated `deploy/scripts/check_provider_contract.py` so static runtime wiring recognizes `resolve_ai_proxy_provider()` as a provider resolver entrypoint.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/services/ai_proxy_service.py deploy/scripts/check_ai_proxy_failover.py deploy/scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_contract.py`
+  - result includes `resolve_provider_references=19`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_ai_proxy_failover.py`
+  - result includes `failover_health_scope_from_registry=1`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - route contract remains `231` OpenAPI paths and `287` operations
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_health_monitor.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_ai_proxy_failover_helper_20260619-102313`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile services/ai_proxy_service.py scripts/check_ai_proxy_failover.py scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `resolve_provider_references=19`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_ai_proxy_failover.py`
+  - result includes `failover_health_scope_from_registry=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `231` OpenAPI paths and `287` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a service-layer refactor only; it does not change public API routes, request payloads, response payloads, or provider registry data.
+- Future compatible provider substitutions can now share one health-aware resolver path instead of duplicating failover logic per handler.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.

@@ -15,6 +15,8 @@ import aiohttp
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
+from services.api_provider_runtime import resolve_provider
+
 logger = logging.getLogger(__name__)
 
 AUDIO_UPLOAD_DIR = os.getenv("AUDIO_UPLOAD_DIR", "persistent_storage/audio")
@@ -48,17 +50,31 @@ class MinimaxAudioClient:
     """MiniMax 音频 API 客户端"""
 
     def __init__(self, api_key: Optional[str] = None, group_id: Optional[str] = None):
-        self.api_key = api_key or os.getenv('MINIMAX_API_KEY')
+        self._explicit_api_key = api_key
+        self.api_key = ""
         self.group_id = group_id or os.getenv('MINIMAX_GROUP_ID', '')
+        self.base_url = ""
+        self.headers: Dict[str, str] = {}
+        self._aiohttp_proxy: Optional[str] = None
+        self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("MINIMAX_API_KEY 未设置，音频功能不可用")
-        self.base_url = "https://api.minimaxi.com/v1"
+
+    def _refresh_runtime_config(self) -> None:
+        config = resolve_provider("minimax", "MiniMax-Hailuo-02")
+        self.api_key = self._explicit_api_key or config.api_key or ""
+        self.base_url = config.endpoint.rstrip("/")
+        self._aiohttp_proxy = config.aiohttp_proxy()
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
 
+    def _aiohttp_kwargs(self) -> Dict[str, Any]:
+        return {"proxy": self._aiohttp_proxy} if self._aiohttp_proxy else {}
+
     def _url(self, path: str) -> str:
+        self._refresh_runtime_config()
         return f"{self.base_url}{path}"
 
     # ------------------------------------------------------------------
@@ -91,7 +107,10 @@ class MinimaxAudioClient:
             payload["aigc_watermark"] = aigc_watermark
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/voice_design"), json=payload, headers=self.headers
+                self._url("/voice_design"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -143,7 +162,10 @@ class MinimaxAudioClient:
             payload["model"] = model
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/voice_clone"), json=payload, headers=self.headers
+                self._url("/voice_clone"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -153,8 +175,9 @@ class MinimaxAudioClient:
         demo_url = data.get("demo_audio") or ""
         if demo_url and demo_url.startswith("http"):
             try:
+                self._refresh_runtime_config()
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(demo_url) as r:
+                    async with session.get(demo_url, **self._aiohttp_kwargs()) as r:
                         if r.status == 200:
                             audio_bytes = await r.read()
                             Path(AUDIO_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
@@ -176,7 +199,10 @@ class MinimaxAudioClient:
         payload = {"voice_type": voice_type}
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/get_voice"), json=payload, headers=self.headers
+                self._url("/get_voice"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -201,7 +227,10 @@ class MinimaxAudioClient:
         payload = {"voice_type": voice_type, "voice_id": voice_id}
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/delete_voice"), json=payload, headers=self.headers
+                self._url("/delete_voice"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -278,7 +307,10 @@ class MinimaxAudioClient:
             try:
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.post(
-                        self._url("/t2a_v2"), json=payload, headers=self.headers
+                        self._url("/t2a_v2"),
+                        json=payload,
+                        headers=self.headers,
+                        **self._aiohttp_kwargs(),
                     ) as resp:
                         if resp.status != 200:
                             body = await resp.text()
@@ -402,7 +434,10 @@ class MinimaxAudioClient:
         }
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/t2a_async_v2"), json=payload, headers=self.headers
+                self._url("/t2a_async_v2"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -419,6 +454,7 @@ class MinimaxAudioClient:
                 self._url("/query/t2a_async_query_v2"),
                 params=params,
                 headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 return data
@@ -470,8 +506,9 @@ class MinimaxAudioClient:
         filename = f"tts_{uuid.uuid4().hex[:8]}.mp3"
         filepath = os.path.join(AUDIO_UPLOAD_DIR, filename)
 
+        self._refresh_runtime_config()
         async with aiohttp.ClientSession() as session:
-            async with session.get(download_url) as resp:
+            async with session.get(download_url, **self._aiohttp_kwargs()) as resp:
                 content = await resp.read()
                 with open(filepath, "wb") as f:
                     f.write(content)
@@ -527,7 +564,10 @@ class MinimaxAudioClient:
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/music_generation"), json=payload, headers=self.headers
+                self._url("/music_generation"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -563,7 +603,10 @@ class MinimaxAudioClient:
         }
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/lyrics_generation"), json=payload, headers=self.headers
+                self._url("/lyrics_generation"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -580,6 +623,7 @@ class MinimaxAudioClient:
         上传文件到 MiniMax，返回 { file_id, ... }
         purpose: voice_clone / refer_voice / refer_instrumental
         """
+        self._refresh_runtime_config()
         headers = {"Authorization": f"Bearer {self.api_key}"}
         form = aiohttp.FormData()
         form.add_field("purpose", purpose)
@@ -590,7 +634,10 @@ class MinimaxAudioClient:
         )
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url("/files/upload"), data=form, headers=headers
+                self._url("/files/upload"),
+                data=form,
+                headers=headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
@@ -604,7 +651,10 @@ class MinimaxAudioClient:
         params = {"file_id": file_id}
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                self._url("/files/retrieve"), params=params, headers=self.headers
+                self._url("/files/retrieve"),
+                params=params,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 return data
@@ -616,7 +666,10 @@ class MinimaxAudioClient:
         payload = {"file_id": file_id}
         async with aiohttp.ClientSession() as session:
             async with session.delete(
-                self._url("/files/delete"), json=payload, headers=self.headers
+                self._url("/files/delete"),
+                json=payload,
+                headers=self.headers,
+                **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
                 return data
@@ -630,4 +683,6 @@ def get_minimax_audio_client() -> MinimaxAudioClient:
     global _minimax_audio_client
     if _minimax_audio_client is None:
         _minimax_audio_client = MinimaxAudioClient()
+    else:
+        _minimax_audio_client._refresh_runtime_config()
     return _minimax_audio_client

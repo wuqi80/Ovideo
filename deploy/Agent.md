@@ -1,0 +1,1149 @@
+# MECHA Deploy Agent Notes
+
+## 2026-06-19 API Config Quality Fix Verification
+
+### Changes
+
+- Fixed admin update payload handling so explicit `False`, `0`, and `None` values are preserved with `model_dump(exclude_unset=True)`.
+- Fixed provider health normalization so mixed health maps keep valid provider dict rows instead of dropping all health data.
+- Removed shared `GEMINI_API_KEY` fallback from `gemini-text` and `gemini-image`; both now require dedicated keys.
+- Made DB-to-env API config reload atomic by building the full environment projection before resetting managed env keys.
+- Added and used the public `ApiConfigDAO.decrypt_key()` wrapper instead of calling the private decrypt method from the runtime loader.
+- Updated API config reload callbacks so write responses expose `env_refreshed`.
+- Moved duplicated `_config_get` helper into `deploy/utils/config_helpers.py`.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for touched Python files
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_api_config_runtime_loader.py`
+  - `scripts/check_admin_api_config_crud.py`
+  - `scripts/check_admin_api_config_health.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_quality_fixes_20260618-164830`
+- Server checks passed:
+  - `py_compile` for touched Python files
+  - `scripts/check_route_contract.py` -> `openapi_paths=228`, `openapi_operations=284`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke tests passed:
+  - `deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Workflow Media Lazy Decode Increment
+
+### Changes
+
+- Added `loading="lazy"` and `decoding="async"` to remaining heavy workflow images in:
+  - `deploy/new_html/components/GenerationPage.tsx`
+  - `deploy/new_html/components/VideoPage.tsx`
+  - `deploy/new_html/pages/VideoGenPage.tsx`
+- Added lazy/async image decoding and metadata-only video preload to the media library preview/detail surfaces:
+  - `deploy/new_html/pages/MediaLibraryPage.tsx`
+- Kept the existing first-screen batching behavior:
+  - storyboard list renders the first 10 shots by default
+  - video task groups render the first 10 groups by default
+  - video results continue using `LazyVideo` with `IntersectionObserver`
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for touched frontend files.
+  - Local Vite build is blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`.
+  - Local full TypeScript check still reports unrelated pre-existing project errors, including missing test fixtures and old `VideoPage` task-status typing issues.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_media_lazy_decode_20260618-165652`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server checks passed:
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Built asset verification passed:
+  - generated JS contains lazy/async image decode attributes and metadata video preload.
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a low-risk rendering increment. It reduces eager image decode/network pressure in visible workflow/media surfaces without changing API calls or persisted data.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Route-Level Lazy Chunk Increment
+
+### Changes
+
+- Converted route page imports in `deploy/new_html/App.tsx` from static imports to `React.lazy()` dynamic imports.
+- Added a single `React.Suspense` boundary around the route tree with a lightweight loading fallback.
+- Preserved existing route paths and component behavior; this only changes when route code is downloaded and parsed.
+
+### Performance Effect
+
+- Before this increment, the production build emitted a single large app entry chunk:
+  - `index-*.js`: about `2,255 KB` minified (`596 KB` gzip)
+- After route-level lazy loading, the main app entry is much smaller and page code is split into route chunks:
+  - `index-D4I_AtZ6.js`: `321.16 KB` minified (`100.84 KB` gzip)
+  - route/page chunks now include `ProjectHub`, `StoryboardGenPage`, `VideoGenPage`, `VideoPage`, `AdminSettingsPage`, etc.
+- Remaining large chunk:
+  - `GenerationPage-BQY_wV5G.js`: `651.87 KB` minified (`166.54 KB` gzip)
+  - This is now isolated to the workflow pages that actually need it and is a good next target for internal component splitting.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/App.tsx`.
+  - Local full TypeScript check still reports unrelated pre-existing project errors; no new `App.tsx` errors were reported.
+  - Local Vite build is still blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_route_lazy_chunks_20260618-170558`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server checks passed:
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - built main entry asset is now about `314K` on disk
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This improves first-route load and parse time without touching backend APIs or data contracts.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Generation Tool Modal Chunk Increment
+
+### Changes
+
+- Converted low-frequency heavy tools inside `deploy/new_html/components/GenerationPage.tsx` to lazy chunks:
+  - `MattingModal`
+  - `ImageFusionModal`
+  - `StoryboardToolModal`
+  - `MultiAngle3DController`
+- Added Suspense fallbacks for tool modals and the 3D controller area.
+- Kept the main Generation workflow behavior unchanged; tools still load when the user opens the relevant modal.
+
+### Performance Effect
+
+- Before this increment, the main generation workflow chunk was:
+  - `GenerationPage-BQY_wV5G.js`: `651.87 KB` minified (`166.54 KB` gzip)
+- After lazy-loading low-frequency tools, the generation workflow is split into:
+  - `GenerationPage-DA8kw22X.js`: `91.61 KB` minified (`24.14 KB` gzip)
+  - `MattingModal-BYCcRAFb.js`: `4.02 KB` minified (`1.35 KB` gzip)
+  - `ImageFusionModal-DM7Ke4gH.js`: `13.50 KB` minified (`4.15 KB` gzip)
+  - `StoryboardToolModal-Brw5Qr-X.js`: `19.13 KB` minified (`4.90 KB` gzip)
+  - `MultiAngle3DController-BpKFsaX6.js`: `523.88 KB` minified (`134.49 KB` gzip), now loaded only when opening the 3D image editor.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/App.tsx` and `deploy/new_html/components/GenerationPage.tsx`.
+  - Local full TypeScript check still reports unrelated pre-existing project errors; no new `App.tsx` or `components/GenerationPage.tsx` errors were reported.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_generation_modal_chunks_20260618-171251`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server checks passed:
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - built assets confirmed:
+    - `GenerationPage-DA8kw22X.js` around `90K` on disk
+    - `MultiAngle3DController-BpKFsaX6.js` around `512K` on disk
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This materially reduces the load/parse cost of entering the generation workflow while preserving the heavy 3D tool for users who actually open it.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Audio Provider Runtime Refresh Messaging Increment
+
+### Changes
+
+- Updated `deploy/services/audio_provider.py` so `GeminiAudioProvider` refreshes `resolve_provider("gemini-tts")` immediately before each Gemini TTS request.
+- Updated missing-key messages in `deploy/services/audio_provider.py` and `deploy/api_routes.py` so admin users are directed to the API config page and the runtime refresh action, not a backend restart.
+- Kept MiniMax audio's existing runtime refresh call path intact.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `deploy/services/audio_provider.py` and `deploy/api_routes.py`
+  - `deploy/scripts/check_provider_contract.py`
+  - `deploy/scripts/check_admin_api_config_crud.py`
+  - `deploy/scripts/check_api_config_runtime_loader.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_audio_runtime_messages_20260618-172221`
+- Server checks passed:
+  - `py_compile` for `api_routes.py` and `services/audio_provider.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This aligns Gemini TTS behavior with the provider registry/runtime model: admin config changes can take effect without requiring a service restart.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 MiniMax Audio Runtime Refresh Increment
+
+### Changes
+
+- Updated `deploy/external_api/audio/minimax_audio.py` so `get_minimax_audio_client()` refreshes the existing singleton from `resolve_provider("minimax")` before returning it.
+- Updated `deploy/services/audio_provider.py` so `MinimaxAudioProvider` fetches the current MiniMax client at call time instead of holding a stale instance reference.
+- Replaced the root compatibility shim `deploy/minimax_audio.py` with a module alias to `external_api.audio.minimax_audio`, preventing duplicated module-level state such as `AUDIO_UPLOAD_DIR`.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `minimax_audio.py`, `external_api/audio/minimax_audio.py`, `services/audio_provider.py`, and `api_routes.py`
+  - `tests/test_audio_provider.py` -> `7/7`
+  - `tests/test_minimax_tts_sync.py` -> `4/4`
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `scripts/check_api_config_runtime_loader.py`
+- Local runtime probe passed:
+  - a live singleton picked up changed `MINIMAX_API_KEY` and `MINIMAX_ENDPOINT` without being recreated.
+- Local known test environment issue:
+  - `tests/test_api_minimax_tts_enqueue.py` is currently blocked by the existing local `starlette.testclient` / `httpx` incompatibility: `Client.__init__() got an unexpected keyword argument 'app'`.
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_minimax_audio_runtime_refresh_20260618-173003`
+- Server checks passed:
+  - `py_compile` for `minimax_audio.py`, `external_api/audio/minimax_audio.py`, and `services/audio_provider.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - MiniMax runtime refresh probe
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This tightens the no-restart API management path for MiniMax audio features: voice design, voice clone, sync TTS, music, lyrics, and file operations share the same refreshed provider runtime.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Config Layout Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` API config editor:
+  - widened the modal from `max-w-2xl` to `max-w-3xl`
+  - changed `Endpoint` from a single-line input to a wrapping textarea
+  - changed `自定义代理` from a single-line input to a wrapping textarea
+  - forced the modal body to hide horizontal overflow while keeping vertical scrolling
+- Updated API config cards so long config names wrap naturally instead of being truncated.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - local Vite build is still blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`
+  - local `tsc --noEmit` still has unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_api_config_layout_20260618-173714`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-B2Oxjze4.js`
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a UI ergonomics increment for the API management platform. It reduces horizontal scrolling when viewing or editing long endpoints and proxy URLs.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 API Provider Health Cache Invalidation Increment
+
+### Changes
+
+- Added provider health cache deletion helpers in `deploy/services/api_provider_health_monitor.py`.
+- Updated `deploy/services/api_config_service.py` so API config create/update/delete invalidates cached provider health for affected providers.
+- Updated `deploy/services/api_config_import_service.py` so preset import invalidates provider health cache for all providers it creates or updates.
+- Updated `deploy/admin_routes.py` so manual runtime reload clears cached health for the full provider catalog and returns `health_cache_invalidated`.
+- Updated contract scripts to cover health cache invalidation:
+  - `deploy/scripts/check_admin_api_config_crud.py`
+  - `deploy/scripts/check_admin_api_config_import.py`
+  - `deploy/scripts/check_provider_health_monitor.py`
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_crud.py`
+  - `scripts/check_admin_api_config_import.py`
+  - `scripts/check_provider_health_monitor.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_api_config_runtime_loader.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_health_cache_invalidation_20260618-174415`
+- Server checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_crud.py`
+  - `scripts/check_admin_api_config_import.py`
+  - `scripts/check_provider_health_monitor.py`
+  - `scripts/check_api_config_runtime_loader.py`
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `228` paths / `284` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Live endpoint check passed:
+  - `POST /api/admin/api-configs/reload-env`
+  - HTTP `200`
+  - response included `health_cache_invalidated` with `12` providers
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This prevents stale green/red status badges after changing an API key or endpoint in the admin API management platform.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Failover Diagnostics Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` runtime diagnostics:
+  - added typed failover/fallback metadata from backend runtime status
+  - translated failover reasons such as `missing_key` and `health_error` into Chinese
+  - shows inactive fallback chains as `备用链路`
+  - shows active fallback selection as `已切换备用` with selected provider/model and reason
+- Added `health_cache_invalidated` to the reload-env response type used by the admin UI.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - local `tsc --noEmit` still has unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported
+  - local Vite build remains blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_failover_diagnostics_20260618-175153`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-CLajXhE6.js`
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This makes the provider registry failover behavior visible in the API management UI before swapping providers or moving traffic to self-hosted APIs.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Config Row Test Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so each API config row now has two distinct checks:
+  - `测运行时`: calls `GET /api/admin/api-configs/{provider}/health` and reports provider runtime health.
+  - `测配置`: calls `POST /api/admin/api-configs/{config_id}/test` and reports the saved row's direct endpoint/key validation result.
+- Added per-row display for config test status, HTTP status, checked time, tested endpoint label, and error message.
+- Clear stale row test result after save, toggle, or delete operations for that API config.
+
+### Verification
+
+- Local checks:
+  - `git diff --check` passed for `deploy/new_html/admin/AdminSettingsPage.tsx`
+  - local `tsc --noEmit` still has unrelated pre-existing project errors; no `AdminSettingsPage.tsx` errors were reported
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_config_row_test_20260618-175628`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-WeZPlu5O.js`
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Live endpoint check passed:
+  - `GET /api/admin/api-configs` -> HTTP `200`, `17` configs returned
+  - `POST /api/admin/api-configs/apicfg_b87253712b90/test` -> HTTP `200`, response included `checked_at`
+  - sampled config currently reports `No API key configured`, which is handled by the UI warning branch
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This separates "provider runtime health" from "this exact saved config row works", making the API management page easier to diagnose.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin API Config Batch Test Increment
+
+### Changes
+
+- Added `POST /api/admin/api-configs/test-all` to batch-test saved API config rows without returning API keys.
+- Added `test_all_saved_api_config_health()` and `summarize_config_test_results()` in `deploy/services/api_config_service.py`.
+- Added a `测全部配置` button to `deploy/new_html/admin/AdminSettingsPage.tsx`.
+  - The existing provider sweep still checks runtime/provider health.
+  - The new button checks each saved config row and writes results back into the cards.
+- Updated `deploy/scripts/check_route_contract.py` for the intentional route increase:
+  - `229` OpenAPI paths
+  - `285` OpenAPI operations
+- Extended `deploy/scripts/check_admin_api_config_health.py` with batch summary contract coverage.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_health.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `git diff --check` for touched files
+- Local frontend TypeScript check could not run because this Windows shell has no `npm` on PATH; server build was used as the frontend gate.
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_config_batch_test_20260618-181020`
+- Server checks passed:
+  - `py_compile` for touched Python files and scripts
+  - `scripts/check_admin_api_config_health.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-CRfEcQry.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Live endpoint check passed:
+  - `POST /api/admin/api-configs/test-all` with one selected config id
+  - HTTP `200`
+  - summary returned `total=1`, `no_key=1`
+  - row result included `checked_at`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- First external health probe immediately after restart briefly returned `502`; local backend was already healthy on `127.0.0.1:6006`, and a retry returned external HTTP `200` with smoke `9/9`.
+- This makes provider replacement safer because the admin can now test exact saved rows in bulk, not only the effective runtime provider.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Cluster API Runtime Summary Increment
+
+### Changes
+
+- Updated `deploy/cluster_main.py` startup behavior:
+  - removed legacy module-level caching of provider API key env vars such as `DEEPSEEK_API_KEY`, `ARK_API_KEY`, `GEMINI_TEXT_API_KEY`, `GEMINI_IMAGE_API_KEY`, `GPT_IMAGE_API_KEY`, and `SORA2_GPT_IMAGE_API_KEY`
+  - removed import-time "missing key" warnings that ran before DB-backed API configs were loaded
+  - added resolver-backed startup summary after `load_api_configs_to_env()`
+- Updated `deploy/scripts/check_provider_contract.py`:
+  - added `cluster_main_env_cache_checks`
+  - contract now fails if `cluster_main.py` directly reads managed provider API key/endpoint/proxy env vars instead of using the runtime loader/resolver path
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `deploy/cluster_main.py` and `deploy/scripts/check_provider_contract.py`
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `git diff --check` for touched files
+  - direct grep found no legacy provider API key env reads in `cluster_main.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_cluster_provider_runtime_summary_20260618-182020`
+- Server checks passed:
+  - `py_compile` for touched files
+  - `scripts/check_provider_contract.py`
+  - `scripts/check_route_contract.py` -> `229` paths / `285` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Runtime log evidence:
+  - `logs/backend.log` and `logs/cluster.log` include `API provider runtime summary: total=17 ready=15 missing_key=2 incomplete=0`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This removes another legacy source of misleading API configuration state. Startup no longer reports provider keys as missing before DB configs have had a chance to load into runtime env.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin Runtime Diagnostics Refresh Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so provider health actions refresh runtime diagnostics without showing the full-page loading state.
+- `loadConfigs()` now accepts `{ showLoading: false }` for silent refreshes.
+- After `测运行时` and provider `测试全部`/health sweep:
+  - provider health cache updates as before
+  - the page immediately reloads `runtime_status`
+  - failover/备用链路 diagnostics no longer require a manual refresh to become accurate
+
+### Verification
+
+- Local checks passed:
+  - `git diff --check` for `deploy/new_html/admin/AdminSettingsPage.tsx`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_runtime_refresh_after_health_20260618-183045`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-C52CLYf4.js`
+- Server source check:
+  - confirmed `loadConfigs({ showLoading: false })` exists after single provider health and provider health sweep
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This keeps the API management UI honest after health checks: health status and failover diagnostics now update together.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Admin Import Clears Config Tests Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so `导入预设` clears all cached per-row config test results before reloading API configs.
+- This prevents stale `No API key configured` or previous error results from staying visible after preset import copies runtime env keys or updates existing empty-key rows.
+
+### Verification
+
+- Local checks passed:
+  - `git diff --check` for `deploy/new_html/admin/AdminSettingsPage.tsx`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_import_clear_config_tests_20260618-184020`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-DkYU5_78.js`
+- Server source check:
+  - confirmed `setConfigTestMap({})` in the preset import callback
+- Server checks passed:
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This keeps the admin API config page from showing stale direct-config test results after a batch import/update.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Route Contract API Config Test Coverage Increment
+
+### Changes
+
+- Updated `deploy/scripts/check_route_contract.py` so the route contract explicitly pins the API config direct-test endpoints:
+  - `POST /api/admin/api-configs/{config_id}/test` -> `admin_routes.admin_test_api_config`
+  - `POST /api/admin/api-configs/test-all` -> `admin_routes.admin_test_all_api_configs`
+- No route count change: expected contract remains `229` OpenAPI paths and `285` operations.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - result: `Route contract OK`, `openapi_paths=229`, `openapi_operations=285`
+  - `git diff --check` for `deploy/scripts/check_route_contract.py`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, or `deploy/workflows`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_route_contract_api_config_tests_20260619-023207`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - result: `Route contract OK`, `openapi_paths=229`, `openapi_operations=285`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This prevents future router refactors from accidentally dropping either direct API config test endpoint.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+## 2026-06-19 Provider Fallback Env Key-Only Increment
+
+### Changes
+
+- Updated `deploy/services/api_provider_runtime.py` so `fallback_env` only borrows API key material.
+- Endpoint/proxy resolution now remains provider-scoped:
+  - `SEEDANCE_ENDPOINT`, `SEEDANCE_PROXY_MODE`, `SEEDANCE_CUSTOM_PROXY` for Seedance
+  - `VEO_ENDPOINT`, `VEO_PROXY_MODE`, `VEO_CUSTOM_PROXY` for Veo
+  - fallback key envs such as `ARK_API_KEY` or `SORA2_API_KEY` no longer cause `ARK_ENDPOINT` / `SORA2_ENDPOINT` / proxy settings to be inherited by the requesting provider
+- Added provider contract coverage in `deploy/scripts/check_provider_contract.py`:
+  - Seedance can borrow `ARK_API_KEY` but must keep its own preset video endpoint
+  - Veo can borrow `SORA2_API_KEY` but must keep its own preset endpoint
+  - fallback envs must not borrow custom proxy settings from the fallback provider
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/services/api_provider_runtime.py deploy/scripts/check_provider_contract.py`
+  - `python deploy/scripts/check_provider_contract.py`
+  - result includes `fallback_env_key_only_checks=2`
+  - `python deploy/scripts/check_api_config_runtime_loader.py`
+  - `python deploy/scripts/check_ai_proxy_failover.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_provider_fallback_key_only_20260619-023727`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile services/api_provider_runtime.py scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `fallback_env_key_only_checks=2`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_ai_proxy_failover.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This closes the generic version of the earlier Gemini fallback bug: shared/fallback credentials no longer drag another provider's endpoint into the active provider.
+- This is especially important for Seedance because `ARK_ENDPOINT` may point at the Doubao image-generation API while Seedance video must use the contents/generation task endpoint.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 External API Endpoint Registry-Only Increment
+
+### Changes
+
+- Removed duplicated third-party default endpoint literals from runtime clients under `deploy/external_api/`:
+  - `external_api/video/minimax.py`
+  - `external_api/audio/minimax_audio.py`
+  - `external_api/video/sora2.py`
+  - `external_api/video/veo.py`
+  - `external_api/video/seedance.py`
+  - `external_api/video/dashscope.py`
+  - `external_api/video/wan2.py`
+- These clients now rely on `resolve_provider()` for endpoint defaults. `resolve_provider()` reads admin DB-projected env first, then registry presets.
+- DashScope/Wan2 URL derivation now starts from the configured endpoint:
+  - full `/services/aigc/video-generation/video-synthesis` endpoint is used directly
+  - `/api/v1` endpoint appends the video synthesis path
+  - `/compatible-mode/v1` endpoint derives the same host's `/api/v1` root
+- Added provider contract coverage in `deploy/scripts/check_provider_contract.py`:
+  - `external_api/` runtime code must not contain non-docstring third-party endpoint URL literals
+  - current result: `external_endpoint_literal_checks=10`
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile` for all touched external API clients and `scripts/check_provider_contract.py`
+  - `python deploy/scripts/check_provider_contract.py`
+  - result includes `external_endpoint_literal_checks=10`
+  - `python deploy/scripts/check_api_config_runtime_loader.py`
+  - `python deploy/scripts/check_ai_proxy_failover.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_external_api_endpoint_registry_only_20260619-024550`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `external_endpoint_literal_checks=10`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_ai_proxy_failover.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This makes the registry/admin configuration the single runtime source for third-party endpoint defaults in `external_api/`.
+- Future provider swaps to self-hosted endpoints should not require editing these clients if the admin config/registry preset is updated.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 API Config Single Active Provider Increment
+
+### Changes
+
+- Updated `deploy/services/api_config_service.py` so API config CRUD enforces one active keyed runtime config per provider.
+- When a config becomes enabled and has a key, the service automatically disables other enabled keyed rows with the same provider.
+- Write responses now include:
+  - `disabled_conflicting_config_ids`
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so save/toggle toast messages mention when same-provider conflicts were automatically disabled.
+- Updated `deploy/scripts/check_admin_api_config_crud.py` to contract-test both create and update conflict disabling.
+
+### Why
+
+- Runtime env has one key/endpoint slot per provider.
+- Before this change, multiple enabled keyed rows for one provider could appear active in the admin UI, but only one row actually won when projected to env.
+- The admin UI already diagnosed this as `db_multiple_keyed_enabled_configs`; this change prevents new conflicts from being introduced through CRUD.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/services/api_config_service.py deploy/scripts/check_admin_api_config_crud.py`
+  - `python deploy/scripts/check_admin_api_config_crud.py`
+  - result includes `same_provider_conflict_disabled=1`
+  - `python deploy/scripts/check_provider_contract.py`
+  - `python deploy/scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Local frontend build note:
+  - local PowerShell has no global `npm`
+  - direct Vite invocation failed because local `node_modules` is missing Rollup's Windows optional package `@rollup/rollup-win32-x64-msvc`
+  - server build is the authoritative frontend build for this deployment and passed
+- Redline check passed:
+  - no diff under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_config_single_active_provider_20260619-025347`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile services/api_config_service.py scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_crud.py`
+  - result includes `same_provider_conflict_disabled=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `229` OpenAPI paths and `285` operations
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-J6euWVkz.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- Existing historical duplicate enabled keyed rows are still reported by runtime diagnostics; CRUD now prevents adding or re-enabling a new conflict.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Admin/API Config Quality Fix Increment
+
+### Changes
+
+- Fixed five admin update handlers in `deploy/admin_routes.py` to use `body.model_dump(exclude_unset=True)` so explicit `False`, `0`, and `None` updates are preserved.
+- Fixed `normalize_provider_health_map()` in `deploy/services/api_provider_runtime.py` so mixed health payload maps only skip non-dict entries instead of dropping every provider health row.
+- Removed shared `GEMINI_API_KEY` fallback from `gemini-text` and `gemini-image` in `deploy/services/api_provider_registry.py`; these providers now require their own keys and no longer inherit a Gemini TTS endpoint.
+- Made `deploy/services/api_config_runtime_loader.py` build a complete env projection first, then atomically reset/write env only after decrypt/projection succeeds.
+- Added public `ApiConfigDAO.decrypt_key()` in `deploy/dao/admin/api_config.py` and switched runtime loading away from direct private `_decrypt_key()` calls.
+- Moved duplicated `_config_get()` helper to `deploy/utils/config_helpers.py`.
+- Updated API config write responses to expose `env_refreshed` and added backend repair support for historical duplicate enabled keyed provider rows:
+  - `POST /api/admin/api-configs/repair-conflicts`
+  - dry-run mode returns `would_disable`
+  - real run disables older duplicate rows and preserves the current runtime winner
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile ...`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_crud.py`
+  - result includes `historical_conflict_repair=1` and `provider_health_invalidations=4`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_contract.py`
+  - result includes `health_map_checks=1` and `fallback_env_key_only_checks=2`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - route contract is now `230` OpenAPI paths and `286` operations because of the new repair endpoint
+  - `python deploy/scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_quality_fixes_20260618-190348`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract: `230` OpenAPI paths and `286` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No frontend files were changed in this increment, so no frontend rebuild was required.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 API Config Conflict Repair UI Increment
+
+### Changes
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` to expose the backend historical conflict repair endpoint in the native API config page.
+- Added a `修复冲突` toolbar action beside provider health/testing controls.
+- The action first calls:
+  - `POST /api/admin/api-configs/repair-conflicts` with `{"dry_run": true}`
+- If no duplicate enabled keyed provider configs are found, it shows a no-op success message.
+- If conflicts are found, it opens a CRM confirm dialog showing:
+  - number of affected providers
+  - number of old duplicate configs that will be disabled
+  - that the current runtime winner will be preserved
+- On confirmation it calls the same endpoint with `{"dry_run": false}`, clears stale config test badges, refreshes the list, and reports whether env refresh succeeded.
+
+### Verification
+
+- Local checks passed:
+  - `git diff --check -- deploy/new_html/admin/AdminSettingsPage.tsx`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+- Local frontend build note:
+  - local Vite build is still blocked by Rollup's missing Windows optional package `@rollup/rollup-win32-x64-msvc`
+  - server build remains the authoritative frontend build for this project
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_api_conflict_repair_ui_20260618-191029`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - built admin settings chunk: `AdminSettingsPage-BFI2DBeS.js`
+- Server runtime checks passed:
+  - `https://mecha.one/health` -> HTTP `200`
+  - `https://mecha.one/admin?item=apiconfig` -> HTTP `200`
+  - `POST /api/admin/api-configs/repair-conflicts {"dry_run": true}` -> HTTP `200`, no current conflicts
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This was frontend-only plus static build output, so no service restart was required.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 DashScope Endpoint Helper Increment
+
+### Changes
+
+- Added `deploy/services/api_provider_endpoints.py` as the shared home for provider-specific endpoint URL derivation.
+- Moved DashScope video endpoint derivation out of individual clients into:
+  - `derive_dashscope_video_urls(endpoint)`
+- Updated both clients to use the shared helper:
+  - `deploy/external_api/video/dashscope.py`
+  - `deploy/external_api/video/wan2.py`
+- Supported admin-configured DashScope endpoint shapes now remain consistent across both clients:
+  - `.../compatible-mode/v1`
+  - `.../api/v1`
+  - full `.../api/v1/services/aigc/video-generation/video-synthesis`
+  - self-hosted roots following the same task URL contract
+- Updated `deploy/scripts/check_provider_contract.py` to prevent reintroducing duplicate DashScope URL derivation inside external clients.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile services/api_provider_endpoints.py external_api/video/dashscope.py external_api/video/wan2.py scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_provider_contract.py`
+  - result includes `endpoint_helper_checks=4`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - `PYTHONIOENCODING=utf-8 python -m pytest tests/test_dashscope_video_payload_extension.py tests/test_dashscope_wiring_e2e.py -q`
+  - result: `8 passed`
+  - `python scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_dashscope_endpoint_helper_20260618-191635`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `endpoint_helper_checks=4`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python -m pytest tests/test_dashscope_video_payload_extension.py tests/test_dashscope_wiring_e2e.py -q`
+  - result: `8 passed`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This reduces drift between DashScope shared video and Wan2.6 clients while preserving the same runtime behavior.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Provider Health Endpoint Helper Increment
+
+### Changes
+
+- Extended `deploy/services/api_provider_endpoints.py` with shared health-check URL helpers:
+  - `dedupe_urls(urls)`
+  - `derive_models_health_urls(endpoint, provider)`
+- Updated `deploy/services/api_config_health_service.py` so admin provider health checks reuse the shared endpoint helper instead of maintaining local `/models` derivation rules.
+- Kept the old `models_url_from_endpoint()` function as a compatibility wrapper around the shared helper.
+- Added health URL derivation coverage in `deploy/scripts/check_admin_api_config_health.py` for:
+  - DeepSeek/base endpoints
+  - OpenAI-compatible `chat/completions`
+  - Ark image generation endpoint
+  - Seedance task endpoint
+  - self-hosted OpenAI-compatible roots
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile services/api_provider_endpoints.py services/api_config_health_service.py scripts/check_admin_api_config_health.py scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_admin_api_config_health.py`
+  - result includes `derived_health_url_cases=5`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - `python scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_health_endpoint_helper_20260618-192247`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile ...`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_health.py`
+  - result includes `derived_health_url_cases=5`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- Provider endpoint shape handling now lives in one helper module for both runtime clients and admin health checks.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Cluster Main AI Proxy Decoupling Increment
+
+### Changes
+
+- Updated `deploy/cluster_main.py` so `/api/generate/multi-grid-storyboard` no longer calls `resolve_provider()` or builds Gemini HTTP requests directly.
+- The route now reuses `services.ai_proxy_service.generate_gemini_images()`, keeping provider resolution, endpoint selection, proxy config, and upstream request handling in the AI proxy service layer.
+- Updated saved metadata for multi-grid storyboard output to record the actual resolved Gemini image model plus `feature=gemini-multi-grid`.
+- Updated `deploy/services/ai_proxy_service.py` module comment to reflect the current router/service split.
+- Updated `deploy/scripts/check_provider_contract.py` with a `cluster_main_resolver_checks` guard so `cluster_main.py` cannot reintroduce direct provider runtime resolver calls.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile cluster_main.py services/ai_proxy_service.py scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_provider_contract.py`
+  - result includes `cluster_main_resolver_checks=1`
+  - `PYTHONIOENCODING=utf-8 python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - `python scripts/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_cluster_main_ai_proxy_decouple_20260618-192922`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py services/ai_proxy_service.py scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `cluster_main_resolver_checks=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- `cluster_main.py` no longer directly calls provider runtime resolvers; provider HTTP details are centralized in service/router layers.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Admin API Config Routes Split Increment
+
+### Changes
+
+- Added `deploy/admin_api_config_routes.py` to own the admin API provider configuration route set.
+- Moved 12 `/api/admin/api-configs*` handlers out of `deploy/admin_routes.py`; the public paths and handler names remain unchanged.
+- Kept compatibility exports in `admin_routes.py` for legacy scripts/tests that import API config body models or handler functions from the old module.
+- Updated `deploy/scripts/check_route_contract.py` so the expected API config endpoints now resolve to `admin_api_config_routes`, and added a guard preventing `/api-configs` route decorators from returning to `admin_routes.py`.
+- Updated `deploy/scripts/check_admin_api_config_import.py` to verify the import-presets HTTP body default in `admin_api_config_routes.py`.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/admin_routes.py deploy/admin_api_config_routes.py deploy/scripts/check_route_contract.py deploy/scripts/check_admin_api_config_import.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - result includes `admin_api_config_route_handlers=12`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_import.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_api_config_routes_split_20260619-100405`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile admin_routes.py admin_api_config_routes.py scripts/check_route_contract.py scripts/check_admin_api_config_import.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `230` OpenAPI paths and `286` operations
+  - result includes `admin_api_config_route_handlers=12`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_import.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is an MVC cleanup increment only; it does not change provider resolution behavior or API key semantics.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 Provider Health Cache Endpoint Increment
+
+### Changes
+
+- Added `GET /api/admin/api-configs/health/cache` in `deploy/admin_api_config_routes.py`.
+- The new endpoint is admin-authenticated, read-only, and returns cached provider health rows from Redis without calling external providers.
+- Added `summarize_provider_health_results()` in `deploy/services/api_provider_health_monitor.py` so manual sweeps and cache reads share the same summary fields: `total`, `ok`, `error`, `no_key`, `unknown`.
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` with a lightweight "刷新状态" action that refreshes health indicators from the cache endpoint without reloading the full API config list.
+- Fixed the API config toolbar's `loadConfigs` click handler to avoid passing the click event as loader options.
+- Updated `deploy/scripts/check_route_contract.py` for the new public API surface:
+  - OpenAPI paths: `231`
+  - OpenAPI operations: `287`
+  - admin API config handlers: `13`
+- Extended `deploy/scripts/check_provider_health_monitor.py` to call the new admin health cache handler with fake Redis and verify summary/settings output.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/admin_api_config_routes.py deploy/services/api_provider_health_monitor.py deploy/scripts/check_route_contract.py deploy/scripts/check_provider_health_monitor.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - result: `openapi_paths=231`, `openapi_operations=287`, `admin_api_config_route_handlers=13`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_health_monitor.py`
+  - result includes `admin_health_cache_endpoint=1`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_crud.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_import.py`
+- Local frontend build note:
+  - `vite build` could not be used as local proof because the Windows node_modules install is missing Rollup's optional package `@rollup/rollup-win32-x64-msvc`.
+  - `tsc --noEmit` still reports unrelated existing project-wide type errors; after the local fix, it reports no `AdminSettingsPage.tsx` errors.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_provider_health_cache_endpoint_20260619-101334`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile admin_api_config_routes.py services/api_provider_health_monitor.py scripts/check_route_contract.py scripts/check_provider_health_monitor.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - result: `openapi_paths=231`, `openapi_operations=287`, `admin_api_config_route_handlers=13`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_health_monitor.py`
+  - result includes `admin_health_cache_endpoint=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_admin_api_config_health.py`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - server build emitted `dist/assets/AdminSettingsPage-BJG9uMJv.js`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Smoke and endpoint checks passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+  - `GET https://mecha.one/api/admin/api-configs/health/cache` with admin token -> HTTP `200`
+  - response includes `success=True`, summary keys `error/no_key/ok/total/unknown`, monitor settings keys, and `provider_health_count=12`
+
+### Notes
+
+- This improves the API management platform's status refresh path and reduces unnecessary full config reloads in the admin UI.
+- No external provider calls are made by the new cache endpoint.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.
+
+## 2026-06-19 AI Proxy Failover Helper Increment
+
+### Changes
+
+- Added reusable failover helpers in `deploy/services/ai_proxy_service.py`:
+  - `provider_health_scope_for_failover(provider)`
+  - `resolve_ai_proxy_provider(provider, model)`
+- The helper derives health-cache scope from the registry fallback chain instead of hardcoding provider pairs in each handler.
+- Updated `generate_gemini_text()` to use `resolve_ai_proxy_provider("gemini-text", model)` while preserving existing Gemini-text-to-DeepSeek behavior.
+- Updated `deploy/scripts/check_ai_proxy_failover.py` to verify:
+  - failover health scope is derived from the registry (`gemini-text` -> `deepseek`)
+  - Gemini text still falls back to DeepSeek when Gemini is unhealthy/missing key
+  - Gemini text stays on primary when Gemini is healthy
+- Updated `deploy/scripts/check_provider_contract.py` so static runtime wiring recognizes `resolve_ai_proxy_provider()` as a provider resolver entrypoint.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/services/ai_proxy_service.py deploy/scripts/check_ai_proxy_failover.py deploy/scripts/check_provider_contract.py`
+  - `git diff --check ...`
+  - redline diff check: no modified files under `deploy/pipeline`, `deploy/agent_routes.py`, `deploy/workflows`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_contract.py`
+  - result includes `resolve_provider_references=19`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_ai_proxy_failover.py`
+  - result includes `failover_health_scope_from_registry=1`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_route_contract.py`
+  - route contract remains `231` OpenAPI paths and `287` operations
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_admin_api_config_health.py`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/check_provider_health_monitor.py`
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_ai_proxy_failover_helper_20260619-102313`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile services/ai_proxy_service.py scripts/check_ai_proxy_failover.py scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_provider_contract.py`
+  - result includes `resolve_provider_references=19`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_ai_proxy_failover.py`
+  - result includes `failover_health_scope_from_registry=1`
+  - `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/check_route_contract.py`
+  - route contract remains `231` OpenAPI paths and `287` operations
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- This is a service-layer refactor only; it does not change public API routes, request payloads, response payloads, or provider registry data.
+- Future compatible provider substitutions can now share one health-aware resolver path instead of duplicating failover logic per handler.
+- No files under `pipeline/`, `agent_routes.py`, `workflows/*.json`, `services/task_service.py`, `core/task_queue.py`, or `core/worker.py` were modified.

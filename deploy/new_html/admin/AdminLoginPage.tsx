@@ -104,7 +104,7 @@ export const AdminLoginPage: React.FC = () => {
                     <div className="inline-flex items-center justify-center w-14 h-14 rounded-md bg-primary-light border border-primary/40 mb-3 shadow-card">
                         <ShieldCheck className="w-7 h-7 text-primary" />
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-n800">MESSIAH · ADMIN</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-n800">MECHA · ADMIN</h1>
                     <p className="text-xs text-n100 mt-1.5 tracking-wider uppercase"
                        style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
                         Restricted · Authentication Required

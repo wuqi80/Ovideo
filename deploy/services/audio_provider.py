@@ -8,6 +8,8 @@ import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+from services.api_provider_runtime import resolve_provider
+
 logger = logging.getLogger(__name__)
 
 AUDIO_UPLOAD_DIR = os.getenv("AUDIO_UPLOAD_DIR", "persistent_storage/audio")
@@ -35,7 +37,12 @@ class GeminiAudioProvider(AudioProvider):
     """Gemini API 音频实现"""
 
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY", "")
+        self.api_key = ""
+        self._refresh_runtime_config()
+
+    def _refresh_runtime_config(self) -> None:
+        config = resolve_provider("gemini-tts", "gemini-2.0-flash")
+        self.api_key = config.api_key
 
     async def _call_gemini(self, prompt: str, audio_type: str = 'speech') -> Dict[str, Any]:
         """调用 Gemini TTS 朗读文本（仅配音/语音）。
@@ -44,10 +51,11 @@ class GeminiAudioProvider(AudioProvider):
         只能"朗读文本"，不能生成音效或音乐。因此只有 generate_speech 调用它；
         音效/音乐请走 MiniMax（见 MinimaxAudioProvider）。
         """
+        self._refresh_runtime_config()
         if not self.api_key:
             raise RuntimeError(
                 "GEMINI_API_KEY 未配置：请在管理员后台 → API 配置 中添加 provider=gemini-tts 的密钥，"
-                "或在后端 .env 设置 GEMINI_API_KEY 后重启服务。"
+                "保存后会实时刷新；如仍未生效，请在后台点击“刷新运行时”。"
             )
         try:
             from google import genai
@@ -133,8 +141,12 @@ class MinimaxAudioProvider(AudioProvider):
     """
 
     def __init__(self):
+        pass
+
+    @staticmethod
+    def _client():
         from minimax_audio import get_minimax_audio_client
-        self.client = get_minimax_audio_client()
+        return get_minimax_audio_client()
 
     async def generate_speech(
         self, text: str, persona: str = 'narrator', emotion: str = 'neutral',
@@ -147,7 +159,7 @@ class MinimaxAudioProvider(AudioProvider):
         speed = kwargs.get('speed', 1.0)
         pitch = kwargs.get('pitch', 0)
 
-        return await self.client.tts_sync(
+        return await self._client().tts_sync(
             text=text,
             voice_id=voice_id,
             speed=speed,
@@ -160,7 +172,7 @@ class MinimaxAudioProvider(AudioProvider):
         # 后端是 music_generate（music-01）。这里把音效描述当作生成提示丢给它，
         # 是当前可用的最接近方案——产出的是一段音频而非严格意义的音效片段，
         # 质量/贴合度有限。若后续接入专门 SFX 模型，应在此替换。
-        result = await self.client.music_generate(
+        result = await self._client().music_generate(
             lyrics=description,
             refer_voice=kwargs.get('refer_voice', ''),
             refer_instrumental=kwargs.get('refer_instrumental', ''),
@@ -176,7 +188,7 @@ class MinimaxAudioProvider(AudioProvider):
         lyrics = kwargs.get('lyrics', description)
         refer_voice = kwargs.get('refer_voice', '')
         refer_instrumental = kwargs.get('refer_instrumental', '')
-        result = await self.client.music_generate(
+        result = await self._client().music_generate(
             lyrics=lyrics,
             refer_voice=refer_voice,
             refer_instrumental=refer_instrumental,

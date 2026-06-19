@@ -129,6 +129,7 @@ function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; tim
 // 给视频 URL 追加 #t=0.1 媒体片段，强制浏览器渲染首帧作为静态封面
 // （否则 <video preload="metadata"> 在未 hover 播放前可能是黑屏）。
 const withFirstFrame = (u: string): string => (!u || u.includes('#')) ? u : `${u}#t=0.1`;
+const VIDEO_GROUP_PAGE_SIZE = 10;
 
 // 懒加载视频：分镜多时若所有 <video> 都立即 preload，会同时发几百个请求导致卡顿。
 // 仅当滚动进入视口附近(±300px)才设置 src 并 preload，未进入时 preload="none" 不发请求。
@@ -420,6 +421,44 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const sortedTaskGroups = useMemo(() => {
         return taskGroups.map((group, originalIndex) => ({ group, originalIndex }));
     }, [taskGroups]);
+    const [visibleGroupCount, setVisibleGroupCount] = useState(VIDEO_GROUP_PAGE_SIZE);
+    const visibleTaskGroups = useMemo(
+        () => sortedTaskGroups.slice(0, visibleGroupCount),
+        [sortedTaskGroups, visibleGroupCount],
+    );
+
+    useEffect(() => {
+        setVisibleGroupCount(VIDEO_GROUP_PAGE_SIZE);
+        leftPanelRef.current?.scrollTo({ top: 0 });
+        rightPanelRef.current?.scrollTo({ top: 0 });
+    }, [sessionScope]);
+
+    const renderMoreGroupsControls = () => {
+        if (sortedTaskGroups.length <= VIDEO_GROUP_PAGE_SIZE) return null;
+        const remaining = Math.max(0, sortedTaskGroups.length - visibleGroupCount);
+        return (
+            <div className="space-y-2 py-2">
+                {remaining > 0 && (
+                    <button
+                        type="button"
+                        onClick={() => setVisibleGroupCount(c => Math.min(c + VIDEO_GROUP_PAGE_SIZE, sortedTaskGroups.length))}
+                        className="w-full py-2 text-xs font-medium text-primary bg-primary-light/50 hover:bg-primary-light rounded-lg border border-primary/20 transition-colors"
+                    >
+                        展开更多（还有 {remaining} 个视频任务）
+                    </button>
+                )}
+                {visibleGroupCount > VIDEO_GROUP_PAGE_SIZE && (
+                    <button
+                        type="button"
+                        onClick={() => setVisibleGroupCount(VIDEO_GROUP_PAGE_SIZE)}
+                        className="w-full py-1.5 text-[11px] text-n300 hover:text-n800 hover:bg-n20 rounded-lg transition-colors"
+                    >
+                        收起（只看前 {VIDEO_GROUP_PAGE_SIZE} 个）
+                    </button>
+                )}
+            </div>
+        );
+    };
     
     // ==================== 滚动同步 ====================
     
@@ -2544,8 +2583,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 >
                     {isPair && img2 ? (
                         <div className="flex h-full">
-                            <img src={img1.url} className="w-1/2 h-full object-cover" />
-                            <img src={img2.url} className="w-1/2 h-full object-cover" />
+                            <img src={img1.url} loading="lazy" decoding="async" alt="" className="w-1/2 h-full object-cover" />
+                            <img src={img2.url} loading="lazy" decoding="async" alt="" className="w-1/2 h-full object-cover" />
                         </div>
                     ) : img1.isPlaceholder || !img1.url ? (
                         // Task 6：列表视图占位缩略图
@@ -2553,7 +2592,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <ImageOff size={14} />
                         </div>
                     ) : (
-                        <img src={img1.url} className="w-full h-full object-cover" />
+                        <img src={img1.url} loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" />
                     )}
                     {img1.isUploading && (
                         <div className="absolute inset-0 bg-n900/60 flex flex-col items-center justify-center">
@@ -2831,7 +2870,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
                                 onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
                             >
-                                <img src={img1.url} className={`w-full ${previewHeight} object-contain bg-n900/50`} />
+                                <img src={img1.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
                                 <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">Start</div>
                             </div>
                             <ArrowRight className="w-4 h-4 text-n100" />
@@ -2839,7 +2878,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
                                 onClick={() => { setLightboxUrl(img2.url); setLightboxType('image'); }}
                             >
-                                <img src={img2.url} className={`w-full ${previewHeight} object-contain bg-n900/50`} />
+                                <img src={img2.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
                                 <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">End</div>
                             </div>
                         </>
@@ -2865,7 +2904,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             className="relative w-full bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in group/img"
                             onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
                         >
-                            <img src={img1.url} className={`w-full ${previewHeight} object-contain bg-n900/50`} />
+                            <img src={img1.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
                             {/* 2026-05-25 #5：右上角"清空图"按钮——hover 时显示，点击后整卡退回空镜 */}
                             {!img1.isUploading && (
                                 <button
@@ -3126,7 +3165,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }
             return (
                 <div className={`w-full ${idleHeight} bg-n800 rounded border border-n40 overflow-hidden opacity-60 grayscale`}>
-                    <img src={idleImg.url} className="w-full h-full object-contain" alt="" />
+                    <img src={idleImg.url} loading="lazy" decoding="async" className="w-full h-full object-contain" alt="" />
                 </div>
             );
         };
@@ -3563,7 +3602,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }
     
     return (
-        <div className="flex-1 flex flex-col bg-n20 text-n800 overflow-hidden">
+        <div className="layout-safe flex-1 flex flex-col bg-n20 text-n800 overflow-hidden">
             {/* Toast消息 */}
             {toast && (
                 <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 bg-n0 border border-n40 text-n800 rounded-lg shadow-bottom">
@@ -3572,8 +3611,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             )}
             
             {/* 工具栏 - 固定52px高度 */}
-            <div className="h-[52px] flex-shrink-0 px-4 border-b border-n40 bg-n30 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <div className="responsive-toolbar flex-shrink-0 px-4 border-b border-n40 bg-n30 flex items-center justify-between">
+                <div className="toolbar-group">
                     {/* 上传按钮组 */}
                     <button
                         onClick={() => fileInputRef.current?.click()}
@@ -3641,7 +3680,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     )}
                 </div>
                 
-                <div className="flex items-center gap-2">
+                <div className="toolbar-actions">
                     {/* 选择和批量操作 */}
                     <button
                         onClick={selectAll}
@@ -3696,14 +3735,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             {viewMode === 'list' ? (
                 /* 列表视图 - 双栏 */
                 <div 
-                    className="flex-1 flex overflow-hidden"
+                    className="responsive-split flex-1 flex overflow-hidden"
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                 >
                     {/* 左侧列表 - 隐藏滚动条 */}
                     <div 
                         ref={leftPanelRef}
-                        className="w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
+                        className="responsive-pane w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                     >
                         {sortedTaskGroups.length === 0 ? (
@@ -3712,13 +3751,16 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 <p className="text-sm">拖拽图片或 Ctrl+V 粘贴</p>
                             </div>
                         ) : (
-                            sortedTaskGroups.map(({ group, originalIndex }) => renderListViewCard(group, originalIndex))
+                            <>
+                                {visibleTaskGroups.map(({ group, originalIndex }) => renderListViewCard(group, originalIndex))}
+                                {renderMoreGroupsControls()}
+                            </>
                         )}
                     </div>
                     {/* 右侧列表 - 显示滚动条 */}
                     <div 
                         ref={rightPanelRef}
-                        className="w-1/2 p-4 overflow-y-auto scrollbar-thin"
+                        className="responsive-pane w-1/2 p-4 overflow-y-auto scrollbar-thin"
                     >
                         {sortedTaskGroups.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-n100">
@@ -3726,21 +3768,24 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 <p className="text-sm">等待任务配置...</p>
                             </div>
                         ) : (
-                            sortedTaskGroups.map(({ group, originalIndex }) => renderListResultCard(group, originalIndex))
+                            <>
+                                {visibleTaskGroups.map(({ group, originalIndex }) => renderListResultCard(group, originalIndex))}
+                                {renderMoreGroupsControls()}
+                            </>
                         )}
                     </div>
                 </div>
             ) : (
                 /* 卡片视图 - 双栏同步滚动 */
                 <div 
-                    className="flex-1 flex overflow-hidden"
+                    className="responsive-split flex-1 flex overflow-hidden"
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                 >
                     {/* 左侧：分镜板 - 隐藏滚动条 */}
                     <div 
                         ref={leftPanelRef}
-                        className="w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
+                        className="responsive-pane w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                     >
                         {sortedTaskGroups.length === 0 ? (
@@ -3753,7 +3798,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 {/* 2026-05-25 (Task B2)：最顶部"+ 插入空卡"按钮（insertIndex = -1 = 插到列表最前） */}
                                 <InsertEmptyCardButton onClick={() => insertEmptyTaskGroup(-1)} />
 
-                                {sortedTaskGroups.map(({ group, originalIndex }, displayIndex) => (
+                                {visibleTaskGroups.map(({ group, originalIndex }, displayIndex) => (
                                     <React.Fragment key={group.uuid}>
                                         {renderStoryboardCard(group, originalIndex)}
                                         
@@ -3778,6 +3823,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                         <InsertEmptyCardButton onClick={() => insertEmptyTaskGroup(originalIndex)} />
                                     </React.Fragment>
                                 ))}
+                                {renderMoreGroupsControls()}
                             </>
                         )}
                     </div>
@@ -3785,7 +3831,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 右侧：结果队列 - 显示滚动条 */}
                     <div 
                         ref={rightPanelRef}
-                        className="w-1/2 p-4 overflow-y-auto scrollbar-thin"
+                        className="responsive-pane w-1/2 p-4 overflow-y-auto scrollbar-thin"
                     >
                         {sortedTaskGroups.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-n100">
@@ -3797,7 +3843,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 {/* 2026-05-25 hotfix：与左侧顶部 InsertEmptyCardButton 对齐的占位 spacer */}
                                 <InsertEmptyCardSpacer />
 
-                                {sortedTaskGroups.map(({ group, originalIndex }, displayIndex) => (
+                                {visibleTaskGroups.map(({ group, originalIndex }, displayIndex) => (
                                     <React.Fragment key={group.uuid}>
                                         {renderResultCard(group, originalIndex)}
                                         
@@ -3812,6 +3858,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                         <InsertEmptyCardSpacer />
                                     </React.Fragment>
                                 ))}
+                                {renderMoreGroupsControls()}
                             </>
                         )}
                     </div>
@@ -3894,7 +3941,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                             }}
                                             className="relative aspect-video rounded border border-n40 hover:border-primary overflow-hidden bg-n800"
                                         >
-                                            <img src={img.url} className="w-full h-full object-cover" />
+                                            <img src={img.url} loading="lazy" decoding="async" alt="" className="w-full h-full object-cover" />
                                             <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-n900/60 text-[9px] text-n700 truncate">
                                                 {img.filename || img.id}
                                             </div>
@@ -3938,6 +3985,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     ) : (
                         <img
                             src={lightboxUrl}
+                            decoding="async"
+                            alt=""
                             className="max-w-[90vw] max-h-[90vh] object-contain"
                             onClick={(e) => e.stopPropagation()}
                         />

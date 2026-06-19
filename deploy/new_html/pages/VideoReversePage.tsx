@@ -172,8 +172,8 @@ export const VideoReversePage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-n20 text-n800">
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
+    <div className="layout-safe flex flex-col h-screen bg-n20 text-n800">
+      <div className="responsive-toolbar flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
         <button onClick={() => navigate(`/projects/${projectId}/episodes`)} className="text-sm text-n300 hover:text-n800">
           ← 返回项目
         </button>
@@ -182,7 +182,7 @@ export const VideoReversePage: React.FC = () => {
           视频反推提示词
         </div>
         <div className="text-xs text-n100">项目 {projectId}</div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="toolbar-actions ml-auto">
           <button onClick={reload} className="p-2 rounded bg-n0 hover:bg-n20">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -211,9 +211,9 @@ export const VideoReversePage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="responsive-split flex flex-1 overflow-hidden">
         {/* 左侧：历史任务 */}
-        <aside className="w-72 border-r border-n40 bg-n0 overflow-auto">
+        <aside className="responsive-pane w-72 border-r border-n40 bg-n0 overflow-auto">
           <div className="px-3 py-2 text-xs text-n100 border-b border-n40">
             历史任务 {tasks.length}
           </div>
@@ -250,7 +250,7 @@ export const VideoReversePage: React.FC = () => {
         </aside>
 
         {/* 主区：详情 */}
-        <main className="flex-1 overflow-auto">
+        <main className="responsive-pane flex-1 overflow-auto">
           {!selectedTask ? (
             <div className="text-center text-sm text-n100 py-24">
               选择一个任务以查看详情
@@ -295,7 +295,7 @@ const TaskDetail: React.FC<{
 
   return (
     <div className="p-5 space-y-4">
-      <div className="flex items-start gap-4">
+      <div className="stack-on-narrow flex items-start gap-4">
         <div className="w-72 shrink-0 rounded overflow-hidden bg-n0 border border-n40">
           {task.video_file_url
             ? <video src={task.video_file_url} controls className="w-full" />

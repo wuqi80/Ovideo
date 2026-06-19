@@ -199,6 +199,17 @@ export interface VoiceDrawerProps {
   open?: boolean;
 }
 
+type CloneDraft = {
+  fileId: string;
+  filename: string;
+  size: number;
+  lastModified: number;
+  voiceId: string;
+  audioUrl: string;
+};
+
+const CLONE_PREVIEW_TEXT = '\u4f60\u597d\uff0c\u8fd9\u662f\u4e00\u6bb5\u6d4b\u8bd5\u8bed\u97f3\u3002';
+
 export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
   roleName, role, projectId, onClose, onSaved, open = true,
 }) => {
@@ -230,6 +241,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
   const [savedCloneMeta, setSavedCloneMeta] = useState<{ file_id?: string; filename?: string }>(() => ({
     file_id: existingParams.file_id, filename: existingParams.original_filename,
   }));
+  const [cloneDraft, setCloneDraft] = useState<CloneDraft | null>(null);
 
   const [designSetting, setDesignSetting] = useState<VoiceDesignSetting>(
     (existingParams.setting as VoiceDesignSetting) || {
@@ -304,6 +316,68 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
     }
   }, [currentInputKey]);
 
+  const handleCloneFileChange = useCallback((file: File | null) => {
+    setCloneFile(file);
+    setCloneDraft(null);
+    if (file) {
+      setPreviewUrl('');
+      setPreviewIsPersisted(false);
+    }
+  }, []);
+
+  const generateClonePreview = useCallback(async (): Promise<CloneDraft | null> => {
+    if (!cloneFile) {
+      alert('请选择要克隆的音频文件');
+      return null;
+    }
+
+    const canReuseDraft = cloneDraft
+      && cloneDraft.filename === cloneFile.name
+      && cloneDraft.size === cloneFile.size
+      && cloneDraft.lastModified === cloneFile.lastModified;
+    if (canReuseDraft) {
+      if (cloneDraft.audioUrl) {
+        setPreviewUrl(cloneDraft.audioUrl);
+        setPreviewIsPersisted(true);
+      }
+      return cloneDraft;
+    }
+
+    const uploadRes = await minimaxFileUpload(cloneFile, 'voice_clone');
+    const fileId = uploadRes.file_id;
+    if (!fileId) {
+      throw new Error('MiniMax 上传成功但未返回 file_id');
+    }
+
+    const cloneRes = await minimaxVoiceClone(fileId, undefined, CLONE_PREVIEW_TEXT, roleName);
+    const voiceId = cloneRes.voice_id || '';
+    if (!voiceId) {
+      throw new Error('MiniMax 声音克隆成功但未返回 voice_id');
+    }
+
+    const cloneAudio = cloneRes.audio_url ? resolveUrl(cloneRes.audio_url)
+      : cloneRes.demo_audio ? resolveUrl(cloneRes.demo_audio)
+      : '';
+    if (!cloneAudio) {
+      throw new Error('MiniMax 声音克隆成功但未返回试听音频');
+    }
+
+    const draft: CloneDraft = {
+      fileId,
+      filename: cloneFile.name,
+      size: cloneFile.size,
+      lastModified: cloneFile.lastModified,
+      voiceId,
+      audioUrl: cloneAudio,
+    };
+
+    setCloneDraft(draft);
+    setVoicePreview(makeCloneKey(fileId), { voiceId, audioUrl: cloneAudio });
+    setPreviewUrl(cloneAudio);
+    setPreviewIsPersisted(true);
+    return draft;
+  }, [cloneFile, cloneDraft, roleName]);
+
   // 没有 stale 概念了——cache 命中=立即还原；不命中=audio 清空。previewIsStale 删除。
 
   const handlePreview = useCallback(async () => {
@@ -361,10 +435,14 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
           setPreviewIsPersisted(true);
         }
       } else if (voiceSource === 'clone') {
-        // clone 试听本应在 handleSave 上传后才产生；如果已经保存过且 sample_audio_url 在，
-        // previewUrl 已是该 URL，无需重新合成
-        if (!previewUrl) {
-          alert('请先选择并保存克隆音频，再试听');
+        if (!cloneFile && previewUrl) {
+          setPreviewIsPersisted(true);
+          return;
+        }
+        const draft = await generateClonePreview();
+        if (draft?.audioUrl) {
+          setPreviewUrl(draft.audioUrl);
+          setPreviewIsPersisted(true);
         }
       }
     } catch (e: any) {
@@ -387,7 +465,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
         previewAbortRef.current = null;
       }
     }
-  }, [voiceSource, designText, designSetting, systemVoiceId, designKey, systemKey, previewUrl, role]);
+  }, [voiceSource, designText, designSetting, systemVoiceId, designKey, systemKey, previewUrl, role, cloneFile, generateClonePreview]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -401,13 +479,12 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
 
       if (voiceSource === 'clone') {
         if (cloneFile) {
-          const uploadRes = await minimaxFileUpload(cloneFile, 'voice_clone');
-          const fileId = uploadRes.file_id;
-          const cloneRes = await minimaxVoiceClone(fileId, undefined, '你好，这是一段测试语音。', roleName);
-          modelId = cloneRes.voice_id || '';
+          const draft = await generateClonePreview();
+          if (!draft) return;
+          const fileId = draft.fileId;
+          modelId = draft.voiceId;
           voiceName = `${roleName}-克隆`;
-          const cloneAudio = cloneRes.audio_url ? resolveUrl(cloneRes.audio_url)
-            : cloneRes.demo_audio || '';
+          const cloneAudio = draft.audioUrl;
           sampleUrl = cloneAudio || sampleUrl;
           params = {
             source: 'clone',
@@ -416,7 +493,6 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
             cloned_voice_id: modelId,
           };
           if (cloneAudio) {
-            setVoicePreview(makeCloneKey(fileId), { voiceId: modelId, audioUrl: cloneAudio });
             setPreviewUrl(cloneAudio);
             setPreviewIsPersisted(true);
           }
@@ -506,7 +582,7 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
     }
   }, [
     roleName, voiceSource, systemVoiceId, cloneFile, designSetting, designText,
-    previewUrl, role, projectId, onSaved, onClose, designKey, systemKey, existingParams,
+    previewUrl, role, projectId, onSaved, onClose, designKey, systemKey, existingParams, generateClonePreview,
   ]);
 
   const handleDeleteVoice = useCallback(async (voiceId: string) => {
@@ -611,9 +687,9 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
                 {cloneFile ? cloneFile.name : '选择文件'}
                 <input
                   type="file"
-                  accept="audio/*"
+                  accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/wav,audio/x-wav,audio/x-m4a"
                   className="hidden"
-                  onChange={e => setCloneFile(e.target.files?.[0] || null)}
+                  onChange={e => handleCloneFileChange(e.target.files?.[0] || null)}
                 />
               </label>
               {cloneFile && (
@@ -723,15 +799,15 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={handlePreview}
-              disabled={previewLoading}
+              disabled={previewLoading || saving}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-n0 border border-n40 text-xs text-n700 hover:bg-n20 transition-all disabled:opacity-50"
             >
               {previewLoading ? <Loader size={13} className="animate-spin" /> : <Play size={13} />}
-              {previewUrl && previewIsPersisted ? '重新生成' : '试听'}
+              {voiceSource === 'clone' ? (cloneFile && !previewUrl ? '生成试听' : '试听') : previewUrl && previewIsPersisted ? '重新生成' : '试听'}
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || previewLoading}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold transition-all disabled:opacity-50 shadow-lg shadow-primary/20"
             >
               {saving ? <Loader size={13} className="animate-spin" /> : <Save size={13} />}

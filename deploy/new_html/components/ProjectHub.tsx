@@ -208,14 +208,14 @@ const ProjectHub: React.FC = () => {
     // refactor/v2 (P1 旗舰)：项目中心整体换肤为 Atlassian 企业级浅色。
     // 逻辑/状态/handler 全部不变，仅替换样式（暗 gray/purple → 浅 n色阶/primary）。
     return (
-        <div className="h-screen bg-n20 text-n800 flex flex-col" onClick={() => setContextMenu(null)}>
+        <div className="layout-safe h-screen bg-n20 text-n800 flex flex-col" onClick={() => setContextMenu(null)}>
             {/* 顶部栏 */}
-            <header className="h-14 bg-n0 border-b border-n40 shadow-card flex items-center px-6 justify-between flex-shrink-0">
-                <div className="flex items-center gap-3">
+            <header className="responsive-toolbar bg-n0 border-b border-n40 shadow-card flex items-center px-6 justify-between flex-shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
                     <FolderOpen className="w-5 h-5 text-primary" />
                     <h1 className="text-lg font-semibold text-n800">项目管理</h1>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                     <span className="text-sm text-n300">
                         {localStorage.getItem('username') || ''}
                     </span>
@@ -233,7 +233,7 @@ const ProjectHub: React.FC = () => {
             </header>
 
             {/* 工具栏 */}
-            <div className="px-6 py-4 flex items-center gap-4 border-b border-n40 bg-n0">
+            <div className="responsive-toolbar px-6 py-4 flex items-center gap-4 border-b border-n40 bg-n0">
                 <button
                     onClick={() => setShowCreateModal(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium transition-colors shadow-card"
@@ -241,7 +241,7 @@ const ProjectHub: React.FC = () => {
                     <Plus className="w-4 h-4" /> 新建项目
                 </button>
 
-                <div className="flex-1 relative max-w-md">
+                <div className="flex-1 relative max-w-md min-w-[220px]">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-n100" />
                     <input
                         type="text"
@@ -252,7 +252,7 @@ const ProjectHub: React.FC = () => {
                     />
                 </div>
 
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm min-w-0">
                     <span className="text-n200">排序:</span>
                     <select
                         value={sortBy}
@@ -277,7 +277,7 @@ const ProjectHub: React.FC = () => {
             </div>
 
             {/* 项目列表 */}
-            <div className="flex-1 overflow-auto p-6 scrollbar-atlas">
+            <div className="layout-safe flex-1 overflow-auto p-6 scrollbar-atlas">
                 {loading ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {[1, 2, 3, 4].map(i => (

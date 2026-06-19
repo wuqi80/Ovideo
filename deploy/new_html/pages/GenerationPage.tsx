@@ -287,7 +287,7 @@ export const GenerationPage: React.FC = () => {
 
       {error && <div className="px-5 py-3 text-danger text-sm">{error}</div>}
 
-      <div className="flex-1 grid grid-cols-[minmax(280px,340px)_1fr] grid-rows-[1fr_minmax(160px,220px)] gap-3 p-3 min-h-0">
+      <div className="video-workbench-grid flex-1 grid grid-cols-[minmax(280px,340px)_1fr] grid-rows-[1fr_minmax(160px,220px)] gap-3 p-3 min-h-0">
         {/* Left: storyboard list */}
         <aside className="row-span-1 bg-n0 rounded-md border border-n40 shadow-card flex flex-col min-h-0 overflow-hidden">
           <div className="px-4 py-3 border-b border-n40 text-sm font-semibold flex items-center gap-2">

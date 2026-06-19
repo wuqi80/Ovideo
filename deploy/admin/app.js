@@ -4,6 +4,292 @@
 
 let currentPage = 'dashboard';
 let dashboardInterval = null;
+let apiProviderCatalog = [];
+let apiProviderMap = new Map();
+let apiProviderStatusMap = new Map();
+let apiProviderRuntimeStatusList = [];
+let apiProviderRuntimeStatusMap = new Map();
+let apiProviderHealthMap = new Map();
+let apiProviderCatalogPromise = null;
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+}
+
+function normalizeProviderId(provider) {
+  return String(provider || '').trim().toLowerCase();
+}
+
+function getApiProviderMeta(provider) {
+  return apiProviderMap.get(normalizeProviderId(provider)) || null;
+}
+
+function hydrateApiProviderCatalog(items) {
+  if (!Array.isArray(items)) return;
+  apiProviderCatalog = items;
+  apiProviderMap = new Map(apiProviderCatalog.map(item => [
+    normalizeProviderId(item.provider),
+    item,
+  ]));
+  ensureApiProviderOptions();
+}
+
+function hydrateApiProviderStatus(items) {
+  if (!Array.isArray(items)) return;
+  apiProviderStatusMap = new Map(items.map(item => [
+    normalizeProviderId(item.provider),
+    item,
+  ]));
+}
+
+function getApiProviderStatus(provider) {
+  return apiProviderStatusMap.get(normalizeProviderId(provider)) || null;
+}
+
+function providerRuntimeKey(provider, modelName = '') {
+  return `${normalizeProviderId(provider)}::${String(modelName || '').trim()}`;
+}
+
+function hydrateApiProviderRuntimeStatus(items) {
+  if (!Array.isArray(items)) return;
+  apiProviderRuntimeStatusList = items;
+  apiProviderRuntimeStatusMap = new Map(items.map(item => [
+    providerRuntimeKey(item.provider, item.model_name),
+    item,
+  ]));
+}
+
+function getApiProviderRuntimeStatus(provider, modelName = '') {
+  const exact = apiProviderRuntimeStatusMap.get(providerRuntimeKey(provider, modelName));
+  if (exact) return exact;
+  const normalized = normalizeProviderId(provider);
+  return apiProviderRuntimeStatusList.find(item => normalizeProviderId(item.provider) === normalized) || null;
+}
+
+function getApiProviderHealth(provider) {
+  return apiProviderHealthMap.get(normalizeProviderId(provider)) || null;
+}
+
+function hydrateApiProviderHealth(items) {
+  if (!Array.isArray(items)) return;
+  apiProviderHealthMap = new Map(items.map(item => [
+    normalizeProviderId(item.provider),
+    item,
+  ]));
+}
+
+function ensureApiProviderOptions() {
+  const select = document.getElementById('api-provider');
+  if (!select || !apiProviderCatalog.length) return;
+
+  const existing = new Set(Array.from(select.options).map(opt => opt.value));
+  apiProviderCatalog.forEach(item => {
+    const provider = item.provider || '';
+    if (!provider || existing.has(provider)) return;
+
+    const opt = document.createElement('option');
+    opt.value = provider;
+    opt.textContent = `${item.label || provider} (${provider})`;
+    select.appendChild(opt);
+    existing.add(provider);
+  });
+}
+
+async function fetchApiProviderMeta(force = false) {
+  if (!force && apiProviderCatalog.length) return apiProviderCatalog;
+
+  if (!apiProviderCatalogPromise || force) {
+    apiProviderCatalogPromise = apiCall('/api/admin/api-configs/presets')
+      .then(data => {
+        hydrateApiProviderCatalog(data.providers || []);
+        return apiProviderCatalog;
+      })
+      .catch(() => {
+        apiProviderCatalog = [];
+        apiProviderMap = new Map();
+        return [];
+      })
+      .finally(() => { apiProviderCatalogPromise = null; });
+  }
+
+  return apiProviderCatalogPromise;
+}
+
+function providerStatusView(status) {
+  const key = status?.status || 'unknown';
+  const map = {
+    ready: { label: 'ready', badge: 'badge-green' },
+    missing_key: { label: 'missing key', badge: 'badge-yellow' },
+    disabled: { label: 'disabled', badge: 'badge-gray' },
+    not_imported: { label: 'not imported', badge: 'badge-gray' },
+    unknown: { label: 'unknown', badge: 'badge-gray' },
+  };
+  return map[key] || map.unknown;
+}
+
+function renderProviderStatusBadge(status) {
+  if (!status) return '';
+  const view = providerStatusView(status);
+  return `<span class="badge ${view.badge}" style="font-size:10px">provider ${view.label}</span>`;
+}
+
+function renderProviderStatusSummary(statuses) {
+  if (!Array.isArray(statuses) || !statuses.length) return '';
+  const ready = statuses.filter(s => s.status === 'ready').length;
+  const missing = statuses.filter(s => s.status === 'missing_key').length;
+  const disabled = statuses.filter(s => s.status === 'disabled').length;
+  const notImported = statuses.filter(s => s.status === 'not_imported').length;
+  return `
+    <span class="flex items-center gap-2"><span class="dot dot-green" style="width:6px;height:6px"></span> providers ready ${ready}</span>
+    ${missing > 0 ? `<span class="flex items-center gap-2"><span class="dot dot-gray" style="width:6px;height:6px"></span> missing ${missing}</span>` : ''}
+    ${disabled > 0 ? `<span class="flex items-center gap-2"><span class="dot dot-gray" style="width:6px;height:6px"></span> disabled ${disabled}</span>` : ''}
+    ${notImported > 0 ? `<span class="flex items-center gap-2"><span class="dot dot-gray" style="width:6px;height:6px"></span> not imported ${notImported}</span>` : ''}
+  `;
+}
+
+function runtimeStatusView(status) {
+  const key = status?.status || 'unknown';
+  const map = {
+    ready: { label: 'runtime ready', badge: 'badge-green' },
+    missing_key: { label: 'runtime missing key', badge: 'badge-yellow' },
+    incomplete: { label: 'runtime incomplete', badge: 'badge-yellow' },
+    unknown: { label: 'runtime unknown', badge: 'badge-gray' },
+  };
+  return map[key] || map.unknown;
+}
+
+function renderRuntimeStatusBadge(status) {
+  if (!status) return '';
+  const view = runtimeStatusView(status);
+  return `<span class="badge ${view.badge}" style="font-size:10px">${view.label}</span>`;
+}
+
+function renderRuntimeStatusSummary(statuses) {
+  if (!Array.isArray(statuses) || !statuses.length) return '';
+  const ready = statuses.filter(s => s.ready).length;
+  return `<span class="flex items-center gap-2"><span class="dot dot-green" style="width:6px;height:6px"></span> runtime ready ${ready}/${statuses.length}</span>`;
+}
+
+function renderRuntimeMetaLine(status) {
+  if (!status) return '';
+  const endpoint = status.endpoint
+    ? status.endpoint.replace(/^https?:\/\//, '').slice(0, 42)
+    : '-';
+  const keySource = status.has_key ? (status.api_key_source || status.api_key_env || 'env') : 'missing';
+  const endpointSource = status.endpoint_source || 'missing';
+  const proxy = status.proxy_mode || 'direct';
+  const runtimeSource = status.runtime_source || 'missing';
+  const dbConfig = status.db_effective_config_name || status.db_effective_config_id || '';
+  const dbCount = Number(status.db_keyed_enabled_config_count || 0);
+  const failover = status.failover || {};
+  const failoverActive = !!status.failover_active;
+  const failoverText = failoverActive
+    ? ` | failover: ${status.failover_selected_provider || '-'} (${status.failover_reason || 'selected'})`
+    : (Array.isArray(status.fallback) && status.fallback.length
+      ? ` | fallback: ${status.fallback.map(f => f.provider).filter(Boolean).join(', ') || '-'}`
+      : '');
+  const dbSource = dbConfig
+    ? ` | db config: ${dbConfig}${dbCount > 1 ? ` (+${dbCount - 1})` : ''}`
+    : '';
+  const issues = Array.isArray(status.issues) && status.issues.length
+    ? ` | issues: ${status.issues.join(', ')}`
+    : '';
+  return `
+    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">
+      runtime key: <span class="mono">${escapeHtml(keySource)}</span>
+      | endpoint: <span class="mono">${escapeHtml(endpoint)}</span>
+      (<span class="mono">${escapeHtml(endpointSource)}</span>)
+      | proxy: <span class="mono">${escapeHtml(proxy)}</span>
+      | source: <span class="mono">${escapeHtml(runtimeSource)}</span>${escapeHtml(dbSource)}${escapeHtml(failoverText)}${escapeHtml(issues)}
+    </div>`;
+}
+
+function providerHealthView(health, runtimeStatus) {
+  if (health) {
+    const key = health.status || 'unknown';
+    const map = {
+      ok: { label: '健康正常', badge: 'badge-green', dot: 'dot-green' },
+      error: { label: '健康异常', badge: 'badge-red', dot: 'dot-red' },
+      no_key: { label: '未配置 Key', badge: 'badge-gray', dot: 'dot-gray' },
+      unknown: { label: '未知', badge: 'badge-gray', dot: 'dot-gray' },
+    };
+    return map[key] || map.unknown;
+  }
+  if (runtimeStatus && runtimeStatus.has_key === false) {
+    return { label: '未配置 Key', badge: 'badge-gray', dot: 'dot-gray' };
+  }
+  return { label: '未检测', badge: 'badge-gray', dot: 'dot-gray' };
+}
+
+function renderProviderHealthBadge(provider, runtimeStatus) {
+  const health = getApiProviderHealth(provider);
+  const view = providerHealthView(health, runtimeStatus);
+  return `
+    <span class="badge ${view.badge}" style="font-size:10px">
+      <span class="dot ${view.dot}" style="width:6px;height:6px;margin-right:4px"></span>${view.label}
+    </span>`;
+}
+
+function renderProviderHealthLine(provider, runtimeStatus) {
+  const health = getApiProviderHealth(provider);
+  const view = providerHealthView(health, runtimeStatus);
+  const latency = Number.isFinite(Number(health?.latency_ms)) ? `${Number(health.latency_ms)}ms` : '-';
+  const checkedAt = health?.checked_at ? String(health.checked_at).replace('T', ' ').replace('Z', '') : '-';
+  const detail = health?.health || {};
+  const url = detail.url ? String(detail.url).replace(/^https?:\/\//, '').slice(0, 42) : '-';
+  const error = detail.error ? ` | error: ${String(detail.error).slice(0, 90)}` : '';
+  return `
+    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">
+      provider health: <span class="mono">${escapeHtml(view.label)}</span>
+      | latency: <span class="mono">${escapeHtml(latency)}</span>
+      | checked: <span class="mono">${escapeHtml(checkedAt)}</span>
+      | url: <span class="mono">${escapeHtml(url)}</span>${escapeHtml(error)}
+    </div>`;
+}
+
+function renderProviderMetaLine(config) {
+  const provider = normalizeProviderId(config.provider);
+  const meta = getApiProviderMeta(provider);
+  const status = getApiProviderStatus(provider);
+  const parts = [];
+
+  if (meta?.vendor) {
+    parts.push(`<span>vendor: <span class="mono">${escapeHtml(meta.vendor)}</span></span>`);
+  }
+  if (meta?.env_key) {
+    parts.push(`<span>key: <span class="mono">${escapeHtml(meta.env_key)}</span></span>`);
+  }
+  if (meta?.endpoint_env_key) {
+    parts.push(`<span>endpoint: <span class="mono">${escapeHtml(meta.endpoint_env_key)}</span></span>`);
+  }
+  const fallbackEnv = Array.isArray(meta?.fallback_env) ? meta.fallback_env.filter(Boolean) : [];
+  if (fallbackEnv.length) {
+    parts.push(`<span>fallback env: <span class="mono">${escapeHtml(fallbackEnv.join(', '))}</span></span>`);
+  }
+  const fallbackProviders = Array.isArray(meta?.fallback) ? meta.fallback.map(f => f?.provider).filter(Boolean) : [];
+  if (fallbackProviders.length) {
+    parts.push(`<span>fallback provider: <span class="mono">${escapeHtml(fallbackProviders.join(', '))}</span></span>`);
+  }
+  const capabilities = Array.isArray(meta?.capabilities) ? meta.capabilities.filter(Boolean) : [];
+  if (capabilities.length) {
+    parts.push(`<span>cap: <span class="mono">${escapeHtml(capabilities.join(', '))}</span></span>`);
+  }
+  if (!meta && provider) {
+    parts.push(`<span>provider: <span class="mono">${escapeHtml(provider)}</span></span>`);
+  }
+  const issueList = Array.isArray(status?.issues) ? status.issues.filter(Boolean) : [];
+  if (issueList.length) {
+    parts.push(`<span>issues: <span class="mono">${escapeHtml(issueList.join(', '))}</span></span>`);
+  }
+
+  return parts.length ? `<div class="api-detail">${parts.join('')}</div>` : '';
+}
 
 const CATEGORY_META = {
   text:   { label: '文本 / 推理',  icon: '📝', badge: 'badge-blue' },
@@ -489,18 +775,29 @@ async function deleteWorkflow(id) {
    ══════════════════════════════════════════════════ */
 
 async function fetchApiConfigs() {
-  const data = await apiCall('/api/admin/api-configs');
+  const [data] = await Promise.all([
+    apiCall('/api/admin/api-configs'),
+    fetchApiProviderMeta(),
+  ]);
   const allConfigs = data.api_configs || data.configs || [];
   const configs = allConfigs.filter(c => c.provider !== 'comfyui');
+  hydrateApiProviderCatalog(data.providers || apiProviderCatalog);
+  hydrateApiProviderStatus(data.provider_status || []);
+  hydrateApiProviderRuntimeStatus(data.runtime_status || []);
+  hydrateApiProviderHealth(data.provider_health || []);
 
-  const configured = configs.filter(c => c.api_key_encrypted && c.api_key_encrypted !== '' && c.api_key_encrypted !== '***').length;
+  const configured = configs.filter(c => c.api_key_encrypted && c.api_key_encrypted !== '').length;
   const needKey = configs.filter(c => !c.api_key_encrypted || c.api_key_encrypted === '').length;
+  const providerStatuses = data.provider_status || [];
+  const runtimeStatuses = data.runtime_status || [];
 
   document.getElementById('config-summary').innerHTML = configs.length > 0 ? `
     <div class="flex items-center gap-3" style="font-size:12px;color:var(--text-2)">
       <span>共 <b style="color:var(--text-0)">${configs.length}</b> 个外部 API</span>
       <span class="flex items-center gap-2"><span class="dot dot-green" style="width:6px;height:6px"></span> 已配置 ${configured}</span>
       ${needKey > 0 ? `<span class="flex items-center gap-2"><span class="dot dot-gray" style="width:6px;height:6px"></span> 待填 Key ${needKey}</span>` : ''}
+      ${renderProviderStatusSummary(providerStatuses)}
+      ${renderRuntimeStatusSummary(runtimeStatuses)}
     </div>
   ` : '';
 
@@ -585,6 +882,12 @@ function renderApiCard(c) {
   const proxyLabel = c.proxy_mode === 'direct' ? '直连' : c.proxy_mode === 'agent' ? 'Agent' : c.proxy_mode || 'direct';
   const proxyBadge = c.proxy_mode === 'direct' ? 'badge-blue' : 'badge-purple';
   const provider = (c.provider || '').toLowerCase();
+  const meta = getApiProviderMeta(provider);
+  const providerStatus = getApiProviderStatus(provider);
+  const runtimeStatus = getApiProviderRuntimeStatus(provider, c.model_name || '');
+  const metaLine = renderProviderMetaLine(c);
+  const runtimeLine = renderRuntimeMetaLine(runtimeStatus);
+  const providerHealthLine = renderProviderHealthLine(provider, runtimeStatus);
   const usageHints = {
     'minimax': '此密钥同时驱动：Hailuo 视频生成 + 配音页 voice-design / voice-clone（共用 MINIMAX_API_KEY）',
     'gemini-tts': '配音页"系统音色"试听使用此密钥（GEMINI_API_KEY）',
@@ -599,26 +902,33 @@ function renderApiCard(c) {
     'laozhang-gpt-image': '分镜页 GPT Image 2 系列（天劫一阶 gpt-image-2-vip）+ 化神 Gemini，使用 laozhang【默认分组】Token（GPT_IMAGE_API_KEY）',
     'laozhang-sora2': '分镜页 GPT Image 2 官方混合（天劫二阶 gpt-image-2），使用 laozhang【Sora2Official 分组】Token（SORA2_GPT_IMAGE_API_KEY）',
   };
-  const hint = usageHints[provider] || '';
+  const hint = meta?.notes || usageHints[provider] || '';
 
   return `
     <div class="api-card">
       <div class="api-status ${hasKey ? 'ok' : 'pending'}"></div>
       <div class="api-info">
         <div class="api-name">
-          ${c.name}
+          ${escapeHtml(c.name)}
           ${!c.enabled ? '<span class="badge badge-red" style="margin-left:6px">禁用</span>' : ''}
         </div>
         <div class="api-detail">
           <span class="badge ${proxyBadge}" style="font-size:10px">${proxyLabel}</span>
-          <span class="mono">${c.model_name || '-'}</span>
-          <span class="mono" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.endpoint ? c.endpoint.replace(/^https?:\/\//, '').slice(0, 36) : '-'}</span>
+          ${renderProviderStatusBadge(providerStatus)}
+          ${renderRuntimeStatusBadge(runtimeStatus)}
+          ${renderProviderHealthBadge(provider, runtimeStatus)}
+          <span class="mono">${escapeHtml(c.model_name || '-')}</span>
+          <span class="mono">${escapeHtml(c.endpoint ? c.endpoint.replace(/^https?:\/\//, '').slice(0, 56) : '-')}</span>
           ${!hasKey ? '<span style="color:var(--warning);font-weight:600">需要填入 Key</span>' : ''}
         </div>
-        ${hint ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">${hint}</div>` : ''}
+        ${metaLine}
+        ${runtimeLine}
+        ${providerHealthLine}
+        ${hint ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.4">${escapeHtml(hint)}</div>` : ''}
       </div>
       <div class="api-actions">
-        <button class="btn btn-ghost btn-xs" onclick="testApiConfig('${c.config_id}')" title="测试">测试</button>
+        <button class="btn btn-ghost btn-xs" onclick="testApiConfig('${c.config_id}')" title="健康检查">健康</button>
+        <button class="btn btn-ghost btn-xs" onclick="testProviderHealth('${provider}')" title="测试当前 provider 的运行时 key/endpoint">运行时</button>
         <button class="btn btn-ghost btn-xs" onclick="toggleApiConfig('${c.config_id}', ${!c.enabled})" title="${c.enabled ? '禁用此配置（生产路径将不再加载它的 Key）' : '启用此配置（reload 后 module 变量立即生效）'}">${c.enabled ? '禁用' : '启用'}</button>
         <button class="btn btn-ghost btn-xs" onclick="editApiConfig('${c.config_id}')">编辑</button>
         <button class="btn btn-danger btn-xs" onclick="deleteApiConfig('${c.config_id}')">删除</button>
@@ -635,10 +945,55 @@ async function importApiPresets() {
   } catch (_) {}
 }
 
+async function importRuntimeEnvKeys() {
+  if (!confirm('将当前服务进程环境变量中的 API Key 加密写入数据库，并启用对应配置。继续？')) return;
+  showToast('正在从运行时环境导入 Key...', 'info');
+  try {
+    const preview = await apiCall('/api/admin/api-configs/import-presets', {
+      method: 'POST',
+      body: JSON.stringify({
+        copy_runtime_env_keys: true,
+        update_existing_empty_keys: true,
+        enable_copied_keys: true,
+        dry_run: true,
+      }),
+    });
+    const message = [
+      '预览结果：',
+      `新增配置：${preview.imported || 0}`,
+      `更新空 Key 配置：${preview.updated_existing || 0}`,
+      `将写入 Key：${preview.env_keys_imported || 0}`,
+      `已有/复用 Key：${preview.env_keys_existing || 0}`,
+      `跳过重复 provider：${preview.env_keys_skipped_provider_claimed || 0}`,
+      `缺失运行时 Key：${preview.env_keys_missing || 0}`,
+      '',
+      '确认执行写入？',
+    ].join('\n');
+    if (!confirm(message)) {
+      showToast('已取消运行时 Key 导入', 'info');
+      return;
+    }
+    const data = await apiCall('/api/admin/api-configs/import-presets', {
+      method: 'POST',
+      body: JSON.stringify({
+        copy_runtime_env_keys: true,
+        update_existing_empty_keys: true,
+        enable_copied_keys: true,
+      }),
+    });
+    showToast(
+      `运行时 Key 导入完成: 新增 ${data.imported || 0}, 更新 ${data.updated_existing || 0}, 写入 Key ${data.env_keys_imported || 0}, 已有/复用 ${data.env_keys_existing || 0}, 跳过重复 ${data.env_keys_skipped_provider_claimed || 0}, 缺失 ${data.env_keys_missing || 0}`,
+      'success'
+    );
+    fetchApiConfigs();
+  } catch (_) {}
+}
+
 function openApiConfigModal(config = null) {
   document.getElementById('api-modal-title').textContent = config ? '编辑 API' : '添加 API';
   document.getElementById('api-id').value = config?.config_id || '';
   document.getElementById('api-name').value = config?.name || '';
+  ensureApiProviderOptions();
   // 防御：若存量 provider 不在下拉选项里（如历史漏配的 seedance），select 会静默回退成
   // "自定义"(value="")，一旦保存就把 provider 抹成空 → load_api_configs_to_env 跳过该条 →
   // 对应 *_API_KEY 永不注入（典型：Seedance 改走 ARK_API_KEY 兜底）。这里动态补一个 option
@@ -715,11 +1070,38 @@ async function saveApiConfig() {
 }
 
 async function testApiConfig(id) {
-  showToast('正在测试连接...', 'info');
+  showToast('正在执行健康检查...', 'info');
   try {
     const data = await apiCall(`/api/admin/api-configs/${id}/test`, { method: 'POST' });
-    if (data.success && data.test?.ok) showToast(`连接成功 (HTTP ${data.test.status_code})`, 'success');
-    else showToast(`连接失败: ${data.test?.error || '未知错误'}`, 'error');
+    const t = data.test || {};
+    if (data.success && t.ok) {
+      showToast(`健康检查通过 (HTTP ${t.status_code})`, 'success');
+    } else if (t.reachable && t.auth_ok === false) {
+      showToast(`认证失败: ${t.error || `HTTP ${t.status_code}`}`, 'error');
+    } else if (t.reachable) {
+      showToast(`端点可达但校验未通过: ${t.error || `HTTP ${t.status_code}`}`, 'warn');
+    } else {
+      showToast(`健康检查失败: ${t.error || '未知错误'}`, 'error');
+    }
+  } catch (_) {}
+}
+
+async function testProviderHealth(provider) {
+  const normalized = normalizeProviderId(provider);
+  if (!normalized) return;
+  showToast(`正在测试 provider: ${normalized}`, 'info');
+  try {
+    const data = await apiCall(`/api/admin/api-configs/${encodeURIComponent(normalized)}/health`);
+    apiProviderHealthMap.set(normalized, data);
+    if (data.status === 'ok') {
+      showToast(`provider ${normalized} 正常 (${data.latency_ms}ms)`, 'success');
+    } else if (data.status === 'no_key') {
+      showToast(`provider ${normalized} 未配置 Key`, 'warn');
+    } else {
+      const detail = data.health || {};
+      showToast(`provider ${normalized} 异常: ${detail.error || data.status || 'unknown'}`, 'error');
+    }
+    fetchApiConfigs();
   } catch (_) {}
 }
 

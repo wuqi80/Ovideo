@@ -176,6 +176,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                 <img
                   src={currentImageClip.imageUrl}
                   alt={currentImageClip.label}
+                  loading="lazy"
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -263,7 +264,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                           title={`${clip.label} (${fmtTime(clip.durationMs)})`}
                         >
                           {clip.track === 'image' && clip.imageUrl ? (
-                            <img src={clip.imageUrl} alt="" className="h-full w-full object-cover" />
+                            <img src={clip.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
                           ) : (
                             <span className="text-[8px] text-white/70 truncate px-1">{clip.label}</span>
                           )}

@@ -310,9 +310,9 @@ export const MediaLibraryPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-n20 text-n800">
+    <div className="layout-safe flex flex-col h-screen bg-n20 text-n800">
       {/* 顶部工具栏 */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
+      <div className="responsive-toolbar flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
         <button
           onClick={() => navigate(`/projects/${projectId}/episodes`)}
           className="text-sm text-n300 hover:text-n800"
@@ -322,7 +322,7 @@ export const MediaLibraryPage: React.FC = () => {
         <div className="text-sm font-medium ml-2">素材库</div>
         <div className="text-xs text-n100">项目 {projectId}</div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="toolbar-actions ml-auto">
           <div className="flex items-center gap-1 px-2 py-1 rounded bg-n0">
             <Search size={14} className="text-n100" />
             <input
@@ -408,9 +408,9 @@ export const MediaLibraryPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="responsive-split flex flex-1 overflow-hidden">
         {/* 左侧分类 + 文件夹 */}
-        <aside className="w-56 border-r border-n40 bg-n0 p-2 flex flex-col gap-1 overflow-y-auto">
+        <aside className="responsive-pane w-56 border-r border-n40 bg-n0 p-2 flex flex-col gap-1 overflow-y-auto">
           {CATEGORIES.map(c => (
             <button
               key={c.key}
@@ -504,7 +504,7 @@ export const MediaLibraryPage: React.FC = () => {
         </aside>
 
         {/* 主区 */}
-        <main className="flex-1 overflow-auto p-4">
+        <main className="responsive-pane flex-1 overflow-auto p-4">
           {error && (
             <div className="mb-3 p-2 text-xs text-danger bg-r50 border border-r75 rounded">
               {error}
@@ -553,7 +553,7 @@ export const MediaLibraryPage: React.FC = () => {
 
         {/* 右侧详情 */}
         {selected && (
-          <aside className="w-80 border-l border-n40 bg-n0 overflow-auto">
+          <aside className="responsive-pane media-detail-pane border-l border-n40 bg-n0 overflow-auto">
             <MediaDetailPanel
               item={selected}
               onClose={() => setSelectedId(null)}
@@ -706,7 +706,7 @@ const MediaCard: React.FC<MediaCardProps> = ({
     >
       <div className="aspect-square bg-n20 flex items-center justify-center overflow-hidden">
         {thumb ? (
-          <img src={thumb} alt={item.title || item.file_name} className="w-full h-full object-cover" />
+          <img src={thumb} alt={item.title || item.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
         ) : item.item_type === 'video' ? (
           <Film size={32} className="text-n100" />
         ) : item.item_type === 'audio' ? (
@@ -863,10 +863,10 @@ const MediaDetailPanel: React.FC<{
 
       <div className="rounded overflow-hidden bg-n20 border border-n40">
         {isImage && item.file_url && (
-          <img src={item.file_url} alt={item.title || ''} className="w-full max-h-72 object-contain" />
+          <img src={item.file_url} alt={item.title || ''} loading="lazy" decoding="async" className="w-full max-h-72 object-contain" />
         )}
         {isVideo && item.file_url && (
-          <video src={item.file_url} controls className="w-full max-h-72" />
+          <video src={item.file_url} controls preload="metadata" className="w-full max-h-72" />
         )}
         {isAudio && item.file_url && (
           <audio src={item.file_url} controls className="w-full p-3" />

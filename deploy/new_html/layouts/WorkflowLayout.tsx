@@ -30,16 +30,16 @@ export const WorkflowLayout: React.FC = () => {
 
   return (
     <EpisodeProvider>
-      <div className="flex flex-col h-screen bg-n20 text-n800">
-        <nav className="flex items-center gap-1 px-4 h-14 border-b border-n40 bg-n0 shadow-card shrink-0">
+      <div className="layout-safe flex flex-col h-screen min-w-0 overflow-hidden bg-n20 text-n800">
+        <nav className="responsive-toolbar flex items-center gap-1 px-4 border-b border-n40 bg-n0 shadow-card shrink-0 min-w-0 overflow-hidden">
           <button
             onClick={() => navigate(`/projects/${projectId}/episodes`)}
-            className="flex items-center gap-1.5 pr-4 mr-1 py-1.5 px-3 text-sm font-medium text-n300 hover:text-n800 rounded hover:bg-n20 transition-colors border-r border-n40"
+            className="shrink-0 flex items-center gap-1.5 pr-4 mr-1 py-1.5 px-3 text-sm font-medium text-n300 hover:text-n800 rounded hover:bg-n20 transition-colors border-r border-n40"
             title="返回分集管理"
           >
             <ArrowLeft size={15} /> 分集
           </button>
-          <div className="flex items-center gap-0.5">
+          <div className="flex flex-1 min-w-0 items-center gap-0.5 overflow-x-auto scrollbar-atlas">
             {NAV_ITEMS.map(item => {
               const Icon = item.icon;
               return (
@@ -47,7 +47,7 @@ export const WorkflowLayout: React.FC = () => {
                   key={item.path}
                   to={item.path}
                   className={({ isActive }) =>
-                    `relative flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                    `relative shrink-0 flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium transition-colors ${
                       isActive
                         ? 'text-primary bg-primary-light'
                         : 'text-n300 hover:text-n800 hover:bg-n20'
@@ -64,7 +64,7 @@ export const WorkflowLayout: React.FC = () => {
           </div>
           <NavLink
             to={`/projects/${projectId}/ep/${episodeId}/canvas`}
-            className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-n300 hover:text-teal hover:bg-t50 transition-colors"
+            className="shrink-0 ml-2 flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-n300 hover:text-teal hover:bg-t50 transition-colors"
           >
             <Brush size={15} /> 自由创作
           </NavLink>
@@ -84,7 +84,7 @@ export const WorkflowLayout: React.FC = () => {
             <LogOut size={15} />
           </button>
         </nav>
-        <main className="flex-1 overflow-auto scrollbar-atlas">
+        <main className="layout-safe flex-1 min-h-0 min-w-0 overflow-auto scrollbar-atlas">
           <Outlet />
         </main>
       </div>

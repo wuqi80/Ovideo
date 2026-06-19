@@ -3,13 +3,13 @@ Sora2 API 客户端
 用于调用老张 Sora2 异步视频生成 API
 """
 
-import os
 import requests
 import time
 import logging
 from typing import Optional, Dict, Any
 from PIL import Image
 import io
+from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +17,19 @@ class Sora2Client:
     """Sora2 API 客户端"""
     
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv('SORA2_API_KEY')
+        self._explicit_api_key = api_key
+        self.api_key = api_key or ""
+        self.base_url = ""
+        self._request_kwargs: Dict[str, Any] = {}
+        self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("⚠️ SORA2_API_KEY 未设置")
-        
-        self.base_url = "https://api.laozhang.ai/v1"
+
+    def _refresh_runtime_config(self):
+        config = resolve_provider("sora2", "sora-2")
+        self.api_key = self._explicit_api_key or config.api_key
+        self.base_url = config.endpoint.rstrip("/")
+        self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}"
         }
@@ -100,6 +108,7 @@ class Sora2Client:
         Returns:
             包含task_id的响应
         """
+        self._refresh_runtime_config()
         url = f"{self.base_url}/videos"
         
         try:
@@ -117,7 +126,7 @@ class Sora2Client:
                         'size': size,
                         'seconds': seconds
                     }
-                    response = requests.post(url, headers=self.headers, files=files, data=data, timeout=30)
+                    response = requests.post(url, headers=self.headers, files=files, data=data, timeout=30, **self._request_kwargs)
             else:
                 # 文生视频 - 使用JSON
                 logger.info(f"🎬 Sora2 创建文生视频任务: {seconds}s, {size}")
@@ -129,7 +138,7 @@ class Sora2Client:
                     "size": size,
                     "seconds": seconds
                 }
-                response = requests.post(url, headers=headers, json=data, timeout=30)
+                response = requests.post(url, headers=headers, json=data, timeout=30, **self._request_kwargs)
             
             response.raise_for_status()
             result = response.json()
@@ -150,10 +159,11 @@ class Sora2Client:
         Returns:
             任务状态信息
         """
+        self._refresh_runtime_config()
         url = f"{self.base_url}/videos/{video_id}"
         
         try:
-            response = requests.get(url, headers=self.headers, timeout=30)
+            response = requests.get(url, headers=self.headers, timeout=30, **self._request_kwargs)
             response.raise_for_status()
             return response.json()
         
@@ -171,11 +181,12 @@ class Sora2Client:
         Returns:
             视频文件内容（bytes）
         """
+        self._refresh_runtime_config()
         url = f"{self.base_url}/videos/{video_id}/content"
         
         try:
             logger.info(f"📥 Sora2 下载视频: {video_id}")
-            response = requests.get(url, headers=self.headers, stream=True, timeout=120)
+            response = requests.get(url, headers=self.headers, stream=True, timeout=120, **self._request_kwargs)
             response.raise_for_status()
             
             video_bytes = b''

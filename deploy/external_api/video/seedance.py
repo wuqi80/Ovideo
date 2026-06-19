@@ -6,13 +6,12 @@ import os
 import logging
 import requests
 from typing import Optional, Dict, Any, List
+from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
 
 class SeedanceClient:
-    BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
-
     # 2026-06-15：账号 2101702750 未开通 Seedance 2.0（doubao-seedance-2-0-260128 实测
     # ModelNotOpen 404），但已开通 Seedance 1.0 Pro（doubao-seedance-1-0-pro-250528 实测 200）。
     # 默认指向 1.0 Pro 让飞升/渡劫可用；后续若在火山方舟开通 2.0，设 env
@@ -23,10 +22,19 @@ class SeedanceClient:
     }
 
     def __init__(self, api_key: Optional[str] = None):
-        # SEEDANCE_API_KEY 优先；缺省回落 ARK_API_KEY（同 veo_api 模式）
-        self.api_key = api_key or os.getenv('SEEDANCE_API_KEY') or os.getenv('ARK_API_KEY')
+        self._explicit_api_key = api_key
+        self.api_key = api_key or ""
+        self.base_url = ""
+        self._request_kwargs: Dict[str, Any] = {}
+        self._refresh_runtime_config()
         if not self.api_key:
             logger.warning("SEEDANCE_API_KEY 与 ARK_API_KEY 均未设置")
+
+    def _refresh_runtime_config(self, model_name: Optional[str] = None) -> None:
+        config = resolve_provider("seedance", model_name)
+        self.api_key = self._explicit_api_key or config.api_key
+        self.base_url = config.endpoint.rstrip("/")
+        self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -52,9 +60,11 @@ class SeedanceClient:
         """
         if sub_model not in self.MODEL_MAP:
             raise ValueError(f"不支持的子型号: {sub_model}")
+        model_name = self.MODEL_MAP[sub_model]
+        self._refresh_runtime_config(model_name)
 
         payload: Dict[str, Any] = {
-            "model": self.MODEL_MAP[sub_model],
+            "model": model_name,
             "content": contents,
         }
         if resolution:
@@ -77,7 +87,7 @@ class SeedanceClient:
             # 中国大陆、本服务在 GCP 香港，跨境上传慢。实测 urllib3 用元组 (connect, read)
             # 时，body 上传(write)受 connect 值约束——(15,180) 下 3.3MB 图仍在 15s 触发
             # 'write operation timed out'。改单值让整个 socket（含 write）都有 180s。
-            resp = requests.post(self.BASE_URL, headers=self.headers, json=payload, timeout=180)
+            resp = requests.post(self.base_url, headers=self.headers, json=payload, timeout=180, **self._request_kwargs)
             if not resp.ok:
                 # 关键：raise_for_status() 只携带 URL，会丢掉 Ark 的错误体。
                 # Ark(OpenAI 兼容)对“模型未开通/无权限/模型名不存在”返回 404 NotFound，
@@ -99,9 +109,10 @@ class SeedanceClient:
 
     def query_task(self, task_id: str) -> Dict[str, Any]:
         """轮询任务状态。返回 {status: queued/running/succeeded/failed/cancelled, content: {video_url, ...}, ...}"""
-        url = f"{self.BASE_URL}/{task_id}"
+        self._refresh_runtime_config()
+        url = f"{self.base_url.rstrip('/')}/{task_id}"
         try:
-            resp = requests.get(url, headers=self.headers, timeout=30)
+            resp = requests.get(url, headers=self.headers, timeout=30, **self._request_kwargs)
             if not resp.ok:
                 logger.error(f"Seedance 查询失败: HTTP {resp.status_code} body={resp.text[:500]}")
             resp.raise_for_status()
@@ -114,7 +125,8 @@ class SeedanceClient:
         """下载已生成的视频。"""
         try:
             logger.info(f"Seedance 下载视频: {video_url[:80]}...")
-            resp = requests.get(video_url, stream=True, timeout=120)
+            self._refresh_runtime_config()
+            resp = requests.get(video_url, stream=True, timeout=120, **self._request_kwargs)
             resp.raise_for_status()
             chunks: List[bytes] = []
             for chunk in resp.iter_content(chunk_size=8192):

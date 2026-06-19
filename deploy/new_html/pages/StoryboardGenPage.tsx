@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEpisode } from '../contexts/EpisodeContext';
@@ -14,8 +14,10 @@ import { fetchEntityFiles } from '../services/entityFileService';
 import { useSelectFileMutation, useDeleteFileMutation } from '../hooks/useFilesMutation';
 import { LayoutGrid, Loader, ChevronDown, ChevronRight, GripHorizontal } from 'lucide-react';
 import { TimelineTrack, type TimelineClip } from '../components/TimelineTrack';
-import type { StoryboardItem, FileVersion, GeneratedImage } from '../types';
+import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
+
+const STORYBOARD_INITIAL_SHOT_COUNT = 10;
 
 function fmtTimeSimple(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0:00';
@@ -31,23 +33,37 @@ export const StoryboardGenPage: React.FC = () => {
     episodeId, projectId, selectedScriptId,
     script, storyboardItems, assets,
     isLoading, error, reload,
-    loadSlices, forceReloadSlices,
+    loadSlices, loadSlicesQuiet, forceReloadSlices,
   } = useEpisode();
 
   // 2026-06-14：进入分镜页强制刷新——loadSlices 对已加载 slice 会跳过，
   // 导致在「素材」改了人物绑定/在别处生成了新图后，跳到分镜仍显示会话缓存的旧数据
   //（用户反馈「导入到分镜始终只有这 8 个、没有新的」的真因）。改用 forceReload 拉最新。
   useEffect(() => {
-    forceReloadSlices('storyboardItems', 'assets', 'script');
-  }, [forceReloadSlices]);
+    forceReloadSlices('storyboardItems', 'script').then(() => {
+      const run = () => loadSlicesQuiet('assets');
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(run, { timeout: 1500 });
+      } else {
+        setTimeout(run, 0);
+      }
+    });
+  }, [forceReloadSlices, loadSlicesQuiet]);
+
+  const [visibleEntityShotCount, setVisibleEntityShotCount] = useState(STORYBOARD_INITIAL_SHOT_COUNT);
+
+  const visibleStoryboardItems = useMemo(
+    () => storyboardItems.slice(0, visibleEntityShotCount),
+    [storyboardItems, visibleEntityShotCount],
+  );
 
   const pseudoFile = useMemo(
-    () => scriptToProjectFile(script, storyboardItems, assets, episodeId),
-    [script, storyboardItems, assets, episodeId]
+    () => scriptToProjectFile(script, visibleStoryboardItems, assets, episodeId),
+    [script, visibleStoryboardItems, assets, episodeId]
   );
 
   const materialLibrary = useMemo(
-    () => assetsToMaterialLibrary(assets),
+    () => assetsToMaterialLibrary(assets) as unknown as MaterialLibrary,
     [assets]
   );
 
@@ -59,7 +75,7 @@ export const StoryboardGenPage: React.FC = () => {
   const [localImagesTick, setLocalImagesTick] = React.useState(0);
 
   const entityImageQueries = useQueries({
-    queries: storyboardItems.map(item => ({
+    queries: visibleStoryboardItems.map(item => ({
       queryKey: ['entityFiles', 'storyboard_item', item.itemId, 'generated_image'],
       queryFn: () => fetchEntityFiles('storyboard_item', item.itemId, 'generated_image'),
       staleTime: 30_000,
@@ -68,7 +84,7 @@ export const StoryboardGenPage: React.FC = () => {
 
   const entityImages = useMemo<Record<string, GeneratedImage[]>>(() => {
     const result: Record<string, GeneratedImage[]> = {};
-    storyboardItems.forEach((item, idx) => {
+    visibleStoryboardItems.forEach((item, idx) => {
       const data = entityImageQueries[idx]?.data;
       if (data?.items?.length) {
         result[item.itemId] = data.items.map(ef => ({
@@ -82,7 +98,7 @@ export const StoryboardGenPage: React.FC = () => {
       }
     });
     return result;
-  }, [entityImageQueries, storyboardItems]);
+  }, [entityImageQueries, visibleStoryboardItems]);
 
   const handleUpdateStoryboardItem = useCallback(
     (shotId: string, updates: Partial<StoryboardItem> | ((item: StoryboardItem) => Partial<StoryboardItem>)) => {
@@ -247,9 +263,10 @@ export const StoryboardGenPage: React.FC = () => {
 
   const timelineClips: TimelineClip[] = useMemo(() => {
     const sorted = [...storyboardItems].sort((a, b) => a.sortOrder - b.sortOrder);
+    const visibleItems = sorted.slice(0, visibleEntityShotCount);
     const result: TimelineClip[] = [];
     let cursorMs = 0;
-    for (const item of sorted) {
+    for (const item of visibleItems) {
       const hasImage = !!item.generatedImageUrl;
       const hasAudio = !!(item.dialogueAudioUrl || item.narrationAudioUrl);
       if (!hasImage && !hasAudio) continue;
@@ -291,7 +308,7 @@ export const StoryboardGenPage: React.FC = () => {
       cursorMs += durMs;
     }
     return result;
-  }, [storyboardItems]);
+  }, [storyboardItems, visibleEntityShotCount]);
 
   const timelineTotalMs = useMemo(
     () => timelineClips.reduce((m, c) => Math.max(m, c.startMs + c.durationMs), 0),
@@ -306,6 +323,9 @@ export const StoryboardGenPage: React.FC = () => {
     defaultValue: { collapsed: false, heightPx: 260 },
   });
   const timelineCollapsed = timelinePanel.collapsed;
+  const timelineVisibleHeightPx = typeof window === 'undefined'
+    ? timelinePanel.heightPx
+    : Math.min(timelinePanel.heightPx, Math.round(window.innerHeight * 0.42));
   const setTimelineCollapsed = useCallback(
     (updater: boolean | ((c: boolean) => boolean)) =>
       setTimelinePanel(p => ({
@@ -380,7 +400,7 @@ export const StoryboardGenPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="layout-safe flex flex-col h-full">
       {durationWarnings.length > 0 && (
         <div className="shrink-0 px-4 py-2 bg-n30 border-b border-n40 text-warning text-sm flex items-center gap-2">
           <span>⚠ {durationWarnings.length} 个镜头的音频时长超过设计时长</span>
@@ -389,11 +409,14 @@ export const StoryboardGenPage: React.FC = () => {
           </span>
         </div>
       )}
-      <div className={showTimeline ? 'flex-1 min-h-0 overflow-auto' : 'h-full'}>
+      <div className={showTimeline ? 'layout-safe flex-1 min-h-0 overflow-auto' : 'layout-safe h-full'}>
         <GenerationPage
           files={[enhancedFile]}
           selectedFileId={episodeId}
           episodeId={episodeId}
+          shotPageSize={STORYBOARD_INITIAL_SHOT_COUNT}
+          totalShotCount={storyboardItems.length}
+          onVisibleShotCountChange={setVisibleEntityShotCount}
           materialLibrary={materialLibrary}
           onUpdateStoryboardItem={handleUpdateStoryboardItem}
           onDeleteStoryboardItem={handleDeleteStoryboardItem}
@@ -433,7 +456,7 @@ export const StoryboardGenPage: React.FC = () => {
             </span>
           </div>
           {!timelineCollapsed && (
-            <div className="px-4 pb-4 overflow-y-auto" style={{ height: timelinePanel.heightPx }}>
+            <div className="px-4 pb-4 overflow-y-auto" style={{ height: timelineVisibleHeightPx }}>
               <TimelineTrack mode="combined" clips={timelineClips} totalDurationMs={timelineTotalMs} showPreview />
             </div>
           )}

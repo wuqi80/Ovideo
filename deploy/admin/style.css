@@ -38,6 +38,14 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html,
+body {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font-sans);
   background: var(--bg-0);
@@ -129,17 +137,19 @@ body {
 }
 
 /* ── Main Area ── */
-.main { flex: 1; overflow-y: auto; background: var(--bg-0); }
-.page { display: none; padding: 32px; max-width: 1200px; }
+.main { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; background: var(--bg-0); }
+.page { display: none; width: 100%; max-width: 1280px; margin: 0 auto; padding: 32px; }
 .page.active { display: block; }
 
 /* refactor/v2：被统一后台壳 <iframe ?embed=1> 内嵌时，隐藏自带侧栏，只留内容区 */
 body.embedded .sidebar { display: none; }
-body.embedded .page { padding: 24px 28px; max-width: none; }
+body.embedded .page { padding: clamp(16px, 2vw, 28px); max-width: none; }
 .page-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 28px;
 }
+.page-header > div { min-width: 0; }
 .page-header h2 {
   font-size: 20px; font-weight: 700; color: var(--text-0);
   letter-spacing: -0.02em;
@@ -206,7 +216,7 @@ body.embedded .page { padding: 24px 28px; max-width: none; }
 .card-padded { padding: 16px; }
 
 /* ── Stat Cards ── */
-.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .stat-card {
   background: var(--bg-1);
   border: 1px solid var(--border);
@@ -273,6 +283,8 @@ body.embedded .page { padding: 24px 28px; max-width: none; }
 
 /* ── Tables ── */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th,
+.data-table td { overflow-wrap: anywhere; }
 .data-table thead th {
   text-align: left;
   padding: 10px 16px;
@@ -348,13 +360,15 @@ select.input {
   position: fixed; inset: 0; z-index: 100;
   background: rgba(9,30,66,0.54); backdrop-filter: blur(4px);
   display: none; align-items: center; justify-content: center;
+  padding: 16px;
 }
 .modal-overlay.open { display: flex; }
 .modal {
+  width: min(680px, 100%);
   background: var(--bg-1);
   border: 1px solid var(--border-hover);
   border-radius: var(--radius-lg);
-  max-height: 85vh; overflow: hidden;
+  max-height: calc(100dvh - 32px); overflow: hidden;
   display: flex; flex-direction: column;
   box-shadow: 0 24px 48px rgba(0,0,0,0.4);
 }
@@ -374,11 +388,12 @@ select.input {
   font-size: 18px;
 }
 .modal-close:hover { color: var(--text-0); background: rgba(9,30,66,0.08); }
-.modal-body { flex: 1; overflow-y: auto; padding: 20px; }
+.modal-body { flex: 1; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; padding: 20px; }
 .modal-footer {
   padding: 14px 20px;
   border-top: 1px solid var(--border);
   display: flex; justify-content: flex-end; gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ── Workflow Category Sections ── */
@@ -399,9 +414,9 @@ select.input {
 }
 
 /* ── Workflow Cards ── */
-.wf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 10px; }
+.wf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 10px; }
 .wf-card {
-  display: flex; align-items: center; gap: 14px;
+  display: flex; align-items: flex-start; gap: 14px;
   padding: 14px 16px;
   background: var(--bg-1);
   border: 1px solid var(--border);
@@ -419,21 +434,21 @@ select.input {
 .wf-card .wf-name { font-size: 13px; font-weight: 600; color: var(--text-0); }
 .wf-card .wf-file {
   font-size: 11px; font-family: var(--font-mono); color: var(--text-2);
-  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-top: 2px; overflow-wrap: anywhere; word-break: break-word;
 }
 .wf-card .wf-meta {
   display: flex; align-items: center; gap: 8px;
   margin-top: 4px;
 }
 .wf-card .wf-actions {
-  display: flex; gap: 4px; opacity: 0;
+  display: flex; gap: 4px; opacity: 0; flex-wrap: wrap; justify-content: flex-end;
   transition: opacity var(--transition);
 }
 .wf-card:hover .wf-actions { opacity: 1; }
 
 /* ── API Config Cards ── */
 .api-card {
-  display: flex; align-items: center; gap: 14px;
+  display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: flex-start; gap: 14px;
   padding: 14px 16px;
   background: var(--bg-1);
   border: 1px solid var(--border);
@@ -447,23 +462,28 @@ select.input {
 .api-card .api-status.ok { background: var(--success); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
 .api-card .api-status.pending { background: var(--text-3); }
 .api-card .api-info { flex: 1; min-width: 0; }
-.api-card .api-name { font-size: 13px; font-weight: 600; color: var(--text-0); }
+.api-card .api-name { font-size: 13px; font-weight: 600; color: var(--text-0); min-width: 0; overflow-wrap: anywhere; }
 .api-card .api-detail {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 3px; font-size: 11px; color: var(--text-2);
+  min-width: 0;
 }
 .api-card .api-detail .mono {
   font-family: var(--font-mono); font-size: 11px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal !important;
 }
 .api-card .api-actions {
-  display: flex; gap: 4px; opacity: 0;
+  display: flex; gap: 4px; opacity: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 240px;
   transition: opacity var(--transition);
 }
 .api-card:hover .api-actions { opacity: 1; }
 
 /* ── Agent Cards ── */
 .agent-card {
-  display: flex; align-items: center; gap: 16px;
+  display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap;
   padding: 16px 18px;
   background: var(--bg-1);
   border: 1px solid var(--border);
@@ -472,13 +492,13 @@ select.input {
   margin-bottom: 8px;
 }
 .agent-card:hover { border-color: var(--border-hover); }
-.agent-card .agent-left { display: flex; align-items: center; gap: 12px; }
+.agent-card .agent-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .agent-card .agent-name { font-size: 14px; font-weight: 600; color: var(--text-0); }
 .agent-card .agent-mid {
-  flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  flex: 1 1 260px; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .agent-card .agent-stats {
-  display: flex; align-items: center; gap: 16px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   font-size: 12px; color: var(--text-2);
 }
 .agent-card .agent-stats span { display: flex; align-items: center; gap: 4px; }
@@ -531,13 +551,14 @@ select.input {
 
 /* ── Proxy Settings ── */
 .proxy-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
 }
 
 /* ── Toast ── */
 .toast-container {
   position: fixed; top: 16px; right: 16px; z-index: 200;
   display: flex; flex-direction: column; gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
 }
 .toast {
   padding: 10px 16px;
@@ -546,6 +567,7 @@ select.input {
   box-shadow: 0 8px 24px rgba(0,0,0,0.3);
   animation: toastIn 0.25s ease-out;
   display: flex; align-items: center; gap: 8px;
+  overflow-wrap: anywhere;
 }
 .toast-info { background: var(--accent); }
 .toast-success { background: #16a34a; }
@@ -598,4 +620,39 @@ select.input {
 .hidden { display: none !important; }
 .space-y-2 > * + * { margin-top: 8px; }
 .space-y-3 > * + * { margin-top: 12px; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+
+#workflow-modal .modal {
+  width: min(1120px, 100%) !important;
+}
+
+#workflow-modal .modal-body {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  overflow-y: auto;
+}
+
+#workflow-modal .modal-body > div {
+  min-width: 0;
+  overflow: visible !important;
+}
+
+@media (max-width: 760px) {
+  .page { padding: 20px 16px; }
+  body.embedded .page { padding: 16px; }
+  .btn { white-space: normal; justify-content: center; }
+  .api-card { grid-template-columns: 8px minmax(0, 1fr); }
+  .api-card .api-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    max-width: none;
+    opacity: 1;
+  }
+  .wf-card .wf-actions { opacity: 1; }
+  #workflow-modal .modal-body {
+    grid-template-columns: 1fr;
+  }
+  #workflow-modal .modal-body > div {
+    border-right: 0 !important;
+  }
+}

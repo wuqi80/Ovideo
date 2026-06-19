@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""Verify MECHA FastAPI route contract after refactor increments.
+
+The script intentionally imports cluster_main without starting uvicorn. Use it
+after moving handlers between modules to make sure the public API surface stays
+stable and no unexpected duplicate route registrations were introduced.
+"""
+from __future__ import annotations
+
+import argparse
+import ast
+import os
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import Iterable
+
+
+HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
+OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
+
+DEFAULT_EXPECTED_PATHS = 231
+DEFAULT_EXPECTED_OPERATIONS = 287
+
+# Known legacy overlap: cluster_main still owns the old project JSON model while
+# api_routes exposes the newer DAO-backed project model. This is high coupling
+# and tracked as a later migration, so the checker allows it but reports it.
+ALLOWED_DUPLICATES = {
+    ("/api/projects/{project_id}", "GET"),
+}
+
+EXPECTED_ENDPOINTS = {
+    ("/api/video/crop", "POST"): ("routers.video", "crop_video"),
+    ("/api/thumbnail", "GET"): ("routers.files", "get_thumbnail"),
+    ("/api/upload", "POST"): ("routers.files", "upload_file"),
+    ("/api/comfyui/upload", "POST"): ("routers.comfyui_files", "comfyui_upload_proxy"),
+    ("/api/admin/users", "GET"): ("admin_routes", "admin_list_users"),
+    ("/api/admin/users/{user_id}/permissions", "PUT"): ("admin_routes", "admin_update_permissions"),
+    ("/api/admin/api-configs/reload-env", "POST"): ("admin_api_config_routes", "admin_reload_api_env"),
+    ("/api/admin/api-configs/{config_id}/test", "POST"): ("admin_api_config_routes", "admin_test_api_config"),
+    ("/api/admin/api-configs/test-all", "POST"): ("admin_api_config_routes", "admin_test_all_api_configs"),
+    ("/api/admin/api-configs/health/cache", "GET"): ("admin_api_config_routes", "admin_get_provider_health_cache"),
+    ("/api/admin/api-configs/health/sweep", "POST"): ("admin_api_config_routes", "admin_sweep_provider_health"),
+    (
+        "/api/admin/api-configs/repair-conflicts",
+        "POST",
+    ): ("admin_api_config_routes", "admin_repair_api_config_conflicts"),
+    (
+        "/api/admin/api-configs/{provider_id}/health",
+        "GET",
+    ): ("admin_api_config_routes", "admin_check_provider_health"),
+}
+
+FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
+
+
+def deploy_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def import_app():
+    root = deploy_root()
+    os.chdir(root)
+    sys.path.insert(0, str(root))
+    import cluster_main  # noqa: PLC0415
+
+    return cluster_main.app
+
+
+def openapi_operation_count(schema: dict) -> int:
+    return sum(
+        1
+        for path_item in schema.get("paths", {}).values()
+        for method in path_item
+        if method in OPENAPI_METHODS
+    )
+
+
+def runtime_routes(app) -> dict[tuple[str, str], list[tuple[int, str | None, str | None]]]:
+    routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]] = defaultdict(list)
+    for idx, route in enumerate(app.routes):
+        path = getattr(route, "path", None)
+        endpoint = getattr(route, "endpoint", None)
+        methods = (getattr(route, "methods", set()) or set()) & HTTP_METHODS
+        for method in sorted(methods):
+            routes[(path, method)].append(
+                (
+                    idx,
+                    getattr(endpoint, "__module__", None),
+                    getattr(endpoint, "__name__", None),
+                )
+            )
+    return routes
+
+
+def fail(message: str) -> None:
+    print(f"FAIL: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def ast_call_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = ast_call_name(node.value)
+        return f"{prefix}.{node.attr}" if prefix else node.attr
+    return None
+
+
+def iter_py_files(root: Path) -> Iterable[Path]:
+    for path in root.rglob("*.py"):
+        if "__pycache__" in path.parts:
+            continue
+        yield path
+
+
+def parse_py_file(path: Path) -> ast.Module:
+    try:
+        return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except Exception as exc:
+        fail(f"Unable to parse {path}: {exc}")
+
+
+def check_external_api_has_no_fastapi_routes(root: Path) -> tuple[int, int]:
+    """external_api is provider/client code only; FastAPI routes live in routers/."""
+    external_root = root / "external_api"
+    if not external_root.exists():
+        fail("external_api directory is missing")
+
+    checked_files = 0
+    violations: list[str] = []
+    for path in iter_py_files(external_root):
+        checked_files += 1
+        tree = parse_py_file(path)
+        rel = path.relative_to(root)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "fastapi":
+                imported = {alias.name for alias in node.names}
+                forbidden = sorted(imported & FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES)
+                if forbidden:
+                    violations.append(f"{rel}:{node.lineno} imports {forbidden}")
+
+            if isinstance(node, ast.Call):
+                name = ast_call_name(node.func)
+                if name in FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES:
+                    violations.append(f"{rel}:{node.lineno} constructs {name}")
+
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for decorator in node.decorator_list:
+                    target = decorator.func if isinstance(decorator, ast.Call) else decorator
+                    name = ast_call_name(target)
+                    if not name:
+                        continue
+                    owner, _, method = name.rpartition(".")
+                    if owner in {"app", "router"} and method.lower() in OPENAPI_METHODS:
+                        violations.append(f"{rel}:{decorator.lineno} route decorator @{name}")
+
+    if violations:
+        fail("external_api must not register FastAPI routes:\n" + "\n".join(violations))
+    return checked_files, 0
+
+
+def check_counts(schema: dict, expected_paths: int, expected_operations: int) -> tuple[int, int]:
+    path_count = len(schema.get("paths", {}))
+    operation_count = openapi_operation_count(schema)
+    if path_count != expected_paths:
+        fail(f"OpenAPI path count changed: expected {expected_paths}, got {path_count}")
+    if operation_count != expected_operations:
+        fail(f"OpenAPI operation count changed: expected {expected_operations}, got {operation_count}")
+    return path_count, operation_count
+
+
+def check_duplicates(routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]]) -> list[tuple[str, str]]:
+    duplicates = sorted(key for key, items in routes.items() if len(items) > 1)
+    unexpected = [key for key in duplicates if key not in ALLOWED_DUPLICATES]
+    if unexpected:
+        details = []
+        for key in unexpected:
+            details.append(f"{key}: {routes[key]}")
+        fail("Unexpected duplicate route registrations:\n" + "\n".join(details))
+    return duplicates
+
+
+def check_expected_endpoints(routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]]) -> None:
+    for key, expected in EXPECTED_ENDPOINTS.items():
+        found = routes.get(key, [])
+        if len(found) != 1:
+            fail(f"{key} should be registered exactly once, found {found}")
+        _, module, name = found[0]
+        if (module, name) != expected:
+            fail(f"{key} endpoint changed: expected {expected}, got {(module, name)}")
+
+
+def check_admin_api_config_routes_extracted(root: Path) -> int:
+    admin_routes_path = root / "admin_routes.py"
+    api_config_routes_path = root / "admin_api_config_routes.py"
+    if not api_config_routes_path.exists():
+        fail("admin_api_config_routes.py is missing")
+
+    admin_tree = parse_py_file(admin_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(admin_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and "/api-configs" in arg.value:
+                violations.append(f"{admin_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("API config route handlers must live in admin_api_config_routes.py:\n" + "\n".join(violations))
+
+    api_tree = parse_py_file(api_config_routes_path)
+    route_count = 0
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count < 10:
+        fail(f"admin_api_config_routes.py should own the API config route set, found {route_count}")
+    return route_count
+
+
+def format_duplicates(
+    duplicates: Iterable[tuple[str, str]],
+    routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
+) -> str:
+    rows = []
+    for key in duplicates:
+        status = "allowed" if key in ALLOWED_DUPLICATES else "unexpected"
+        rows.append(f"  {status}: {key} -> {routes[key]}")
+    return "\n".join(rows) if rows else "  none"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Check MECHA FastAPI route contract.")
+    parser.add_argument("--expected-paths", type=int, default=DEFAULT_EXPECTED_PATHS)
+    parser.add_argument("--expected-operations", type=int, default=DEFAULT_EXPECTED_OPERATIONS)
+    parser.add_argument("--show-routes", action="store_true", help="Print checked route endpoints.")
+    args = parser.parse_args()
+
+    root = deploy_root()
+    external_api_files, external_api_routes = check_external_api_has_no_fastapi_routes(root)
+    api_config_route_handlers = check_admin_api_config_routes_extracted(root)
+    app = import_app()
+    schema = app.openapi()
+    path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
+    routes = runtime_routes(app)
+    duplicates = check_duplicates(routes)
+    check_expected_endpoints(routes)
+
+    print("Route contract OK")
+    print(f"  openapi_paths={path_count}")
+    print(f"  openapi_operations={operation_count}")
+    print(f"  external_api_python_files={external_api_files}")
+    print(f"  external_api_route_handlers={external_api_routes}")
+    print(f"  admin_api_config_route_handlers={api_config_route_handlers}")
+    print("  duplicate_routes:")
+    print(format_duplicates(duplicates, routes))
+
+    if args.show_routes:
+        print("  expected_endpoints:")
+        for key in sorted(EXPECTED_ENDPOINTS):
+            print(f"    {key} -> {routes[key][0]}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

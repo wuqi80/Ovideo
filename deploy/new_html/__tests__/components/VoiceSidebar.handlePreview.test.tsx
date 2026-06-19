@@ -94,4 +94,43 @@ describe('VoiceSidebar.handlePreview — fast-path 同步 (2026-05-25)', () => {
     rerender(<VoiceDrawer {...baseProps} open={false} />);
     expect(abortSignal?.aborted).toBe(true);
   });
+
+  it('克隆模式点击生成试听会上传音频并调用 voice-clone', async () => {
+    const { minimaxFileUpload, minimaxVoiceClone, minimaxTTSSync } = await import('../../services/apiService');
+    (minimaxFileUpload as any).mockResolvedValue({ success: true, file_id: '123456789' });
+    (minimaxVoiceClone as any).mockResolvedValue({
+      success: true,
+      voice_id: 'clone_test_123456',
+      audio_url: '/storage/audio/voice_clone_preview.mp3',
+    });
+
+    render(<VoiceDrawer {...baseProps} open />);
+    fireEvent.click(screen.getByRole('button', { name: /声音克隆/ }));
+
+    const file = new File(['voice-bytes'], 'voice.mp3', {
+      type: 'audio/mpeg',
+      lastModified: 123,
+    });
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    fireEvent.click(screen.getByRole('button', { name: /生成试听/ }));
+
+    await waitFor(() => {
+      expect(minimaxFileUpload).toHaveBeenCalledWith(file, 'voice_clone');
+      expect(minimaxVoiceClone).toHaveBeenCalledWith(
+        '123456789',
+        undefined,
+        expect.any(String),
+        '测试角色',
+      );
+    });
+    expect(minimaxTTSSync).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      const audio = document.querySelector('audio') as HTMLAudioElement | null;
+      expect(audio).toBeTruthy();
+      expect(audio!.src).toContain('/storage/audio/voice_clone_preview.mp3');
+    });
+  });
 });

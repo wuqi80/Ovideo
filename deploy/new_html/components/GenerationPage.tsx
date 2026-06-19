@@ -1,6 +1,6 @@
 
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, ReferenceType, GeneratedImage, FileVersion } from '../types';
@@ -20,14 +20,23 @@ import {
 } from '../utils/gptImageSizeMap';
 import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/geminiService';
 import type { TaskKind } from '../types';
-import { MattingModal } from './MattingModal';
-import { ImageFusionModal } from './ImageFusionModal';
-import { StoryboardToolModal } from './StoryboardToolModal';
-import MultiAngle3DController from './MultiAngle3DController';
 import { generateThumbnail } from '../utils/imageOptimization';
 import { loadShotImages, clearImageCache, getAuthenticatedImageUrl, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache } from '../services/imageLoaderService';
 import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../services/taskRecovery';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
+
+const MattingModal = React.lazy(() => import('./MattingModal'));
+const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
+const StoryboardToolModal = React.lazy(() => import('./StoryboardToolModal'));
+const MultiAngle3DController = React.lazy(() => import('./MultiAngle3DController'));
+
+const ModalChunkFallback: React.FC = () => (
+  <div className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center">
+    <div className="rounded-md border border-n40 bg-n0 px-4 py-3 text-sm text-n300 shadow-bottom">
+      加载工具...
+    </div>
+  </div>
+);
 
 interface GenerationPageProps {
   files: ProjectFile[];
@@ -41,6 +50,9 @@ interface GenerationPageProps {
   onForceSave: () => void;
   onExportNext: (data: any) => void;
   onImportProject: () => void;
+  shotPageSize?: number;
+  totalShotCount?: number;
+  onVisibleShotCountChange?: (count: number) => void;
   onDeleteStoryboardItem?: (itemId: string) => void;  // 2026-06-14：删除分镜镜头
   onBatchDeleteStoryboardItems?: (itemIds: string[]) => Promise<void> | void;  // 2026-06-14：批量删除选中镜头
 }
@@ -57,6 +69,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   onForceSave,
   onExportNext,
   onImportProject,
+  shotPageSize,
+  totalShotCount,
+  onVisibleShotCountChange,
   onDeleteStoryboardItem,
   onBatchDeleteStoryboardItems,
 }) => {
@@ -74,12 +89,24 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   // Batch Selection — 多选 Set 不持久化（运行时态，刷新清空合理）
   const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set());
   // 分镜列表默认只渲染前 N 个，避免镜头很多时（如 70+）一次性渲染卡顿；点"展开更多"按需加载
-  const SHOT_PAGE_SIZE = 20;
+  const SHOT_PAGE_SIZE = Math.max(1, shotPageSize || 10);
   const [visibleShotCount, setVisibleShotCount] = useState<number>(SHOT_PAGE_SIZE);
 
   // Configuration State
   const [prompt, setPrompt] = useState<string>('');
   const [references, setReferences] = useState<GenerationReference[]>([]);
+  const visibleStoryboardItems = useMemo(
+    () => selectedFile?.storyboard?.items.slice(0, visibleShotCount) || [],
+    [selectedFile?.storyboard?.items, visibleShotCount],
+  );
+
+  useEffect(() => {
+    onVisibleShotCountChange?.(visibleShotCount);
+  }, [visibleShotCount, onVisibleShotCountChange]);
+
+  useEffect(() => {
+    setVisibleShotCount(SHOT_PAGE_SIZE);
+  }, [selectedFileId, SHOT_PAGE_SIZE]);
 
   // 2026-05-20 (Task System Overhaul M3)：构造传给 generateXxxQueued 的 registryMeta，
   // 让铃铛 / TaskBadge / 跨页通知能感知该镜头正在生成。
@@ -91,7 +118,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     const projectId = (() => {
       try { return localStorage.getItem('current_project_id') || undefined; } catch { return undefined; }
     })();
-    const shotLabel = shot?.shotId || (shot?.id ? `#${String(shot.id).slice(0, 6)}` : '?');
+    const shotLabel = shot?.shotNumber || (shot?.id ? `#${String(shot.id).slice(0, 6)}` : '?');
     return {
       title: `${titlePrefix} · 镜头 ${shotLabel}`,
       kind,
@@ -217,10 +244,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const [thumbnailProcessed, setThumbnailProcessed] = useState<Set<string>>(new Set());
   
   useEffect(() => {
-    if (!selectedFile?.storyboard?.items) return;
+    if (!visibleStoryboardItems.length) return;
     
-    // 检查所有镜头中是否有需要生成缩略图的图片
-    selectedFile.storyboard.items.forEach(shot => {
+    // 只检查当前可见镜头，避免折叠的长分镜列表提前拉取所有远端图片
+    visibleStoryboardItems.forEach(shot => {
       if (!shot.generatedImages) return;
       
       // 只处理未处理过的镜头
@@ -265,7 +292,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         setThumbnailProcessed(prev => new Set(prev).add(shot.id));
       }
     });
-  }, [selectedFile?.id, selectedFile?.storyboard?.items?.length]); // 只在文件或镜头数量变化时触发
+  }, [selectedFile?.id, visibleStoryboardItems]); // 只处理当前可见镜头
   
   const [generatingShotIds, setGeneratingShotIds] = useState<Set<string>>(new Set());
   const [batchProgress, setBatchProgress] = useState<{current: number, total: number} | null>(null);
@@ -562,6 +589,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   // Always show UI, even without data
   const hasStoryboard = selectedFile && selectedFile.storyboard && selectedFile.storyboard.items.length > 0;
+  const storyboardTotalCount = totalShotCount ?? selectedFile?.storyboard?.items.length ?? 0;
   const selectedShot = hasStoryboard && selectedFile ? selectedFile.storyboard!.items.find(i => i.id === selectedShotId) : null;
 
   // --- Selection Logic ---
@@ -1866,11 +1894,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   }
 
   return (
-      <div className="flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
+      <div className="layout-safe flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
           
           {/* Header Bar */}
-          <div className="absolute top-0 left-0 right-0 h-[52px] bg-n0 border-b border-n40 z-20 flex items-center justify-between px-4">
-              <div className="flex items-center gap-4">
+          <div className="storyboard-generation-toolbar absolute top-0 left-0 right-0 h-[52px] bg-n0 border-b border-n40 z-20 flex items-center justify-between px-4">
+              <div className="flex items-center gap-4 min-w-0">
                   <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
                       <LayoutDashboard className="w-4 h-4 text-primary" />
                       画面分镜列表
@@ -1890,7 +1918,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                   {onBatchDeleteStoryboardItems && selectedShotIds.size > 0 && !batchProgress && (
                       <button
                           onClick={async () => {
@@ -1973,7 +2001,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
              className="pt-[52px] border-r border-n40 bg-n0 flex flex-col z-10 flex-shrink-0 relative"
           >
                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
-                   {hasStoryboard && selectedFile?.storyboard?.items.slice(0, visibleShotCount).map((item, index) => {
+                   {hasStoryboard && visibleStoryboardItems.map((item, index) => {
                        const isSelected = item.id === selectedShotId;
                        const hasImage = (item.generatedImages && item.generatedImages.length > 0) || !!item.generatedImage;
                        const isChecked = selectedShotIds.has(item.id);
@@ -2010,6 +2038,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                        <img 
                                            src={thumb} 
                                            loading="lazy"
+                                           decoding="async"
+                                           alt=""
                                            className="w-full h-full object-cover" 
                                        />
                                    ) : (
@@ -2088,12 +2118,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                        );
                    })}
                    {/* 分批加载：镜头很多时默认只显示前 N 个，避免卡顿 */}
-                   {hasStoryboard && (selectedFile?.storyboard?.items.length || 0) > visibleShotCount && (
+                   {hasStoryboard && storyboardTotalCount > visibleShotCount && (
                        <button
                            onClick={() => setVisibleShotCount(c => c + SHOT_PAGE_SIZE)}
                            className="w-full py-2 my-1 text-xs font-medium text-primary bg-primary-light/50 hover:bg-primary-light rounded-lg border border-primary/20 transition-colors"
                        >
-                           展开更多（还有 {(selectedFile?.storyboard?.items.length || 0) - visibleShotCount} 个镜头）
+                           展开更多（还有 {storyboardTotalCount - visibleShotCount} 个镜头）
                        </button>
                    )}
                    {hasStoryboard && visibleShotCount > SHOT_PAGE_SIZE && (
@@ -2117,10 +2147,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 flex overflow-hidden pt-[52px]">
+          <div className="storyboard-generation-main flex-1 flex overflow-hidden pt-[52px]">
               
             {/* Configuration Column */}
-            <div className="w-[380px] flex flex-col border-r border-n40 bg-n0 p-6 overflow-y-auto custom-scrollbar">
+            <div className="storyboard-config-pane flex flex-col border-r border-n40 bg-n0 p-6 overflow-y-auto custom-scrollbar">
                   <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-bold text-n700 flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-primary" />
@@ -2398,6 +2428,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               >
                                 <img 
                                   src={ref.url} 
+                                  loading="lazy"
+                                  decoding="async"
+                                  alt=""
                                   className="w-full h-full object-cover cursor-pointer" 
                                   onClick={() => {
                                     // 🆕 点击打开图片编辑器
@@ -2533,7 +2566,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
             {/* Results Column */}
             <div 
-                className={`flex-1 flex flex-col bg-n20 relative overflow-hidden transition-all ${isDraggingResult ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-500/5' : ''}`}
+                className={`storyboard-results-pane flex-1 flex flex-col bg-n20 relative overflow-hidden transition-all ${isDraggingResult ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-500/5' : ''}`}
                 onDragOver={handleResultDragOver}
                 onDragLeave={handleResultDragLeave}
                 onDrop={handleResultDrop}
@@ -2626,6 +2659,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                         <img 
                                             src={img.thumbnail || img.url}
                                             loading="lazy"
+                                            decoding="async"
+                                            alt=""
                                             className="w-full h-full object-contain transition-opacity duration-300"
                                             style={{ imageRendering: 'auto', opacity: 1 }}
                                             onError={(e) => {
@@ -2791,6 +2826,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     )}
                     <img 
                         src={previewImage} 
+                        decoding="async"
+                        alt=""
                         className={`max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl transition-opacity ${isLoadingFullImage ? 'opacity-30' : 'opacity-100'}`}
                         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
                         onLoad={() => {
@@ -2899,36 +2936,42 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
         {/* 🆕 抠图弹窗 */}
         {mattingModalImage && (
-            <MattingModal
-                imageUrl={mattingModalImage}
-                onClose={() => setMattingModalImage(null)}
-                onSubmit={handleMatting}
-                isProcessing={isMattingProcessing}
-            />
+            <React.Suspense fallback={<ModalChunkFallback />}>
+                <MattingModal
+                    imageUrl={mattingModalImage}
+                    onClose={() => setMattingModalImage(null)}
+                    onSubmit={handleMatting}
+                    isProcessing={isMattingProcessing}
+                />
+            </React.Suspense>
         )}
 
         {/* 🆕 融合弹窗 */}
         {showFusionModal && (
-            <ImageFusionModal
-                generatedImages={currentGeneratedImages}
-                onClose={() => setShowFusionModal(false)}
-                onSubmit={handleImageFusion}
-                isProcessing={isFusionProcessing}
-            />
+            <React.Suspense fallback={<ModalChunkFallback />}>
+                <ImageFusionModal
+                    generatedImages={currentGeneratedImages}
+                    onClose={() => setShowFusionModal(false)}
+                    onSubmit={handleImageFusion}
+                    isProcessing={isFusionProcessing}
+                />
+            </React.Suspense>
         )}
 
         {/* 🆕 分镜工具弹窗 */}
         {showStoryboardToolModal && (
-            <StoryboardToolModal
-                generatedImages={currentGeneratedImages}
-                materialImages={Object.values(materialLibrary).flat().map(m => ({ url: m.url, name: m.name }))}
-                onClose={() => setShowStoryboardToolModal(false)}
-                onPanorama360={handlePanorama360}
-                onPanoramaFusion={handlePanoramaFusion}
-                onAutoStoryboard={handleAutoStoryboard}
-                onMultiGridStoryboard={handleMultiGridStoryboardSubmit}
-                isProcessing={isStoryboardToolProcessing}
-            />
+            <React.Suspense fallback={<ModalChunkFallback />}>
+                <StoryboardToolModal
+                    generatedImages={currentGeneratedImages}
+                    materialImages={Object.values(materialLibrary).flat().map(m => ({ url: m.url, name: (m as any).name || m.id }))}
+                    onClose={() => setShowStoryboardToolModal(false)}
+                    onPanorama360={handlePanorama360}
+                    onPanoramaFusion={handlePanoramaFusion}
+                    onAutoStoryboard={handleAutoStoryboard}
+                    onMultiGridStoryboard={handleMultiGridStoryboardSubmit}
+                    isProcessing={isStoryboardToolProcessing}
+                />
+            </React.Suspense>
         )}
 
       </div>
@@ -3046,7 +3089,7 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-4">
                         <div className="relative rounded-2xl overflow-hidden border border-n40 h-80 bg-n30 flex items-center justify-center">
-                            <img src={imageUrl} className="w-full h-full object-contain" alt="预览" />
+                            <img src={imageUrl} loading="lazy" decoding="async" className="w-full h-full object-contain" alt="预览" />
                         </div>
                     </div>
 
@@ -3181,7 +3224,7 @@ const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, o
                 <div className="grid grid-cols-1 gap-6">
                     {/* 预览图 */}
                     <div className="relative rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">
-                        <img src={imageUrl} className="w-full h-full object-contain" alt="选中的图片" />
+                        <img src={imageUrl} loading="lazy" decoding="async" className="w-full h-full object-contain" alt="选中的图片" />
                     </div>
 
                     {/* Seed 控制 */}
@@ -3347,11 +3390,17 @@ const AroundAngleModal: React.FC<AroundAngleModalProps> = ({ imageUrl, onClose, 
 
                 {/* 3D 控制器 - 占据主要空间 */}
                 <div className="flex-1 min-h-0 p-4">
-                    <MultiAngle3DController
-                        imageUrl={imageUrl}
-                        onChange={handleControllerChange}
-                        initialValues={rawValues}
-                    />
+                    <React.Suspense fallback={
+                        <div className="w-full h-full min-h-[320px] rounded-lg border border-n40 bg-n20 flex items-center justify-center text-sm text-n300">
+                            加载 3D 控制器...
+                        </div>
+                    }>
+                        <MultiAngle3DController
+                            imageUrl={imageUrl}
+                            onChange={handleControllerChange}
+                            initialValues={rawValues}
+                        />
+                    </React.Suspense>
                 </div>
                 
                 {/* 底部工具栏 */}

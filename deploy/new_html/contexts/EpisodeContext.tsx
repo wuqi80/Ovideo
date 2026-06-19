@@ -149,6 +149,7 @@ interface EpisodeContextValue {
   videoSegments: VideoSegment[];
   characterVoices: CharacterVoice[];
   loadSlices: (...slices: DataSlice[]) => Promise<void>;
+  loadSlicesQuiet: (...slices: DataSlice[]) => Promise<void>;
   forceReloadSlices: (...slices: DataSlice[]) => Promise<void>;
   reload: () => Promise<void>;
   updateStoryboardDuration: (itemId: string, durationMs: number) => Promise<void>;
@@ -172,6 +173,7 @@ const EpisodeContext = createContext<EpisodeContextValue>({
   videoSegments: [],
   characterVoices: [],
   loadSlices: async () => {},
+  loadSlicesQuiet: async () => {},
   forceReloadSlices: async () => {},
   reload: async () => {},
   updateStoryboardDuration: async () => {},
@@ -208,9 +210,11 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
   const selectedScriptIdRef = useRef<string | null>(null);
   selectedScriptIdRef.current = selectedScriptId;
 
-  const fetchSlices = useCallback(async (...slices: DataSlice[]) => {
+  const fetchSlices = useCallback(async (optionsOrFirst?: DataSlice | { quiet?: boolean }, ...rest: DataSlice[]) => {
+    const quiet = typeof optionsOrFirst === 'object';
+    const slices = (quiet ? rest : [optionsOrFirst as DataSlice, ...rest]).filter(Boolean) as DataSlice[];
     if (!episodeId || slices.length === 0) return;
-    setIsLoading(true);
+    if (!quiet) setIsLoading(true);
     setError(null);
 
     slices.forEach(s => loadedSlicesRef.current.add(s));
@@ -256,7 +260,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     } catch (e: any) {
       setError(e.message || '加载集数据失败');
     } finally {
-      setIsLoading(false);
+      if (!quiet) setIsLoading(false);
     }
   }, [episodeId, projectId]);
 
@@ -264,6 +268,12 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     const newSlices = slices.filter(s => !loadedSlicesRef.current.has(s));
     if (newSlices.length === 0) return;
     await fetchSlices(...newSlices);
+  }, [fetchSlices]);
+
+  const loadSlicesQuiet = useCallback(async (...slices: DataSlice[]) => {
+    const newSlices = slices.filter(s => !loadedSlicesRef.current.has(s));
+    if (newSlices.length === 0) return;
+    await fetchSlices({ quiet: true }, ...newSlices);
   }, [fetchSlices]);
 
   const reload = useCallback(async () => {
@@ -379,6 +389,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       videoSegments: filteredVideoSegments,
       characterVoices,
       loadSlices,
+      loadSlicesQuiet,
       forceReloadSlices: fetchSlices,
       reload,
       updateStoryboardDuration,

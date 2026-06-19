@@ -14,7 +14,7 @@ export const ScriptPage: React.FC = () => {
     }
   }, [forceReloadSlices]);
   return (
-    <div className="h-full w-full overflow-hidden">
+    <div className="layout-safe h-full w-full overflow-auto">
       <WorkspaceApp hideHeader episodeId={episodeId} initialScriptId={selectedScriptId} onScriptSelect={setSelectedScriptId} onAfterExport={handleAfterExport} />
     </div>
   );

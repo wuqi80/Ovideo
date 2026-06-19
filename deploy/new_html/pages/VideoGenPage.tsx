@@ -394,7 +394,7 @@ export const VideoGenPage: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-n20">
+    <div className="layout-safe h-full flex flex-col bg-n20">
       {/* Import panel */}
       {showImportPanel && !importDone && (
         <div className="shrink-0 border-b border-n40 bg-n0 px-4 py-3">
@@ -415,14 +415,14 @@ export const VideoGenPage: React.FC = () => {
               </button>
             </div>
           )}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 text-xs text-n100">
+          <div className="responsive-toolbar flex items-center justify-between">
+            <div className="toolbar-group text-xs text-n100">
               <Film size={14} className="text-primary" />
               <span>{itemsWithImages.length} 个分镜已生成画面</span>
               <span className="text-n100">|</span>
               <span>{storyboardItems.length - itemsWithImages.length} 个待生成</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="toolbar-actions">
               <button
                 onClick={handleImportAll}
                 disabled={importing || allStoryboardItems.length === 0}
@@ -450,6 +450,8 @@ export const VideoGenPage: React.FC = () => {
                     <img
                       src={secureMediaUrl(url)!}
                       alt={`分镜 ${idx + 1}`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -466,8 +468,8 @@ export const VideoGenPage: React.FC = () => {
       )}
 
       {/* Navigation + 同步最新分镜图 */}
-      <div className="shrink-0 flex justify-between items-center px-4 py-1.5 border-b border-n40">
-        <div className="flex items-center gap-2">
+      <div className="responsive-toolbar shrink-0 flex justify-between items-center px-4 py-1.5 border-b border-n40">
+        <div className="toolbar-group">
           {changedCount > 0 && (
             <span className="text-[11px] text-amber-600">⚠ {changedCount} 个分镜图已在分镜页更新</span>
           )}
@@ -494,7 +496,7 @@ export const VideoGenPage: React.FC = () => {
       </div>
 
       {/* Embedded old VideoPage */}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="layout-safe flex-1 min-h-0 overflow-auto">
         <VideoPage
           isActive={true}
           sessionScope={sessionScope}

@@ -44,30 +44,39 @@ function SSEInvalidationProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-import ProjectHub from './components/ProjectHub';
-import ProjectWorkspace from './components/ProjectWorkspace';
-
-import { WorkflowLayout } from './layouts/WorkflowLayout';
-import { EpisodeHubPage } from './pages/EpisodeHubPage';
-import { ScriptPage } from './pages/ScriptPage';
-import { MaterialsPage } from './pages/MaterialsPage';
-import { AudioStagePage } from './pages/AudioStagePage';
-import { DesignPage } from './pages/DesignPage';
-import { GenerationPage } from './pages/GenerationPage';
-import { EnhancePage } from './pages/EnhancePage';
-import { FinalProductPage } from './pages/FinalProductPage';
-import { StoryboardGenPage } from './pages/StoryboardGenPage';
-import { VideoGenPage } from './pages/VideoGenPage';
-import { HistoryPage } from './pages/HistoryPage';
-import { CanvasPage } from './pages/CanvasPage';
-import { MediaLibraryPage } from './pages/MediaLibraryPage';
-import { CreditsPage } from './pages/CreditsPage';
-import { VideoReversePage } from './pages/VideoReversePage';
-import { AdminPage } from './components/AdminPage';
-import { AdminFeatureTabs } from './components/AdminFeatureTabs';
 import { CrmHost } from './admin/crmUI';
 
-import PostProcessPage from './components/PostProcessPage';
+const ProjectHub = React.lazy(() => import('./components/ProjectHub'));
+const ProjectWorkspace = React.lazy(() => import('./components/ProjectWorkspace'));
+const WorkflowLayout = React.lazy(() => import('./layouts/WorkflowLayout').then(m => ({ default: m.WorkflowLayout })));
+const EpisodeHubPage = React.lazy(() => import('./pages/EpisodeHubPage').then(m => ({ default: m.EpisodeHubPage })));
+const ScriptPage = React.lazy(() => import('./pages/ScriptPage').then(m => ({ default: m.ScriptPage })));
+const MaterialsPage = React.lazy(() => import('./pages/MaterialsPage').then(m => ({ default: m.MaterialsPage })));
+const AudioStagePage = React.lazy(() => import('./pages/AudioStagePage').then(m => ({ default: m.AudioStagePage })));
+const DesignPage = React.lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })));
+const GenerationPage = React.lazy(() => import('./pages/GenerationPage').then(m => ({ default: m.GenerationPage })));
+const EnhancePage = React.lazy(() => import('./pages/EnhancePage').then(m => ({ default: m.EnhancePage })));
+const FinalProductPage = React.lazy(() => import('./pages/FinalProductPage'));
+const StoryboardGenPage = React.lazy(() => import('./pages/StoryboardGenPage').then(m => ({ default: m.StoryboardGenPage })));
+const VideoGenPage = React.lazy(() => import('./pages/VideoGenPage').then(m => ({ default: m.VideoGenPage })));
+const HistoryPage = React.lazy(() => import('./pages/HistoryPage').then(m => ({ default: m.HistoryPage })));
+const CanvasPage = React.lazy(() => import('./pages/CanvasPage').then(m => ({ default: m.CanvasPage })));
+const MediaLibraryPage = React.lazy(() => import('./pages/MediaLibraryPage'));
+const CreditsPage = React.lazy(() => import('./pages/CreditsPage'));
+const VideoReversePage = React.lazy(() => import('./pages/VideoReversePage'));
+const AdminPage = React.lazy(() => import('./components/AdminPage').then(m => ({ default: m.AdminPage })));
+const AdminFeatureTabs = React.lazy(() => import('./components/AdminFeatureTabs'));
+const PostProcessPage = React.lazy(() => import('./components/PostProcessPage'));
+const AdminLayout = React.lazy(() => import('./admin/AdminLayout'));
+const AdminLoginPage = React.lazy(() => import('./admin/AdminLoginPage'));
+const AdminHubPage = React.lazy(() => import('./admin/AdminHubPage'));
+const AdminSettingsPage = React.lazy(() => import('./admin/AdminSettingsPage'));
+
+const RouteFallback: React.FC = () => (
+    <div className="h-screen w-full bg-n20 flex items-center justify-center text-sm text-n300">
+        加载中...
+    </div>
+);
 
 // 2026-05-26：独立 Admin Shell
 //  - /admin/login            → AdminLoginPage（独立账号密码登录）
@@ -75,10 +84,6 @@ import PostProcessPage from './components/PostProcessPage';
 //  - /admin/settings         → AdminLayout > AdminSettingsPage（系统设置）
 //  - /admin/operations       → AdminPage 全屏（5 tab 不变，浮层"返回 Hub"）
 // Admin token 走 sessionStorage（adminAuth.ts），与主站 localStorage.auth_token 隔离。
-import { AdminLayout } from './admin/AdminLayout';
-import { AdminLoginPage } from './admin/AdminLoginPage';
-import { AdminHubPage } from './admin/AdminHubPage';
-import { AdminSettingsPage } from './admin/AdminSettingsPage';
 
 // refactor/v2：操作面板/功能面板已并入统一壳（AdminLayout 提供层级菜单 + 鉴权门）。
 // 这两个轻包装只负责把 ?tab 透传给被内嵌的组件，组件不卸载 → 切 tab 不重复拉数。
@@ -113,6 +118,7 @@ const App: React.FC = () => {
             <TaskProvider>
                 <GlobalToastWithNav />
                 <CrmHost />
+                <React.Suspense fallback={<RouteFallback />}>
                 <Routes>
                     {/* ========== 项目管理中心 ========== */}
                     <Route path="/projects" element={<ProjectHub />} />
@@ -179,6 +185,7 @@ const App: React.FC = () => {
                     <Route path="/canvas" element={<Navigate to="/projects" replace />} />
                     <Route path="*" element={<Navigate to="/projects" replace />} />
                 </Routes>
+                </React.Suspense>
             </TaskProvider>
             </WorkspaceProvider>
         </BrowserRouter>

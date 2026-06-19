@@ -543,8 +543,11 @@ Requires admin role. All prefixed with `/api/admin/`.
 | PUT | `/api/admin/api-configs/{config_id}` | `admin_routes.py` | Update config |
 | DELETE | `/api/admin/api-configs/{config_id}` | `admin_routes.py` | Delete config |
 | POST | `/api/admin/api-configs/{config_id}/test` | `admin_routes.py` | Test API config |
+| POST | `/api/admin/api-configs/reload-env` | `admin_routes.py` | Reload DB-backed API configs into runtime env without restart |
+| POST | `/api/admin/api-configs/health/sweep` | `admin_routes.py` | Sweep provider runtime health and cache results |
+| GET | `/api/admin/api-configs/{provider_id}/health` | `admin_routes.py` | Check one provider runtime health and cache result |
 | GET | `/api/admin/api-configs/presets` | `admin_routes.py` | List presets (含 `飞升 (Seedance 2.0)` `渡劫 (Seedance 2.0 Fast)`，provider=`seedance`，env=`SEEDANCE_API_KEY`) |
-| POST | `/api/admin/api-configs/import-presets` | `admin_routes.py` | Import presets |
+| POST | `/api/admin/api-configs/import-presets` | `admin_routes.py` | Import presets; default copies current runtime env keys into DB configs |
 
 ### System Settings
 

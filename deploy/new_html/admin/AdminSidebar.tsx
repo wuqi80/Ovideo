@@ -56,13 +56,13 @@ export const AdminSidebar: React.FC = () => {
     setOpenItems(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
-    <aside className="w-60 shrink-0 bg-n0 border-r border-n40 flex flex-col">
+    <aside className="w-60 shrink-0 bg-n0 border-r border-n40 flex flex-col min-h-0">
       {/* header cell */}
-      <div className="h-14 flex items-center gap-2.5 px-4 border-b border-n40">
+      <div className="h-14 flex items-center gap-2.5 px-4 border-b border-n40 min-w-0">
         <div className="w-8 h-8 rounded-md bg-primary-light border border-primary/30 flex items-center justify-center">
           <ShieldCheck className="w-4 h-4 text-primary" />
         </div>
-        <div className="leading-tight">
+        <div className="leading-tight min-w-0">
           <div className="text-sm font-bold tracking-tight text-n800">系统管理后台</div>
           <div className="text-[10px] uppercase tracking-widest text-n100"
                style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>Admin Console</div>
@@ -79,12 +79,12 @@ export const AdminSidebar: React.FC = () => {
               {/* 一级 */}
               <button
                 onClick={() => toggleSection(sec.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
+                className={`w-full min-w-0 flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
                   active.sectionId === sec.id ? 'text-n800' : 'text-n400 hover:text-n800 hover:bg-n20'
                 }`}
               >
                 <Icon className="w-[18px] h-[18px] shrink-0" />
-                <span className="flex-1 text-left">{sec.label}</span>
+                <span className="flex-1 min-w-0 text-left truncate">{sec.label}</span>
                 {open ? <ChevronDown className="w-3.5 h-3.5 text-n100" /> : <ChevronRight className="w-3.5 h-3.5 text-n100" />}
               </button>
 
@@ -99,13 +99,13 @@ export const AdminSidebar: React.FC = () => {
                       <div key={item.id}>
                         <button
                           onClick={() => hasLeaves ? toggleItem(item.id) : item.to && navigate(item.to)}
-                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
+                          className={`w-full min-w-0 flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
                             itemActive
                               ? 'bg-primary-light text-primary font-medium'
                               : 'text-n300 hover:text-n800 hover:bg-n20'
                           }`}
                         >
-                          <span className="flex-1 text-left">{item.label}</span>
+                          <span className="flex-1 min-w-0 text-left truncate">{item.label}</span>
                           {hasLeaves && (itemOpen
                             ? <ChevronDown className="w-3 h-3 text-n100" />
                             : <ChevronRight className="w-3 h-3 text-n100" />)}
@@ -120,14 +120,14 @@ export const AdminSidebar: React.FC = () => {
                                 <button
                                   key={leaf.id}
                                   onClick={() => navigate(leaf.to)}
-                                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
+                                  className={`w-full min-w-0 flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
                                     leafActive
                                       ? 'bg-primary-light text-primary font-medium'
                                       : 'text-n300 hover:text-n800 hover:bg-n20'
                                   }`}
                                 >
                                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${leafActive ? 'bg-primary' : 'bg-n50'}`} />
-                                  <span className="flex-1 text-left">{leaf.label}</span>
+                                  <span className="flex-1 min-w-0 text-left truncate">{leaf.label}</span>
                                 </button>
                               );
                             })}

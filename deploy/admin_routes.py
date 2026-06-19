@@ -11,12 +11,31 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiohttp
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+from admin_api_config_routes import (
+    ApiConfigBatchTestBody,
+    ApiConfigCreateBody,
+    ApiConfigHealthSweepBody,
+    ApiConfigImportPresetsBody,
+    ApiConfigRepairConflictsBody,
+    ApiConfigUpdateBody,
+    admin_check_provider_health,
+    admin_create_api_config,
+    admin_delete_api_config,
+    admin_get_presets,
+    admin_import_preset_configs,
+    admin_list_api_configs,
+    admin_reload_api_env,
+    admin_repair_api_config_conflicts,
+    admin_sweep_provider_health,
+    admin_test_all_api_configs,
+    admin_test_api_config,
+    admin_update_api_config,
+    router as api_config_router,
+)
 from dao_agent import AgentDAO
-from dao_api_config import ApiConfigDAO
 from dao_system_settings import SystemSettingsDAO
 from dao_task import TaskDAO
 from dao_workflow_template import WorkflowTemplateDAO
@@ -58,7 +77,7 @@ async def require_admin(request: Request) -> str:
         # 保证开箱即用（登录密码本身才是安全边界）。可用 MY2_ADMIN_USERNAMES 追加白名单。
         # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
         import os as _os
-        allowed = {'admin', 'lllsdhr'}
+        allowed = {'admin'}
         boot = (_os.environ.get('MY2_ADMIN_USERNAMES') or '').strip()
         if boot:
             allowed |= {s.strip() for s in boot.split(',') if s.strip()}
@@ -73,16 +92,6 @@ async def require_admin(request: Request) -> str:
 # api-configs 增删改等公网无鉴权可调（严重漏洞）。现旧控制台 app.js 已改为携带 admin JWT
 # （读同源 iframe 共享的 sessionStorage.admin_session_token），故可安全挂全局鉴权。
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
-
-
-async def _reload_api_env():
-    """保存 API 配置后实时刷新环境变量"""
-    try:
-        from cluster_main import load_api_configs_to_env
-        await load_api_configs_to_env()
-        logger.info("🔄 API 配置已实时刷新到环境变量")
-    except Exception as e:
-        logger.warning(f"⚠️ 实时刷新API配置失败: {e}")
 
 
 def _require_db() -> None:
@@ -247,13 +256,6 @@ def _normalize_admin_user(row: Any) -> Dict[str, Any]:
         "used_storage_bytes": d.get("used_storage_bytes"),
         "created_at": d.get("created_at"),
     }
-
-
-def _mask_api_config_row(row: Any) -> Dict[str, Any]:
-    d = _row_to_jsonable(row)
-    if "api_key_encrypted" in d:
-        d["api_key_encrypted"] = "***" if d["api_key_encrypted"] else ""
-    return d
 
 
 def _instance_healthy(inst: Dict[str, Any]) -> bool:
@@ -608,264 +610,7 @@ async def admin_delete_workflow(template_id: str):
 # --- API configurations ---
 
 
-class ApiConfigCreateBody(BaseModel):
-    # 关闭 Pydantic v2 对 `model_` 前缀的保护：本表语义里 model_name
-    # 指 "LLM 模型名"（gpt-4 / claude-3.5 / ...），跟 Pydantic 的 model_*
-    # 内部方法不冲突；重命名会牵动 FE/BE/DB 三层，得不偿失。
-    model_config = ConfigDict(protected_namespaces=())
-
-    name: str = Field(..., min_length=1)
-    provider: str = Field(..., min_length=1)
-    endpoint: str = Field(..., min_length=1)
-    api_key: str = Field(..., min_length=1)
-    model_name: str = ""
-    proxy_mode: str = "direct"
-    custom_proxy: str = ""
-    # 2026-05-24：category 字段。前端 admin UI 按这个分类显示；
-    # 空字符串 = "未分类"（DB CHECK 约束允许 ''/text/image/video/audio）
-    category: str = ""
-
-
-class ApiConfigUpdateBody(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    name: Optional[str] = None
-    provider: Optional[str] = None
-    endpoint: Optional[str] = None
-    api_key: Optional[str] = None
-    model_name: Optional[str] = None
-    proxy_mode: Optional[str] = None
-    custom_proxy: Optional[str] = None
-    request_template: Optional[Dict[str, Any]] = None
-    headers: Optional[Dict[str, Any]] = None
-    enabled: Optional[bool] = None
-    category: Optional[str] = None
-
-
-@router.get("/api-configs")
-async def admin_list_api_configs():
-    _require_db()
-    rows = await ApiConfigDAO.list_all()
-    return {
-        "success": True,
-        "api_configs": [_mask_api_config_row(r) for r in rows],
-    }
-
-
-@router.post("/api-configs", status_code=status.HTTP_201_CREATED)
-async def admin_create_api_config(body: ApiConfigCreateBody):
-    _require_db()
-    row = await ApiConfigDAO.create(
-        name=body.name.strip(),
-        provider=body.provider.strip(),
-        endpoint=body.endpoint.strip(),
-        api_key=body.api_key,
-        model_name=body.model_name,
-        proxy_mode=body.proxy_mode,
-        custom_proxy=body.custom_proxy,
-        category=body.category,
-    )
-    if not row:
-        raise HTTPException(status_code=500, detail="Failed to create API config")
-    await _reload_api_env()
-    return {"success": True, "api_config": _mask_api_config_row(row)}
-
-
-@router.put("/api-configs/{config_id}")
-async def admin_update_api_config(config_id: str, body: ApiConfigUpdateBody):
-    _require_db()
-    data = body.model_dump(exclude_unset=True)
-    if not data:
-        row = await ApiConfigDAO.get_by_id(config_id)
-        if not row:
-            raise HTTPException(status_code=404, detail="Config not found")
-        return {"success": True, "api_config": _mask_api_config_row(row)}
-    updated = await ApiConfigDAO.update(config_id, **data)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Config not found")
-    await _reload_api_env()
-    return {"success": True, "api_config": _mask_api_config_row(updated)}
-
-
-@router.delete("/api-configs/{config_id}")
-async def admin_delete_api_config(config_id: str):
-    _require_db()
-    ok = await ApiConfigDAO.delete(config_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Config not found")
-    await _reload_api_env()
-    return {"success": True, "deleted": True}
-
-
-PRESET_API_MODELS = [
-    {"name": "Gemini 2.5 Flash (文本)", "provider": "gemini-text", "model_name": "gemini-2.5-flash", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "text"},
-    {"name": "DeepSeek Reasoner", "provider": "deepseek", "model_name": "deepseek-reasoner", "endpoint": "https://api.deepseek.com", "proxy_mode": "direct", "category": "text"},
-    {"name": "Gemini 2.5 Flash (图像)", "provider": "gemini-image", "model_name": "gemini-2.5-flash-preview-native-audio-dialog", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "image"},
-    {"name": "Gemini 3 Pro (图像)", "provider": "gemini-image", "model_name": "gemini-3-pro-image-preview", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "image"},
-    {"name": "豆包 SeedDream", "provider": "doubao", "model_name": "doubao-seedream-4-0-250828", "endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations", "proxy_mode": "direct", "category": "image"},
-    {"name": "MiniMax Hailuo", "provider": "minimax", "model_name": "MiniMax-Hailuo-02", "endpoint": "https://api.minimaxi.com/v1", "proxy_mode": "direct", "category": "video"},
-    {"name": "Sora2", "provider": "sora2", "model_name": "sora-2", "endpoint": "https://api.laozhang.ai/v1", "proxy_mode": "direct", "category": "video"},
-    {"name": "Veo", "provider": "veo", "model_name": "veo-3.1", "endpoint": "https://api.laozhang.ai/v1", "proxy_mode": "direct", "category": "video"},
-    {"name": "大能 Wan2.6 (DashScope)", "provider": "dashscope", "model_name": "wan2.6-i2v", "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1", "proxy_mode": "direct", "category": "video"},
-    # 2026-05-24：阿里云百炼共享 API（Kling / Vidu / HappyHorse 同一 DASHSCOPE_API_KEY）
-    # 修真境界已用：练气(Wan2)/筑基(Veo)/金丹(MINI)/化神(Sora2)/飞升(Seedance2)/渡劫(Seedance2Fast)
-    # 本次新接入境界：合体(Kling, omni 全能多 mode) / 大乘(Vidu, 多版本) / 炼虚(HappyHorse, 多图参考)
-    {"name": "阿里云百炼共享 API · 合体 (Kling)", "provider": "dashscope", "model_name": "kling/kling-v3-video-generation", "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis", "proxy_mode": "direct", "category": "video"},
-    {"name": "阿里云百炼共享 API · 大乘 (Vidu)", "provider": "dashscope", "model_name": "vidu/viduq3-turbo_reference2video", "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis", "proxy_mode": "direct", "category": "video"},
-    {"name": "阿里云百炼共享 API · 炼虚 (HappyHorse)", "provider": "dashscope", "model_name": "happyhorse-1.0-r2v", "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis", "proxy_mode": "direct", "category": "video"},
-    {"name": "飞升 (Seedance 2.0)", "provider": "seedance", "model_name": "doubao-seedance-2-0-260128", "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks", "proxy_mode": "direct", "category": "video"},
-    {"name": "渡劫 (Seedance 2.0 Fast)", "provider": "seedance", "model_name": "doubao-seedance-2-0-fast-260128", "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks", "proxy_mode": "direct", "category": "video"},
-    {"name": "Gemini TTS (语音)", "provider": "gemini-tts", "model_name": "gemini-2.0-flash", "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/", "proxy_mode": "direct", "category": "audio"},
-]
-
-
-@router.post("/api-configs/import-presets")
-async def admin_import_preset_configs():
-    """一键导入全部预置模型模板"""
-    _require_db()
-    existing = await ApiConfigDAO.list_all()
-    existing_providers = {(r.get('provider', ''), r.get('model_name', '')) for r in existing}
-    imported = 0
-    skipped = 0
-    for preset in PRESET_API_MODELS:
-        key = (preset['provider'], preset['model_name'])
-        if key in existing_providers:
-            skipped += 1
-            continue
-        await ApiConfigDAO.create(
-            name=preset['name'],
-            provider=preset['provider'],
-            endpoint=preset['endpoint'],
-            api_key="",
-            model_name=preset['model_name'],
-            proxy_mode=preset['proxy_mode'],
-            category=preset.get('category', ''),
-        )
-        imported += 1
-    return {"success": True, "imported": imported, "skipped": skipped, "total": len(PRESET_API_MODELS)}
-
-
-@router.get("/api-configs/presets")
-async def admin_get_presets():
-    """返回预置模型列表（前端展示用）"""
-    return {"success": True, "presets": PRESET_API_MODELS}
-
-
-def _resolve_aiohttp_proxy(proxy_mode: str, custom_proxy: str) -> Optional[str]:
-    mode = (proxy_mode or "direct").lower().strip()
-    if mode == "direct":
-        return None
-    if mode == "custom" and custom_proxy.strip():
-        return custom_proxy.strip()
-    if mode == "system":
-        return None
-    return None
-
-
-async def _resolve_proxy_for_request(proxy_mode: str, custom_proxy: str) -> Optional[str]:
-    direct = _resolve_aiohttp_proxy(proxy_mode, custom_proxy)
-    if direct is not None or (proxy_mode or "").lower() != "system":
-        return direct
-    settings = await SystemSettingsDAO.get_proxy_settings()
-    for key in (
-        "proxy_https",
-        "proxy_http",
-        "https_proxy",
-        "http_proxy",
-        "all_proxy",
-    ):
-        val = settings.get(key) or settings.get(key.upper())
-        if val:
-            return val.strip()
-    return None
-
-
-@router.post("/api-configs/{config_id}/test")
-async def admin_test_api_config(config_id: str):
-    _require_db()
-    row = await ApiConfigDAO.get_by_id(config_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="Config not found")
-    key = await ApiConfigDAO.get_decrypted_key(config_id)
-    if not key:
-        return {
-            "success": True,
-            "test": {
-                "ok": False,
-                "status_code": None,
-                "error": "No API key configured",
-                "url": None,
-            },
-        }
-
-    endpoint = (row.get("endpoint") or "").rstrip("/")
-    hdrs_raw = _jsonb_to_python(row.get("headers")) or {}
-    headers: Dict[str, str] = {}
-    if isinstance(hdrs_raw, dict):
-        headers = {str(k): str(v) for k, v in hdrs_raw.items()}
-    if "Authorization" not in headers and "authorization" not in headers:
-        headers["Authorization"] = f"Bearer {key}"
-
-    proxy = await _resolve_proxy_for_request(
-        str(row.get("proxy_mode") or "direct"),
-        str(row.get("custom_proxy") or ""),
-    )
-    timeout = aiohttp.ClientTimeout(total=20)
-    urls_to_try = [endpoint]
-    if endpoint:
-        if not endpoint.endswith("/models"):
-            urls_to_try.append(f"{endpoint}/models")
-            urls_to_try.append(f"{endpoint}/v1/models")
-
-    last_error: Optional[str] = None
-    last_status: Optional[int] = None
-    tried_url: Optional[str] = None
-
-    try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            for url in urls_to_try:
-                if not url:
-                    continue
-                tried_url = url
-                try:
-                    async with session.get(
-                        url, headers=headers, proxy=proxy, allow_redirects=True
-                    ) as resp:
-                        last_status = resp.status
-                        if resp.status < 500:
-                            return {
-                                "success": True,
-                                "test": {
-                                    "ok": True,
-                                    "status_code": resp.status,
-                                    "url": url,
-                                    "error": None,
-                                },
-                            }
-                        last_error = f"HTTP {resp.status}"
-                except aiohttp.ClientError as e:
-                    last_error = str(e)
-    except Exception as e:
-        logger.exception("api-config test failed")
-        return {
-            "success": True,
-            "test": {
-                "ok": False,
-                "status_code": last_status,
-                "error": str(e),
-                "url": tried_url,
-            },
-        }
-
-    return {
-        "success": True,
-        "test": {
-            "ok": False,
-            "status_code": last_status,
-            "error": last_error or "Request failed",
-            "url": tried_url,
-        },
-    }
+router.include_router(api_config_router)
 
 
 # --- System settings ---

@@ -2648,7 +2648,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
   }
 
   return (
-    <div className={`flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} bg-n20 text-n800 font-sans`}>
+    <div className={`layout-safe flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} bg-n20 text-n800 font-sans`}>
       {!hideHeader && (
         <Header 
           visibleColumns={visibleColumns} 
@@ -2666,8 +2666,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         />
       )}
       
-      <main className={`flex-1 overflow-hidden ${currentView === AppView.Admin ? 'flex' : 'flex'} relative`} ref={containerRef}>
-         <div className="w-full h-full flex">
+      <main className={`workspace-main flex-1 ${currentView === AppView.Admin ? 'flex' : 'flex'} relative`} ref={containerRef}>
+         <div className="workspace-view-frame w-full h-full flex">
          {renderAllViews()}
          </div>
          {/* 🚀 优化：仅在初次加载项目列表时显示Loading，视图切换不阻塞 */}

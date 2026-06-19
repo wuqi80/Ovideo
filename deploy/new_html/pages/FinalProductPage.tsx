@@ -110,12 +110,12 @@ export const FinalProductPage: React.FC = () => {
   const rest = finals.slice(1).concat(others);
 
   return (
-    <div className="flex-1 overflow-auto p-6 bg-n20">
-      <header className="mb-5 flex items-center gap-2">
+    <div className="layout-safe flex-1 overflow-auto p-6 bg-n20">
+      <header className="responsive-toolbar mb-5 flex items-center gap-2">
         <Clapperboard className="w-5 h-5 text-primary" />
         <h1 className="text-lg font-semibold text-n800">成品</h1>
         <span className="text-xs text-n100">合成好的整片在这里查看与下载</span>
-        <div className="flex-1" />
+        <div className="flex-1 min-w-[16px]" />
         {compose?.status === 'running' ? (
           <span className="flex items-center gap-1 px-3 py-1.5 bg-primary-light text-primary text-xs rounded-lg border border-primary/20">
             <Loader2 size={13} className="animate-spin" /> 合成中 {compose.done}/{compose.total || '…'}
@@ -150,11 +150,11 @@ export const FinalProductPage: React.FC = () => {
           还没有成品视频 —— 在「视频 / 美化」阶段合成整片后，会自动出现在这里。
         </div>
       ) : (
-        <div className="space-y-6 max-w-6xl">
+        <div className="space-y-6 max-w-6xl min-w-0">
           {/* 主成片 */}
           {featured ? (
             <div className="bg-n0 border border-n40 rounded-md shadow-card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-n40">
+              <div className="responsive-toolbar flex items-center justify-between px-4 py-3 border-b border-n40">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-[10px] px-2 py-0.5 rounded bg-success-light text-success font-medium shrink-0">完整成片</span>
                   <span className="text-sm font-semibold text-n800 truncate">{featured.title}</span>
@@ -197,8 +197,8 @@ export const FinalProductPage: React.FC = () => {
       {/* 合成挑选面板 */}
       {pickerOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPickerOpen(false)}>
-          <div className="bg-n0 rounded-lg shadow-bottom w-[900px] max-w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-3 border-b border-n40 flex items-center gap-2">
+          <div className="modal-surface bg-n0 rounded-lg shadow-bottom w-[900px] max-w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="responsive-toolbar px-5 py-3 border-b border-n40 flex items-center gap-2">
               <Wand2 className="w-4 h-4 text-primary" />
               <h2 className="text-sm font-semibold text-n800">挑选每镜要用的视频</h2>
               <span className="text-xs text-n100">默认选中最新一条，可逐镜更换</span>

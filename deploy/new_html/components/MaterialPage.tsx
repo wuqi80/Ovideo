@@ -692,11 +692,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   };
 
   return (
-    <div className="flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
+    <div className="layout-safe responsive-split flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
       {/* Resizable Sidebar: Shot List */}
       <div
         style={{ width: sidebarWidth }}
-        className="flex-shrink-0 border-r border-n40 bg-n0 flex flex-col relative"
+        className="responsive-pane flex-shrink-0 border-r border-n40 bg-n0 flex flex-col relative"
       >
         <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex items-center justify-between flex-shrink-0">
           <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
@@ -851,7 +851,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
       </div>
 
       {/* Right Content: Workspace */}
-      <div className="flex-1 flex flex-col bg-n20 overflow-hidden relative">
+      <div className="responsive-pane layout-safe flex-1 flex flex-col bg-n20 overflow-hidden relative">
          {/* Top Bar */}
          <div className="h-[52px] border-b border-n40 bg-n0 px-6 flex items-center justify-between flex-shrink-0 shadow-sm z-20">
              <div className="flex items-center gap-4">
@@ -949,12 +949,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
              <div className="bg-n0 rounded-md p-1 border border-n40 mb-8 shadow-card">
                  <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-n40">
                     {/* Script */}
-                    <div className="p-4 flex flex-col h-full min-h-[140px]">
+                    <div className="p-4 flex flex-col min-h-[140px]">
                         <span className="text-[10px] font-bold text-n100 uppercase block mb-3 flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full bg-n100"></span>
                             剧本描述
                         </span>
-                        <div className="flex-1 overflow-y-auto max-h-[100px] custom-scrollbar pr-2">
+                        <div className="flex-1 pr-2">
                              <p className="text-sm text-n700 leading-relaxed font-serif whitespace-pre-wrap break-words">
                                  {selectedShot.originalText || '无'}
                              </p>
@@ -962,12 +962,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     </div>
                     
                     {/* Image Prompt */}
-                    <div className="p-4 flex flex-col h-full min-h-[140px]">
+                    <div className="p-4 flex flex-col min-h-[140px]">
                         <span className="text-[10px] font-bold text-cyan-500 uppercase block mb-3 flex items-center gap-2">
                              <ImageIcon className="w-3.5 h-3.5" />
                              画面提示词 (Image)
                         </span>
-                        <div className="flex-1 overflow-y-auto max-h-[100px] custom-scrollbar pr-2">
+                        <div className="flex-1 pr-2">
                             <p className="text-xs text-n300 leading-relaxed whitespace-pre-wrap break-words">
                                 {selectedShot.imagePrompt || '无'}
                             </p>
@@ -975,12 +975,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     </div>
 
                     {/* Video Prompt */}
-                    <div className="p-4 flex flex-col h-full min-h-[140px]">
+                    <div className="p-4 flex flex-col min-h-[140px]">
                          <span className="text-[10px] font-bold text-primary uppercase block mb-3 flex items-center gap-2">
                              <Film className="w-3.5 h-3.5" />
                              视频提示词 (Video)
                          </span>
-                         <div className="flex-1 overflow-y-auto max-h-[100px] custom-scrollbar pr-2">
+                         <div className="flex-1 pr-2">
                             <p className="text-xs text-n300 leading-relaxed whitespace-pre-wrap break-words">
                                 {selectedShot.videoPrompt || '无'}
                             </p>

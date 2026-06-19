@@ -68,6 +68,11 @@ class ApiConfigDAO:
             return encrypted
 
     @staticmethod
+    def decrypt_key(encrypted: str) -> str:
+        """Public API for decrypting stored API keys."""
+        return ApiConfigDAO._decrypt_key(encrypted)
+
+    @staticmethod
     async def create(
         name: str,
         provider: str,
@@ -131,7 +136,7 @@ class ApiConfigDAO:
         enc = row.get("api_key_encrypted")
         if enc is None or enc == "":
             return None
-        return ApiConfigDAO._decrypt_key(enc)
+        return ApiConfigDAO.decrypt_key(enc)
 
     @staticmethod
     async def list_all() -> List[Dict[str, Any]]:
