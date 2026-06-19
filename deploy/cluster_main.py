@@ -28,7 +28,6 @@ from pydantic import BaseModel, ConfigDict, Field
 # ── Pydantic 模型已抽离至 schemas/ 包（规范 §2.3 / §6，MVC增量1）。
 #    下列导入同时作为对外 re-export：保持 `from cluster_main import <Model>`
 #    与 `cluster_main.<Model>` 的历史引用零破坏（如 tests/test_dashscope_wiring_e2e.py）。
-from schemas.auth import LoginRequest
 from schemas.generation import (
     GenerateRequest,
     DeepseekChatRequest,
@@ -88,6 +87,7 @@ from services.api_provider_health_monitor import (
 from services.ai_proxy_service import AIProxyError, generate_gemini_images
 from services.api_provider_runtime import build_provider_runtime_status
 from routers.ai_proxy import create_ai_proxy_router
+from routers.auth import create_auth_router
 from routers.cluster_status import create_cluster_status_router
 from routers.comfyui_files import create_comfyui_files_router
 from routers.fallback_static import create_fallback_static_router
@@ -901,123 +901,15 @@ app.include_router(
 )
 logger.info("Project API routes registered (/api/projects/*)")
 
-@app.post("/api/login")
-async def login(request: LoginRequest):
-    """用户登录（支持硬编码用户 + 数据库用户）"""
-    is_valid = False
-
-    # 1. 先检查硬编码用户（快速路径）
-    if verify_credentials(request.username, request.password):
-        is_valid = True
-        logger.info(f"用户 {request.username} 通过硬编码验证")
-
-    # 2. 如果硬编码验证失败，尝试数据库验证
-    db_user_record: Optional[Dict[str, Any]] = None
-    if not is_valid and db_manager:
-        try:
-            from dao_user import UserDAO
-            user = await UserDAO.verify_password(request.username, request.password)
-            if user:
-                is_valid = True
-                db_user_record = user
-                logger.info(f"用户 {request.username} 通过数据库验证")
-        except Exception as e:
-            logger.error(f"数据库验证失败: {e}")
-
-    # 3. 验证失败
-    if not is_valid:
-        logger.warning(f"用户 {request.username} 登录失败：用户名或密码错误")
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-
-    # 2026-05-26 Slice 4: 管理员禁用的账号不允许登录
-    # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
-    if db_user_record and isinstance(db_user_record, dict):
-        u_status = db_user_record.get('status')
-        if u_status and u_status != 'active':
-            reason = db_user_record.get('disabled_reason') or '账户已被管理员禁用'
-            logger.warning(f"用户 {request.username} 登录被拒：{u_status} - {reason}")
-            raise HTTPException(status_code=403, detail=f"账户已被禁用：{reason}")
-
-    # 4. 创建会话token
-    token = create_session_token(request.username)
-    logger.info(f"用户 {request.username} 登录成功")
-
-    # 5. 自动同步用户到数据库（如果数据库可用且用户不存在）
-    if db_manager:
-        try:
-            from dao_user import UserDAO
-
-            logger.info(f"🔍 检查用户 {request.username} 是否存在于数据库...")
-
-            # 检查用户是否已存在
-            existing_user = await UserDAO.get_user_by_username(request.username)
-
-            if not existing_user:
-                logger.info(f"📝 用户 {request.username} 不存在，开始创建...")
-                # 创建数据库用户记录 ⭐ 使用 username 作为 user_id（向后兼容）
-                user = await UserDAO.create_user(
-                    username=request.username,
-                    password=request.password,
-                    email=f"{request.username}@local.com",  # 默认邮箱
-                    user_id=request.username  # ⭐ 关键：使用 username 作为 user_id
-                )
-                if user:
-                    logger.info(f"✅ 用户 {request.username} 已同步到数据库（ID: {user['user_id']}）")
-
-                    # 🆕 为新用户设置默认权限（所有模型可用）
-                    default_permissions = {
-                        "allowedModels": [
-                            "gemini-2.5-flash",
-                            "gemini-2.5-flash-image",
-                            "wan2-i2v",
-                            "wan2-morph",
-                            "wan26-i2v",
-                            "sora2-i2v",
-                            "veo-i2v",
-                            "minimax-i2v"
-                        ],
-                        "priority": "normal",
-                        "canExport": True
-                    }
-                    await UserDAO.update_user_permissions(request.username, default_permissions)
-                    logger.info(f"✅ 已为用户 {request.username} 设置默认权限")
-                else:
-                    logger.error(f"❌ 创建用户记录失败，返回值为None")
-            else:
-                logger.info(f"✅ 用户 {request.username} 已存在于数据库（ID: {existing_user['user_id']}）")
-
-                # 🔧 检查是否需要更新权限字段（迁移旧用户）
-                user_permissions = existing_user.get('permissions')
-                if not user_permissions or not isinstance(user_permissions, dict):
-                    logger.info(f"⚠️ 用户 {request.username} 权限字段为空，设置默认权限...")
-                    default_permissions = {
-                        "allowedModels": [
-                            "gemini-2.5-flash",
-                            "gemini-2.5-flash-image",
-                            "wan2-i2v",
-                            "wan2-morph",
-                            "wan26-i2v",
-                            "sora2-i2v",
-                            "veo-i2v",
-                            "minimax-i2v"
-                        ],
-                        "priority": "normal",
-                        "canExport": True
-                    }
-                    await UserDAO.update_user_permissions(request.username, default_permissions)
-                    logger.info(f"✅ 已为现有用户 {request.username} 设置默认权限")
-        except Exception as e:
-            # 数据库同步失败不影响登录，但需要记录详细错误
-            logger.error(f"❌ 用户同步到数据库失败: {e}", exc_info=True)
-    else:
-        logger.warning(f"⚠️ 数据库未连接，跳过用户同步")
-
-    return {
-        "success": True,
-        "message": "登录成功",
-        "token": token,
-        "username": request.username
-    }
+app.include_router(
+    create_auth_router(
+        verify_credentials=verify_credentials,
+        create_session_token=create_session_token,
+        get_db_manager=lambda: db_manager,
+        logger=logger,
+    )
+)
+logger.info("Auth API routes registered (/api/login)")
 
 # ==================== 管理员API ====================
 

@@ -30,6 +30,7 @@ ALLOWED_DUPLICATES = {
 }
 
 EXPECTED_ENDPOINTS = {
+    ("/api/login", "POST"): ("routers.auth", "login"),
     ("/api/video/crop", "POST"): ("routers.video", "crop_video"),
     ("/api/thumbnail", "GET"): ("routers.files", "get_thumbnail"),
     ("/api/upload", "POST"): ("routers.files", "upload_file"),
@@ -702,6 +703,47 @@ def check_generation_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_auth_routes_extracted(root: Path) -> int:
+    cluster_main_path = root / "cluster_main.py"
+    auth_path = root / "routers" / "auth.py"
+    if not auth_path.exists():
+        fail("routers/auth.py is missing")
+
+    cluster_tree = parse_py_file(cluster_main_path)
+    violations: list[str] = []
+    for node in ast.walk(cluster_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and arg.value == "/api/login":
+                violations.append(f"{cluster_main_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Auth route handlers must live in routers/auth.py:\n" + "\n".join(violations))
+
+    auth_tree = parse_py_file(auth_path)
+    route_count = 0
+    for node in ast.walk(auth_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 1:
+        fail(f"routers/auth.py should own 1 auth route registration, found {route_count}")
+    return route_count
+
+
 def check_project_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     projects_path = root / "routers" / "projects.py"
@@ -780,6 +822,7 @@ def main() -> int:
     task_route_handlers = check_task_routes_extracted(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
+    auth_route_handlers = check_auth_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
@@ -803,6 +846,7 @@ def main() -> int:
     print(f"  task_route_handlers={task_route_handlers}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
+    print(f"  auth_route_handlers={auth_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))

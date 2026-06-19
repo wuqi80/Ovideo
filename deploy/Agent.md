@@ -1717,3 +1717,57 @@
 ### Notes
 
 - No behavior change is intended; this moves project HTTP handlers only. Redline task queue/core/worker/pipeline/agent/workflow files were not modified.
+
+## 2026-06-19 Auth Router Extraction Increment
+
+### Changes
+
+- Extracted the public login endpoint from `deploy/cluster_main.py` into `deploy/routers/auth.py`.
+- Preserved the existing public API surface:
+  - `POST /api/login`
+- Kept the existing login flow:
+  - built-in credential validation first
+  - database user/password validation fallback
+  - disabled account rejection
+  - session token creation through the existing `create_session_token`
+  - best-effort DB user sync/default permission assignment
+- Injected existing runtime dependencies into the router:
+  - `verify_credentials`
+  - `create_session_token`
+  - `db_manager` via `get_db_manager`
+  - `logger`
+- Updated `deploy/scripts/check_route_contract.py` to assert:
+  - `/api/login` belongs to `routers.auth`
+  - `cluster_main.py` no longer registers the login route decorator
+  - OpenAPI route counts remain unchanged
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/auth.py deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py --show-routes`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `auth_route_handlers=1`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_auth_router_20260619-044956`
+- Uploaded to server:
+  - `/home/Administrator/deploy/cluster_main.py`
+  - `/home/Administrator/deploy/routers/auth.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+- Server checks passed:
+  - `cd /home/Administrator/deploy && .venv/bin/python -m py_compile cluster_main.py routers/auth.py scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - result remains `openapi_paths=231`, `openapi_operations=287`, `auth_route_handlers=1`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+- Online endpoint checks passed:
+  - `POST https://mecha.one/api/login` with valid admin credentials -> HTTP `200`, token returned
+  - `POST https://mecha.one/api/login` with invalid password -> HTTP `401`
+  - `python /tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No behavior change is intended; this moves the login HTTP handler only. Redline task queue/core/worker/pipeline/agent/workflow files were not modified.
