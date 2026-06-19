@@ -2574,3 +2574,39 @@
 
 - This directly reduces storyboard first-screen data volume for large episodes while keeping full-list behavior available to other pages.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-19 Video Page Deferred Storyboard Load
+
+### Changes
+
+- Updated `deploy/new_html/pages/VideoGenPage.tsx` so `/workflow/video` no longer force-loads all storyboard items, audio tracks, character voices, and assets during the first render.
+- Video page now loads only the first 10 storyboard items for the import preview via `loadStoryboardItemsPage({ limit: 10, includeTotal: true })`.
+- Audio tracks, character voices, and assets are deferred with `requestIdleCallback`/`setTimeout` so they do not block first paint.
+- Manual "导入全部分镜到视频工作区" still imports the full episode: it fetches the unpaginated storyboard list only when the user actually imports.
+- Large episodes no longer auto-import/rebuild the whole video workspace immediately when only a partial storyboard page is loaded; the panel now tells the user how many shots are previewed and waits for explicit import.
+
+### Verification
+
+- Local checks passed:
+  - redline diff check: no changes under `deploy/pipeline/`, `deploy/agent_routes.py`, `deploy/workflows/`, `deploy/services/task_service.py`, `deploy/core/task_queue.py`, or `deploy/core/worker.py`
+  - `git diff --check -- deploy/new_html/pages/VideoGenPage.tsx`
+- Local `npm run build` could not run because `npm` is not exposed in this Windows shell; server build was used as the frontend validation.
+- Server checks passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_video_paged_load_20260619_083110`
+- Uploaded to server:
+  - `/home/Administrator/deploy/new_html/pages/VideoGenPage.tsx`
+
+### Notes
+
+- This is frontend-only and does not change backend routes or API contracts.
+- A health check immediately after restart briefly returned `502` while the service was still coming up; a retry returned HTTP `200`, then smoke passed.
+- `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.

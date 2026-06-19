@@ -5,7 +5,9 @@ import { VideoPage } from '../components/VideoPage';
 import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
 import * as videoService from '../services/videoService';
 import { estimateDurationMs } from '../utils/durationMapping';
-import { updateStoryboardItem as apiUpdateStoryboardItem } from '../services/apiService';
+import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/apiService';
+
+const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 
 function secureMediaUrl(url: string | null): string | null {
   if (!url) return null;
@@ -22,12 +24,29 @@ function secureMediaUrl(url: string | null): string | null {
 
 export const VideoGenPage: React.FC = () => {
   const navigate = useNavigate();
-  const { episodeId, projectId, selectedScriptId, storyboardItems, isLoading, error, loadSlices, forceReloadSlices } = useEpisode();
+  const {
+    episodeId,
+    projectId,
+    selectedScriptId,
+    storyboardItems,
+    storyboardTotalCount,
+    isLoading,
+    loadSlicesQuiet,
+    loadStoryboardItemsPage,
+  } = useEpisode();
   useEffect(() => {
-    // 2026-05-20 (Bug 3a)：视频页 @ 候选需要 character_voices + audio_tracks
-    // 2026-06-14：强制刷新，跨页改动（新分镜图/音频）可见。
-    forceReloadSlices('storyboardItems', 'audioTracks', 'characterVoices', 'assets');
-  }, [forceReloadSlices]);
+    loadStoryboardItemsPage({ limit: VIDEO_INITIAL_STORYBOARD_COUNT, includeTotal: true });
+    const loadSupportSlices = () => {
+      void loadSlicesQuiet('audioTracks', 'characterVoices', 'assets');
+    };
+    if (typeof window === 'undefined') {
+      loadSupportSlices();
+    } else if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(loadSupportSlices, { timeout: 1500 });
+    } else {
+      window.setTimeout(loadSupportSlices, 0);
+    }
+  }, [loadStoryboardItemsPage, loadSlicesQuiet, selectedScriptId]);
   const [showImportPanel, setShowImportPanel] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);
@@ -64,11 +83,26 @@ export const VideoGenPage: React.FC = () => {
     [storyboardItems]
   );
 
+  const totalStoryboardCount = Math.max(storyboardTotalCount || 0, allStoryboardItems.length);
+  const isStoryboardPagePartial = totalStoryboardCount > allStoryboardItems.length;
+
+  const ensureAllStoryboardItemsForImport = useCallback(async () => {
+    if (!episodeId || !isStoryboardPagePartial) return allStoryboardItems;
+    const res = await getStoryboardItems(episodeId, selectedScriptId || undefined);
+    if (!res?.success) throw new Error('加载全部分镜失败');
+    return [...(res.items || [])].sort((a, b) =>
+      ((a as any).sort_order ?? (a as any).sortOrder ?? 0) -
+      ((b as any).sort_order ?? (b as any).sortOrder ?? 0)
+    );
+  }, [allStoryboardItems, episodeId, isStoryboardPagePartial, selectedScriptId]);
+
   const handleImportAll = useCallback(async () => {
-    if (importing || allStoryboardItems.length === 0) return;
+    if (importing || totalStoryboardCount === 0) return;
     setImporting(true);
     setImportMsg(null);
     try {
+      const storyboardItemsForImport = await ensureAllStoryboardItemsForImport();
+      if (storyboardItemsForImport.length === 0) return;
       const images: videoService.UploadedImage[] = [];
       const prompts: Record<string, string> = {};
       const meta: Record<string, videoService.StoryboardMeta> = {};
@@ -76,7 +110,7 @@ export const VideoGenPage: React.FC = () => {
       const groups: videoService.TaskGroup[] = [];
       const skipped: { id: string; reason: string; sample?: string }[] = [];
 
-      for (const item of allStoryboardItems) {
+      for (const item of storyboardItemsForImport) {
         const rawUrl = (item as any).generated_image_url ?? (item as any).generatedImageUrl;
         const itemId = (item as any).item_id ?? (item as any).itemId;
         // 视频页优先用 video_prompt（视频生成专用），fallback 到 image_prompt（图像生成 prompt）。
@@ -203,7 +237,7 @@ export const VideoGenPage: React.FC = () => {
       }
 
       if (images.length === 0) {
-        const msg = `没有可导入的分镜（共 ${allStoryboardItems.length} 个，全部被跳过）`;
+        const msg = `没有可导入的分镜（共 ${storyboardItemsForImport.length} 个，全部被跳过）`;
         setImportMsg({ kind: 'error', text: msg });
         return;
       }
@@ -286,7 +320,7 @@ export const VideoGenPage: React.FC = () => {
     } finally {
       setImporting(false);
     }
-  }, [importing, allStoryboardItems, sessionScope]);
+  }, [ensureAllStoryboardItemsForImport, importing, sessionScope, totalStoryboardCount]);
 
   useEffect(() => {
     autoImported.current = false;
@@ -308,12 +342,29 @@ export const VideoGenPage: React.FC = () => {
           .filter((i: any) => i.url && !i.isPlaceholder).length;
         const placeholderBroken = groupCount > 0 && realImgCount === 0 && itemsWithImages.length > 0;
         if (!existing.success || !groupCount || placeholderBroken) {
+          if (isStoryboardPagePartial) {
+            setImportMsg({
+              kind: 'info',
+              text: `已先加载 ${allStoryboardItems.length}/${totalStoryboardCount} 个分镜预览，需要时点击导入全部。`,
+            });
+            return;
+          }
           autoImported.current = true;
           handleImportAll();
         }
       } catch {}
     })();
-  }, [isLoading, allStoryboardItems, itemsWithImages, importing, importDone, handleImportAll, sessionScope]);
+  }, [
+    isLoading,
+    allStoryboardItems,
+    itemsWithImages,
+    importing,
+    importDone,
+    handleImportAll,
+    sessionScope,
+    isStoryboardPagePartial,
+    totalStoryboardCount,
+  ]);
 
   // 最新分镜图：item_id -> 去 query 的图片 URL
   const latestImageById = useMemo(() => {
@@ -418,14 +469,14 @@ export const VideoGenPage: React.FC = () => {
           <div className="responsive-toolbar flex items-center justify-between">
             <div className="toolbar-group text-xs text-n100">
               <Film size={14} className="text-primary" />
-              <span>{itemsWithImages.length} 个分镜已生成画面</span>
+              <span>已预览 {allStoryboardItems.length}/{totalStoryboardCount} 个分镜</span>
               <span className="text-n100">|</span>
-              <span>{storyboardItems.length - itemsWithImages.length} 个待生成</span>
+              <span>{itemsWithImages.length} 个预览分镜已有画面</span>
             </div>
             <div className="toolbar-actions">
               <button
                 onClick={handleImportAll}
-                disabled={importing || allStoryboardItems.length === 0}
+                disabled={importing || totalStoryboardCount === 0}
                 className="flex items-center gap-2 px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors disabled:opacity-50"
               >
                 {importing ? <Loader size={14} className="animate-spin" /> : <Upload size={14} />}
