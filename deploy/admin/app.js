@@ -324,11 +324,48 @@ function navigateTo(page) {
 
 /* ────────────────── API Helper ────────────────── */
 
+function readStorageItem(storage, key) {
+  try {
+    return storage?.getItem(key) || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function writeSessionItem(key, value) {
+  try {
+    if (value) sessionStorage.setItem(key, value);
+  } catch (_) {}
+}
+
+function syncLegacyAdminSessionFromParent() {
+  try {
+    if (!window.parent || window.parent === window.self) return;
+    const parentSession = window.parent.sessionStorage;
+    const parentToken = readStorageItem(parentSession, 'admin_session_token');
+    if (!parentToken) return;
+
+    const localToken = readStorageItem(sessionStorage, 'admin_session_token');
+    if (parentToken === localToken) return;
+
+    writeSessionItem('admin_session_token', parentToken);
+    writeSessionItem('admin_session_username', readStorageItem(parentSession, 'admin_session_username'));
+    writeSessionItem('admin_session_login_at', readStorageItem(parentSession, 'admin_session_login_at'));
+  } catch (_) {
+    // Cross-origin or storage restrictions should not break the legacy console.
+  }
+}
+
+function getLegacyAdminToken() {
+  syncLegacyAdminSessionFromParent();
+  return readStorageItem(sessionStorage, 'admin_session_token') || readStorageItem(localStorage, 'auth_token');
+}
+
 async function apiCall(url, options = {}) {
   try {
     // 安全(C3)：带上 admin JWT。本控制台作为 /admin-legacy 同源 iframe 嵌在 admin 壳里，
     // 共享 sessionStorage，可读到壳登录时写入的 admin_session_token（与 AdminHubPage 一致）。
-    const token = sessionStorage.getItem('admin_session_token') || localStorage.getItem('auth_token');
+    const token = getLegacyAdminToken();
     const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
     const resp = await fetch(url, {
       headers: { 'Content-Type': 'application/json', ...authHeader, ...options.headers },

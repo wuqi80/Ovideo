@@ -22,10 +22,10 @@ import {
     Timer,
     Trash2,
 } from 'lucide-react';
-import { getAdminToken, pickTokenForCurrentRoute, setAdminPostLoginRedirect } from './adminAuth';
+import { pickTokenForCurrentRoute, setAdminPostLoginRedirect } from './adminAuth';
 import { crmConfirm, crmMessage } from './crmUI';
 
-const LEGACY_VER = '20260619b';
+const LEGACY_VER = '20260619c';
 const LEGACY_API_CONFIG_ROUTE = '/admin/settings?item=legacy-apiconfig';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
     'legacy-apiconfig': 'apiconfig',
@@ -1249,7 +1249,7 @@ const ApiConfigPanel: React.FC = () => {
 
     const openLegacyApiConfig = useCallback(() => {
         setAdminPostLoginRedirect(LEGACY_API_CONFIG_ROUTE);
-        if (!getAdminToken()) {
+        if (!pickTokenForCurrentRoute()) {
             window.location.assign(`/admin/login?redirect=${encodeURIComponent(LEGACY_API_CONFIG_ROUTE)}`);
             return;
         }

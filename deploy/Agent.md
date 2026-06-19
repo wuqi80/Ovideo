@@ -1,5 +1,43 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-19 Admin Legacy API Editor Redirect Fix
+
+### Changes
+
+- Fixed the native admin API provider page "旧版编辑" entry so it uses the same route-aware token selection as admin API requests before redirecting to login.
+- Bumped the legacy admin cache version from `20260619b` to `20260619c`.
+- Added a legacy iframe token sync fallback in `deploy/admin/app.js`:
+  - reads `admin_session_token` from the same-origin parent shell when available
+  - mirrors `admin_session_username` and `admin_session_login_at`
+  - then falls back to `localStorage.auth_token` for compatibility
+
+### Verification
+
+- Local checks:
+  - `node --check deploy/admin/app.js` passed.
+  - Single-file TypeScript check for `deploy/new_html/admin/AdminSettingsPage.tsx` passed.
+  - `git diff --check` passed for touched files.
+  - Local full Vite build is still blocked by the existing Windows Rollup optional dependency issue: missing `@rollup/rollup-win32-x64-msvc`.
+  - Local full TypeScript check still reports unrelated pre-existing project errors.
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_admin_legacy_redirect_20260619-171502`
+- Server build passed:
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+- Server checks passed:
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `https://mecha.one/health` -> HTTP `200`
+  - built `AdminSettingsPage` asset contains `20260619c`
+  - `/home/Administrator/deploy/admin/app.js` contains `syncLegacyAdminSessionFromParent()` and `getLegacyAdminToken()`
+- Smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one Liu3753650@`
+  - result: `9/9`
+
+### Notes
+
+- No backend route behavior changed.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-19 API Config Quality Fix Verification
 
 ### Changes
