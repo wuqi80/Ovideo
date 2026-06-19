@@ -6,15 +6,17 @@ import pytest
 
 async def test_import_presets_passes_category_for_video_preset():
     """飞升 (Seedance 2.0) preset 字典里 category=video；import 时必须传进 DAO。"""
-    import admin_routes
+    import admin_api_config_routes
+    from services import api_config_import_service
 
     # 跑过 _require_db 校验（mock 数据库存在）
     fake_db = object()
-    with patch.object(admin_routes, "get_db_manager", lambda: fake_db), \
-         patch.object(admin_routes.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
-         patch.object(admin_routes.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
+    with patch.object(admin_api_config_routes, "get_db_manager", lambda: fake_db), \
+         patch.object(admin_api_config_routes, "_reload_api_env", AsyncMock(return_value=True)), \
+         patch.object(api_config_import_service.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
+         patch.object(api_config_import_service.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
 
-        result = await admin_routes.admin_import_preset_configs()
+        result = await admin_api_config_routes.admin_import_preset_configs()
 
     assert result["success"] is True
     # 至少有一次 create 调用传了 category='video'
@@ -30,13 +32,15 @@ async def test_import_presets_passes_category_for_video_preset():
 
 async def test_import_presets_passes_category_for_audio_preset():
     """Gemini TTS / MiniMax preset 字典里 category=audio；import 时必须传进 DAO。"""
-    import admin_routes
+    import admin_api_config_routes
+    from services import api_config_import_service
 
     fake_db = object()
-    with patch.object(admin_routes, "get_db_manager", lambda: fake_db), \
-         patch.object(admin_routes.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
-         patch.object(admin_routes.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
-        await admin_routes.admin_import_preset_configs()
+    with patch.object(admin_api_config_routes, "get_db_manager", lambda: fake_db), \
+         patch.object(admin_api_config_routes, "_reload_api_env", AsyncMock(return_value=True)), \
+         patch.object(api_config_import_service.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
+         patch.object(api_config_import_service.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
+        await admin_api_config_routes.admin_import_preset_configs()
 
     audio_calls = [c for c in mock_create.await_args_list if c.kwargs.get("category") == "audio"]
     assert len(audio_calls) >= 1, (
@@ -47,8 +51,8 @@ async def test_import_presets_passes_category_for_audio_preset():
 
 async def test_create_api_config_body_accepts_category():
     """ApiConfigCreateBody Pydantic model 必须接受 category 字段。"""
-    import admin_routes
-    body = admin_routes.ApiConfigCreateBody(
+    import admin_api_config_routes
+    body = admin_api_config_routes.ApiConfigCreateBody(
         name="t", provider="seedance", endpoint="https://x", api_key="k",
         category="video",
     )
@@ -56,8 +60,23 @@ async def test_create_api_config_body_accepts_category():
 
 
 async def test_create_api_config_body_defaults_category_empty():
-    import admin_routes
-    body = admin_routes.ApiConfigCreateBody(
+    import admin_api_config_routes
+    body = admin_api_config_routes.ApiConfigCreateBody(
         name="t", provider="x", endpoint="y", api_key="k",
     )
     assert body.category == ""
+
+
+async def test_create_api_config_body_accepts_template_and_headers():
+    """ApiConfigCreateBody must accept advanced request_template/headers fields."""
+    import admin_api_config_routes
+    body = admin_api_config_routes.ApiConfigCreateBody(
+        name="minimax",
+        provider="minimax",
+        endpoint="https://api.minimaxi.com/v1",
+        api_key="k",
+        request_template={"group_id": "g"},
+        headers={"X-Test": "yes"},
+    )
+    assert body.request_template == {"group_id": "g"}
+    assert body.headers == {"X-Test": "yes"}

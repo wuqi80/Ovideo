@@ -4313,3 +4313,30 @@
 - Local check:
   - `node node_modules/typescript/bin/tsc --noEmit --pretty false | Select-String AdminSettingsPage` -> no `AdminSettingsPage.tsx` errors.
   - The full local TypeScript command still exits non-zero because of existing unrelated project errors.
+
+## 2026-06-20 Admin API Config Advanced Fields
+
+### Changes
+
+- Updated backend API config create path:
+  - `deploy/admin_api_config_routes.py` `ApiConfigCreateBody` now accepts `request_template` and `headers`.
+  - `deploy/services/api_config_service.py` passes those fields through to `ApiConfigDAO.create()`.
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` editor modal:
+  - added `MiniMax Group ID` field when provider is `minimax`.
+  - added `Request Template JSON` editor.
+  - added `Headers JSON` editor.
+  - save validates both JSON fields before calling backend.
+  - MiniMax Group ID is merged into `request_template.group_id`, which then hot-reloads through `MINIMAX_GROUP_ID`.
+- Extended checks:
+  - `deploy/tests/test_admin_import_presets_writes_category.py`
+  - `deploy/scripts/check_admin_api_config_crud.py`
+
+### Usage
+
+- MiniMax clone/TTS group id can now be configured in the new admin UI:
+  - `/admin/settings?item=apiconfig`
+  - open/create MiniMax config
+  - fill `MiniMax Group ID`
+  - save
+- Equivalent raw JSON:
+  - `request_template: {"group_id": "<MiniMax GroupId>"}`

@@ -38,6 +38,7 @@ async def main() -> int:
             "custom_proxy": "",
             "category": "text",
             "enabled": True,
+            "request_template": {},
             "headers": {},
         },
         {
@@ -51,6 +52,7 @@ async def main() -> int:
             "custom_proxy": "",
             "category": "image",
             "enabled": False,
+            "request_template": {},
             "headers": {},
         },
     ]
@@ -145,6 +147,8 @@ async def main() -> int:
             endpoint=" https://api.example.test/v1 ",
             api_key="new-secret",
             model_name="deepseek-chat",
+            request_template={"group_id": "runtime-group"},
+            headers={"X-Test": "yes"},
             reload_api_env=fake_reload,
         )
         if created["api_config"]["name"] != "New Config":
@@ -155,6 +159,10 @@ async def main() -> int:
             fail("create_api_config did not trim endpoint")
         if created["api_config"]["api_key_encrypted"] != "***":
             fail("create_api_config did not mask API key")
+        if created["api_config"].get("request_template") != {"group_id": "runtime-group"}:
+            fail("create_api_config did not persist request_template")
+        if created["api_config"].get("headers") != {"X-Test": "yes"}:
+            fail("create_api_config did not persist headers")
         if created.get("env_refreshed") is not True:
             fail(f"create_api_config did not report env_refreshed=true: {created}")
         if created.get("disabled_conflicting_config_ids") != ["apicfg_existing"]:

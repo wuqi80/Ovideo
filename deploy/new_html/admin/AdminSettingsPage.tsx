@@ -35,6 +35,7 @@ const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
 };
 
 type HealthStatus = 'ok' | 'error' | 'no_key' | 'unknown';
+type JsonRecord = Record<string, any>;
 
 interface ApiConfig {
     config_id: string;
@@ -45,6 +46,8 @@ interface ApiConfig {
     model_name?: string;
     proxy_mode?: string;
     custom_proxy?: string;
+    request_template?: JsonRecord | string | null;
+    headers?: JsonRecord | string | null;
     category?: string;
     enabled?: boolean;
 }
@@ -160,6 +163,9 @@ interface ApiConfigFormState {
     model_name: string;
     proxy_mode: string;
     custom_proxy: string;
+    request_template: string;
+    headers: string;
+    minimax_group_id: string;
     category: string;
     enabled: boolean;
 }
@@ -351,6 +357,39 @@ function groupCategory(config: ApiConfig): string {
     return 'text';
 }
 
+function jsonRecordFrom(value: ApiConfig['request_template']): JsonRecord {
+    if (!value) return {};
+    if (typeof value === 'object' && !Array.isArray(value)) return { ...value };
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+        } catch {
+            return {};
+        }
+    }
+    return {};
+}
+
+function jsonTextFrom(value: ApiConfig['request_template']): string {
+    const record = jsonRecordFrom(value);
+    return Object.keys(record).length ? JSON.stringify(record, null, 2) : '';
+}
+
+function parseJsonText(value: string, label: string): JsonRecord {
+    const text = value.trim();
+    if (!text) return {};
+    try {
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error(`${label} 必须是 JSON object`);
+        }
+        return parsed;
+    } catch (err: any) {
+        throw new Error(`${label} 不是有效 JSON：${err?.message || 'parse error'}`);
+    }
+}
+
 function emptyConfigForm(): ApiConfigFormState {
     return {
         name: '',
@@ -360,12 +399,16 @@ function emptyConfigForm(): ApiConfigFormState {
         model_name: '',
         proxy_mode: 'direct',
         custom_proxy: '',
+        request_template: '',
+        headers: '',
+        minimax_group_id: '',
         category: 'text',
         enabled: true,
     };
 }
 
 function configToForm(config: ApiConfig): ApiConfigFormState {
+    const requestTemplate = jsonRecordFrom(config.request_template);
     return {
         config_id: config.config_id,
         name: config.name || '',
@@ -375,6 +418,9 @@ function configToForm(config: ApiConfig): ApiConfigFormState {
         model_name: config.model_name || '',
         proxy_mode: config.proxy_mode || 'direct',
         custom_proxy: config.custom_proxy || '',
+        request_template: jsonTextFrom(config.request_template),
+        headers: jsonTextFrom(config.headers),
+        minimax_group_id: String(requestTemplate.group_id || requestTemplate.minimax_group_id || ''),
         category: config.category || groupCategory(config),
         enabled: config.enabled !== false,
     };
@@ -464,6 +510,7 @@ const ApiConfigEditorModal: React.FC<{
     }, [form.provider, providers]);
 
     const patch = (fields: Partial<ApiConfigFormState>) => onChange({ ...form, ...fields });
+    const isMinimax = normalizeProvider(form.provider) === 'minimax';
 
     return (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-n900/40 backdrop-blur-sm p-4">
@@ -603,6 +650,44 @@ const ApiConfigEditorModal: React.FC<{
                             />
                         </label>
                     )}
+
+                    {isMinimax && (
+                        <label className="block min-w-0">
+                            <span className="block text-xs font-medium text-n300 mb-1">MiniMax Group ID</span>
+                            <input
+                                value={form.minimax_group_id}
+                                onChange={event => patch({ minimax_group_id: event.target.value })}
+                                className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
+                                placeholder="MiniMax 控制台中的 GroupId"
+                            />
+                            <span className="mt-1 block text-[11px] text-n100">
+                                保存后会写入 request_template.group_id，并热更新到 MINIMAX_GROUP_ID，用于 TTS、声音设计和克隆声音。
+                            </span>
+                        </label>
+                    )}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <label className="block min-w-0">
+                            <span className="block text-xs font-medium text-n300 mb-1">Request Template JSON</span>
+                            <textarea
+                                value={form.request_template}
+                                onChange={event => patch({ request_template: event.target.value })}
+                                rows={5}
+                                className="w-full min-h-[120px] resize-y rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono leading-relaxed break-all focus:border-primary focus:outline-none"
+                                placeholder='{"group_id":"..."}'
+                            />
+                        </label>
+                        <label className="block min-w-0">
+                            <span className="block text-xs font-medium text-n300 mb-1">Headers JSON</span>
+                            <textarea
+                                value={form.headers}
+                                onChange={event => patch({ headers: event.target.value })}
+                                rows={5}
+                                className="w-full min-h-[120px] resize-y rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono leading-relaxed break-all focus:border-primary focus:outline-none"
+                                placeholder='{"X-Custom":"value"}'
+                            />
+                        </label>
+                    </div>
                 </div>
 
                 <div className="responsive-toolbar flex items-center justify-end gap-2 px-5 py-4 border-t border-n40 bg-n20">
@@ -1165,6 +1250,25 @@ const ApiConfigPanel: React.FC = () => {
             return;
         }
 
+        let requestTemplate: JsonRecord;
+        let headers: JsonRecord;
+        try {
+            requestTemplate = parseJsonText(editingForm.request_template, 'Request Template');
+            headers = parseJsonText(editingForm.headers, 'Headers');
+        } catch (err: any) {
+            crmMessage.warning(err?.message || '高级配置 JSON 格式错误');
+            return;
+        }
+        if (provider === 'minimax') {
+            const groupId = editingForm.minimax_group_id.trim();
+            if (groupId) {
+                requestTemplate.group_id = groupId;
+            } else {
+                delete requestTemplate.group_id;
+                delete requestTemplate.minimax_group_id;
+            }
+        }
+
         setSaving(true);
         try {
             const body: Record<string, any> = {
@@ -1174,6 +1278,8 @@ const ApiConfigPanel: React.FC = () => {
                 model_name: editingForm.model_name.trim(),
                 proxy_mode: editingForm.proxy_mode || 'direct',
                 custom_proxy: editingForm.proxy_mode === 'custom' ? editingForm.custom_proxy.trim() : '',
+                request_template: requestTemplate,
+                headers,
                 category: editingForm.category || '',
                 enabled: editingForm.enabled,
             };

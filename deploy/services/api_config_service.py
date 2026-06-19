@@ -177,6 +177,8 @@ async def create_api_config(
     model_name: str = "",
     proxy_mode: str = "direct",
     custom_proxy: str = "",
+    request_template: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, Any]] = None,
     category: str = "",
     reload_api_env: Optional[ReloadCallback] = None,
 ) -> Dict[str, Any]:
@@ -188,6 +190,8 @@ async def create_api_config(
         model_name=model_name,
         proxy_mode=proxy_mode,
         custom_proxy=custom_proxy,
+        request_template=request_template,
+        headers=headers,
         category=category,
     )
     if not row:

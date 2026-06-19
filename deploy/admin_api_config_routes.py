@@ -86,6 +86,8 @@ class ApiConfigCreateBody(BaseModel):
     model_name: str = ""
     proxy_mode: str = "direct"
     custom_proxy: str = ""
+    request_template: Dict[str, Any] = Field(default_factory=dict)
+    headers: Dict[str, Any] = Field(default_factory=dict)
     category: str = ""
 
 
@@ -145,6 +147,8 @@ async def admin_create_api_config(body: ApiConfigCreateBody):
             model_name=body.model_name,
             proxy_mode=body.proxy_mode,
             custom_proxy=body.custom_proxy,
+            request_template=body.request_template,
+            headers=body.headers,
             category=body.category,
             reload_api_env=_reload_api_env,
         )
