@@ -45,6 +45,7 @@ from file_service import save_generated_file_to_db
 from routers.audio import create_audio_router
 from routers.canvas import create_canvas_router
 from routers.script_timeline import create_script_timeline_router
+from routers.task_notifications import create_task_notifications_router
 
 # 2026-05-24：MiniMax TTS 改异步入队，handler 调 task_service.submit
 import task_service
@@ -190,6 +191,14 @@ router.include_router(
         canvas_board_dao=CanvasBoardDAO,
         canvas_node_dao=CanvasNodeDAO,
         canvas_connection_dao=CanvasConnectionDAO,
+    )
+)
+
+router.include_router(
+    create_task_notifications_router(
+        get_current_user_dependency=get_current_user,
+        task_dao=TaskDAO,
+        get_db_manager_func=get_db_manager,
     )
 )
 
@@ -908,47 +917,6 @@ async def get_text(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================
-# 任务管理API
-# ============================================
-
-@router.get("/api/tasks/recent")
-async def get_recent_tasks(
-    hours: int = 24,
-    user_id: str = Depends(get_current_user)
-):
-    """获取最近完成的任务(用于恢复丢失的任务)"""
-    try:
-        tasks = await TaskDAO.get_recent_completed_tasks(user_id, hours)
-        return {
-            "success": True,
-            "tasks": tasks
-        }
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/tasks/{task_id}/files")
-async def get_task_files(
-    task_id: str,
-    user_id: str = Depends(get_current_user)
-):
-    """获取任务相关的文件"""
-    try:
-        task = await TaskDAO.get_task(task_id)
-        if not task or task['user_id'] != user_id:
-            raise HTTPException(status_code=403, detail="无权访问")
-        
-        files = await TaskDAO.get_task_files(task_id)
-        return {
-            "success": True,
-            "files": files
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
 # 项目更新 API
@@ -1126,147 +1094,6 @@ async def remove_member(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ============================================
-# 全局任务状态 API (Step 8)
-# ============================================
-
-@router.get("/api/tasks/active")
-async def get_active_tasks(
-    user_id: str = Depends(get_current_user)
-):
-    """获取用户所有活跃任务（running + queued）"""
-    try:
-        from db_manager import get_db_manager as _get_db
-        db = _get_db()
-        query = """
-            SELECT task_id, task_type, status, project_id, category,
-                   source_page, source_item_id, display_name,
-                   created_at, started_at, completed_at, metadata
-            FROM tasks
-            WHERE user_id = $1 AND status IN ('pending', 'processing', 'queued')
-            ORDER BY created_at DESC
-            LIMIT 50
-        """
-        tasks = await db.fetch(query, user_id)
-        return {"success": True, "tasks": tasks}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/tasks/notifications")
-async def get_task_notifications(
-    since: Optional[int] = None,
-    user_id: str = Depends(get_current_user)
-):
-    """获取最近完成/失败的任务通知"""
-    try:
-        from db_manager import get_db_manager as _get_db
-        db = _get_db()
-        
-        if since:
-            from datetime import datetime as _dt, timezone as _tz
-            # tasks.completed_at 列是 TIMESTAMP（naive，存 UTC），asyncpg 不允许把
-            # tz-aware datetime 与 naive 列做比较，会抛 "can't subtract offset-naive
-            # and offset-aware datetimes"。先按 UTC 解析时间戳，再剥 tzinfo。
-            since_dt = _dt.fromtimestamp(since / 1000, tz=_tz.utc).replace(tzinfo=None)
-            query = """
-                SELECT task_id, task_type, status, project_id, category,
-                       source_page, source_item_id, display_name,
-                       created_at, completed_at, result_data, task_data
-                FROM tasks
-                WHERE user_id = $1 AND status IN ('completed', 'failed')
-                  AND completed_at > $2
-                ORDER BY completed_at DESC
-                LIMIT 20
-            """
-            tasks = await db.fetch(query, user_id, since_dt)
-        else:
-            query = """
-                SELECT task_id, task_type, status, project_id, category,
-                       source_page, source_item_id, display_name,
-                       created_at, completed_at, result_data, task_data
-                FROM tasks
-                WHERE user_id = $1 AND status IN ('completed', 'failed')
-                ORDER BY completed_at DESC
-                LIMIT 20
-            """
-            tasks = await db.fetch(query, user_id)
-        
-        notifications = []
-        for t in tasks:
-            row = dict(t)
-            td = row.pop("task_data", None) or {}
-            if isinstance(td, str):
-                import json as _json
-                try:
-                    td = _json.loads(td)
-                except Exception:
-                    td = {}
-            row["entity_type"] = td.get("entity_type", "")
-            row["entity_id"] = td.get("entity_id", "")
-            row["file_role"] = td.get("file_role", "")
-            row["episode_id"] = td.get("episode_id", "")
-            notifications.append(row)
-        
-        return {"success": True, "notifications": notifications}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# 持久化通知 API
-# ============================================
-
-@router.get("/api/notifications/unread-count")
-async def get_unread_notification_count(user_id: str = Depends(get_current_user)):
-    try:
-        from dao_notification import NotificationDAO
-        count = await NotificationDAO.get_unread_count(user_id)
-        return {"success": True, "count": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/api/notifications")
-async def get_notifications(
-    status: Optional[str] = None,
-    limit: int = 50,
-    offset: int = 0,
-    user_id: str = Depends(get_current_user)
-):
-    try:
-        from dao_notification import NotificationDAO
-        if status == 'unread':
-            items = await NotificationDAO.get_unread(user_id, limit=limit)
-        else:
-            items = await NotificationDAO.get_history(user_id, limit=limit, offset=offset)
-        return {"success": True, "notifications": items}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/notifications/{notification_id}/read")
-async def mark_notification_read(notification_id: str, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_notification import NotificationDAO
-        await NotificationDAO.mark_read(notification_id, user_id)
-        return {"success": True}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/api/notifications/read-all")
-async def mark_all_notifications_read(user_id: str = Depends(get_current_user)):
-    try:
-        from dao_notification import NotificationDAO
-        count = await NotificationDAO.mark_all_read(user_id)
-        return {"success": True, "count": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/api/notifications/{notification_id}")
-async def dismiss_notification(notification_id: str, user_id: str = Depends(get_current_user)):
-    try:
-        from dao_notification import NotificationDAO
-        await NotificationDAO.dismiss(notification_id, user_id)
-        return {"success": True}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================
 # 集数管理 API

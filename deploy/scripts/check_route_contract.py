@@ -96,6 +96,24 @@ EXPECTED_ENDPOINTS = {
     ("/api/task/{task_id}/delete", "DELETE"): ("routers.tasks", "delete_task"),
     ("/api/tasks/stream", "GET"): ("routers.tasks", "task_event_stream"),
     ("/api/tasks", "GET"): ("routers.tasks", "list_tasks"),
+    ("/api/tasks/recent", "GET"): ("routers.task_notifications", "get_recent_tasks"),
+    ("/api/tasks/{task_id}/files", "GET"): ("routers.task_notifications", "get_task_files"),
+    ("/api/tasks/active", "GET"): ("routers.task_notifications", "get_active_tasks"),
+    ("/api/tasks/notifications", "GET"): ("routers.task_notifications", "get_task_notifications"),
+    ("/api/notifications/unread-count", "GET"): (
+        "routers.task_notifications",
+        "get_unread_notification_count",
+    ),
+    ("/api/notifications", "GET"): ("routers.task_notifications", "get_notifications"),
+    ("/api/notifications/{notification_id}/read", "POST"): (
+        "routers.task_notifications",
+        "mark_notification_read",
+    ),
+    ("/api/notifications/read-all", "POST"): ("routers.task_notifications", "mark_all_notifications_read"),
+    ("/api/notifications/{notification_id}", "DELETE"): (
+        "routers.task_notifications",
+        "dismiss_notification",
+    ),
     ("/{filename}", "GET"): ("routers.fallback_static", "serve_image_files"),
     ("/{path:path}", "GET"): ("routers.fallback_static", "catch_scanner_requests"),
     ("/api/generate/image", "POST"): ("routers.generation", "generate_image"),
@@ -687,6 +705,58 @@ def check_task_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_task_notification_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    task_notifications_path = root / "routers" / "task_notifications.py"
+    if not task_notifications_path.exists():
+        fail("routers/task_notifications.py is missing")
+
+    route_paths = {
+        "/api/tasks/recent",
+        "/api/tasks/{task_id}/files",
+        "/api/tasks/active",
+        "/api/tasks/notifications",
+        "/api/notifications/unread-count",
+        "/api/notifications",
+        "/api/notifications/{notification_id}/read",
+        "/api/notifications/read-all",
+        "/api/notifications/{notification_id}",
+    }
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Task/notification route handlers must live in routers/task_notifications.py:\n" + "\n".join(violations))
+
+    task_notifications_tree = parse_py_file(task_notifications_path)
+    route_count = 0
+    for node in ast.walk(task_notifications_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 9:
+        fail(f"routers/task_notifications.py should own 9 task/notification route registrations, found {route_count}")
+    return route_count
+
+
 def check_fallback_static_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     fallback_static_path = root / "routers" / "fallback_static.py"
@@ -1102,6 +1172,7 @@ def main() -> int:
     user_session_route_handlers = check_user_session_routes_extracted(root)
     workspace_route_handlers = check_workspace_routes_extracted(root)
     task_route_handlers = check_task_routes_extracted(root)
+    task_notification_route_handlers = check_task_notification_routes_extracted(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -1130,6 +1201,7 @@ def main() -> int:
     print(f"  user_session_route_handlers={user_session_route_handlers}")
     print(f"  workspace_route_handlers={workspace_route_handlers}")
     print(f"  task_route_handlers={task_route_handlers}")
+    print(f"  task_notification_route_handlers={task_notification_route_handlers}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")
