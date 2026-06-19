@@ -140,6 +140,18 @@ EXPECTED_ENDPOINTS = {
     ("/api/projects/{project_id}/character-voices", "GET"): ("routers.audio", "get_character_voices"),
     ("/api/character-voices/{voice_id}", "PUT"): ("routers.audio", "update_character_voice"),
     ("/api/character-voices/{voice_id}", "DELETE"): ("routers.audio", "delete_character_voice"),
+    ("/api/episodes/{episode_id}/script-segments", "GET"): ("routers.script_timeline", "list_script_segments"),
+    ("/api/episodes/{episode_id}/script-segments/batch", "PUT"): ("routers.script_timeline", "batch_save_script_segments"),
+    ("/api/episodes/{episode_id}/script-segments", "DELETE"): ("routers.script_timeline", "delete_script_segments"),
+    ("/api/episodes/{episode_id}/script", "GET"): ("routers.script_timeline", "get_script"),
+    ("/api/episodes/{episode_id}/script", "PUT"): ("routers.script_timeline", "update_script"),
+    ("/api/episodes/{episode_id}/scripts", "GET"): ("routers.script_timeline", "list_scripts"),
+    ("/api/episodes/{episode_id}/scripts", "POST"): ("routers.script_timeline", "create_script"),
+    ("/api/episodes/{episode_id}/scripts/{script_id}", "PUT"): ("routers.script_timeline", "update_script_by_id"),
+    ("/api/episodes/{episode_id}/scripts/{script_id}", "DELETE"): ("routers.script_timeline", "delete_script_by_id"),
+    ("/api/episodes/{episode_id}/timeline-tracks", "GET"): ("routers.script_timeline", "get_timeline_tracks"),
+    ("/api/episodes/{episode_id}/timeline-tracks", "POST"): ("routers.script_timeline", "create_timeline_track"),
+    ("/api/timeline-tracks/{track_id}", "PUT"): ("routers.script_timeline", "update_timeline_track"),
 }
 
 FORBIDDEN_EXTERNAL_API_FASTAPI_NAMES = {"APIRouter", "FastAPI"}
@@ -961,6 +973,56 @@ def check_audio_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_script_timeline_routes_extracted(root: Path) -> int:
+    api_routes_path = root / "api_routes.py"
+    script_timeline_path = root / "routers" / "script_timeline.py"
+    if not script_timeline_path.exists():
+        fail("routers/script_timeline.py is missing")
+
+    route_paths = {
+        "/api/episodes/{episode_id}/script-segments",
+        "/api/episodes/{episode_id}/script-segments/batch",
+        "/api/episodes/{episode_id}/script",
+        "/api/episodes/{episode_id}/scripts",
+        "/api/episodes/{episode_id}/scripts/{script_id}",
+        "/api/episodes/{episode_id}/timeline-tracks",
+        "/api/timeline-tracks/{track_id}",
+    }
+    api_tree = parse_py_file(api_routes_path)
+    violations: list[str] = []
+    for node in ast.walk(api_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            if not call or not call.args:
+                continue
+            arg = call.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value in route_paths:
+                violations.append(f"{api_routes_path.name}:{decorator.lineno} {node.name}")
+
+    if violations:
+        fail("Script/timeline route handlers must live in routers/script_timeline.py:\n" + "\n".join(violations))
+
+    script_tree = parse_py_file(script_timeline_path)
+    route_count = 0
+    for node in ast.walk(script_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                route_count += 1
+
+    if route_count != 12:
+        fail(f"routers/script_timeline.py should own 12 script/timeline route registrations, found {route_count}")
+    return route_count
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -995,6 +1057,7 @@ def main() -> int:
     admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
     audio_route_handlers = check_audio_routes_extracted(root)
+    script_timeline_route_handlers = check_script_timeline_routes_extracted(root)
     app = import_app()
     schema = app.openapi()
     path_count, operation_count = check_counts(schema, args.expected_paths, args.expected_operations)
@@ -1021,6 +1084,7 @@ def main() -> int:
     print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
     print(f"  audio_route_handlers={audio_route_handlers}")
+    print(f"  script_timeline_route_handlers={script_timeline_route_handlers}")
     print("  duplicate_routes:")
     print(format_duplicates(duplicates, routes))
 
