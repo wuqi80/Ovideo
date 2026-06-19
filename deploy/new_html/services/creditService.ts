@@ -4,9 +4,7 @@
  * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
  */
 
-import { handleResponse, getHeaders } from './apiService';
-
-const API_BASE = '';
+import { apiJson } from './httpClient';
 
 export interface CreditBalance {
   success: boolean;
@@ -50,23 +48,19 @@ export interface CreditTransaction {
 }
 
 export async function getCreditBalance(): Promise<CreditBalance> {
-  const resp = await fetch(`${API_BASE}/api/credits/balance`, {
+  return apiJson('/api/credits/balance', {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'getCreditBalance');
+  }, 'getCreditBalance');
 }
 
 export async function estimateCredits(
   featureKey: string,
   params: Record<string, any> = {},
 ): Promise<CreditEstimateResult> {
-  const resp = await fetch(`${API_BASE}/api/credits/estimate`, {
+  return apiJson('/api/credits/estimate', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify({ feature_key: featureKey, params }),
-  });
-  return handleResponse(resp, 'estimateCredits');
+  }, 'estimateCredits');
 }
 
 export interface ListTransactionsParams {
@@ -87,11 +81,9 @@ export async function listCreditTransactions(
     sp.set(k, String(v));
   }
   const qs = sp.toString() ? `?${sp.toString()}` : '';
-  const resp = await fetch(`${API_BASE}/api/credits/transactions${qs}`, {
+  return apiJson(`/api/credits/transactions${qs}`, {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'listCreditTransactions');
+  }, 'listCreditTransactions');
 }
 
 
@@ -116,40 +108,32 @@ export interface CreditRule {
 }
 
 export async function adminListCreditRules(): Promise<{ success: boolean; rules: CreditRule[] }> {
-  const resp = await fetch(`${API_BASE}/api/admin/credit-rules`, {
+  return apiJson('/api/admin/credit-rules', {
     method: 'GET',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'adminListCreditRules');
+  }, 'adminListCreditRules');
 }
 
 export async function adminCreateCreditRule(payload: Partial<CreditRule> & {
   feature_key: string; feature_name: string; base_cost: number;
 }): Promise<{ success: boolean; rule: CreditRule }> {
-  const resp = await fetch(`${API_BASE}/api/admin/credit-rules`, {
+  return apiJson('/api/admin/credit-rules', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'adminCreateCreditRule');
+  }, 'adminCreateCreditRule');
 }
 
 export async function adminUpdateCreditRule(
   ruleId: string,
   payload: Partial<CreditRule>,
 ): Promise<{ success: boolean; rule: CreditRule }> {
-  const resp = await fetch(`${API_BASE}/api/admin/credit-rules/${ruleId}`, {
+  return apiJson(`/api/admin/credit-rules/${ruleId}`, {
     method: 'PUT',
-    headers: getHeaders(),
     body: JSON.stringify(payload),
-  });
-  return handleResponse(resp, 'adminUpdateCreditRule');
+  }, 'adminUpdateCreditRule');
 }
 
 export async function adminDeleteCreditRule(ruleId: string): Promise<{ success: boolean }> {
-  const resp = await fetch(`${API_BASE}/api/admin/credit-rules/${ruleId}`, {
+  return apiJson(`/api/admin/credit-rules/${ruleId}`, {
     method: 'DELETE',
-    headers: getHeaders(),
-  });
-  return handleResponse(resp, 'adminDeleteCreditRule');
+  }, 'adminDeleteCreditRule');
 }

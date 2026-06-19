@@ -2541,6 +2541,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         new_html / "services" / "shareService.ts",
         new_html / "services" / "entityFileService.ts",
         new_html / "services" / "mediaLibraryService.ts",
+        new_html / "services" / "creditService.ts",
+        new_html / "services" / "organizationService.ts",
     ]
 
     required_snippets = [

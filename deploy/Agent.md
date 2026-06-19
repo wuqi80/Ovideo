@@ -1,5 +1,19 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Frontend Admin/User Service Http Client Consolidation
+
+### Changes
+
+- Migrated more frontend JSON services to `new_html/services/httpClient.ts`:
+  - `new_html/services/creditService.ts`
+  - `new_html/services/organizationService.ts`
+- Extended `scripts/check_route_contract.py` so these services are covered by `frontend_http_client_checks` and cannot regress to direct `fetch()`, local `getHeaders()`, manual `Authorization`, or duplicated `handleResponse` plumbing.
+
+### Notes
+
+- This continues the frontend request-layer consolidation across user and admin workflows. Credit and organization APIs now share the same path-aware auth handling as the newer API-management UI.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Frontend Service Http Client Consolidation
 
 ### Changes

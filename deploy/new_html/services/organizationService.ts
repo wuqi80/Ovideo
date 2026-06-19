@@ -4,9 +4,7 @@
  * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5
  */
 
-import { handleResponse, getHeaders } from './apiService';
-
-const API_BASE = '';
+import { apiJson } from './httpClient';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -49,9 +47,8 @@ export async function adminListOrganizations(params?: {
   if (params?.keyword) qs.set('keyword', params.keyword);
   if (params?.limit != null) qs.set('limit', String(params.limit));
   if (params?.offset != null) qs.set('offset', String(params.offset));
-  const url = `${API_BASE}/api/admin/organizations${qs.toString() ? '?' + qs.toString() : ''}`;
-  const resp = await fetch(url, { method: 'GET', headers: getHeaders() });
-  return handleResponse(resp, 'adminListOrganizations');
+  const url = `/api/admin/organizations${qs.toString() ? '?' + qs.toString() : ''}`;
+  return apiJson(url, { method: 'GET' }, 'adminListOrganizations');
 }
 
 export async function adminCreateOrganization(body: {
@@ -60,67 +57,53 @@ export async function adminCreateOrganization(body: {
   description?: string;
   color?: string | null;
 }): Promise<{ success: boolean; organization: Organization }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations`, {
+  return apiJson('/api/admin/organizations', {
     method: 'POST',
-    headers: getHeaders(),
     body: JSON.stringify(body),
-  });
-  return handleResponse(resp, 'adminCreateOrganization');
+  }, 'adminCreateOrganization');
 }
 
 export async function adminGetOrganization(
   orgId: string,
 ): Promise<{ success: boolean; organization: Organization; members: OrganizationMember[] }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations/${orgId}`, {
-    method: 'GET', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'adminGetOrganization');
+  return apiJson(`/api/admin/organizations/${orgId}`, { method: 'GET' }, 'adminGetOrganization');
 }
 
 export async function adminUpdateOrganization(
   orgId: string,
   body: Partial<Pick<Organization, 'name' | 'description' | 'status' | 'color' | 'owner_user_id'>>,
 ): Promise<{ success: boolean; organization: Organization }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations/${orgId}`, {
-    method: 'PUT', headers: getHeaders(), body: JSON.stringify(body),
-  });
-  return handleResponse(resp, 'adminUpdateOrganization');
+  return apiJson(`/api/admin/organizations/${orgId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  }, 'adminUpdateOrganization');
 }
 
 export async function adminDeleteOrganization(orgId: string): Promise<{ success: boolean }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations/${orgId}`, {
-    method: 'DELETE', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'adminDeleteOrganization');
+  return apiJson(`/api/admin/organizations/${orgId}`, { method: 'DELETE' }, 'adminDeleteOrganization');
 }
 
 export async function adminListMembers(
   orgId: string,
 ): Promise<{ success: boolean; members: OrganizationMember[] }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations/${orgId}/members`, {
-    method: 'GET', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'adminListMembers');
+  return apiJson(`/api/admin/organizations/${orgId}/members`, { method: 'GET' }, 'adminListMembers');
 }
 
 export async function adminAddMember(
   orgId: string,
   body: { user_id: string; role?: 'owner' | 'admin' | 'member' },
 ): Promise<{ success: boolean; member: OrganizationMember }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations/${orgId}/members`, {
-    method: 'POST', headers: getHeaders(), body: JSON.stringify(body),
-  });
-  return handleResponse(resp, 'adminAddMember');
+  return apiJson(`/api/admin/organizations/${orgId}/members`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, 'adminAddMember');
 }
 
 export async function adminRemoveMember(
   orgId: string,
   userId: string,
 ): Promise<{ success: boolean }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations/${orgId}/members/${userId}`, {
-    method: 'DELETE', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'adminRemoveMember');
+  return apiJson(`/api/admin/organizations/${orgId}/members/${userId}`, { method: 'DELETE' }, 'adminRemoveMember');
 }
 
 export async function adminSetMemberRole(
@@ -128,10 +111,10 @@ export async function adminSetMemberRole(
   userId: string,
   role: 'owner' | 'admin' | 'member',
 ): Promise<{ success: boolean; member: OrganizationMember }> {
-  const resp = await fetch(`${API_BASE}/api/admin/organizations/${orgId}/members/${userId}/role`, {
-    method: 'PUT', headers: getHeaders(), body: JSON.stringify({ role }),
-  });
-  return handleResponse(resp, 'adminSetMemberRole');
+  return apiJson(`/api/admin/organizations/${orgId}/members/${userId}/role`, {
+    method: 'PUT',
+    body: JSON.stringify({ role }),
+  }, 'adminSetMemberRole');
 }
 
 // ── User self-service ─────────────────────────────────────────
@@ -140,15 +123,9 @@ export async function listMyOrganizations(): Promise<{
   success: boolean;
   organizations: Organization[];
 }> {
-  const resp = await fetch(`${API_BASE}/api/me/organizations`, {
-    method: 'GET', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'listMyOrganizations');
+  return apiJson('/api/me/organizations', { method: 'GET' }, 'listMyOrganizations');
 }
 
 export async function leaveOrganization(orgId: string): Promise<{ success: boolean }> {
-  const resp = await fetch(`${API_BASE}/api/me/organizations/${orgId}/leave`, {
-    method: 'POST', headers: getHeaders(),
-  });
-  return handleResponse(resp, 'leaveOrganization');
+  return apiJson(`/api/me/organizations/${orgId}/leave`, { method: 'POST' }, 'leaveOrganization');
 }
