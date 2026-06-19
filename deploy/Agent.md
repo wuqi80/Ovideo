@@ -4172,3 +4172,76 @@
   - `GET https://mecha.one/health` -> HTTP `200`
   - `GET https://mecha.one/admin/settings?item=legacy-apiconfig` -> HTTP `200`
   - `/tmp/smoke_test.py https://mecha.one <current-admin-password>` -> `9/9`
+
+## 2026-06-20 Vidu/HappyHorse Runtime Model Wiring
+
+### Changes
+
+- Extended `deploy/services/api_provider_registry.py` with the remaining DashScope shared-provider sub-model metadata:
+  - Vidu reference models:
+    - `DASHSCOPE_MODEL_VIDU_REFERENCE_Q3_MIX`
+    - `DASHSCOPE_MODEL_VIDU_REFERENCE_Q3`
+    - `DASHSCOPE_MODEL_VIDU_REFERENCE_Q3_TURBO`
+    - `DASHSCOPE_MODEL_VIDU_REFERENCE_Q2_PRO`
+    - `DASHSCOPE_MODEL_VIDU_REFERENCE_Q2`
+  - Vidu start/end models:
+    - `DASHSCOPE_MODEL_VIDU_STARTEND_Q3_PRO`
+    - `DASHSCOPE_MODEL_VIDU_STARTEND_Q3_TURBO`
+    - `DASHSCOPE_MODEL_VIDU_STARTEND_Q2_PRO`
+    - `DASHSCOPE_MODEL_VIDU_STARTEND_Q2_TURBO`
+  - HappyHorse:
+    - `DASHSCOPE_MODEL_HAPPYHORSE`
+- Added `dashscope_sub_model_for_model()` so runtime DB rows can be projected to the right sub-model env without a growing if/else chain.
+- Updated `deploy/services/api_config_runtime_loader.py` so all registered DashScope sub-model defaults project from DB into their dedicated runtime env keys.
+- Updated `deploy/external_api/video/dashscope.py`:
+  - unified `"大乘"` Vidu submit path now resolves Vidu reference/start-end sub-models through `resolve_dashscope_model_name()`.
+  - direct `vidu_reference_submit()` and `vidu_startend_submit()` calls with legacy default hardcoded model names now defer to runtime env, preserving `core/worker.py` compatibility without touching the redline worker file.
+  - unified and direct HappyHorse calls now resolve `DASHSCOPE_MODEL_HAPPYHORSE`.
+- Extended `deploy/scripts/check_api_config_runtime_loader.py` with all Vidu/HappyHorse DB-to-env projection coverage.
+- Extended `deploy/tests/test_dashscope_video_payload_extension.py` and `deploy/tests/test_api_provider_runtime_model_env.py` with Vidu/HappyHorse runtime model and anti-cross-family coverage.
+- Extended `deploy/scripts/check_route_contract.py`:
+  - `api_provider_runtime_model_checks` increased from `67` to `81`
+  - contract now protects Vidu/HappyHorse DashScope sub-model env wiring.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile external_api/video/dashscope.py services/api_provider_registry.py services/api_provider_runtime.py services/api_config_runtime_loader.py tests/test_dashscope_video_payload_extension.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - From `deploy/`: `.venv/Scripts/python.exe -m pytest tests/test_dashscope_video_payload_extension.py tests/test_api_provider_runtime_model_env.py -q` -> `36/36`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_api_config_runtime_loader.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_provider_contract.py`
+  - From `deploy/`: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - route contract remains `openapi_paths=231`, `openapi_operations=287`
+  - new contract line: `api_provider_runtime_model_checks=81`
+
+### Notes
+
+- This completes the current DashScope shared-provider split for Wan2.6, Kling, Vidu, and HappyHorse model-name selection. Endpoint/key are still shared at the `dashscope` provider level, while model names are now sub-model-specific and hot-reloadable.
+
+### Server Deployment
+
+- Server backup created:
+  - `/home/Administrator/deploy_backups/mecha_vidu_happyhorse_runtime_model_20260620_000749/files.tgz`
+- Uploaded to server:
+  - `/home/Administrator/deploy/Agent.md`
+  - `/home/Administrator/deploy/external_api/video/dashscope.py`
+  - `/home/Administrator/deploy/services/api_provider_registry.py`
+  - `/home/Administrator/deploy/services/api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_api_config_runtime_loader.py`
+  - `/home/Administrator/deploy/scripts/check_route_contract.py`
+  - `/home/Administrator/deploy/tests/test_dashscope_video_payload_extension.py`
+  - `/home/Administrator/deploy/tests/test_api_provider_runtime_model_env.py`
+- Server checks passed:
+  - `.venv/bin/python -m py_compile external_api/video/dashscope.py services/api_provider_registry.py services/api_config_runtime_loader.py tests/test_dashscope_video_payload_extension.py tests/test_api_provider_runtime_model_env.py scripts/check_api_config_runtime_loader.py scripts/check_route_contract.py`
+  - `.venv/bin/python -m pytest tests/test_dashscope_video_payload_extension.py tests/test_api_provider_runtime_model_env.py -q` -> `36/36`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_api_config_runtime_loader.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 PYTHONUTF8=1 .venv/bin/python scripts/check_route_contract.py`
+  - `sudo systemctl restart drama`
+  - `systemctl is-active drama` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python /tmp/smoke_test.py https://mecha.one Liu3753650@` -> `9/9`
+  - runtime helper check:
+    - `DASHSCOPE_MODEL_VIDU_REFERENCE_Q3` -> `vidu-reference-smoke`
+    - `DASHSCOPE_MODEL_VIDU_STARTEND_Q3_TURBO` -> `vidu-startend-smoke`
+    - `DASHSCOPE_MODEL_HAPPYHORSE` -> `happyhorse-smoke`

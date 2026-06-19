@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from services.api_provider_endpoints import derive_dashscope_video_urls
+from services.api_provider_registry import DASHSCOPE_DEFAULT_MODEL_MAP
 from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
 
 logger = logging.getLogger(__name__)
@@ -40,12 +41,36 @@ logger = logging.getLogger(__name__)
 # 终态判定（大小写不敏感，DashScope 返回 PENDING/RUNNING/SUCCEEDED/FAILED/CANCELED/UNKNOWN）
 _TERMINAL_SUCCESS = {"succeeded"}
 _TERMINAL_FAILED = {"failed", "canceled", "unknown"}
-DEFAULT_KLING_STANDARD_MODEL = "kling/kling-v3-video-generation"
-DEFAULT_KLING_OMNI_MODEL = "kling/kling-v3-omni-video-generation"
+DEFAULT_KLING_STANDARD_MODEL = DASHSCOPE_DEFAULT_MODEL_MAP["kling-standard"]
+DEFAULT_KLING_OMNI_MODEL = DASHSCOPE_DEFAULT_MODEL_MAP["kling-omni"]
+DEFAULT_HAPPYHORSE_MODEL = DASHSCOPE_DEFAULT_MODEL_MAP["happyhorse"]
+VIDU_REFERENCE_SUB_MODEL_MAP = {
+    "q3-mix": "vidu-reference-q3-mix",
+    "q3": "vidu-reference-q3",
+    "q3-turbo": "vidu-reference-q3-turbo",
+    "q2-pro": "vidu-reference-q2-pro",
+    "q2": "vidu-reference-q2",
+}
+VIDU_STARTEND_SUB_MODEL_MAP = {
+    "q3-pro": "vidu-startend-q3-pro",
+    "q3-turbo": "vidu-startend-q3-turbo",
+    "q2-pro": "vidu-startend-q2-pro",
+    "q2-turbo": "vidu-startend-q2-turbo",
+}
+DEFAULT_DASHSCOPE_MODEL_TO_SUB_MODEL = {
+    model.lower(): sub_model for sub_model, model in DASHSCOPE_DEFAULT_MODEL_MAP.items()
+}
 
 
 def _normalize_status(s: Optional[str]) -> str:
     return (s or "").strip().lower()
+
+
+def _resolve_default_dashscope_model(model: str) -> str:
+    sub_model = DEFAULT_DASHSCOPE_MODEL_TO_SUB_MODEL.get((model or "").strip().lower())
+    if sub_model:
+        return resolve_dashscope_model_name(sub_model)
+    return model
 
 
 class DashScopeVideoError(RuntimeError):
@@ -270,15 +295,10 @@ class DashScopeVideoClient:
                 vidu_seed = int(vidu_seed)
             # 首尾帧
             if first and last:
-                startend_map = {
-                    "q3-pro": "vidu/viduq3-pro_start-end2video",
-                    "q3-turbo": "vidu/viduq3-turbo_start-end2video",
-                    "q2-pro": "vidu/viduq2-pro_start-end2video",
-                    "q2-turbo": "vidu/viduq2-turbo_start-end2video",
-                }
+                vidu_sub_model = VIDU_STARTEND_SUB_MODEL_MAP.get(sub_vidu, "vidu-startend-q3-turbo")
                 return await self.vidu_startend_submit(
                     prompt=prompt,
-                    model=startend_map.get(sub_vidu, "vidu/viduq3-turbo_start-end2video"),
+                    model=resolve_dashscope_model_name(vidu_sub_model),
                     first_frame_url=first,
                     last_frame_url=last,
                     resolution=vidu_resolution,
@@ -288,18 +308,12 @@ class DashScopeVideoClient:
                     seed=vidu_seed,
                 )
             # 参考生
-            r2v_map = {
-                "q3-mix": "vidu/viduq3-mix_reference2video",
-                "q3": "vidu/viduq3_reference2video",
-                "q3-turbo": "vidu/viduq3-turbo_reference2video",
-                "q2-pro": "vidu/viduq2-pro_reference2video",
-                "q2": "vidu/viduq2_reference2video",
-            }
+            vidu_sub_model = VIDU_REFERENCE_SUB_MODEL_MAP.get(sub_vidu, "vidu-reference-q3")
             ref_imgs = _urls_by_role("reference_image") or _urls_by_kind("image") or None
             ref_videos = _urls_by_kind("video") or None
             return await self.vidu_reference_submit(
                 prompt=prompt,
-                model=r2v_map.get(sub_vidu, "vidu/viduq3_reference2video"),
+                model=resolve_dashscope_model_name(vidu_sub_model),
                 reference_image_urls=ref_imgs,
                 reference_video_urls=ref_videos,
                 resolution=vidu_resolution,
@@ -318,6 +332,7 @@ class DashScopeVideoClient:
                 hh_seed = int(hh_seed)
             return await self.happyhorse_submit(
                 prompt=prompt,
+                model=resolve_dashscope_model_name("happyhorse"),
                 reference_image_urls=ref_imgs,
                 resolution=params.get("hh_resolution") or "1080P",
                 ratio=params.get("hh_ratio") or "16:9",
@@ -449,6 +464,7 @@ class DashScopeVideoClient:
             params["size"] = size
         if seed is not None:
             params["seed"] = seed
+        model = _resolve_default_dashscope_model(model)
         return await self.create_task(model, input_payload, params)
 
     async def vidu_startend_submit(
@@ -483,6 +499,7 @@ class DashScopeVideoClient:
         }
         if seed is not None:
             params["seed"] = seed
+        model = _resolve_default_dashscope_model(model)
         return await self.create_task(model, input_payload, params)
 
     # ─── HappyHorse (happyhorse-1.0-r2v) ────────────────────────────────
@@ -492,6 +509,7 @@ class DashScopeVideoClient:
         prompt: str,
         *,
         reference_image_urls: List[str],
+        model: str = DEFAULT_HAPPYHORSE_MODEL,
         resolution: str = "720P",
         ratio: str = "16:9",
         duration: int = 5,
@@ -516,7 +534,8 @@ class DashScopeVideoClient:
         }
         if seed is not None:
             params["seed"] = seed
-        return await self.create_task("happyhorse-1.0-r2v", input_payload, params)
+        model = _resolve_default_dashscope_model(model)
+        return await self.create_task(model, input_payload, params)
 
     # ─── 视频结果提取助手 ─────────────────────────────────────────────────
 

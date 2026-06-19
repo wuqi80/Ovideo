@@ -15,6 +15,7 @@ from services.api_provider_registry import (
     DASHSCOPE_SUB_MODEL_ENV_MAP,
     PROVIDER_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
+    dashscope_sub_model_for_model,
     get_api_model_preset,
     get_custom_proxy_env_key,
     get_dashscope_sub_model_env_key,
@@ -24,9 +25,6 @@ from services.api_provider_registry import (
     get_provider_env_key,
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
-    is_dashscope_kling_omni_model,
-    is_dashscope_kling_standard_model,
-    is_dashscope_wan26_model,
     is_seedance_fast_model,
 )
 from utils.config_helpers import _config_get
@@ -135,12 +133,9 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                     sub_model = "fast" if is_seedance_fast_model(model_name) else "standard"
                     new_env[get_seedance_sub_model_env_key(sub_model)] = model_name
                 if provider.strip().lower() == "dashscope":
-                    if is_dashscope_wan26_model(model_name):
-                        new_env[get_dashscope_sub_model_env_key("wan26")] = model_name
-                    if is_dashscope_kling_standard_model(model_name):
-                        new_env[get_dashscope_sub_model_env_key("kling-standard")] = model_name
-                    if is_dashscope_kling_omni_model(model_name):
-                        new_env[get_dashscope_sub_model_env_key("kling-omni")] = model_name
+                    dashscope_sub_model = dashscope_sub_model_for_model(model_name)
+                    if dashscope_sub_model:
+                        new_env[get_dashscope_sub_model_env_key(dashscope_sub_model)] = model_name
             else:
                 new_env[model_env] = None
 

@@ -44,12 +44,32 @@ DASHSCOPE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     "wan26": "wan2.6-i2v",
     "kling-standard": "kling/kling-v3-video-generation",
     "kling-omni": "kling/kling-v3-omni-video-generation",
+    "vidu-reference-q3-mix": "vidu/viduq3-mix_reference2video",
+    "vidu-reference-q3": "vidu/viduq3_reference2video",
+    "vidu-reference-q3-turbo": "vidu/viduq3-turbo_reference2video",
+    "vidu-reference-q2-pro": "vidu/viduq2-pro_reference2video",
+    "vidu-reference-q2": "vidu/viduq2_reference2video",
+    "vidu-startend-q3-pro": "vidu/viduq3-pro_start-end2video",
+    "vidu-startend-q3-turbo": "vidu/viduq3-turbo_start-end2video",
+    "vidu-startend-q2-pro": "vidu/viduq2-pro_start-end2video",
+    "vidu-startend-q2-turbo": "vidu/viduq2-turbo_start-end2video",
+    "happyhorse": "happyhorse-1.0-r2v",
 }
 
 DASHSCOPE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "wan26": "DASHSCOPE_MODEL_WAN26",
     "kling-standard": "DASHSCOPE_MODEL_KLING_STANDARD",
     "kling-omni": "DASHSCOPE_MODEL_KLING_OMNI",
+    "vidu-reference-q3-mix": "DASHSCOPE_MODEL_VIDU_REFERENCE_Q3_MIX",
+    "vidu-reference-q3": "DASHSCOPE_MODEL_VIDU_REFERENCE_Q3",
+    "vidu-reference-q3-turbo": "DASHSCOPE_MODEL_VIDU_REFERENCE_Q3_TURBO",
+    "vidu-reference-q2-pro": "DASHSCOPE_MODEL_VIDU_REFERENCE_Q2_PRO",
+    "vidu-reference-q2": "DASHSCOPE_MODEL_VIDU_REFERENCE_Q2",
+    "vidu-startend-q3-pro": "DASHSCOPE_MODEL_VIDU_STARTEND_Q3_PRO",
+    "vidu-startend-q3-turbo": "DASHSCOPE_MODEL_VIDU_STARTEND_Q3_TURBO",
+    "vidu-startend-q2-pro": "DASHSCOPE_MODEL_VIDU_STARTEND_Q2_PRO",
+    "vidu-startend-q2-turbo": "DASHSCOPE_MODEL_VIDU_STARTEND_Q2_TURBO",
+    "happyhorse": "DASHSCOPE_MODEL_HAPPYHORSE",
 }
 
 
@@ -94,6 +114,10 @@ def is_dashscope_kling_omni_model(model_name: Optional[str]) -> bool:
 
 def dashscope_model_matches_sub_model(sub_model: str, model_name: Optional[str]) -> bool:
     normalized_sub_model = normalize_dashscope_sub_model(sub_model)
+    normalized_model = (model_name or "").strip().lower()
+    default_model = DASHSCOPE_DEFAULT_MODEL_MAP.get(normalized_sub_model, "").lower()
+    if normalized_model and normalized_model == default_model:
+        return True
     if normalized_sub_model == "wan26":
         return is_dashscope_wan26_model(model_name)
     if normalized_sub_model == "kling-standard":
@@ -101,6 +125,22 @@ def dashscope_model_matches_sub_model(sub_model: str, model_name: Optional[str])
     if normalized_sub_model == "kling-omni":
         return is_dashscope_kling_omni_model(model_name)
     return False
+
+
+def dashscope_sub_model_for_model(model_name: Optional[str]) -> Optional[str]:
+    normalized_model = (model_name or "").strip().lower()
+    if not normalized_model:
+        return None
+    for sub_model, default_model in DASHSCOPE_DEFAULT_MODEL_MAP.items():
+        if normalized_model == default_model.lower():
+            return sub_model
+    if is_dashscope_wan26_model(model_name):
+        return "wan26"
+    if is_dashscope_kling_omni_model(model_name):
+        return "kling-omni"
+    if is_dashscope_kling_standard_model(model_name):
+        return "kling-standard"
+    return None
 
 
 PROVIDER_CATALOG: Dict[str, dict] = {

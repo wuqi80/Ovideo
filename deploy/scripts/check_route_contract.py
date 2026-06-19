@@ -2240,7 +2240,23 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_MODEL_VIDU_REFERENCE_Q3",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_MODEL_VIDU_STARTEND_Q3_TURBO",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_MODEL_HAPPYHORSE",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
             "dashscope_model_matches_sub_model",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "dashscope_sub_model_for_model",
         ),
         (
             root / "services" / "api_provider_runtime.py",
@@ -2248,15 +2264,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "api_config_runtime_loader.py",
-            "get_dashscope_sub_model_env_key(\"wan26\")",
+            "dashscope_sub_model_for_model(model_name)",
         ),
         (
             root / "services" / "api_config_runtime_loader.py",
-            "get_dashscope_sub_model_env_key(\"kling-standard\")",
-        ),
-        (
-            root / "services" / "api_config_runtime_loader.py",
-            "get_dashscope_sub_model_env_key(\"kling-omni\")",
+            "get_dashscope_sub_model_env_key(dashscope_sub_model)",
         ),
         (
             root / "external_api" / "video" / "wan2.py",
@@ -2275,6 +2287,26 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "resolve_dashscope_model_name(\"kling-omni\")",
         ),
         (
+            root / "external_api" / "video" / "dashscope.py",
+            "VIDU_REFERENCE_SUB_MODEL_MAP",
+        ),
+        (
+            root / "external_api" / "video" / "dashscope.py",
+            "VIDU_STARTEND_SUB_MODEL_MAP",
+        ),
+        (
+            root / "external_api" / "video" / "dashscope.py",
+            "resolve_dashscope_model_name(vidu_sub_model)",
+        ),
+        (
+            root / "external_api" / "video" / "dashscope.py",
+            "resolve_dashscope_model_name(\"happyhorse\")",
+        ),
+        (
+            root / "external_api" / "video" / "dashscope.py",
+            "_resolve_default_dashscope_model(model)",
+        ),
+        (
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_wan26_video_uses_runtime_sub_model_env",
         ),
@@ -2287,6 +2319,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "test_dashscope_kling_ignores_unrelated_generic_model_env",
         ),
         (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_dashscope_vidu_ignores_unrelated_generic_model_env",
+        ),
+        (
             root / "tests" / "test_dashscope_video_payload_extension.py",
             "test_kling_standard_uses_runtime_sub_model_env",
         ),
@@ -2297,6 +2333,26 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         (
             root / "tests" / "test_dashscope_video_payload_extension.py",
             "test_kling_submit_default_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_vidu_reference_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_vidu_startend_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_vidu_direct_default_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_happyhorse_uses_runtime_sub_model_env",
+        ),
+        (
+            root / "tests" / "test_dashscope_video_payload_extension.py",
+            "test_happyhorse_direct_default_uses_runtime_sub_model_env",
         ),
     ]
     checks = 0

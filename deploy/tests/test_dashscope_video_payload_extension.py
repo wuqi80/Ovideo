@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import dashscope_video_api as ds
-from services.api_provider_registry import get_dashscope_sub_model_env_key
+from services.api_provider_registry import DASHSCOPE_DEFAULT_MODEL_MAP, get_dashscope_sub_model_env_key
 
 
 # ─── helpers（沿用 test_minimax_tts_sync 的 fake aiohttp 范式） ───────────
@@ -173,6 +173,56 @@ async def test_vidu_resolution_size_seed_audio_serialized(patch_http):
     assert p["parameters"].get("duration") == 8
 
 
+async def test_vidu_reference_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("vidu-reference-q3"), "vidu/runtime-reference-q3")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="\u5927\u4e58",
+        params={
+            "prompt": "runtime vidu reference",
+            "sub_model_vidu": "q3",
+            "media_inputs": [
+                {"kind": "image", "url": "https://x/ref.jpg", "role": "reference_image"}
+            ],
+        },
+    )
+
+    assert patch_http["payload"]["model"] == "vidu/runtime-reference-q3"
+
+
+async def test_vidu_startend_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("vidu-startend-q3-turbo"), "vidu/runtime-startend-q3-turbo")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="\u5927\u4e58",
+        params={
+            "prompt": "runtime vidu startend",
+            "sub_model_vidu": "q3-turbo",
+            "media_inputs": [
+                {"kind": "image", "url": "https://x/first.jpg", "role": "first_frame"},
+                {"kind": "image", "url": "https://x/last.jpg", "role": "last_frame"},
+            ],
+        },
+    )
+
+    assert patch_http["payload"]["model"] == "vidu/runtime-startend-q3-turbo"
+
+
+async def test_vidu_direct_default_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("vidu-reference-q3"), "vidu/runtime-direct-reference-q3")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.vidu_reference_submit(
+        "runtime direct vidu reference",
+        model=DASHSCOPE_DEFAULT_MODEL_MAP["vidu-reference-q3"],
+        reference_image_urls=["https://x/ref.jpg"],
+    )
+
+    assert patch_http["payload"]["model"] == "vidu/runtime-direct-reference-q3"
+
+
 async def test_happyhorse_resolution_ratio_duration_watermark_seed_serialized(patch_http):
     client = ds.DashScopeVideoClient(api_key="k")
     await client.submit(
@@ -195,3 +245,33 @@ async def test_happyhorse_resolution_ratio_duration_watermark_seed_serialized(pa
     assert p["parameters"].get("duration") == 7
     assert p["parameters"].get("watermark") is False
     assert p["parameters"].get("seed") == 42
+
+
+async def test_happyhorse_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("happyhorse"), "happyhorse-runtime-r2v")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.submit(
+        model_name="\u70bc\u865a",
+        params={
+            "prompt": "runtime happyhorse",
+            "media_inputs": [
+                {"kind": "image", "url": "https://x/hh.jpg", "role": "reference_image"}
+            ],
+        },
+    )
+
+    assert patch_http["payload"]["model"] == "happyhorse-runtime-r2v"
+
+
+async def test_happyhorse_direct_default_uses_runtime_sub_model_env(patch_http, monkeypatch):
+    monkeypatch.setenv(get_dashscope_sub_model_env_key("happyhorse"), "happyhorse-runtime-direct-r2v")
+
+    client = ds.DashScopeVideoClient(api_key="k")
+    await client.happyhorse_submit(
+        "runtime direct happyhorse",
+        reference_image_urls=["https://x/hh.jpg"],
+        model=DASHSCOPE_DEFAULT_MODEL_MAP["happyhorse"],
+    )
+
+    assert patch_http["payload"]["model"] == "happyhorse-runtime-direct-r2v"

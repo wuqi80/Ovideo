@@ -629,6 +629,17 @@ def test_dashscope_kling_ignores_unrelated_generic_model_env(monkeypatch):
     assert resolve_dashscope_model_name("kling-standard") == DASHSCOPE_DEFAULT_MODEL_MAP["kling-standard"]
 
 
+def test_dashscope_vidu_ignores_unrelated_generic_model_env(monkeypatch):
+    env_key = get_provider_env_key("dashscope")
+    assert env_key
+    model_env = get_model_env_key(env_key)
+
+    monkeypatch.setenv(model_env, DASHSCOPE_DEFAULT_MODEL_MAP["happyhorse"])
+    monkeypatch.delenv(get_dashscope_sub_model_env_key("vidu-reference-q3"), raising=False)
+
+    assert resolve_dashscope_model_name("vidu-reference-q3") == DASHSCOPE_DEFAULT_MODEL_MAP["vidu-reference-q3"]
+
+
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):
     env_key = get_provider_env_key("deepseek")
     assert env_key

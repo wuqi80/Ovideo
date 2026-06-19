@@ -109,6 +109,19 @@ async def main() -> int:
             "enabled": True,
         },
     ]
+    rows.extend(
+        {
+            "provider": "dashscope",
+            "api_key_encrypted": "enc:db-dashscope-key",
+            "endpoint": "https://db.dashscope.example.test/api/v1/services/aigc/video-generation/video-synthesis",
+            "model_name": model_name,
+            "proxy_mode": "direct",
+            "custom_proxy": "",
+            "enabled": True,
+        }
+        for sub_model, model_name in registry.DASHSCOPE_DEFAULT_MODEL_MAP.items()
+        if sub_model not in {"wan26", "kling-standard", "kling-omni"}
+    )
     creates: list[dict[str, Any]] = []
     updates: list[tuple[str, dict[str, Any]]] = []
 
@@ -149,8 +162,8 @@ async def main() -> int:
     loader.ApiConfigDAO = FakeDAO
     try:
         result = await loader.load_api_configs_to_env()
-        if result.get("loaded") != 6:
-            fail(f"Expected six loaded keyed rows, got {result}")
+        if result.get("loaded") != 16:
+            fail(f"Expected sixteen loaded keyed rows, got {result}")
         if os.environ.get("DEEPSEEK_API_KEY") != "db-deepseek-key":
             fail("DB key did not override baseline env key")
         if os.environ.get("DEEPSEEK_ENDPOINT") != "https://db.deepseek.example.test":
@@ -173,6 +186,12 @@ async def main() -> int:
             fail("DashScope Kling standard model was not projected to sub-model env")
         if os.environ.get("DASHSCOPE_MODEL_KLING_OMNI") != "kling/kling-v3-omni-video-generation":
             fail("DashScope Kling omni model was not projected to sub-model env")
+        for sub_model, model_name in registry.DASHSCOPE_DEFAULT_MODEL_MAP.items():
+            if sub_model in {"wan26", "kling-standard", "kling-omni"}:
+                continue
+            env_key = registry.get_dashscope_sub_model_env_key(sub_model)
+            if os.environ.get(env_key) != model_name:
+                fail(f"DashScope {sub_model} model was not projected to {env_key}")
 
         rows[:] = [
             {
@@ -219,6 +238,12 @@ async def main() -> int:
             fail("Empty DB reload did not clear DashScope Wan2.6 sub-model env value")
         if os.environ.get("DASHSCOPE_MODEL_KLING_STANDARD") or os.environ.get("DASHSCOPE_MODEL_KLING_OMNI"):
             fail("Empty DB reload did not clear DashScope Kling sub-model env values")
+        for sub_model in registry.DASHSCOPE_DEFAULT_MODEL_MAP:
+            if sub_model in {"wan26", "kling-standard", "kling-omni"}:
+                continue
+            env_key = registry.get_dashscope_sub_model_env_key(sub_model)
+            if os.environ.get(env_key):
+                fail(f"Empty DB reload did not clear DashScope {sub_model} sub-model env value")
 
         rows[:] = [
             {
@@ -285,10 +310,11 @@ async def main() -> int:
         fail("admin_routes.py must not dynamically import cluster_main for API env reload")
 
     print("API config runtime loader contract OK")
-    print("  hot_reload_loaded_rows=6")
+    print("  hot_reload_loaded_rows=16")
     print("  seedance_sub_model_env_projection=2")
     print("  dashscope_wan26_env_projection=1")
     print("  dashscope_kling_env_projection=2")
+    print("  dashscope_vidu_happyhorse_env_projection=10")
     print("  baseline_restore=1")
     print("  seed_registry_placeholders=2")
     print("  legacy_model_upgrades=3")
