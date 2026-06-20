@@ -460,6 +460,28 @@ class FileDAO:
             WHERE file_id = $1
         """
         await db.execute(query, file_id)
+
+    @staticmethod
+    async def soft_delete_user_files_by_path_fragment(user_id: str, path_fragment: str) -> int:
+        """Soft-delete a user's file records whose stored path contains a generated file path."""
+        if not path_fragment:
+            return 0
+        db = get_db_manager()
+        result = await db.execute(
+            """
+            UPDATE files
+            SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1
+              AND file_path LIKE $2
+              AND is_deleted = FALSE
+            """,
+            user_id,
+            f"%{path_fragment}%",
+        )
+        try:
+            return int(str(result).split()[-1])
+        except (IndexError, TypeError, ValueError):
+            return 0
     
     @staticmethod
     async def permanently_delete_file(file_id: str):

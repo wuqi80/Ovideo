@@ -20,11 +20,13 @@ def create_task_router(
     jwt_auth_module: Any,
     task_service_module: Any,
     task_dao: Any,
+    file_dao: Any,
     get_db_manager: Any,
     get_pubsub_redis_client: Any,
     logger: logging.Logger,
 ) -> APIRouter:
     router = APIRouter()
+    FileDAO = file_dao
 
     @router.post("/api/generate")
     async def create_generate_task(request: GenerateRequest, username: str = Depends(require_auth_dependency)):
@@ -189,19 +191,11 @@ def create_task_router(
 
                             if db:
                                 try:
-                                    result = await db.execute(
-                                        """
-                                        UPDATE files
-                                        SET is_deleted = TRUE, deleted_at = NOW()
-                                        WHERE user_id = $1
-                                        AND file_path LIKE $2
-                                        AND is_deleted = FALSE
-                                        RETURNING file_id
-                                        """,
+                                    deleted_count = await FileDAO.soft_delete_user_files_by_path_fragment(
                                         username,
-                                        f"%{file_path}%",
+                                        file_path,
                                     )
-                                    if result:
+                                    if deleted_count:
                                         logger.info("✅ 已从数据库标记删除: %s", file_path)
                                 except Exception as db_err:
                                     logger.warning("数据库删除文件记录失败: %s", db_err)

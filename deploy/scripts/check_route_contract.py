@@ -2977,6 +2977,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "business" / "credit.py", "async def confirm_task_freeze("),
         (root / "dao" / "business" / "task.py", "async def get_active_tasks_for_user("),
         (root / "dao" / "business" / "task.py", "async def get_terminal_tasks_for_notifications("),
+        (root / "dao" / "content" / "content.py", "async def soft_delete_user_files_by_path_fragment("),
         (root / "dao" / "creative" / "episode.py", "async def get_project_id("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
@@ -2984,6 +2985,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
         (root / "routers" / "episode_video.py", "EpisodeDAO.get_project_id("),
+        (root / "routers" / "tasks.py", "FileDAO.soft_delete_user_files_by_path_fragment("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
     ]
     for path, snippet in required_snippets:
@@ -3020,6 +3022,16 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     ]:
         if snippet in episode_video_router_text:
             violations.append(f"routers/episode_video.py must delegate episode project lookup to EpisodeDAO: {snippet}")
+        checks += 1
+
+    tasks_router_text = (root / "routers" / "tasks.py").read_text(encoding="utf-8")
+    for snippet in [
+        "UPDATE files",
+        "RETURNING file_id",
+        "result = await db.execute(",
+    ]:
+        if snippet in tasks_router_text:
+            violations.append(f"routers/tasks.py must delegate generated-file soft delete to FileDAO: {snippet}")
         checks += 1
 
     if violations:

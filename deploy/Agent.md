@@ -5187,3 +5187,25 @@
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
   - `service_mapper_purity_checks=456`
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+
+## 2026-06-20 Task Generated File Delete Mapper Cleanup
+
+### Changes
+
+- Added `FileDAO.soft_delete_user_files_by_path_fragment()` for the generated-file cleanup path used when deleting tasks.
+- Moved the `UPDATE files ... file_path LIKE ...` soft-delete SQL out of `routers/tasks.py`.
+- Updated `create_task_router()` wiring so the task router receives `FileDAO` instead of executing file-record SQL directly.
+- Extended `scripts/check_route_contract.py` so `routers/tasks.py` cannot reintroduce direct generated-file soft-delete SQL.
+
+### Follow-Up
+
+- User reported that storyboards disappeared during testing. Need to restore/diagnose later by checking whether the issue is frontend pagination/lazy-load display, `storyboard_items` data, or legacy `projects.storyboard` migration/compatibility.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/cluster_main.py deploy/routers/tasks.py deploy/dao/content/content.py deploy/scripts/check_route_contract.py`
+  - `rg -n "UPDATE files|RETURNING file_id|result = await db\.execute\(" deploy/routers/tasks.py` -> no matches
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `service_mapper_purity_checks=461`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
