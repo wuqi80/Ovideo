@@ -3552,6 +3552,22 @@ def check_frontend_flow_chunk_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_core_vendor_chunk_contract(root: Path) -> int:
+    """Core app infrastructure libraries should be cacheable vendor chunks."""
+    vite_config = root / "new_html" / "vite.config.ts"
+    config_text = vite_config.read_text(encoding="utf-8")
+    required_snippets = [
+        "'router-vendor': ['react-router-dom']",
+        "'query-vendor': ['@tanstack/react-query']",
+    ]
+    checks = 0
+    for snippet in required_snippets:
+        if snippet not in config_text:
+            fail(f"Missing frontend core vendor chunk snippet in {vite_config.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
@@ -3719,6 +3735,7 @@ def main() -> int:
     frontend_workflow_chunk_checks = check_frontend_workflow_chunk_contract(root)
     frontend_three_chunk_checks = check_frontend_three_chunk_contract(root)
     frontend_flow_chunk_checks = check_frontend_flow_chunk_contract(root)
+    frontend_core_vendor_chunk_checks = check_frontend_core_vendor_chunk_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
@@ -3782,6 +3799,7 @@ def main() -> int:
     print(f"  frontend_workflow_chunk_checks={frontend_workflow_chunk_checks}")
     print(f"  frontend_three_chunk_checks={frontend_three_chunk_checks}")
     print(f"  frontend_flow_chunk_checks={frontend_flow_chunk_checks}")
+    print(f"  frontend_core_vendor_chunk_checks={frontend_core_vendor_chunk_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")

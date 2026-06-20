@@ -6036,3 +6036,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server build succeeded and split `CanvasPage` down to 7.39 kB while moving React Flow to a cacheable `flow-vendor` chunk.
 - Server route/architecture contracts passed.
 - Online smoke test passed `9/9`.
+
+## 2026-06-21 Core Frontend Vendor Split
+
+### Changes
+
+- Added dedicated Vite `router-vendor` and `query-vendor` manual chunks for `react-router-dom` and `@tanstack/react-query`.
+- Added route contract guards for the core frontend vendor split.
+
+### Verification
+
+- Local route contract passed with `frontend_core_vendor_chunk_checks=2`.
+- Local architecture contract suite passed `9/9`.
+- Server build succeeded and split `index` down to 250.74 kB while moving router/query libraries to cacheable vendor chunks.
+- Server route/architecture contracts passed.
+- Online smoke test passed `9/9`.

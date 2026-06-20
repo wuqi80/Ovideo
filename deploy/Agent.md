@@ -6022,3 +6022,22 @@
   - `flow-vendor-*.js`: 181.80 kB build output, 178K on disk
 - Server route contract and architecture contract passed.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Core Frontend Vendor Split
+
+### Changes
+
+- Added dedicated Vite `router-vendor` and `query-vendor` manual chunks for `react-router-dom` and `@tanstack/react-query`.
+- Added `check_frontend_core_vendor_chunk_contract()` to preserve the app infrastructure chunk split.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_core_vendor_chunk_checks=2`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `live_deploy_mvc2.sh` built successfully.
+- Server build output split:
+  - `index-*.js`: 250.74 kB build output, 245K on disk
+  - `router-vendor-*.js`: 37.78 kB build output, 37K on disk
+  - `query-vendor-*.js`: 45.77 kB build output, 45K on disk
+- Server route contract and architecture contract passed.
+- Online smoke test against `https://mecha.one` passed `9/9`.
