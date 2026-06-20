@@ -2579,6 +2579,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
     history_page = new_html / "components" / "HistoryPage.tsx"
     header = new_html / "components" / "Header.tsx"
     project_context = new_html / "contexts" / "ProjectContext.tsx"
+    admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
+    design_page = new_html / "pages" / "DesignPage.tsx"
     admin_feature_tabs = new_html / "components" / "AdminFeatureTabs.tsx"
     admin_organizations_tab = new_html / "admin" / "AdminOrganizationsTab.tsx"
     admin_hub_page = new_html / "admin" / "AdminHubPage.tsx"
@@ -2599,6 +2601,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         history_page,
         header,
         project_context,
+        admin_login_page,
+        design_page,
         admin_feature_tabs,
         admin_organizations_tab,
         admin_hub_page,
@@ -2631,6 +2635,12 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (header, "apiFetch('/api/logout'"),
         (project_context, "import { apiJson } from '../services/httpClient'"),
         (project_context, "apiJson<any>(`/api/projects/${projectId}`"),
+        (admin_login_page, "import { apiJson } from '../services/httpClient'"),
+        (admin_login_page, "apiJson<any>('/api/login'"),
+        (admin_login_page, "{ requireAuth: false }"),
+        (design_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
+        (design_page, "secureApiUrl(normalized, { absolute: true })"),
+        (design_page, "apiBlob(secured, { method: 'GET' }, '下载图片'"),
         (admin_feature_tabs, "import { apiJson } from '../services/httpClient'"),
         (admin_feature_tabs, "apiJson<T>(url, { method: 'GET' }, 'Admin API')"),
         (admin_organizations_tab, "import { apiJson } from '../services/httpClient'"),

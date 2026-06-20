@@ -18,6 +18,7 @@ import {
     getAdminUsername,
     getAndClearAdminPostLoginRedirect,
 } from './adminAuth';
+import { apiJson } from '../services/httpClient';
 
 function getLoginRedirect(location: ReturnType<typeof useLocation>): string {
     const redirect = new URLSearchParams(location.search).get('redirect');
@@ -75,14 +76,12 @@ export const AdminLoginPage: React.FC = () => {
             //   不存在 /api/auth/login —— 旧 URL 会 404，res.ok=false → setError 但不写 token，
             //   用户感觉"登录成功"实际未登录，点"生成管理"时 AdminOperationsRoute 看 token=null → 弹回登录页。
             // 后端响应格式 { success, message, token, username } 完全匹配下面的解构。
-            const res = await fetch('/api/login', {
+            const data = await apiJson<any>('/api/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: username.trim(), password }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || !data.success || !data.token) {
-                setError(data?.detail || data?.message || `登录失败 (HTTP ${res.status})`);
+            }, '登录', { requireAuth: false });
+            if (!data.success || !data.token) {
+                setError(data?.detail || data?.message || '登录失败');
                 return;
             }
             const respUsername = data.username || username.trim();

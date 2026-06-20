@@ -15,6 +15,7 @@ import { AiModel } from '../types';
 import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
 import type { AssetItem } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
+import { apiBlob, secureApiUrl } from '../services/httpClient';
 
 type AssetTab = 'character' | 'scene' | 'prop';
 type MaterialAIEngine = 'nanobanana' | 'doubao';
@@ -71,22 +72,19 @@ function safeObj(val: unknown): Record<string, unknown> {
 
 function secureMediaUrl(url: string | null): string | null {
   if (!url) return null;
-  const token = localStorage.getItem('auth_token');
-  if (!token || url.startsWith('data:') || url.startsWith('blob:')) return url;
-  let absolute = url.startsWith('http') ? url : `${window.location.origin}${url.startsWith('/') ? url : `/${url}`}`;
-  if (absolute.includes('token=')) return absolute;
-  return `${absolute}${absolute.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const normalized = url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`);
+  return secureApiUrl(normalized, { absolute: true });
 }
 
 async function ensureDataUrl(input: string): Promise<string> {
   if (!input) throw new Error('图片URL无效');
   if (input.startsWith('data:')) return input;
-  const token = localStorage.getItem('auth_token');
-  const absolute = input.startsWith('http') ? input : `${window.location.origin}${input}`;
-  const secured = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
-  const res = await fetch(secured, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
-  if (!res.ok) throw new Error('无法下载图片');
-  const blob = await res.blob();
+  const secured = secureMediaUrl(input) || input;
+  const blob = await apiBlob(secured, { method: 'GET' }, '下载图片', {
+    requireAuth: false,
+    includeContentType: false,
+  });
   return new Promise((resolve, reject) => { const r = new FileReader(); r.onloadend = () => resolve(r.result as string); r.onerror = reject; r.readAsDataURL(blob); });
 }
 

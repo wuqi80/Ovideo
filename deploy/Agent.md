@@ -4619,6 +4619,27 @@
   - `scripts/live_deploy_mvc2.sh` -> `✅ 部署成功`
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
+
+## 2026-06-20 Frontend Admin Login And Design HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/admin/AdminLoginPage.tsx` login submit from local `fetch()` to shared `apiJson()` with `requireAuth: false`.
+- Migrated `new_html/pages/DesignPage.tsx` secured image URL creation and blob download from local `auth_token`/Authorization handling to shared `secureApiUrl()` and `apiBlob()`.
+- Extended `scripts/check_route_contract.py` so both files cannot reintroduce page-local `fetch()` or duplicated Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_admin_login_design_httpclient_20260620132534.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
   - `.venv/bin/python scripts/check_route_contract.py`
   - `.venv/bin/python scripts/check_provider_contract.py`
   - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
