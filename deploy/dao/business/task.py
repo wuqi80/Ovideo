@@ -159,6 +159,44 @@ class TaskDAO:
             LIMIT $2
         """ % hours
         return await db.fetch(query, user_id, limit)
+
+    @staticmethod
+    async def get_active_tasks_for_user(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get active pending/processing/queued tasks for task recovery polling."""
+        db = get_db_manager()
+        limit = max(1, min(int(limit or 50), 200))
+        query = """
+            SELECT task_id, task_type, status, project_id, category,
+                   source_page, source_item_id, display_name,
+                   created_at, started_at, completed_at, metadata
+            FROM tasks
+            WHERE user_id = $1 AND status IN ('pending', 'processing', 'queued')
+            ORDER BY created_at DESC
+            LIMIT $2
+        """
+        return await db.fetch(query, user_id, limit)
+
+    @staticmethod
+    async def get_terminal_tasks_for_notifications(
+        user_id: str,
+        since_dt: Optional[datetime] = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Get completed/failed task rows for notification polling."""
+        db = get_db_manager()
+        limit = max(1, min(int(limit or 20), 100))
+        query = """
+            SELECT task_id, task_type, status, project_id, category,
+                   source_page, source_item_id, display_name,
+                   created_at, completed_at, result_data, task_data
+            FROM tasks
+            WHERE user_id = $1 AND status IN ('completed', 'failed')
+              AND ($2::timestamp IS NULL OR completed_at > $2)
+              AND COALESCE(error_message, '') <> 'Auto-cleanup: stale task exceeded timeout'
+            ORDER BY completed_at DESC
+            LIMIT $3
+        """
+        return await db.fetch(query, user_id, since_dt, limit)
     
     @staticmethod
     async def link_task_file(task_id: str, file_id: str, file_role: str = 'output'):

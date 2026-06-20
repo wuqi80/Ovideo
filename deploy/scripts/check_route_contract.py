@@ -864,9 +864,7 @@ def check_task_notification_routes_extracted(root: Path) -> int:
 def check_task_stale_cleanup_notification_contract(root: Path) -> int:
     """Auto-cleaned stale tasks must not create a recent notification burst."""
     task_dao_path = root / "dao" / "business" / "task.py"
-    task_notifications_path = root / "routers" / "task_notifications.py"
     task_dao_text = task_dao_path.read_text(encoding="utf-8")
-    task_notifications_text = task_notifications_path.read_text(encoding="utf-8")
 
     marker = "Auto-cleanup: stale task exceeded timeout"
     if "async def cleanup_stale(hours: int = 24, limit: int = 50)" not in task_dao_text:
@@ -877,8 +875,8 @@ def check_task_stale_cleanup_notification_contract(root: Path) -> int:
         fail("TaskDAO.cleanup_stale must not stamp stale tasks as recently completed")
     if "completed_at = COALESCE(started_at, created_at)" not in task_dao_text:
         fail("TaskDAO.cleanup_stale must preserve old completion time for auto-cleaned stale tasks")
-    if task_notifications_text.count(marker) < 2:
-        fail("/api/tasks/notifications must filter auto-cleaned stale task failures from both queries")
+    if marker not in task_dao_text:
+        fail("TaskDAO notification lookup must filter auto-cleaned stale task failures")
     return 2
 
 
@@ -2977,9 +2975,13 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "business" / "credit.py", "class CreditLedgerDAO:"),
         (root / "dao" / "business" / "credit.py", "async def freeze_credits("),
         (root / "dao" / "business" / "credit.py", "async def confirm_task_freeze("),
+        (root / "dao" / "business" / "task.py", "async def get_active_tasks_for_user("),
+        (root / "dao" / "business" / "task.py", "async def get_terminal_tasks_for_notifications("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
+        (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
+        (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
     ]
     for path, snippet in required_snippets:
@@ -2995,6 +2997,16 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     ]:
         if snippet in entity_files_router_text:
             violations.append(f"routers/entity_files.py must delegate user file counts to EntityFileDAO: {snippet}")
+        checks += 1
+
+    task_notifications_router_text = (root / "routers" / "task_notifications.py").read_text(encoding="utf-8")
+    for snippet in [
+        "SELECT task_id, task_type, status, project_id, category",
+        "db = get_db_manager_func()",
+        "tasks = await db.fetch(query",
+    ]:
+        if snippet in task_notifications_router_text:
+            violations.append(f"routers/task_notifications.py must delegate task lookups to TaskDAO: {snippet}")
         checks += 1
 
     if violations:

@@ -5150,3 +5150,21 @@
   - `service_mapper_purity_checks=443`
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
   - `deploy/.venv/Scripts/python.exe -m py_compile deploy/routers/entity_files.py deploy/dao/content/entity_file.py deploy/scripts/check_route_contract.py`
+
+## 2026-06-20 Task Notifications Router Mapper Cleanup
+
+### Changes
+
+- Moved `/api/tasks/active` task lookup into `TaskDAO.get_active_tasks_for_user()`.
+- Moved `/api/tasks/notifications` terminal task lookup into `TaskDAO.get_terminal_tasks_for_notifications()`.
+- Kept stale-task auto-cleanup suppression in the DAO notification query.
+- Extended `scripts/check_route_contract.py` so task notification routes cannot reintroduce direct task SQL or `db.fetch()` lookups.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/routers/task_notifications.py deploy/dao/business/task.py deploy/scripts/check_route_contract.py`
+  - `rg -n "\b(SELECT|INSERT|UPDATE|DELETE|WITH)\b|db\.(fetch|fetchrow|fetchval|execute)|conn\.(fetch|fetchrow|fetchval|execute)" deploy/routers/task_notifications.py` -> no matches
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `service_mapper_purity_checks=450`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`

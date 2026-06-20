@@ -66,17 +66,7 @@ def create_task_notifications_router(
     ):
         """鑾峰彇鐢ㄦ埛鎵€鏈夋椿璺冧换鍔★紙running + queued锛?"""
         try:
-            db = get_db_manager_func()
-            query = """
-                SELECT task_id, task_type, status, project_id, category,
-                       source_page, source_item_id, display_name,
-                       created_at, started_at, completed_at, metadata
-                FROM tasks
-                WHERE user_id = $1 AND status IN ('pending', 'processing', 'queued')
-                ORDER BY created_at DESC
-                LIMIT 50
-            """
-            tasks = await db.fetch(query, user_id)
+            tasks = await TaskDAO.get_active_tasks_for_user(user_id, limit=50)
             return {"success": True, "tasks": tasks}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -88,35 +78,11 @@ def create_task_notifications_router(
     ):
         """鑾峰彇鏈€杩戝畬鎴?澶辫触鐨勪换鍔￠€氱煡"""
         try:
-            db = get_db_manager_func()
-
+            since_dt = None
             if since:
                 # tasks.completed_at is a naive UTC timestamp; strip tzinfo before comparing.
                 since_dt = datetime.fromtimestamp(since / 1000, tz=timezone.utc).replace(tzinfo=None)
-                query = """
-                    SELECT task_id, task_type, status, project_id, category,
-                           source_page, source_item_id, display_name,
-                           created_at, completed_at, result_data, task_data
-                    FROM tasks
-                    WHERE user_id = $1 AND status IN ('completed', 'failed')
-                      AND completed_at > $2
-                      AND COALESCE(error_message, '') <> 'Auto-cleanup: stale task exceeded timeout'
-                    ORDER BY completed_at DESC
-                    LIMIT 20
-                """
-                tasks = await db.fetch(query, user_id, since_dt)
-            else:
-                query = """
-                    SELECT task_id, task_type, status, project_id, category,
-                           source_page, source_item_id, display_name,
-                           created_at, completed_at, result_data, task_data
-                    FROM tasks
-                    WHERE user_id = $1 AND status IN ('completed', 'failed')
-                      AND COALESCE(error_message, '') <> 'Auto-cleanup: stale task exceeded timeout'
-                    ORDER BY completed_at DESC
-                    LIMIT 20
-                """
-                tasks = await db.fetch(query, user_id)
+            tasks = await TaskDAO.get_terminal_tasks_for_notifications(user_id, since_dt, limit=20)
 
             notifications = []
             for t in tasks:
