@@ -124,6 +124,7 @@ async def main() -> int:
 
     original_dao = service.ApiConfigDAO
     original_invalidate = service.delete_cached_provider_health_many
+    original_test_health = service.test_api_config_health
     service.ApiConfigDAO = FakeDAO
     service.delete_cached_provider_health_many = fake_invalidate
     try:
@@ -204,10 +205,56 @@ async def main() -> int:
         if "deepseek" not in invalidations[-1]:
             fail(f"update_api_config should invalidate updated provider health cache: {invalidations}")
 
-        health = await service.test_saved_api_config_health("apicfg_empty")
-        test = health.get("test") or {}
-        if test.get("ok") is not False or test.get("error") != "No API key configured":
-            fail(f"health wrapper result changed: {test}")
+        previous_gpt_image_key = os.environ.pop("GPT_IMAGE_API_KEY", None)
+        try:
+            health = await service.test_saved_api_config_health("apicfg_empty")
+            test = health.get("test") or {}
+            if test.get("ok") is not False or test.get("error") != "No API key configured":
+                fail(f"health wrapper result changed: {test}")
+            if test.get("key_source") != "missing" or test.get("used_runtime_key") is not False:
+                fail(f"health wrapper should report missing key source without runtime env: {test}")
+        finally:
+            if previous_gpt_image_key is not None:
+                os.environ["GPT_IMAGE_API_KEY"] = previous_gpt_image_key
+
+        async def fake_test_health(row, api_key):
+            if api_key != "runtime-secret":
+                fail(f"runtime fallback did not pass resolved API key: {api_key!r}")
+            return {
+                "success": True,
+                "test": {
+                    "ok": True,
+                    "reachable": True,
+                    "auth_ok": True,
+                    "status_code": 200,
+                    "url": row.get("endpoint"),
+                    "error": None,
+                    "provider": row.get("provider"),
+                    "model_name": row.get("model_name"),
+                    "method": "GET",
+                    "urls_tried": [row.get("endpoint")],
+                    "checked_at": "2026-06-20T00:00:00Z",
+                },
+            }
+
+        previous_gpt_image_key = os.environ.get("GPT_IMAGE_API_KEY")
+        service.test_api_config_health = fake_test_health
+        os.environ["GPT_IMAGE_API_KEY"] = "runtime-secret"
+        try:
+            health = await service.test_saved_api_config_health("apicfg_empty")
+            test = health.get("test") or {}
+            if test.get("ok") is not True:
+                fail(f"runtime fallback health should pass: {test}")
+            if test.get("key_source") != "runtime" or test.get("key_env") != "GPT_IMAGE_API_KEY":
+                fail(f"runtime fallback key source not reported: {test}")
+            if test.get("used_runtime_key") is not True:
+                fail(f"runtime fallback flag not reported: {test}")
+        finally:
+            service.test_api_config_health = original_test_health
+            if previous_gpt_image_key is None:
+                os.environ.pop("GPT_IMAGE_API_KEY", None)
+            else:
+                os.environ["GPT_IMAGE_API_KEY"] = previous_gpt_image_key
 
         deleted = await service.delete_api_config("apicfg_empty", reload_api_env=fake_reload)
         if deleted != {"success": True, "deleted": True, "env_refreshed": True}:
@@ -309,6 +356,7 @@ async def main() -> int:
     finally:
         service.ApiConfigDAO = original_dao
         service.delete_cached_provider_health_many = original_invalidate
+        service.test_api_config_health = original_test_health
 
     print("Admin API config CRUD contract OK")
     print("  list_masks_key=1")
@@ -319,6 +367,7 @@ async def main() -> int:
     print("  historical_conflict_repair=1")
     print("  provider_health_invalidations=4")
     print("  health_wrapper_no_key=1")
+    print("  health_wrapper_runtime_key_fallback=1")
     return 0
 
 

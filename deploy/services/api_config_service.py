@@ -19,7 +19,7 @@ from services.api_provider_registry import (
     normalize_provider,
     summarize_api_provider_configs,
 )
-from services.api_provider_runtime import build_provider_runtime_status
+from services.api_provider_runtime import build_provider_runtime_status, resolve_provider
 
 
 ReloadCallback = Callable[[], Awaitable[bool]]
@@ -314,7 +314,27 @@ async def test_saved_api_config_health(config_id: str) -> Dict[str, Any]:
     if not row:
         raise ApiConfigNotFound("Config not found")
     key = await ApiConfigDAO.get_decrypted_key(config_id)
-    return await test_api_config_health(row, key or "")
+    key_source = "db" if key else "missing"
+    key_env: Optional[str] = None
+    if not key:
+        provider = normalize_provider(row.get("provider") or "")
+        model_name = str(row.get("model_name") or "") or None
+        try:
+            runtime = resolve_provider(provider, model_name)
+            if runtime.has_key:
+                key = runtime.api_key
+                key_source = "runtime"
+                key_env = runtime.api_key_env
+        except Exception as exc:
+            logger.warning("Runtime key fallback failed for config %s: %s", config_id, exc, exc_info=True)
+
+    result = await test_api_config_health(row, key or "")
+    test = result.get("test")
+    if isinstance(test, dict):
+        test["key_source"] = key_source
+        test["key_env"] = key_env
+        test["used_runtime_key"] = key_source == "runtime"
+    return result
 
 
 def summarize_config_test_results(results: Iterable[Dict[str, Any]]) -> Dict[str, int]:
@@ -364,8 +384,21 @@ async def test_all_saved_api_config_health(
         async with sem:
             try:
                 key = await ApiConfigDAO.get_decrypted_key(config_id)
+                key_source = "db" if key else "missing"
+                key_env: Optional[str] = None
+                if not key:
+                    provider = normalize_provider(row.get("provider") or "")
+                    model_name = str(row.get("model_name") or "") or None
+                    runtime = resolve_provider(provider, model_name)
+                    if runtime.has_key:
+                        key = runtime.api_key
+                        key_source = "runtime"
+                        key_env = runtime.api_key_env
                 result = await test_api_config_health(row, key or "")
                 test = result.get("test") or {}
+                test["key_source"] = key_source
+                test["key_env"] = key_env
+                test["used_runtime_key"] = key_source == "runtime"
             except Exception as exc:
                 logger.warning("API config batch test failed for %s: %s", config_id, exc, exc_info=True)
                 test = {

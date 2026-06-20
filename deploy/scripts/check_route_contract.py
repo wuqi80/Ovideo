@@ -2176,15 +2176,19 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "填写 / 修改 Key",
+            "配置 / 修改 API Key",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "测试 DB 记录",
+            "高级诊断",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "测试运行时",
+            "测试连通性",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "新增 / 修改厂商 API",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
