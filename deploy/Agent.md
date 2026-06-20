@@ -1,5 +1,36 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Provider Health Monitor Observability
+
+### Changes
+
+- Added observable monitor state to the API provider health monitor:
+  - `enabled`, `loop_running`, `loop_started_at`, and Redis cache availability.
+  - last sweep source (`background` or `manual`), start/end timestamps, duration, summary, and last error.
+- Exposed `monitor_state` from:
+  - `GET /api/admin/api-configs`
+  - `GET /api/admin/api-configs/health/cache`
+  - `POST /api/admin/api-configs/health/sweep`
+- Manual health sweeps now record `last_sweep_source=manual`; background sweeps record `last_sweep_source=background`.
+- Updated the native admin API config page with a compact provider-health monitor strip so admins can see whether automatic provider health checks are enabled/running, when the last sweep completed, and whether Redis health cache is available.
+- Strengthened provider-health and route/UI contracts to require the new monitor state and admin display.
+
+### Verification
+
+- Local `py_compile` for changed backend scripts: passed.
+- Local `scripts/check_provider_health_monitor.py`: passed, including `provider_monitor_state=1`.
+- Local `scripts/check_route_contract.py`: passed, including `admin_api_config_ui_checks=13`.
+- Local `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Local `tsc --noEmit` still fails on existing project-wide TypeScript debt outside this change; it reported no new `AdminSettingsPage.tsx` errors.
+- `scripts/live_deploy_mvc2.sh`: deployed successfully; remote Vite build passed and `drama.service` stayed active.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Production API probes:
+  - `GET /api/admin/api-configs` returned `monitor_state` with `enabled=true` and `redis_configured=true`.
+  - `GET /api/admin/api-configs/health/cache` returned provider health cache rows and `monitor_state`.
+  - `POST /api/admin/api-configs/health/sweep` for `deepseek` returned `ok=1` and `monitor_state.last_sweep_source=manual`.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 MiniMax Voice Clone Runtime Guardrails
 
 ### Changes

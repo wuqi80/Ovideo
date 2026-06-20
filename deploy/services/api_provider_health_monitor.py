@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
 
@@ -19,6 +20,21 @@ DEFAULT_HEALTH_TTL_SECONDS = 900
 ProviderHealthCheck = Callable[[str], Awaitable[Dict[str, Any]]]
 
 _redis_client: Any = None
+_monitor_state: Dict[str, Any] = {
+    "enabled": None,
+    "loop_running": False,
+    "loop_started_at": None,
+    "last_sweep_source": None,
+    "last_sweep_started_at": None,
+    "last_sweep_completed_at": None,
+    "last_sweep_duration_ms": None,
+    "last_summary": None,
+    "last_error": None,
+}
+
+
+def _utc_now() -> str:
+    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -43,6 +59,16 @@ def provider_health_monitor_settings() -> Dict[str, int | bool]:
         "interval_seconds": _env_int_at_least("API_PROVIDER_HEALTH_INTERVAL_SECONDS", 300, 60),
         "ttl_seconds": _env_int_at_least("API_PROVIDER_HEALTH_TTL_SECONDS", DEFAULT_HEALTH_TTL_SECONDS, 60),
         "concurrency": _env_int_at_least("API_PROVIDER_HEALTH_CONCURRENCY", 3, 1),
+    }
+
+
+def provider_health_monitor_state() -> Dict[str, Any]:
+    """Return observable provider-health monitor state for admin UI/debugging."""
+    settings = provider_health_monitor_settings()
+    return {
+        **_monitor_state,
+        "enabled": bool(settings["enabled"]),
+        "redis_configured": _redis_client is not None,
     }
 
 
@@ -173,6 +199,8 @@ async def run_provider_health_sweep(
     redis_client: Any = None,
     check_fn: Optional[ProviderHealthCheck] = None,
     concurrency: Optional[int] = None,
+    record_state: bool = False,
+    sweep_source: str = "manual",
 ) -> List[Dict[str, Any]]:
     provider_ids = [normalize_provider(p) for p in (providers or sorted(PROVIDER_CATALOG))]
     provider_ids = [p for p in provider_ids if p]
@@ -184,6 +212,18 @@ async def run_provider_health_sweep(
     ttl = int(settings["ttl_seconds"])
     checker = check_fn or check_provider_health
     sem = asyncio.Semaphore(limit)
+    started_at = _utc_now()
+    started_perf = time.perf_counter()
+    if record_state:
+        _monitor_state.update(
+            {
+                "last_sweep_source": sweep_source,
+                "last_sweep_started_at": started_at,
+                "last_sweep_completed_at": None,
+                "last_sweep_duration_ms": None,
+                "last_error": None,
+            }
+        )
 
     async def one(provider: str) -> Dict[str, Any]:
         async with sem:
@@ -215,20 +255,54 @@ async def run_provider_health_sweep(
                 ttl_seconds=ttl,
             )
 
-    return list(await asyncio.gather(*(one(provider) for provider in provider_ids)))
+    try:
+        results = list(await asyncio.gather(*(one(provider) for provider in provider_ids)))
+    except Exception as exc:
+        if record_state:
+            _monitor_state.update(
+                {
+                    "last_sweep_completed_at": _utc_now(),
+                    "last_sweep_duration_ms": int((time.perf_counter() - started_perf) * 1000),
+                    "last_error": str(exc),
+                }
+            )
+        raise
+    if record_state:
+        _monitor_state.update(
+            {
+                "last_sweep_completed_at": _utc_now(),
+                "last_sweep_duration_ms": int((time.perf_counter() - started_perf) * 1000),
+                "last_summary": summarize_provider_health_results(results),
+                "last_error": None,
+            }
+        )
+    return results
 
 
 async def provider_health_monitor_loop(redis_client: Any = None) -> None:
     settings = provider_health_monitor_settings()
+    _monitor_state.update(
+        {
+            "enabled": bool(settings["enabled"]),
+            "loop_running": bool(settings["enabled"]),
+            "loop_started_at": _utc_now(),
+            "last_error": None,
+        }
+    )
     if not settings["enabled"]:
         logger.info("API provider health monitor disabled by API_PROVIDER_HEALTH_MONITOR_ENABLED")
+        _monitor_state["loop_running"] = False
         return
 
     client = redis_client if redis_client is not None else _redis_client
     await asyncio.sleep(int(settings["initial_delay_seconds"]))
     while True:
         try:
-            results = await run_provider_health_sweep(redis_client=client)
+            results = await run_provider_health_sweep(
+                redis_client=client,
+                record_state=True,
+                sweep_source="background",
+            )
             ok = sum(1 for item in results if item.get("status") == "ok")
             no_key = sum(1 for item in results if item.get("status") == "no_key")
             error = sum(1 for item in results if item.get("status") == "error")
@@ -240,7 +314,9 @@ async def provider_health_monitor_loop(redis_client: Any = None) -> None:
                 error,
             )
         except asyncio.CancelledError:
+            _monitor_state["loop_running"] = False
             raise
         except Exception as exc:
+            _monitor_state["last_error"] = str(exc)
             logger.warning("API provider health sweep failed: %s", exc, exc_info=True)
         await asyncio.sleep(int(provider_health_monitor_settings()["interval_seconds"]))

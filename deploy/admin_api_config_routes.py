@@ -33,6 +33,7 @@ from services.api_provider_health_monitor import (
     delete_cached_provider_health_many,
     list_cached_provider_health,
     provider_health_monitor_settings,
+    provider_health_monitor_state,
     run_provider_health_sweep,
     summarize_provider_health_results,
 )
@@ -223,6 +224,7 @@ async def admin_get_provider_health_cache():
         "provider_health": provider_health,
         "summary": summarize_provider_health_results(provider_health),
         "settings": provider_health_monitor_settings(),
+        "monitor_state": provider_health_monitor_state(),
     }
 
 
@@ -232,9 +234,16 @@ async def admin_sweep_provider_health(body: Optional[ApiConfigHealthSweepBody] =
     results = await run_provider_health_sweep(
         providers=body.providers,
         concurrency=body.concurrency,
+        record_state=True,
+        sweep_source="manual",
     )
     summary = summarize_provider_health_results(results)
-    return {"success": True, "provider_health": results, "summary": summary}
+    return {
+        "success": True,
+        "provider_health": results,
+        "summary": summary,
+        "monitor_state": provider_health_monitor_state(),
+    }
 
 
 @router.post("/api-configs/repair-conflicts")

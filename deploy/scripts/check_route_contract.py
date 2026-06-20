@@ -3366,6 +3366,12 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "const runtimeByKey = useMemo",
         "const runtimeForConfig = useCallback",
         "runtime={runtimeForConfig(config)}",
+        "interface ProviderHealthMonitorState",
+        "monitor_state?: ProviderHealthMonitorState",
+        "const ProviderHealthMonitorStrip",
+        "setMonitorState(data.monitor_state || null)",
+        "<ProviderHealthMonitorStrip state={monitorState} />",
+        "setMonitorState(result.monitor_state || null)",
     ]
     forbidden_snippets = [
         "const status = healthStatusFrom(result, runtimeMap.get(provider))",

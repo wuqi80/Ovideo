@@ -145,6 +145,25 @@ interface ProviderHealth {
     };
 }
 
+interface ProviderHealthMonitorState {
+    enabled?: boolean;
+    loop_running?: boolean;
+    loop_started_at?: string | null;
+    redis_configured?: boolean;
+    last_sweep_source?: string | null;
+    last_sweep_started_at?: string | null;
+    last_sweep_completed_at?: string | null;
+    last_sweep_duration_ms?: number | null;
+    last_summary?: {
+        total?: number;
+        ok?: number;
+        error?: number;
+        no_key?: number;
+        unknown?: number;
+    } | null;
+    last_error?: string | null;
+}
+
 interface ApiConfigTest {
     ok?: boolean;
     reachable?: boolean;
@@ -175,6 +194,7 @@ interface ApiConfigsResponse {
     providers?: ProviderMeta[];
     runtime_status?: RuntimeStatus[];
     provider_health?: ProviderHealth[];
+    monitor_state?: ProviderHealthMonitorState;
 }
 
 interface ApiConfigFormState {
@@ -230,6 +250,7 @@ interface ProviderHealthSweepResponse {
         no_key?: number;
         unknown?: number;
     };
+    monitor_state?: ProviderHealthMonitorState;
 }
 
 interface ProviderHealthCacheResponse extends ProviderHealthSweepResponse {
@@ -608,6 +629,56 @@ const HealthBadge: React.FC<{ status: HealthStatus }> = ({ status }) => {
             <span className="font-mono">{view.label}</span>
             <span>{view.text}</span>
         </span>
+    );
+};
+
+const ProviderHealthMonitorStrip: React.FC<{ state: ProviderHealthMonitorState | null }> = ({ state }) => {
+    if (!state) return null;
+    const enabled = state.enabled !== false;
+    const running = state.loop_running === true;
+    const hasError = Boolean(state.last_error);
+    const summary = state.last_summary || {};
+    const badgeClass = !enabled
+        ? 'bg-n20 text-n300'
+        : hasError
+            ? 'bg-r50 text-r400'
+            : running
+                ? 'bg-g50 text-g400'
+                : 'bg-y50 text-y400';
+    const label = !enabled ? 'disabled' : hasError ? 'error' : running ? 'running' : 'idle';
+    return (
+        <section className="rounded-md border border-n40 bg-n0 px-3 py-2 shadow-card flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-n300">
+            <span className={`inline-flex items-center gap-1.5 rounded px-2 py-0.5 font-semibold ${badgeClass}`}>
+                <Activity className="w-3.5 h-3.5" />
+                <span>自动巡检</span>
+                <span className="font-mono">{label}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+                <Timer className="w-3.5 h-3.5 text-n100" />
+                <span>最近完成</span>
+                <span className="font-mono text-n700">{formatTime(state.last_sweep_completed_at || undefined)}</span>
+            </span>
+            <span className="font-mono text-n700">
+                {typeof state.last_sweep_duration_ms === 'number' ? `${state.last_sweep_duration_ms} ms` : '- ms'}
+            </span>
+            <span className="font-mono text-n700">
+                ok {summary.ok ?? 0} / error {summary.error ?? 0} / no_key {summary.no_key ?? 0}
+            </span>
+            <span className="font-mono text-n100">
+                source {state.last_sweep_source || '-'}
+            </span>
+            {!state.redis_configured && (
+                <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 bg-y50 text-y400 font-medium">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Redis cache offline
+                </span>
+            )}
+            {state.last_error && (
+                <span className="min-w-0 flex-1 text-r400 truncate" title={state.last_error}>
+                    {state.last_error}
+                </span>
+            )}
+        </section>
     );
 };
 
@@ -1275,6 +1346,7 @@ const ApiConfigPanel: React.FC = () => {
     const [providers, setProviders] = useState<ProviderMeta[]>([]);
     const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus[]>([]);
     const [healthMap, setHealthMap] = useState<Record<string, ProviderHealth>>({});
+    const [monitorState, setMonitorState] = useState<ProviderHealthMonitorState | null>(null);
     const [configTestMap, setConfigTestMap] = useState<Record<string, ApiConfigTest>>({});
     const [loading, setLoading] = useState(true);
     const [checking, setChecking] = useState<Record<string, boolean>>({});
@@ -1298,6 +1370,7 @@ const ApiConfigPanel: React.FC = () => {
             setConfigs(rows);
             setProviders(data.providers || []);
             setRuntimeStatus(data.runtime_status || []);
+            setMonitorState(data.monitor_state || null);
             const nextHealth: Record<string, ProviderHealth> = {};
             (data.provider_health || []).forEach(item => {
                 const provider = normalizeProvider(item.provider);
@@ -1322,6 +1395,7 @@ const ApiConfigPanel: React.FC = () => {
         try {
             const result = await apiJson<ProviderHealthCacheResponse>('/api/admin/api-configs/health/cache');
             const rows = result.provider_health || [];
+            setMonitorState(result.monitor_state || null);
             setHealthMap(prev => {
                 const next = { ...prev };
                 rows.forEach(item => {
@@ -1519,6 +1593,7 @@ const ApiConfigPanel: React.FC = () => {
                 body: JSON.stringify({ providers: providerIds }),
             });
             const rows = result.provider_health || [];
+            setMonitorState(result.monitor_state || null);
             setHealthMap(prev => {
                 const next = { ...prev };
                 rows.forEach(item => {
@@ -1864,6 +1939,8 @@ const ApiConfigPanel: React.FC = () => {
                         </button>
                     </div>
                 </header>
+
+                <ProviderHealthMonitorStrip state={monitorState} />
 
                 <section className="grid grid-cols-2 lg:grid-cols-6 gap-3">
                     <div className="bg-n0 border border-n40 rounded-md p-3 shadow-card">

@@ -12,6 +12,7 @@ from services.api_config_health_service import test_api_config_health
 from services.api_provider_health_monitor import (
     delete_cached_provider_health_many,
     list_cached_provider_health,
+    provider_health_monitor_state,
 )
 from services.api_provider_registry import (
     get_api_model_presets,
@@ -157,6 +158,7 @@ async def list_api_configs() -> Dict[str, Any]:
         "provider_status": summarize_api_provider_configs(rows),
         "runtime_status": build_provider_runtime_status(rows, provider_health=provider_health),
         "provider_health": provider_health,
+        "monitor_state": provider_health_monitor_state(),
     }
 
 

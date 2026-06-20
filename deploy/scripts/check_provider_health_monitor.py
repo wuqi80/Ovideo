@@ -78,6 +78,8 @@ async def main() -> int:
         redis_client=fake_redis,
         check_fn=fake_check,
         concurrency=2,
+        record_state=True,
+        sweep_source="manual",
     )
     if len(results) != 2:
         fail(f"Expected two sweep results, got {len(results)}")
@@ -115,6 +117,15 @@ async def main() -> int:
         fail(f"Admin health cache endpoint did not return cached rows: {cache_response}")
     if "ttl_seconds" not in (cache_response.get("settings") or {}):
         fail(f"Admin health cache endpoint missing monitor settings: {cache_response}")
+    monitor_state = cache_response.get("monitor_state") or {}
+    if monitor_state.get("last_sweep_source") != "manual":
+        fail(f"Admin health cache endpoint missing manual sweep source: {monitor_state}")
+    if not monitor_state.get("last_sweep_completed_at"):
+        fail(f"Provider monitor state missing completion timestamp: {monitor_state}")
+    if monitor_state.get("last_summary") != summary:
+        fail(f"Provider monitor state summary changed: {monitor_state}")
+    if monitor_state.get("redis_configured") is not True:
+        fail(f"Provider monitor state should report configured Redis: {monitor_state}")
 
     rows = [
         {
@@ -148,12 +159,15 @@ async def main() -> int:
     provider_health = listed.get("provider_health") or []
     if len(provider_health) != 2:
         fail(f"list_api_configs did not include cached provider health: {provider_health}")
+    if not (listed.get("monitor_state") or {}).get("last_sweep_completed_at"):
+        fail(f"list_api_configs did not include provider monitor state: {listed.get('monitor_state')}")
 
     print("Provider health monitor contract OK")
     print("  cached_provider_health=2")
     print("  admin_health_cache_endpoint=1")
     print("  sweep_results=2")
     print("  api_config_response_provider_health=2")
+    print("  provider_monitor_state=1")
     return 0
 
 
