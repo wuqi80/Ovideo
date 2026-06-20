@@ -6069,3 +6069,26 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - `index-*.js`: 250.80 kB build output, 245K on disk
 - Server route/architecture contracts passed.
 - Online smoke test passed `9/9`.
+
+## 2026-06-21 Legacy Workspace Lazy Views
+
+### Changes
+
+- Converted `WorkspaceApp` legacy Materials, Generation, Video, History, and Admin views from static imports to `React.lazy()` boundaries.
+- Added local Suspense fallbacks for those legacy views so `/workflow/script` no longer has direct synchronous imports for non-script workspaces.
+- Expanded the frontend workflow chunk contract to forbid reintroducing those static legacy imports.
+
+### Verification
+
+- Local route contract passed with `frontend_workflow_chunk_checks=17`.
+- Local architecture contract suite passed `9/9`.
+- Server `live_deploy_mvc2.sh` build and restart succeeded.
+- Server build kept the legacy views in independent chunks:
+  - `ScriptPage-*.js`: 141.58 kB build output, 139K on disk
+  - `MaterialPage-*.js`: 58K on disk
+  - `GenerationPage-*.js`: 89K on disk for the legacy component chunk
+  - `VideoPage-*.js`: 149K on disk
+  - `AdminPage-*.js`: 54K on disk
+  - `HistoryPage-*.js`: 14K on disk
+- Server route/architecture contracts passed.
+- Online smoke test passed `9/9`.

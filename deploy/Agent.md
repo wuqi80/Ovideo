@@ -6060,3 +6060,26 @@
   - `index-*.js`: 250.80 kB build output, 245K on disk
 - Server route contract and architecture contract passed.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Legacy Workspace Lazy Views
+
+### Changes
+
+- Converted `WorkspaceApp` legacy Materials, Generation, Video, History, and Admin views from static imports to `React.lazy()` boundaries.
+- Added local Suspense fallbacks for those legacy views so the script workflow no longer directly imports non-script workspaces.
+- Expanded `check_frontend_workflow_chunk_contract()` to preserve the legacy lazy-view boundary.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_workflow_chunk_checks=17`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `live_deploy_mvc2.sh` built and restarted successfully.
+- Server build output kept legacy view chunks separate:
+  - `ScriptPage-*.js`: 141.58 kB build output, 139K on disk
+  - `MaterialPage-*.js`: 58K on disk
+  - `GenerationPage-*.js`: 89K on disk for the legacy component chunk
+  - `VideoPage-*.js`: 149K on disk
+  - `AdminPage-*.js`: 54K on disk
+  - `HistoryPage-*.js`: 14K on disk
+- Server route contract and architecture contract passed.
+- Online smoke test against `https://mecha.one` passed `9/9`.

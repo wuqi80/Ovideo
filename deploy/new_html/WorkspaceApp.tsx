@@ -10,11 +10,6 @@ import { FileColumn } from './components/FileColumn';
 import { ViewerColumn } from './components/ViewerColumn';
 import { ScriptColumn } from './components/ScriptColumn';
 import { StoryboardColumn } from './components/StoryboardColumn';
-import { MaterialPage } from './components/MaterialPage';
-import { GenerationPage } from './components/GenerationPage';
-import { VideoPage } from './components/VideoPage';
-import { AdminPage } from './components/AdminPage';
-import { HistoryPage } from './components/HistoryPage';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { SkeletonScreen } from './components/SkeletonScreen';
 import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock } from './types';
@@ -27,6 +22,17 @@ import { getAuthToken } from './services/httpClient';
 const loadAiModelService = () => import('./services/aiModelService');
 
 const WORKSPACE_INITIAL_STORYBOARD_COUNT = 10;
+const LegacyMaterialPage = React.lazy(() => import('./components/MaterialPage').then(m => ({ default: m.MaterialPage })));
+const LegacyGenerationPage = React.lazy(() => import('./components/GenerationPage').then(m => ({ default: m.GenerationPage })));
+const LegacyVideoPage = React.lazy(() => import('./components/VideoPage').then(m => ({ default: m.VideoPage })));
+const LegacyAdminPage = React.lazy(() => import('./components/AdminPage').then(m => ({ default: m.AdminPage })));
+const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
+
+const LegacyViewFallback: React.FC<{ label: string }> = ({ label }) => (
+  <div className="h-full w-full flex items-center justify-center text-sm text-n300">
+    Loading {label}...
+  </div>
+);
 
 function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
   return rows.map((r: any, idx: number) => {
@@ -2629,7 +2635,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           {mountedViews.has(AppView.Materials) && (
             <div style={{ display: currentView === AppView.Materials ? 'contents' : 'none' }}>
               {!isDataLoaded ? <SkeletonScreen message="正在加载素材库..." /> : (
-                <MaterialPage 
+                <React.Suspense fallback={<LegacyViewFallback label="materials" />}>
+                <LegacyMaterialPage
                     files={files}
                     selectedFileId={selectedFileId}
                     materialLibrary={materialLibrary}
@@ -2643,6 +2650,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     onAppendStoryboard={handleAppendStoryboard}
                     onRemoveAppendedStoryboard={handleRemoveAppendedStoryboard}
                 />
+                </React.Suspense>
               )}
             </div>
           )}
@@ -2651,7 +2659,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           {mountedViews.has(AppView.Generation) && (
             <div style={{ display: currentView === AppView.Generation ? 'contents' : 'none' }}>
               {!isDataLoaded ? <SkeletonScreen message="正在加载分镜数据..." /> : (
-                  <GenerationPage 
+                  <React.Suspense fallback={<LegacyViewFallback label="generation" />}>
+                  <LegacyGenerationPage
                       files={files}
                       selectedFileId={selectedFileId}
                       episodeId={propEpisodeId}
@@ -2669,6 +2678,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                       }}
                       onExportNext={handleExportNext}
                   />
+                  </React.Suspense>
               )}
             </div>
           )}
@@ -2676,19 +2686,23 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           {/* Video */}
           {mountedViews.has(AppView.Video) && (
             <div style={{ display: currentView === AppView.Video ? 'contents' : 'none' }}>
-                <VideoPage 
+                <React.Suspense fallback={<LegacyViewFallback label="video" />}>
+                <LegacyVideoPage
                   onAddNotification={addTaskNotification}
                   onUpdateNotification={updateTaskNotification}
                   isActive={currentView === AppView.Video}
                   sessionScope={selectedFileId ? `${propEpisodeId}:${selectedFileId}` : propEpisodeId || ''}
                 />
+                </React.Suspense>
             </div>
           )}
 
           {/* History */}
           {mountedViews.has(AppView.History) && (
             <div style={{ display: currentView === AppView.History ? 'contents' : 'none' }}>
-                <HistoryPage />
+                <React.Suspense fallback={<LegacyViewFallback label="history" />}>
+                <LegacyHistoryPage />
+                </React.Suspense>
             </div>
           )}
 
@@ -2704,10 +2718,12 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                       </div>
                   </div>
               ) : (
-                  <AdminPage 
+                  <React.Suspense fallback={<LegacyViewFallback label="admin" />}>
+                  <LegacyAdminPage
                       files={files}
                       materialLibrary={materialLibrary}
                   />
+                  </React.Suspense>
               )}
             </div>
           )}
