@@ -5515,3 +5515,16 @@
 ### Follow-up
 
 - `routers/admin_compat.py` still contains larger admin statistics/reporting SQL blocks. Treat those as a later DAO/reporting-service extraction, not as general service-layer code.
+
+## 2026-06-20 Admin Stats Breakdown Mapper Purity
+
+### Changes
+
+- Added `dao/admin/admin_stats.py` with `AdminStatsDAO`.
+- Moved `/api/admin/stats?group_by=user|org` breakdown SQL and org aggregation support out of `routers/admin_compat.py`.
+- Updated `routers/admin_compat.py` so the route delegates breakdown generation through `AdminStatsDAO.get_stats_breakdown()`.
+- Extended `service_mapper_purity_checks` to guard this extraction and prevent the legacy `WITH u_files` / `organization_members` SQL from returning to the route.
+
+### Follow-up
+
+- The aggregate totals and generation logs in `routers/admin_compat.py` still contain direct reporting SQL. Continue extracting them into admin DAO/reporting helpers in small slices.

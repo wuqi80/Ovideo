@@ -10,6 +10,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from dao.admin.admin_stats import AdminStatsDAO
+
 
 def create_admin_compat_router(
     *,
@@ -215,75 +217,11 @@ def create_admin_compat_router(
                     # 公共子查询：每个 user 各项资产计数
                     # （complete = files 表过滤已删除；保留与上面一致的视频任务白名单也可，但太复杂；
                     #  这里按 files 表 file_type 简单聚合，保证表能跑）
-                    per_user_sql = """
-                        WITH u_files AS (
-                            SELECT user_id,
-                                SUM(CASE WHEN file_type='image' THEN 1 ELSE 0 END) AS img_cnt,
-                                SUM(CASE WHEN file_type='video' THEN 1 ELSE 0 END) AS vid_cnt,
-                                SUM(CASE WHEN file_type='audio' THEN 1 ELSE 0 END) AS aud_cnt
-                            FROM files WHERE is_deleted = FALSE
-                            GROUP BY user_id
-                        ),
-                        u_proj AS (
-                            SELECT user_id, COUNT(*) AS proj_cnt
-                            FROM projects
-                            GROUP BY user_id
-                        )
-                        SELECT u.user_id, u.username,
-                            COALESCE(p.proj_cnt, 0) AS projects,
-                            COALESCE(f.img_cnt, 0) AS images,
-                            COALESCE(f.vid_cnt, 0) AS videos,
-                            COALESCE(f.aud_cnt, 0) AS audios
-                        FROM users u
-                        LEFT JOIN u_files f ON f.user_id = u.user_id
-                        LEFT JOIN u_proj  p ON p.user_id = u.user_id
-                        WHERE u.is_deleted = FALSE
-                    """
-                    # admin（非超管）过滤掉超管行
-                    if username == 'admin':
-                        per_user_sql += " AND u.username <> $1 "
-                        rows = await db_manager.fetch(per_user_sql, SUPER_ADMIN)
-                    else:
-                        rows = await db_manager.fetch(per_user_sql)
-                    user_rows = [dict(r) for r in rows]
-
-                    if group_by == 'user':
-                        breakdown = sorted(
-                            user_rows,
-                            key=lambda r: (r['projects'] + r['images'] + r['videos']),
-                            reverse=True,
-                        )
-                    else:  # 'org'
-                        members = await db_manager.fetch(
-                            """
-                            SELECT om.org_id, o.name, om.user_id
-                            FROM organization_members om
-                            JOIN organizations o ON o.org_id = om.org_id
-                            WHERE o.status = 'active'
-                            """
-                        )
-                        user_idx = {r['user_id']: r for r in user_rows}
-                        agg: Dict[str, Dict[str, Any]] = {}
-                        for m in members:
-                            oid = m['org_id']
-                            if oid not in agg:
-                                agg[oid] = {
-                                    'org_id': oid, 'name': m['name'],
-                                    'member_count': 0,
-                                    'projects': 0, 'images': 0, 'videos': 0, 'audios': 0,
-                                }
-                            agg[oid]['member_count'] += 1
-                            u = user_idx.get(m['user_id'])
-                            if u:
-                                agg[oid]['projects'] += u['projects']
-                                agg[oid]['images']   += u['images']
-                                agg[oid]['videos']   += u['videos']
-                                agg[oid]['audios']   += u['audios']
-                        breakdown = sorted(
-                            agg.values(),
-                            key=lambda r: (r['projects'] + r['images'] + r['videos']),
-                            reverse=True,
-                        )
+                    breakdown = await AdminStatsDAO.get_stats_breakdown(
+                        group_by=group_by,
+                        requesting_username=username,
+                        super_admin_username=SUPER_ADMIN,
+                    )
                 except Exception as e:
                     logger.warning(f"⚠️ stats breakdown 失败 group_by={group_by}: {e}")
                     breakdown = []
