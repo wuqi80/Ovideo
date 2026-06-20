@@ -91,7 +91,24 @@ describe('uploadImageToComfyUI', () => {
 
     const [downloadUrl, downloadOpts] = mockFetch.mock.calls[0];
     expect(downloadUrl).toBe('https://cdn.example.test/source.png');
-    expect(downloadOpts).toBeUndefined();
+    expect(downloadOpts.method).toBe('GET');
+    expect(downloadOpts.headers.Authorization).toBeUndefined();
+    expect(downloadOpts.headers['Content-Type']).toBeUndefined();
+  });
+
+  it('downloads blob URLs through public blob helper without auth headers', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockBlobResponse())
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, filename: 'image.png', storage_url: '/uploads/image.png' }));
+
+    const { uploadImageToComfyUI } = await import('../../services/apiService');
+    await uploadImageToComfyUI('blob:http://localhost/source');
+
+    const [downloadUrl, downloadOpts] = mockFetch.mock.calls[0];
+    expect(downloadUrl).toBe('blob:http://localhost/source');
+    expect(downloadOpts.method).toBe('GET');
+    expect(downloadOpts.headers.Authorization).toBeUndefined();
+    expect(downloadOpts.headers['Content-Type']).toBeUndefined();
   });
 });
 

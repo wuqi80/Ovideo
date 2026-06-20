@@ -1,5 +1,33 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Frontend Direct Fetch Consolidation
+
+### Changes
+
+- Added `publicFetch()` / `publicBlob()` to `new_html/services/httpClient.ts` for unauthenticated public resource downloads.
+- Moved the remaining direct `fetch()` calls in `new_html/services/apiService.ts` image upload preparation through `publicBlob()`:
+  - `blob:` URL downloads no longer call `fetch()` directly.
+  - External image downloads no longer call `fetch()` directly and still avoid sending the local Authorization header.
+  - Same-origin images continue to use the authenticated `apiBlob()` path with `secureApiUrl()`.
+- Strengthened `scripts/check_route_contract.py` so frontend source files outside `services/httpClient.ts` cannot reintroduce direct `fetch(` calls.
+- Added frontend service tests for public blob/external image download auth behavior.
+
+### Verification
+
+- `rg "\bfetch\s*\(" new_html`: only `services/httpClient.ts` contains direct `fetch(` in source.
+- `scripts/check_architecture_contracts.py`: passed 9/9 locally.
+- `scripts/smoke_test.py`: 9/9 passed locally.
+- Server deploy via `scripts/live_deploy_mvc2.sh`: Vite production build passed and `drama.service` stayed active.
+- Server `npm run test:run -- --pool=threads __tests__/services/apiService.test.ts`: 20 passed.
+- Server `scripts/check_architecture_contracts.py`: passed 9/9.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Server direct fetch scan: `direct_fetch_violations=0`.
+- `tsc --noEmit`: still fails on existing unrelated project-wide TypeScript debt (missing Seedance fixtures, several legacy prop/type mismatches); no new direct-fetch issue surfaced by the architecture contract.
+
+### Notes
+
+- Local Vite/Vitest could not run before reinstalling dependencies because the Windows workspace `node_modules` is missing Rollup's Windows optional native package and only contains Linux Rollup optional packages. Server build remains the deployment authority for frontend bundling.
+
 ## 2026-06-20 Storyboard Partial Stale Script Fallback
 
 ### Changes

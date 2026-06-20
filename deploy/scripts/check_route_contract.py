@@ -2645,6 +2645,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (http_client, "export function authTokenFromHeaders("),
         (http_client, "export function secureApiUrl("),
         (http_client, "export async function apiBlob("),
+        (http_client, "export async function publicBlob("),
+        (http_client, "includeAuth?: boolean"),
         (new_html / "services" / "entityFileService.ts", "{ includeContentType: false }"),
         (new_html / "services" / "mediaLibraryService.ts", "{ includeContentType: false }"),
         (new_html / "services" / "mediaLibraryService.ts", "apiBlob('/api/media-library/batch-download'"),
@@ -2658,14 +2660,17 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "const postGenerationTask = async ("),
         (new_html / "services" / "geminiService.ts", "postGenerationTask('/api/generate/comfyui-workflow'"),
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
-        (api_service, "import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, secureApiUrl } from './httpClient'"),
+        (api_service, "import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, publicBlob, secureApiUrl } from './httpClient'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
         (api_service, "function normalizeImageSourceUrl("),
         (api_service, "function isSameOriginUrl("),
         (api_service, "secureApiUrl(absolute, { requireAuth: false })"),
         (api_service, "apiBlob("),
+        (api_service, "publicBlob(imageUrlOrDataUrl"),
+        (api_service, "publicBlob(absolute"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads same-origin image through shared authenticated blob client"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "does not attach local auth token to external image downloads"),
+        (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
         (api_service, "return apiJson<any>('/api/comfyui/upload'"),
         (api_service, "return apiJson<any>('/api/tasks/active'"),
         (api_service, "return apiJson<any>('/api/notifications/unread-count'"),
@@ -2844,6 +2849,24 @@ def check_frontend_http_client_contract(root: Path) -> int:
             if snippet in text:
                 fail(f"Frontend auth token reads must go through httpClient/adminAuth: {path.relative_to(root)}")
             checks += 1
+
+    direct_fetch_allowed = {
+        new_html / "services" / "httpClient.ts",
+    }
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if (
+            path in direct_fetch_allowed
+            or "__tests__" in path.parts
+            or "node_modules" in path.parts
+            or path.name == "vite.config.ts"
+        ):
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "fetch(" in text:
+            fail(f"Frontend direct fetch must go through services/httpClient.ts: {path.relative_to(root)}")
+        checks += 1
 
     for snippet in [
         "fetch(`${API_BASE}/api/tasks/active`",

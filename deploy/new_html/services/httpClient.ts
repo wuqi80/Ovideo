@@ -6,6 +6,7 @@ interface HeaderOptions {
   requireAuth?: boolean;
   authErrorMessage?: string;
   includeContentType?: boolean;
+  includeAuth?: boolean;
 }
 
 interface ApiFetchConfig extends HeaderOptions {
@@ -143,17 +144,28 @@ function withoutContentType(headers: HeaderMap): HeaderMap {
   return out;
 }
 
+function withoutAuthorization(headers: HeaderMap): HeaderMap {
+  const out: HeaderMap = {};
+  Object.entries(headers).forEach(([key, value]) => {
+    if (key.toLowerCase() !== 'authorization') out[key] = value;
+  });
+  return out;
+}
+
 export function buildAuthHeaders(
   extraHeaders?: HeadersInit,
   options: HeaderOptions = {},
 ): HeaderMap {
-  const baseHeaders = normalizeHeaders(getHeaders());
+  const normalizedBaseHeaders = normalizeHeaders(getHeaders());
+  const baseHeaders = options.includeAuth === false
+    ? withoutAuthorization(normalizedBaseHeaders)
+    : normalizedBaseHeaders;
   const headers = {
     ...(options.includeContentType === false ? withoutContentType(baseHeaders) : baseHeaders),
     ...normalizeHeaders(extraHeaders),
   };
 
-  if (options.requireAuth !== false && !hasAuthorization(headers)) {
+  if (options.requireAuth !== false && options.includeAuth !== false && !hasAuthorization(headers)) {
     throw new Error(options.authErrorMessage || '未登录，请先登录');
   }
 
@@ -211,6 +223,21 @@ export async function apiFetch(
   return response;
 }
 
+export async function publicFetch(
+  url: string,
+  options: RequestInit = {},
+  config: Pick<ApiFetchConfig, 'apiName' | 'includeContentType'> = {},
+): Promise<Response> {
+  return fetch(url, {
+    ...options,
+    headers: buildAuthHeaders(options.headers, {
+      requireAuth: false,
+      includeAuth: false,
+      includeContentType: config.includeContentType,
+    }),
+  });
+}
+
 export async function apiJson<T>(
   url: string,
   options: RequestInit = {},
@@ -230,6 +257,22 @@ export async function apiBlob(
   const response = await apiFetch(url, options, { ...config, apiName });
   if (!response.ok) {
     await handleResponse(response, apiName);
+  }
+  return response.blob();
+}
+
+export async function publicBlob(
+  url: string,
+  options: RequestInit = {},
+  apiName: string = 'Public Blob',
+  config: Pick<ApiFetchConfig, 'includeContentType'> = {},
+): Promise<Blob> {
+  const response = await publicFetch(url, options, {
+    apiName,
+    includeContentType: config.includeContentType ?? false,
+  });
+  if (!response.ok) {
+    throw new Error(`${apiName} failed (${response.status})`);
   }
   return response.blob();
 }

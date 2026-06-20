@@ -2,7 +2,7 @@
  * API服务层 - 调用后端接口
  */
 
-import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, secureApiUrl } from './httpClient';
+import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, publicBlob, secureApiUrl } from './httpClient';
 
 export { getAuthToken, getHeaders, handleResponse };
 
@@ -102,15 +102,9 @@ export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
         const byteArray = new Uint8Array(byteNumbers);
         blob = new Blob([byteArray], { type: 'image/png' });
     } else if (imageUrlOrDataUrl.startsWith('blob:')) {
-        // Blob URL格式：直接fetch
+        // Blob URL格式：通过公开下载 helper 读取，不携带站内 token
         console.log(`🔄 下载Blob图片: ${imageUrlOrDataUrl}`);
-        const response = await fetch(imageUrlOrDataUrl);
-        
-        if (!response.ok) {
-            throw new Error(`无法下载Blob图片 (${response.status})`);
-        }
-        
-        blob = await response.blob();
+        blob = await publicBlob(imageUrlOrDataUrl, { method: 'GET' }, 'downloadBlobImageForComfyUI');
     } else {
         // 普通URL格式：先下载图片
         const normalizedUrl = normalizeImageSourceUrl(imageUrlOrDataUrl);
@@ -128,13 +122,7 @@ export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
                 { requireAuth: false, includeContentType: false },
             );
         } else {
-            const response = await fetch(absolute);
-
-            if (!response.ok) {
-                throw new Error(`无法下载图片: ${imageUrlOrDataUrl} (${response.status})`);
-            }
-
-            blob = await response.blob();
+            blob = await publicBlob(absolute, { method: 'GET' }, 'downloadExternalImageForComfyUI');
         }
     }
     
