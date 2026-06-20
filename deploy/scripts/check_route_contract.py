@@ -959,7 +959,7 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
     workspace_text = (root / "new_html" / "WorkspaceApp.tsx").read_text(encoding="utf-8")
     hook_text = (root / "new_html" / "hooks" / "useEpisodeData.ts").read_text(encoding="utf-8")
     video_page_text = (root / "new_html" / "pages" / "VideoGenPage.tsx").read_text(encoding="utf-8")
-    api_test_text = (root / "new_html" / "__tests__" / "services" / "apiService.test.ts").read_text(encoding="utf-8")
+    episode_data_test_text = (root / "new_html" / "__tests__" / "services" / "episodeDataService.test.ts").read_text(encoding="utf-8")
     context_test_text = (
         root / "new_html" / "__tests__" / "contexts" / "EpisodeContext.test.tsx"
     ).read_text(encoding="utf-8")
@@ -1025,8 +1025,8 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         (episode_data_text, "function normalizeStoryboardFallbackResult(", "storyboard backend fallback metadata normalizer"),
         (episode_data_text, "result.fallbackScriptId ?? result.fallback_script_id", "storyboard fallback script id supports snake case"),
         (episode_data_text, "fallbackReason: 'empty_script_storyboard'", "storyboard stale script fallback marker"),
-        (api_test_text, "falls back to episode storyboard when selected script has no rows", "storyboard fallback unit test"),
-        (api_test_text, "normalizes backend storyboard fallback metadata", "storyboard backend fallback metadata unit test"),
+        (episode_data_test_text, "falls back to episode storyboard when selected script has no rows", "storyboard fallback unit test"),
+        (episode_data_test_text, "normalizes backend storyboard fallback metadata", "storyboard backend fallback metadata unit test"),
         (context_text, "clearStaleScriptSelectionFromStoryboardFallback", "storyboard context clears stale script fallback"),
         (context_text, "res?.fallbackScriptId ?? res?.fallback_script_id", "storyboard context supports snake fallback metadata"),
         (context_text, "const previousScriptId = prevScriptIdRef.current", "storyboard context tracks previous script selection"),

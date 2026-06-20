@@ -6228,9 +6228,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Kept `apiService.ts` compatibility re-exports so older imports continue to work.
 - Updated `EpisodeContext` and `useEpisodeData` to import the episode data helpers directly from the new service.
 - Moved storyboard fallback and lightweight-field contract checks to the new service owner.
+- Moved episode data URL/fallback unit coverage from `apiService.test.ts` to `episodeDataService.test.ts`; kept `apiService.test.ts` focused on APIs still owned by the monolithic compatibility layer.
+- Updated routing tests to assert the current workflow labels and page headings.
 
 ### Verification
 
 - Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6853`.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
-- Note: this change was pushed to the remote repository first; server deployment and online smoke verification are still pending.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `episodeDataService-*.js` as a separate 2.26 kB chunk and kept `apiService-*.js` at 8.26 kB.
+- Server `npm run test:run -- --pool=forks __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts` passed `37/37`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

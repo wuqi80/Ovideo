@@ -61,7 +61,8 @@ describe('Routing', () => {
 
   it('renders ScriptPage at workflow/script', () => {
     render(<TestRouter initialEntry="/projects/p1/ep/ep1/workflow/script" />);
-    expect(screen.getByRole('heading', { name: '剧本编辑' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '剧本' })).toHaveAttribute('aria-current', 'page');
+    expect(document.querySelector('main')).toBeInTheDocument();
   });
 
   it('renders AudioStagePage at workflow/audio', () => {
@@ -72,7 +73,7 @@ describe('Routing', () => {
 
   it('renders DesignPage at workflow/design', () => {
     render(<TestRouter initialEntry="/projects/p1/ep/ep1/workflow/design" />);
-    expect(screen.getByRole('heading', { name: '资产设计' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '资产设计工作台' })).toBeInTheDocument();
   });
 
   it('renders GenerationPage at workflow/generation', () => {
@@ -83,7 +84,7 @@ describe('Routing', () => {
 
   it('renders EnhancePage at workflow/enhance', () => {
     render(<TestRouter initialEntry="/projects/p1/ep/ep1/workflow/enhance" />);
-    expect(screen.getByRole('heading', { name: '视频增强' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '视频美化' })).toBeInTheDocument();
   });
 
   it('renders CanvasPage at canvas route', () => {
@@ -95,13 +96,17 @@ describe('Routing', () => {
     render(<TestRouter initialEntry="/projects/p1/ep/ep1/workflow/script" />);
     const nav = screen.getByRole('navigation');
     expect(nav).toBeInTheDocument();
-    expect(nav.textContent).toContain('剧本编辑');
-    expect(nav.textContent).toContain('素材绑定');
-    expect(nav.textContent).toContain('音频预演');
-    expect(nav.textContent).toContain('资产设计');
-    expect(nav.textContent).toContain('视频生成');
-    expect(nav.textContent).toContain('视频增强');
-    expect(nav.textContent).toContain('历史记录');
+    expect(nav.textContent).toContain('剧本');
+    expect(nav.textContent).toContain('视频反推');
+    expect(nav.textContent).toContain('设计');
+    expect(nav.textContent).toContain('素材');
+    expect(nav.textContent).toContain('配音');
+    expect(nav.textContent).toContain('分镜');
+    expect(nav.textContent).toContain('视频');
+    expect(nav.textContent).toContain('美化');
+    expect(nav.textContent).toContain('成品');
+    expect(nav.textContent).toContain('素材库');
+    expect(nav.textContent).toContain('历史');
     expect(nav.textContent).toContain('自由创作');
   });
 });
