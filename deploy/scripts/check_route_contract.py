@@ -2805,11 +2805,14 @@ def check_frontend_http_client_contract(root: Path) -> int:
     episode_data_service = new_html / "services" / "episodeDataService.ts"
     audio_generation_service = new_html / "services" / "audioGenerationService.ts"
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
+    asset_mutation_service = new_html / "services" / "assetMutationService.ts"
+    storyboard_mutation_service = new_html / "services" / "storyboardMutationService.ts"
     use_episode_data = new_html / "hooks" / "useEpisodeData.ts"
     episode_context = new_html / "contexts" / "EpisodeContext.tsx"
     audio_stage_page = new_html / "pages" / "AudioStagePage.tsx"
     enhance_page = new_html / "pages" / "EnhancePage.tsx"
     final_product_page = new_html / "pages" / "FinalProductPage.tsx"
+    storyboard_page = new_html / "pages" / "StoryboardGenPage.tsx"
     workflow_materials_page = new_html / "pages" / "MaterialsPage.tsx"
     voice_sidebar = new_html / "components" / "audio" / "VoiceSidebar.tsx"
     music_modal = new_html / "components" / "audio" / "MusicModal.tsx"
@@ -2837,6 +2840,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         episode_data_service,
         audio_generation_service,
         video_workflow_service,
+        asset_mutation_service,
+        storyboard_mutation_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2890,6 +2895,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "from './episodeDataService';"),
         (api_service, "from './audioGenerationService';"),
         (api_service, "from './videoWorkflowService';"),
+        (api_service, "from './assetMutationService';"),
+        (api_service, "from './storyboardMutationService';"),
         (api_service, "function normalizeImageSourceUrl("),
         (api_service, "function isSameOriginUrl("),
         (api_service, "secureApiUrl(absolute, { requireAuth: false })"),
@@ -2942,8 +2949,20 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}/video-takes`"),
         (video_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}/compose`"),
         (video_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}/compose/status`"),
+        (asset_mutation_service, "import { apiJson } from './httpClient';"),
+        (asset_mutation_service, "return apiJson<any>('/api/assets'"),
+        (asset_mutation_service, "return apiJson<any>(`/api/assets/${assetId}`"),
+        (asset_mutation_service, "return apiJson<any>(`/api/assets/${assetId}/share`"),
+        (storyboard_mutation_service, "import { apiJson } from './httpClient';"),
+        (storyboard_mutation_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items`"),
+        (storyboard_mutation_service, "return apiJson<any>(`/api/storyboard-items/${itemId}`"),
+        (storyboard_mutation_service, "`/api/episodes/${episodeId}/storyboard-items/all${qs}`"),
+        (storyboard_mutation_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/reorder`"),
+        (storyboard_mutation_service, "return apiJson<any>(`/api/episodes/${episodeId}/export-script`"),
         (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
         (new_html / "__tests__" / "services" / "videoWorkflowService.test.ts", "fetchSeedanceOmni caches video capability responses"),
+        (new_html / "__tests__" / "services" / "assetMutationService.test.ts", "shares assets to target episode and script"),
+        (new_html / "__tests__" / "services" / "storyboardMutationService.test.ts", "deletes all storyboard items for a script scope"),
         (new_html / "__tests__" / "services" / "minimaxTTSSync.test.ts", "from '../../services/audioGenerationService'"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads same-origin image through shared authenticated blob client"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "does not attach local auth token to external image downloads"),
@@ -2962,19 +2981,12 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "return apiJson<any>(`/api/projects/${projectId}/episodes`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}`"),
         (api_service, "return apiJson<any>('/api/materials/process'"),
-        (api_service, "return apiJson<any>('/api/assets'"),
-        (api_service, "return apiJson<any>(`/api/assets/${assetId}`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/all${qs}`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/reorder`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/scripts`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/scripts/${scriptId}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/script-segments${qs}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/script-segments/batch`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/timeline-tracks`"),
         (api_service, "return apiJson<any>(`/api/timeline-tracks/${trackId}`"),
-        (api_service, "return apiJson<any>(`/api/assets/${assetId}/share`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/export-script`"),
         (api_service, "return apiJson<any>('/api/canvas/boards'"),
         (api_service, "return apiJson<any>(`/api/canvas/boards/${boardId}`"),
         (api_service, "return apiJson<any>('/api/canvas/nodes'"),
@@ -3006,8 +3018,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (episode_context, "from '../services/episodeDataService'"),
         (use_episode_data, "from '../services/episodeDataService'"),
         (workspace_app, "from './services/episodeDataService'"),
+        (workspace_app, "from './services/storyboardMutationService'"),
         (audio_stage_page, "from '../services/audioGenerationService'"),
         (audio_stage_page, "from '../services/episodeDataService'"),
+        (audio_stage_page, "from '../services/storyboardMutationService'"),
         (workflow_generation_page, "from '../services/episodeDataService'"),
         (workflow_generation_page, "from '../services/videoWorkflowService'"),
         (video_gen_page, "from '../services/episodeDataService'"),
@@ -3017,6 +3031,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_page, "from '../services/videoWorkflowService'"),
         (seedance_multimodal_panel, "from '../services/videoWorkflowService'"),
         (workflow_materials_page, "from '../services/episodeDataService'"),
+        (workflow_materials_page, "from '../services/assetMutationService'"),
+        (storyboard_page, "from '../services/storyboardMutationService'"),
+        (design_page, "from '../services/assetMutationService'"),
         (voice_sidebar, "from '../../services/audioGenerationService'"),
         (music_modal, "from '../../services/audioGenerationService'"),
         (admin_login_page, "import { apiJson } from '../services/httpClient'"),

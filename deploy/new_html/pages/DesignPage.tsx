@@ -6,7 +6,7 @@ import {
   Wand2, Scissors, CheckCircle, Layers, Square, CheckSquare,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { createAsset, deleteAsset, updateAsset } from '../services/apiService';
+import { createAsset, deleteAsset, updateAsset } from '../services/assetMutationService';
 import { generateGeminiImageVariant, adjustImageAngle, waitForComfyUITask, processMaterialImage, generateHumanMultiAngleQueued } from '../services/geminiService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { callAI } from '../services/aiService';

@@ -7,7 +7,7 @@ import {
   assetsToMaterialLibrary,
   storyboardItemToDbUpdate,
 } from '../utils/episodeAdapters';
-import { createStoryboardItem, deleteStoryboardItem } from '../services/apiService';
+import { createStoryboardItem, deleteStoryboardItem } from '../services/storyboardMutationService';
 import { updateStoryboardItem } from '../services/episodeDataService';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
 import { fetchEntityFiles } from '../services/entityFileService';

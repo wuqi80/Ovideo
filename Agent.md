@@ -6281,3 +6281,25 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `npm run test:run -- --pool=forks __tests__/services/videoWorkflowService.test.ts __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `52/52`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Asset and Storyboard Mutation Service Split
+
+### Changes
+
+- Extracted asset create/update/delete/share helpers from `deploy/new_html/services/apiService.ts` into `deploy/new_html/services/assetMutationService.ts`.
+- Extracted storyboard create/delete/delete-all/reorder/export helpers from `deploy/new_html/services/apiService.ts` into `deploy/new_html/services/storyboardMutationService.ts`.
+- Kept `apiService.ts` compatibility re-exports while removing duplicated asset/storyboard mutation implementations from the monolithic file.
+- Updated `DesignPage`, `MaterialsPage`, `StoryboardGenPage`, `AudioStagePage`, and `WorkspaceApp` to import these mutations directly from the new services.
+- Added focused `assetMutationService.test.ts` and `storyboardMutationService.test.ts`, and strengthened `deploy/scripts/check_route_contract.py` so these endpoint families stay with their new owners.
+
+### Verification
+
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `frontend_http_client_checks=6946`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Local `tsc --noEmit` remains blocked by existing project TS debt unrelated to this split, including missing Seedance test fixtures and legacy Workspace/App prop/type mismatches.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `assetMutationService-*.js` (`0.35 kB`) and `storyboardMutationService-*.js` (`0.63 kB`) as separate chunks, reducing the built `apiService-*.js` chunk to `5.36 kB`.
+- Server `npm run test:run -- --pool=forks __tests__/services/assetMutationService.test.ts __tests__/services/storyboardMutationService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `59/59`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

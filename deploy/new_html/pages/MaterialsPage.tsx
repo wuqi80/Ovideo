@@ -10,7 +10,7 @@ import {
 import {
   updateAsset as apiUpdateAsset,
   createAsset as apiCreateAsset,
-} from '../services/apiService';
+} from '../services/assetMutationService';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { Image as ImageIcon, Loader } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';

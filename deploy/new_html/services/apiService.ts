@@ -61,6 +61,20 @@ export {
     type VideoTake,
     type VideoShot,
 } from './videoWorkflowService';
+export {
+    createAsset,
+    updateAsset,
+    deleteAsset,
+    shareAsset,
+    type CreateAssetPayload,
+} from './assetMutationService';
+export {
+    createStoryboardItem,
+    deleteStoryboardItem,
+    deleteAllStoryboardItems,
+    reorderStoryboardItems,
+    exportScript,
+} from './storyboardMutationService';
 
 function normalizeImageSourceUrl(imageUrl: string): string {
     if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) return imageUrl;
@@ -425,57 +439,6 @@ export async function getSystemStats(groupBy?: 'user' | 'org'): Promise<{
 // UI 重构新增 API
 // =============================================
 
-// ===== Asset APIs =====
-
-export async function createAsset(data: {
-    project_id: string; asset_type: string; name: string;
-    episode_id?: string; script_id?: string; description?: string;
-    reference_images?: string[];
-}) {
-    return apiJson<any>('/api/assets', {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'createAsset');
-}
-
-export async function updateAsset(assetId: string, data: Record<string, any>) {
-    return apiJson<any>(`/api/assets/${assetId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateAsset');
-}
-
-export async function deleteAsset(assetId: string) {
-    return apiJson<any>(`/api/assets/${assetId}`, { method: 'DELETE' }, 'deleteAsset');
-}
-
-// ===== Storyboard Item APIs =====
-
-export async function createStoryboardItem(episodeId: string, data: any) {
-    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items`, {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'createStoryboardItem');
-}
-
-export async function deleteStoryboardItem(itemId: string) {
-    return apiJson<any>(`/api/storyboard-items/${itemId}`, { method: 'DELETE' }, 'deleteStoryboardItem');
-}
-
-export async function deleteAllStoryboardItems(episodeId: string, scriptId?: string) {
-    const params = new URLSearchParams();
-    if (scriptId) params.set('script_id', scriptId);
-    const qs = params.toString() ? `?${params}` : '';
-    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/all${qs}`, { method: 'DELETE' }, 'deleteAllStoryboardItems');
-}
-
-export async function reorderStoryboardItems(episodeId: string, itemIds: string[]) {
-    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/reorder`, {
-        method: 'POST',
-        body: JSON.stringify({ item_ids: itemIds })
-    }, 'reorderStoryboardItems');
-}
-
 // ===== Episode Script APIs =====
 
 // ===== 多文件剧本 APIs =====
@@ -550,28 +513,4 @@ export async function updateTimelineTrack(trackId: string, data: any) {
         method: 'PUT',
         body: JSON.stringify(data)
     }, 'updateTimelineTrack');
-}
-
-// ===== Batch Operations =====
-
-export async function shareAsset(assetId: string, targetEpisodeId: string, targetScriptId: string) {
-    return apiJson<any>(`/api/assets/${assetId}/share`, {
-        method: 'POST',
-        body: JSON.stringify({ target_episode_id: targetEpisodeId, target_script_id: targetScriptId })
-    }, 'shareAsset');
-}
-
-export async function exportScript(episodeId: string, data: {
-    project_id: string;
-    original_content: string;
-    script_content: string;
-    storyboard_items: any[];
-    characters: { name: string; description: string }[];
-    scenes: { name: string; description: string }[];
-    script_id?: string | null;
-}) {
-    return apiJson<any>(`/api/episodes/${episodeId}/export-script`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-    }, 'exportScript');
 }

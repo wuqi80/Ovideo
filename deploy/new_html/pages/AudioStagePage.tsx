@@ -8,7 +8,7 @@ import {
   // 历史持久化里残留的 legacy persona 字符串（'narrator'/'male_young'/...）通过
   // LEGACY_VOICE_ALIAS 转译成 MiniMax 官方音色 id。
   createStoryboardItem as apiCreateStoryboardItem,
-} from '../services/apiService';
+} from '../services/storyboardMutationService';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { minimaxTTS } from '../services/audioGenerationService';
 import { crmMessage } from '../admin/crmUI';

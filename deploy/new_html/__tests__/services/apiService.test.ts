@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  createAsset,
-  deleteAsset,
   getTimelineTracks,
   uploadImageToComfyUI,
 } from '../../services/apiService';
@@ -30,17 +28,6 @@ function mockBlobResponse(blob: Blob = new Blob(['image-bytes'], { type: 'image/
 beforeEach(() => {
   mockFetch.mockReset();
   localStorage.setItem('auth_token', 'test-token');
-});
-
-describe('createAsset', () => {
-  it('sends POST with correct body', async () => {
-    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, asset: { asset_id: 'a1' } }));
-    await createAsset({ project_id: 'p1', asset_type: 'character', name: 'hero' });
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe('/api/assets');
-    expect(opts.method).toBe('POST');
-    expect(JSON.parse(opts.body).name).toBe('hero');
-  });
 });
 
 describe('uploadImageToComfyUI', () => {
@@ -90,16 +77,6 @@ describe('uploadImageToComfyUI', () => {
     expect(downloadOpts.method).toBe('GET');
     expect(downloadOpts.headers.Authorization).toBeUndefined();
     expect(downloadOpts.headers['Content-Type']).toBeUndefined();
-  });
-});
-
-describe('deleteAsset', () => {
-  it('sends DELETE to correct URL', async () => {
-    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true }));
-    await deleteAsset('asset_abc');
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe('/api/assets/asset_abc');
-    expect(opts.method).toBe('DELETE');
   });
 });
 
