@@ -496,6 +496,8 @@ class FileDAO:
         if not path_fragment:
             return 0
         db = get_db_manager()
+        if not db:
+            return 0
         result = await db.execute(
             """
             UPDATE files

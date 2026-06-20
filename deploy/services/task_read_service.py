@@ -7,7 +7,7 @@ in one place while preserving the existing route response shape.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 
 def _jsonish(value: Any, default: Any) -> Any:
@@ -28,13 +28,6 @@ def _iso(value: Any) -> Optional[str]:
     if callable(isoformat):
         return isoformat()
     return str(value)
-
-
-def database_available(get_db_manager: Callable[[], Any]) -> bool:
-    try:
-        return bool(get_db_manager())
-    except Exception:
-        return False
 
 
 def format_queue_task_status(task: Any) -> dict[str, Any]:
@@ -100,15 +93,12 @@ async def get_task_status_response(
     task_id: str,
     task_queue: Any,
     task_dao: Any,
-    get_db_manager: Callable[[], Any],
     logger: Any,
 ) -> Optional[dict[str, Any]]:
     task = await task_queue.get_task(task_id)
     if task:
         return format_queue_task_status(task)
 
-    if not database_available(get_db_manager):
-        return None
     try:
         db_task = await task_dao.get_task_by_task_id(task_id)
         return format_db_task_status(db_task) if db_task else None
@@ -121,11 +111,8 @@ async def get_db_task_for_delete(
     *,
     task_id: str,
     task_dao: Any,
-    get_db_manager: Callable[[], Any],
     logger: Any,
 ) -> Optional[dict[str, Any]]:
-    if not database_available(get_db_manager):
-        return None
     try:
         db_task = await task_dao.get_task(task_id)
         if db_task:
@@ -141,11 +128,8 @@ async def soft_delete_user_file_by_path_fragment(
     username: str,
     file_path: str,
     file_dao: Any,
-    get_db_manager: Callable[[], Any],
     logger: Any,
 ) -> int:
-    if not database_available(get_db_manager):
-        return 0
     try:
         return int(await file_dao.soft_delete_user_files_by_path_fragment(username, file_path) or 0)
     except Exception as exc:
@@ -158,15 +142,15 @@ async def delete_db_task(
     task_id: str,
     username: str,
     task_dao: Any,
-    get_db_manager: Callable[[], Any],
     logger: Any,
 ) -> Optional[bool]:
-    if not database_available(get_db_manager):
-        logger.warning("⚠️ 数据库未连接，跳过数据库删除")
-        return None
     try:
         logger.info("📞 调用 TaskDAO.delete_task(%s, %s)", task_id, username)
-        deleted = bool(await task_dao.delete_task(task_id, username))
+        result = await task_dao.delete_task(task_id, username)
+        if result is None:
+            logger.warning("⚠️ 数据库未连接，跳过数据库删除")
+            return None
+        deleted = bool(result)
         logger.info("📋 TaskDAO.delete_task 返回结果: %s", deleted)
         return deleted
     except Exception as exc:
@@ -181,12 +165,11 @@ async def list_user_tasks_response(
     status: Optional[str],
     task_queue: Any,
     task_dao: Any,
-    get_db_manager: Callable[[], Any],
     logger: Any,
 ) -> dict[str, Any]:
-    if database_available(get_db_manager):
-        try:
-            db_tasks = await task_dao.get_user_tasks(username, limit=limit)
+    try:
+        db_tasks = await task_dao.get_user_tasks(username, limit=limit)
+        if db_tasks is not None:
             task_list = [format_db_task_summary(task) for task in db_tasks]
             logger.info("✅ 从数据库加载了 %s 个任务", len(task_list))
             if task_list:
@@ -198,8 +181,8 @@ async def list_user_tasks_response(
                     type(task_list[0]["data"]),
                 )
             return {"success": True, "tasks": task_list}
-        except Exception as exc:
-            logger.warning("⚠️ 数据库加载失败，降级到Redis: %s", exc)
+    except Exception as exc:
+        logger.warning("⚠️ 数据库加载失败，降级到Redis: %s", exc)
 
     tasks = await task_queue.get_user_tasks(username, limit=limit, status=status)
     task_list = [format_queue_task_summary(task) for task in tasks]

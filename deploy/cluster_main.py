@@ -904,7 +904,6 @@ app.include_router(
         task_service_module=task_service,
         task_dao=TaskDAO,
         file_dao=FileDAO,
-        get_db_manager=lambda: db_manager,
         get_pubsub_redis_client=lambda: pubsub_redis_client,
         logger=logger,
     )

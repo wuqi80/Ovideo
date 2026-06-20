@@ -20,7 +20,7 @@ class _Logger:
 class _TaskDAO:
     def __init__(self, *, status_task=None, list_tasks=None, raise_on_list=False):
         self.status_task = status_task
-        self.list_tasks = list_tasks or []
+        self.list_tasks = list_tasks
         self.raise_on_list = raise_on_list
 
     async def get_task_by_task_id(self, _task_id):
@@ -29,6 +29,8 @@ class _TaskDAO:
     async def get_user_tasks(self, _username, limit=100):
         if self.raise_on_list:
             raise RuntimeError("db down")
+        if self.list_tasks is None:
+            return None
         return self.list_tasks[:limit]
 
 
@@ -63,21 +65,12 @@ def _queue_task(task_id="task_redis", status="processing"):
     )
 
 
-def _db_available():
-    return object()
-
-
-def _db_missing():
-    return None
-
-
 @pytest.mark.asyncio
 async def test_get_task_status_prefers_queue_task():
     result = await svc.get_task_status_response(
         task_id="task_1",
         task_queue=_Queue(task=_queue_task()),
         task_dao=_TaskDAO(status_task={"task_id": "task_db"}),
-        get_db_manager=_db_available,
         logger=_Logger(),
     )
 
@@ -101,7 +94,6 @@ async def test_get_task_status_falls_back_to_database():
         task_id="task_db",
         task_queue=_Queue(task=None),
         task_dao=_TaskDAO(status_task=db_row),
-        get_db_manager=_db_available,
         logger=_Logger(),
     )
 
@@ -131,7 +123,6 @@ async def test_list_user_tasks_formats_database_rows():
         status=None,
         task_queue=_Queue(tasks=[_queue_task()]),
         task_dao=_TaskDAO(list_tasks=[db_row]),
-        get_db_manager=_db_available,
         logger=_Logger(),
     )
 
@@ -159,7 +150,6 @@ async def test_list_user_tasks_falls_back_to_queue_when_database_fails():
         status="processing",
         task_queue=_Queue(tasks=[_queue_task(status="processing"), _queue_task("done", "completed")]),
         task_dao=_TaskDAO(raise_on_list=True),
-        get_db_manager=_db_available,
         logger=_Logger(),
     )
 
@@ -174,8 +164,7 @@ async def test_list_user_tasks_uses_queue_when_database_missing():
         limit=10,
         status=None,
         task_queue=_Queue(tasks=[_queue_task()]),
-        task_dao=_TaskDAO(list_tasks=[]),
-        get_db_manager=_db_missing,
+        task_dao=_TaskDAO(list_tasks=None),
         logger=_Logger(),
     )
 

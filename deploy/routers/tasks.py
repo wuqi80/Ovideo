@@ -28,7 +28,6 @@ def create_task_router(
     task_service_module: Any,
     task_dao: Any,
     file_dao: Any,
-    get_db_manager: Any,
     get_pubsub_redis_client: Any,
     logger: logging.Logger,
 ) -> APIRouter:
@@ -80,7 +79,6 @@ def create_task_router(
             task_id=task_id,
             task_queue=task_service_module.get_queue(),
             task_dao=task_dao,
-            get_db_manager=get_db_manager,
             logger=logger,
         )
         if response:
@@ -114,7 +112,6 @@ def create_task_router(
                 task_data = await get_db_task_for_delete(
                     task_id=task_id,
                     task_dao=task_dao,
-                    get_db_manager=get_db_manager,
                     logger=logger,
                 )
 
@@ -168,7 +165,6 @@ def create_task_router(
                                 username=username,
                                 file_path=file_path,
                                 file_dao=FileDAO,
-                                get_db_manager=get_db_manager,
                                 logger=logger,
                             )
                             if deleted_count:
@@ -181,7 +177,6 @@ def create_task_router(
                 task_id=task_id,
                 username=username,
                 task_dao=task_dao,
-                get_db_manager=get_db_manager,
                 logger=logger,
             )
             if db_deleted:
@@ -319,7 +314,6 @@ def create_task_router(
                 status=status,
                 task_queue=task_service_module.get_queue(),
                 task_dao=task_dao,
-                get_db_manager=get_db_manager,
                 logger=logger,
             )
         except Exception as exc:

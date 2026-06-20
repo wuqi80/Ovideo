@@ -101,6 +101,8 @@ class TaskDAO:
     async def get_task(task_id: str) -> Optional[Dict[str, Any]]:
         """获取任务详情"""
         db = get_db_manager()
+        if not db:
+            return None
         query = "SELECT * FROM tasks WHERE task_id = $1"
         return await db.fetchrow(query, task_id)
     
@@ -108,6 +110,8 @@ class TaskDAO:
     async def get_task_by_task_id(task_id: str) -> Optional[Dict[str, Any]]:
         """按task_id查询任务（用于Redis过期后的API降级查询）"""
         db = get_db_manager()
+        if not db:
+            return None
         query = """
             SELECT task_id, status, result_data, error_message, 
                    node_id, task_type, created_at, started_at, completed_at
@@ -121,9 +125,11 @@ class TaskDAO:
         status: Optional[str] = None,
         limit: int = 50,
         offset: int = 0
-    ) -> List[Dict[str, Any]]:
+    ) -> Optional[List[Dict[str, Any]]]:
         """获取用户的任务列表"""
         db = get_db_manager()
+        if not db:
+            return None
         
         if status:
             query = """
@@ -223,7 +229,7 @@ class TaskDAO:
         return await db.fetch(query, task_id)
     
     @staticmethod
-    async def delete_task(task_id: str, user_id: str) -> bool:
+    async def delete_task(task_id: str, user_id: str) -> Optional[bool]:
         """
         删除任务
         :param task_id: 任务ID
@@ -231,6 +237,8 @@ class TaskDAO:
         :return: 是否删除成功
         """
         db = get_db_manager()
+        if not db:
+            return None
         query = """
             DELETE FROM tasks
             WHERE task_id = $1 AND user_id = $2

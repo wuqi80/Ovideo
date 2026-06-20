@@ -3164,6 +3164,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "business" / "credit.py", "async def confirm_task_freeze("),
         (root / "dao" / "business" / "task.py", "async def get_active_tasks_for_user("),
         (root / "dao" / "business" / "task.py", "async def get_terminal_tasks_for_notifications("),
+        (root / "dao" / "business" / "task.py", "if not db:\n            return None"),
         (root / "dao" / "content" / "content.py", "async def soft_delete_user_files_by_path_fragment("),
         (root / "dao" / "content" / "content.py", "async def update_project_metadata("),
         (root / "dao" / "creative" / "episode.py", "async def get_project_id("),
@@ -3261,6 +3262,8 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         "result = await db.execute(",
         "if get_db_manager():",
         "db = get_db_manager()",
+        "get_db_manager: Any",
+        "get_db_manager=get_db_manager",
         "await task_dao.get_task_by_task_id(",
         "await task_dao.get_task(",
         "await task_dao.get_user_tasks(",
@@ -3269,6 +3272,15 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     ]:
         if snippet in tasks_router_text:
             violations.append(f"routers/tasks.py must delegate task read/DB fallback work to task_read_service/DAO boundaries: {snippet}")
+        checks += 1
+
+    task_read_service_text = (root / "services" / "task_read_service.py").read_text(encoding="utf-8")
+    for snippet in [
+        "get_db_manager",
+        "database_available(",
+    ]:
+        if snippet in task_read_service_text:
+            violations.append(f"services/task_read_service.py must not receive DB connection plumbing: {snippet}")
         checks += 1
 
     project_admin_router_text = (root / "routers" / "project_admin.py").read_text(encoding="utf-8")

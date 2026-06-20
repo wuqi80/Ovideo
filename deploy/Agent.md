@@ -5916,3 +5916,17 @@
 - The action first calls `POST /api/admin/api-configs/import-presets` with `dry_run=true`, shows a confirmation with importable/skipped/missing counts, then writes runtime keys into DB only after confirmation.
 - Added a warning band when providers are using runtime/env keys but have no DB-saved key, so the API management platform clearly shows it has not fully taken over those providers yet.
 - Strengthened `scripts/check_route_contract.py` to keep the dry-run migration path and runtime-only key warning in place.
+
+## 2026-06-20 Task Read Service DB Plumbing Cleanup
+
+### Changes
+
+- Removed `get_db_manager` plumbing from `services/task_read_service.py` and its `routers/tasks.py` call sites.
+- Let `TaskDAO` and `FileDAO` own DB-unavailable fallbacks for task read/delete and generated-file soft delete helpers.
+- Kept the existing Redis fallback behavior for task status/list endpoints: DAO returning `None` now triggers queue fallback in the service.
+- Strengthened `scripts/check_route_contract.py` so task routes and task read service cannot reintroduce DB connection plumbing.
+
+### Verification
+
+- Local `py_compile` passed for the touched task router/service/DAO files.
+- Local `pytest tests/test_task_read_service.py -q` passed `5/5`.
