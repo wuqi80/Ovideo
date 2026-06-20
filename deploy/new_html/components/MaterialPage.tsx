@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant, adjustImageAngle, waitForComfyUITask } from '../services/geminiService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { generateThumbnail } from '../utils/imageOptimization';
-import { getAuthToken } from '../services/apiService';
+import { apiBlob, secureApiUrl } from '../services/httpClient';
 
 type MaterialAIEngine = 'nanobanana' | 'doubao';
 
@@ -67,39 +67,28 @@ const randomSeed = () => Math.floor(Math.random() * 900000000000000) + 100000000
 const MATERIAL_INITIAL_SHOT_COUNT = 20;
 const MATERIAL_SHOT_PAGE_SIZE = 20;
 
-async function downloadImageAsDataUrl(url: string): Promise<string> {
-  // 🔧 支持 Blob URL（本地素材库可能使用）
-  if (url.startsWith('blob:')) {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error('无法下载Blob图片');
-    }
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-  
-  // 处理普通 HTTP URL
-  const token = localStorage.getItem('auth_token');
-  const absolute = url.startsWith('http') ? url : `${window.location.origin}${url}`;
-  const secured = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
-  const response = await fetch(secured, {
-      headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-  });
-  if (!response.ok) {
-      throw new Error('无法下载生成的图片');
-  }
-  const blob = await response.blob();
+function normalizeDownloadUrl(url: string): string {
+  if (url.startsWith('blob:')) return url;
+  const normalized = url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`);
+  return secureApiUrl(normalized, { absolute: true });
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
   });
+}
+
+async function downloadImageAsDataUrl(url: string): Promise<string> {
+  const downloadUrl = normalizeDownloadUrl(url);
+  const blob = await apiBlob(downloadUrl, { method: 'GET' }, '下载生成的图片', {
+    requireAuth: false,
+    includeContentType: false,
+  });
+  return blobToDataUrl(blob);
 }
 
 async function ensureDataUrl(input: string | undefined | null): Promise<string> {
