@@ -145,7 +145,6 @@ router.include_router(
         user_dao=UserDAO,
         project_dao=ProjectDAO,
         project_member_dao=ProjectMemberDAO,
-        get_db_manager_func=get_db_manager,
     )
 )
 

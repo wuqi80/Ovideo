@@ -5410,3 +5410,20 @@
 - Local smoke passed:
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
 - Deployed to `https://mecha.one`; remote Vite build completed, `drama.service` stayed `active`, and remote smoke passed `9/9`.
+
+## 2026-06-20 Project Admin Mapper Purity
+
+### Changes
+
+- Moved the project metadata update SQL out of `routers/project_admin.py`.
+- Added `ProjectDAO.update_project_metadata()` so the router delegates project name, description, cover, and tag updates through a business DAO method.
+- Removed the project-admin router dependency on `get_db_manager_func`.
+- Extended `scripts/check_route_contract.py` so `routers/project_admin.py` cannot reintroduce direct `UPDATE projects`, `db.execute`, or `get_db_manager_func` usage.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/dao/content/content.py deploy/routers/project_admin.py deploy/api_routes.py deploy/scripts/check_route_contract.py`
+  - `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_architecture_contracts.py` -> `9/9`
+  - `service_mapper_purity_checks=466`
+  - `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`

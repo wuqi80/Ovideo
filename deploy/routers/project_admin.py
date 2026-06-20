@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Project settings and membership route handlers."""
 
-import json
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,7 +13,6 @@ def create_project_admin_router(
     user_dao: Any,
     project_dao: Any,
     project_member_dao: Any,
-    get_db_manager_func: Any,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
@@ -49,31 +47,7 @@ def create_project_admin_router(
             if not has_perm:
                 raise HTTPException(status_code=403, detail="闇€瑕佺鐞嗗憳鏉冮檺")
 
-            db = get_db_manager_func()
-            sets, vals = [], []
-            idx = 1
-            if data.project_name is not None:
-                sets.append(f"project_name = ${idx}")
-                vals.append(data.project_name)
-                idx += 1
-            if data.description is not None:
-                sets.append(f"description = ${idx}")
-                vals.append(data.description)
-                idx += 1
-            if data.cover_url is not None:
-                sets.append(f"cover_url = ${idx}")
-                vals.append(data.cover_url)
-                idx += 1
-            if data.tags is not None:
-                sets.append(f"tags = ${idx}::jsonb")
-                vals.append(json.dumps(data.tags, ensure_ascii=False))
-                idx += 1
-
-            if sets:
-                vals.append(project_id)
-                query = f"UPDATE projects SET {', '.join(sets)} WHERE project_id = ${idx}"
-                await db.execute(query, *vals)
-
+            await ProjectDAO.update_project_metadata(project_id, data.model_dump(exclude_unset=True))
             return {"success": True}
         except HTTPException:
             raise

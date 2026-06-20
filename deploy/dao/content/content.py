@@ -114,6 +114,35 @@ class ProjectDAO:
             WHERE project_id = $1
         """
         await db.execute(query, project_id)
+
+    @staticmethod
+    async def update_project_metadata(project_id: str, fields: Dict[str, Any]) -> None:
+        """Update editable project metadata fields."""
+        allowed_columns = {
+            "project_name": "project_name",
+            "description": "description",
+            "cover_url": "cover_url",
+            "tags": "tags",
+        }
+        update_fields = {key: value for key, value in fields.items() if key in allowed_columns}
+        if not update_fields:
+            return None
+
+        db = get_db_manager()
+        sets: List[str] = []
+        values: List[Any] = []
+        for key, value in update_fields.items():
+            idx = len(values) + 1
+            if key == "tags":
+                sets.append(f"{allowed_columns[key]} = ${idx}::jsonb")
+                values.append(json.dumps(value, ensure_ascii=False) if value is not None else None)
+            else:
+                sets.append(f"{allowed_columns[key]} = ${idx}")
+                values.append(value)
+
+        values.append(project_id)
+        query = f"UPDATE projects SET {', '.join(sets)} WHERE project_id = ${len(values)}"
+        await db.execute(query, *values)
     
     @staticmethod
     async def save_or_update_project(
