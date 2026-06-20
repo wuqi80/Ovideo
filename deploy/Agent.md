@@ -5490,3 +5490,16 @@
 ### Follow-up
 
 - User reported seeing storyboard content disappear yesterday. Keep this as a dedicated recovery item after the current performance pass; do not mix that investigation into unrelated bundle-splitting edits.
+
+## 2026-06-20 App Shell CRM Host Deferral
+
+### Changes
+
+- Removed the eager `CrmHost` import from `new_html/App.tsx`.
+- Added `DeferredCrmHost` so the CRM-style message/dialog host loads after browser idle instead of being parsed in the first app shell chunk.
+- Added `frontend_app_shell_chunk_checks` to `scripts/check_route_contract.py` to keep `admin/crmUI` out of the App static import path.
+
+### Expected Impact
+
+- Keeps nonessential global admin/CRM UI code off the initial route shell.
+- `crmMessage`, `crmConfirm`, and `crmPrompt` still use the same module and state; messages triggered before the idle host mounts are retained and render once the host loads.

@@ -3198,6 +3198,34 @@ def check_frontend_ai_chunk_split_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_app_shell_chunk_contract(root: Path) -> int:
+    """App shell should defer nonessential global UI hosts out of the entry chunk."""
+    app_path = root / "new_html" / "App.tsx"
+    app_text = app_path.read_text(encoding="utf-8")
+    required_snippets = [
+        "const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));",
+        "const DeferredCrmHost: React.FC = () => {",
+        "requestIdleCallback",
+        "<DeferredCrmHost />",
+    ]
+    forbidden_snippets = [
+        "import { CrmHost } from './admin/crmUI';",
+        'import { CrmHost } from "./admin/crmUI";',
+        "import * as crmUI from './admin/crmUI';",
+        'import * as crmUI from "./admin/crmUI";',
+    ]
+    checks = 0
+    for snippet in required_snippets:
+        if snippet not in app_text:
+            fail(f"Missing frontend app-shell chunk snippet in {app_path.relative_to(root)}: {snippet}")
+        checks += 1
+    for snippet in forbidden_snippets:
+        if snippet in app_text:
+            fail(f"Forbidden eager app-shell import in {app_path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def check_live_deploy_frontend_contract(root: Path) -> int:
     """Production deploy script must ship and build the Vite frontend."""
     script_path = root / "scripts" / "live_deploy_mvc2.sh"
@@ -3328,6 +3356,7 @@ def main() -> int:
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
+    frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
     architecture_contract_runner_checks = check_architecture_contract_runner(root)
@@ -3387,6 +3416,7 @@ def main() -> int:
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
+    print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
     print(f"  architecture_contract_runner_checks={architecture_contract_runner_checks}")

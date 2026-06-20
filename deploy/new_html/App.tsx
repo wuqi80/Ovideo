@@ -44,8 +44,6 @@ function SSEInvalidationProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-import { CrmHost } from './admin/crmUI';
-
 const ProjectHub = React.lazy(() => import('./components/ProjectHub'));
 const ProjectWorkspace = React.lazy(() => import('./components/ProjectWorkspace'));
 const WorkflowLayout = React.lazy(() => import('./layouts/WorkflowLayout').then(m => ({ default: m.WorkflowLayout })));
@@ -71,6 +69,7 @@ const AdminLayout = React.lazy(() => import('./admin/AdminLayout'));
 const AdminLoginPage = React.lazy(() => import('./admin/AdminLoginPage'));
 const AdminHubPage = React.lazy(() => import('./admin/AdminHubPage'));
 const AdminSettingsPage = React.lazy(() => import('./admin/AdminSettingsPage'));
+const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));
 
 const RouteFallback: React.FC = () => (
     <div className="h-screen w-full bg-n20 flex items-center justify-center text-sm text-n300">
@@ -109,6 +108,26 @@ const GlobalToastWithNav: React.FC = () => {
     );
 };
 
+const DeferredCrmHost: React.FC = () => {
+    const [mounted, setMounted] = React.useState(false);
+    React.useEffect(() => {
+        const mount = () => setMounted(true);
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            const id = (window as any).requestIdleCallback(mount, { timeout: 1500 });
+            return () => (window as any).cancelIdleCallback?.(id);
+        }
+        const id = window.setTimeout(mount, 300);
+        return () => window.clearTimeout(id);
+    }, []);
+
+    if (!mounted) return null;
+    return (
+        <React.Suspense fallback={null}>
+            <CrmHost />
+        </React.Suspense>
+    );
+};
+
 const App: React.FC = () => {
     return (
         <QueryClientProvider client={queryClient}>
@@ -117,7 +136,7 @@ const App: React.FC = () => {
             <WorkspaceProvider>
             <TaskProvider>
                 <GlobalToastWithNav />
-                <CrmHost />
+                <DeferredCrmHost />
                 <React.Suspense fallback={<RouteFallback />}>
                 <Routes>
                     {/* ========== 项目管理中心 ========== */}
