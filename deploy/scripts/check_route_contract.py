@@ -3159,7 +3159,42 @@ def check_frontend_lazy_video_contract(root: Path) -> int:
         text = path.read_text(encoding="utf-8")
         if snippet in text:
             fail(f"Forbidden eager video snippet in {path.relative_to(root)}: {snippet}")
+            checks += 1
+    return checks
+
+
+def check_frontend_ai_chunk_split_contract(root: Path) -> int:
+    """AI model service should stay out of the initial script workspace chunk."""
+    new_html = root / "new_html"
+    workspace_app = new_html / "WorkspaceApp.tsx"
+    workspace_text = workspace_app.read_text(encoding="utf-8")
+    required_snippets = [
+        "const loadAiModelService = () => import('./services/aiModelService');",
+        "await loadAiModelService()",
+    ]
+    checks = 0
+    for snippet in required_snippets:
+        if snippet not in workspace_text:
+            fail(f"Missing frontend AI chunk split snippet in {workspace_app.relative_to(root)}: {snippet}")
         checks += 1
+
+    static_import_violations: list[str] = []
+    static_import_re = re.compile(r"from\s+['\"][^'\"]*aiModelService['\"]")
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "node_modules" in path.parts or "dist" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for idx, line in enumerate(text.splitlines(), start=1):
+            if static_import_re.search(line):
+                static_import_violations.append(f"{path.relative_to(root)}:{idx}: {line.strip()}")
+    if static_import_violations:
+        fail(
+            "aiModelService must be dynamically imported so script pages can split the AI chunk:\n"
+            + "\n".join(static_import_violations)
+        )
+    checks += 1
     return checks
 
 
@@ -3292,6 +3327,7 @@ def main() -> int:
     frontend_http_client_checks = check_frontend_http_client_contract(root)
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
+    frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
     architecture_contract_runner_checks = check_architecture_contract_runner(root)
@@ -3350,6 +3386,7 @@ def main() -> int:
     print(f"  frontend_http_client_checks={frontend_http_client_checks}")
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
+    print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
     print(f"  architecture_contract_runner_checks={architecture_contract_runner_checks}")

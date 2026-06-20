@@ -5478,3 +5478,15 @@
 - Server architecture contracts passed:
   - `scripts/check_architecture_contracts.py` -> `9/9`
   - `storyboard_paged_reload_checks=16`
+
+## 2026-06-20 Frontend AI Chunk Split
+
+### Changes
+
+- Removed the top-level `aiModelService` static import from `new_html/WorkspaceApp.tsx`.
+- Added `loadAiModelService()` so script/storyboard AI helpers are loaded only when the user triggers AI operations.
+- Added `frontend_ai_chunk_split_checks` to `scripts/check_route_contract.py` to prevent future static `aiModelService` imports from merging the AI service/prompts layer back into the initial script workspace chunk.
+
+### Follow-up
+
+- User reported seeing storyboard content disappear yesterday. Keep this as a dedicated recovery item after the current performance pass; do not mix that investigation into unrelated bundle-splitting edits.

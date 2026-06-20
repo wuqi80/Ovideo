@@ -18,12 +18,13 @@ import { HistoryPage } from './components/HistoryPage';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { SkeletonScreen } from './components/SkeletonScreen';
 import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock } from './types';
-import { aiRewriteNovelToScript, aiGenerateStoryboards, aiExtractScriptMetadata, aiRefineScriptSegment, aiRestructureShot, aiRegenerateSingleShot, aiGenerateStoryboardScript, aiContinueStoryboardScript, aiSplitScriptIntoSegments, aiGenerateVideoScriptFromSegment, aiExtractStoryboardPromptFromVideoShot } from './services/aiModelService';
 import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { estimateDurationMs } from './utils/durationMapping';
 import { extractToAssets, batchCreateStoryboardItems, deleteAllStoryboardItems, exportScript, getEpisodeScript, updateEpisodeScript, getStoryboardItems, listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, updateStoryboardItem, deleteStoryboardItem, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/apiService';
 import { getAuthToken } from './services/httpClient';
+
+const loadAiModelService = () => import('./services/aiModelService');
 
 /**
  * ✅ localStorage使用说明：
@@ -1369,6 +1370,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
 
       setIsProcessing(true);
       try {
+        const { aiRegenerateSingleShot } = await loadAiModelService();
         const newData = await aiRegenerateSingleShot(aiModel, itemToRegen.scriptSegment, instruction);
           
           updateFileWithHistory(selectedFileId, (f) => {
@@ -1432,6 +1434,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       }
       contextPrompt += '\n请返回新镜头的 scriptSegment, imagePrompt, videoPrompt, dialogue, characters, scene';
 
+      const { aiRegenerateSingleShot } = await loadAiModelService();
       const newData = await aiRegenerateSingleShot(aiModel, originalText, contextPrompt);
       
       const newItem: StoryboardItem = {
@@ -1627,6 +1630,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
             // 全局累积的结果
             let allParsedItems: StoryboardItem[] = [];
             let allDisplayText = '';
+            const { aiGenerateStoryboardScript, aiContinueStoryboardScript } = await loadAiModelService();
 
             // 🆕 处理每一段
             for (let segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
@@ -1837,7 +1841,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       console.log('📤 开始提取分镜...');
       
       // 调用AI提取分镜
-      const { aiExtractShotsFromScript } = await import('./services/aiModelService');
+      const { aiExtractShotsFromScript } = await loadAiModelService();
       const result = await aiExtractShotsFromScript(aiModel, selectedFile.scriptContent);
       
       console.log('✅ 提取成功，分镜数量:', result.items.length);
@@ -1897,6 +1901,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
 
     setStage(file.id, 'split', { status: 'running', errorMessage: '' });
     try {
+      const { aiSplitScriptIntoSegments } = await loadAiModelService();
       const segments = await aiSplitScriptIntoSegments(aiModel, file.originalContent);
       const applySegs = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, scriptSegments: segments } : f);
       setFiles(applySegs);
@@ -1928,6 +1933,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         const seg = ordered[i];
         if (seg.status === 'done' && seg.videoScript) { completed++; continue; } // 跳过已完成（失败恢复）
         try {
+          const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
           const text = await aiGenerateVideoScriptFromSegment(aiModel, seg);
           updated[i] = { ...seg, videoScript: text, status: 'done', errorMessage: '' };
           completed++;
@@ -1984,6 +1990,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       const { segmentId, block } = shots[i];
       try {
         // 单个视频镜头 → 一个或多个更细的分镜
+        const { aiExtractStoryboardPromptFromVideoShot } = await loadAiModelService();
         const exList = await aiExtractStoryboardPromptFromVideoShot(aiModel, block.rawBlock);
         for (const ex of exList) {
           items.push({
@@ -2066,7 +2073,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         
         try {
           // 调用AI生成详细信息
-          const { aiGenerateShotDetails } = await import('./services/aiModelService');
+          const { aiGenerateShotDetails } = await loadAiModelService();
           const details = await aiGenerateShotDetails(
             aiModel,
             item.originalText,
@@ -2121,6 +2128,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         try {
              const currentFile = files.find(f => f.id === id);
              if (!currentFile || !currentFile.scriptContent) continue;
+             const { aiExtractScriptMetadata } = await loadAiModelService();
              const metadata = await aiExtractScriptMetadata(aiModel, currentFile.scriptContent);
              
              updateFileWithHistory(id, (f) => ({
@@ -2142,6 +2150,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
     if (!selectedFileId || !selectedFile?.scriptContent) return;
     setIsProcessing(true);
     try {
+        const { aiRefineScriptSegment } = await loadAiModelService();
         const newSegment = await aiRefineScriptSegment(aiModel, selection, instruction, selectedFile.scriptContent);
         const newScriptContent = selectedFile.scriptContent.replace(selection, newSegment);
         
@@ -2193,6 +2202,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           const endIndex = Math.max(...matchedIndices);
           const count = endIndex - startIndex + 1;
 
+          const { aiRestructureShot } = await loadAiModelService();
           const result = await aiRestructureShot(aiModel, selection, instruction, type);
 
           // 🔧 确保新生成的分镜包含必需字段
@@ -2258,6 +2268,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
               if (!script) {
                   console.log('📝 步骤1: 改写小说为剧本...');
                   let streamedContent = '';
+                  const { aiRewriteNovelToScript } = await loadAiModelService();
                   script = await aiRewriteNovelToScript(
                       aiModel, 
                       currentFile.originalContent, 
@@ -2279,7 +2290,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
 
               // 步骤2: 提取分镜段落
               console.log('🎬 步骤2: 提取分镜段落...');
-              const { aiExtractShotsFromScript } = await import('./services/aiModelService');
+              const { aiExtractShotsFromScript } = await loadAiModelService();
               const shotsResult = await aiExtractShotsFromScript(aiModel, contentToUse);
               
               const storyboardItems: StoryboardItem[] = shotsResult.items.map((item, index) => ({
@@ -2314,7 +2325,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                   console.log(`🎬 生成第 ${i + 1}/${storyboardItems.length} 个分镜...`);
                   
                   try {
-                      const { aiGenerateShotDetails } = await import('./services/aiModelService');
+                      const { aiGenerateShotDetails } = await loadAiModelService();
                       const details = await aiGenerateShotDetails(
                           aiModel,
                           item.originalText,
