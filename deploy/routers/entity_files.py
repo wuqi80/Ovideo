@@ -15,7 +15,6 @@ def create_entity_files_router(
     get_current_user_dependency: Any,
     file_dao: Any,
     entity_file_dao: Any,
-    get_db_manager_func: Callable[[], Any],
     save_generated_file_to_db_provider: Callable[[], Callable[..., Any]],
     logger: logging.Logger,
 ) -> APIRouter:

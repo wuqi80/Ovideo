@@ -535,6 +535,9 @@ class FileDAO:
     ) -> List[Dict[str, Any]]:
         """获取用户的所有文件"""
         db = get_db_manager()
+        if not db:
+            logger.warning("get_user_files skipped because database manager is unavailable: %s", user_id)
+            return []
         
         if file_type:
             query = """

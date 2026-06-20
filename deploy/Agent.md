@@ -5967,3 +5967,21 @@
 - Local `pytest tests/test_content_file_dao.py tests/test_task_read_service.py -q` passed `7/7`.
 - Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `service_mapper_purity_checks=587`.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
+
+## 2026-06-21 Entity Files Router DB Plumbing Cleanup
+
+### Changes
+
+- Removed the unused `get_db_manager_func` dependency from `routers/entity_files.py`.
+- Removed the `db_manager.get_db_manager` import and entity-file router DB plumbing pass-through from `api_routes.py`.
+- Added a DB-unavailable fallback to `FileDAO.get_user_files()` so `/api/user-files` returns an empty list instead of requiring route-level connection checks.
+- Expanded `tests/test_content_file_dao.py` to cover `FileDAO.get_user_files()` DB-unavailable and query-shape paths.
+- Strengthened `scripts/check_route_contract.py` so `api_routes.py` and `routers/entity_files.py` cannot reintroduce entity-file DB plumbing.
+
+### Verification
+
+- Local `py_compile` passed for `api_routes.py`, `routers/entity_files.py`, `dao/content/content.py`, and the route contract script.
+- Local `pytest tests/test_content_file_dao.py tests/test_project_read_access.py -q` passed `8/8`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `entity_file_route_handlers=13` including purity guards.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Runtime route/service DB plumbing search now only finds `cluster_main.py` DB lifecycle initialization/shutdown.

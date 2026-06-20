@@ -20,7 +20,6 @@ from dao_timeline import TimelineDAO
 from dao_audio_track import AudioTrackDAO
 from dao_character_voice import CharacterVoiceDAO
 from audio_provider import get_audio_provider, AUDIO_UPLOAD_DIR
-from db_manager import get_db_manager
 
 try:
     from minimax_audio import get_minimax_audio_client
@@ -207,7 +206,6 @@ router.include_router(
         get_current_user_dependency=get_current_user,
         file_dao=FileDAO,
         entity_file_dao=EntityFileDAO,
-        get_db_manager_func=get_db_manager,
         save_generated_file_to_db_provider=lambda: save_generated_file_to_db,
         logger=logger,
     )

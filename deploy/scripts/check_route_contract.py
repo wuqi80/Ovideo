@@ -1923,6 +1923,8 @@ def check_entity_file_routes_extracted(root: Path) -> int:
     entity_files_path = root / "routers" / "entity_files.py"
     if not entity_files_path.exists():
         fail("routers/entity_files.py is missing")
+    api_text = api_routes_path.read_text(encoding="utf-8")
+    entity_files_text = entity_files_path.read_text(encoding="utf-8")
 
     route_pairs = {
         ("/api/user-files", "get"),
@@ -1974,7 +1976,18 @@ def check_entity_file_routes_extracted(root: Path) -> int:
 
     if route_count != 9:
         fail(f"routers/entity_files.py should own 9 entity-file route registrations, found {route_count}")
-    return route_count
+
+    purity_violations = []
+    for snippet in ["get_db_manager_func", "get_db_manager"]:
+        if snippet in entity_files_text:
+            purity_violations.append(f"routers/entity_files.py still depends on DB plumbing: {snippet}")
+    for snippet in ["get_db_manager_func=", "from db_manager import get_db_manager"]:
+        if snippet in api_text:
+            purity_violations.append(f"api_routes.py still passes DB plumbing into entity file routes: {snippet}")
+    if purity_violations:
+        fail("Entity file router purity contract failed:\n" + "\n".join(purity_violations))
+
+    return route_count + 4
 
 
 def check_legacy_file_routes_extracted(root: Path) -> int:

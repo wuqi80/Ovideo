@@ -5989,3 +5989,20 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `pytest tests/test_content_file_dao.py tests/test_task_read_service.py -q` passed `7/7`.
 - Local route contract passed with `openapi_paths=231`, `openapi_operations=287`, `service_mapper_purity_checks=587`.
 - Local architecture contract suite passed `9/9`.
+
+## 2026-06-21 Entity Files Router DB Plumbing Cleanup
+
+### Changes
+
+- Removed unused `get_db_manager_func` plumbing from `deploy/routers/entity_files.py`.
+- Removed `get_db_manager` import and entity-file router DB pass-through from `deploy/api_routes.py`.
+- Added a DB-unavailable fallback to `FileDAO.get_user_files()`.
+- Expanded `deploy/tests/test_content_file_dao.py` and route contract guards for the entity-file router boundary.
+
+### Verification
+
+- Local `py_compile` passed for touched backend files.
+- Local `pytest tests/test_content_file_dao.py tests/test_project_read_access.py -q` passed `8/8`.
+- Local route contract passed with `openapi_paths=231`, `openapi_operations=287`, `entity_file_route_handlers=13`.
+- Local architecture contract suite passed `9/9`.
+- Runtime route/service DB plumbing search now only finds `cluster_main.py` lifecycle DB management.
