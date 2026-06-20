@@ -11,10 +11,6 @@ class _AssetDAO:
     pass
 
 
-class _NoopDB:
-    pass
-
-
 def _build_app(storyboard_dao, episode_script_dao) -> FastAPI:
     app = FastAPI()
     app.include_router(
@@ -23,7 +19,6 @@ def _build_app(storyboard_dao, episode_script_dao) -> FastAPI:
             storyboard_dao=storyboard_dao,
             episode_script_dao=episode_script_dao,
             asset_dao=_AssetDAO,
-            get_db_manager_func=lambda: _NoopDB(),
             logger=logging.getLogger("test_storyboard_stale_script_fallback"),
         )
     )

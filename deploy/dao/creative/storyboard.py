@@ -197,6 +197,79 @@ class StoryboardDAO:
         return count
 
     @staticmethod
+    async def delete_by_episode_transactional(conn, episode_id: str, script_id: Optional[str] = None) -> int:
+        if script_id:
+            result = await conn.execute(
+                "DELETE FROM storyboard_items WHERE episode_id = $1 AND script_id = $2",
+                episode_id,
+                script_id,
+            )
+        else:
+            result = await conn.execute("DELETE FROM storyboard_items WHERE episode_id = $1", episode_id)
+        try:
+            return int(result.split()[-1])
+        except Exception:
+            return 0
+
+    @staticmethod
+    async def export_script_transaction(
+        *,
+        episode_script_dao: Any,
+        asset_dao: Any,
+        episode_id: str,
+        project_id: str,
+        original_content: str,
+        script_content: str,
+        storyboard_items: List[Dict[str, Any]],
+        characters: List[Dict[str, Any]],
+        scenes: List[Dict[str, Any]],
+        script_id: Optional[str],
+        created_by: str,
+    ) -> int:
+        db = get_db_manager()
+        if not db:
+            raise RuntimeError("database unavailable")
+
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                await episode_script_dao.upsert_transactional(
+                    conn,
+                    episode_id,
+                    original_content=original_content,
+                    adapted_script=script_content,
+                    metadata={
+                        "extracted_characters": [c.get("name", "") for c in characters],
+                        "extracted_scenes": [s.get("name", "") for s in scenes],
+                    },
+                )
+                await StoryboardDAO.delete_by_episode_transactional(conn, episode_id, script_id=script_id)
+                created = await StoryboardDAO.batch_create_transactional(
+                    conn,
+                    episode_id,
+                    storyboard_items,
+                    script_id=script_id,
+                )
+                await asset_dao.create_missing_episode_assets_transactional(
+                    conn,
+                    project_id=project_id,
+                    episode_id=episode_id,
+                    script_id=script_id,
+                    asset_type="character",
+                    items=characters,
+                    created_by=created_by,
+                )
+                await asset_dao.create_missing_episode_assets_transactional(
+                    conn,
+                    project_id=project_id,
+                    episode_id=episode_id,
+                    script_id=script_id,
+                    asset_type="scene",
+                    items=scenes,
+                    created_by=created_by,
+                )
+        return created
+
+    @staticmethod
     async def get_by_id(item_id: str) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:

@@ -189,7 +189,6 @@ router.include_router(
         storyboard_dao=StoryboardDAO,
         episode_script_dao=EpisodeScriptDAO,
         asset_dao=AssetDAO,
-        get_db_manager_func=get_db_manager,
         logger=logger,
     )
 )

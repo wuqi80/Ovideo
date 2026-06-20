@@ -3019,6 +3019,9 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "content" / "content.py", "async def soft_delete_user_files_by_path_fragment("),
         (root / "dao" / "content" / "content.py", "async def update_project_metadata("),
         (root / "dao" / "creative" / "episode.py", "async def get_project_id("),
+        (root / "dao" / "creative" / "asset.py", "async def create_missing_episode_assets_transactional("),
+        (root / "dao" / "creative" / "storyboard.py", "async def export_script_transaction("),
+        (root / "dao" / "creative" / "storyboard.py", "async def delete_by_episode_transactional("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
@@ -3028,6 +3031,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "tasks.py", "FileDAO.soft_delete_user_files_by_path_fragment("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
         (root / "routers" / "project_admin.py", "ProjectDAO.update_project_metadata("),
+        (root / "routers" / "storyboard.py", "StoryboardDAO.export_script_transaction("),
     ]
     for path, snippet in required_snippets:
         if snippet not in path.read_text(encoding="utf-8"):
@@ -3083,6 +3087,22 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     ]:
         if snippet in project_admin_router_text:
             violations.append(f"routers/project_admin.py must delegate project metadata updates to ProjectDAO: {snippet}")
+        checks += 1
+
+    storyboard_router_text = (root / "routers" / "storyboard.py").read_text(encoding="utf-8")
+    for snippet in [
+        "get_db_manager_func",
+        "db.acquire()",
+        "conn.execute(",
+        "conn.fetch(",
+        "EpisodeScriptDAO.upsert_transactional(",
+        "StoryboardDAO.batch_create_transactional(",
+        "DELETE FROM storyboard_items",
+        "SELECT asset_type, name FROM assets",
+        "INSERT INTO assets",
+    ]:
+        if snippet in storyboard_router_text:
+            violations.append(f"routers/storyboard.py must delegate export-script transaction SQL to DAO methods: {snippet}")
         checks += 1
 
     if violations:

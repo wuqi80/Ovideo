@@ -5427,3 +5427,21 @@
   - `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_architecture_contracts.py` -> `9/9`
   - `service_mapper_purity_checks=466`
   - `PYTHONUTF8=1 PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+
+## 2026-06-20 Storyboard Export Mapper Purity
+
+### Changes
+
+- Moved the cross-table export-script transaction out of `routers/storyboard.py`.
+- Added `StoryboardDAO.export_script_transaction()` to own the episode-script upsert, storyboard replacement, and asset extraction transaction.
+- Added `AssetDAO.create_missing_episode_assets_transactional()` so character/scene asset dedupe and inserts stay in the DAO layer.
+- Removed the storyboard router dependency on `get_db_manager_func`.
+- Extended `scripts/check_route_contract.py` so `routers/storyboard.py` cannot reintroduce the export-script DB handle, direct storyboard deletion SQL, or direct asset insert SQL.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/dao/creative/asset.py deploy/dao/creative/storyboard.py deploy/routers/storyboard.py deploy/api_routes.py deploy/scripts/check_route_contract.py deploy/tests/test_storyboard_stale_script_fallback.py`
+  - `cd deploy && PYTHONUTF8=1 PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -m pytest tests/test_storyboard_stale_script_fallback.py -q` -> `4 passed`
+  - `cd deploy && PYTHONUTF8=1 PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe scripts/check_route_contract.py`
+  - `service_mapper_purity_checks=479`

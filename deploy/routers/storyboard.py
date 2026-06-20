@@ -3,8 +3,7 @@
 
 import json
 import logging
-import uuid
-from typing import Any, Callable, List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -16,7 +15,6 @@ def create_storyboard_router(
     storyboard_dao: Any,
     episode_script_dao: Any,
     asset_dao: Any,
-    get_db_manager_func: Callable[[], Any],
     logger: logging.Logger,
 ) -> APIRouter:
     router = APIRouter()
@@ -236,91 +234,22 @@ def create_storyboard_router(
         req: ExportScriptRequest,
         user_id: str = Depends(get_current_user),
     ):
-        db = get_db_manager_func()
-        if not db:
-            raise HTTPException(500, "数据库不可用")
-
-        async with db.acquire() as conn:
-            async with conn.transaction():
-                await EpisodeScriptDAO.upsert_transactional(
-                    conn,
-                    episode_id,
-                    original_content=req.original_content,
-                    adapted_script=req.script_content,
-                    metadata={
-                        "extracted_characters": [c.get("name", "") for c in req.characters],
-                        "extracted_scenes": [s.get("name", "") for s in req.scenes],
-                    },
-                )
-
-                if req.script_id:
-                    await conn.execute(
-                        "DELETE FROM storyboard_items WHERE episode_id = $1 AND script_id = $2",
-                        episode_id,
-                        req.script_id,
-                    )
-                else:
-                    await conn.execute("DELETE FROM storyboard_items WHERE episode_id = $1", episode_id)
-
-                created = await StoryboardDAO.batch_create_transactional(
-                    conn,
-                    episode_id,
-                    req.storyboard_items,
-                    script_id=req.script_id,
-                )
-
-                if req.script_id:
-                    existing_assets = await conn.fetch(
-                        "SELECT asset_type, name FROM assets WHERE project_id = $1 AND episode_id = $2 AND script_id = $3",
-                        req.project_id,
-                        episode_id,
-                        req.script_id,
-                    )
-                else:
-                    existing_assets = await conn.fetch(
-                        "SELECT asset_type, name FROM assets WHERE project_id = $1 AND episode_id = $2",
-                        req.project_id,
-                        episode_id,
-                    )
-                existing_names = {(r["asset_type"], r["name"]) for r in existing_assets}
-
-                for char in req.characters:
-                    name = char.get("name", "").strip()
-                    if not name or ("character", name) in existing_names:
-                        continue
-                    await conn.execute(
-                        """
-                        INSERT INTO assets (asset_id, project_id, episode_id, script_id, asset_type, name, description, created_by)
-                        VALUES ($1, $2, $3, $4, 'character', $5, $6, $7)
-                        """,
-                        f"asset_{uuid.uuid4().hex[:12]}",
-                        req.project_id,
-                        episode_id,
-                        req.script_id,
-                        name,
-                        char.get("description", ""),
-                        user_id,
-                    )
-                    existing_names.add(("character", name))
-
-                for scene in req.scenes:
-                    name = scene.get("name", "").strip()
-                    if not name or ("scene", name) in existing_names:
-                        continue
-                    await conn.execute(
-                        """
-                        INSERT INTO assets (asset_id, project_id, episode_id, script_id, asset_type, name, description, created_by)
-                        VALUES ($1, $2, $3, $4, 'scene', $5, $6, $7)
-                        """,
-                        f"asset_{uuid.uuid4().hex[:12]}",
-                        req.project_id,
-                        episode_id,
-                        req.script_id,
-                        name,
-                        scene.get("description", ""),
-                        user_id,
-                    )
-                    existing_names.add(("scene", name))
+        try:
+            created = await StoryboardDAO.export_script_transaction(
+                episode_script_dao=EpisodeScriptDAO,
+                asset_dao=AssetDAO,
+                episode_id=episode_id,
+                project_id=req.project_id,
+                original_content=req.original_content,
+                script_content=req.script_content,
+                storyboard_items=req.storyboard_items,
+                characters=req.characters,
+                scenes=req.scenes,
+                script_id=req.script_id,
+                created_by=user_id,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(500, str(exc))
 
         return {
             "success": True,

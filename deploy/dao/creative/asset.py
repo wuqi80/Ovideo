@@ -135,6 +135,62 @@ class AssetDAO:
         )
 
     @staticmethod
+    async def create_missing_episode_assets_transactional(
+        conn,
+        *,
+        project_id: str,
+        episode_id: str,
+        script_id: Optional[str],
+        asset_type: str,
+        items: List[Dict[str, Any]],
+        created_by: str,
+    ) -> int:
+        if script_id:
+            existing_assets = await conn.fetch(
+                """
+                SELECT name FROM assets
+                WHERE project_id = $1 AND episode_id = $2 AND script_id = $3 AND asset_type = $4
+                """,
+                project_id,
+                episode_id,
+                script_id,
+                asset_type,
+            )
+        else:
+            existing_assets = await conn.fetch(
+                """
+                SELECT name FROM assets
+                WHERE project_id = $1 AND episode_id = $2 AND asset_type = $3
+                """,
+                project_id,
+                episode_id,
+                asset_type,
+            )
+        existing_names = {str(row["name"]) for row in existing_assets}
+        created = 0
+        for item in items:
+            name = str(item.get("name", "")).strip()
+            if not name or name in existing_names:
+                continue
+            await conn.execute(
+                """
+                INSERT INTO assets (asset_id, project_id, episode_id, script_id, asset_type, name, description, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                f"asset_{uuid.uuid4().hex[:12]}",
+                project_id,
+                episode_id,
+                script_id,
+                asset_type,
+                name,
+                item.get("description", ""),
+                created_by,
+            )
+            existing_names.add(name)
+            created += 1
+        return created
+
+    @staticmethod
     async def delete(asset_id: str) -> bool:
         db = get_db_manager()
         if not db:
