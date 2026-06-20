@@ -116,3 +116,112 @@ async def test_storyboard_items_do_not_fallback_for_valid_empty_script():
         "offset": 0,
     }
     assert StoryboardDAO.calls == [("ep_1", "script_empty", 10, 0, None)]
+
+
+@pytest.mark.asyncio
+async def test_storyboard_items_fallback_for_partial_stale_script_rows():
+    class StoryboardDAO:
+        calls = []
+
+        @staticmethod
+        async def get_by_episode(episode_id, script_id=None, limit=None, offset=0, fields=None):
+            StoryboardDAO.calls.append((episode_id, script_id, limit, offset, fields))
+            if script_id:
+                return [
+                    {
+                        "item_id": "sb_stale",
+                        "episode_id": episode_id,
+                        "script_id": script_id,
+                        "sort_order": 0,
+                        "bound_assets": [],
+                    }
+                ]
+            return [
+                {
+                    "item_id": "sb_current",
+                    "episode_id": episode_id,
+                    "script_id": "script_current",
+                    "sort_order": 0,
+                    "bound_assets": [],
+                }
+            ]
+
+        @staticmethod
+        async def count_by_episode(episode_id, script_id=None):
+            return 1 if script_id else 23
+
+    class EpisodeScriptDAO:
+        @staticmethod
+        async def get_by_id(script_id):
+            return None
+
+    app = _build_app(StoryboardDAO, EpisodeScriptDAO)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/episodes/ep_1/storyboard-items",
+            params={"script_id": "script_deleted", "limit": 10, "include_total": "true"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["item_id"] for item in payload["items"]] == ["sb_current"]
+    assert payload["total"] == 23
+    assert payload["fallback_script_id"] == "script_deleted"
+    assert payload["fallback_reason"] == "stale_script_storyboard"
+    assert payload["fallback_scope"] == "episode"
+    assert StoryboardDAO.calls == [
+        ("ep_1", "script_deleted", 10, 0, None),
+        ("ep_1", None, 10, 0, None),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_storyboard_items_keep_partial_valid_script_rows():
+    class StoryboardDAO:
+        calls = []
+
+        @staticmethod
+        async def get_by_episode(episode_id, script_id=None, limit=None, offset=0, fields=None):
+            StoryboardDAO.calls.append((episode_id, script_id, limit, offset, fields))
+            if script_id:
+                return [
+                    {
+                        "item_id": "sb_valid_partial",
+                        "episode_id": episode_id,
+                        "script_id": script_id,
+                        "sort_order": 0,
+                        "bound_assets": [],
+                    }
+                ]
+            return [
+                {
+                    "item_id": "sb_other_scope",
+                    "episode_id": episode_id,
+                    "script_id": "script_other",
+                    "sort_order": 0,
+                    "bound_assets": [],
+                }
+            ]
+
+        @staticmethod
+        async def count_by_episode(episode_id, script_id=None):
+            return 1 if script_id else 23
+
+    class EpisodeScriptDAO:
+        @staticmethod
+        async def get_by_id(script_id):
+            return {"script_id": script_id, "episode_id": "ep_1"}
+
+    app = _build_app(StoryboardDAO, EpisodeScriptDAO)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/episodes/ep_1/storyboard-items",
+            params={"script_id": "script_valid", "limit": 10, "include_total": "true"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["item_id"] for item in payload["items"]] == ["sb_valid_partial"]
+    assert payload["total"] == 1
+    assert "fallback_script_id" not in payload
+    assert StoryboardDAO.calls == [("ep_1", "script_valid", 10, 0, None)]

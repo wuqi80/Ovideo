@@ -110,7 +110,9 @@ def create_storyboard_router(
         )
         fallback_script_id: Optional[str] = None
         fallback_reason: Optional[str] = None
-        if script_id and not items:
+        fallback_total: Optional[int] = None
+        requested_script_total: Optional[int] = None
+        if script_id:
             try:
                 script = await EpisodeScriptDAO.get_by_id(script_id)
                 script_belongs_to_episode = bool(script and script.get("episode_id") == episode_id)
@@ -124,6 +126,13 @@ def create_storyboard_router(
                 script_belongs_to_episode = True
 
             if not script_belongs_to_episode:
+                requested_script_total = await StoryboardDAO.count_by_episode(episode_id, script_id=script_id)
+                fallback_total = await StoryboardDAO.count_by_episode(episode_id, script_id=None)
+                should_fallback = fallback_total > requested_script_total
+            else:
+                should_fallback = False
+
+            if should_fallback:
                 fallback_items = await StoryboardDAO.get_by_episode(
                     episode_id,
                     script_id=None,
@@ -151,10 +160,16 @@ def create_storyboard_router(
             payload["fallback_reason"] = fallback_reason
             payload["fallback_scope"] = "episode"
         if include_total:
-            payload["total"] = await StoryboardDAO.count_by_episode(
-                episode_id,
-                script_id=None if fallback_script_id else script_id,
-            )
+            if fallback_script_id and fallback_total is not None:
+                total = fallback_total
+            elif script_id and requested_script_total is not None:
+                total = requested_script_total
+            else:
+                total = await StoryboardDAO.count_by_episode(
+                    episode_id,
+                    script_id=None if fallback_script_id else script_id,
+                )
+            payload["total"] = total
             payload["limit"] = limit
             payload["offset"] = max(0, int(offset or 0))
         return payload

@@ -1,5 +1,30 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Storyboard Partial Stale Script Fallback
+
+### Changes
+
+- Confirmed `ep_2fc899a228f5` on `https://mecha.one` still has 152 storyboard rows under `script_a7314932ac1b`; the reported missing storyboard was not a hard data loss for that episode.
+- Strengthened `/api/episodes/{episode_id}/storyboard-items` fallback:
+  - If a requested `script_id` no longer belongs to the episode, compare script-scoped and episode-scoped storyboard counts.
+  - If the episode has more storyboard rows than the stale script scope, return the episode storyboard page with `fallback_reason=stale_script_storyboard`.
+  - Valid scripts still keep their own empty or partial storyboard rows, so multi-script workflows are not collapsed accidentally.
+- Added regression coverage for partial stale script rows and valid partial script rows.
+
+### Verification
+
+- `pytest tests/test_storyboard_stale_script_fallback.py -q`: 4 passed.
+- `scripts/check_architecture_contracts.py`: passed 9/9.
+- `scripts/smoke_test.py`: 9/9 passed locally.
+- Server probe confirmed:
+  - no `script_id`: `total=152`
+  - current `script_id=script_a7314932ac1b`: `total=152`
+  - stale script probe: `fallback_reason=stale_script_storyboard`, `total=152`
+
+### Notes
+
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Architecture Contract Suite Runner
 
 ### Changes
