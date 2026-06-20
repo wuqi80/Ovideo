@@ -4628,3 +4628,39 @@
 ### Remaining Gap
 
 - Server SSH port `22` is still publicly exposed. This is outside the app code path and should be handled in GCP firewall/IAP or host SSH policy.
+
+## 2026-06-20 Frontend Project/Episode HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/components/ProjectHub.tsx` from page-local `fetch()` + `getHeaders()` to shared `apiJson()`:
+  - project list
+  - project create
+  - project delete
+  - project archive
+  - project unarchive
+- Migrated `new_html/pages/EpisodeHubPage.tsx` from page-local `fetch()` + `getHeaders()` to shared `apiJson()`:
+  - episode list
+  - episode create
+  - episode delete
+  - episode duplicate
+  - episode rename
+- Extended `scripts/check_route_contract.py` so these two high-traffic entry pages cannot reintroduce duplicated request/auth handling.
+
+### Notes
+
+- This is P2 frontend request consolidation work. The large historical `new_html/services/apiService.ts` still owns many direct `fetch()` calls and should be split/migrated by domain in later steps.
+
+### Verification
+
+- Local checks passed:
+  - targeted TypeScript check for `ProjectHub.tsx` and `EpisodeHubPage.tsx`
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_hub_httpclient_20260620120800.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`

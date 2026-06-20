@@ -2574,6 +2574,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
     new_html = root / "new_html"
     http_client = new_html / "services" / "httpClient.ts"
     video_page = new_html / "components" / "VideoPage.tsx"
+    project_hub = new_html / "components" / "ProjectHub.tsx"
+    episode_hub = new_html / "pages" / "EpisodeHubPage.tsx"
     migrated_services = [
         new_html / "services" / "videoService.ts",
         new_html / "services" / "videoReverseService.ts",
@@ -2582,6 +2584,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         new_html / "services" / "mediaLibraryService.ts",
         new_html / "services" / "creditService.ts",
         new_html / "services" / "organizationService.ts",
+    ]
+    migrated_pages = [
+        project_hub,
+        episode_hub,
     ]
 
     required_snippets = [
@@ -2597,6 +2603,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_page, "videoService.secureMediaUrl("),
         (video_page, "videoService.getProjectVideoTasks("),
         (video_page, "videoService.clearProjectVideoTasks("),
+        (project_hub, "import { apiJson } from '../services/httpClient'"),
+        (project_hub, "apiJson<any>(`/api/projects?"),
+        (episode_hub, "import { apiJson } from '../services/httpClient'"),
+        (episode_hub, "apiJson<any>(`/api/projects/${projectId}/episodes`"),
     ]
     forbidden_snippets = [
         "function getHeaders",
@@ -2626,6 +2636,16 @@ def check_frontend_http_client_contract(root: Path) -> int:
         for snippet in forbidden_snippets:
             if snippet in text:
                 fail(f"Frontend service has duplicated request/auth logic in {path.relative_to(root)}: {snippet}")
+            checks += 1
+
+    for path in migrated_pages:
+        text = path.read_text(encoding="utf-8")
+        if "../services/httpClient" not in text:
+            fail(f"Frontend page must use shared httpClient: {path.relative_to(root)}")
+        checks += 1
+        for snippet in ["getHeaders(", "Authorization:", "'Authorization'", '"Authorization"', "Bearer ", "handleResponse", "fetch("]:
+            if snippet in text:
+                fail(f"Frontend page has duplicated request/auth logic in {path.relative_to(root)}: {snippet}")
             checks += 1
 
     video_page_text = video_page.read_text(encoding="utf-8")

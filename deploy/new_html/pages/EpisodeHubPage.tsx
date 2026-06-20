@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, LogOut, Pencil, Copy } from 'lucide-react';
-import { getHeaders } from '../services/apiService';
+import { apiJson } from '../services/httpClient';
 import type { Episode } from '../types';
-
-const API_BASE = '';
 
 export const EpisodeHubPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -22,17 +20,13 @@ export const EpisodeHubPage: React.FC = () => {
     if (!projectId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/episodes`, {
-        headers: getHeaders()
-      });
-      const data = await res.json();
+      const data = await apiJson<any>(`/api/projects/${projectId}/episodes`, {}, '分集列表');
       if (data.success) {
         setEpisodes((data.episodes || []).map((ep: any) => ({
           episodeId: ep.episode_id,
           projectId: ep.project_id,
           episodeNumber: ep.episode_number,
           episodeName: ep.episode_name,
-          title: ep.episode_name,
           description: ep.description || '',
           status: ep.status || 'draft',
           settings: ep.settings || {},
@@ -53,12 +47,10 @@ export const EpisodeHubPage: React.FC = () => {
   const createEpisode = async () => {
     if (!newTitle.trim() || !projectId) return;
     try {
-      const res = await fetch(`${API_BASE}/api/projects/${projectId}/episodes`, {
+      const data = await apiJson<any>(`/api/projects/${projectId}/episodes`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ episode_name: newTitle })
-      });
-      const data = await res.json();
+      }, '创建分集');
       if (data.success) {
         setNewTitle('');
         setShowCreate(false);
@@ -72,11 +64,9 @@ export const EpisodeHubPage: React.FC = () => {
   const deleteEpisode = async (episodeId: string) => {
     if (!confirm('确定要删除此分集吗？')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/episodes/${episodeId}`, {
+      const data = await apiJson<any>(`/api/episodes/${episodeId}`, {
         method: 'DELETE',
-        headers: getHeaders()
-      });
-      const data = await res.json();
+      }, '删除分集');
       if (data.success) loadEpisodes();
     } catch (e) {
       console.error('Failed to delete episode:', e);
@@ -91,11 +81,9 @@ export const EpisodeHubPage: React.FC = () => {
     if (duplicatingId) return;
     setDuplicatingId(episodeId);
     try {
-      const res = await fetch(`${API_BASE}/api/episodes/${episodeId}/duplicate`, {
+      const data = await apiJson<any>(`/api/episodes/${episodeId}/duplicate`, {
         method: 'POST',
-        headers: getHeaders()
-      });
-      const data = await res.json();
+      }, '复制分集');
       if (data.success) {
         await loadEpisodes();
       } else {
@@ -111,19 +99,17 @@ export const EpisodeHubPage: React.FC = () => {
 
   const startRename = (ep: Episode) => {
     setEditingId(ep.episodeId);
-    setEditingName(ep.title || ep.episodeName || '');
+    setEditingName(ep.episodeName || '');
     setMenuOpen(null);
   };
 
   const submitRename = async () => {
     if (!editingId || !editingName.trim()) { setEditingId(null); return; }
     try {
-      const res = await fetch(`${API_BASE}/api/episodes/${editingId}`, {
+      const data = await apiJson<any>(`/api/episodes/${editingId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify({ episode_name: editingName.trim() })
-      });
-      const data = await res.json();
+      }, '重命名分集');
       if (data.success) loadEpisodes();
     } catch (e) {
       console.error('Failed to rename episode:', e);
@@ -141,8 +127,9 @@ export const EpisodeHubPage: React.FC = () => {
 
   const statusColors: Record<string, string> = {
     draft: 'bg-n30 text-n700',
-    'in-progress': 'bg-primary-light text-primary',
+    in_progress: 'bg-primary-light text-primary',
     completed: 'bg-n30 text-success',
+    published: 'bg-g50 text-g400',
   };
 
   return (
@@ -242,7 +229,7 @@ export const EpisodeHubPage: React.FC = () => {
                           #{(ep.sortOrder ?? 0) + 1}
                         </span>
                         <span className={`text-xs px-2 py-0.5 rounded ${statusColors[ep.status] || statusColors.draft}`}>
-                          {ep.status === 'draft' ? '草稿' : ep.status === 'in-progress' ? '制作中' : ep.status === 'completed' ? '已完成' : ep.status}
+                          {ep.status === 'draft' ? '草稿' : ep.status === 'in_progress' ? '制作中' : ep.status === 'completed' ? '已完成' : ep.status === 'published' ? '已发布' : ep.status}
                         </span>
                       </div>
                       {editingId === ep.episodeId ? (
@@ -255,7 +242,7 @@ export const EpisodeHubPage: React.FC = () => {
                           className="w-full text-base font-semibold text-n800 bg-n0 border border-primary rounded px-2 py-0.5 focus:outline-none"
                         />
                       ) : (
-                        <h3 className="text-base font-semibold text-n800 truncate">{ep.title || '未命名分集'}</h3>
+                        <h3 className="text-base font-semibold text-n800 truncate">{ep.episodeName || '未命名分集'}</h3>
                       )}
                     </div>
                     <div className="relative">

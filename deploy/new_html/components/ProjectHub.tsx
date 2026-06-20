@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Archive, Trash2, Users, Clock, Tag, FolderOpen, MoreVertical, Star, ChevronDown, Share2 } from 'lucide-react';
-import { getHeaders } from '../services/apiService';
+import { apiJson } from '../services/httpClient';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import ShareResourceDialog from './ShareResourceDialog';
 import { createShare } from '../services/shareService';
 import type { ProjectInfo } from '../types';
 import { crmMessage, crmConfirm } from '../admin/crmUI';
-
-const API_BASE = '';
 
 type SortKey = 'updated' | 'created' | 'name';
 
@@ -41,10 +39,7 @@ const ProjectHub: React.FC = () => {
         try {
             const qs = new URLSearchParams({ include_archived: String(showArchived) });
             if (orgId) qs.set('org_id', orgId);
-            const res = await fetch(`${API_BASE}/api/projects?${qs.toString()}`, {
-                headers: getHeaders()
-            });
-            const data = await res.json();
+            const data = await apiJson<any>(`/api/projects?${qs.toString()}`, {}, '项目列表');
             if (data.success) {
                 setProjects(data.projects.map((p: any) => ({
                     projectId: p.project_id,
@@ -95,16 +90,14 @@ const ProjectHub: React.FC = () => {
     const handleCreate = async () => {
         if (!newProjectName.trim()) return;
         try {
-            const res = await fetch(`${API_BASE}/api/projects`, {
+            const data = await apiJson<any>('/api/projects', {
                 method: 'POST',
-                headers: getHeaders(),
                 body: JSON.stringify({
                     project_name: newProjectName,
                     description: newProjectDesc,
                     visibility: newProjectVisibility,
                 })
-            });
-            const data = await res.json();
+            }, '创建项目');
             if (data.success) {
                 const createdProjectId = data.project?.project_id;
                 // 2026-05-26 组织管理 MVP — Slice 5
@@ -142,10 +135,9 @@ const ProjectHub: React.FC = () => {
             : `确定删除空项目「${name}」？（无集内容）此操作不可撤销。`;
         if (!await crmConfirm({ title: epCount > 0 ? '⚠️ 删除有内容的项目' : '删除空项目', message, type: 'danger', confirmText: epCount > 0 ? `仍要删除（含${epCount}集）` : '删除' })) return;
         try {
-            await fetch(`${API_BASE}/api/projects/${projectId}`, {
+            await apiJson(`/api/projects/${projectId}`, {
                 method: 'DELETE',
-                headers: getHeaders()
-            });
+            }, '删除项目');
             crmMessage.success('已删除');
             loadProjects();
         } catch (e) {
@@ -157,15 +149,9 @@ const ProjectHub: React.FC = () => {
     const handleArchive = async (projectId: string) => {
         setContextMenu(null);
         try {
-            const res = await fetch(`${API_BASE}/api/projects/${projectId}/archive`, {
+            await apiJson(`/api/projects/${projectId}/archive`, {
                 method: 'POST',
-                headers: getHeaders()
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                crmMessage.error(`归档失败: ${err.detail || res.statusText}`);
-                return;
-            }
+            }, '归档项目');
             crmMessage.success('已归档');
             loadProjects();
         } catch (e) {
@@ -177,15 +163,9 @@ const ProjectHub: React.FC = () => {
     const handleUnarchive = async (projectId: string) => {
         setContextMenu(null);
         try {
-            const res = await fetch(`${API_BASE}/api/projects/${projectId}/unarchive`, {
+            await apiJson(`/api/projects/${projectId}/unarchive`, {
                 method: 'POST',
-                headers: getHeaders()
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                crmMessage.error(`取消归档失败: ${err.detail || res.statusText}`);
-                return;
-            }
+            }, '取消归档项目');
             crmMessage.success('已取消归档');
             loadProjects();
         } catch (e) {
