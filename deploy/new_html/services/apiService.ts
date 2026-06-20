@@ -335,86 +335,58 @@ export async function deleteEpisode(episodeId: string) {
 // ==================== 画布 API ====================
 
 export async function createCanvasBoard(projectId: string, name = '未命名画布', description = '') {
-    const response = await fetch(`${API_BASE}/api/canvas/boards`, {
+    return apiJson('/api/canvas/boards', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ project_id: projectId, name, description })
-    });
-    return handleResponse(response, 'createCanvasBoard');
+    }, 'createCanvasBoard');
 }
 
 export async function getCanvasBoards(projectId: string) {
-    const response = await fetch(`${API_BASE}/api/canvas/boards?project_id=${projectId}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getCanvasBoards');
+    return apiJson(`/api/canvas/boards?project_id=${projectId}`, { method: 'GET' }, 'getCanvasBoards');
 }
 
 export async function getCanvasBoardDetail(boardId: string) {
-    const response = await fetch(`${API_BASE}/api/canvas/boards/${boardId}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getCanvasBoardDetail');
+    return apiJson(`/api/canvas/boards/${boardId}`, { method: 'GET' }, 'getCanvasBoardDetail');
 }
 
 export async function updateCanvasBoard(boardId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/canvas/boards/${boardId}`, {
+    return apiJson(`/api/canvas/boards/${boardId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateCanvasBoard');
+    }, 'updateCanvasBoard');
 }
 
 export async function deleteCanvasBoard(boardId: string) {
-    const response = await fetch(`${API_BASE}/api/canvas/boards/${boardId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteCanvasBoard');
+    return apiJson(`/api/canvas/boards/${boardId}`, { method: 'DELETE' }, 'deleteCanvasBoard');
 }
 
 export async function createCanvasNode(boardId: string, nodeType: string, x = 0, y = 0, data?: any) {
-    const response = await fetch(`${API_BASE}/api/canvas/nodes`, {
+    return apiJson('/api/canvas/nodes', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ board_id: boardId, node_type: nodeType, x, y, data })
-    });
-    return handleResponse(response, 'createCanvasNode');
+    }, 'createCanvasNode');
 }
 
 export async function updateCanvasNode(nodeId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/canvas/nodes/${nodeId}`, {
+    return apiJson(`/api/canvas/nodes/${nodeId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateCanvasNode');
+    }, 'updateCanvasNode');
 }
 
 export async function deleteCanvasNode(nodeId: string) {
-    const response = await fetch(`${API_BASE}/api/canvas/nodes/${nodeId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteCanvasNode');
+    return apiJson(`/api/canvas/nodes/${nodeId}`, { method: 'DELETE' }, 'deleteCanvasNode');
 }
 
 export async function createCanvasConnection(boardId: string, sourceNodeId: string, targetNodeId: string) {
-    const response = await fetch(`${API_BASE}/api/canvas/connections`, {
+    return apiJson('/api/canvas/connections', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ board_id: boardId, source_node_id: sourceNodeId, target_node_id: targetNodeId })
-    });
-    return handleResponse(response, 'createCanvasConnection');
+    }, 'createCanvasConnection');
 }
 
 export async function deleteCanvasConnection(connectionId: string) {
-    const response = await fetch(`${API_BASE}/api/canvas/connections/${connectionId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteCanvasConnection');
+    return apiJson(`/api/canvas/connections/${connectionId}`, { method: 'DELETE' }, 'deleteCanvasConnection');
 }
 
 // ==================== 管理员API ====================

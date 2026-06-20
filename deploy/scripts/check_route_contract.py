@@ -2643,6 +2643,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
         (api_service, "return apiJson('/api/tasks/active'"),
         (api_service, "return apiJson('/api/notifications/unread-count'"),
+        (api_service, "return apiJson('/api/canvas/boards'"),
+        (api_service, "return apiJson(`/api/canvas/boards/${boardId}`"),
+        (api_service, "return apiJson('/api/canvas/nodes'"),
+        (api_service, "return apiJson('/api/canvas/connections'"),
         (video_page, "videoService.secureMediaUrl("),
         (video_page, "videoService.getProjectVideoTasks("),
         (video_page, "videoService.clearProjectVideoTasks("),
@@ -2728,6 +2732,13 @@ def check_frontend_http_client_contract(root: Path) -> int:
         "fetch(`${API_BASE}/api/notifications/${notificationId}/read`",
         "fetch(`${API_BASE}/api/notifications/read-all`",
         "fetch(`${API_BASE}/api/notifications/${notificationId}`",
+        "fetch(`${API_BASE}/api/canvas/boards`",
+        "fetch(`${API_BASE}/api/canvas/boards?project_id=${projectId}`",
+        "fetch(`${API_BASE}/api/canvas/boards/${boardId}`",
+        "fetch(`${API_BASE}/api/canvas/nodes`",
+        "fetch(`${API_BASE}/api/canvas/nodes/${nodeId}`",
+        "fetch(`${API_BASE}/api/canvas/connections`",
+        "fetch(`${API_BASE}/api/canvas/connections/${connectionId}`",
     ]:
         if snippet in api_service_text:
             fail(f"apiService task/notification endpoints must use shared httpClient: {snippet}")

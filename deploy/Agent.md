@@ -4620,6 +4620,29 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend API Service Canvas HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/services/apiService.ts` Canvas API helpers from local `fetch()` / `getHeaders()` calls to shared `apiJson()`:
+  - canvas board create/list/detail/update/delete
+  - canvas node create/update/delete
+  - canvas connection create/delete
+- Extended `scripts/check_route_contract.py` so the migrated Canvas endpoints cannot reintroduce direct `fetch()` calls.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_api_service_canvas_httpclient_20260620141926.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend API Service HTTP Client Core Migration
 
 ### Changes
