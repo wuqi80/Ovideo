@@ -349,6 +349,14 @@ function healthStatusFrom(health?: ProviderHealth, runtime?: RuntimeStatus, conf
     return 'unknown';
 }
 
+function healthStatusFromResult(result?: ProviderHealth): HealthStatus {
+    const status = String(result?.status || '').toLowerCase();
+    if (status === 'ok' || status === 'error' || status === 'no_key') return status;
+    if (result?.health?.auth_ok === true) return 'ok';
+    if (result?.health?.auth_ok === false) return 'error';
+    return 'unknown';
+}
+
 function groupCategory(config: ApiConfig): string {
     const category = String(config.category || '').toLowerCase();
     if (CATEGORY_LABELS[category]) return category;
@@ -1357,7 +1365,7 @@ const ApiConfigPanel: React.FC = () => {
             const result = await apiJson<ProviderHealth>(`/api/admin/api-configs/${encodeURIComponent(provider)}/health`);
             setHealthMap(prev => ({ ...prev, [provider]: result }));
             await loadConfigs({ showLoading: false });
-            const status = healthStatusFrom(result, runtimeMap.get(provider));
+            const status = healthStatusFromResult(result);
             if (status === 'ok') {
                 crmMessage.success(`${provider} 连接正常 (${result.latency_ms ?? '-'} ms)`);
             } else if (status === 'no_key') {
@@ -1370,7 +1378,7 @@ const ApiConfigPanel: React.FC = () => {
         } finally {
             setChecking(prev => ({ ...prev, [provider]: false }));
         }
-    }, [loadConfigs, runtimeMap]);
+    }, [loadConfigs]);
 
     const testConfig = useCallback(async (config: ApiConfig) => {
         const configId = config.config_id;

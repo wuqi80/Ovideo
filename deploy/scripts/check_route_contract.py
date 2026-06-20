@@ -3083,6 +3083,34 @@ def check_frontend_lazy_video_contract(root: Path) -> int:
     return checks
 
 
+def check_live_deploy_frontend_contract(root: Path) -> int:
+    """Production deploy script must ship and build the Vite frontend."""
+    script_path = root / "scripts" / "live_deploy_mvc2.sh"
+    text = script_path.read_text(encoding="utf-8")
+    required_snippets = [
+        "new_html-src.tgz",
+        "--exclude='new_html/node_modules'",
+        "--exclude='new_html/.env'",
+        "dist.bak.",
+        "npm run build",
+        "tar -xzf '$FRONTEND_TAR_REMOTE' -C '$REMOTE_DIR'",
+    ]
+    forbidden_snippets = [
+        "new_html/node_modules\"",
+        "new_html/.env\"",
+    ]
+    checks = 0
+    for snippet in required_snippets:
+        if snippet not in text:
+            fail(f"Missing frontend deploy contract snippet in {script_path.relative_to(root)}: {snippet}")
+        checks += 1
+    for snippet in forbidden_snippets:
+        if snippet in text:
+            fail(f"Forbidden frontend deploy secret/dependency upload in {script_path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -3126,6 +3154,7 @@ def main() -> int:
     frontend_http_client_checks = check_frontend_http_client_contract(root)
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
+    live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -3181,6 +3210,7 @@ def main() -> int:
     print(f"  frontend_http_client_checks={frontend_http_client_checks}")
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
+    print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

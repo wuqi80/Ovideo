@@ -5233,3 +5233,25 @@
   - `storyboard_paged_reload_checks=5`
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
 - Frontend Vitest run is blocked locally by the existing missing optional Rollup package `@rollup/rollup-win32-x64-msvc`.
+
+## 2026-06-20 Frontend-Aware Live Deploy and API Health UX
+
+### Changes
+
+- Updated `scripts/live_deploy_mvc2.sh` so live deployment also ships `new_html` source, excludes local `.env*` and `node_modules`, builds Vite on the server, and backs up/restores `dist`.
+- Added `live_deploy_frontend_checks` to `scripts/check_route_contract.py` so the frontend build path cannot be silently removed from the live deploy script.
+- Adjusted `AdminSettingsPage.tsx` provider health test feedback to use the fresh health endpoint result directly instead of a stale `runtimeMap` snapshot.
+
+### Verification
+
+- Deployed the frontend-aware script to `https://mecha.one`; remote Vite build completed and `drama.service` stayed `active`.
+- Remote smoke test passed:
+  - `/tmp/smoke_test.py https://mecha.one <service ADMIN_PASSWORD>` -> `9/9`
+- Remote API health spot-check:
+  - `gemini-text` -> `ok`, HTTP 200
+  - `laozhang-gpt-image` -> `no_key` (expected until a key is configured)
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `live_deploy_frontend_checks=8`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
