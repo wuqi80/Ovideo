@@ -42,65 +42,6 @@ def create_entity_files_router(
     class HardDeleteBatchRequest(BaseModel):
         file_ids: List[str]
 
-    async def _sync_legacy_url(entity_type: str, entity_id: str, file_role: str, url: str):
-        """Keep legacy URL columns in sync with selected entity files."""
-        db = get_db_manager_func()
-        if not db:
-            return
-        try:
-            if entity_type == "storyboard_item":
-                field_map = {
-                    "generated_image": "generated_image_url",
-                    "dialogue_audio": "dialogue_audio_url",
-                    "narration_audio": "narration_audio_url",
-                    "sfx": "sfx_audio_url",
-                }
-                col = field_map.get(file_role)
-                if col:
-                    await db.execute(
-                        f"UPDATE storyboard_items SET {col} = $1 WHERE item_id = $2",
-                        url,
-                        entity_id,
-                    )
-            elif entity_type == "asset":
-                if file_role == "asset_thumbnail":
-                    await db.execute(
-                        "UPDATE assets SET thumbnail_url = $1 WHERE asset_id = $2",
-                        url,
-                        entity_id,
-                    )
-                elif file_role == "reference_image":
-                    row = await db.fetchrow(
-                        "SELECT reference_images FROM assets WHERE asset_id = $1",
-                        entity_id,
-                    )
-                    if row:
-                        existing = row.get("reference_images") or []
-                        if isinstance(existing, str):
-                            existing = json.loads(existing) if existing else []
-                        if url not in existing:
-                            existing.append(url)
-                            await db.execute(
-                                "UPDATE assets SET reference_images = $1::jsonb WHERE asset_id = $2",
-                                json.dumps(existing, ensure_ascii=False),
-                                entity_id,
-                            )
-            elif entity_type == "video_segment":
-                if file_role == "video":
-                    await db.execute(
-                        "UPDATE video_segments SET video_url = $1 WHERE segment_id = $2",
-                        url,
-                        entity_id,
-                    )
-                elif file_role == "video_thumbnail":
-                    await db.execute(
-                        "UPDATE video_segments SET thumbnail_url = $1 WHERE segment_id = $2",
-                        url,
-                        entity_id,
-                    )
-        except Exception as exc:
-            logger.warning("同步旧URL字段失败: %s", exc)
-
     @router.get("/api/user-files")
     async def get_user_files(
         file_type: Optional[str] = None,
@@ -180,7 +121,10 @@ def create_entity_files_router(
         if not row:
             raise HTTPException(404, "文件不存在或不属于指定实体")
 
-        await _sync_legacy_url(req.entity_type, req.entity_id, req.file_role, row["file_url"])
+        try:
+            await EntityFileDAO.sync_legacy_url(req.entity_type, req.entity_id, req.file_role, row["file_url"])
+        except Exception as exc:
+            logger.warning("同步旧URL字段失败: %s", exc)
         return {"success": True, "file": row}
 
     @router.post("/api/entity-files/upload")

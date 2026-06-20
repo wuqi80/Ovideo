@@ -147,6 +147,7 @@ class FileService:
 # 统一数据层: 通用文件保存入口（复用 dao_content.FileDAO.create_file）
 # ---------------------------------------------------------------------------
 from dao_content import FileDAO as ContentFileDAO
+from dao_entity_file import EntityFileDAO
 
 
 async def save_generated_file_to_db(
@@ -253,50 +254,4 @@ async def save_generated_file_to_db(
 
 async def _sync_legacy_on_file_create(entity_type: str, entity_id: str, file_role: str, file_url: str):
     """文件创建后自动同步旧业务表字段，确保下游页面数据联通。"""
-    import json as _json
-    from db_manager import get_db_manager
-
-    db = get_db_manager()
-    if not db:
-        return
-
-    if entity_type == "asset" and file_role == "reference_image":
-        row = await db.fetchrow(
-            "SELECT reference_images FROM assets WHERE asset_id = $1", entity_id
-        )
-        if row:
-            existing = row.get("reference_images") or []
-            if isinstance(existing, str):
-                existing = _json.loads(existing) if existing else []
-            if file_url not in existing:
-                existing.append(file_url)
-                await db.execute(
-                    "UPDATE assets SET reference_images = $1::jsonb WHERE asset_id = $2",
-                    _json.dumps(existing, ensure_ascii=False), entity_id,
-                )
-
-    elif entity_type == "storyboard_item":
-        field_map = {
-            "generated_image": "generated_image_url",
-            "dialogue_audio": "dialogue_audio_url",
-            "narration_audio": "narration_audio_url",
-            "sfx": "sfx_audio_url",
-        }
-        col = field_map.get(file_role)
-        if col:
-            await db.execute(
-                f"UPDATE storyboard_items SET {col} = $1 WHERE item_id = $2",
-                file_url, entity_id,
-            )
-
-    elif entity_type == "video_segment":
-        if file_role == "video":
-            await db.execute(
-                "UPDATE video_segments SET video_url = $1 WHERE segment_id = $2",
-                file_url, entity_id,
-            )
-        elif file_role == "video_thumbnail":
-            await db.execute(
-                "UPDATE video_segments SET thumbnail_url = $1 WHERE segment_id = $2",
-                file_url, entity_id,
-            )
+    await EntityFileDAO.sync_legacy_url(entity_type, entity_id, file_role, file_url)

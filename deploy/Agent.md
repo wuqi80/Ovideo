@@ -4682,3 +4682,36 @@
 ### Notes
 
 - `AdminFeatureTabs.tsx` still has a separate admin-session-token helper and should be migrated carefully with the `/admin` login/session split in mind.
+
+### Verification
+
+- Local checks passed:
+  - targeted TypeScript check for `HistoryPage.tsx` and `httpClient.ts`
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_history_header_httpclient_20260620121626.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
+## 2026-06-20 Mapper Purity Audit And Entity File Legacy Sync
+
+### Changes
+
+- Audited direct SQL in `services/`:
+  - `services/file_service.py` had direct legacy URL sync SQL.
+  - `services/credit_service.py` still has direct row-lock SQL for credit account transactions.
+- Moved entity-file legacy URL sync into `dao/content/entity_file.py`:
+  - new `EntityFileDAO.sync_legacy_url(entity_type, entity_id, file_role, file_url)`.
+  - `services/file_service.py` now calls the DAO method instead of writing SQL.
+  - `routers/entity_files.py` now calls the DAO method instead of maintaining a duplicated route-local SQL helper.
+- Extended `scripts/check_route_contract.py`:
+  - prevents direct SQL/connection operations from reappearing in `services/` outside the tracked `credit_service.py` exception.
+  - checks that file-service and entity-file route legacy sync go through `EntityFileDAO.sync_legacy_url()`.
+
+### Remaining Gap
+
+- `services/credit_service.py` remains the only direct-SQL service found by the audit. It needs a dedicated transaction-oriented DAO design because it currently owns `SELECT ... FOR UPDATE` account balance transitions.

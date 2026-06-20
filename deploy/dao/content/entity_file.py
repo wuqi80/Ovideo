@@ -68,6 +68,77 @@ class EntityFileDAO:
         return dict(row) if row else None
 
     @staticmethod
+    async def sync_legacy_url(entity_type: str, entity_id: str, file_role: str, file_url: str) -> bool:
+        """Keep legacy entity URL columns in sync after linking or saving files."""
+        db = get_db_manager()
+        if not db:
+            return False
+
+        if entity_type == "storyboard_item":
+            field_map = {
+                "generated_image": "generated_image_url",
+                "dialogue_audio": "dialogue_audio_url",
+                "narration_audio": "narration_audio_url",
+                "sfx": "sfx_audio_url",
+            }
+            col = field_map.get(file_role)
+            if not col:
+                return False
+            result = await db.execute(
+                f"UPDATE storyboard_items SET {col} = $1 WHERE item_id = $2",
+                file_url,
+                entity_id,
+            )
+            return result == "UPDATE 1"
+
+        if entity_type == "asset":
+            if file_role == "asset_thumbnail":
+                result = await db.execute(
+                    "UPDATE assets SET thumbnail_url = $1 WHERE asset_id = $2",
+                    file_url,
+                    entity_id,
+                )
+                return result == "UPDATE 1"
+
+            if file_role == "reference_image":
+                row = await db.fetchrow(
+                    "SELECT reference_images FROM assets WHERE asset_id = $1",
+                    entity_id,
+                )
+                if not row:
+                    return False
+                existing = row.get("reference_images") or []
+                if isinstance(existing, str):
+                    existing = json.loads(existing) if existing else []
+                if file_url in existing:
+                    return True
+                existing.append(file_url)
+                result = await db.execute(
+                    "UPDATE assets SET reference_images = $1::jsonb WHERE asset_id = $2",
+                    json.dumps(existing, ensure_ascii=False),
+                    entity_id,
+                )
+                return result == "UPDATE 1"
+
+        if entity_type == "video_segment":
+            if file_role == "video":
+                result = await db.execute(
+                    "UPDATE video_segments SET video_url = $1 WHERE segment_id = $2",
+                    file_url,
+                    entity_id,
+                )
+                return result == "UPDATE 1"
+            if file_role == "video_thumbnail":
+                result = await db.execute(
+                    "UPDATE video_segments SET thumbnail_url = $1 WHERE segment_id = $2",
+                    file_url,
+                    entity_id,
+                )
+                return result == "UPDATE 1"
+
+        return False
+
+    @staticmethod
     async def select_file(
         file_id: str,
         entity_type: str,

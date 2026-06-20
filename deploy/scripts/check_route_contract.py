@@ -2674,6 +2674,47 @@ def check_frontend_http_client_contract(root: Path) -> int:
     return checks
 
 
+def check_service_mapper_purity_contract(root: Path) -> int:
+    """Service layer should not grow new direct SQL outside tracked transaction exceptions."""
+    allowed_direct_sql = {
+        root / "services" / "credit_service.py",
+    }
+    service_root = root / "services"
+    forbidden_snippets = [
+        "SELECT ",
+        "INSERT ",
+        "UPDATE ",
+        "DELETE ",
+        "conn.fetch",
+        "conn.execute",
+        "pool.acquire(",
+    ]
+    violations: list[str] = []
+    checks = 0
+    for path in service_root.rglob("*.py"):
+        if path in allowed_direct_sql:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for snippet in forbidden_snippets:
+            if snippet in text:
+                violations.append(f"{path.relative_to(root)} contains direct DB operation: {snippet}")
+            checks += 1
+
+    required_snippets = [
+        (root / "dao" / "content" / "entity_file.py", "async def sync_legacy_url("),
+        (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
+        (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
+    ]
+    for path, snippet in required_snippets:
+        if snippet not in path.read_text(encoding="utf-8"):
+            violations.append(f"Missing mapper purity snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+
+    if violations:
+        fail("Service mapper purity contract failed:\n" + "\n".join(violations))
+    return checks
+
+
 def check_frontend_lazy_video_contract(root: Path) -> int:
     lazy_video = root / "new_html" / "components" / "LazyVideo.tsx"
     video_page = root / "new_html" / "components" / "VideoPage.tsx"
@@ -2758,6 +2799,7 @@ def main() -> int:
     api_provider_runtime_model_checks = check_api_provider_runtime_model_contract(root)
     frontend_ai_proxy_checks = check_frontend_ai_proxy_contract(root)
     frontend_http_client_checks = check_frontend_http_client_contract(root)
+    service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
@@ -2812,6 +2854,7 @@ def main() -> int:
     print(f"  api_provider_runtime_model_checks={api_provider_runtime_model_checks}")
     print(f"  frontend_ai_proxy_checks={frontend_ai_proxy_checks}")
     print(f"  frontend_http_client_checks={frontend_http_client_checks}")
+    print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
