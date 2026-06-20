@@ -22,8 +22,9 @@ import {
     Timer,
     Trash2,
 } from 'lucide-react';
-import { getAdminToken, pickTokenForCurrentRoute, setAdminPostLoginRedirect } from './adminAuth';
+import { getAdminToken, setAdminPostLoginRedirect } from './adminAuth';
 import { crmConfirm, crmMessage } from './crmUI';
+import { apiJson } from '../services/httpClient';
 
 const LEGACY_VER = '20260619c';
 const LEGACY_API_CONFIG_ROUTE = '/admin-legacy/?page=apiconfig';
@@ -290,28 +291,6 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 function normalizeProvider(provider: string | undefined | null): string {
     return String(provider || '').trim().toLowerCase();
-}
-
-function getHeaders(): HeadersInit {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = pickTokenForCurrentRoute();
-    if (token) headers.Authorization = `Bearer ${token}`;
-    return headers;
-}
-
-async function apiJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            ...getHeaders(),
-            ...(options.headers || {}),
-        },
-    });
-    if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        throw new Error(`${response.status}${detail ? `: ${detail.slice(0, 240)}` : ''}`);
-    }
-    return response.json();
 }
 
 function formatEndpoint(endpoint?: string): string {

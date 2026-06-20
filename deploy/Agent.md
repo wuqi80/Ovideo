@@ -4665,6 +4665,27 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend Admin Settings HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/admin/AdminSettingsPage.tsx` API-management requests from a local `getHeaders()` + `fetch()` wrapper to shared `apiJson()`.
+- Removed direct dependency on `pickTokenForCurrentRoute()` from the settings page; `/admin` token selection now flows through shared `httpClient` / `apiService`.
+- Extended `scripts/check_route_contract.py` so the API configuration page cannot reintroduce page-local `fetch()` / Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_admin_settings_httpclient_20260620130937.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend Admin Hub HTTP Client Migration
 
 ### Changes
