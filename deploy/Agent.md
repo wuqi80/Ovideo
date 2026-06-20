@@ -4712,6 +4712,38 @@
   - prevents direct SQL/connection operations from reappearing in `services/` outside the tracked `credit_service.py` exception.
   - checks that file-service and entity-file route legacy sync go through `EntityFileDAO.sync_legacy_url()`.
 
-### Remaining Gap
+### Follow-Up
 
-- `services/credit_service.py` remains the only direct-SQL service found by the audit. It needs a dedicated transaction-oriented DAO design because it currently owns `SELECT ... FOR UPDATE` account balance transitions.
+- The next section closes the `services/credit_service.py` direct-SQL exception with a transaction-oriented DAO design.
+
+## 2026-06-20 Credit Ledger Mapper Purity
+
+### Changes
+
+- Closed the remaining direct-SQL service gap in `services/credit_service.py`.
+- Added transaction-oriented ledger methods in `dao/business/credit.py`:
+  - `CreditLedgerDAO.freeze_credits()`
+  - `CreditLedgerDAO.confirm_task_freeze()`
+  - `CreditLedgerDAO.release_task_freeze()`
+  - `CreditLedgerDAO.admin_adjust_account()`
+- Moved account row-locking, freeze records, and transaction ledger writes into DAO-managed transactions.
+- Rewrote `services/credit_service.py` so it only handles cost calculation, public API shape, logging, and DAO error translation.
+- Tightened `scripts/check_route_contract.py`:
+  - `services/credit_service.py` is no longer an allowed direct-SQL exception.
+  - the route contract now asserts the new credit ledger DAO methods exist and are used by the service layer.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile deploy/dao/business/credit.py deploy/services/credit_service.py deploy/scripts/check_route_contract.py`
+  - service direct-SQL scan -> clean
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/credit_ledger_mapper_20260620043627.tgz`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python -m py_compile dao/business/credit.py services/credit_service.py scripts/check_route_contract.py`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - temporary credit ledger probe -> `credit_ledger_mapper_smoke_ok` and cleanup completed

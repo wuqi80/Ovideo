@@ -13,9 +13,27 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
+import asyncpg
+
 from db_manager import get_db_manager
 
 logger = logging.getLogger(__name__)
+
+
+class CreditDAOError(Exception):
+    """Base error for credit persistence operations."""
+
+
+class InsufficientCreditBalance(CreditDAOError):
+    """Raised when a locked account cannot cover a debit/freeze."""
+
+
+class CreditAccountNotFound(CreditDAOError):
+    """Raised when an account-scoped credit operation cannot find the account."""
+
+
+class CreditFreezeNotFound(CreditDAOError):
+    """Raised when a task has no active credit freeze to settle/release."""
 
 
 def _coerce_jsonb(value: Any) -> Any:
@@ -39,6 +57,126 @@ def _normalize(row: Optional[Dict[str, Any]], json_fields: tuple = ('factors', '
         if k in out:
             out[k] = _coerce_jsonb(out[k])
     return out
+
+
+async def _get_or_create_account_for_update(conn, owner_type: str, owner_id: str) -> Dict[str, Any]:
+    row = await conn.fetchrow(
+        """
+        SELECT * FROM credit_accounts
+        WHERE owner_type = $1 AND owner_id = $2
+        FOR UPDATE
+        """,
+        owner_type,
+        owner_id,
+    )
+    if not row:
+        account_id = f"acct_{uuid.uuid4().hex[:16]}"
+        await conn.fetchrow(
+            """
+            INSERT INTO credit_accounts (account_id, owner_type, owner_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (owner_type, owner_id) DO UPDATE
+              SET updated_at = CURRENT_TIMESTAMP
+            RETURNING account_id
+            """,
+            account_id,
+            owner_type,
+            owner_id,
+        )
+        row = await conn.fetchrow(
+            """
+            SELECT * FROM credit_accounts
+            WHERE owner_type = $1 AND owner_id = $2
+            FOR UPDATE
+            """,
+            owner_type,
+            owner_id,
+        )
+    if not row:
+        raise CreditAccountNotFound(f"credit account not found: {owner_type}/{owner_id}")
+    return _normalize(row, json_fields=())
+
+
+async def _insert_credit_transaction(
+    conn,
+    account_id: str,
+    change_type: str,
+    amount: int,
+    balance_before: int,
+    balance_after: int,
+    *,
+    user_id: Optional[str] = None,
+    team_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    feature_key: Optional[str] = None,
+    rule_version: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    operated_by: Optional[str] = None,
+    operation_reason: Optional[str] = None,
+) -> Dict[str, Any]:
+    txn_id = f"txn_{uuid.uuid4().hex[:16]}"
+    try:
+        # The managed schema includes operated_by/operation_reason. A nested
+        # transaction gives older schemas a savepoint so the fallback does not
+        # poison the outer ledger transaction.
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                INSERT INTO credit_transactions (
+                    transaction_id, account_id, user_id, team_id, project_id,
+                    task_id, feature_key, change_type, amount,
+                    balance_before, balance_after, rule_version, metadata,
+                    operated_by, operation_reason
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15)
+                RETURNING *
+                """,
+                txn_id,
+                account_id,
+                user_id,
+                team_id,
+                project_id,
+                task_id,
+                feature_key,
+                change_type,
+                amount,
+                balance_before,
+                balance_after,
+                rule_version,
+                json.dumps(metadata or {}),
+                operated_by,
+                operation_reason,
+            )
+    except asyncpg.UndefinedColumnError:
+        meta = dict(metadata or {})
+        if operated_by:
+            meta['operated_by'] = operated_by
+        if operation_reason:
+            meta['operation_reason'] = operation_reason
+        row = await conn.fetchrow(
+            """
+            INSERT INTO credit_transactions (
+                transaction_id, account_id, user_id, team_id, project_id,
+                task_id, feature_key, change_type, amount,
+                balance_before, balance_after, rule_version, metadata
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)
+            RETURNING *
+            """,
+            txn_id,
+            account_id,
+            user_id,
+            team_id,
+            project_id,
+            task_id,
+            feature_key,
+            change_type,
+            amount,
+            balance_before,
+            balance_after,
+            rule_version,
+            json.dumps(meta),
+        )
+    return _normalize(row, json_fields=('metadata',))
 
 
 # ============================================
@@ -140,6 +278,357 @@ class CreditAccountDAO:
                 limit, offset,
             )
             return [_normalize(r, json_fields=()) for r in rows]
+
+
+# ============================================
+# CreditLedgerDAO
+# ============================================
+class CreditLedgerDAO:
+    """Transactional credit ledger operations across account/freeze/transaction tables."""
+
+    @staticmethod
+    async def freeze_credits(
+        owner_type: str,
+        owner_id: str,
+        *,
+        feature_key: str,
+        amount: int,
+        task_id: Optional[str] = None,
+        rule_version: Optional[str] = None,
+        project_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        db = get_db_manager()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                account_row = await _get_or_create_account_for_update(conn, owner_type, owner_id)
+                available = int(account_row['available_credits'] or 0)
+                if available < amount:
+                    raise InsufficientCreditBalance(
+                        f"Insufficient credits: need {amount}, available {available}"
+                    )
+
+                balance_before = available
+                balance_after = available - amount
+                updated_account = await conn.fetchrow(
+                    """
+                    UPDATE credit_accounts
+                    SET available_credits = available_credits - $2,
+                        frozen_credits    = frozen_credits + $2,
+                        updated_at        = CURRENT_TIMESTAMP
+                    WHERE account_id = $1
+                    RETURNING *
+                    """,
+                    account_row['account_id'],
+                    amount,
+                )
+
+                freeze_id = f"frz_{uuid.uuid4().hex[:16]}"
+                freeze_row = await conn.fetchrow(
+                    """
+                    INSERT INTO credit_freezes (
+                        freeze_id, account_id, task_id, feature_key, amount, rule_version, status
+                    ) VALUES ($1,$2,$3,$4,$5,$6,'frozen')
+                    RETURNING *
+                    """,
+                    freeze_id,
+                    account_row['account_id'],
+                    task_id,
+                    feature_key,
+                    amount,
+                    rule_version,
+                )
+                transaction_row = await _insert_credit_transaction(
+                    conn,
+                    account_row['account_id'],
+                    change_type='freeze',
+                    amount=amount,
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    user_id=owner_id if owner_type == 'user' else None,
+                    team_id=owner_id if owner_type == 'team' else None,
+                    project_id=project_id,
+                    task_id=task_id,
+                    feature_key=feature_key,
+                    rule_version=rule_version,
+                    metadata=metadata or {},
+                )
+
+        updated_account = _normalize(updated_account, json_fields=())
+        freeze = dict(freeze_row)
+        return {
+            'freeze': freeze,
+            'transaction': transaction_row,
+            'account': updated_account,
+            'freeze_id': freeze['freeze_id'],
+            'account_id': account_row['account_id'],
+            'balance_before': balance_before,
+            'balance_after': balance_after,
+            'frozen_after': int(updated_account['frozen_credits'] or 0),
+        }
+
+    @staticmethod
+    async def confirm_task_freeze(
+        task_id: str,
+        final_amount: int,
+        *,
+        operator: Optional[str] = None,
+        project_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        db = get_db_manager()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                freeze_row = await conn.fetchrow(
+                    """
+                    SELECT * FROM credit_freezes
+                    WHERE task_id = $1 AND status = 'frozen'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    task_id,
+                )
+                if not freeze_row:
+                    raise CreditFreezeNotFound(f"No active credit freeze for task_id={task_id}")
+
+                freeze = dict(freeze_row)
+                account_id = freeze['account_id']
+                frozen_amount = int(freeze['amount'] or 0)
+                if final_amount > frozen_amount:
+                    raise CreditDAOError(
+                        f"Final credit amount {final_amount} exceeds frozen amount {frozen_amount}"
+                    )
+                refund = frozen_amount - final_amount
+
+                account_row = await conn.fetchrow(
+                    "SELECT * FROM credit_accounts WHERE account_id = $1 FOR UPDATE",
+                    account_id,
+                )
+                if not account_row:
+                    raise CreditAccountNotFound(f"credit account not found: {account_id}")
+                balance_before = int(account_row['available_credits'] or 0)
+                updated_account = await conn.fetchrow(
+                    """
+                    UPDATE credit_accounts
+                    SET available_credits = available_credits + $2,
+                        frozen_credits    = frozen_credits - $3,
+                        total_used_credits = total_used_credits + $4,
+                        updated_at        = CURRENT_TIMESTAMP
+                    WHERE account_id = $1
+                    RETURNING *
+                    """,
+                    account_id,
+                    refund,
+                    frozen_amount,
+                    final_amount,
+                )
+                balance_after = balance_before + refund
+
+                await conn.execute(
+                    """
+                    UPDATE credit_freezes
+                    SET status = 'settled', released_at = CURRENT_TIMESTAMP
+                    WHERE freeze_id = $1
+                    """,
+                    freeze['freeze_id'],
+                )
+
+                release_txn = None
+                consume_txn = None
+                if refund > 0:
+                    release_txn = await _insert_credit_transaction(
+                        conn,
+                        account_id,
+                        change_type='release',
+                        amount=refund,
+                        balance_before=balance_before,
+                        balance_after=balance_after,
+                        user_id=account_row['owner_id'] if account_row['owner_type'] == 'user' else None,
+                        project_id=project_id,
+                        task_id=task_id,
+                        feature_key=freeze.get('feature_key'),
+                        rule_version=freeze.get('rule_version'),
+                        metadata=metadata or {},
+                        operated_by=operator,
+                    )
+
+                if final_amount > 0:
+                    consume_txn = await _insert_credit_transaction(
+                        conn,
+                        account_id,
+                        change_type='consume',
+                        amount=final_amount,
+                        balance_before=balance_after,
+                        balance_after=balance_after,
+                        user_id=account_row['owner_id'] if account_row['owner_type'] == 'user' else None,
+                        project_id=project_id,
+                        task_id=task_id,
+                        feature_key=freeze.get('feature_key'),
+                        rule_version=freeze.get('rule_version'),
+                        metadata=metadata or {},
+                        operated_by=operator,
+                    )
+
+        return {
+            'task_id': task_id,
+            'account_id': account_id,
+            'account': _normalize(updated_account, json_fields=()),
+            'freeze': freeze,
+            'release_transaction': release_txn,
+            'consume_transaction': consume_txn,
+            'frozen_amount': frozen_amount,
+            'final_amount': final_amount,
+            'refund': refund,
+            'balance_before': balance_before,
+            'balance_after': balance_after,
+        }
+
+    @staticmethod
+    async def release_task_freeze(
+        task_id: str,
+        *,
+        operator: Optional[str] = None,
+        reason: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                freeze_row = await conn.fetchrow(
+                    """
+                    SELECT * FROM credit_freezes
+                    WHERE task_id = $1 AND status = 'frozen'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    FOR UPDATE
+                    """,
+                    task_id,
+                )
+                if not freeze_row:
+                    return None
+
+                freeze = dict(freeze_row)
+                account_id = freeze['account_id']
+                amount = int(freeze['amount'] or 0)
+                account_row = await conn.fetchrow(
+                    "SELECT * FROM credit_accounts WHERE account_id = $1 FOR UPDATE",
+                    account_id,
+                )
+                if not account_row:
+                    raise CreditAccountNotFound(f"credit account not found: {account_id}")
+                balance_before = int(account_row['available_credits'] or 0)
+                updated_account = await conn.fetchrow(
+                    """
+                    UPDATE credit_accounts
+                    SET available_credits = available_credits + $2,
+                        frozen_credits    = frozen_credits - $2,
+                        updated_at        = CURRENT_TIMESTAMP
+                    WHERE account_id = $1
+                    RETURNING *
+                    """,
+                    account_id,
+                    amount,
+                )
+                balance_after = balance_before + amount
+
+                await conn.execute(
+                    """
+                    UPDATE credit_freezes
+                    SET status = 'released', released_at = CURRENT_TIMESTAMP
+                    WHERE freeze_id = $1
+                    """,
+                    freeze['freeze_id'],
+                )
+
+                transaction_row = await _insert_credit_transaction(
+                    conn,
+                    account_id,
+                    change_type='release',
+                    amount=amount,
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    user_id=account_row['owner_id'] if account_row['owner_type'] == 'user' else None,
+                    project_id=project_id,
+                    task_id=task_id,
+                    feature_key=freeze.get('feature_key'),
+                    rule_version=freeze.get('rule_version'),
+                    metadata={'reason': reason} if reason else {},
+                    operated_by=operator,
+                )
+
+        return {
+            'task_id': task_id,
+            'account_id': account_id,
+            'account': _normalize(updated_account, json_fields=()),
+            'freeze': freeze,
+            'transaction': transaction_row,
+            'amount': amount,
+            'balance_before': balance_before,
+            'balance_after': balance_after,
+        }
+
+    @staticmethod
+    async def admin_adjust_account(
+        account_id: str,
+        *,
+        amount: int,
+        reason: str,
+        operator: str,
+        feature_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        db = get_db_manager()
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                account_row = await conn.fetchrow(
+                    "SELECT * FROM credit_accounts WHERE account_id = $1 FOR UPDATE",
+                    account_id,
+                )
+                if not account_row:
+                    raise CreditAccountNotFound(f"credit account not found: {account_id}")
+
+                balance_before = int(account_row['available_credits'] or 0)
+                balance_after = balance_before + amount
+                if balance_after < 0:
+                    raise InsufficientCreditBalance(
+                        f"Credit adjustment would make balance negative (before={balance_before}, delta={amount})"
+                    )
+
+                updated_account = await conn.fetchrow(
+                    """
+                    UPDATE credit_accounts
+                    SET available_credits = available_credits + $2,
+                        updated_at        = CURRENT_TIMESTAMP
+                    WHERE account_id = $1
+                    RETURNING *
+                    """,
+                    account_id,
+                    amount,
+                )
+
+                change_type = 'admin_credit' if amount > 0 else 'admin_debit'
+                transaction_row = await _insert_credit_transaction(
+                    conn,
+                    account_id,
+                    change_type=change_type,
+                    amount=abs(amount),
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    user_id=account_row['owner_id'] if account_row['owner_type'] == 'user' else None,
+                    feature_key=feature_key,
+                    metadata={'reason': reason},
+                    operated_by=operator,
+                    operation_reason=reason,
+                )
+
+        return {
+            'account_id': account_id,
+            'account': _normalize(updated_account, json_fields=()),
+            'transaction': transaction_row,
+            'amount': amount,
+            'balance_before': balance_before,
+            'balance_after': balance_after,
+        }
 
 
 # ============================================

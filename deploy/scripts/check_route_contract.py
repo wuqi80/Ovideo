@@ -2676,9 +2676,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
 
 def check_service_mapper_purity_contract(root: Path) -> int:
     """Service layer should not grow new direct SQL outside tracked transaction exceptions."""
-    allowed_direct_sql = {
-        root / "services" / "credit_service.py",
-    }
+    allowed_direct_sql: set[Path] = set()
     service_root = root / "services"
     forbidden_snippets = [
         "SELECT ",
@@ -2702,8 +2700,12 @@ def check_service_mapper_purity_contract(root: Path) -> int:
 
     required_snippets = [
         (root / "dao" / "content" / "entity_file.py", "async def sync_legacy_url("),
+        (root / "dao" / "business" / "credit.py", "class CreditLedgerDAO:"),
+        (root / "dao" / "business" / "credit.py", "async def freeze_credits("),
+        (root / "dao" / "business" / "credit.py", "async def confirm_task_freeze("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
+        (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
     ]
     for path, snippet in required_snippets:
         if snippet not in path.read_text(encoding="utf-8"):
