@@ -4620,6 +4620,27 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend Image Loader HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/services/imageLoaderService.ts` from local `fetch()` / `getHeaders()` calls to shared `apiJson()`, `secureApiUrl()`, and `apiBlob()`.
+- Preserved the existing image cache, loading promise de-duplication, Blob URL cache, and fallback behavior for failed authenticated image conversion.
+- Extended `scripts/check_route_contract.py` so `imageLoaderService.ts` cannot reintroduce service-local `fetch()` or duplicated Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_image_loader_httpclient_20260620135156.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend Generation Page HTTP Client Migration
 
 ### Changes

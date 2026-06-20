@@ -2591,6 +2591,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     migrated_services = [
         new_html / "services" / "videoService.ts",
         new_html / "services" / "videoReverseService.ts",
+        new_html / "services" / "imageLoaderService.ts",
         new_html / "services" / "shareService.ts",
         new_html / "services" / "entityFileService.ts",
         new_html / "services" / "mediaLibraryService.ts",
@@ -2626,6 +2627,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "videoService.ts", "export function secureMediaUrl("),
         (new_html / "services" / "videoService.ts", "export async function getProjectVideoTasks("),
         (new_html / "services" / "videoService.ts", "export async function clearProjectVideoTasks("),
+        (new_html / "services" / "imageLoaderService.ts", "import { apiBlob, apiJson, secureApiUrl } from './httpClient'"),
+        (new_html / "services" / "imageLoaderService.ts", "apiJson<any>(\n        `/api/projects/${projectId}/images/${shotId}`"),
+        (new_html / "services" / "imageLoaderService.ts", "apiBlob(securedUrl, { method: 'GET' }, '下载图片'"),
         (video_page, "videoService.secureMediaUrl("),
         (video_page, "videoService.getProjectVideoTasks("),
         (video_page, "videoService.clearProjectVideoTasks("),

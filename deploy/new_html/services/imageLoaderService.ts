@@ -5,9 +5,7 @@
  * - 避免重复加载
  */
 
-import { getHeaders } from './apiService';
-
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+import { apiBlob, apiJson, secureApiUrl } from './httpClient';
 
 // 原图缓存：{ shotId: { imageId: fullImageUrl } }
 const imageCache: Map<string, Map<string, string>> = new Map();
@@ -73,19 +71,11 @@ async function fetchShotImages(
     projectId: string,
     shotId: string
 ): Promise<{ images: any[]; selectedImageId?: string }> {
-    const response = await fetch(
-        `${API_BASE}/api/projects/${projectId}/images/${shotId}`,
-        {
-            method: 'GET',
-            headers: getHeaders()
-        }
+    const data = await apiJson<any>(
+        `/api/projects/${projectId}/images/${shotId}`,
+        { method: 'GET' },
+        '加载镜头图片'
     );
-    
-    if (!response.ok) {
-        throw new Error(`加载失败: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
     
     // 🔧 将所有图片URL转换为Blob URL，但保留原始URL
     const convertedImages = await convertImageUrlsToBlobUrls(data.images || []);
@@ -265,19 +255,12 @@ export async function getAuthenticatedImageUrl(imageUrl: string): Promise<string
     }
     
     try {
-        // 使用认证fetch下载图片
-        const response = await fetch(imageUrl, {
-            method: 'GET',
-            headers: getHeaders()
+        // 使用共享 httpClient 下载图片
+        const securedUrl = secureApiUrl(imageUrl, { absolute: imageUrl.startsWith('/') });
+        const blob = await apiBlob(securedUrl, { method: 'GET' }, '下载图片', {
+            requireAuth: false,
+            includeContentType: false,
         });
-        
-        if (!response.ok) {
-            console.error(`下载图片失败: ${imageUrl}, 状态: ${response.status}`);
-            return imageUrl; // 返回原URL作为fallback
-        }
-        
-        // 转换为blob
-        const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
         
         // 缓存blob URL
