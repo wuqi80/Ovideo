@@ -1,5 +1,36 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 MiniMax Voice Clone Runtime Guardrails
+
+### Changes
+
+- Audited current architecture-debt checkpoints:
+  - `new_html` direct `fetch()` calls are now confined to `services/httpClient.ts`.
+  - `services/` no longer contains direct SQL usage in the current scan.
+  - `_config_get` is centralized in `utils/config_helpers.py`.
+- Tightened MiniMax audio API diagnostics in `external_api/audio/minimax_audio.py`:
+  - Added `_raise_for_minimax_response()` so voice-design, voice-clone, async TTS, music, lyrics, voice list/delete, and file upload failures include `http_status`, MiniMax `status_code`, `status_msg`, and `trace_id` when available.
+  - Kept API key values out of error text.
+  - Wrapped MiniMax file upload's file handle in `with open(...)` to avoid leaking descriptors.
+- Added MiniMax runtime regression tests for voice clone and file upload:
+  - voice clone uses runtime endpoint, proxy, and `GroupId`.
+  - file upload uses runtime endpoint, proxy, and `GroupId`.
+  - voice clone failures surface actionable diagnostics.
+- Strengthened `scripts/check_route_contract.py` so the MiniMax audio runtime tests and diagnostic helper are contract-checked.
+- Added `tests/test_minimax_audio_runtime.py` to `scripts/live_deploy_mvc2.sh` so server-side contracts see the updated test file after deployment.
+
+### Verification
+
+- Local `pytest tests/test_minimax_audio_runtime.py tests/test_minimax_tts_sync.py`: 11/11 passed.
+- Local `py_compile` for `external_api/audio/minimax_audio.py` and `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_architecture_contracts.py`: 9/9 passed.
+- `scripts/live_deploy_mvc2.sh`: deployed successfully; remote Vite build passed and `drama.service` stayed active.
+- Server `pytest tests/test_minimax_audio_runtime.py tests/test_minimax_tts_sync.py`: 11/11 passed.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Storyboard Admin Read Access Recovery
 
 ### Changes

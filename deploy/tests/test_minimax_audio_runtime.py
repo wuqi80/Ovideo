@@ -1,6 +1,7 @@
 """Runtime wiring tests for MiniMax audio client."""
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,6 +33,14 @@ def _fake_response(payload: dict, status: int = 200):
 def _fake_session(get_response):
     session = MagicMock()
     session.get = MagicMock(return_value=get_response)
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    return session
+
+
+def _fake_post_session(post_response):
+    session = MagicMock()
+    session.post = MagicMock(return_value=post_response)
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=False)
     return session
@@ -82,6 +91,73 @@ async def test_minimax_audio_query_sends_group_id_param(monkeypatch):
     _, kwargs = fake_session_ctx.get.call_args
     assert kwargs["params"] == {"task_id": "task-1", "GroupId": "runtime-group"}
     assert kwargs["headers"]["Authorization"] == "Bearer runtime-minimax-key"
+
+
+@pytest.mark.asyncio
+async def test_minimax_audio_voice_clone_sends_runtime_group_proxy(monkeypatch):
+    monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: FakeConfig())
+    fake_resp = _fake_response({"base_resp": {"status_code": 0}})
+    fake_session_ctx = _fake_post_session(fake_resp)
+    client = minimax_audio.MinimaxAudioClient()
+
+    with patch("aiohttp.ClientSession", return_value=fake_session_ctx):
+        result = await client.voice_clone("123", demo_text=None, voice_id_prefix="clone")
+
+    assert result["voice_id"].startswith("clone_")
+    args, kwargs = fake_session_ctx.post.call_args
+    assert args[0] == "https://minimax-runtime.example.test/v1/voice_clone"
+    assert kwargs["params"] == {"GroupId": "runtime-group"}
+    assert kwargs["headers"]["Authorization"] == "Bearer runtime-minimax-key"
+    assert kwargs["proxy"] == "http://runtime-proxy.example.test:8080"
+    assert kwargs["json"]["file_id"] == 123
+    assert kwargs["json"]["voice_id"].startswith("clone_")
+    assert "text" not in kwargs["json"]
+    assert "model" not in kwargs["json"]
+
+
+@pytest.mark.asyncio
+async def test_minimax_audio_file_upload_sends_runtime_group_proxy(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: FakeConfig())
+    fake_resp = _fake_response({"base_resp": {"status_code": 0}, "file": {"file_id": "file-1"}})
+    fake_session_ctx = _fake_post_session(fake_resp)
+    upload_path = tmp_path / "voice.mp3"
+    upload_path.write_bytes(b"ID3")
+    client = minimax_audio.MinimaxAudioClient()
+
+    with patch("aiohttp.ClientSession", return_value=fake_session_ctx):
+        result = await client.file_upload(str(upload_path), purpose="voice_clone")
+
+    assert result["file"]["file_id"] == "file-1"
+    args, kwargs = fake_session_ctx.post.call_args
+    assert args[0] == "https://minimax-runtime.example.test/v1/files/upload"
+    assert kwargs["params"] == {"GroupId": "runtime-group"}
+    assert kwargs["headers"] == {"Authorization": "Bearer runtime-minimax-key"}
+    assert kwargs["proxy"] == "http://runtime-proxy.example.test:8080"
+
+
+@pytest.mark.asyncio
+async def test_minimax_audio_voice_clone_error_has_diagnostics(monkeypatch):
+    monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: FakeConfig())
+    fake_resp = _fake_response(
+        {
+            "base_resp": {"status_code": 1004, "status_msg": "auth failed"},
+            "trace_id": "trace-voice-clone",
+        },
+        status=401,
+    )
+    fake_session_ctx = _fake_post_session(fake_resp)
+    client = minimax_audio.MinimaxAudioClient()
+
+    with patch("aiohttp.ClientSession", return_value=fake_session_ctx):
+        with pytest.raises(RuntimeError) as exc:
+            await client.voice_clone("file-1")
+
+    message = str(exc.value)
+    assert "voice_clone failed" in message
+    assert "http_status=401" in message
+    assert "status_code=1004" in message
+    assert "status_msg=auth failed" in message
+    assert "trace_id=trace-voice-clone" in message
 
 
 @pytest.mark.asyncio

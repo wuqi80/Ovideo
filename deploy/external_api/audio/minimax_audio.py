@@ -46,6 +46,26 @@ def _map_emotion_for_tts(emotion: Optional[str]) -> Optional[str]:
     return {"neutral": "calm"}.get(emotion, emotion)
 
 
+def _raise_for_minimax_response(action: str, http_status: int, data: Dict[str, Any]) -> None:
+    """Raise a diagnostic error for MiniMax responses without leaking API keys."""
+    base_resp = data.get("base_resp") if isinstance(data, dict) else {}
+    if not isinstance(base_resp, dict):
+        base_resp = {}
+    status_code = base_resp.get("status_code", 0)
+    if http_status == 200 and status_code == 0:
+        return
+
+    parts = [f"http_status={http_status}", f"status_code={status_code}"]
+    status_msg = base_resp.get("status_msg")
+    if status_msg:
+        parts.append(f"status_msg={status_msg}")
+    trace_id = data.get("trace_id") if isinstance(data, dict) else None
+    if trace_id:
+        parts.append(f"trace_id={trace_id}")
+    parts.append(f"body={str(data)[:300]}")
+    raise RuntimeError(f"{action} failed: " + " ".join(parts))
+
+
 class MinimaxAudioClient:
     """MiniMax 音频 API 客户端"""
 
@@ -123,8 +143,7 @@ class MinimaxAudioClient:
                 **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"voice_design 失败: {data}")
+                _raise_for_minimax_response("voice_design", resp.status, data)
 
         trial_hex = data.get("trial_audio") or ""
         if trial_hex:
@@ -179,8 +198,7 @@ class MinimaxAudioClient:
                 **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"voice_clone 失败: {data}")
+                _raise_for_minimax_response("voice_clone", resp.status, data)
         data.setdefault("voice_id", resolved_voice_id)
 
         demo_url = data.get("demo_audio") or ""
@@ -217,8 +235,7 @@ class MinimaxAudioClient:
                 **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"list_voices 失败: {data}")
+                _raise_for_minimax_response("list_voices", resp.status, data)
                 return data
 
     async def get_voice(self, voice_id: str) -> Dict[str, Any]:
@@ -246,8 +263,7 @@ class MinimaxAudioClient:
                 **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"delete_voice 失败: {data}")
+                _raise_for_minimax_response("delete_voice", resp.status, data)
                 return data
 
     # ------------------------------------------------------------------
@@ -455,8 +471,7 @@ class MinimaxAudioClient:
                 **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"tts_async 失败: {data}")
+                _raise_for_minimax_response("tts_async", resp.status, data)
                 return data
 
     # ------------------------------------------------------------------
@@ -586,8 +601,7 @@ class MinimaxAudioClient:
                 **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"music_generate 失败: {data}")
+                _raise_for_minimax_response("music_generate", resp.status, data)
 
                 audio_hex = data.get("data", {}).get("audio", "")
                 if audio_hex:
@@ -626,8 +640,7 @@ class MinimaxAudioClient:
                 **self._aiohttp_kwargs(),
             ) as resp:
                 data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"lyrics_generate 失败: {data}")
+                _raise_for_minimax_response("lyrics_generate", resp.status, data)
                 return data
 
     # ------------------------------------------------------------------
@@ -644,23 +657,23 @@ class MinimaxAudioClient:
         headers = {"Authorization": f"Bearer {self.api_key}"}
         form = aiohttp.FormData()
         form.add_field("purpose", purpose)
-        form.add_field(
-            "file",
-            open(file_path, "rb"),
-            filename=os.path.basename(file_path),
-        )
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/files/upload"),
-                params=self._group_params(),
-                data=form,
-                headers=headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                if resp.status != 200 or data.get("base_resp", {}).get("status_code", 0) != 0:
-                    raise RuntimeError(f"file_upload 失败: {data}")
-                return data
+        with open(file_path, "rb") as file_obj:
+            form.add_field(
+                "file",
+                file_obj,
+                filename=os.path.basename(file_path),
+            )
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    self._url("/files/upload"),
+                    params=self._group_params(),
+                    data=form,
+                    headers=headers,
+                    **self._aiohttp_kwargs(),
+                ) as resp:
+                    data = await resp.json()
+                    _raise_for_minimax_response("file_upload", resp.status, data)
+                    return data
 
     # ------------------------------------------------------------------
     # 文件查询  GET /v1/files/retrieve

@@ -2288,6 +2288,22 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "test_minimax_audio_query_sends_group_id_param",
         ),
         (
+            root / "tests" / "test_minimax_audio_runtime.py",
+            "test_minimax_audio_voice_clone_sends_runtime_group_proxy",
+        ),
+        (
+            root / "tests" / "test_minimax_audio_runtime.py",
+            "test_minimax_audio_file_upload_sends_runtime_group_proxy",
+        ),
+        (
+            root / "tests" / "test_minimax_audio_runtime.py",
+            "test_minimax_audio_voice_clone_error_has_diagnostics",
+        ),
+        (
+            root / "external_api" / "audio" / "minimax_audio.py",
+            "_raise_for_minimax_response",
+        ),
+        (
             root / "external_api" / "video" / "minimax.py",
             "model: Optional[str] = None",
         ),
