@@ -1,5 +1,20 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Frontend Video Service Http Client Consolidation
+
+### Changes
+
+- Migrated `new_html/services/videoService.ts` away from duplicated auth/request helpers:
+  - removed the local `getAuthToken()` and `getHeaders()` implementations
+  - replaced direct JSON `fetch()` calls with shared `apiFetch()` / `apiJson()`
+  - kept `XMLHttpRequest` uploads for progress/cancel support, but now builds auth headers through `buildAuthHeaders()`
+- Covered `videoService.ts` in `scripts/check_route_contract.py` so the file cannot regress to direct `fetch(`, local auth token reads, manual `Bearer` headers, or duplicate response handling.
+
+### Notes
+
+- This moves the video-generation frontend path closer to the same request/auth layer used by the API provider management UI and other migrated services.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Admin API Config UI Follow-up
 
 ### Changes

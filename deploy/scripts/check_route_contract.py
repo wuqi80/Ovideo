@@ -2176,15 +2176,15 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "配置 / 修改 API Key",
+            "填写 / 修改 Key",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "测试此条记录",
+            "测试 DB 记录",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "测试生效配置",
+            "测试运行时",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
@@ -2537,6 +2537,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     new_html = root / "new_html"
     http_client = new_html / "services" / "httpClient.ts"
     migrated_services = [
+        new_html / "services" / "videoService.ts",
         new_html / "services" / "videoReverseService.ts",
         new_html / "services" / "shareService.ts",
         new_html / "services" / "entityFileService.ts",

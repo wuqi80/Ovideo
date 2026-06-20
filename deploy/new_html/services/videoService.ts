@@ -4,6 +4,7 @@
 
 import { enqueueComfyUITask, getComfyUIQueueStatus } from './comfyuiTaskQueue';
 import { computeReactiveDuration as _crd } from '../utils/durationMapping';
+import { apiFetch, apiJson, buildAuthHeaders } from './httpClient';
 
 const API_BASE = '';
 
@@ -22,31 +23,6 @@ const EXTERNAL_API_MODELS: string[] = ['MINI', 'Sora2', 'Veo', '大能', 'Seedan
  */
 export function isComfyUIModel(model: VideoModel): boolean {
     return COMFYUI_MODELS.includes(model);
-}
-
-/**
- * 获取认证token
- */
-function getAuthToken(): string | null {
-    return localStorage.getItem('auth_token');
-}
-
-/**
- * 构造请求头
- */
-function getHeaders(includeContentType = true): HeadersInit {
-    const headers: Record<string, string> = {};
-    
-    const token = getAuthToken();
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    if (includeContentType) {
-        headers['Content-Type'] = 'application/json';
-    }
-    
-    return headers;
 }
 
 // ==================== 视频生成任务相关类型 ====================
@@ -180,6 +156,7 @@ export interface VideoTask {
     result?: {
         videos?: Array<{ url: string; filename?: string; generateTime?: number }>;
         images?: Array<{ url: string; filename?: string }>;
+        error?: string;
     };
     error?: string;
 }
@@ -201,11 +178,11 @@ function xhrUpload(url: string, formData: FormData, options: UploadOptions = {})
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url);
-        
-        const token = getAuthToken();
-        if (token) {
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        }
+
+        const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
+        Object.entries(headers).forEach(([key, value]) => {
+            xhr.setRequestHeader(key, value);
+        });
         
         xhr.upload.onprogress = (e) => {
             if (e.lengthComputable && options.onProgress) {
@@ -265,6 +242,21 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> {
     throw new Error('上传失败');
 }
 
+function hasAuthHeader(): boolean {
+    const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
+    return Object.keys(headers).some(key => key.toLowerCase() === 'authorization');
+}
+
+function ensureAuthenticated(message = '请先登录'): void {
+    buildAuthHeaders(undefined, { includeContentType: false, authErrorMessage: message });
+}
+
+async function throwResponseError(response: Response, fallback: string): Promise<never> {
+    const error = await response.json().catch(() => ({ detail: fallback }));
+    const detail = error?.detail ?? error?.message;
+    throw new Error(typeof detail === 'string' && detail ? detail : fallback);
+}
+
 // ==================== 图片上传 ====================
 
 /**
@@ -277,10 +269,7 @@ export async function uploadImage(file: File, options?: UploadOptions): Promise<
     path: string;
     size: number;
 }> {
-    const token = getAuthToken();
-    if (!token) {
-        throw new Error('请先登录');
-    }
+    ensureAuthenticated();
     
     const formData = new FormData();
     formData.append('file', file);
@@ -298,10 +287,7 @@ export async function uploadImageToComfyUI(file: File, nodeType = 'video', optio
     storage_url: string;
     node_id?: string;
 }> {
-    const token = getAuthToken();
-    if (!token) {
-        throw new Error('请先登录');
-    }
+    ensureAuthenticated();
     
     const formData = new FormData();
     formData.append('image', file);
@@ -508,15 +494,13 @@ export async function submitTask(
         requestData.episode_id = entityOptions.episode_id;
     }
 
-    const response = await fetch(`${API_BASE}/api/generate`, {
+    const response = await apiFetch(`${API_BASE}/api/generate`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(requestData)
-    });
+    }, { apiName: 'submitTask' });
     
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: '任务提交失败' }));
-        throw new Error(error.detail || '任务提交失败');
+        await throwResponseError(response, '任务提交失败');
     }
     
     return await response.json();
@@ -548,14 +532,13 @@ export async function submitUpscaleTask(
         requestData.episode_id = entityOptions.episode_id;
     }
 
-    const response = await fetch(`${API_BASE}/api/generate`, {
+    const response = await apiFetch(`${API_BASE}/api/generate`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(requestData)
-    });
+    }, { apiName: 'submitUpscaleTask' });
     
     if (!response.ok) {
-        throw new Error('放大任务提交失败');
+        await throwResponseError(response, '放大任务提交失败');
     }
     
     return await response.json();
@@ -571,9 +554,8 @@ export async function submitVoiceTask(
     prompt: string,
     model: VideoModel = 'Wan2'
 ): Promise<{ task_id: string }> {
-    const response = await fetch(`${API_BASE}/api/generate`, {
+    return await apiJson<{ task_id: string }>(`${API_BASE}/api/generate`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({
             task_type: 'voice',
             image_path: imageFilename,
@@ -584,22 +566,14 @@ export async function submitVoiceTask(
             seed: -1,
             priority: 2
         })
-    });
-    
-    if (!response.ok) {
-        throw new Error('配音任务提交失败');
-    }
-    
-    return await response.json();
+    }, 'submitVoiceTask');
 }
 
 /**
  * 查询任务状态
  */
 export async function getTaskStatus(taskId: string): Promise<VideoTask> {
-    const response = await fetch(`${API_BASE}/api/task/${taskId}`, {
-        headers: getHeaders()
-    });
+    const response = await apiFetch(`${API_BASE}/api/task/${taskId}`, {}, { apiName: 'getTaskStatus' });
     
     if (!response.ok) {
         if (response.status === 404) {
@@ -615,14 +589,22 @@ export async function getTaskStatus(taskId: string): Promise<VideoTask> {
  * 获取历史任务列表
  */
 export async function getTasks(limit = 100): Promise<{ tasks: VideoTask[] }> {
-    const token = getAuthToken();
-    if (!token) {
+    const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
+    if (!hasAuthHeader()) {
         return { tasks: [] };
     }
     
-    const response = await fetch(`${API_BASE}/api/tasks?limit=${limit}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-    });
+    let response: Response;
+    try {
+        response = await apiFetch(`${API_BASE}/api/tasks?limit=${limit}`, {
+            headers,
+        }, { apiName: 'getTasks', requireAuth: false, includeContentType: false });
+    } catch (e: any) {
+        if (e?.message?.includes('未授权')) {
+            throw new Error('登录已过期');
+        }
+        throw e;
+    }
     
     if (!response.ok) {
         if (response.status === 401) {
@@ -641,14 +623,12 @@ export async function getTasks(limit = 100): Promise<{ tasks: VideoTask[] }> {
  * 避免前端刷新后从 /api/tasks/active 重新拉回）。
  */
 export async function cancelTask(taskId: string): Promise<void> {
-    const response = await fetch(`${API_BASE}/api/task/${taskId}`, {
+    const response = await apiFetch(`${API_BASE}/api/task/${taskId}`, {
         method: 'DELETE',
-        headers: getHeaders()
-    });
+    }, { apiName: 'cancelTask' });
 
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: '取消失败' }));
-        throw new Error(error.detail || '取消失败');
+        await throwResponseError(response, '取消失败');
     }
 }
 
@@ -656,14 +636,12 @@ export async function cancelTask(taskId: string): Promise<void> {
  * 删除任务
  */
 export async function deleteTask(taskId: string): Promise<void> {
-    const response = await fetch(`${API_BASE}/api/task/${taskId}/delete`, {
+    const response = await apiFetch(`${API_BASE}/api/task/${taskId}/delete`, {
         method: 'DELETE',
-        headers: getHeaders()
-    });
+    }, { apiName: 'deleteTask' });
     
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: '删除失败' }));
-        throw new Error(error.detail || '删除失败');
+        await throwResponseError(response, '删除失败');
     }
 }
 
@@ -698,18 +676,22 @@ export interface WorkspaceSession {
  * @param scope 作用域（如 "ep_xxx:script_yyy"），为空时使用用户级全局会话
  */
 export async function saveWorkspaceSession(session: WorkspaceSession, scope?: string): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_BASE}/api/workspace/save-session`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ ...session, scope: scope || '' })
-    });
-    
-    if (!response.ok) {
-        console.error('保存会话失败:', response.statusText);
+    try {
+        const response = await apiFetch(`${API_BASE}/api/workspace/save-session`, {
+            method: 'POST',
+            body: JSON.stringify({ ...session, scope: scope || '' })
+        }, { apiName: 'saveWorkspaceSession' });
+
+        if (!response.ok) {
+            console.error('保存会话失败:', response.statusText);
+            return { success: false };
+        }
+
+        return await response.json();
+    } catch (e) {
+        console.error('保存会话失败:', e);
         return { success: false };
     }
-    
-    return await response.json();
 }
 
 /**
@@ -718,17 +700,21 @@ export async function saveWorkspaceSession(session: WorkspaceSession, scope?: st
  */
 export async function loadWorkspaceSession(scope?: string): Promise<{ success: boolean; session: WorkspaceSession | null }> {
     const params = scope ? `?scope=${encodeURIComponent(scope)}` : '';
-    const response = await fetch(`${API_BASE}/api/workspace/load-session${params}`, {
-        method: 'GET',
-        headers: getHeaders()
-    });
-    
-    if (!response.ok) {
-        console.error('加载会话失败:', response.statusText);
+    try {
+        const response = await apiFetch(`${API_BASE}/api/workspace/load-session${params}`, {
+            method: 'GET',
+        }, { apiName: 'loadWorkspaceSession' });
+
+        if (!response.ok) {
+            console.error('加载会话失败:', response.statusText);
+            return { success: false, session: null };
+        }
+
+        return await response.json();
+    } catch (e) {
+        console.error('加载会话失败:', e);
         return { success: false, session: null };
     }
-    
-    return await response.json();
 }
 
 // ==================== 视频操作 ====================
@@ -740,21 +726,17 @@ export async function cropVideo(videoFilename: string, startTime: number, endTim
     filename: string;
     url: string;
 }> {
-    const response = await fetch(`${API_BASE}/api/video/crop`, {
+    return await apiJson<{
+        filename: string;
+        url: string;
+    }>(`${API_BASE}/api/video/crop`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({
             video_filename: videoFilename,
             start_time: startTime,
             end_time: endTime
         })
-    });
-    
-    if (!response.ok) {
-        throw new Error('视频裁剪失败');
-    }
-    
-    return await response.json();
+    }, 'cropVideo');
 }
 
 /**
@@ -764,19 +746,16 @@ export async function reuploadVideo(filename: string, fileType = 'output'): Prom
     filename: string;
     url: string;
 }> {
-    const response = await fetch(
+    return await apiJson<{
+        filename: string;
+        url: string;
+    }>(
         `${API_BASE}/api/comfyui/reupload/video?filename=${encodeURIComponent(filename)}&file_type=${fileType}`,
         {
             method: 'POST',
-            headers: getHeaders()
-        }
+        },
+        'reuploadVideo',
     );
-    
-    if (!response.ok) {
-        throw new Error('视频文件准备失败');
-    }
-    
-    return await response.json();
 }
 
 // ==================== 工具函数 ====================
@@ -1006,14 +985,12 @@ export async function submitSeedanceTask(
         body.episode_id = entityOptions.episode_id;
     }
 
-    const resp = await fetch(`${API_BASE}/api/generate`, {
+    const resp = await apiFetch(`${API_BASE}/api/generate`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(body),
-    });
+    }, { apiName: 'submitSeedanceTask' });
     if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: 'Seedance 任务提交失败' }));
-        throw new Error(err.detail || 'Seedance 任务提交失败');
+        await throwResponseError(resp, 'Seedance 任务提交失败');
     }
     return await resp.json();
 }
@@ -1300,14 +1277,12 @@ export async function submitDashScopeVideoTask(
         body.episode_id = entityOptions.episode_id;
     }
 
-    const resp = await fetch(`${API_BASE}/api/generate`, {
+    const resp = await apiFetch(`${API_BASE}/api/generate`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(body),
-    });
+    }, { apiName: 'submitDashScopeVideoTask' });
     if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: `${params.model} 任务提交失败` }));
-        throw new Error(err.detail || `${params.model} 任务提交失败`);
+        await throwResponseError(resp, `${params.model} 任务提交失败`);
     }
     return await resp.json();
 }
@@ -1334,15 +1309,10 @@ export interface MixStoryboardAudioResponse {
 export async function mixStoryboardAudio(
     body: MixStoryboardAudioRequest,
 ): Promise<MixStoryboardAudioResponse> {
-    const token = localStorage.getItem('auth_token') || '';
-    const resp = await fetch('/api/storyboard/mix-audio', {
+    const resp = await apiFetch('/api/storyboard/mix-audio', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify(body),
-    });
+    }, { apiName: 'mixStoryboardAudio' });
     if (!resp.ok) {
         throw new Error(`mix-audio failed: ${resp.status} ${await resp.text()}`);
     }
