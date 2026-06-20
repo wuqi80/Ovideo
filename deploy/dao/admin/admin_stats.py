@@ -37,6 +37,104 @@ VIDEO_TASK_TYPES = (
     "seedance_draft",
 )
 
+VIDEO_LOG_TYPE_MATCHES = (
+    "i2v",
+    "morph",
+    "upscale",
+    "voice",
+    "minimax_i2v",
+    "minimax_morph",
+    "wan2_i2v",
+    "wan2_morph",
+    "sora2_i2v",
+    "sora2_morph",
+    "veo_i2v",
+    "veo_morph",
+    "video_crop",
+    "video_magnify",
+    "kling_t2v",
+    "kling_i2v",
+    "kling_morph",
+    "kling_refer",
+    "vidu_r2v",
+    "vidu_morph",
+    "happyhorse_r2v",
+)
+
+IMAGE_LOG_TYPE_MATCHES = (
+    "qwen",
+    "qwen_lora",
+    "qwen_1",
+    "qwen_2",
+    "qwen_3",
+    "qwen_4",
+    "qwen_5",
+    "qwen_lora_1",
+    "qwen_lora_2",
+    "qwen_lora_3",
+    "qwen_lora_4",
+    "qwen_lora_5",
+    "kontext",
+    "upscale_hd",
+    "remove_watermark",
+    "three_view",
+    "gemini_image",
+    "doubao_image",
+    "i2i_fj",
+)
+
+TEXT_LOG_TYPE_MATCHES = (
+    "deepseek_text",
+    "gemini_text",
+)
+
+MODEL_NAME_BY_TASK_TYPE = {
+    "wan2_i2v": "wan2-i2v",
+    "wan2_morph": "wan2-morph",
+    "wan26_i2v": "wan26-i2v",
+    "kling_t2v": "kling-t2v",
+    "kling_i2v": "kling-i2v",
+    "kling_morph": "kling-morph",
+    "kling_refer": "kling-refer",
+    "vidu_r2v": "vidu-r2v",
+    "vidu_morph": "vidu-morph",
+    "happyhorse_r2v": "happyhorse-r2v",
+    "sora2_i2v": "sora2-i2v",
+    "sora2_morph": "sora2-morph",
+    "veo_i2v": "veo-i2v",
+    "veo_morph": "veo-morph",
+    "minimax_i2v": "minimax-i2v",
+    "minimax_morph": "minimax-morph",
+    "upscale_hd": "upscale-hd",
+    "remove_watermark": "remove-watermark",
+    "three_view": "three-view",
+    "qwen": "qwen",
+    "qwen_lora": "qwen-lora",
+    "qwen_1": "qwen",
+    "qwen_2": "qwen",
+    "qwen_3": "qwen",
+    "qwen_4": "qwen",
+    "qwen_5": "qwen",
+    "qwen_lora_1": "qwen-lora",
+    "qwen_lora_2": "qwen-lora",
+    "qwen_lora_3": "qwen-lora",
+    "qwen_lora_4": "qwen-lora",
+    "qwen_lora_5": "qwen-lora",
+    "kontext": "kontext",
+    "i2v": "i2v",
+    "morph": "morph",
+    "upscale": "upscale",
+    "voice": "voice",
+    "gemini_image_2.5-flash": "gemini-2.5-flash-image",
+    "gemini_image_3-pro": "gemini-3-pro-image",
+    "doubao_image": "doubao-image",
+    "deepseek_text": "deepseek-r1",
+    "gemini_text": "gemini-2.5-flash-text",
+    "i2i_fj": "comfyui-i2i",
+    "video_crop": "video-crop",
+    "video_magnify": "video-magnify",
+}
+
 
 class AdminStatsDAO:
     """Admin reporting queries used by the compatibility admin shell."""
@@ -72,6 +170,26 @@ class AdminStatsDAO:
             return row[key]
         except Exception:
             return default
+
+    @staticmethod
+    def _timestamp_ms(value: Any) -> int:
+        if not value:
+            return 0
+        if hasattr(value, "timestamp"):
+            return int(value.timestamp() * 1000)
+        try:
+            return int(value)
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _duration_ms(started_at: Any, completed_at: Any) -> int:
+        if not started_at or not completed_at:
+            return 0
+        try:
+            return int((completed_at - started_at).total_seconds() * 1000)
+        except Exception:
+            return 0
 
     @classmethod
     def _count_legacy_project_generations(cls, projects: List[Any]) -> Dict[str, int]:
@@ -257,6 +375,267 @@ class AdminStatsDAO:
         except Exception as exc:
             logger.warning("failed to load admin summary stats: %s", exc)
         return stats
+
+    @staticmethod
+    async def _fetch_legacy_generation_log_projects(
+        db: Any,
+        *,
+        requesting_username: str,
+        super_admin_username: str,
+        limit: int,
+    ) -> List[Any]:
+        if requesting_username == "admin":
+            return await db.fetch(
+                """
+                SELECT p.project_id, p.user_id, u.username, p.storyboard, p.generated_images, p.updated_at
+                FROM projects p
+                LEFT JOIN users u ON p.user_id = u.user_id
+                WHERE (p.storyboard IS NOT NULL OR p.generated_images IS NOT NULL)
+                AND u.username != $1
+                ORDER BY p.updated_at DESC
+                LIMIT $2
+                """,
+                super_admin_username,
+                limit * 2,
+            )
+
+        return await db.fetch(
+            """
+            SELECT p.project_id, p.user_id, u.username, p.storyboard, p.generated_images, p.updated_at
+            FROM projects p
+            LEFT JOIN users u ON p.user_id = u.user_id
+            WHERE p.storyboard IS NOT NULL OR p.generated_images IS NOT NULL
+            ORDER BY p.updated_at DESC
+            LIMIT $1
+            """,
+            limit * 2,
+        )
+
+    @staticmethod
+    async def _fetch_completed_generation_tasks(
+        db: Any,
+        *,
+        requesting_username: str,
+        super_admin_username: str,
+        limit: int,
+    ) -> List[Any]:
+        if requesting_username == "admin":
+            return await db.fetch(
+                """
+                SELECT t.task_id, t.user_id, u.username, t.status, t.created_at, t.completed_at,
+                       t.task_data, t.result_data, t.task_type
+                FROM tasks t
+                LEFT JOIN users u ON t.user_id = u.user_id
+                WHERE t.status = 'completed'
+                AND u.username != $1
+                ORDER BY t.completed_at DESC
+                LIMIT $2
+                """,
+                super_admin_username,
+                limit,
+            )
+
+        return await db.fetch(
+            """
+            SELECT t.task_id, t.user_id, u.username, t.status, t.created_at, t.completed_at,
+                   t.task_data, t.result_data, t.task_type
+            FROM tasks t
+            LEFT JOIN users u ON t.user_id = u.user_id
+            WHERE t.status = 'completed'
+            ORDER BY t.completed_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+
+    @classmethod
+    def _build_legacy_project_logs(cls, projects: List[Any]) -> List[Dict[str, Any]]:
+        logs: List[Dict[str, Any]] = []
+        for project in projects:
+            project_id = cls._row_get(project, "project_id")
+            user_id = cls._row_get(project, "user_id")
+            username = cls._row_get(project, "username") or "unknown"
+            updated_at_ms = cls._timestamp_ms(cls._row_get(project, "updated_at"))
+            storyboard = cls._decode_jsonish(cls._row_get(project, "storyboard"))
+            if not isinstance(storyboard, dict):
+                continue
+            items = storyboard.get("items")
+            if not isinstance(items, list):
+                continue
+
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                item_id = item.get("id", "unknown")
+                logs.append(
+                    {
+                        "id": f"text_{project_id}_{item_id}",
+                        "userId": user_id,
+                        "username": username,
+                        "timestamp": updated_at_ms,
+                        "type": "text",
+                        "model": "gemini-2.5-flash",
+                        "status": "success",
+                        "prompt": (item.get("scriptSegment", "") or "")[:100] or "Storyboard generation",
+                        "params": '{"temperature": 0.7}',
+                        "executionTimeMs": 2000,
+                        "queueTimeMs": 100,
+                    }
+                )
+
+                generated_images = item.get("generatedImages")
+                if not isinstance(generated_images, list):
+                    continue
+                for idx, image in enumerate(generated_images):
+                    image_url = image.get("url") if isinstance(image, dict) else None
+                    image_timestamp = (
+                        image.get("timestamp", updated_at_ms)
+                        if isinstance(image, dict)
+                        else updated_at_ms
+                    )
+                    logs.append(
+                        {
+                            "id": f"img_{project_id}_{item_id}_{idx}",
+                            "userId": user_id,
+                            "username": username,
+                            "timestamp": image_timestamp,
+                            "type": "image",
+                            "model": "gemini-2.5-flash-image",
+                            "status": "success",
+                            "prompt": (item.get("imagePrompt", "") or "")[:100] or "Image generation",
+                            "params": '{"temperature": 0.7}',
+                            "executionTimeMs": 5000,
+                            "queueTimeMs": 300,
+                            "resultPreview": image_url,
+                        }
+                    )
+        return logs
+
+    @staticmethod
+    def _classify_task_log_type(task_type: str) -> str:
+        if any(video_type in task_type for video_type in VIDEO_LOG_TYPE_MATCHES):
+            return "video"
+        if any(image_type in task_type for image_type in IMAGE_LOG_TYPE_MATCHES):
+            return "image"
+        if any(text_type in task_type for text_type in TEXT_LOG_TYPE_MATCHES):
+            return "text"
+        lowered = task_type.lower()
+        if "video" in lowered:
+            return "video"
+        if "image" in lowered or "img" in lowered:
+            return "image"
+        return "text"
+
+    @staticmethod
+    def _extract_task_result(log_type: str, result_data: Dict[str, Any]) -> Dict[str, Any]:
+        result = {
+            "resultPreview": None,
+            "resultVideo": None,
+            "resultText": None,
+        }
+
+        if log_type == "image":
+            images = result_data.get("images")
+            if isinstance(images, list) and images:
+                image = images[0]
+                if isinstance(image, dict):
+                    result["resultPreview"] = image.get("url") or image.get("filename")
+                elif isinstance(image, str):
+                    result["resultPreview"] = image
+        elif log_type == "video":
+            videos = result_data.get("videos")
+            if isinstance(videos, list) and videos:
+                video = videos[0]
+                if isinstance(video, dict):
+                    result["resultVideo"] = video.get("url") or video.get("filename")
+                elif isinstance(video, str):
+                    result["resultVideo"] = video
+        elif log_type == "text":
+            result["resultText"] = result_data.get("text") or "（文本内容未保存）"
+        return result
+
+    @classmethod
+    def _build_task_log(cls, task: Any) -> Dict[str, Any]:
+        task_data = cls._decode_jsonish(cls._row_get(task, "task_data")) or {}
+        if not isinstance(task_data, dict):
+            task_data = {}
+        result_data = cls._decode_jsonish(cls._row_get(task, "result_data")) or {}
+        if not isinstance(result_data, dict):
+            result_data = {}
+
+        task_type = cls._row_get(task, "task_type") or "unknown"
+        log_type = cls._classify_task_log_type(task_type)
+        prompt = (task_data.get("prompt") or "")[:100] or f"{log_type.capitalize()} generation"
+        result_fields = cls._extract_task_result(log_type, result_data)
+        created_at = cls._row_get(task, "created_at")
+        completed_at = cls._row_get(task, "completed_at")
+
+        return {
+            "id": f"{log_type}_{cls._row_get(task, 'task_id')}",
+            "userId": cls._row_get(task, "user_id"),
+            "username": cls._row_get(task, "username") or "unknown",
+            "timestamp": cls._timestamp_ms(completed_at) or cls._timestamp_ms(created_at),
+            "type": log_type,
+            "model": MODEL_NAME_BY_TASK_TYPE.get(task_type, task_type),
+            "status": "success" if cls._row_get(task, "status") == "completed" else "failed",
+            "prompt": prompt,
+            "params": f'{{"workflow": "{task_type}"}}',
+            "executionTimeMs": cls._duration_ms(created_at, completed_at),
+            "queueTimeMs": 500,
+            **result_fields,
+        }
+
+    @classmethod
+    async def get_generation_logs(
+        cls,
+        *,
+        requesting_username: str,
+        super_admin_username: str,
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return []
+
+        logs: List[Dict[str, Any]] = []
+        try:
+            if await cls._has_legacy_project_generation_columns(db):
+                projects = await cls._fetch_legacy_generation_log_projects(
+                    db,
+                    requesting_username=requesting_username,
+                    super_admin_username=super_admin_username,
+                    limit=limit,
+                )
+                logs.extend(cls._build_legacy_project_logs(projects))
+            else:
+                logger.info("using task table for admin generation logs")
+
+            tasks = await cls._fetch_completed_generation_tasks(
+                db,
+                requesting_username=requesting_username,
+                super_admin_username=super_admin_username,
+                limit=limit,
+            )
+            logger.info("loaded %s completed tasks for admin generation logs", len(tasks))
+            logs.extend(cls._build_task_log(task) for task in tasks)
+            logs.sort(key=lambda log: log["timestamp"], reverse=True)
+
+            if logs:
+                type_counts: Dict[str, int] = {}
+                for log in logs:
+                    type_counts[log["type"]] = type_counts.get(log["type"], 0) + 1
+                logger.info(
+                    "admin generation logs loaded: total=%s Text=%s Image=%s Video=%s",
+                    len(logs),
+                    type_counts.get("text", 0),
+                    type_counts.get("image", 0),
+                    type_counts.get("video", 0),
+                )
+            else:
+                logger.warning("admin generation logs query returned no rows")
+        except Exception as exc:
+            logger.warning("failed to load admin generation logs: %s", exc)
+        return logs
 
     @staticmethod
     async def get_user_asset_breakdown(

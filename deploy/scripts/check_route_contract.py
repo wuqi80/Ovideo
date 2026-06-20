@@ -3036,6 +3036,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "user" / "user.py", "async def delete_user_by_id("),
         (root / "dao" / "admin" / "admin_stats.py", "class AdminStatsDAO:"),
         (root / "dao" / "admin" / "admin_stats.py", "async def get_summary_stats("),
+        (root / "dao" / "admin" / "admin_stats.py", "async def get_generation_logs("),
         (root / "dao" / "admin" / "admin_stats.py", "async def get_stats_breakdown("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
@@ -3049,6 +3050,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "storyboard.py", "StoryboardDAO.export_script_transaction("),
         (root / "routers" / "admin_compat.py", "UserDAO.delete_user_by_id("),
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_summary_stats("),
+        (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_generation_logs("),
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_stats_breakdown("),
     ]
     for path, snippet in required_snippets:
@@ -3088,6 +3090,13 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         "SELECT COUNT(*) FROM text_contents",
         "SELECT COUNT(*) FROM storyboard_items",
         "total_videos = await db_manager.fetchval",
+        "SELECT storyboard FROM projects LIMIT 1",
+        "SELECT p.project_id, p.user_id",
+        "SELECT t.task_id, t.user_id",
+        "video_types = [",
+        "image_types = [",
+        "text_types = [",
+        "model_name_map = {",
     ]:
         if snippet in admin_compat_router_text:
             violations.append(f"routers/admin_compat.py must delegate admin reporting/deletion SQL to DAO methods: {snippet}")

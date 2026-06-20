@@ -1,5 +1,36 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Admin Logs DAO Move
+
+### Changes
+
+- Moved `/api/admin/logs` database queries and log-entry shaping out of `routers/admin_compat.py` and into `dao/admin/admin_stats.py`.
+- Added `AdminStatsDAO.get_generation_logs()` for the legacy storyboard JSON log rows and completed task log rows.
+- Kept the existing frontend response shape: `id`, `userId`, `username`, `timestamp`, `type`, `model`, `status`, `prompt`, `params`, timing fields, and result preview/video/text fields.
+- Strengthened `scripts/check_route_contract.py` so project/task log SQL and local model/type mapping blocks cannot be reintroduced into `routers/admin_compat.py`.
+- Added `tests/test_admin_stats_logs.py` for task log formatting and legacy storyboard/image log formatting.
+- Updated `scripts/live_deploy_mvc2.sh` so the new admin stats log test is shipped to the server.
+
+### Verification
+
+- `py_compile`: passed for `dao/admin/admin_stats.py`, `routers/admin_compat.py`, and `scripts/check_route_contract.py`.
+- `pytest tests/test_admin_stats_logs.py -q`: 2 passed locally.
+- `scripts/check_route_contract.py`: passed locally.
+- `scripts/check_architecture_contracts.py`: 9/9 passed locally.
+- `scripts/smoke_test.py`: 9/9 passed locally.
+- Server deploy completed; `drama.service` stayed active and Vite build artifacts refreshed.
+- Server `pytest tests/test_admin_stats_logs.py -q`: 2 passed.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Server probe for `/api/admin/logs?limit=5`: returned 200 with the expected log field shape.
+- Recent `drama.service` logs showed no admin log errors after deployment.
+
+### Follow-up
+
+- `routers/admin_compat.py` is now much thinner for stats/logs, but user-create still touches in-memory `DEFAULT_USERS` plus DAO sync; later admin-user cleanup can make this fully DAO/service backed.
+- User reported seeing storyboard data disappear yesterday; keep that as a separate restore/verification task after this admin compatibility cleanup lands.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Admin Stats Summary DAO Move
 
 ### Changes
