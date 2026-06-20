@@ -2536,6 +2536,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     """Selected frontend services should share auth/error handling via httpClient."""
     new_html = root / "new_html"
     http_client = new_html / "services" / "httpClient.ts"
+    video_page = new_html / "components" / "VideoPage.tsx"
     migrated_services = [
         new_html / "services" / "videoService.ts",
         new_html / "services" / "videoReverseService.ts",
@@ -2553,6 +2554,12 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "entityFileService.ts", "{ includeContentType: false }"),
         (new_html / "services" / "mediaLibraryService.ts", "{ includeContentType: false }"),
         (new_html / "services" / "mediaLibraryService.ts", "apiBlob('/api/media-library/batch-download'"),
+        (new_html / "services" / "videoService.ts", "export function secureMediaUrl("),
+        (new_html / "services" / "videoService.ts", "export async function getProjectVideoTasks("),
+        (new_html / "services" / "videoService.ts", "export async function clearProjectVideoTasks("),
+        (video_page, "videoService.secureMediaUrl("),
+        (video_page, "videoService.getProjectVideoTasks("),
+        (video_page, "videoService.clearProjectVideoTasks("),
     ]
     forbidden_snippets = [
         "function getHeaders",
@@ -2583,6 +2590,20 @@ def check_frontend_http_client_contract(root: Path) -> int:
             if snippet in text:
                 fail(f"Frontend service has duplicated request/auth logic in {path.relative_to(root)}: {snippet}")
             checks += 1
+
+    video_page_text = video_page.read_text(encoding="utf-8")
+    for snippet in [
+        "localStorage.getItem('auth_token')",
+        'localStorage.getItem("auth_token")',
+        "Authorization:",
+        "'Authorization'",
+        '"Authorization"',
+        "Bearer ",
+        "fetch(",
+    ]:
+        if snippet in video_page_text:
+            fail(f"VideoPage must route video requests/media auth through videoService: {snippet}")
+        checks += 1
     return checks
 
 

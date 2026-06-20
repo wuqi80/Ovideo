@@ -1,5 +1,21 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Video Page Project Task Request Consolidation
+
+### Changes
+
+- Added `new_html/services/videoService.ts` helpers for video-page project imports:
+  - `secureMediaUrl()` centralizes tokenized media URL handling
+  - `getProjectVideoTasks()` reads exported storyboard-to-video tasks through the shared HTTP client
+  - `clearProjectVideoTasks()` clears imported project video tasks through the shared HTTP client
+- Updated `new_html/components/VideoPage.tsx` so project video-task loading, cleanup, restored media URLs, completed video URLs, and cropped video URLs use `videoService` instead of direct `fetch()` / local `auth_token` reads.
+- Extended `scripts/check_route_contract.py` so `VideoPage.tsx` cannot regress to direct `fetch(`, manual `Authorization`/`Bearer`, or local `auth_token` access for these paths.
+
+### Notes
+
+- This keeps the video workflow page focused on state transitions while request/auth/media URL mechanics stay in the service layer.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Frontend Video Service Http Client Consolidation
 
 ### Changes

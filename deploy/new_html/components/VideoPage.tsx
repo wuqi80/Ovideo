@@ -511,7 +511,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     if (item && url) byItem[item] = url;
                 }
                 if (cancelled || Object.keys(byItem).length === 0) return;
-                const token = localStorage.getItem('auth_token');
                 // 归一化用于去重：去掉 ?query 和 origin，让 onComplete 存的绝对 URL
                 // 与本处 DB 的相对 URL 能对齐（否则同一视频会被重复加入 → 出现两个）。
                 const bare = (u: any) => (typeof u === 'string'
@@ -525,9 +524,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         const raw0 = item ? byItem[item] : undefined;
                         if (!raw0) continue;
                         // 与 onComplete 一致：相对路径补成绝对 URL，再附 token
-                        const absUrl = raw0.startsWith('http') ? raw0 : `${window.location.origin}${raw0}`;
-                        const url = absUrl.includes('token=') ? absUrl : absUrl + (absUrl.includes('?') ? '&' : '?') + `token=${token}`;
-                        const cur = next[g.uuid] || {};
+                        const url = videoService.secureMediaUrl(raw0, { absolute: true });
+                        const cur: videoService.TaskStatus = next[g.uuid] || {};
                         const curVideos = cur.videos || [];
                         if (curVideos.some((v: any) => bare(v) === bare(url))) continue; // 已有，跳过
                         next[g.uuid] = {
@@ -566,14 +564,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         
         try {
             console.log('🔄 页面激活，检查新导出的 video_tasks:', projectId);
-            const projectResponse = await fetch(`/api/projects/${projectId}`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-            });
-            
-            if (!projectResponse.ok) return;
-            
-            const projectData = await projectResponse.json();
-            const videoTasks = projectData.project?.video_tasks || [];
+            const videoTasks = await videoService.getProjectVideoTasks(projectId);
             
             console.log('📋 检查结果:', { videoTasksCount: videoTasks.length });
             
@@ -586,12 +577,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 videoTasks.forEach((task: any, index: number) => {
                     const imgId = `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
-                    const token = localStorage.getItem('auth_token');
-                    let imageUrl = task.image_url || '';
-                    
-                    if (imageUrl && !imageUrl.includes('token=')) {
-                        imageUrl += (imageUrl.includes('?') ? '&' : '?') + `token=${token}`;
-                    }
+                    const imageUrl = videoService.secureMediaUrl(task.image_url || '');
                     
                     if (!imageUrl) {
                         console.warn(`⚠️ 镜头 ${task.storyboard_id} 没有图片，跳过`);
@@ -624,13 +610,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 // 清空项目的 video_tasks（避免重复加载）
                 try {
-                    await fetch(`/api/projects/${projectId}/clear-video-tasks`, {
-                        method: 'POST',
-                        headers: { 
-                            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
+                    await videoService.clearProjectVideoTasks(projectId);
                     console.log('✅ 已清空项目的 video_tasks');
                 } catch (err) {
                     console.warn('清空 video_tasks 失败:', err);
@@ -702,18 +682,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
 
                 // 给图片 URL 注入 token（保持与 videos/result 处理一致，否则 <img src> 401）
                 // ⭐ Task 6：占位卡 url 为空，此处直接跳过不报错。
-                {
-                    const _token = localStorage.getItem('auth_token');
-                    if (_token) {
-                        existingImages = existingImages.map(img => {
-                            if (img.url && !img.url.includes('token=')) {
-                                const sep = img.url.includes('?') ? '&' : '?';
-                                return { ...img, url: img.url + sep + 'token=' + _token };
-                            }
-                            return img;
-                        });
-                    }
-                }
+                existingImages = existingImages.map(img => (
+                    img.url ? { ...img, url: videoService.secureMediaUrl(img.url) } : img
+                ));
 
                 // ⭐ Task 6：恢复 seedance_params 与 storyboard_meta
                 const sessSP = (session as any).seedance_params as Record<string, SeedanceParams> | undefined;
@@ -758,7 +729,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 });
                 
                 // 处理任务状态
-                const token = localStorage.getItem('auth_token');
                 const statusWithToken: Record<string, videoService.TaskStatus> = {};
                 const pendingTaskIds: { uuid: string; taskId: string }[] = [];
                 
@@ -766,18 +736,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     if (!validGroupUuids.has(uuid)) return;
                     
                     const videosRaw = (status.videos || []).map(url => {
-                        if (typeof url === 'string' && url && !url.includes('token=')) {
-                            return url + (url.includes('?') ? '&' : '?') + `token=${token}`;
-                        }
-                        return url;
+                        return typeof url === 'string' ? videoService.secureMediaUrl(url) : url;
                     });
                     // 去重：旧会话可能已存了重复视频（历史 bug 落盘的），恢复时清掉
                     const dd = dedupVideosWithTimes(videosRaw, status.videoGenerateTimes || []);
                     const videos = dd.videos;
                     let result = status.result || '';
-                    if (result && !result.includes('token=')) {
-                        result = result + (result.includes('?') ? '&' : '?') + `token=${token}`;
-                    }
+                    if (result) result = videoService.secureMediaUrl(result);
                     statusWithToken[uuid] = { ...status, videos, videoGenerateTimes: dd.times, result };
                     
                     if (status.state === 'pending' && status.taskId) {
@@ -810,98 +775,72 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             if (projectId) {
                 try {
                     console.log('🔍 检查项目 video_tasks:', projectId);
-                    const projectResponse = await fetch(`/api/projects/${projectId}`, {
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
+                    const videoTasks = await videoService.getProjectVideoTasks(projectId);
+
+                    // 🔍 调试日志
+                    console.log('📋 API返回的 projectData:', {
+                        success: true,
+                        hasProject: true,
+                        videoTasksCount: videoTasks.length,
+                        videoTasks: videoTasks
                     });
-                    
-                    if (projectResponse.ok) {
-                        const projectData = await projectResponse.json();
-                        // 🔧 修复：API返回 {success, project}，不是 {data}
-                        const videoTasks = projectData.project?.video_tasks || [];
-                        
-                        // 🔍 调试日志
-                        console.log('📋 API返回的 projectData:', {
-                            success: projectData.success,
-                            hasProject: !!projectData.project,
-                            videoTasksCount: videoTasks.length,
-                            videoTasks: videoTasks
-                        });
-                        
-                        if (videoTasks.length > 0) {
-                            console.log(`📦 从项目发现 ${videoTasks.length} 个新导出的镜头，追加到现有数据`);
-                            
-                            // 🆕 转换 video_tasks 并追加到现有数据
-                            const newImages: videoService.UploadedImage[] = [];
-                            const newGroups: videoService.TaskGroup[] = [];
-                            const newPrompts: Record<string, string> = {};
-                            
-                            videoTasks.forEach((task: any, index: number) => {
-                                // 🔧 修复：允许没有 image_url 的任务也导入，用户可以后续上传图片
-                                const imgId = `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
-                                const token = localStorage.getItem('auth_token');
-                                let imageUrl = task.image_url || '';
-                                
-                                // 🔧 修复：只有有效的 image_url 才添加 token
-                                if (imageUrl && !imageUrl.includes('token=')) {
-                                    imageUrl += (imageUrl.includes('?') ? '&' : '?') + `token=${token}`;
-                                }
-                                
-                                // 🔧 如果没有图片URL，跳过这个任务（在画面分镜中没有选择图片）
-                                if (!imageUrl) {
-                                    console.warn(`⚠️ 镜头 ${task.storyboard_id} 没有图片，跳过`);
-                                    return;
-                                }
-                                
-                                newImages.push({
-                                    id: imgId,
-                                    url: imageUrl,
-                                    filename: `${task.scene || 'shot'}_${task.storyboard_id}.png`,
-                                    uploadTime: Date.now()
-                                });
-                                
-                                // 使用 video_prompt 作为提示词
-                                newPrompts[imgId] = task.video_prompt || '';
-                                
-                                // 创建任务组
-                                newGroups.push({
-                                    uuid: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                    ids: [imgId],
-                                    model: 'HappyHorse',  // 默认炼虚（百炼，可用）；原 'Wan2' 需 GPU agent
-                                    createdAt: Date.now()
-                                });
-                            });
-                            
-                            // 🆕 追加到现有数据后面
-                            setUploadedImages([...existingImages, ...newImages]);
-                            setTaskGroups([...existingGroups, ...newGroups]);
-                            setImagePrompts({...existingPrompts, ...newPrompts});
-                            setTasksStatus(existingStatus);
-                            
-                            console.log(`✅ 已追加 ${newImages.length} 个新导出的镜头`);
-                            console.log(`📊 当前总计: ${existingImages.length + newImages.length}张图片, ${existingGroups.length + newGroups.length}个任务组`);
-                            
-                            // 🔧 清空项目的 video_tasks（避免重复加载）
-                            try {
-                                await fetch(`/api/projects/${projectId}/clear-video-tasks`, {
-                                    method: 'POST',
-                                    headers: { 
-                                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-                                        'Content-Type': 'application/json'
-                                    }
-                                });
-                                console.log('✅ 已清空项目的 video_tasks');
-                            } catch (err) {
-                                console.warn('清空 video_tasks 失败:', err);
+
+                    if (videoTasks.length > 0) {
+                        console.log(`📦 从项目发现 ${videoTasks.length} 个新导出的镜头，追加到现有数据`);
+
+                        // 🆕 转换 video_tasks 并追加到现有数据
+                        const newImages: videoService.UploadedImage[] = [];
+                        const newGroups: videoService.TaskGroup[] = [];
+                        const newPrompts: Record<string, string> = {};
+
+                        videoTasks.forEach((task: any, index: number) => {
+                            // 🔧 修复：允许没有 image_url 的任务也导入，用户可以后续上传图片
+                            const imgId = `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
+                            const imageUrl = videoService.secureMediaUrl(task.image_url || '');
+
+                            // 🔧 如果没有图片URL，跳过这个任务（在画面分镜中没有选择图片）
+                            if (!imageUrl) {
+                                console.warn(`⚠️ 镜头 ${task.storyboard_id} 没有图片，跳过`);
+                                return;
                             }
-                        } else {
-                            // 没有新的 video_tasks，使用现有数据
-                            setUploadedImages(existingImages);
-                            setTaskGroups(existingGroups);
-                            setImagePrompts(existingPrompts);
-                            setTasksStatus(existingStatus);
+
+                            newImages.push({
+                                id: imgId,
+                                url: imageUrl,
+                                filename: `${task.scene || 'shot'}_${task.storyboard_id}.png`,
+                                uploadTime: Date.now()
+                            });
+
+                            // 使用 video_prompt 作为提示词
+                            newPrompts[imgId] = task.video_prompt || '';
+
+                            // 创建任务组
+                            newGroups.push({
+                                uuid: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                ids: [imgId],
+                                model: 'HappyHorse',  // 默认炼虚（百炼，可用）；原 'Wan2' 需 GPU agent
+                                createdAt: Date.now()
+                            });
+                        });
+
+                        // 🆕 追加到现有数据后面
+                        setUploadedImages([...existingImages, ...newImages]);
+                        setTaskGroups([...existingGroups, ...newGroups]);
+                        setImagePrompts({...existingPrompts, ...newPrompts});
+                        setTasksStatus(existingStatus);
+
+                        console.log(`✅ 已追加 ${newImages.length} 个新导出的镜头`);
+                        console.log(`📊 当前总计: ${existingImages.length + newImages.length}张图片, ${existingGroups.length + newGroups.length}个任务组`);
+
+                        // 🔧 清空项目的 video_tasks（避免重复加载）
+                        try {
+                            await videoService.clearProjectVideoTasks(projectId);
+                            console.log('✅ 已清空项目的 video_tasks');
+                        } catch (err) {
+                            console.warn('清空 video_tasks 失败:', err);
                         }
                     } else {
-                        // 加载项目失败，使用现有数据
+                        // 没有新的 video_tasks，使用现有数据
                         setUploadedImages(existingImages);
                         setTaskGroups(existingGroups);
                         setImagePrompts(existingPrompts);
@@ -1596,7 +1535,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 ? { ...rawParams, media_inputs: rawParams.media_inputs.filter(m => m.kind === 'image') }
                 : rawParams;
             setTasksStatus(prev => {
-                const oldStatus = prev[uuid] || {};
+                const oldStatus: videoService.TaskStatus = prev[uuid] || {};
                 return {
                     ...prev,
                     [uuid]: {
@@ -1647,7 +1586,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 return;
             }
             setTasksStatus(prev => {
-                const oldStatus = prev[uuid] || {};
+                const oldStatus: videoService.TaskStatus = prev[uuid] || {};
                 return {
                     ...prev,
                     [uuid]: {
@@ -1708,7 +1647,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         
         // 🆕 保留旧视频和时间戳，运行新任务
         setTasksStatus(prev => {
-            const oldStatus = prev[uuid] || {};
+            const oldStatus: videoService.TaskStatus = prev[uuid] || {};
             return {
                 ...prev,
                 [uuid]: { 
@@ -1772,19 +1711,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 但本组件主要用 setState（已支持函数式更新）和 ref 局部数据，所以闭包不会过期。
     const buildPollCallbacks = useCallback((uuid: string) => ({
         onComplete: ({ status }: { status: videoService.VideoTask }) => {
-            const token = localStorage.getItem('auth_token');
             const videos = status.result?.videos?.map(v => {
-                let url = v.url.startsWith('http') ? v.url : `${window.location.origin}${v.url}`;
-                if (!url.includes('token=')) {
-                    url += (url.includes('?') ? '&' : '?') + `token=${token}`;
-                }
-                return url;
+                return videoService.secureMediaUrl(v.url, { absolute: true });
             }) || [];
 
             const videoTimes = status.result?.videos?.map(v => v.generateTime || 0) || [];
 
             setTasksStatus(prev => {
-                const oldStatus = prev[uuid] || {};
+                const oldStatus: videoService.TaskStatus = prev[uuid] || {};
                 const oldVideos = oldStatus.videos || [];
                 const oldTimes = oldStatus.videoGenerateTimes || [];
                 // 去重：oldVideos 里可能已有同一视频（DB兜底/会话恢复加过），盲目追加会出现两个一模一样
@@ -2204,14 +2138,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const result = await videoService.cropVideo(filename, cropStartTime, cropEndTime);
             
             // 将裁剪后的视频添加到视频列表
-            const token = localStorage.getItem('auth_token');
-            let croppedUrl = result.url || `/storage/videos/${result.filename}`;
-            if (!croppedUrl.startsWith('http')) {
-                croppedUrl = `${window.location.origin}${croppedUrl}`;
-            }
-            if (!croppedUrl.includes('token=')) {
-                croppedUrl += (croppedUrl.includes('?') ? '&' : '?') + `token=${token}`;
-            }
+            const croppedUrl = videoService.secureMediaUrl(
+                result.url || `/storage/videos/${result.filename}`,
+                { absolute: true },
+            );
             
             setTasksStatus(prev => {
                 const status = prev[editModalUuid];

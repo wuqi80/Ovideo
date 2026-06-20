@@ -86,7 +86,7 @@ export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: 
     return 'seedance_multi';
 }
 
-export type TaskState = 'idle' | 'running' | 'processing' | 'done' | 'failed';
+export type TaskState = 'idle' | 'pending' | 'running' | 'processing' | 'done' | 'failed';
 
 export interface UploadedImage {
     id: string;
@@ -109,6 +109,7 @@ export interface TaskGroup {
     uuid: string;
     ids: string[];                        // 图片ID列表 (1个=I2V, 2个=Morph)
     model: VideoModel;
+    createdAt?: number;
     shotType?: ShotType;                  // 仅大能模型使用
     duration?: number;                    // 通用时长（秒，3–15）
     durationUserOverride?: boolean;       // true 后响应式规则不再自动改
@@ -127,7 +128,8 @@ export interface MergedCardSnapshot {
 }
 
 export interface TaskStatus {
-    state: TaskState;
+    state?: TaskState;
+    taskId?: string;
     progress?: number;
     result?: string;
     videos?: string[];
@@ -247,6 +249,12 @@ function hasAuthHeader(): boolean {
     return Object.keys(headers).some(key => key.toLowerCase() === 'authorization');
 }
 
+function authTokenFromHeaders(): string {
+    const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
+    const auth = Object.entries(headers).find(([key]) => key.toLowerCase() === 'authorization')?.[1] || '';
+    return auth.replace(/^Bearer\s+/i, '').trim();
+}
+
 function ensureAuthenticated(message = '请先登录'): void {
     buildAuthHeaders(undefined, { includeContentType: false, authErrorMessage: message });
 }
@@ -255,6 +263,16 @@ async function throwResponseError(response: Response, fallback: string): Promise
     const error = await response.json().catch(() => ({ detail: fallback }));
     const detail = error?.detail ?? error?.message;
     throw new Error(typeof detail === 'string' && detail ? detail : fallback);
+}
+
+export function secureMediaUrl(url: string, options: { absolute?: boolean } = {}): string {
+    if (!url) return url;
+    let next = options.absolute && !url.startsWith('http') ? `${window.location.origin}${url}` : url;
+    if (next.includes('token=')) return next;
+    const token = authTokenFromHeaders();
+    if (!token) return next;
+    next += (next.includes('?') ? '&' : '?') + `token=${encodeURIComponent(token)}`;
+    return next;
 }
 
 // ==================== 图片上传 ====================
@@ -643,6 +661,32 @@ export async function deleteTask(taskId: string): Promise<void> {
     if (!response.ok) {
         await throwResponseError(response, '删除失败');
     }
+}
+
+export interface ProjectVideoTask {
+    image_url?: string;
+    scene?: string;
+    storyboard_id?: string;
+    video_prompt?: string;
+    [key: string]: any;
+}
+
+export async function getProjectVideoTasks(projectId: string): Promise<ProjectVideoTask[]> {
+    const data = await apiJson<{ success?: boolean; project?: { video_tasks?: ProjectVideoTask[] } }>(
+        `${API_BASE}/api/projects/${projectId}`,
+        { method: 'GET' },
+        'getProjectVideoTasks',
+    );
+    const tasks = data.project?.video_tasks;
+    return Array.isArray(tasks) ? tasks : [];
+}
+
+export async function clearProjectVideoTasks(projectId: string): Promise<void> {
+    await apiJson<{ success?: boolean }>(
+        `${API_BASE}/api/projects/${projectId}/clear-video-tasks`,
+        { method: 'POST' },
+        'clearProjectVideoTasks',
+    );
 }
 
 // ==================== 会话管理 ====================
