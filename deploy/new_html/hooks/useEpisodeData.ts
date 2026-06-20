@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getStoryboardItems, getAssets, getVideoSegments, getEpisodeScript, updateStoryboardItem } from '../services/apiService';
+import { getStoryboardItems, getAssets, getVideoSegments, getEpisodeScript, updateStoryboardItem } from '../services/episodeDataService';
 
 const STORYBOARD_QUERY_INITIAL_LIMIT = 10;
 

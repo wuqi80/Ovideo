@@ -14,14 +14,17 @@ import { EnhancePage } from '../../pages/EnhancePage';
 import { HistoryPage } from '../../pages/HistoryPage';
 import { CanvasPage } from '../../pages/CanvasPage';
 
-vi.mock('../../services/apiService', () => ({
+vi.mock('../../services/episodeDataService', () => ({
   getEpisodeScript: vi.fn().mockResolvedValue({ success: true, script: null }),
   getStoryboardItems: vi.fn().mockResolvedValue({ success: true, items: [] }),
   getAssets: vi.fn().mockResolvedValue({ success: true, assets: [] }),
   getAudioTracks: vi.fn().mockResolvedValue({ success: true, tracks: [] }),
   getVideoSegments: vi.fn().mockResolvedValue({ success: true, segments: [] }),
+  getCharacterVoices: vi.fn().mockResolvedValue({ success: true, voices: [] }),
   updateStoryboardItem: vi.fn().mockResolvedValue({ success: true }),
-  getHeaders: vi.fn().mockReturnValue({}),
+  updateEpisodeScript: vi.fn().mockResolvedValue({ success: true }),
+  batchCreateStoryboardItems: vi.fn().mockResolvedValue({ success: true }),
+  extractToAssets: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 function TestRouter({ initialEntry }: { initialEntry: string }) {

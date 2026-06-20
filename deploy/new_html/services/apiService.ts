@@ -14,6 +14,19 @@ export {
     markAllNotificationsRead,
     markNotificationRead,
 } from './taskNotificationService';
+export {
+    batchCreateStoryboardItems,
+    extractToAssets,
+    getAssets,
+    getAudioTracks,
+    getCharacterVoices,
+    getEpisodeScript,
+    getStoryboardItems,
+    getVideoSegments,
+    updateEpisodeScript,
+    updateStoryboardItem,
+    type StoryboardItemsQueryOptions,
+} from './episodeDataService';
 
 function normalizeImageSourceUrl(imageUrl: string): string {
     if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) return imageUrl;
@@ -380,15 +393,6 @@ export async function getSystemStats(groupBy?: 'user' | 'org'): Promise<{
 
 // ===== Asset APIs =====
 
-export async function getAssets(projectId: string, episodeId?: string, assetType?: string, scriptId?: string) {
-    const params = new URLSearchParams();
-    if (episodeId) params.set('episode_id', episodeId);
-    if (assetType) params.set('asset_type', assetType);
-    if (scriptId) params.set('script_id', scriptId);
-    const qs = params.toString() ? `?${params}` : '';
-    return apiJson<any>(`/api/projects/${projectId}/assets${qs}`, { method: 'GET' }, 'getAssets');
-}
-
 export async function createAsset(data: {
     project_id: string; asset_type: string; name: string;
     episode_id?: string; script_id?: string; description?: string;
@@ -413,83 +417,11 @@ export async function deleteAsset(assetId: string) {
 
 // ===== Storyboard Item APIs =====
 
-export interface StoryboardItemsQueryOptions {
-    limit?: number;
-    offset?: number;
-    includeTotal?: boolean;
-    fields?: 'audio' | 'video' | 'audio_stage' | 'materials' | string;
-    fallbackToEpisode?: boolean;
-}
-
-async function getStoryboardItemsRaw(
-    episodeId: string,
-    scriptId?: string,
-    options: StoryboardItemsQueryOptions = {},
-) {
-    const params = new URLSearchParams();
-    if (scriptId) params.set('script_id', scriptId);
-    if (typeof options.limit === 'number') params.set('limit', String(options.limit));
-    if (typeof options.offset === 'number') params.set('offset', String(options.offset));
-    if (options.includeTotal) params.set('include_total', 'true');
-    if (options.fields) params.set('fields', options.fields);
-    const qs = params.toString() ? `?${params}` : '';
-    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items${qs}`, { method: 'GET' }, 'getStoryboardItems');
-}
-
-export async function getStoryboardItems(
-    episodeId: string,
-    scriptId?: string,
-    options: StoryboardItemsQueryOptions = {},
-) {
-    const result = normalizeStoryboardFallbackResult(await getStoryboardItemsRaw(episodeId, scriptId, options));
-    const shouldFallback =
-        !!scriptId &&
-        options.fallbackToEpisode !== false &&
-        result?.success &&
-        Array.isArray(result.items) &&
-        result.items.length === 0 &&
-        (typeof result.total !== 'number' || result.total === 0);
-
-    if (!shouldFallback) return result;
-
-    const fallback = await getStoryboardItemsRaw(episodeId, undefined, {
-        ...options,
-        fallbackToEpisode: false,
-    });
-    if (fallback?.success && Array.isArray(fallback.items) && fallback.items.length > 0) {
-        return {
-            ...fallback,
-            fallbackScriptId: scriptId,
-            fallbackReason: 'empty_script_storyboard',
-        };
-    }
-    return result;
-}
-
-function normalizeStoryboardFallbackResult(result: any) {
-    if (!result || typeof result !== 'object') return result;
-    const fallbackScriptId = result.fallbackScriptId ?? result.fallback_script_id;
-    const fallbackReason = result.fallbackReason ?? result.fallback_reason;
-    if (!fallbackScriptId && !fallbackReason) return result;
-    return {
-        ...result,
-        fallbackScriptId,
-        fallbackReason,
-    };
-}
-
 export async function createStoryboardItem(episodeId: string, data: any) {
     return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items`, {
         method: 'POST',
         body: JSON.stringify(data)
     }, 'createStoryboardItem');
-}
-
-export async function updateStoryboardItem(itemId: string, data: any) {
-    return apiJson<any>(`/api/storyboard-items/${itemId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateStoryboardItem');
 }
 
 export async function deleteStoryboardItem(itemId: string) {
@@ -512,10 +444,6 @@ export async function reorderStoryboardItems(episodeId: string, itemIds: string[
 
 // ===== Video Segment APIs =====
 
-export async function getVideoSegments(episodeId: string) {
-    return apiJson<any>(`/api/episodes/${episodeId}/video-segments`, { method: 'GET' }, 'getVideoSegments');
-}
-
 export async function createVideoSegment(episodeId: string, data: any) {
     return apiJson<any>(`/api/episodes/${episodeId}/video-segments`, {
         method: 'POST',
@@ -531,10 +459,6 @@ export async function updateVideoSegment(segmentId: string, data: any) {
 }
 
 // ===== Audio Track APIs =====
-
-export async function getAudioTracks(episodeId: string) {
-    return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`, { method: 'GET' }, 'getAudioTracks');
-}
 
 export async function createAudioTrack(episodeId: string, data: any) {
     return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`, {
@@ -647,17 +571,6 @@ export async function generateMusic(data: { description: string; duration_ms?: n
 
 // ===== Episode Script APIs =====
 
-export async function getEpisodeScript(episodeId: string) {
-    return apiJson<any>(`/api/episodes/${episodeId}/script`, { method: 'GET' }, 'getEpisodeScript');
-}
-
-export async function updateEpisodeScript(episodeId: string, data: any) {
-    return apiJson<any>(`/api/episodes/${episodeId}/script`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateEpisodeScript');
-}
-
 // ===== 多文件剧本 APIs =====
 
 export async function listEpisodeScripts(episodeId: string) {
@@ -734,10 +647,6 @@ export async function updateTimelineTrack(trackId: string, data: any) {
 
 // ===== Character Voice APIs =====
 
-export async function getCharacterVoices(projectId: string) {
-    return apiJson<any>(`/api/projects/${projectId}/character-voices`, { method: 'GET' }, 'getCharacterVoices');
-}
-
 export async function createCharacterVoice(data: {
     project_id: string; character_name: string;
     asset_id?: string; voice_provider?: string;
@@ -762,20 +671,6 @@ export async function deleteCharacterVoice(voiceId: string) {
 }
 
 // ===== Batch Operations =====
-
-export async function batchCreateStoryboardItems(episodeId: string, items: any[], scriptId?: string) {
-    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/batch`, {
-        method: 'POST',
-        body: JSON.stringify({ items, script_id: scriptId })
-    }, 'batchCreateStoryboardItems');
-}
-
-export async function extractToAssets(episodeId: string, characters: any[], scenes: any[], scriptId?: string) {
-    return apiJson<any>(`/api/episodes/${episodeId}/extract-to-assets`, {
-        method: 'POST',
-        body: JSON.stringify({ characters, scenes, script_id: scriptId })
-    }, 'extractToAssets');
-}
 
 export async function shareAsset(assetId: string, targetEpisodeId: string, targetScriptId: string) {
     return apiJson<any>(`/api/assets/${assetId}/share`, {

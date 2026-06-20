@@ -4,7 +4,7 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { EpisodeProvider, useEpisode } from '../../contexts/EpisodeContext';
 
-vi.mock('../../services/apiService', () => ({
+vi.mock('../../services/episodeDataService', () => ({
   getEpisodeScript: vi.fn().mockResolvedValue({
     success: true,
     script: { scriptId: 's1', episodeId: 'ep1', originalContent: '剧本内容', adaptedScript: '', metadata: {} }
@@ -16,8 +16,11 @@ vi.mock('../../services/apiService', () => ({
   getAssets: vi.fn().mockResolvedValue({ success: true, assets: [] }),
   getAudioTracks: vi.fn().mockResolvedValue({ success: true, tracks: [] }),
   getVideoSegments: vi.fn().mockResolvedValue({ success: true, segments: [] }),
+  getCharacterVoices: vi.fn().mockResolvedValue({ success: true, voices: [] }),
   updateStoryboardItem: vi.fn().mockResolvedValue({ success: true }),
-  getHeaders: vi.fn().mockReturnValue({}),
+  updateEpisodeScript: vi.fn().mockResolvedValue({ success: true }),
+  batchCreateStoryboardItems: vi.fn().mockResolvedValue({ success: true }),
+  extractToAssets: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 function wrapper({ children }: { children: React.ReactNode }) {
@@ -59,12 +62,12 @@ describe('EpisodeContext', () => {
   });
 
   it('exposes error when all APIs fail', async () => {
-    const apiService = await import('../../services/apiService');
-    vi.mocked(apiService.getEpisodeScript).mockRejectedValueOnce(new Error('fail'));
-    vi.mocked(apiService.getStoryboardItems).mockRejectedValueOnce(new Error('fail'));
-    vi.mocked(apiService.getAssets).mockRejectedValueOnce(new Error('fail'));
-    vi.mocked(apiService.getAudioTracks).mockRejectedValueOnce(new Error('fail'));
-    vi.mocked(apiService.getVideoSegments).mockRejectedValueOnce(new Error('fail'));
+    const episodeDataService = await import('../../services/episodeDataService');
+    vi.mocked(episodeDataService.getEpisodeScript).mockRejectedValueOnce(new Error('fail'));
+    vi.mocked(episodeDataService.getStoryboardItems).mockRejectedValueOnce(new Error('fail'));
+    vi.mocked(episodeDataService.getAssets).mockRejectedValueOnce(new Error('fail'));
+    vi.mocked(episodeDataService.getAudioTracks).mockRejectedValueOnce(new Error('fail'));
+    vi.mocked(episodeDataService.getVideoSegments).mockRejectedValueOnce(new Error('fail'));
 
     const { result } = renderHook(() => useEpisode(), { wrapper });
     await act(async () => {
@@ -87,8 +90,8 @@ describe('EpisodeContext', () => {
   });
 
   it('clears stale script selection when storyboard falls back to episode scope', async () => {
-    const apiService = await import('../../services/apiService');
-    vi.mocked(apiService.getStoryboardItems).mockResolvedValueOnce({
+    const episodeDataService = await import('../../services/episodeDataService');
+    vi.mocked(episodeDataService.getStoryboardItems).mockResolvedValueOnce({
       success: true,
       items: [{ item_id: 'sb_episode', sort_order: 0, dialogue: 'episode scope' }],
       total: 23,
@@ -108,7 +111,7 @@ describe('EpisodeContext', () => {
       await result.current.loadStoryboardItemsPage({ limit: 10, includeTotal: true });
     });
 
-    expect(apiService.getStoryboardItems).toHaveBeenLastCalledWith(
+    expect(episodeDataService.getStoryboardItems).toHaveBeenLastCalledWith(
       'ep1',
       'stale_script',
       { limit: 10, offset: 0, includeTotal: true },
@@ -119,7 +122,7 @@ describe('EpisodeContext', () => {
   });
 
   it('reloads script scoped slices on first script selection', async () => {
-    const apiService = await import('../../services/apiService');
+    const episodeDataService = await import('../../services/episodeDataService');
     const { result } = renderHook(() => useEpisode(), { wrapper });
 
     await act(async () => {
@@ -132,18 +135,18 @@ describe('EpisodeContext', () => {
     });
 
     await waitFor(() => {
-      expect(apiService.getStoryboardItems).toHaveBeenCalledWith(
+      expect(episodeDataService.getStoryboardItems).toHaveBeenCalledWith(
         'ep1',
         'script_2',
         { limit: 10, includeTotal: true },
       );
     });
-    expect(apiService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, 'script_2');
+    expect(episodeDataService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, 'script_2');
   });
 
   it('reloads loaded script scoped slices after stale storyboard fallback clears selection', async () => {
-    const apiService = await import('../../services/apiService');
-    vi.mocked(apiService.getStoryboardItems)
+    const episodeDataService = await import('../../services/episodeDataService');
+    vi.mocked(episodeDataService.getStoryboardItems)
       .mockResolvedValueOnce({
         success: true,
         items: [{ item_id: 'sb_episode', sort_order: 0, dialogue: 'episode scope' }],
@@ -169,8 +172,8 @@ describe('EpisodeContext', () => {
 
     await waitFor(() => expect(result.current.selectedScriptId).toBeNull());
     await waitFor(() => {
-      expect(apiService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, undefined);
+      expect(episodeDataService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, undefined);
     });
-    expect(apiService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, 'stale_script');
+    expect(episodeDataService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, 'stale_script');
   });
 });

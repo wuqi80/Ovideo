@@ -954,7 +954,7 @@ def check_lifespan_shutdown_contract(root: Path) -> int:
 def check_storyboard_paged_reload_contract(root: Path) -> int:
     """Storyboard workflow should keep large episodes paged after mutations."""
     page_text = (root / "new_html" / "pages" / "StoryboardGenPage.tsx").read_text(encoding="utf-8")
-    api_text = (root / "new_html" / "services" / "apiService.ts").read_text(encoding="utf-8")
+    episode_data_text = (root / "new_html" / "services" / "episodeDataService.ts").read_text(encoding="utf-8")
     context_text = (root / "new_html" / "contexts" / "EpisodeContext.tsx").read_text(encoding="utf-8")
     workspace_text = (root / "new_html" / "WorkspaceApp.tsx").read_text(encoding="utf-8")
     hook_text = (root / "new_html" / "hooks" / "useEpisodeData.ts").read_text(encoding="utf-8")
@@ -1021,10 +1021,10 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         (context_text, "limit: EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT", "episode context bounded storyboard slice"),
         (hook_text, "STORYBOARD_QUERY_INITIAL_LIMIT = 10", "legacy storyboard query hook bounded limit"),
         (video_page_text, "getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'video' })", "video import uses lightweight storyboard fields"),
-        (api_text, "fallbackToEpisode", "storyboard stale script fallback option"),
-        (api_text, "function normalizeStoryboardFallbackResult(", "storyboard backend fallback metadata normalizer"),
-        (api_text, "result.fallbackScriptId ?? result.fallback_script_id", "storyboard fallback script id supports snake case"),
-        (api_text, "fallbackReason: 'empty_script_storyboard'", "storyboard stale script fallback marker"),
+        (episode_data_text, "fallbackToEpisode", "storyboard stale script fallback option"),
+        (episode_data_text, "function normalizeStoryboardFallbackResult(", "storyboard backend fallback metadata normalizer"),
+        (episode_data_text, "result.fallbackScriptId ?? result.fallback_script_id", "storyboard fallback script id supports snake case"),
+        (episode_data_text, "fallbackReason: 'empty_script_storyboard'", "storyboard stale script fallback marker"),
         (api_test_text, "falls back to episode storyboard when selected script has no rows", "storyboard fallback unit test"),
         (api_test_text, "normalizes backend storyboard fallback metadata", "storyboard backend fallback metadata unit test"),
         (context_text, "clearStaleScriptSelectionFromStoryboardFallback", "storyboard context clears stale script fallback"),
@@ -1050,7 +1050,7 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
 def check_enhance_lightweight_storyboard_contract(root: Path) -> int:
     """Enhance workflow should not fetch full storyboard rows just to build audio clips."""
     page_text = (root / "new_html" / "pages" / "EnhancePage.tsx").read_text(encoding="utf-8")
-    api_text = (root / "new_html" / "services" / "apiService.ts").read_text(encoding="utf-8")
+    episode_data_text = (root / "new_html" / "services" / "episodeDataService.ts").read_text(encoding="utf-8")
     router_text = (root / "routers" / "storyboard.py").read_text(encoding="utf-8")
     dao_text = (root / "dao" / "creative" / "storyboard.py").read_text(encoding="utf-8")
 
@@ -1064,12 +1064,12 @@ def check_enhance_lightweight_storyboard_contract(root: Path) -> int:
 
     required_snippets = {
         "fields: 'audio'": "EnhancePage lightweight audio field query",
-        "params.set('fields'": "apiService storyboard fields query option",
+        "params.set('fields'": "episodeDataService storyboard fields query option",
         "fields: Optional[str]": "storyboard route fields query parameter",
         "fields=selected_fields": "storyboard route passes selected fields to DAO",
         '"audio": (': "StoryboardDAO audio field set",
     }
-    sources = "\n".join([page_text, api_text, router_text, dao_text])
+    sources = "\n".join([page_text, episode_data_text, router_text, dao_text])
     missing = [
         f"{label}: missing {snippet}"
         for snippet, label in required_snippets.items()
@@ -2802,6 +2802,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
     dash_scope_cards = new_html / "components" / "video" / "DashScopeCards.tsx"
     global_task_manager = new_html / "services" / "globalTaskManager.ts"
     task_notification_service = new_html / "services" / "taskNotificationService.ts"
+    episode_data_service = new_html / "services" / "episodeDataService.ts"
+    use_episode_data = new_html / "hooks" / "useEpisodeData.ts"
+    episode_context = new_html / "contexts" / "EpisodeContext.tsx"
     admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
     design_page = new_html / "pages" / "DesignPage.tsx"
     material_page = new_html / "components" / "MaterialPage.tsx"
@@ -2822,6 +2825,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         new_html / "services" / "creditService.ts",
         new_html / "services" / "organizationService.ts",
         task_notification_service,
+        episode_data_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2872,6 +2876,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, publicBlob, secureApiUrl } from './httpClient'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
         (api_service, "from './taskNotificationService';"),
+        (api_service, "from './episodeDataService';"),
         (api_service, "function normalizeImageSourceUrl("),
         (api_service, "function isSameOriginUrl("),
         (api_service, "secureApiUrl(absolute, { requireAuth: false })"),
@@ -2886,6 +2891,19 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (task_notification_service, "return apiJson<any>(`/api/notifications/${notificationId}/read`"),
         (task_notification_service, "return apiJson<any>('/api/notifications/read-all'"),
         (task_notification_service, "return apiJson<any>(`/api/notifications/${notificationId}`"),
+        (episode_data_service, "import { apiJson } from './httpClient';"),
+        (episode_data_service, "export interface StoryboardItemsQueryOptions"),
+        (episode_data_service, "async function getStoryboardItemsRaw("),
+        (episode_data_service, "fallbackScriptId: scriptId"),
+        (episode_data_service, "return apiJson<any>(`/api/projects/${projectId}/assets${qs}`"),
+        (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items${qs}`"),
+        (episode_data_service, "return apiJson<any>(`/api/storyboard-items/${itemId}`"),
+        (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/video-segments`"),
+        (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`"),
+        (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/script`"),
+        (episode_data_service, "return apiJson<any>(`/api/projects/${projectId}/character-voices`"),
+        (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/batch`"),
+        (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/extract-to-assets`"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads same-origin image through shared authenticated blob client"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "does not attach local auth token to external image downloads"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
@@ -2903,12 +2921,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "return apiJson<any>(`/api/projects/${projectId}/episodes`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}`"),
         (api_service, "return apiJson<any>('/api/materials/process'"),
-        (api_service, "return apiJson<any>(`/api/projects/${projectId}/assets${qs}`"),
         (api_service, "return apiJson<any>('/api/assets'"),
         (api_service, "return apiJson<any>(`/api/assets/${assetId}`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items${qs}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items`"),
-        (api_service, "return apiJson<any>(`/api/storyboard-items/${itemId}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/all${qs}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/reorder`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/video-segments`"),
@@ -2922,18 +2937,14 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "return apiJson<any>('/api/audio/generate-speech'"),
         (api_service, "return apiJson<any>('/api/audio/generate-sfx'"),
         (api_service, "return apiJson<any>('/api/audio/generate-music'"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/script`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/scripts`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/scripts/${scriptId}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/script-segments${qs}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/script-segments/batch`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/timeline-tracks`"),
         (api_service, "return apiJson<any>(`/api/timeline-tracks/${trackId}`"),
-        (api_service, "return apiJson<any>(`/api/projects/${projectId}/character-voices`"),
         (api_service, "return apiJson<any>('/api/character-voices'"),
         (api_service, "return apiJson<any>(`/api/character-voices/${voiceId}`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/batch`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/extract-to-assets`"),
         (api_service, "return apiJson<any>(`/api/assets/${assetId}/share`"),
         (api_service, "return apiJson<any>('/api/minimax/voice-design'"),
         (api_service, "return apiJson<any>('/api/minimax/voice-clone'"),
@@ -2974,6 +2985,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (global_task_manager, "import { authTokenFromHeaders } from './httpClient'"),
         (global_task_manager, "from './taskNotificationService'"),
         (global_task_manager, "authTokenFromHeaders({ requireAuth: false })"),
+        (episode_context, "from '../services/episodeDataService'"),
+        (use_episode_data, "from '../services/episodeDataService'"),
         (admin_login_page, "import { apiJson } from '../services/httpClient'"),
         (admin_login_page, "apiJson<any>('/api/login'"),
         (admin_login_page, "{ requireAuth: false }"),

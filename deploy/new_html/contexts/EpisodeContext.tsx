@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
+  batchCreateStoryboardItems as apiBatchCreateStoryboardItems,
+  extractToAssets as apiExtractToAssets,
   getEpisodeScript,
   getStoryboardItems,
   getAssets,
@@ -9,9 +11,7 @@ import {
   getCharacterVoices,
   updateStoryboardItem as apiUpdateStoryboardItem,
   updateEpisodeScript as apiUpdateEpisodeScript,
-  batchCreateStoryboardItems as apiBatchCreateStoryboardItems,
-  extractToAssets as apiExtractToAssets,
-} from '../services/apiService';
+} from '../services/episodeDataService';
 import type { AssetItem, StoryboardItemDB, VideoSegment, AudioTrack, EpisodeScript, CharacterVoice } from '../types';
 
 const EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT = 10;

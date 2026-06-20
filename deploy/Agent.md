@@ -6210,3 +6210,18 @@
 - Server `npm run test:run -- --pool=forks __tests__/services/globalTaskManager.test.ts` passed `2/2`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Episode Data Service Split
+
+### Changes
+
+- Extracted episode storyboard/assets/audio/video/script/character data helpers from `new_html/services/apiService.ts` into `new_html/services/episodeDataService.ts`.
+- Kept `apiService.ts` compatibility re-exports so older imports continue to work.
+- Updated `EpisodeContext` and `useEpisodeData` to import the episode data helpers directly from the new service.
+- Moved storyboard fallback and lightweight-field contract checks to the new service owner.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6853`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Note: this change was pushed to the remote repository first; server deployment and online smoke verification are still pending.
