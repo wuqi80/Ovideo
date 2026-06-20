@@ -5017,3 +5017,25 @@
   - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
   - `service_mapper_purity_checks=438`
   - `PYTHONIOENCODING=utf-8 python deploy/scripts/smoke_test.py` -> `9/9`
+
+## 2026-06-20 Frontend API Service Project HTTP Client Migration
+
+### Changes
+
+- Migrated the project-main-flow helpers in `new_html/services/apiService.ts` from local `fetch()` / `getHeaders()` calls to shared `apiJson()`:
+  - project save/list/detail/delete/update/export
+  - project member list/create/update/delete
+  - episode list/create/update/delete
+  - material processing
+  - asset list/create/update/delete
+  - storyboard item list/create/update/delete/reorder/bulk-delete
+- Extended `scripts/check_route_contract.py` so these migrated endpoints cannot reintroduce direct `fetch()` calls.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `frontend_http_client_checks=328`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/smoke_test.py` -> `9/9`
+- Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
+- `tsc --noEmit` still fails on existing baseline fixture/component type errors, but the `apiService` migration no longer leaks `unknown` return types because migrated calls use `apiJson<any>()`.

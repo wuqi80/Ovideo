@@ -11,13 +11,10 @@ export { getAuthToken, getHeaders, handleResponse };
  * 保存项目到后端
  */
 export async function saveProject(projectData: any): Promise<{ success: boolean; project_id: string }> {
-    const response = await fetch(`${API_BASE}/api/projects/save`, {
+    return apiJson<any>('/api/projects/save', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(projectData)
-    });
-    
-    return handleResponse(response, 'saveProject');
+    }, 'saveProject');
 }
 
 /**
@@ -32,36 +29,21 @@ export async function listProjects(
     if (limit !== 100) qs.set('limit', String(limit));
     if (orgId) qs.set('org_id', orgId);
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
-    const response = await fetch(`${API_BASE}/api/projects/list${suffix}`, {
-        method: 'GET',
-        headers: getHeaders()
-    });
-
-    return handleResponse(response, 'listProjects');
+    return apiJson<any>(`/api/projects/list${suffix}`, { method: 'GET' }, 'listProjects');
 }
 
 /**
  * 获取项目详情
  */
 export async function getProject(projectId: string): Promise<{ success: boolean; project: any }> {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}`, {
-        method: 'GET',
-        headers: getHeaders()
-    });
-    
-    return handleResponse(response, 'getProject');
+    return apiJson<any>(`/api/projects/${projectId}`, { method: 'GET' }, 'getProject');
 }
 
 /**
  * 删除项目
  */
 export async function deleteProject(projectId: string): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    
-    return handleResponse(response, 'deleteProject');
+    return apiJson<any>(`/api/projects/${projectId}`, { method: 'DELETE' }, 'deleteProject');
 }
 
 /**
@@ -72,13 +54,10 @@ export async function exportToVideo(projectId: string, selectedItems: string[]):
     exported_count: number;
     video_tasks: any[];
 }> {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/export-to-video`, {
+    return apiJson<any>(`/api/projects/${projectId}/export-to-video`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ selected_items: selectedItems })
-    });
-    
-    return handleResponse(response, 'exportToVideo');
+    }, 'exportToVideo');
 }
 
 /**
@@ -189,12 +168,8 @@ export async function processMaterial(
         throw new Error('未登录');
     }
     
-    const response = await fetch(`${API_BASE}/api/materials/process`, {
+    return apiJson<any>('/api/materials/process', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify({
             image_filename: imageFilename,
             workflow_type: workflowType,
@@ -203,44 +178,31 @@ export async function processMaterial(
             file_role: entityOptions?.fileRole,
             episode_id: entityOptions?.episodeId,
         })
-    });
-    
-    return handleResponse(response);
+    }, 'processMaterial');
 }
 
 // ==================== 项目成员管理 API ====================
 
 export async function getProjectMembers(projectId: string) {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/members`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getProjectMembers');
+    return apiJson<any>(`/api/projects/${projectId}/members`, { method: 'GET' }, 'getProjectMembers');
 }
 
 export async function addProjectMember(projectId: string, userId: string, role = 'member', responsibility = 'all') {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/members`, {
+    return apiJson<any>(`/api/projects/${projectId}/members`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ user_id: userId, role, responsibility })
-    });
-    return handleResponse(response, 'addProjectMember');
+    }, 'addProjectMember');
 }
 
 export async function updateProjectMember(projectId: string, memberUserId: string, data: { role?: string; responsibility?: string }) {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/members/${memberUserId}`, {
+    return apiJson<any>(`/api/projects/${projectId}/members/${memberUserId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateProjectMember');
+    }, 'updateProjectMember');
 }
 
 export async function removeProjectMember(projectId: string, memberUserId: string) {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/members/${memberUserId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'removeProjectMember');
+    return apiJson<any>(`/api/projects/${projectId}/members/${memberUserId}`, { method: 'DELETE' }, 'removeProjectMember');
 }
 
 // ==================== 项目更新 API ====================
@@ -251,142 +213,129 @@ export async function updateProject(projectId: string, data: {
     cover_url?: string;
     tags?: string[];
 }) {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+    return apiJson<any>(`/api/projects/${projectId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateProject');
+    }, 'updateProject');
 }
 
 // ==================== 全局任务 API ====================
 
 export async function getActiveTasks() {
-    return apiJson('/api/tasks/active', { method: 'GET' }, 'getActiveTasks');
+    return apiJson<any>('/api/tasks/active', { method: 'GET' }, 'getActiveTasks');
 }
 
 export async function getTaskNotifications(since?: number) {
     const url = since
         ? `/api/tasks/notifications?since=${since}`
         : `/api/tasks/notifications`;
-    return apiJson(url, { method: 'GET' }, 'getTaskNotifications');
+    return apiJson<any>(url, { method: 'GET' }, 'getTaskNotifications');
 }
 
 // ==================== 持久化通知 API ====================
 
 export async function getUnreadNotificationCount() {
-    return apiJson('/api/notifications/unread-count', { method: 'GET' }, 'getUnreadNotificationCount');
+    return apiJson<any>('/api/notifications/unread-count', { method: 'GET' }, 'getUnreadNotificationCount');
 }
 
 export async function getNotifications(status?: string, limit = 50, offset = 0) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (status) params.set('status', status);
-    return apiJson(`/api/notifications?${params}`, { method: 'GET' }, 'getNotifications');
+    return apiJson<any>(`/api/notifications?${params}`, { method: 'GET' }, 'getNotifications');
 }
 
 export async function markNotificationRead(notificationId: string) {
-    return apiJson(`/api/notifications/${notificationId}/read`, { method: 'POST' }, 'markNotificationRead');
+    return apiJson<any>(`/api/notifications/${notificationId}/read`, { method: 'POST' }, 'markNotificationRead');
 }
 
 export async function markAllNotificationsRead() {
-    return apiJson('/api/notifications/read-all', { method: 'POST' }, 'markAllNotificationsRead');
+    return apiJson<any>('/api/notifications/read-all', { method: 'POST' }, 'markAllNotificationsRead');
 }
 
 // 2026-05-20 (M5)：dismiss 单条通知（后端 DELETE /api/notifications/{id}）
 export async function dismissNotification(notificationId: string) {
-    return apiJson(`/api/notifications/${notificationId}`, { method: 'DELETE' }, 'dismissNotification');
+    return apiJson<any>(`/api/notifications/${notificationId}`, { method: 'DELETE' }, 'dismissNotification');
 }
 
 // ==================== 集数管理 API ====================
 
 export async function getEpisodes(projectId: string) {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/episodes`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getEpisodes');
+    return apiJson<any>(`/api/projects/${projectId}/episodes`, { method: 'GET' }, 'getEpisodes');
 }
 
 export async function createEpisode(projectId: string, episodeName = '', description = '') {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/episodes`, {
+    return apiJson<any>(`/api/projects/${projectId}/episodes`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ project_id: projectId, episode_name: episodeName, description })
-    });
-    return handleResponse(response, 'createEpisode');
+    }, 'createEpisode');
 }
 
 export async function updateEpisode(episodeId: string, data: { episode_name?: string; description?: string; status?: string }) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}`, {
+    return apiJson<any>(`/api/episodes/${episodeId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateEpisode');
+    }, 'updateEpisode');
 }
 
 export async function deleteEpisode(episodeId: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteEpisode');
+    return apiJson<any>(`/api/episodes/${episodeId}`, { method: 'DELETE' }, 'deleteEpisode');
 }
 
 // ==================== 画布 API ====================
 
 export async function createCanvasBoard(projectId: string, name = '未命名画布', description = '') {
-    return apiJson('/api/canvas/boards', {
+    return apiJson<any>('/api/canvas/boards', {
         method: 'POST',
         body: JSON.stringify({ project_id: projectId, name, description })
     }, 'createCanvasBoard');
 }
 
 export async function getCanvasBoards(projectId: string) {
-    return apiJson(`/api/canvas/boards?project_id=${projectId}`, { method: 'GET' }, 'getCanvasBoards');
+    return apiJson<any>(`/api/canvas/boards?project_id=${projectId}`, { method: 'GET' }, 'getCanvasBoards');
 }
 
 export async function getCanvasBoardDetail(boardId: string) {
-    return apiJson(`/api/canvas/boards/${boardId}`, { method: 'GET' }, 'getCanvasBoardDetail');
+    return apiJson<any>(`/api/canvas/boards/${boardId}`, { method: 'GET' }, 'getCanvasBoardDetail');
 }
 
 export async function updateCanvasBoard(boardId: string, data: any) {
-    return apiJson(`/api/canvas/boards/${boardId}`, {
+    return apiJson<any>(`/api/canvas/boards/${boardId}`, {
         method: 'PUT',
         body: JSON.stringify(data)
     }, 'updateCanvasBoard');
 }
 
 export async function deleteCanvasBoard(boardId: string) {
-    return apiJson(`/api/canvas/boards/${boardId}`, { method: 'DELETE' }, 'deleteCanvasBoard');
+    return apiJson<any>(`/api/canvas/boards/${boardId}`, { method: 'DELETE' }, 'deleteCanvasBoard');
 }
 
 export async function createCanvasNode(boardId: string, nodeType: string, x = 0, y = 0, data?: any) {
-    return apiJson('/api/canvas/nodes', {
+    return apiJson<any>('/api/canvas/nodes', {
         method: 'POST',
         body: JSON.stringify({ board_id: boardId, node_type: nodeType, x, y, data })
     }, 'createCanvasNode');
 }
 
 export async function updateCanvasNode(nodeId: string, data: any) {
-    return apiJson(`/api/canvas/nodes/${nodeId}`, {
+    return apiJson<any>(`/api/canvas/nodes/${nodeId}`, {
         method: 'PUT',
         body: JSON.stringify(data)
     }, 'updateCanvasNode');
 }
 
 export async function deleteCanvasNode(nodeId: string) {
-    return apiJson(`/api/canvas/nodes/${nodeId}`, { method: 'DELETE' }, 'deleteCanvasNode');
+    return apiJson<any>(`/api/canvas/nodes/${nodeId}`, { method: 'DELETE' }, 'deleteCanvasNode');
 }
 
 export async function createCanvasConnection(boardId: string, sourceNodeId: string, targetNodeId: string) {
-    return apiJson('/api/canvas/connections', {
+    return apiJson<any>('/api/canvas/connections', {
         method: 'POST',
         body: JSON.stringify({ board_id: boardId, source_node_id: sourceNodeId, target_node_id: targetNodeId })
     }, 'createCanvasConnection');
 }
 
 export async function deleteCanvasConnection(connectionId: string) {
-    return apiJson(`/api/canvas/connections/${connectionId}`, { method: 'DELETE' }, 'deleteCanvasConnection');
+    return apiJson<any>(`/api/canvas/connections/${connectionId}`, { method: 'DELETE' }, 'deleteCanvasConnection');
 }
 
 // ==================== 管理员API ====================
@@ -497,10 +446,7 @@ export async function getAssets(projectId: string, episodeId?: string, assetType
     if (assetType) params.set('asset_type', assetType);
     if (scriptId) params.set('script_id', scriptId);
     const qs = params.toString() ? `?${params}` : '';
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/assets${qs}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getAssets');
+    return apiJson<any>(`/api/projects/${projectId}/assets${qs}`, { method: 'GET' }, 'getAssets');
 }
 
 export async function createAsset(data: {
@@ -508,29 +454,21 @@ export async function createAsset(data: {
     episode_id?: string; script_id?: string; description?: string;
     reference_images?: string[];
 }) {
-    const response = await fetch(`${API_BASE}/api/assets`, {
+    return apiJson<any>('/api/assets', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'createAsset');
+    }, 'createAsset');
 }
 
 export async function updateAsset(assetId: string, data: Record<string, any>) {
-    const response = await fetch(`${API_BASE}/api/assets/${assetId}`, {
+    return apiJson<any>(`/api/assets/${assetId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateAsset');
+    }, 'updateAsset');
 }
 
 export async function deleteAsset(assetId: string) {
-    const response = await fetch(`${API_BASE}/api/assets/${assetId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteAsset');
+    return apiJson<any>(`/api/assets/${assetId}`, { method: 'DELETE' }, 'deleteAsset');
 }
 
 // ===== Storyboard Item APIs =====
@@ -554,56 +492,39 @@ export async function getStoryboardItems(
     if (options.includeTotal) params.set('include_total', 'true');
     if (options.fields) params.set('fields', options.fields);
     const qs = params.toString() ? `?${params}` : '';
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/storyboard-items${qs}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getStoryboardItems');
+    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items${qs}`, { method: 'GET' }, 'getStoryboardItems');
 }
 
 export async function createStoryboardItem(episodeId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/storyboard-items`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'createStoryboardItem');
+    }, 'createStoryboardItem');
 }
 
 export async function updateStoryboardItem(itemId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/storyboard-items/${itemId}`, {
+    return apiJson<any>(`/api/storyboard-items/${itemId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateStoryboardItem');
+    }, 'updateStoryboardItem');
 }
 
 export async function deleteStoryboardItem(itemId: string) {
-    const response = await fetch(`${API_BASE}/api/storyboard-items/${itemId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteStoryboardItem');
+    return apiJson<any>(`/api/storyboard-items/${itemId}`, { method: 'DELETE' }, 'deleteStoryboardItem');
 }
 
 export async function deleteAllStoryboardItems(episodeId: string, scriptId?: string) {
     const params = new URLSearchParams();
     if (scriptId) params.set('script_id', scriptId);
     const qs = params.toString() ? `?${params}` : '';
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/storyboard-items/all${qs}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteAllStoryboardItems');
+    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/all${qs}`, { method: 'DELETE' }, 'deleteAllStoryboardItems');
 }
 
 export async function reorderStoryboardItems(episodeId: string, itemIds: string[]) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/storyboard-items/reorder`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/reorder`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ item_ids: itemIds })
-    });
-    return handleResponse(response, 'reorderStoryboardItems');
+    }, 'reorderStoryboardItems');
 }
 
 // ===== Video Segment APIs =====
