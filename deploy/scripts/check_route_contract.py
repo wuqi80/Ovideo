@@ -2573,6 +2573,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     """Selected frontend services should share auth/error handling via httpClient."""
     new_html = root / "new_html"
     http_client = new_html / "services" / "httpClient.ts"
+    api_service = new_html / "services" / "apiService.ts"
     video_page = new_html / "components" / "VideoPage.tsx"
     project_hub = new_html / "components" / "ProjectHub.tsx"
     episode_hub = new_html / "pages" / "EpisodeHubPage.tsx"
@@ -2618,6 +2619,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
 
     required_snippets = [
         (http_client, "export function buildAuthHeaders("),
+        (http_client, "export async function handleResponse("),
+        (http_client, "export function getAuthToken("),
+        (http_client, "export function getHeaders("),
         (http_client, "includeContentType?: boolean"),
         (http_client, "export function authTokenFromHeaders("),
         (http_client, "export function secureApiUrl("),
@@ -2635,6 +2639,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "const postGenerationTask = async ("),
         (new_html / "services" / "geminiService.ts", "postGenerationTask('/api/generate/comfyui-workflow'"),
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
+        (api_service, "import { apiJson, getAuthToken, getHeaders, handleResponse } from './httpClient'"),
+        (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
+        (api_service, "return apiJson('/api/tasks/active'"),
+        (api_service, "return apiJson('/api/notifications/unread-count'"),
         (video_page, "videoService.secureMediaUrl("),
         (video_page, "videoService.getProjectVideoTasks("),
         (video_page, "videoService.clearProjectVideoTasks("),
@@ -2711,6 +2719,19 @@ def check_frontend_http_client_contract(root: Path) -> int:
             if snippet in text:
                 fail(f"Frontend page has duplicated request/auth logic in {path.relative_to(root)}: {snippet}")
             checks += 1
+
+    api_service_text = api_service.read_text(encoding="utf-8")
+    for snippet in [
+        "fetch(`${API_BASE}/api/tasks/active`",
+        "fetch(`${API_BASE}/api/notifications/unread-count`",
+        "fetch(`${API_BASE}/api/notifications?${params}`",
+        "fetch(`${API_BASE}/api/notifications/${notificationId}/read`",
+        "fetch(`${API_BASE}/api/notifications/read-all`",
+        "fetch(`${API_BASE}/api/notifications/${notificationId}`",
+    ]:
+        if snippet in api_service_text:
+            fail(f"apiService task/notification endpoints must use shared httpClient: {snippet}")
+        checks += 1
 
     video_page_text = video_page.read_text(encoding="utf-8")
     for snippet in [

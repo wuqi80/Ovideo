@@ -1,5 +1,3 @@
-import { getHeaders, handleResponse } from './apiService';
-
 type HeaderMap = Record<string, string>;
 
 interface HeaderOptions {
@@ -10,6 +8,114 @@ interface HeaderOptions {
 
 interface ApiFetchConfig extends HeaderOptions {
   apiName?: string;
+}
+
+/**
+ * 统一的响应处理函数
+ * 2026-05-24：504 / 4xx / 5xx 的 detail 若是 dict，平铺到 Error 对象上，
+ * 让上层能用 e.task_id / e.error 做精细处理（之前一律 [object Object]）。
+ *
+ * 2026-05-26 修复：401 处理改为路径感知 —
+ *   - /admin/* 路径下 401 → 清 sessionStorage admin session，跳 /admin/login（保留 from 状态）
+ *   - 其他路径 → 清 localStorage 主站 token，跳 /login（行为不变）
+ *   - 在 /admin/login 或 /login 自身上 401 → 不再跳（防死循环）
+ * 旧 bug：admin 路径下 401 清的是主站 token，跳 /login 又被 App.tsx 的 path="*" 兜底到 /projects。
+ */
+export async function handleResponse(response: Response, apiName: string = 'API'): Promise<any> {
+  if (response.status === 401) {
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    const isAdminPath = path.startsWith('/admin');
+    const isLoginPage = path === '/login' || path === '/admin/login';
+    console.error(`${apiName} 返回401，token可能已失效（path=${path}, isAdmin=${isAdminPath}）`);
+
+    if (isAdminPath) {
+      try {
+        sessionStorage.removeItem('admin_session_token');
+        sessionStorage.removeItem('admin_session_username');
+        sessionStorage.removeItem('admin_session_login_at');
+      } catch {}
+      if (!isLoginPage) {
+        const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.href = `/admin/login?redirect=${encodeURIComponent(from)}`;
+      }
+    } else {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('username');
+      if (!isLoginPage) window.location.href = '/login';
+    }
+    throw new Error('未授权，请重新登录');
+  }
+
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text();
+    console.error(`${apiName} 返回非JSON响应 (${response.status}):`, text.substring(0, 200));
+    if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
+      throw new Error(`${apiName} 返回了HTML页面而非JSON (${response.status})，可能是路由不存在或服务器错误`);
+    }
+    throw new Error(`${apiName} 返回了非JSON响应: ${text.substring(0, 100)}`);
+  }
+
+  let data: any;
+  try {
+    data = await response.json();
+  } catch (e) {
+    const text = await response.text();
+    console.error(`${apiName} JSON解析失败:`, text.substring(0, 200));
+    throw new Error(`${apiName} 返回的数据无法解析为JSON`);
+  }
+
+  if (!response.ok) {
+    const detail = data?.detail ?? data?.message;
+    if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+      const human =
+        detail.error ||
+        detail.message ||
+        JSON.stringify(detail);
+      console.error(`${apiName} 返回错误 (${response.status}):`, detail);
+      const err: any = new Error(`${apiName} 失败 (${response.status}): ${human}`);
+      err.status = response.status;
+      const { message: _detailMessage, ...rest } = detail as Record<string, any>;
+      Object.assign(err, rest);
+      throw err;
+    }
+    const text = typeof detail === 'string' ? detail : JSON.stringify(data);
+    console.error(`${apiName} 返回错误 (${response.status}):`, text);
+    const err: any = new Error(`${apiName} 失败 (${response.status}): ${text}`);
+    err.status = response.status;
+    throw err;
+  }
+
+  return data;
+}
+
+/**
+ * 获取认证 token。
+ *
+ * Admin 路由下优先使用独立的 sessionStorage admin token，避免后台登录态和主站登录态互相污染。
+ */
+export function getAuthToken(): string | null {
+  if (typeof window !== 'undefined') {
+    try {
+      if (window.location.pathname.startsWith('/admin')) {
+        return sessionStorage.getItem('admin_session_token');
+      }
+    } catch {}
+  }
+  return localStorage.getItem('auth_token');
+}
+
+export function getHeaders(): HeadersInit {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  const token = getAuthToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return headers;
 }
 
 function normalizeHeaders(headers?: HeadersInit): HeaderMap {

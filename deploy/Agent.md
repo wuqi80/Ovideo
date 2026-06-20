@@ -4620,6 +4620,38 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend API Service HTTP Client Core Migration
+
+### Changes
+
+- Moved core frontend request primitives into `new_html/services/httpClient.ts`:
+  - `handleResponse()`
+  - `getAuthToken()`
+  - `getHeaders()`
+- Kept compatibility exports from `new_html/services/apiService.ts` so existing imports and tests can continue to use `apiService.handleResponse`.
+- Migrated `apiService.ts` task and notification endpoints from local `fetch()` / `getHeaders()` calls to shared `apiJson()`:
+  - active tasks
+  - task notifications
+  - unread notification count
+  - notification list
+  - mark read / mark all read / dismiss
+- Extended `scripts/check_route_contract.py` so the core request primitives live in `httpClient.ts` and the migrated task/notification endpoints cannot reintroduce direct fetches.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Local targeted Vitest is blocked by the existing Windows Rollup optional dependency issue (`@rollup/rollup-win32-x64-msvc` missing); server Node validation is used below.
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_api_service_httpclient_core_20260620141102.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `npm run test:run -- __tests__/services/apiService.handleResponse.test.ts` -> `3 passed`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend Gemini Service HTTP Client Migration
 
 ### Changes

@@ -2,127 +2,10 @@
  * API服务层 - 调用后端接口
  */
 
+import { apiJson, getAuthToken, getHeaders, handleResponse } from './httpClient';
+
 const API_BASE = '';  // 使用相对路径，开发时通过vite proxy
-
-/**
- * 统一的响应处理函数
- * 2026-05-24：504 / 4xx / 5xx 的 detail 若是 dict，平铺到 Error 对象上，
- * 让上层能用 e.task_id / e.error 做精细处理（之前一律 [object Object]）。
- *
- * 2026-05-26 修复：401 处理改为路径感知 —
- *   - /admin/* 路径下 401 → 清 sessionStorage admin session，跳 /admin/login（保留 from 状态）
- *   - 其他路径 → 清 localStorage 主站 token，跳 /login（行为不变）
- *   - 在 /admin/login 或 /login 自身上 401 → 不再跳（防死循环）
- * 旧 bug：admin 路径下 401 清的是主站 token，跳 /login 又被 App.tsx 的 path="*" 兜底到 /projects。
- */
-export async function handleResponse(response: Response, apiName: string = 'API'): Promise<any> {
-    if (response.status === 401) {
-        const path = typeof window !== 'undefined' ? window.location.pathname : '';
-        const isAdminPath = path.startsWith('/admin');
-        const isLoginPage = path === '/login' || path === '/admin/login';
-        console.error(`${apiName} 返回401，token可能已失效（path=${path}, isAdmin=${isAdminPath}）`);
-
-        if (isAdminPath) {
-            try {
-                sessionStorage.removeItem('admin_session_token');
-                sessionStorage.removeItem('admin_session_username');
-                sessionStorage.removeItem('admin_session_login_at');
-            } catch {}
-            if (!isLoginPage) {
-                const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-                window.location.href = `/admin/login?redirect=${encodeURIComponent(from)}`;
-            }
-        } else {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('username');
-            if (!isLoginPage) window.location.href = '/login';
-        }
-        throw new Error('未授权，请重新登录');
-    }
-
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error(`${apiName} 返回非JSON响应 (${response.status}):`, text.substring(0, 200));
-        if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
-            throw new Error(`${apiName} 返回了HTML页面而非JSON (${response.status})，可能是路由不存在或服务器错误`);
-        }
-        throw new Error(`${apiName} 返回了非JSON响应: ${text.substring(0, 100)}`);
-    }
-
-    let data: any;
-    try {
-        data = await response.json();
-    } catch (e) {
-        const text = await response.text();
-        console.error(`${apiName} JSON解析失败:`, text.substring(0, 200));
-        throw new Error(`${apiName} 返回的数据无法解析为JSON`);
-    }
-
-    if (!response.ok) {
-        const detail = data?.detail ?? data?.message;
-        if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
-            // 优先取 error code（机器可读、稳定），其次 message（人话），最后整体 JSON
-            const human =
-                detail.error ||
-                detail.message ||
-                JSON.stringify(detail);
-            console.error(`${apiName} 返回错误 (${response.status}):`, detail);
-            const err: any = new Error(`${apiName} 失败 (${response.status}): ${human}`);
-            err.status = response.status;
-            // 平铺所有 detail 字段（task_id / error / hint / ...），但保留 Error 构造的 message
-            const { message: _detailMessage, ...rest } = detail as Record<string, any>;
-            Object.assign(err, rest);
-            throw err;
-        }
-        const text = typeof detail === 'string' ? detail : JSON.stringify(data);
-        console.error(`${apiName} 返回错误 (${response.status}):`, text);
-        const err: any = new Error(`${apiName} 失败 (${response.status}): ${text}`);
-        err.status = response.status;
-        throw err;
-    }
-
-    return data;
-}
-
-/**
- * 获取认证token
- *
- * 2026-05-26：admin 路由 (/admin/*) 下优先返回独立的 admin_session_token，
- * 让主站登录与后台登录隔离 — 后台登出不影响主站；主站登出也不影响后台。
- *
- * 2026-05-26 修复：admin 路径下 sessionStorage 没 token 时 **不再 fallthrough** 到主站
- *   localStorage.auth_token —— 用主站普通用户 token 去打 /api/admin/* 必然 401，
- *   触发 handleResponse 401 拦截器，循环跳转到 /admin/login。
- *   在 /admin/login 自身上返回 null 是预期（让 AdminLoginPage 的 form 主导登录流程）。
- */
-function getAuthToken(): string | null {
-    if (typeof window !== 'undefined') {
-        try {
-            if (window.location.pathname.startsWith('/admin')) {
-                const adminToken = sessionStorage.getItem('admin_session_token');
-                return adminToken;  // null 也直接返回，不要回落到主站 token
-            }
-        } catch {}
-    }
-    return localStorage.getItem('auth_token');
-}
-
-/**
- * 构造请求头
- */
-export function getHeaders(): HeadersInit {
-    const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-    };
-    
-    const token = getAuthToken();
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    return headers;
-}
+export { getAuthToken, getHeaders, handleResponse };
 
 /**
  * 保存项目到后端
@@ -379,61 +262,39 @@ export async function updateProject(projectId: string, data: {
 // ==================== 全局任务 API ====================
 
 export async function getActiveTasks() {
-    const response = await fetch(`${API_BASE}/api/tasks/active`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getActiveTasks');
+    return apiJson('/api/tasks/active', { method: 'GET' }, 'getActiveTasks');
 }
 
 export async function getTaskNotifications(since?: number) {
     const url = since
-        ? `${API_BASE}/api/tasks/notifications?since=${since}`
-        : `${API_BASE}/api/tasks/notifications`;
-    const response = await fetch(url, { headers: getHeaders() });
-    return handleResponse(response, 'getTaskNotifications');
+        ? `/api/tasks/notifications?since=${since}`
+        : `/api/tasks/notifications`;
+    return apiJson(url, { method: 'GET' }, 'getTaskNotifications');
 }
 
 // ==================== 持久化通知 API ====================
 
 export async function getUnreadNotificationCount() {
-    const response = await fetch(`${API_BASE}/api/notifications/unread-count`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getUnreadNotificationCount');
+    return apiJson('/api/notifications/unread-count', { method: 'GET' }, 'getUnreadNotificationCount');
 }
 
 export async function getNotifications(status?: string, limit = 50, offset = 0) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (status) params.set('status', status);
-    const response = await fetch(`${API_BASE}/api/notifications?${params}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getNotifications');
+    return apiJson(`/api/notifications?${params}`, { method: 'GET' }, 'getNotifications');
 }
 
 export async function markNotificationRead(notificationId: string) {
-    const response = await fetch(`${API_BASE}/api/notifications/${notificationId}/read`, {
-        method: 'POST',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'markNotificationRead');
+    return apiJson(`/api/notifications/${notificationId}/read`, { method: 'POST' }, 'markNotificationRead');
 }
 
 export async function markAllNotificationsRead() {
-    const response = await fetch(`${API_BASE}/api/notifications/read-all`, {
-        method: 'POST',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'markAllNotificationsRead');
+    return apiJson('/api/notifications/read-all', { method: 'POST' }, 'markAllNotificationsRead');
 }
 
 // 2026-05-20 (M5)：dismiss 单条通知（后端 DELETE /api/notifications/{id}）
 export async function dismissNotification(notificationId: string) {
-    const response = await fetch(`${API_BASE}/api/notifications/${notificationId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'dismissNotification');
+    return apiJson(`/api/notifications/${notificationId}`, { method: 'DELETE' }, 'dismissNotification');
 }
 
 // ==================== 集数管理 API ====================
