@@ -26,6 +26,41 @@ import { getAuthToken } from './services/httpClient';
 
 const loadAiModelService = () => import('./services/aiModelService');
 
+const WORKSPACE_INITIAL_STORYBOARD_COUNT = 10;
+
+function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
+  return rows.map((r: any, idx: number) => {
+    const boundAssets: string[] = Array.isArray(r.bound_assets ?? r.boundAssets)
+      ? (r.bound_assets ?? r.boundAssets)
+      : [];
+    const imageUrl = r.generated_image_url ?? r.generatedImageUrl ?? null;
+    const imageId = `img_${r.item_id ?? r.itemId ?? idx}`;
+    return {
+      id: r.item_id ?? r.itemId ?? uuidv4(),
+      shotNumber: idx + 1,
+      originalText: r.scene_heading ?? r.sceneHeading ?? '',
+      scriptSegment: r.action_text ?? r.actionText ?? '',
+      dialogue: r.dialogue ?? '',
+      cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
+      imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
+      videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
+      generatedImageUrl: imageUrl,
+      generatedImage: imageUrl ?? undefined,
+      generatedImages: imageUrl ? [{ id: imageId, url: imageUrl, thumbnail: imageUrl, timestamp: Date.now() }] : [],
+      selectedImageId: imageUrl ? imageId : undefined,
+      characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
+      scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
+      plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
+      scriptSegmentId: r.script_segment_id ?? r.scriptSegmentId ?? undefined,
+      sourceVideoShotNo: r.source_video_shot_no ?? r.sourceVideoShotNo ?? '',
+      videoScriptBlock: r.video_script_block ?? r.videoScriptBlock ?? '',
+      shotSize: r.shot_size ?? r.shotSize ?? '',
+      cameraAngle: r.camera_angle ?? r.cameraAngle ?? '',
+      timestamp: Date.now(),
+    };
+  });
+}
+
 /**
  * ✅ localStorage使用说明：
  * 
@@ -51,6 +86,7 @@ interface WorkspaceAppProps {
 const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episodeId: propEpisodeId, initialScriptId, onScriptSelect, onAfterExport }) => {
 
   const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [storyboardTotalsByFileId, setStoryboardTotalsByFileId] = useState<Record<string, number>>({});
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [checkedFileIds, setCheckedFileIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -187,13 +223,21 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
     if (!propEpisodeId) return;
     setIsLoadingProjects(true);
     try {
-      const [scriptsRes, sbRes, segRes] = await Promise.all([
+      const [scriptsRes, segRes] = await Promise.all([
         listEpisodeScripts(propEpisodeId).catch(() => ({ success: false, scripts: [] })),
-        getStoryboardItems(propEpisodeId).catch(() => ({ success: false, items: [] })),
         listEpisodeScriptSegments(propEpisodeId).catch(() => ({ success: false, segments: [] })),
       ]);
 
       const scripts: any[] = scriptsRes.success ? (scriptsRes.scripts || []) : [];
+      const initialStoryboardScriptId = (
+        initialScriptId && scripts.some((script: any) => (script.script_id ?? script.scriptId) === initialScriptId)
+      )
+        ? initialScriptId
+        : (scripts[0]?.script_id ?? scripts[0]?.scriptId ?? undefined);
+      const sbRes = await getStoryboardItems(propEpisodeId, initialStoryboardScriptId, {
+        limit: WORKSPACE_INITIAL_STORYBOARD_COUNT,
+        includeTotal: true,
+      }).catch(() => ({ success: false, items: [] }));
       const dbItems: any[] = sbRes.success ? (sbRes.items || []) : [];
 
       const itemsByScript = new Map<string | null, any[]>();
@@ -223,39 +267,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         list.sort((a, b) => a.order - b.order);
       }
 
-      const buildUiItems = (rows: any[]): StoryboardItem[] => rows.map((r: any, idx: number) => {
-        const boundAssets: string[] = Array.isArray(r.bound_assets ?? r.boundAssets)
-          ? (r.bound_assets ?? r.boundAssets)
-          : [];
-        const _imgUrl = r.generated_image_url ?? r.generatedImageUrl ?? null;
-        const _imgId = `img_${r.item_id ?? r.itemId ?? idx}`;
-        return {
-          id: r.item_id ?? r.itemId ?? uuidv4(),
-          shotNumber: idx + 1,
-          originalText: r.scene_heading ?? r.sceneHeading ?? '',
-          scriptSegment: r.action_text ?? r.actionText ?? '',
-          dialogue: r.dialogue ?? '',
-          cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
-          imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
-          videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
-          generatedImageUrl: _imgUrl,
-          // 同步填充分镜页显示用字段，否则从库加载后这些为空 → 分镜缩略图空白（图其实在库/磁盘）。
-          generatedImage: _imgUrl ?? undefined,
-          generatedImages: _imgUrl ? [{ id: _imgId, url: _imgUrl, thumbnail: _imgUrl, timestamp: Date.now() }] : [],
-          selectedImageId: _imgUrl ? _imgId : undefined,
-          characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
-          scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
-          plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
-          // 三阶段字段：精确框选/高亮依赖 videoScriptBlock 定位（否则刷新后镜头号重复，框选只命中第一个）
-          scriptSegmentId: r.script_segment_id ?? r.scriptSegmentId ?? undefined,
-          sourceVideoShotNo: r.source_video_shot_no ?? r.sourceVideoShotNo ?? '',
-          videoScriptBlock: r.video_script_block ?? r.videoScriptBlock ?? '',
-          shotSize: r.shot_size ?? r.shotSize ?? '',
-          cameraAngle: r.camera_angle ?? r.cameraAngle ?? '',
-          timestamp: Date.now(),
-        };
-      });
-
       let projectFiles: ProjectFile[];
 
       if (scripts.length > 0) {
@@ -263,7 +274,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           const sid = script.script_id ?? script.scriptId;
           const matchedRows = itemsByScript.get(sid) || [];
           const orphanRows = idx === 0 ? (itemsByScript.get(null) || []) : [];
-          const fileItems = buildUiItems([...matchedRows, ...orphanRows]);
+          const fileItems = mapWorkspaceStoryboardRowsToItems([...matchedRows, ...orphanRows]);
           const file: ProjectFile = {
             id: sid,
             name: script.file_name ?? script.fileName ?? `文件${idx + 1}`,
@@ -292,7 +303,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       } else {
         const created = await createEpisodeScript(propEpisodeId, { file_name: '分集剧本' }).catch(() => null);
         const newId = created?.script?.script_id || `local_${uuidv4()}`;
-        const allItems = buildUiItems(dbItems);
+        const allItems = mapWorkspaceStoryboardRowsToItems(dbItems);
         projectFiles = [{
           id: newId,
           name: '分集剧本',
@@ -308,10 +319,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         }];
       }
 
-      setFiles(projectFiles);
       const restoreId = initialScriptId && projectFiles.some(f => f.id === initialScriptId)
         ? initialScriptId
         : projectFiles[0]?.id || null;
+      const storyboardTotal = typeof (sbRes as any).total === 'number'
+        ? (sbRes as any).total
+        : dbItems.length;
+      setStoryboardTotalsByFileId(restoreId ? { [restoreId]: storyboardTotal } : {});
+      setFiles(projectFiles);
       setSelectedFileId(restoreId);
       setLoadedViews(new Set([AppView.Editor, AppView.Materials, AppView.Generation]));
       setIsDataLoaded(true);
@@ -679,6 +694,39 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
 
 
 
+  const loadWorkspaceStoryboardPage = useCallback((fileId: string, count: number) => {
+    if (!propEpisodeId || !fileId) return;
+    const targetCount = Math.max(WORKSPACE_INITIAL_STORYBOARD_COUNT, count || WORKSPACE_INITIAL_STORYBOARD_COUNT);
+    const currentFile = filesRef.current.find(f => f.id === fileId);
+    const currentCount = currentFile?.storyboard?.items?.length || 0;
+    if (targetCount <= currentCount) return;
+
+    const scriptId = fileId.startsWith('local_') ? undefined : fileId;
+    getStoryboardItems(propEpisodeId, scriptId, {
+      limit: targetCount,
+      includeTotal: true,
+    })
+      .then((res: any) => {
+        if (!res?.success) return;
+        const items = mapWorkspaceStoryboardRowsToItems(res.items || []);
+        setFiles(prev => prev.map(f => (
+          f.id === fileId
+            ? { ...f, storyboard: items.length > 0 ? { items } : null }
+            : f
+        )));
+        const total = typeof res.total === 'number' ? res.total : items.length;
+        setStoryboardTotalsByFileId(prev => ({ ...prev, [fileId]: total }));
+      })
+      .catch(err => {
+        console.warn('Workspace storyboard page load failed:', err);
+      });
+  }, [propEpisodeId]);
+
+  const handleWorkspaceVisibleShotCountChange = useCallback((count: number) => {
+    if (!selectedFileId) return;
+    loadWorkspaceStoryboardPage(selectedFileId, count);
+  }, [loadWorkspaceStoryboardPage, selectedFileId]);
+
   const handleExportNext = async (data: any) => {
     try {
       const selectedItems: string[] = data.items.map((item: any) => item.shotId);
@@ -844,6 +892,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
 
   const handleFileSelect = (id: string) => {
     setSelectedFileId(id);
+    const file = filesRef.current.find(f => f.id === id);
+    if (!file?.storyboard?.items?.length && storyboardTotalsByFileId[id] !== 0) {
+      loadWorkspaceStoryboardPage(id, WORKSPACE_INITIAL_STORYBOARD_COUNT);
+    }
     setHighlightedScriptSegments(new Set());
     setHighlightedStoryboardItemIds(new Set());
   };
@@ -2602,7 +2654,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                   <GenerationPage 
                       files={files}
                       selectedFileId={selectedFileId}
+                      episodeId={propEpisodeId}
                       materialLibrary={materialLibrary}
+                      shotPageSize={WORKSPACE_INITIAL_STORYBOARD_COUNT}
+                      totalShotCount={selectedFileId ? (storyboardTotalsByFileId[selectedFileId] ?? selectedFile?.storyboard?.items?.length ?? 0) : 0}
+                      onVisibleShotCountChange={handleWorkspaceVisibleShotCountChange}
                       onUpdateStoryboardItem={handleUpdateStoryboardItem}
                       onSaveVersion={(name) => selectedFileId && handleSaveVersion(selectedFileId, name)}
                       onRestoreVersion={(version) => selectedFileId && handleRestoreVersion(selectedFileId, version)}

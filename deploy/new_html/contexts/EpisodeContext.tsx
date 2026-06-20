@@ -14,6 +14,8 @@ import {
 } from '../services/apiService';
 import type { AssetItem, StoryboardItemDB, VideoSegment, AudioTrack, EpisodeScript, CharacterVoice } from '../types';
 
+const EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT = 10;
+
 /* ============ snake_case → camelCase 规范化 ============ */
 
 function safeArr(v: unknown): string[] {
@@ -239,7 +241,10 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       },
       storyboardItems: async () => {
         const sid = selectedScriptIdRef.current || undefined;
-        const res = await getStoryboardItems(episodeId, sid).catch(() => ({ success: false, items: [] }));
+        const res = await getStoryboardItems(episodeId, sid, {
+          limit: EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT,
+          includeTotal: true,
+        }).catch(() => ({ success: false, items: [], total: 0 }));
         if (res.success) {
           clearStaleScriptSelectionFromStoryboardFallback(res, sid);
           const items = (res.items || []).map(normalizeStoryboardItem);

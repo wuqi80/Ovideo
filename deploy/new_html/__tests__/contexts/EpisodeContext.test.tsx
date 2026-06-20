@@ -132,7 +132,11 @@ describe('EpisodeContext', () => {
     });
 
     await waitFor(() => {
-      expect(apiService.getStoryboardItems).toHaveBeenCalledWith('ep1', 'script_2');
+      expect(apiService.getStoryboardItems).toHaveBeenCalledWith(
+        'ep1',
+        'script_2',
+        { limit: 10, includeTotal: true },
+      );
     });
     expect(apiService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, 'script_2');
   });

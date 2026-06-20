@@ -1,11 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getStoryboardItems, getAssets, getVideoSegments, getEpisodeScript, updateStoryboardItem } from '../services/apiService';
 
+const STORYBOARD_QUERY_INITIAL_LIMIT = 10;
+
 export function useStoryboardItems(episodeId: string | null) {
   return useQuery({
     queryKey: ['storyboardItems', episodeId],
     queryFn: async () => {
-      const r = await getStoryboardItems(episodeId!);
+      const r = await getStoryboardItems(episodeId!, undefined, {
+        limit: STORYBOARD_QUERY_INITIAL_LIMIT,
+        includeTotal: true,
+      });
       return r.items || [];
     },
     enabled: !!episodeId,

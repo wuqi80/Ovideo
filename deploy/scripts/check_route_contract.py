@@ -943,6 +943,9 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
     page_text = (root / "new_html" / "pages" / "StoryboardGenPage.tsx").read_text(encoding="utf-8")
     api_text = (root / "new_html" / "services" / "apiService.ts").read_text(encoding="utf-8")
     context_text = (root / "new_html" / "contexts" / "EpisodeContext.tsx").read_text(encoding="utf-8")
+    workspace_text = (root / "new_html" / "WorkspaceApp.tsx").read_text(encoding="utf-8")
+    hook_text = (root / "new_html" / "hooks" / "useEpisodeData.ts").read_text(encoding="utf-8")
+    video_page_text = (root / "new_html" / "pages" / "VideoGenPage.tsx").read_text(encoding="utf-8")
     api_test_text = (root / "new_html" / "__tests__" / "services" / "apiService.test.ts").read_text(encoding="utf-8")
     context_test_text = (
         root / "new_html" / "__tests__" / "contexts" / "EpisodeContext.test.tsx"
@@ -962,9 +965,49 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
             "StoryboardGenPage must not force full storyboard reloads after mutations:\n"
             + "\n".join(forbidden)
         )
+    unbounded_sources = {
+        "WorkspaceApp": (
+            workspace_text,
+            [
+                "getStoryboardItems(propEpisodeId).catch",
+                "getStoryboardItems(propEpisodeId, initialStoryboardScriptId).catch",
+            ],
+        ),
+        "EpisodeContext": (
+            context_text,
+            [
+                "getStoryboardItems(episodeId, sid).catch",
+            ],
+        ),
+        "useEpisodeData": (
+            hook_text,
+            [
+                "getStoryboardItems(episodeId!)",
+            ],
+        ),
+    }
+    unbounded = [
+        f"{name}: {snippet}"
+        for name, (text, snippets) in unbounded_sources.items()
+        for snippet in snippets
+        if snippet in text
+    ]
+    if unbounded:
+        fail(
+            "Storyboard shared loaders must keep storyboard requests bounded:\n"
+            + "\n".join(unbounded)
+        )
     required_snippets = [
         (page_text, "reloadVisibleStoryboardPage", "paged post-mutation reload helper"),
         (page_text, "loadStoryboardItemsPage({ limit: visibleEntityShotCount", "current-page storyboard reload"),
+        (workspace_text, "WORKSPACE_INITIAL_STORYBOARD_COUNT = 10", "legacy workspace initial storyboard limit"),
+        (workspace_text, "limit: WORKSPACE_INITIAL_STORYBOARD_COUNT", "legacy workspace bounded storyboard preload"),
+        (workspace_text, "handleWorkspaceVisibleShotCountChange", "legacy workspace load-more bridge"),
+        (workspace_text, "onVisibleShotCountChange={handleWorkspaceVisibleShotCountChange}", "legacy workspace GenerationPage load-more callback"),
+        (context_text, "EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT = 10", "episode context initial storyboard limit"),
+        (context_text, "limit: EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT", "episode context bounded storyboard slice"),
+        (hook_text, "STORYBOARD_QUERY_INITIAL_LIMIT = 10", "legacy storyboard query hook bounded limit"),
+        (video_page_text, "getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'video' })", "video import uses lightweight storyboard fields"),
         (api_text, "fallbackToEpisode", "storyboard stale script fallback option"),
         (api_text, "function normalizeStoryboardFallbackResult(", "storyboard backend fallback metadata normalizer"),
         (api_text, "result.fallbackScriptId ?? result.fallback_script_id", "storyboard fallback script id supports snake case"),

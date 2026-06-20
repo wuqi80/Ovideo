@@ -91,7 +91,7 @@ export const VideoGenPage: React.FC = () => {
 
   const ensureAllStoryboardItemsForImport = useCallback(async () => {
     if (!episodeId || !isStoryboardPagePartial) return allStoryboardItems;
-    const res = await getStoryboardItems(episodeId, selectedScriptId || undefined);
+    const res = await getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'video' });
     if (!res?.success) throw new Error('加载全部分镜失败');
     return [...(res.items || [])].sort((a, b) =>
       ((a as any).sort_order ?? (a as any).sortOrder ?? 0) -

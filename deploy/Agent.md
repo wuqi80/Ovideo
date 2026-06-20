@@ -1,5 +1,32 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Storyboard/Video Bounded Loading Follow-up
+
+### Changes
+
+- Reduced legacy `WorkspaceApp` storyboard boot loading from unbounded full-episode fetches to the current script's first 10 storyboard rows with `include_total=true`.
+- Added a legacy workspace load-more bridge so `GenerationPage` can request additional storyboard rows by visible count instead of forcing all rows up front.
+- Changed generic `EpisodeContext` storyboard slice loading to default to 10 rows plus total, covering post-export refreshes and script-scope reloads.
+- Updated the old React Query storyboard hook to use the same bounded initial load.
+- Changed video import's full-storyboard fallback fetch to request only the lightweight `video` storyboard field set.
+- Strengthened route/frontend contracts to reject shared storyboard loaders that regress to unbounded fetches.
+
+### Follow-up
+
+- User reported that storyboard content appeared missing yesterday; keep a dedicated storyboard recovery/verification pass queued after this bounded-loading deploy. Re-check project `proj_05d34fc535e2`, episode `ep_2fc899a228f5`, selected script scope, fallback metadata, and visible-count behavior.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
+### Verification
+
+- Local `git diff --check`: passed.
+- Local `scripts/check_route_contract.py`: passed, including `storyboard_paged_reload_checks=29`.
+- Local `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Local Vitest could not run because Windows `node_modules` is still missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package; this is the existing local frontend dependency issue.
+- `scripts/live_deploy_mvc2.sh`: deployed successfully; remote Vite build passed and `drama.service` stayed active.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Production storyboard probe for `ep_2fc899a228f5` returned `items=10`, `total=152`, `fallback=null`.
+
 ## 2026-06-20 Provider Health Monitor Observability
 
 ### Changes
