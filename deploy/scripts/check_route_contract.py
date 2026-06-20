@@ -941,6 +941,8 @@ def check_lifespan_shutdown_contract(root: Path) -> int:
 def check_storyboard_paged_reload_contract(root: Path) -> int:
     """Storyboard workflow should keep large episodes paged after mutations."""
     page_text = (root / "new_html" / "pages" / "StoryboardGenPage.tsx").read_text(encoding="utf-8")
+    api_text = (root / "new_html" / "services" / "apiService.ts").read_text(encoding="utf-8")
+    api_test_text = (root / "new_html" / "__tests__" / "services" / "apiService.test.ts").read_text(encoding="utf-8")
     forbidden_snippets = [
         "forceReloadSlices('storyboardItems')",
         'forceReloadSlices("storyboardItems")',
@@ -952,15 +954,14 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
             "StoryboardGenPage must not force full storyboard reloads after mutations:\n"
             + "\n".join(forbidden)
         )
-    required_snippets = {
-        "reloadVisibleStoryboardPage": "paged post-mutation reload helper",
-        "loadStoryboardItemsPage({ limit: visibleEntityShotCount": "current-page storyboard reload",
-    }
-    missing = [
-        f"{label}: missing {snippet}"
-        for snippet, label in required_snippets.items()
-        if snippet not in page_text
+    required_snippets = [
+        (page_text, "reloadVisibleStoryboardPage", "paged post-mutation reload helper"),
+        (page_text, "loadStoryboardItemsPage({ limit: visibleEntityShotCount", "current-page storyboard reload"),
+        (api_text, "fallbackToEpisode", "storyboard stale script fallback option"),
+        (api_text, "fallbackReason: 'empty_script_storyboard'", "storyboard stale script fallback marker"),
+        (api_test_text, "falls back to episode storyboard when selected script has no rows", "storyboard fallback unit test"),
     ]
+    missing = [f"{label}: missing {snippet}" for text, snippet, label in required_snippets if snippet not in text]
     if missing:
         fail("StoryboardGenPage paged reload contract failed:\n" + "\n".join(missing))
     return len(required_snippets)

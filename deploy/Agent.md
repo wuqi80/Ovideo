@@ -5209,3 +5209,27 @@
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
   - `service_mapper_purity_checks=461`
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+
+## 2026-06-20 Storyboard Stale Script Fallback
+
+### Diagnosis
+
+- Server data for `ep_2fc899a228f5` is intact: unfiltered storyboard endpoint returns 152 items; paged mode returns 10 items with total 152.
+- A stale or mismatched `selectedScriptId` can make the same storyboard endpoint return `items=[]` and `total=0`, which appears in the UI as "storyboards disappeared".
+- Verified the behavior by comparing the target episode endpoint with and without a missing `script_id` filter.
+
+### Changes
+
+- Added a read-only fallback in `getStoryboardItems()`: if a script-filtered storyboard GET succeeds but returns no rows, retry once without `script_id`.
+- Preserved pagination and lightweight `fields` options during fallback.
+- Returned `fallbackScriptId` and `fallbackReason='empty_script_storyboard'` for observability.
+- Added unit coverage and extended the route contract so the stale-script fallback cannot be accidentally removed.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/scripts/check_route_contract.py`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `storyboard_paged_reload_checks=5`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+- Frontend Vitest run is blocked locally by the existing missing optional Rollup package `@rollup/rollup-win32-x64-msvc`.

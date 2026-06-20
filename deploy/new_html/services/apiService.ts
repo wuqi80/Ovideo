@@ -446,9 +446,10 @@ export interface StoryboardItemsQueryOptions {
     offset?: number;
     includeTotal?: boolean;
     fields?: 'audio' | 'video' | 'audio_stage' | 'materials' | string;
+    fallbackToEpisode?: boolean;
 }
 
-export async function getStoryboardItems(
+async function getStoryboardItemsRaw(
     episodeId: string,
     scriptId?: string,
     options: StoryboardItemsQueryOptions = {},
@@ -461,6 +462,36 @@ export async function getStoryboardItems(
     if (options.fields) params.set('fields', options.fields);
     const qs = params.toString() ? `?${params}` : '';
     return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items${qs}`, { method: 'GET' }, 'getStoryboardItems');
+}
+
+export async function getStoryboardItems(
+    episodeId: string,
+    scriptId?: string,
+    options: StoryboardItemsQueryOptions = {},
+) {
+    const result = await getStoryboardItemsRaw(episodeId, scriptId, options);
+    const shouldFallback =
+        !!scriptId &&
+        options.fallbackToEpisode !== false &&
+        result?.success &&
+        Array.isArray(result.items) &&
+        result.items.length === 0 &&
+        (typeof result.total !== 'number' || result.total === 0);
+
+    if (!shouldFallback) return result;
+
+    const fallback = await getStoryboardItemsRaw(episodeId, undefined, {
+        ...options,
+        fallbackToEpisode: false,
+    });
+    if (fallback?.success && Array.isArray(fallback.items) && fallback.items.length > 0) {
+        return {
+            ...fallback,
+            fallbackScriptId: scriptId,
+            fallbackReason: 'empty_script_storyboard',
+        };
+    }
+    return result;
 }
 
 export async function createStoryboardItem(episodeId: string, data: any) {

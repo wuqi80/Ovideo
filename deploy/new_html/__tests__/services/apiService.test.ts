@@ -78,6 +78,20 @@ describe('getStoryboardItems', () => {
     expect(url).toBe('/api/episodes/ep_1/storyboard-items?script_id=script_1&limit=10&offset=20&include_total=true');
   });
 
+  it('falls back to episode storyboard when selected script has no rows', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, items: [], total: 0 }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, items: [{ item_id: 'sb_1' }], total: 1 }));
+    const { getStoryboardItems } = await import('../../services/apiService');
+    const result = await getStoryboardItems('ep_1', 'stale_script', { limit: 10, includeTotal: true });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/episodes/ep_1/storyboard-items?script_id=stale_script&limit=10&include_total=true');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/episodes/ep_1/storyboard-items?limit=10&include_total=true');
+    expect(result.items).toHaveLength(1);
+    expect(result.fallbackScriptId).toBe('stale_script');
+  });
+
   it('supports lightweight field sets', async () => {
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, items: [] }));
     const { getStoryboardItems } = await import('../../services/apiService');
