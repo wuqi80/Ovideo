@@ -22,7 +22,7 @@ class UserDAO:
         email: Optional[str] = None,
         user_id: Optional[str] = None,
         password_hash: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """创建新用户
         
         Args:
@@ -33,6 +33,9 @@ class UserDAO:
             password_hash: 密码哈希（可选，如果不提供则从password生成）
         """
         db = get_db_manager()
+        if not db:
+            logger.warning("create_user skipped because database manager is unavailable: %s", username)
+            return None
         
         # 如果没有提供user_id，则自动生成
         if not user_id:
@@ -53,6 +56,9 @@ class UserDAO:
     async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
         """根据user_id获取用户"""
         db = get_db_manager()
+        if not db:
+            logger.warning("get_user_by_id skipped because database manager is unavailable: %s", user_id)
+            return None
         query = """
             SELECT id, user_id, username, email, avatar_url, 
                    storage_quota_gb, used_storage_bytes, created_at, 
@@ -78,6 +84,9 @@ class UserDAO:
     async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
         """根据用户名获取用户"""
         db = get_db_manager()
+        if not db:
+            logger.warning("get_user_by_username skipped because database manager is unavailable: %s", username)
+            return None
         # 2026-05-26 Slice 4: 同时返回 role/status/disabled_reason（列不存在时降级）
         try:
             query = """
@@ -128,6 +137,9 @@ class UserDAO:
     async def update_last_login(user_id: str):
         """更新最后登录时间"""
         db = get_db_manager()
+        if not db:
+            logger.warning("update_last_login skipped because database manager is unavailable: %s", user_id)
+            return False
         query = """
             UPDATE users
             SET last_login_at = $1
@@ -183,6 +195,9 @@ class UserDAO:
             permissions: 权限配置字典
         """
         db = get_db_manager()
+        if not db:
+            logger.warning("update_user_permissions skipped because database manager is unavailable: %s", user_id)
+            return False
         
         # 更新权限（启动时已确保字段存在）
         # asyncpg会自动处理JSONB类型，不需要json.dumps

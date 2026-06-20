@@ -5930,3 +5930,22 @@
 
 - Local `py_compile` passed for the touched task router/service/DAO files.
 - Local `pytest tests/test_task_read_service.py -q` passed `5/5`.
+
+## 2026-06-21 Auth User Service DB Plumbing Cleanup
+
+### Changes
+
+- Added `services/auth_user_service.py` to own DB password verification, login user-row sync, default permission assignment, and token-authenticated user-row auto-creation.
+- Removed the `get_db_manager` parameter from `routers/auth.py` and from the `cluster_main.py` `create_auth_router(...)` registration.
+- Replaced the inline `require_auth` DB user auto-create block with `ensure_authenticated_user_record(...)`.
+- Added DB-unavailable fallbacks to the `UserDAO` auth-facing methods used by the new service.
+- Strengthened `scripts/check_route_contract.py` so auth routes cannot reintroduce DB connection plumbing.
+- Added `tests/test_auth_user_service.py` and expanded `tests/test_user_dao_admin_delete.py`.
+- Added the new service and test to `scripts/live_deploy_mvc2.sh`.
+
+### Verification
+
+- Local `py_compile` passed for auth router/service, `dao/user/user.py`, `cluster_main.py`, and the route contract script.
+- Local `pytest tests/test_auth_user_service.py tests/test_user_dao_admin_delete.py -q` passed `10/10`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `auth_route_handlers=8`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.

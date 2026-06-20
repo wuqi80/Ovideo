@@ -5956,3 +5956,20 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - No frontend build was required.
 - This moves the cross-domain file binding layer out of the mixed V2 route file, making later media loading and file-management optimization safer to work on.
 - `deploy/scripts/smoke_test.py` still has a pre-existing local modification and was intentionally not staged.
+
+## 2026-06-21 Auth User Service DB Plumbing Cleanup
+
+### Changes
+
+- Added `deploy/services/auth_user_service.py` for DB credential checks, login user-row sync, default permissions, and token-authenticated user-row auto-creation.
+- Removed `get_db_manager` plumbing from `deploy/routers/auth.py` and from the `cluster_main.py` auth router registration.
+- Replaced inline `require_auth` user auto-create logic with `ensure_authenticated_user_record(...)`.
+- Added DB-unavailable fallbacks to the `UserDAO` methods used by auth.
+- Added auth service tests and route contract guards, and included the new files in `deploy/scripts/live_deploy_mvc2.sh`.
+
+### Verification
+
+- Local `py_compile` passed for touched backend files.
+- Local `pytest tests/test_auth_user_service.py tests/test_user_dao_admin_delete.py -q` passed `10/10`.
+- Local route contract passed with `openapi_paths=231`, `openapi_operations=287`.
+- Local architecture contract suite passed `9/9`.

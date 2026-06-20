@@ -1286,9 +1286,15 @@ def check_generation_routes_extracted(root: Path) -> int:
 def check_auth_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     auth_path = root / "routers" / "auth.py"
+    auth_user_service_path = root / "services" / "auth_user_service.py"
     if not auth_path.exists():
         fail("routers/auth.py is missing")
+    if not auth_user_service_path.exists():
+        fail("services/auth_user_service.py is missing")
 
+    cluster_text = cluster_main_path.read_text(encoding="utf-8")
+    auth_text = auth_path.read_text(encoding="utf-8")
+    auth_user_service_text = auth_user_service_path.read_text(encoding="utf-8")
     cluster_tree = parse_py_file(cluster_main_path)
     violations: list[str] = []
     for node in ast.walk(cluster_tree):
@@ -1321,7 +1327,27 @@ def check_auth_routes_extracted(root: Path) -> int:
 
     if route_count != 1:
         fail(f"routers/auth.py should own 1 auth route registration, found {route_count}")
-    return route_count
+
+    service_snippets = [
+        "async def verify_database_credentials",
+        "async def ensure_login_user_record",
+        "async def ensure_authenticated_user_record",
+        "from dao_user import UserDAO",
+    ]
+    for snippet in service_snippets:
+        if snippet not in auth_user_service_text:
+            fail(f"Missing auth user service snippet: {snippet}")
+
+    purity_violations = []
+    for snippet in ["get_db_manager", "db_manager"]:
+        if snippet in auth_text:
+            purity_violations.append(f"routers/auth.py still depends on DB plumbing: {snippet}")
+    if re.search(r"create_auth_router\([\s\S]{0,400}get_db_manager\s*=", cluster_text):
+        purity_violations.append("cluster_main.py still passes DB plumbing into create_auth_router")
+    if purity_violations:
+        fail("Auth router purity contract failed:\n" + "\n".join(purity_violations))
+
+    return route_count + len(service_snippets) + 3
 
 
 def check_auth_legacy_routes_extracted(root: Path) -> int:

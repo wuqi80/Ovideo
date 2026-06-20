@@ -84,6 +84,7 @@ from services.api_provider_health_monitor import (
     set_provider_health_redis,
 )
 from services.ai_proxy_service import AIProxyError, generate_gemini_images
+from services.auth_user_service import ensure_authenticated_user_record
 from services.api_provider_runtime import build_provider_runtime_status
 from routers.ai_proxy import create_ai_proxy_router
 from routers.admin_compat import create_admin_compat_router
@@ -788,32 +789,7 @@ async def require_auth(username: Optional[str] = Depends(verify_session)) -> str
     if not username:
         raise HTTPException(status_code=401, detail="需要登录")
 
-    # 🆕 自动创建数据库用户记录（如果不存在且数据库可用）
-    if db_manager:
-        try:
-            from dao_user import UserDAO
-            # 检查用户是否已存在于数据库（使用 user_id 或 username）
-            existing_user = await UserDAO.get_user_by_id(username)
-            if not existing_user:
-                existing_user = await UserDAO.get_user_by_username(username)
-
-            if not existing_user:
-                # 自动创建用户记录
-                logger.info(f"🔧 用户 {username} 不存在于数据库，自动创建...")
-                created_user = await UserDAO.create_user(
-                    username=username,
-                    password="auto_created_placeholder",
-                    email=f"{username}@system.local",
-                    user_id=username,  # 使用 username 作为 user_id
-                    password_hash="auto_created_placeholder_hash"
-                )
-                if created_user:
-                    logger.info(f"✅ 自动创建数据库用户成功: {username} (ID: {created_user.get('user_id')})")
-                else:
-                    logger.error(f"❌ 自动创建用户失败，返回值为None")
-        except Exception as e:
-            logger.error(f"⚠️ 创建用户记录失败: {e}", exc_info=True)
-            # 不抛出异常，允许继续（向后兼容）
+    await ensure_authenticated_user_record(username, logger=logger)
 
     return username
 
@@ -943,7 +919,6 @@ app.include_router(
     create_auth_router(
         verify_credentials=verify_credentials,
         create_session_token=create_session_token,
-        get_db_manager=lambda: db_manager,
         logger=logger,
     )
 )

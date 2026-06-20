@@ -30,6 +30,7 @@ FILES=(
   "services/api_provider_health_monitor.py"
   "services/api_provider_registry.py"
   "services/api_provider_runtime.py"
+  "services/auth_user_service.py"
   "services/task_read_service.py"
   "utils/config_helpers.py"
   "external_api/video/dashscope.py"
@@ -42,6 +43,7 @@ FILES=(
   "scripts/live_deploy_mvc2.sh"
   scripts/check_*.py
   tests/test_admin_stats_logs.py
+  tests/test_auth_user_service.py
   tests/test_minimax_audio_runtime.py
   tests/test_project_read_access.py
   tests/test_storyboard_stale_script_fallback.py
