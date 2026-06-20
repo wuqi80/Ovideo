@@ -53,11 +53,14 @@ async def main() -> int:
     fake_redis = FakeRedis()
     monitor.set_provider_health_redis(fake_redis)
 
-    async def fake_check(provider: str):
+    checker_calls: list[tuple[str, str]] = []
+
+    async def fake_check(provider: str, model_name: str | None = None):
+        checker_calls.append((provider, model_name or ""))
         return {
             "success": True,
             "provider": provider,
-            "model_name": "model-a",
+            "model_name": model_name or "model-a",
             "status": "ok" if provider == "deepseek" else "no_key",
             "latency_ms": 12 if provider == "deepseek" else None,
             "checked_at": "2026-06-18T00:00:00Z",
@@ -85,8 +88,30 @@ async def main() -> int:
         fail(f"Expected two sweep results, got {len(results)}")
     if sorted(item["provider"] for item in results) != ["deepseek", "gemini-text"]:
         fail(f"Unexpected sweep providers: {results}")
+    if checker_calls[:2] != [("deepseek", ""), ("gemini-text", "")]:
+        fail(f"Provider sweep did not preserve provider order/model args: {checker_calls}")
     if fake_redis.ttl.get(monitor.provider_health_cache_key("deepseek")) is None:
         fail("Health cache did not set a TTL")
+
+    target_results = await monitor.run_provider_health_sweep(
+        targets=[
+            {"provider": "dashscope", "model_name": "wan2.6-i2v"},
+            {"provider": "dashscope", "model_name": "kling/kling-v3-video-generation"},
+            {"provider": "seedance", "model_name": "doubao-seedance-2-0-260128"},
+        ],
+        redis_client=fake_redis,
+        check_fn=fake_check,
+        concurrency=2,
+        record_state=False,
+        sweep_source="manual-targets",
+    )
+    if [(item.get("provider"), item.get("model_name")) for item in target_results] != [
+        ("dashscope", "wan2.6-i2v"),
+        ("seedance", "doubao-seedance-2-0-260128"),
+    ]:
+        fail(f"Target sweep did not dedupe by provider and preserve model_name: {target_results}")
+    await monitor.delete_cached_provider_health("dashscope", redis_client=fake_redis)
+    await monitor.delete_cached_provider_health("seedance", redis_client=fake_redis)
 
     cached = await monitor.get_cached_provider_health("deepseek", redis_client=fake_redis)
     if not cached or cached.get("status") != "ok" or cached.get("latency_ms") != 12:
@@ -166,6 +191,7 @@ async def main() -> int:
     print("  cached_provider_health=2")
     print("  admin_health_cache_endpoint=1")
     print("  sweep_results=2")
+    print("  sweep_target_model_checks=2")
     print("  api_config_response_provider_health=2")
     print("  provider_monitor_state=1")
     return 0

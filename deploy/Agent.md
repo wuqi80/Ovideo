@@ -6083,3 +6083,24 @@
   - `HistoryPage-*.js`: 14K on disk
 - Server route contract and architecture contract passed.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 API Provider Health Model Targeting
+
+### Changes
+
+- Added optional `model_name` targeting to `GET /api/admin/api-configs/{provider_id}/health`.
+- Extended provider health sweeps to accept `targets=[{provider, model_name}]`, so batch health checks can test the active provider/model pair instead of only the provider default.
+- Updated `new_html/admin/AdminSettingsPage.tsx` so provider cards and batch health refresh pass the primary DB config/runtime model name.
+- Added contract coverage for model-aware provider health checks and model-aware health sweep targets.
+
+### Verification
+
+- Local `py_compile` passed for touched backend scripts/services.
+- Local `scripts/check_admin_api_config_health.py` passed with `provider_runtime_health=2`.
+- Local `scripts/check_provider_health_monitor.py` passed with `sweep_target_model_checks=2`.
+- Local `scripts/check_route_contract.py` passed with `admin_api_config_route_handlers=17` and `admin_api_config_ui_checks=17`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `live_deploy_mvc2.sh` built and restarted successfully.
+- Server route contract and architecture contract passed.
+- Online smoke test against `https://mecha.one` passed `9/9`.
+- Authenticated online check `GET /api/admin/api-configs/deepseek/health?model_name=deepseek-reasoner` returned 200 with `model_name=deepseek-reasoner`.

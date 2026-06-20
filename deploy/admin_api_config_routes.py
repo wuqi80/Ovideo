@@ -115,6 +115,7 @@ class ApiConfigImportPresetsBody(BaseModel):
 
 class ApiConfigHealthSweepBody(BaseModel):
     providers: Optional[List[str]] = None
+    targets: Optional[List[Dict[str, Optional[str]]]] = None
     concurrency: Optional[int] = None
 
 
@@ -233,6 +234,7 @@ async def admin_sweep_provider_health(body: Optional[ApiConfigHealthSweepBody] =
     body = body or ApiConfigHealthSweepBody()
     results = await run_provider_health_sweep(
         providers=body.providers,
+        targets=body.targets,
         concurrency=body.concurrency,
         record_state=True,
         sweep_source="manual",
@@ -266,9 +268,9 @@ async def admin_test_api_config(config_id: str):
 
 
 @router.get("/api-configs/{provider_id}/health")
-async def admin_check_provider_health(provider_id: str):
+async def admin_check_provider_health(provider_id: str, model_name: Optional[str] = None):
     try:
-        result = await check_provider_health(provider_id)
+        result = await check_provider_health(provider_id, model_name=model_name)
         return await cache_provider_health_result(result)
     except ProviderHealthNotFound:
         raise HTTPException(status_code=404, detail="Provider not found")

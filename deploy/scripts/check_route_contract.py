@@ -484,6 +484,18 @@ def check_admin_api_config_routes_extracted(root: Path) -> int:
 
     if route_count < 10:
         fail(f"admin_api_config_routes.py should own the API config route set, found {route_count}")
+
+    api_text = api_config_routes_path.read_text(encoding="utf-8")
+    required_snippets = [
+        "targets: Optional[List[Dict[str, Optional[str]]]] = None",
+        "targets=body.targets",
+        "async def admin_check_provider_health(provider_id: str, model_name: Optional[str] = None)",
+        "check_provider_health(provider_id, model_name=model_name)",
+    ]
+    for snippet in required_snippets:
+        if snippet not in api_text:
+            fail(f"Missing admin API config route contract snippet: {snippet}")
+        route_count += 1
     return route_count
 
 
@@ -3682,6 +3694,10 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "setMonitorState(data.monitor_state || null)",
         "<ProviderHealthMonitorStrip state={monitorState} />",
         "setMonitorState(result.monitor_state || null)",
+        "query.set('model_name', model)",
+        "onCheck(provider, config.model_name || runtime?.runtime_model_name || null)",
+        "onCheck(provider, model || null)",
+        "body: JSON.stringify({ targets })",
     ]
     forbidden_snippets = [
         "const status = healthStatusFrom(result, runtimeMap.get(provider))",

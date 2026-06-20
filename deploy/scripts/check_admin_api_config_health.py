@@ -209,6 +209,15 @@ async def main() -> int:
             fail(f"Provider runtime health did not use runtime endpoint: {runtime_factory.calls[0]}")
         if runtime_factory.calls[0]["headers"].get("Authorization") != "Bearer runtime-secret":
             fail("Provider runtime health did not use runtime API key")
+
+        runtime_model_factory = FakeSessionFactory([(200, '{"data": []}')])
+        runtime_model_ok = await check_provider_health(
+            "deepseek",
+            model_name="deepseek-chat",
+            session_factory=runtime_model_factory,
+        )
+        if runtime_model_ok.get("model_name") != "deepseek-chat":
+            fail(f"Provider runtime health did not preserve model_name override: {runtime_model_ok}")
     finally:
         for key, value in saved_env.items():
             if value is None:
@@ -222,7 +231,7 @@ async def main() -> int:
     print("  no_key_result_ok=1")
     print("  batch_summary_ok=1")
     print(f"  fake_http_calls={len(factory.calls)}")
-    print("  provider_runtime_health=1")
+    print("  provider_runtime_health=2")
     return 0
 
 

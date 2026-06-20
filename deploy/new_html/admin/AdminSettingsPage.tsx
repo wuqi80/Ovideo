@@ -954,7 +954,7 @@ const ApiConfigCard: React.FC<{
     configTest?: ApiConfigTest;
     checking: boolean;
     testingConfig: boolean;
-    onCheck: (provider: string) => void;
+    onCheck: (provider: string, modelName?: string | null) => void;
     onTestConfig: (config: ApiConfig) => void;
     onEdit: (config: ApiConfig) => void;
     onToggle: (config: ApiConfig) => void;
@@ -1048,7 +1048,7 @@ const ApiConfigCard: React.FC<{
                             </button>
                             <button
                                 type="button"
-                                onClick={() => onCheck(provider)}
+                                onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
                                 title="测试实际生成调用会使用的生效 Key 和 Endpoint"
@@ -1222,7 +1222,7 @@ const ProviderQuickCard: React.FC<{
     onConfigure: (meta: ProviderMeta) => void;
     onEditConfig: (config: ApiConfig) => void;
     onTestConfig: (config: ApiConfig) => void;
-    onCheck: (provider: string) => void;
+    onCheck: (provider: string, modelName?: string | null) => void;
 }> = ({ meta, configs, runtime, health, configTest, checking, testingConfig, onConfigure, onEditConfig, onTestConfig, onCheck }) => {
     const provider = normalizeProvider(meta.provider);
     const primaryConfig = bestConfigForProvider(configs, provider);
@@ -1364,7 +1364,7 @@ const ProviderQuickCard: React.FC<{
                 )}
                 <button
                     type="button"
-                    onClick={() => onCheck(provider)}
+                    onClick={() => onCheck(provider, model || null)}
                     disabled={checking || !provider}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                     title="测试实际生成调用会使用的生效 Key 和 Endpoint"
@@ -1575,12 +1575,17 @@ const ApiConfigPanel: React.FC = () => {
         };
     }, [configs, healthMap, runtimeMap, runtimeStatus]);
 
-    const testProvider = useCallback(async (providerRaw: string) => {
+    const testProvider = useCallback(async (providerRaw: string, modelName?: string | null) => {
         const provider = normalizeProvider(providerRaw);
         if (!provider) return;
+        const model = String(modelName || '').trim();
+        const query = new URLSearchParams();
+        if (model) query.set('model_name', model);
+        const suffix = query.toString() ? `?${query.toString()}` : '';
+        const displayName = model ? `${provider} / ${model}` : provider;
         setChecking(prev => ({ ...prev, [provider]: true }));
         try {
-            const result = await apiJson<ProviderHealth>(`/api/admin/api-configs/${encodeURIComponent(provider)}/health`);
+            const result = await apiJson<ProviderHealth>(`/api/admin/api-configs/${encodeURIComponent(provider)}/health${suffix}`);
             setHealthMap(prev => ({ ...prev, [provider]: result }));
             await loadConfigs({ showLoading: false });
             const status = healthStatusFromResult(result);
@@ -1653,13 +1658,22 @@ const ApiConfigPanel: React.FC = () => {
     }, [configs]);
 
     const sweepProviders = useCallback(async () => {
-        const providerIds = Array.from(new Set(configs.map(item => normalizeProvider(item.provider)).filter(Boolean)));
-        if (!providerIds.length) return;
+        const targets = Array.from(configsByProvider.entries())
+            .map(([provider, providerConfigs]) => {
+                const primaryConfig = bestConfigForProvider(providerConfigs, provider);
+                const runtime = runtimeMap.get(provider);
+                return {
+                    provider,
+                    model_name: primaryConfig?.model_name || runtime?.runtime_model_name || undefined,
+                };
+            })
+            .filter(target => target.provider);
+        if (!targets.length) return;
         setSweeping(true);
         try {
             const result = await apiJson<ProviderHealthSweepResponse>('/api/admin/api-configs/health/sweep', {
                 method: 'POST',
-                body: JSON.stringify({ providers: providerIds }),
+                body: JSON.stringify({ targets }),
             });
             const rows = result.provider_health || [];
             setMonitorState(result.monitor_state || null);
@@ -1679,7 +1693,7 @@ const ApiConfigPanel: React.FC = () => {
         } finally {
             setSweeping(false);
         }
-    }, [configs, loadConfigs]);
+    }, [configsByProvider, loadConfigs, runtimeMap]);
 
     const reloadRuntimeEnv = useCallback(async () => {
         setReloadingEnv(true);

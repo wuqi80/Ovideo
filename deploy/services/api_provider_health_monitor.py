@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 HEALTH_CACHE_PREFIX = "provider:health:"
 DEFAULT_HEALTH_TTL_SECONDS = 900
 
-ProviderHealthCheck = Callable[[str], Awaitable[Dict[str, Any]]]
+ProviderHealthCheck = Callable[..., Awaitable[Dict[str, Any]]]
 
 _redis_client: Any = None
 _monitor_state: Dict[str, Any] = {
@@ -193,18 +193,47 @@ def summarize_provider_health_results(results: Iterable[Dict[str, Any]]) -> Dict
     return summary
 
 
+def _normalize_sweep_targets(
+    *,
+    providers: Optional[Iterable[str]] = None,
+    targets: Optional[Iterable[Any]] = None,
+) -> List[Dict[str, Optional[str]]]:
+    raw_targets: Iterable[Any]
+    if targets is not None:
+        raw_targets = targets
+    else:
+        raw_targets = [{"provider": provider} for provider in (providers or sorted(PROVIDER_CATALOG))]
+
+    out: List[Dict[str, Optional[str]]] = []
+    seen: set[str] = set()
+    for item in raw_targets:
+        if isinstance(item, str):
+            provider = normalize_provider(item)
+            model_name = None
+        elif isinstance(item, dict):
+            provider = normalize_provider(str(item.get("provider") or ""))
+            model_name = str(item.get("model_name") or "").strip() or None
+        else:
+            continue
+        if not provider or provider in seen:
+            continue
+        seen.add(provider)
+        out.append({"provider": provider, "model_name": model_name})
+    return out
+
+
 async def run_provider_health_sweep(
     *,
     providers: Optional[Iterable[str]] = None,
+    targets: Optional[Iterable[Any]] = None,
     redis_client: Any = None,
     check_fn: Optional[ProviderHealthCheck] = None,
     concurrency: Optional[int] = None,
     record_state: bool = False,
     sweep_source: str = "manual",
 ) -> List[Dict[str, Any]]:
-    provider_ids = [normalize_provider(p) for p in (providers or sorted(PROVIDER_CATALOG))]
-    provider_ids = [p for p in provider_ids if p]
-    if not provider_ids:
+    sweep_targets = _normalize_sweep_targets(providers=providers, targets=targets)
+    if not sweep_targets:
         return []
 
     settings = provider_health_monitor_settings()
@@ -225,16 +254,18 @@ async def run_provider_health_sweep(
             }
         )
 
-    async def one(provider: str) -> Dict[str, Any]:
+    async def one(target: Dict[str, Optional[str]]) -> Dict[str, Any]:
+        provider = str(target.get("provider") or "")
+        model_name = target.get("model_name") or None
         async with sem:
             try:
-                result = await checker(provider)
+                result = await checker(provider, model_name=model_name)
             except Exception as exc:
                 logger.warning("Provider health check failed for %s: %s", provider, exc, exc_info=True)
                 result = {
                     "success": True,
                     "provider": provider,
-                    "model_name": None,
+                    "model_name": model_name,
                     "status": "error",
                     "latency_ms": None,
                     "checked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
@@ -256,7 +287,7 @@ async def run_provider_health_sweep(
             )
 
     try:
-        results = list(await asyncio.gather(*(one(provider) for provider in provider_ids)))
+        results = list(await asyncio.gather(*(one(target) for target in sweep_targets)))
     except Exception as exc:
         if record_state:
             _monitor_state.update(
