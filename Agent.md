@@ -6051,3 +6051,21 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server build succeeded and split `index` down to 250.74 kB while moving router/query libraries to cacheable vendor chunks.
 - Server route/architecture contracts passed.
 - Online smoke test passed `9/9`.
+
+## 2026-06-21 Utility Frontend Vendor Split
+
+### Changes
+
+- Replaced the mixed Vite `utils` manual chunk with dedicated `icons-vendor` and `id-vendor` chunks for `lucide-react` and `uuid`.
+- Added route contract guards so icon and id libraries stay as explicit cacheable utility vendor chunks.
+
+### Verification
+
+- Local route contract passed with `frontend_utility_vendor_chunk_checks=4`.
+- Local architecture contract suite passed `9/9`.
+- Server build succeeded and split utility dependencies into:
+  - `icons-vendor-*.js`: 61.64 kB build output, 61K on disk
+  - `id-vendor-*.js`: 0.94 kB build output, 941 bytes on disk
+  - `index-*.js`: 250.80 kB build output, 245K on disk
+- Server route/architecture contracts passed.
+- Online smoke test passed `9/9`.

@@ -45,7 +45,8 @@ export default defineConfig(({ mode }) => {
               'query-vendor': ['@tanstack/react-query'],
               'flow-vendor': ['@xyflow/react'],
               'three-vendor': ['three'],
-              utils: ['uuid', 'lucide-react']
+              'icons-vendor': ['lucide-react'],
+              'id-vendor': ['uuid']
             }
           }
         }

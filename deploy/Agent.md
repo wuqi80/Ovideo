@@ -6041,3 +6041,22 @@
   - `query-vendor-*.js`: 45.77 kB build output, 45K on disk
 - Server route contract and architecture contract passed.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Utility Frontend Vendor Split
+
+### Changes
+
+- Replaced the mixed Vite `utils` manual chunk with dedicated `icons-vendor` and `id-vendor` chunks for `lucide-react` and `uuid`.
+- Added `check_frontend_utility_vendor_chunk_contract()` to preserve the explicit utility vendor split.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_utility_vendor_chunk_checks=4`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `live_deploy_mvc2.sh` built successfully.
+- Server build output split:
+  - `icons-vendor-*.js`: 61.64 kB build output, 61K on disk
+  - `id-vendor-*.js`: 0.94 kB build output, 941 bytes on disk
+  - `index-*.js`: 250.80 kB build output, 245K on disk
+- Server route contract and architecture contract passed.
+- Online smoke test against `https://mecha.one` passed `9/9`.
