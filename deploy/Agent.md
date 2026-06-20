@@ -4620,6 +4620,27 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend Generation Page HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/components/GenerationPage.tsx` full-image preview and image-to-DataURL download paths from local `fetch()` / `auth_token` / Authorization handling to shared `secureApiUrl()` and `apiBlob()`.
+- Removed an unused intermediate image URL variable in the PNG conversion helper while preserving the existing data/blob URL behavior.
+- Extended `scripts/check_route_contract.py` so `GenerationPage.tsx` cannot reintroduce page-local `fetch()` or duplicated Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_generation_page_httpclient_20260620134353.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend Material Page HTTP Client Migration
 
 ### Changes

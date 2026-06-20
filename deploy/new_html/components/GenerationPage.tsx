@@ -21,14 +21,37 @@ import {
 import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/geminiService';
 import type { TaskKind } from '../types';
 import { generateThumbnail } from '../utils/imageOptimization';
-import { loadShotImages, clearImageCache, getAuthenticatedImageUrl, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache } from '../services/imageLoaderService';
+import { loadShotImages, clearImageCache, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache } from '../services/imageLoaderService';
 import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../services/taskRecovery';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
+import { apiBlob, secureApiUrl } from '../services/httpClient';
 
 const MattingModal = React.lazy(() => import('./MattingModal'));
 const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
 const StoryboardToolModal = React.lazy(() => import('./StoryboardToolModal'));
 const MultiAngle3DController = React.lazy(() => import('./MultiAngle3DController'));
+
+function normalizeImageDownloadUrl(url: string): string {
+  if (url.startsWith('blob:') || url.startsWith('data:')) return url;
+  const normalized = url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`);
+  return secureApiUrl(normalized, { absolute: true });
+}
+
+async function downloadImageBlob(url: string, apiName = '下载图片'): Promise<Blob> {
+  return apiBlob(normalizeImageDownloadUrl(url), { method: 'GET' }, apiName, {
+    requireAuth: false,
+    includeContentType: false,
+  });
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 const ModalChunkFallback: React.FC = () => (
   <div className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center">
@@ -1159,17 +1182,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           }
           
           // 从服务器加载并转换为 Blob URL
-          const token = localStorage.getItem('auth_token');
-          const fullUrl = imageUrl.startsWith('http') ? imageUrl : `${window.location.origin}${imageUrl}`;
-          const securedUrl = token ? `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}token=${token}` : fullUrl;
-          
-          const response = await fetch(securedUrl, {
-              headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-          });
-          
-          if (!response.ok) throw new Error(`加载失败: ${response.status}`);
-          
-          const blob = await response.blob();
+          const blob = await downloadImageBlob(imageUrl, '加载完整图片');
           const blobUrl = URL.createObjectURL(blob);
           
           // 缓存 Blob URL
@@ -1224,34 +1237,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   
   const ensureDataUrl = async (url: string): Promise<string> => {
     if (url.startsWith('data:')) return url;
-    const token = localStorage.getItem('auth_token');
-    const absolute = url.startsWith('http') ? url : `${window.location.origin}${url}`;
-    const secured = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
-    const response = await fetch(secured, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-    });
-    if (!response.ok) throw new Error('无法下载图片');
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
+    const blob = await downloadImageBlob(url, '下载图片');
+    return blobToDataUrl(blob);
   };
 
   // 🆕 将图片转换为 PNG 格式的 DataURL（用于 ComfyUI 兼容性）
   const ensureDataUrlAsPng = async (url: string): Promise<string> => {
     return new Promise<string>(async (resolve, reject) => {
         try {
-            // 先获取图片源
-            let imgSrc = url;
-            if (!url.startsWith('data:') && !url.startsWith('blob:')) {
-                const token = localStorage.getItem('auth_token');
-                const absolute = url.startsWith('http') ? url : `${window.location.origin}${url}`;
-                imgSrc = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
-            }
-            
             // 使用 Image 加载并通过 Canvas 转换为 PNG
             const img = new Image();
             img.crossOrigin = 'anonymous';
@@ -1284,14 +1277,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                 img.src = url;
             } else {
                 // 对于服务器 URL，需要先 fetch 再转换为 blob URL
-                const token = localStorage.getItem('auth_token');
-                const absolute = url.startsWith('http') ? url : `${window.location.origin}${url}`;
-                const secured = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
-                const response = await fetch(secured, {
-                    headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-                });
-                if (!response.ok) throw new Error('无法下载图片');
-                const blob = await response.blob();
+                const blob = await downloadImageBlob(url, '下载图片');
                 img.src = URL.createObjectURL(blob);
             }
         } catch (err) {

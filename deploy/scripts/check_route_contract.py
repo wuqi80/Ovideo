@@ -2582,6 +2582,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
     design_page = new_html / "pages" / "DesignPage.tsx"
     material_page = new_html / "components" / "MaterialPage.tsx"
+    generation_page = new_html / "components" / "GenerationPage.tsx"
     admin_feature_tabs = new_html / "components" / "AdminFeatureTabs.tsx"
     admin_organizations_tab = new_html / "admin" / "AdminOrganizationsTab.tsx"
     admin_hub_page = new_html / "admin" / "AdminHubPage.tsx"
@@ -2605,6 +2606,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         admin_login_page,
         design_page,
         material_page,
+        generation_page,
         admin_feature_tabs,
         admin_organizations_tab,
         admin_hub_page,
@@ -2646,6 +2648,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (material_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
         (material_page, "secureApiUrl(normalized, { absolute: true })"),
         (material_page, "apiBlob(downloadUrl, { method: 'GET' }, '下载生成的图片'"),
+        (generation_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
+        (generation_page, "function normalizeImageDownloadUrl("),
+        (generation_page, "downloadImageBlob(imageUrl, '加载完整图片')"),
         (admin_feature_tabs, "import { apiJson } from '../services/httpClient'"),
         (admin_feature_tabs, "apiJson<T>(url, { method: 'GET' }, 'Admin API')"),
         (admin_organizations_tab, "import { apiJson } from '../services/httpClient'"),
