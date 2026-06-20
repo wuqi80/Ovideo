@@ -12,6 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from schemas.generation import GenerateRequest
+from services.task_read_service import (
+    delete_db_task,
+    get_db_task_for_delete,
+    get_task_status_response,
+    list_user_tasks_response,
+    soft_delete_user_file_by_path_fragment,
+)
 
 
 def create_task_router(
@@ -69,45 +76,15 @@ def create_task_router(
     @router.get("/api/task/{task_id}")
     async def get_task_status(task_id: str, username: str = Depends(require_auth_dependency)):
         """获取任务状态（Redis优先，DB降级）"""
-        task = await task_service_module.get_queue().get_task(task_id)
-
-        if task:
-            return {
-                "task_id": task.task_id,
-                "status": task.status.value,
-                "progress": task.progress,
-                "node_id": task.node_id,
-                "result": task.result,
-                "error": task.error,
-                "created_at": task.created_at,
-                "started_at": task.started_at,
-                "completed_at": task.completed_at,
-            }
-
-        if get_db_manager():
-            try:
-                db_task = await task_dao.get_task_by_task_id(task_id)
-                if db_task:
-                    result_data = db_task.get("result_data")
-                    if isinstance(result_data, str):
-                        try:
-                            result_data = json.loads(result_data)
-                        except Exception:
-                            pass
-                    return {
-                        "task_id": db_task["task_id"],
-                        "status": db_task["status"],
-                        "progress": 100 if db_task["status"] == "completed" else 0,
-                        "node_id": db_task.get("node_id"),
-                        "result": result_data,
-                        "error": db_task.get("error_message"),
-                        "created_at": str(db_task["created_at"]) if db_task.get("created_at") else None,
-                        "started_at": str(db_task["started_at"]) if db_task.get("started_at") else None,
-                        "completed_at": str(db_task["completed_at"]) if db_task.get("completed_at") else None,
-                        "source": "database",
-                    }
-            except Exception as exc:
-                logger.warning("DB降级查询任务失败: %s", exc)
+        response = await get_task_status_response(
+            task_id=task_id,
+            task_queue=task_service_module.get_queue(),
+            task_dao=task_dao,
+            get_db_manager=get_db_manager,
+            logger=logger,
+        )
+        if response:
+            return response
 
         raise HTTPException(status_code=404, detail="任务不存在")
 
@@ -132,16 +109,14 @@ def create_task_router(
         try:
             task = await task_service_module.get_queue().get_task(task_id)
 
-            db = get_db_manager()
             task_data = None
-            if not task and db:
-                try:
-                    db_task = await task_dao.get_task(task_id)
-                    if db_task:
-                        logger.info("✅ 从数据库获取任务信息: %s", task_id)
-                        task_data = db_task
-                except Exception as exc:
-                    logger.warning("从数据库获取任务失败: %s", exc)
+            if not task:
+                task_data = await get_db_task_for_delete(
+                    task_id=task_id,
+                    task_dao=task_dao,
+                    get_db_manager=get_db_manager,
+                    logger=logger,
+                )
 
             deleted_files = []
 
@@ -189,34 +164,30 @@ def create_task_router(
                                 else:
                                     logger.debug("物理文件不存在: %s", physical_path)
 
-                            if db:
-                                try:
-                                    deleted_count = await FileDAO.soft_delete_user_files_by_path_fragment(
-                                        username,
-                                        file_path,
-                                    )
-                                    if deleted_count:
-                                        logger.info("✅ 已从数据库标记删除: %s", file_path)
-                                except Exception as db_err:
-                                    logger.warning("数据库删除文件记录失败: %s", db_err)
+                            deleted_count = await soft_delete_user_file_by_path_fragment(
+                                username=username,
+                                file_path=file_path,
+                                file_dao=FileDAO,
+                                get_db_manager=get_db_manager,
+                                logger=logger,
+                            )
+                            if deleted_count:
+                                logger.info("✅ 已从数据库标记删除: %s", file_path)
 
                 if deleted_files:
                     logger.info("✅ 共删除 %s 个文件: %s", len(deleted_files), deleted_files)
 
-            logger.info("🗑️ 尝试从数据库删除任务: %s, db_manager存在: %s", task_id, db is not None)
-            if db:
-                try:
-                    logger.info("📞 调用 TaskDAO.delete_task(%s, %s)", task_id, username)
-                    db_deleted = await task_dao.delete_task(task_id, username)
-                    logger.info("📋 TaskDAO.delete_task 返回结果: %s", db_deleted)
-                    if db_deleted:
-                        logger.info("✅ 已从数据库删除任务: %s", task_id)
-                    else:
-                        logger.warning("⚠️ 数据库中未找到任务或无权删除: %s", task_id)
-                except Exception as db_err:
-                    logger.error("❌ 从数据库删除任务失败: %s", db_err, exc_info=True)
-            else:
-                logger.warning("⚠️ 数据库未连接，跳过数据库删除")
+            db_deleted = await delete_db_task(
+                task_id=task_id,
+                username=username,
+                task_dao=task_dao,
+                get_db_manager=get_db_manager,
+                logger=logger,
+            )
+            if db_deleted:
+                logger.info("✅ 已从数据库删除任务: %s", task_id)
+            elif db_deleted is False:
+                logger.warning("⚠️ 数据库中未找到任务或无权删除: %s", task_id)
 
             task_owner = None
             if task:
@@ -342,83 +313,15 @@ def create_task_router(
     ):
         """获取用户任务列表（优先从数据库，降级到Redis）"""
         try:
-            if get_db_manager():
-                try:
-                    db_tasks = await task_dao.get_user_tasks(username, limit=limit)
-
-                    task_list = []
-                    for task in db_tasks:
-                        task_data = task.get("task_data", {})
-                        if isinstance(task_data, str):
-                            try:
-                                task_data = json.loads(task_data)
-                            except Exception:
-                                task_data = {}
-
-                        result_data = task.get("result_data", {})
-                        if isinstance(result_data, str):
-                            try:
-                                result_data = json.loads(result_data)
-                            except Exception:
-                                result_data = {}
-
-                        task_list.append(
-                            {
-                                "task_id": task.get("task_id"),
-                                "task_type": task.get("task_type"),
-                                "status": task.get("status", "unknown"),
-                                "progress": task.get("progress", 0),
-                                "result": result_data,
-                                "error": task.get("error_message"),
-                                "created_at": task.get("created_at").isoformat() if task.get("created_at") else None,
-                                "completed_at": task.get("completed_at").isoformat()
-                                if task.get("completed_at")
-                                else None,
-                                "data": task_data,
-                            }
-                        )
-
-                    logger.info("✅ 从数据库加载了 %s 个任务", len(task_list))
-
-                    if task_list:
-                        logger.info(
-                            "📋 示例任务数据: task_id=%s, type=%s, result=%s, data=%s",
-                            task_list[0]["task_id"],
-                            task_list[0]["task_type"],
-                            type(task_list[0]["result"]),
-                            type(task_list[0]["data"]),
-                        )
-
-                    return {
-                        "success": True,
-                        "tasks": task_list,
-                    }
-                except Exception as db_error:
-                    logger.warning("⚠️ 数据库加载失败，降级到Redis: %s", db_error)
-
-            tasks = await task_service_module.get_queue().get_user_tasks(username, limit=limit, status=status)
-
-            task_list = []
-            for task in tasks:
-                task_list.append(
-                    {
-                        "task_id": task.task_id,
-                        "task_type": task.task_type,
-                        "status": task.status.value,
-                        "progress": task.progress,
-                        "result": task.result,
-                        "error": task.error,
-                        "created_at": task.created_at,
-                        "completed_at": task.completed_at,
-                        "data": task.data,
-                    }
-                )
-
-            logger.info("✅ 从Redis加载了 %s 个任务", len(task_list))
-            return {
-                "success": True,
-                "tasks": task_list,
-            }
+            return await list_user_tasks_response(
+                username=username,
+                limit=limit,
+                status=status,
+                task_queue=task_service_module.get_queue(),
+                task_dao=task_dao,
+                get_db_manager=get_db_manager,
+                logger=logger,
+            )
         except Exception as exc:
             logger.error("获取任务列表失败: %s", exc)
             return {

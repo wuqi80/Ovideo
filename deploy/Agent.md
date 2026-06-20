@@ -1,5 +1,31 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Task Route Read Service Extraction
+
+### Changes
+
+- Added `services/task_read_service.py` to own task read-side fallback behavior:
+  - Redis task status formatting.
+  - PostgreSQL task status fallback formatting.
+  - user task list DB-first / Redis fallback behavior.
+  - generated-file DB soft-delete helper.
+  - task DB deletion helper.
+- Simplified `routers/tasks.py` so task routes no longer call `get_db_manager()` or task DAO read/delete methods directly.
+- Strengthened `scripts/check_route_contract.py` mapper-purity checks so task routes must delegate DB fallback/read helpers to `task_read_service`.
+- Added `tests/test_task_read_service.py` and included the new service/test in `scripts/live_deploy_mvc2.sh`.
+
+### Verification
+
+- Local `pytest tests/test_task_read_service.py`: 5/5 passed.
+- Local `py_compile` for `services/task_read_service.py`, `routers/tasks.py`, and `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed with `service_mapper_purity_checks=557`.
+- Local `scripts/check_architecture_contracts.py`: 9/9 passed.
+- `scripts/live_deploy_mvc2.sh`: deployed successfully; remote Vite build passed and `drama.service` stayed active.
+- Server `pytest tests/test_task_read_service.py`: 5/5 passed.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Storyboard Recovery Probe
 
 ### Changes

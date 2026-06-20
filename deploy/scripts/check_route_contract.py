@@ -3124,7 +3124,12 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
         (root / "routers" / "episode_video.py", "EpisodeDAO.get_project_id("),
-        (root / "routers" / "tasks.py", "FileDAO.soft_delete_user_files_by_path_fragment("),
+        (root / "routers" / "tasks.py", "get_task_status_response("),
+        (root / "routers" / "tasks.py", "list_user_tasks_response("),
+        (root / "routers" / "tasks.py", "soft_delete_user_file_by_path_fragment("),
+        (root / "services" / "task_read_service.py", "async def get_task_status_response("),
+        (root / "services" / "task_read_service.py", "async def list_user_tasks_response("),
+        (root / "services" / "task_read_service.py", "async def soft_delete_user_file_by_path_fragment("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
         (root / "routers" / "project_admin.py", "ProjectDAO.update_project_metadata("),
         (root / "routers" / "storyboard.py", "StoryboardDAO.export_script_transaction("),
@@ -3197,9 +3202,16 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         "UPDATE files",
         "RETURNING file_id",
         "result = await db.execute(",
+        "if get_db_manager():",
+        "db = get_db_manager()",
+        "await task_dao.get_task_by_task_id(",
+        "await task_dao.get_task(",
+        "await task_dao.get_user_tasks(",
+        "await task_dao.delete_task(",
+        "FileDAO.soft_delete_user_files_by_path_fragment(",
     ]:
         if snippet in tasks_router_text:
-            violations.append(f"routers/tasks.py must delegate generated-file soft delete to FileDAO: {snippet}")
+            violations.append(f"routers/tasks.py must delegate task read/DB fallback work to task_read_service/DAO boundaries: {snippet}")
         checks += 1
 
     project_admin_router_text = (root / "routers" / "project_admin.py").read_text(encoding="utf-8")

@@ -30,6 +30,7 @@ FILES=(
   "services/api_provider_health_monitor.py"
   "services/api_provider_registry.py"
   "services/api_provider_runtime.py"
+  "services/task_read_service.py"
   "utils/config_helpers.py"
   "external_api/video/dashscope.py"
   "external_api/video/minimax.py"
@@ -44,6 +45,7 @@ FILES=(
   tests/test_minimax_audio_runtime.py
   tests/test_project_read_access.py
   tests/test_storyboard_stale_script_fallback.py
+  tests/test_task_read_service.py
 )
 
 for path in "${FILES[@]}"; do
