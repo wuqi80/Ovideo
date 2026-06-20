@@ -1,5 +1,30 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Storyboard Admin Read Access Recovery
+
+### Changes
+
+- Verified the target production episode `ep_2fc899a228f5` still has `152` storyboard rows for project `proj_05d34fc535e2`; the storyboard data was not deleted.
+- Root cause: the admin user could log in, but opening Yuan's private project hit `GET /api/projects/{project_id}` first and received `403`, so the workflow page stopped before requesting storyboard items.
+- Added `UserDAO.is_admin_user()` so platform-admin checks are centralized and reusable.
+- Updated legacy project read routes in `routers/projects.py` so owners, project members, and platform admins can read project detail and legacy shot-image metadata.
+- Updated DAO-backed project detail in `routers/project_core.py` with the same platform-admin read allowance.
+- Added `tests/test_project_read_access.py` to cover admin read, project-member read, unauthorized read denial, and legacy shot-image reads.
+- Added the new project read-access test to `scripts/live_deploy_mvc2.sh` so it is copied during live deployment.
+
+### Verification
+
+- Local `pytest tests/test_project_read_access.py`: 4/4 passed.
+- Local `scripts/check_architecture_contracts.py`: 9/9 passed.
+- `scripts/live_deploy_mvc2.sh`: deployed successfully; remote Vite build passed and `drama.service` stayed active.
+- Server `pytest tests/test_project_read_access.py`: 4/4 passed.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Production API probe after deploy:
+  - `GET /api/projects/proj_05d34fc535e2` as admin returned 200.
+  - `GET /api/episodes/ep_2fc899a228f5/storyboard-items?limit=10&include_total=true` as admin returned `10` rows with `total=152`.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Admin API Config UI Clarification
 
 ### Changes

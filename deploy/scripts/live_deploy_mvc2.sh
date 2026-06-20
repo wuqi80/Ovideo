@@ -41,6 +41,7 @@ FILES=(
   "scripts/live_deploy_mvc2.sh"
   scripts/check_*.py
   tests/test_admin_stats_logs.py
+  tests/test_project_read_access.py
   tests/test_storyboard_stale_script_fallback.py
 )
 

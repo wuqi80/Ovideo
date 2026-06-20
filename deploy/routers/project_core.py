@@ -21,6 +21,7 @@ def create_project_core_router(
     project_dao: Any,
     version_dao: Any,
     project_member_dao: Any,
+    user_dao: Any,
     activity_log_dao: Any,
 ) -> APIRouter:
     router = APIRouter()
@@ -28,6 +29,7 @@ def create_project_core_router(
     ProjectDAO = project_dao
     VersionDAO = version_dao
     ProjectMemberDAO = project_member_dao
+    UserDAO = user_dao
     ActivityLogDAO = activity_log_dao
 
     @router.post("/api/projects")
@@ -110,7 +112,11 @@ def create_project_core_router(
             if not project:
                 raise HTTPException(status_code=404, detail="项目不存在")
 
-            has_access = await ProjectMemberDAO.check_permission(project_id, user_id, 'readonly')
+            has_access = (
+                project.get('user_id') == user_id
+                or await ProjectMemberDAO.check_permission(project_id, user_id, 'readonly')
+                or await UserDAO.is_admin_user(user_id)
+            )
             if not has_access:
                 raise HTTPException(status_code=403, detail="无权访问")
 

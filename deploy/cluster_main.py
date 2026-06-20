@@ -65,7 +65,7 @@ from media_library_routes import router as media_library_router
 from credit_routes import router as credit_router
 from video_reverse_routes import router as video_reverse_router
 from dao_task import TaskDAO
-from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO
+from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO, ProjectMemberDAO
 from dao_user import UserDAO
 
 DB_AVAILABLE = True
@@ -931,6 +931,8 @@ app.include_router(
     create_projects_router(
         require_auth_dependency=require_auth,
         project_dao=ProjectDAO,
+        project_member_dao=ProjectMemberDAO,
+        user_dao=UserDAO,
         file_dao=FileDAO,
         version_dao=VersionDAO,
         logger=logger,

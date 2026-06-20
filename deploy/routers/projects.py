@@ -19,16 +19,29 @@ def create_projects_router(
     *,
     require_auth_dependency: Any,
     project_dao: Any,
+    project_member_dao: Any,
+    user_dao: Any,
     file_dao: Any,
     version_dao: Any,
     logger: logging.Logger,
 ) -> APIRouter:
     router = APIRouter()
     ProjectDAO = project_dao
+    ProjectMemberDAO = project_member_dao
+    UserDAO = user_dao
     FileDAO = file_dao
     VersionDAO = version_dao
 
     # ==================== 项目数据管理 API（四阶段数据打通） ====================
+
+    async def can_read_project(db_project: dict, username: str) -> bool:
+        """Owner, project members, and platform admins may read project detail."""
+        project_id = db_project.get("project_id")
+        if db_project.get("user_id") == username:
+            return True
+        if project_id and await ProjectMemberDAO.check_permission(project_id, username, "readonly"):
+            return True
+        return await UserDAO.is_admin_user(username)
 
     async def convert_base64_images_in_project(project_data: dict, username: str) -> dict:
         """将项目中的所有Base64图片转换为数据库文件URL"""
@@ -440,8 +453,7 @@ def create_projects_router(
             if not db_project:
                 raise HTTPException(status_code=404, detail="项目不存在")
 
-            # 验证项目所有权
-            if db_project.get('user_id') != username:
+            if not await can_read_project(db_project, username):
                 raise HTTPException(status_code=403, detail="无权访问此项目")
 
             # 从settings JSONB字段中获取完整的项目数据
@@ -554,8 +566,7 @@ def create_projects_router(
             if not db_project:
                 raise HTTPException(status_code=404, detail="项目不存在")
 
-            # 验证项目所有权
-            if db_project.get('user_id') != username:
+            if not await can_read_project(db_project, username):
                 raise HTTPException(status_code=403, detail="无权访问此项目")
 
             # 从settings JSONB字段中获取项目数据

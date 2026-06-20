@@ -241,6 +241,7 @@ router.include_router(
         project_dao=ProjectDAO,
         version_dao=VersionDAO,
         project_member_dao=ProjectMemberDAO,
+        user_dao=UserDAO,
         activity_log_dao=ActivityLogDAO,
     )
 )

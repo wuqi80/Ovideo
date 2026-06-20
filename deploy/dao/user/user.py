@@ -95,6 +95,17 @@ class UserDAO:
                 WHERE username = $1 AND is_active = TRUE
             """
             return await db.fetchrow(query, username)
+
+    @staticmethod
+    async def is_admin_user(username: str) -> bool:
+        """Return whether a username has platform-admin privileges."""
+        if not username:
+            return False
+        if username == "admin":
+            # Built-in bootstrap admin remains valid even before role seeding.
+            return True
+        user = await UserDAO.get_user_by_username(username)
+        return bool(user and user.get("role") in ("admin", "super_admin"))
     
     @staticmethod
     async def verify_password(username: str, password: str) -> Optional[Dict[str, Any]]:
