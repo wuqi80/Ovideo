@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getActiveTasks, getTaskNotifications } from '../../services/apiService';
 import { GlobalTaskManager } from '../../services/globalTaskManager';
+import { getActiveTasks, getTaskNotifications } from '../../services/taskNotificationService';
 
-vi.mock('../../services/apiService', () => ({
+vi.mock('../../services/taskNotificationService', () => ({
   getActiveTasks: vi.fn(),
   getTaskNotifications: vi.fn(),
 }));

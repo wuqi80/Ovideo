@@ -12,11 +12,11 @@ import type { GlobalTask, TaskNotification, RegisteredTask, SourcePage } from '.
 import { globalTaskManager } from '../services/globalTaskManager';
 import { taskRegistry, type RegisterInput } from '../services/taskRegistry';
 import {
+    dismissNotification as apiDismissNotification,
+    getNotifications,
     getUnreadNotificationCount,
     markAllNotificationsRead,
-    getNotifications,
-    dismissNotification as apiDismissNotification,
-} from '../services/apiService';
+} from '../services/taskNotificationService';
 import { mapNotificationsToTasks, type ServerNotificationRow } from '../services/notificationMapping';
 import { cancelTask as apiCancelTask } from '../services/videoService';
 

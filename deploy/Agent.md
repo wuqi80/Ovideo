@@ -6191,3 +6191,22 @@
 - Local `scripts/check_route_contract.py` passed with `frontend_dependency_checks=11`.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
 - Note: server npm audit still reports existing dependency audit findings (`1 low`, `2 moderate`, `6 high`); this cleanup removes unused packages but does not attempt a broad dependency upgrade.
+
+## 2026-06-21 Task Notification Service Split
+
+### Changes
+
+- Extracted task polling and persistent notification API helpers from `new_html/services/apiService.ts` into `new_html/services/taskNotificationService.ts`.
+- Updated `globalTaskManager` and `TaskContext` to import task/notification APIs from the new service directly.
+- Kept `apiService.ts` compatibility re-exports so older imports continue to work while new task code has a clear ownership boundary.
+- Strengthened `scripts/check_route_contract.py` so task notification endpoints are checked against `taskNotificationService.ts` and `globalTaskManager` cannot drift back to the monolithic service.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6829`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build split `apiService-*.js` into a separate 10.29 kB chunk and reduced the main `index-*.js` chunk from about 250.7 kB to 240.4 kB.
+- Server `npm run test:run -- --pool=forks __tests__/services/globalTaskManager.test.ts` passed `2/2`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

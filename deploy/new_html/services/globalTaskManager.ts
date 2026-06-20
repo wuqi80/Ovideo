@@ -3,8 +3,8 @@
  * SSE 优先推送 + HTTP 轮询降级
  */
 import type { GlobalTask, TaskNotification } from '../types';
-import { getActiveTasks, getTaskNotifications } from './apiService';
 import { authTokenFromHeaders } from './httpClient';
+import { getActiveTasks, getTaskNotifications } from './taskNotificationService';
 
 export type TaskEventType = 'tasks_updated' | 'notification' | 'progress';
 export type TaskEventCallback = (

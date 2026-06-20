@@ -2801,6 +2801,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     video_gen_page = new_html / "pages" / "VideoGenPage.tsx"
     dash_scope_cards = new_html / "components" / "video" / "DashScopeCards.tsx"
     global_task_manager = new_html / "services" / "globalTaskManager.ts"
+    task_notification_service = new_html / "services" / "taskNotificationService.ts"
     admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
     design_page = new_html / "pages" / "DesignPage.tsx"
     material_page = new_html / "components" / "MaterialPage.tsx"
@@ -2820,6 +2821,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         new_html / "services" / "mediaLibraryService.ts",
         new_html / "services" / "creditService.ts",
         new_html / "services" / "organizationService.ts",
+        task_notification_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2869,18 +2871,25 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
         (api_service, "import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, publicBlob, secureApiUrl } from './httpClient'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
+        (api_service, "from './taskNotificationService';"),
         (api_service, "function normalizeImageSourceUrl("),
         (api_service, "function isSameOriginUrl("),
         (api_service, "secureApiUrl(absolute, { requireAuth: false })"),
         (api_service, "apiBlob("),
         (api_service, "publicBlob(imageUrlOrDataUrl"),
         (api_service, "publicBlob(absolute"),
+        (task_notification_service, "import { apiJson } from './httpClient';"),
+        (task_notification_service, "return apiJson<any>('/api/tasks/active'"),
+        (task_notification_service, "return apiJson<any>(url, { method: 'GET' }, 'getTaskNotifications')"),
+        (task_notification_service, "return apiJson<any>('/api/notifications/unread-count'"),
+        (task_notification_service, "return apiJson<any>(`/api/notifications?${params}`"),
+        (task_notification_service, "return apiJson<any>(`/api/notifications/${notificationId}/read`"),
+        (task_notification_service, "return apiJson<any>('/api/notifications/read-all'"),
+        (task_notification_service, "return apiJson<any>(`/api/notifications/${notificationId}`"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads same-origin image through shared authenticated blob client"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "does not attach local auth token to external image downloads"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
         (api_service, "return apiJson<any>('/api/comfyui/upload'"),
-        (api_service, "return apiJson<any>('/api/tasks/active'"),
-        (api_service, "return apiJson<any>('/api/notifications/unread-count'"),
         (api_service, "return apiJson<any>('/api/admin/users'"),
         (api_service, "return apiJson<any>('/api/admin/users/create'"),
         (api_service, "return apiJson<any>(`/api/admin/users/${userId}/permissions`"),
@@ -2963,6 +2972,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (dash_scope_cards, "import { secureApiUrl } from '../../services/httpClient'"),
         (dash_scope_cards, "secureApiUrl(firstRefUrl, { absolute: true, requireAuth: false })"),
         (global_task_manager, "import { authTokenFromHeaders } from './httpClient'"),
+        (global_task_manager, "from './taskNotificationService'"),
         (global_task_manager, "authTokenFromHeaders({ requireAuth: false })"),
         (admin_login_page, "import { apiJson } from '../services/httpClient'"),
         (admin_login_page, "apiJson<any>('/api/login'"),
