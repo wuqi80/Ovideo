@@ -220,7 +220,6 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     const fallbackScriptId = res?.fallbackScriptId ?? res?.fallback_script_id;
     if (!sid || !fallbackScriptId || fallbackScriptId !== sid) return;
     selectedScriptIdRef.current = null;
-    prevScriptIdRef.current = null;
     setSelectedScriptId(null);
   }, []);
 
@@ -343,18 +342,19 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
   }, [episodeId]);
 
   useEffect(() => {
-    if (!selectedScriptId) return;
-    if (prevScriptIdRef.current === null) {
-      prevScriptIdRef.current = selectedScriptId;
+    const previousScriptId = prevScriptIdRef.current;
+    if (previousScriptId === selectedScriptId) return;
+    prevScriptIdRef.current = selectedScriptId;
+
+    if (previousScriptId === null && !selectedScriptId) {
       return;
     }
-    if (prevScriptIdRef.current === selectedScriptId) return;
-    prevScriptIdRef.current = selectedScriptId;
+
     const slicesToReload: DataSlice[] = [];
     if (loadedSlicesRef.current.has('storyboardItems')) slicesToReload.push('storyboardItems');
     if (loadedSlicesRef.current.has('assets')) slicesToReload.push('assets');
     if (slicesToReload.length > 0) {
-      fetchSlices(...slicesToReload);
+      void fetchSlices({ quiet: true }, ...slicesToReload);
     }
   }, [selectedScriptId, fetchSlices]);
 

@@ -1,5 +1,38 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Storyboard Script Scope Recovery
+
+### Changes
+
+- Verified the target episode `ep_2fc899a228f5` on `https://mecha.one` still has `152` storyboard rows, including the current script scope.
+- Updated `new_html/contexts/EpisodeContext.tsx` so script-scope changes always refresh loaded script-scoped slices:
+  - the first non-null script selection now reloads storyboard/assets instead of only recording `prevScriptIdRef`.
+  - when stale storyboard fallback clears `selectedScriptId`, already loaded storyboard/assets slices are quietly refreshed with episode scope.
+- Added EpisodeContext regression tests for first script selection reload and stale fallback reload of loaded script-scoped slices.
+- Strengthened `scripts/check_route_contract.py` so the script-scope recovery behavior is contract-checked.
+
+### Verification
+
+- Server data probe before the fix:
+  - `/api/episodes/ep_2fc899a228f5/storyboard-items?limit=10&include_total=true`: `total=152`
+  - same endpoint with `script_id=script_a7314932ac1b`: `total=152`
+  - same endpoint with stale script probe: `fallback_reason=stale_script_storyboard`, `total=152`
+- `py_compile`: passed for `scripts/check_route_contract.py`.
+- `scripts/check_architecture_contracts.py`: 9/9 passed locally.
+- `scripts/smoke_test.py`: 9/9 passed locally.
+- Local Vitest could not run because the Windows workspace `node_modules` is missing Rollup's `@rollup/rollup-win32-x64-msvc` optional package; run the frontend test on the Linux server after deploy.
+- Server deploy completed; `drama.service` stayed active and Vite build artifacts refreshed.
+- Server `npm run test:run -- --pool=threads __tests__/contexts/EpisodeContext.test.tsx`: 8 passed.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Server storyboard probes for episode scope, current script scope, and stale script scope all returned 200; stale script still returned `fallback_reason=stale_script_storyboard` with `total=152`.
+- Recent `drama.service` logs showed no storyboard/fallback errors after deployment.
+
+### Notes
+
+- This addresses the class of "storyboard disappeared" issue where existing storyboard rows are hidden by a stale or newly selected script scope in frontend state.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Admin Logs DAO Move
 
 ### Changes

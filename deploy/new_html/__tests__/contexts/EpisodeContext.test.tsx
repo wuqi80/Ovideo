@@ -117,4 +117,56 @@ describe('EpisodeContext', () => {
     expect(result.current.storyboardItems).toHaveLength(1);
     expect(result.current.storyboardTotalCount).toBe(23);
   });
+
+  it('reloads script scoped slices on first script selection', async () => {
+    const apiService = await import('../../services/apiService');
+    const { result } = renderHook(() => useEpisode(), { wrapper });
+
+    await act(async () => {
+      await result.current.loadSlices('storyboardItems', 'assets');
+    });
+
+    vi.clearAllMocks();
+    act(() => {
+      result.current.setSelectedScriptId('script_2');
+    });
+
+    await waitFor(() => {
+      expect(apiService.getStoryboardItems).toHaveBeenCalledWith('ep1', 'script_2');
+    });
+    expect(apiService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, 'script_2');
+  });
+
+  it('reloads loaded script scoped slices after stale storyboard fallback clears selection', async () => {
+    const apiService = await import('../../services/apiService');
+    vi.mocked(apiService.getStoryboardItems)
+      .mockResolvedValueOnce({
+        success: true,
+        items: [{ item_id: 'sb_episode', sort_order: 0, dialogue: 'episode scope' }],
+        total: 23,
+        fallbackScriptId: 'stale_script',
+        fallbackReason: 'stale_script_storyboard',
+      } as any)
+      .mockResolvedValue({
+        success: true,
+        items: [{ item_id: 'sb_episode', sort_order: 0, dialogue: 'episode scope' }],
+        total: 23,
+      } as any);
+
+    const { result } = renderHook(() => useEpisode(), { wrapper });
+    act(() => {
+      result.current.setSelectedScriptId('stale_script');
+    });
+    await waitFor(() => expect(result.current.selectedScriptId).toBe('stale_script'));
+
+    await act(async () => {
+      await result.current.loadSlices('storyboardItems', 'assets');
+    });
+
+    await waitFor(() => expect(result.current.selectedScriptId).toBeNull());
+    await waitFor(() => {
+      expect(apiService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, undefined);
+    });
+    expect(apiService.getAssets).toHaveBeenCalledWith('p1', 'ep1', undefined, 'stale_script');
+  });
 });
