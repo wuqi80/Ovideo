@@ -4,7 +4,6 @@
 
 import { apiJson, getAuthToken, getHeaders, handleResponse } from './httpClient';
 
-const API_BASE = '';  // 使用相对路径，开发时通过vite proxy
 export { getAuthToken, getHeaders, handleResponse };
 
 /**
@@ -137,15 +136,10 @@ export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
         throw new Error('未登录');
     }
     
-    const response = await fetch(`${API_BASE}/api/comfyui/upload`, {
+    return apiJson<any>('/api/comfyui/upload', {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`
-        },
         body: formData
-    });
-    
-    return handleResponse(response);
+    }, 'uploadImageToComfyUI', { includeContentType: false });
 }
 
 /**
@@ -347,12 +341,7 @@ export async function getUsers(): Promise<{
     success: boolean;
     users: any[];
 }> {
-    const response = await fetch(`${API_BASE}/api/admin/users`, {
-        method: 'GET',
-        headers: getHeaders()
-    });
-    
-    return handleResponse(response);
+    return apiJson<any>('/api/admin/users', { method: 'GET' }, 'getUsers');
 }
 
 /**
@@ -362,13 +351,10 @@ export async function createUser(userData: any): Promise<{
     success: boolean;
     user: any;
 }> {
-    const response = await fetch(`${API_BASE}/api/admin/users/create`, {
+    return apiJson<any>('/api/admin/users/create', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(userData)
-    });
-    
-    return handleResponse(response);
+    }, 'createUser');
 }
 
 /**
@@ -377,13 +363,10 @@ export async function createUser(userData: any): Promise<{
 export async function updateUserPermissions(userId: string, permissions: any): Promise<{
     success: boolean;
 }> {
-    const response = await fetch(`${API_BASE}/api/admin/users/${userId}/permissions`, {
+    return apiJson<any>(`/api/admin/users/${userId}/permissions`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(permissions)
-    });
-    
-    return handleResponse(response);
+    }, 'updateUserPermissions');
 }
 
 /**
@@ -392,12 +375,7 @@ export async function updateUserPermissions(userId: string, permissions: any): P
 export async function deleteUser(userId: string): Promise<{
     success: boolean;
 }> {
-    const response = await fetch(`${API_BASE}/api/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    
-    return handleResponse(response);
+    return apiJson<any>(`/api/admin/users/${userId}`, { method: 'DELETE' }, 'deleteUser');
 }
 
 /**
@@ -407,12 +385,7 @@ export async function getGenerationLogs(limit: number = 100): Promise<{
     success: boolean;
     logs: any[];
 }> {
-    const response = await fetch(`${API_BASE}/api/admin/logs?limit=${limit}`, {
-        method: 'GET',
-        headers: getHeaders()
-    });
-    
-    return handleResponse(response);
+    return apiJson<any>(`/api/admin/logs?limit=${limit}`, { method: 'GET' }, 'getGenerationLogs');
 }
 
 /**
@@ -426,12 +399,7 @@ export async function getSystemStats(groupBy?: 'user' | 'org'): Promise<{
     breakdown?: any[];
 }> {
     const qs = groupBy ? `?group_by=${groupBy}` : '';
-    const response = await fetch(`${API_BASE}/api/admin/stats${qs}`, {
-        method: 'GET',
-        headers: getHeaders()
-    });
-    
-    return handleResponse(response);
+    return apiJson<any>(`/api/admin/stats${qs}`, { method: 'GET' }, 'getSystemStats');
 }
 
 // =============================================
@@ -926,13 +894,10 @@ export async function minimaxFileUpload(file: File, purpose = 'voice_clone') {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('purpose', purpose);
-    const token = localStorage.getItem('auth_token') || '';
-    const response = await fetch(`${API_BASE}/api/minimax/files/upload`, {
+    return apiJson<any>('/api/minimax/files/upload', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
-    });
-    return handleResponse(response, 'minimaxFileUpload');
+    }, 'minimaxFileUpload', { includeContentType: false });
 }
 
 export async function minimaxFileRetrieve(fileId: string) {

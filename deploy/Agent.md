@@ -5071,3 +5071,26 @@
   - `PYTHONIOENCODING=utf-8 python deploy/scripts/smoke_test.py` -> `9/9`
 - Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
 - `tsc --noEmit` still fails on existing baseline fixture/component type errors, with no new `apiService` unknown-return regressions observed.
+
+## 2026-06-20 Frontend API Service Upload And Legacy Admin HTTP Client Migration
+
+### Changes
+
+- Migrated the remaining backend API calls in `new_html/services/apiService.ts` to shared `apiJson<any>()`:
+  - ComfyUI image upload FormData request (`includeContentType: false`)
+  - legacy admin user/log/stat helpers
+  - MiniMax file upload FormData request (`includeContentType: false`)
+- Removed the now-unused `API_BASE` constant.
+- Left the two remaining native `fetch()` calls in `apiService.ts` intentionally:
+  - one reads a browser `blob:` URL.
+  - one downloads an already-secured image URL before re-uploading to ComfyUI.
+- Extended `scripts/check_route_contract.py` so `apiService.ts` cannot reintroduce `API_BASE`, direct backend API `fetch()`, or local auth-token reads.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `frontend_http_client_checks=408`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+- Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
+- `tsc --noEmit` still fails on existing baseline fixture/component type errors, with the temporary `apiService.ts` `downloadedBlob` regression fixed and no remaining `apiService` type errors in the latest run.

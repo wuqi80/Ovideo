@@ -2642,8 +2642,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
         (api_service, "import { apiJson, getAuthToken, getHeaders, handleResponse } from './httpClient'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
+        (api_service, "return apiJson<any>('/api/comfyui/upload'"),
         (api_service, "return apiJson<any>('/api/tasks/active'"),
         (api_service, "return apiJson<any>('/api/notifications/unread-count'"),
+        (api_service, "return apiJson<any>('/api/admin/users'"),
+        (api_service, "return apiJson<any>('/api/admin/users/create'"),
+        (api_service, "return apiJson<any>(`/api/admin/users/${userId}/permissions`"),
+        (api_service, "return apiJson<any>(`/api/admin/users/${userId}`"),
+        (api_service, "return apiJson<any>(`/api/admin/logs?limit=${limit}`"),
+        (api_service, "return apiJson<any>(`/api/admin/stats${qs}`"),
         (api_service, "return apiJson<any>('/api/projects/save'"),
         (api_service, "return apiJson<any>(`/api/projects/list${suffix}`"),
         (api_service, "return apiJson<any>(`/api/projects/${projectId}`"),
@@ -2691,6 +2698,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "return apiJson<any>('/api/minimax/tts/sync'"),
         (api_service, "return apiJson<any>('/api/minimax/music'"),
         (api_service, "return apiJson<any>('/api/minimax/lyrics'"),
+        (api_service, "return apiJson<any>('/api/minimax/files/upload'"),
         (api_service, "return apiJson<any>(`/api/minimax/files/${fileId}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/export-script`"),
         (api_service, "return apiJson<any>('/api/canvas/boards'"),
@@ -2775,6 +2783,16 @@ def check_frontend_http_client_contract(root: Path) -> int:
             checks += 1
 
     api_service_text = api_service.read_text(encoding="utf-8")
+    for snippet in [
+        "const API_BASE",
+        "fetch(`${API_BASE}/api/",
+        "localStorage.getItem('auth_token')",
+        'localStorage.getItem("auth_token")',
+    ]:
+        if snippet in api_service_text:
+            fail(f"apiService must not own API-base fetch/auth plumbing: {snippet}")
+        checks += 1
+
     for snippet in [
         "fetch(`${API_BASE}/api/tasks/active`",
         "fetch(`${API_BASE}/api/notifications/unread-count`",
