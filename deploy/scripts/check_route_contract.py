@@ -2805,6 +2805,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     episode_data_service = new_html / "services" / "episodeDataService.ts"
     audio_generation_service = new_html / "services" / "audioGenerationService.ts"
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
+    video_media_service = new_html / "services" / "videoMediaService.ts"
     asset_mutation_service = new_html / "services" / "assetMutationService.ts"
     storyboard_mutation_service = new_html / "services" / "storyboardMutationService.ts"
     script_timeline_service = new_html / "services" / "scriptTimelineService.ts"
@@ -2845,6 +2846,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         episode_data_service,
         audio_generation_service,
         video_workflow_service,
+        video_media_service,
         asset_mutation_service,
         storyboard_mutation_service,
         script_timeline_service,
@@ -2889,9 +2891,21 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "entityFileService.ts", "{ includeContentType: false }"),
         (new_html / "services" / "mediaLibraryService.ts", "{ includeContentType: false }"),
         (new_html / "services" / "mediaLibraryService.ts", "apiBlob('/api/media-library/batch-download'"),
-        (new_html / "services" / "videoService.ts", "export function secureMediaUrl("),
-        (new_html / "services" / "videoService.ts", "export async function getProjectVideoTasks("),
-        (new_html / "services" / "videoService.ts", "export async function clearProjectVideoTasks("),
+        (new_html / "services" / "videoService.ts", "from './videoMediaService';"),
+        (video_media_service, "import { apiJson, buildAuthHeaders, secureApiUrl } from './httpClient';"),
+        (video_media_service, "export function secureMediaUrl("),
+        (video_media_service, "export async function uploadImage("),
+        (video_media_service, "export async function uploadImageToComfyUI("),
+        (video_media_service, "export async function uploadAudio("),
+        (video_media_service, "export async function uploadVideoFile("),
+        (video_media_service, "export async function getProjectVideoTasks("),
+        (video_media_service, "export async function clearProjectVideoTasks("),
+        (video_media_service, "export async function cropVideo("),
+        (video_media_service, "export async function reuploadVideo("),
+        (video_media_service, "const data = await apiJson<{ success?: boolean; project?: { video_tasks?: ProjectVideoTask[] } }>("),
+        (video_media_service, "`/api/projects/${projectId}/clear-video-tasks`"),
+        (video_media_service, "return apiJson<{\n    filename: string;\n    url: string;\n  }>('/api/video/crop'"),
+        (video_media_service, "`/api/comfyui/reupload/video?filename=${encodeURIComponent(filename)}&file_type=${fileType}`"),
         (new_html / "services" / "imageLoaderService.ts", "import { apiBlob, apiJson, secureApiUrl } from './httpClient'"),
         (new_html / "services" / "imageLoaderService.ts", "apiJson<any>(\n        `/api/projects/${projectId}/images/${shotId}`"),
         (new_html / "services" / "imageLoaderService.ts", "apiBlob(securedUrl, { method: 'GET' }, '下载图片'"),
@@ -3010,6 +3024,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (canvas_service, "return apiJson<any>(`/api/canvas/connections/${connectionId}`"),
         (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
         (new_html / "__tests__" / "services" / "videoWorkflowService.test.ts", "fetchSeedanceOmni caches video capability responses"),
+        (new_html / "__tests__" / "services" / "videoMediaService.test.ts", "secures media URLs with the current auth token"),
         (new_html / "__tests__" / "services" / "assetMutationService.test.ts", "shares assets to target episode and script"),
         (new_html / "__tests__" / "services" / "storyboardMutationService.test.ts", "deletes all storyboard items for a script scope"),
         (new_html / "__tests__" / "services" / "scriptTimelineService.test.ts", "batch saves and deletes script segments"),
@@ -3061,6 +3076,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (final_product_page, "from '../services/videoWorkflowService'"),
         (video_page, "from '../services/videoWorkflowService'"),
         (seedance_multimodal_panel, "from '../services/videoWorkflowService'"),
+        (seedance_multimodal_panel, "from '../services/videoMediaService'"),
         (workflow_materials_page, "from '../services/episodeDataService'"),
         (workflow_materials_page, "from '../services/assetMutationService'"),
         (storyboard_page, "from '../services/storyboardMutationService'"),

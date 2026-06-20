@@ -6409,3 +6409,27 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6650`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Video Media Service Split
+
+### Changes
+
+- Extracted media URL signing, image/audio/video upload, project video task import cleanup, crop, and reupload helpers from `deploy/new_html/services/videoService.ts` into `deploy/new_html/services/videoMediaService.ts`.
+- Kept `videoService.ts` compatibility re-exports while removing duplicated media/upload implementations from the larger video generation service.
+- Updated `deploy/new_html/components/SeedanceMultimodalPanel.tsx` to import upload helpers directly from `videoMediaService.ts`.
+- Added `videoMediaService.test.ts` for media URL tokenization, project video task import cleanup, crop, and reupload request contracts.
+- Strengthened `deploy/scripts/check_route_contract.py` so media/upload endpoint ownership stays in `videoMediaService.ts`.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `frontend_http_client_checks=7075`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Local Vitest was unavailable because `npm` was not on the Windows PATH.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `index-DrKLO5Y8.js` at `237.88 kB`, down from the prior `240.51 kB` app shell build; `VideoPage` remains the next large target at `154.44 kB`.
+- Server `npm run test:run -- --pool=forks --testTimeout=15000 __tests__/services/videoMediaService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/canvasService.test.ts __tests__/routing/routing.test.tsx` passed `23/23`.
+- Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6679`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
