@@ -3103,6 +3103,10 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     script_path = root / "scripts" / "live_deploy_mvc2.sh"
     text = script_path.read_text(encoding="utf-8")
     required_snippets = [
+        '"dao"',
+        '"scripts/live_deploy_mvc2.sh"',
+        "scripts/check_*.py",
+        "tests/test_storyboard_stale_script_fallback.py",
         "new_html-src.tgz",
         "--exclude='new_html/node_modules'",
         "--exclude='new_html/.env'",
@@ -3153,6 +3157,33 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
     return checks
 
 
+def check_architecture_contract_runner(root: Path) -> int:
+    """Architecture checks should have a single pre-refactor runner."""
+    script_path = root / "scripts" / "check_architecture_contracts.py"
+    if not script_path.exists():
+        fail("Missing architecture contract runner: scripts/check_architecture_contracts.py")
+    text = script_path.read_text(encoding="utf-8")
+    required_snippets = [
+        "CONTRACT_SCRIPTS",
+        "scripts/check_api_config_runtime_loader.py",
+        "scripts/check_admin_api_config_crud.py",
+        "scripts/check_admin_api_config_import.py",
+        "scripts/check_admin_api_config_health.py",
+        "scripts/check_provider_contract.py",
+        "scripts/check_provider_health_monitor.py",
+        "scripts/check_ai_proxy_failover.py",
+        "scripts/check_audio_provider_runtime.py",
+        "scripts/check_route_contract.py",
+        "Architecture contract suite OK",
+    ]
+    checks = 0
+    for snippet in required_snippets:
+        if snippet not in text:
+            fail(f"Missing architecture contract runner snippet in {script_path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -3198,6 +3229,7 @@ def main() -> int:
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
+    architecture_contract_runner_checks = check_architecture_contract_runner(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -3255,6 +3287,7 @@ def main() -> int:
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
+    print(f"  architecture_contract_runner_checks={architecture_contract_runner_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

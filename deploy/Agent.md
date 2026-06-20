@@ -1,5 +1,35 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Architecture Contract Suite Runner
+
+### Changes
+
+- Added `scripts/check_architecture_contracts.py` as the single pre-refactor contract runner for API management and architecture work.
+- The runner executes these existing focused checks in order:
+  - `check_api_config_runtime_loader.py`
+  - `check_admin_api_config_crud.py`
+  - `check_admin_api_config_import.py`
+  - `check_admin_api_config_health.py`
+  - `check_provider_contract.py`
+  - `check_provider_health_monitor.py`
+  - `check_ai_proxy_failover.py`
+  - `check_audio_provider_runtime.py`
+  - `check_route_contract.py`
+- Updated `scripts/check_route_contract.py` so the runner itself is contract-checked and cannot silently drop provider/API-management guardrails.
+
+### Verification
+
+- `check_architecture_contracts.py --list`: listed 9 contracts.
+- `check_architecture_contracts.py`: passed 9/9, elapsed about 5 seconds.
+- `check_route_contract.py`: passed with `architecture_contract_runner_checks=11`.
+- `py_compile` passed for the new runner and route contract.
+
+### Notes
+
+- This is a developer-safety improvement for the ongoing API replacement and MVC work. It does not change runtime behavior.
+- `scripts/live_deploy_mvc2.sh` now ships itself, `dao/`, `scripts/check_*.py`, and `tests/test_storyboard_stale_script_fallback.py`; the server contract runner had failed when newer router checks were deployed without the matching DAO mapper files or the updated deploy script.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Storyboard Stale Script Backend Fallback
 
 ### Changes

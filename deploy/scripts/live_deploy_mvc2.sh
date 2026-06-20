@@ -18,6 +18,7 @@ FILES=(
   "admin_routes.py"
   "admin_api_config_routes.py"
   "api_routes.py"
+  "dao"
   "routers"
   "schemas"
   "services/ai_proxy_service.py"
@@ -37,6 +38,9 @@ FILES=(
   "external_api/video/veo.py"
   "external_api/video/wan2.py"
   "external_api/audio/minimax_audio.py"
+  "scripts/live_deploy_mvc2.sh"
+  scripts/check_*.py
+  tests/test_storyboard_stale_script_fallback.py
 )
 
 for path in "${FILES[@]}"; do
