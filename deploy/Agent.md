@@ -5117,3 +5117,20 @@
 - Direct `auth_token` reads in production frontend code now resolve to `admin/adminAuth.ts` only.
 - Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
 - `tsc --noEmit` still fails on existing baseline fixture/component type errors; no new changed-file auth helper type errors appeared in the latest run.
+
+## 2026-06-20 Frontend Video Service API Base Cleanup
+
+### Changes
+
+- Removed the empty `API_BASE` constant from `new_html/services/videoService.ts`.
+- Replaced legacy `${API_BASE}/api/...` and `${API_BASE}/uploads/...` string templates with explicit root-relative paths.
+- Added `API_BASE` to the shared frontend service contract forbidden snippets so migrated service files cannot reintroduce the old base-url shim.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `frontend_http_client_checks=6649`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+  - `rg -n "API_BASE" deploy/new_html --glob "*.ts" --glob "*.tsx"` -> no production frontend matches
+- `tsc --noEmit` still fails on existing baseline fixture/component type errors; this cleanup did not add new `videoService.ts` type errors in the latest run.

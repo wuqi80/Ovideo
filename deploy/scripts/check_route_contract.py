@@ -2771,6 +2771,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         "'Authorization'",
         '"Authorization"',
         "Bearer ",
+        "API_BASE",
         "handleResponse",
         "fetch(",
     ]

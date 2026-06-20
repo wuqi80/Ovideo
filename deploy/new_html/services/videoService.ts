@@ -6,8 +6,6 @@ import { enqueueComfyUITask, getComfyUIQueueStatus } from './comfyuiTaskQueue';
 import { computeReactiveDuration as _crd } from '../utils/durationMapping';
 import { apiFetch, apiJson, buildAuthHeaders } from './httpClient';
 
-const API_BASE = '';
-
 // 重新导出队列状态
 export { getComfyUIQueueStatus };
 
@@ -292,7 +290,7 @@ export async function uploadImage(file: File, options?: UploadOptions): Promise<
     const formData = new FormData();
     formData.append('file', file);
     
-    const result = await withRetry(() => xhrUpload(`${API_BASE}/api/upload`, formData, options));
+    const result = await withRetry(() => xhrUpload('/api/upload', formData, options));
     result.url = result.storage_url || result.url;
     return result;
 }
@@ -311,7 +309,7 @@ export async function uploadImageToComfyUI(file: File, nodeType = 'video', optio
     formData.append('image', file);
     formData.append('node_type', nodeType);
     
-    return withRetry(() => xhrUpload(`${API_BASE}/api/comfyui/upload`, formData, options));
+    return withRetry(() => xhrUpload('/api/comfyui/upload', formData, options));
 }
 
 /**
@@ -326,7 +324,7 @@ export async function uploadAudio(file: File, startTime = 0, duration = 5, optio
     formData.append('start_time', startTime.toString());
     formData.append('duration', duration.toString());
     
-    return withRetry(() => xhrUpload(`${API_BASE}/api/upload/audio`, formData, options));
+    return withRetry(() => xhrUpload('/api/upload/audio', formData, options));
 }
 
 /**
@@ -369,7 +367,7 @@ export async function submitTask(
     if (model === 'MINI') {
         // MiniMax API
         taskType = imageFilenameEnd ? 'minimax_morph' : 'minimax_i2v';
-        const imageUrl = imageFilename.startsWith('http') ? imageFilename : `${API_BASE}/uploads/${imageFilename}`;
+        const imageUrl = imageFilename.startsWith('http') ? imageFilename : `/uploads/${imageFilename}`;
         requestData = {
             task_type: taskType,
             first_frame_image: imageUrl,
@@ -377,7 +375,7 @@ export async function submitTask(
             priority: 2
         };
         if (imageFilenameEnd) {
-            requestData.last_frame_image = imageFilenameEnd.startsWith('http') ? imageFilenameEnd : `${API_BASE}/uploads/${imageFilenameEnd}`;
+            requestData.last_frame_image = imageFilenameEnd.startsWith('http') ? imageFilenameEnd : `/uploads/${imageFilenameEnd}`;
         }
     } else if (model === 'Sora2') {
         // Sora2 API
@@ -396,11 +394,11 @@ export async function submitTask(
         const subModel = model === 'Seedance2' ? 'standard' : 'fast';
         const media: SeedanceMediaInput[] = [];
         if (imageFilename) {
-            const url = imageFilename.startsWith('http') ? imageFilename : `${API_BASE}/uploads/${imageFilename}`;
+            const url = imageFilename.startsWith('http') ? imageFilename : `/uploads/${imageFilename}`;
             media.push({ kind: 'image', url, role: imageFilenameEnd ? 'first_frame' : undefined });
         }
         if (imageFilenameEnd) {
-            const urlEnd = imageFilenameEnd.startsWith('http') ? imageFilenameEnd : `${API_BASE}/uploads/${imageFilenameEnd}`;
+            const urlEnd = imageFilenameEnd.startsWith('http') ? imageFilenameEnd : `/uploads/${imageFilenameEnd}`;
             media.push({ kind: 'image', url: urlEnd, role: 'last_frame' });
         }
         taskType = inferSeedanceTaskType(media);
@@ -512,7 +510,7 @@ export async function submitTask(
         requestData.episode_id = entityOptions.episode_id;
     }
 
-    const response = await apiFetch(`${API_BASE}/api/generate`, {
+    const response = await apiFetch('/api/generate', {
         method: 'POST',
         body: JSON.stringify(requestData)
     }, { apiName: 'submitTask' });
@@ -550,7 +548,7 @@ export async function submitUpscaleTask(
         requestData.episode_id = entityOptions.episode_id;
     }
 
-    const response = await apiFetch(`${API_BASE}/api/generate`, {
+    const response = await apiFetch('/api/generate', {
         method: 'POST',
         body: JSON.stringify(requestData)
     }, { apiName: 'submitUpscaleTask' });
@@ -572,7 +570,7 @@ export async function submitVoiceTask(
     prompt: string,
     model: VideoModel = 'Wan2'
 ): Promise<{ task_id: string }> {
-    return await apiJson<{ task_id: string }>(`${API_BASE}/api/generate`, {
+    return await apiJson<{ task_id: string }>('/api/generate', {
         method: 'POST',
         body: JSON.stringify({
             task_type: 'voice',
@@ -591,7 +589,7 @@ export async function submitVoiceTask(
  * 查询任务状态
  */
 export async function getTaskStatus(taskId: string): Promise<VideoTask> {
-    const response = await apiFetch(`${API_BASE}/api/task/${taskId}`, {}, { apiName: 'getTaskStatus' });
+    const response = await apiFetch(`/api/task/${taskId}`, {}, { apiName: 'getTaskStatus' });
     
     if (!response.ok) {
         if (response.status === 404) {
@@ -614,7 +612,7 @@ export async function getTasks(limit = 100): Promise<{ tasks: VideoTask[] }> {
     
     let response: Response;
     try {
-        response = await apiFetch(`${API_BASE}/api/tasks?limit=${limit}`, {
+        response = await apiFetch(`/api/tasks?limit=${limit}`, {
             headers,
         }, { apiName: 'getTasks', requireAuth: false, includeContentType: false });
     } catch (e: any) {
@@ -641,7 +639,7 @@ export async function getTasks(limit = 100): Promise<{ tasks: VideoTask[] }> {
  * 避免前端刷新后从 /api/tasks/active 重新拉回）。
  */
 export async function cancelTask(taskId: string): Promise<void> {
-    const response = await apiFetch(`${API_BASE}/api/task/${taskId}`, {
+    const response = await apiFetch(`/api/task/${taskId}`, {
         method: 'DELETE',
     }, { apiName: 'cancelTask' });
 
@@ -654,7 +652,7 @@ export async function cancelTask(taskId: string): Promise<void> {
  * 删除任务
  */
 export async function deleteTask(taskId: string): Promise<void> {
-    const response = await apiFetch(`${API_BASE}/api/task/${taskId}/delete`, {
+    const response = await apiFetch(`/api/task/${taskId}/delete`, {
         method: 'DELETE',
     }, { apiName: 'deleteTask' });
     
@@ -673,7 +671,7 @@ export interface ProjectVideoTask {
 
 export async function getProjectVideoTasks(projectId: string): Promise<ProjectVideoTask[]> {
     const data = await apiJson<{ success?: boolean; project?: { video_tasks?: ProjectVideoTask[] } }>(
-        `${API_BASE}/api/projects/${projectId}`,
+        `/api/projects/${projectId}`,
         { method: 'GET' },
         'getProjectVideoTasks',
     );
@@ -683,7 +681,7 @@ export async function getProjectVideoTasks(projectId: string): Promise<ProjectVi
 
 export async function clearProjectVideoTasks(projectId: string): Promise<void> {
     await apiJson<{ success?: boolean }>(
-        `${API_BASE}/api/projects/${projectId}/clear-video-tasks`,
+        `/api/projects/${projectId}/clear-video-tasks`,
         { method: 'POST' },
         'clearProjectVideoTasks',
     );
@@ -721,7 +719,7 @@ export interface WorkspaceSession {
  */
 export async function saveWorkspaceSession(session: WorkspaceSession, scope?: string): Promise<{ success: boolean }> {
     try {
-        const response = await apiFetch(`${API_BASE}/api/workspace/save-session`, {
+        const response = await apiFetch('/api/workspace/save-session', {
             method: 'POST',
             body: JSON.stringify({ ...session, scope: scope || '' })
         }, { apiName: 'saveWorkspaceSession' });
@@ -745,7 +743,7 @@ export async function saveWorkspaceSession(session: WorkspaceSession, scope?: st
 export async function loadWorkspaceSession(scope?: string): Promise<{ success: boolean; session: WorkspaceSession | null }> {
     const params = scope ? `?scope=${encodeURIComponent(scope)}` : '';
     try {
-        const response = await apiFetch(`${API_BASE}/api/workspace/load-session${params}`, {
+        const response = await apiFetch(`/api/workspace/load-session${params}`, {
             method: 'GET',
         }, { apiName: 'loadWorkspaceSession' });
 
@@ -773,7 +771,7 @@ export async function cropVideo(videoFilename: string, startTime: number, endTim
     return await apiJson<{
         filename: string;
         url: string;
-    }>(`${API_BASE}/api/video/crop`, {
+    }>('/api/video/crop', {
         method: 'POST',
         body: JSON.stringify({
             video_filename: videoFilename,
@@ -794,7 +792,7 @@ export async function reuploadVideo(filename: string, fileType = 'output'): Prom
         filename: string;
         url: string;
     }>(
-        `${API_BASE}/api/comfyui/reupload/video?filename=${encodeURIComponent(filename)}&file_type=${fileType}`,
+        `/api/comfyui/reupload/video?filename=${encodeURIComponent(filename)}&file_type=${fileType}`,
         {
             method: 'POST',
         },
@@ -1029,7 +1027,7 @@ export async function submitSeedanceTask(
         body.episode_id = entityOptions.episode_id;
     }
 
-    const resp = await apiFetch(`${API_BASE}/api/generate`, {
+    const resp = await apiFetch('/api/generate', {
         method: 'POST',
         body: JSON.stringify(body),
     }, { apiName: 'submitSeedanceTask' });
@@ -1321,7 +1319,7 @@ export async function submitDashScopeVideoTask(
         body.episode_id = entityOptions.episode_id;
     }
 
-    const resp = await apiFetch(`${API_BASE}/api/generate`, {
+    const resp = await apiFetch('/api/generate', {
         method: 'POST',
         body: JSON.stringify(body),
     }, { apiName: 'submitDashScopeVideoTask' });
