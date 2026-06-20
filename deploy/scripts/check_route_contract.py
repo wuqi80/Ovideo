@@ -1385,6 +1385,8 @@ def check_admin_compat_routes_extracted(root: Path) -> int:
     admin_compat_path = root / "routers" / "admin_compat.py"
     if not admin_compat_path.exists():
         fail("routers/admin_compat.py is missing")
+    cluster_text = cluster_main_path.read_text(encoding="utf-8")
+    admin_compat_text = admin_compat_path.read_text(encoding="utf-8")
 
     route_paths = {
         "/api/admin/stats",
@@ -1424,7 +1426,17 @@ def check_admin_compat_routes_extracted(root: Path) -> int:
 
     if route_count != 4:
         fail(f"routers/admin_compat.py should own 4 admin compatibility route registrations, found {route_count}")
-    return route_count
+
+    purity_violations = []
+    for snippet in ["get_db_manager", "db_manager"]:
+        if snippet in admin_compat_text:
+            purity_violations.append(f"routers/admin_compat.py still depends on DB plumbing: {snippet}")
+    if re.search(r"create_admin_compat_router\([\s\S]{0,400}get_db_manager\s*=", cluster_text):
+        purity_violations.append("cluster_main.py still passes DB plumbing into create_admin_compat_router")
+    if purity_violations:
+        fail("Admin compatibility router purity contract failed:\n" + "\n".join(purity_violations))
+
+    return route_count + 3
 
 
 def check_project_routes_extracted(root: Path) -> int:

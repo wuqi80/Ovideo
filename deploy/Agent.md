@@ -5861,3 +5861,26 @@
 ### Follow-up
 
 - User reported that storyboard content disappeared yesterday. Keep this as the next dedicated recovery investigation: verify whether the rows still exist in DB, whether the selected script scope is stale, and whether frontend fallback clears the script selection correctly on the affected project/episode.
+
+## 2026-06-20 Admin Compat User Route DB Plumbing Cleanup
+
+### Changes
+
+- Removed the `get_db_manager` dependency from `routers/admin_compat.py` and from its `cluster_main.py` registration.
+- Kept legacy admin user create/delete routes on `UserDAO` business methods instead of route-local DB availability checks.
+- Updated `UserDAO.delete_user_by_id()` to return `None` when the database manager is unavailable, preserving the old simulated-delete fallback without exposing connection plumbing to the router.
+- Added `tests/test_user_dao_admin_delete.py` for the DB-unavailable and DB-backed delete paths.
+- Strengthened `check_admin_compat_routes_extracted()` so admin compat routes cannot receive or reference DB plumbing again.
+- Added the new DAO test to `scripts/live_deploy_mvc2.sh`.
+
+### Verification
+
+- Local checks passed:
+  - `py_compile` for `routers/admin_compat.py`, `dao/user/user.py`, `cluster_main.py`, and `scripts/check_route_contract.py`
+  - `pytest tests/test_user_dao_admin_delete.py tests/test_admin_stats_logs.py tests/test_project_read_access.py`
+  - `scripts/check_route_contract.py`
+  - `scripts/check_architecture_contracts.py`
+- Route contract remains:
+  - `openapi_paths=231`
+  - `openapi_operations=287`
+  - `admin_compat_route_handlers=7` including the new DB-plumbing purity guards.

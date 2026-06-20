@@ -63,9 +63,12 @@ class UserDAO:
         return await db.fetchrow(query, user_id)
 
     @staticmethod
-    async def delete_user_by_id(user_id: str) -> str:
+    async def delete_user_by_id(user_id: str) -> Optional[str]:
         """Hard-delete a user row by user_id for the legacy admin endpoint."""
         db = get_db_manager()
+        if not db:
+            logger.warning("delete_user_by_id skipped because database manager is unavailable: %s", user_id)
+            return None
         return await db.execute(
             "DELETE FROM users WHERE user_id = $1",
             user_id,

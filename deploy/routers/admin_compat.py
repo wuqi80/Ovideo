@@ -11,12 +11,12 @@ from typing import Any, Callable, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from dao.admin.admin_stats import AdminStatsDAO
+from dao_user import UserDAO
 
 
 def create_admin_compat_router(
     *,
     require_auth: Callable[..., Any],
-    get_db_manager: Callable[[], Any],
     online_users: Dict[str, Any],
     default_users: Dict[str, str],
     super_admin: str,
@@ -114,8 +114,6 @@ def create_admin_compat_router(
         if username not in ['admin', SUPER_ADMIN]:
             raise HTTPException(status_code=403, detail="权限不足：仅管理员可访问")
 
-        db_manager = get_db_manager()
-
         try:
             new_username = user_data.get('username')
             password = user_data.get('password')
@@ -134,19 +132,17 @@ def create_admin_compat_router(
             # 添加到DEFAULT_USERS（内存）
             DEFAULT_USERS[new_username] = password
 
-            # 如果数据库可用，同步到数据库
-            if db_manager:
-                try:
-                    from dao_user import UserDAO
-                    user = await UserDAO.create_user(
-                        username=new_username,
-                        password=password,
-                        email=email,
-                        user_id=new_username,  # user_id 必须 == username（全站资源表外键约定）
-                    )
-                    logger.info(f"✅ 用户 {new_username} 已创建（ID: {user['user_id'][:12]}...）")
-                except Exception as e:
-                    logger.warning(f"⚠️ 同步用户到数据库失败: {e}")
+            # 如果数据库可用，同步到数据库；不可用时保持旧的内存用户降级。
+            try:
+                user = await UserDAO.create_user(
+                    username=new_username,
+                    password=password,
+                    email=email,
+                    user_id=new_username,  # user_id 必须 == username（全站资源表外键约定）
+                )
+                logger.info(f"✅ 用户 {new_username} 已创建（ID: {user['user_id'][:12]}...）")
+            except Exception as e:
+                logger.warning(f"⚠️ 同步用户到数据库失败: {e}")
 
             # 审计留痕：新建用户（best-effort，失败不影响主流程）
             try:
@@ -185,8 +181,6 @@ def create_admin_compat_router(
         if username not in ['admin', SUPER_ADMIN]:
             raise HTTPException(status_code=403, detail="权限不足：仅管理员可访问")
 
-        db_manager = get_db_manager()
-
         try:
             # 防止删除自己
             if user_id == username:
@@ -196,28 +190,24 @@ def create_admin_compat_router(
             if user_id in ['admin', SUPER_ADMIN]:
                 raise HTTPException(status_code=400, detail="不能删除系统管理员账号")
 
-            # 如果数据库可用，从数据库删除
-            if db_manager:
-                try:
-                    # 删除用户记录（使用user_id字段，不是username）
-                    from dao_user import UserDAO
-                    result = await UserDAO.delete_user_by_id(user_id)
-
-                    logger.info(f"✅ 管理员 {username} 删除了用户: {user_id}，影响行数: {result}")
+            try:
+                # 删除用户记录（使用user_id字段，不是username）
+                result = await UserDAO.delete_user_by_id(user_id)
+                if result is None:
+                    logger.warning(f"⚠️ 数据库未连接，无法真正删除用户 {user_id}")
                     return {
                         "success": True,
-                        "message": f"用户 {user_id} 已从数据库删除"
+                        "message": f"用户 {user_id} 已删除（模拟）"
                     }
-                except Exception as db_error:
-                    logger.error(f"数据库删除用户失败: {db_error}")
-                    raise HTTPException(status_code=500, detail=f"数据库删除失败: {str(db_error)}")
-            else:
-                # 如果没有数据库，只返回成功（前端会从列表移除）
-                logger.warning(f"⚠️ 数据库未连接，无法真正删除用户 {user_id}")
+
+                logger.info(f"✅ 管理员 {username} 删除了用户: {user_id}，影响行数: {result}")
                 return {
                     "success": True,
-                    "message": f"用户 {user_id} 已删除（模拟）"
+                    "message": f"用户 {user_id} 已从数据库删除"
                 }
+            except Exception as db_error:
+                logger.error(f"数据库删除用户失败: {db_error}")
+                raise HTTPException(status_code=500, detail=f"数据库删除失败: {str(db_error)}")
         except HTTPException:
             raise
         except Exception as e:

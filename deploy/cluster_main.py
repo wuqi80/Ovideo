@@ -953,7 +953,6 @@ logger.info("Auth API routes registered (/api/login)")
 app.include_router(
     create_admin_compat_router(
         require_auth=require_auth,
-        get_db_manager=lambda: db_manager,
         online_users=_online_users,
         default_users=DEFAULT_USERS,
         super_admin=SUPER_ADMIN,
