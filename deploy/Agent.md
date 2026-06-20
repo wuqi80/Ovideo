@@ -1,5 +1,34 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Storyboard Stale Script Backend Fallback
+
+### Changes
+
+- Verified the reported target episode still has storyboard data on the server:
+  - `ep_2fc899a228f5` has `152` storyboard rows.
+  - current script `script_a7314932ac1b` also has `152` storyboard rows.
+- Updated `routers/storyboard.py` so `GET /api/episodes/{episode_id}/storyboard-items` handles stale `script_id` values at the backend layer:
+  - first queries the requested script-scoped storyboard rows
+  - if empty, checks whether the requested script still belongs to the episode through `EpisodeScriptDAO.get_by_id()`
+  - only stale/foreign script ids fall back to the episode-level storyboard rows
+  - valid existing scripts with no storyboard still return an empty result
+- Added `tests/test_storyboard_stale_script_fallback.py` coverage for stale-script fallback and valid-empty-script non-fallback.
+- Extended `scripts/check_route_contract.py` so the backend stale-script fallback markers are contract-checked.
+
+### Verification
+
+- `pytest tests/test_storyboard_stale_script_fallback.py -q`: `2 passed`.
+- `scripts/check_route_contract.py`: passed with `storyboard_paged_reload_checks=10`.
+- Local smoke test passed: `9/9`.
+- Server deploy passed: `drama.service` active.
+- Server smoke test passed: `9/9`.
+- Server stale-script probe returned `stale_items=3`, `stale_total=152`, `fallback_reason=stale_script_storyboard`.
+
+### Notes
+
+- This addresses the class of issue where a browser/session carries an old selected script id and the storyboard page appears empty even though the episode still has storyboard rows.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 API Service Image Download HttpClient Cleanup
 
 ### Changes

@@ -108,6 +108,34 @@ def create_storyboard_router(
             offset=offset,
             fields=selected_fields,
         )
+        fallback_script_id: Optional[str] = None
+        fallback_reason: Optional[str] = None
+        if script_id and not items:
+            try:
+                script = await EpisodeScriptDAO.get_by_id(script_id)
+                script_belongs_to_episode = bool(script and script.get("episode_id") == episode_id)
+            except Exception as exc:
+                logger.warning(
+                    "get_storyboard_items: script ownership check failed ep=%s script=%s: %s",
+                    episode_id,
+                    script_id,
+                    exc,
+                )
+                script_belongs_to_episode = True
+
+            if not script_belongs_to_episode:
+                fallback_items = await StoryboardDAO.get_by_episode(
+                    episode_id,
+                    script_id=None,
+                    limit=limit,
+                    offset=offset,
+                    fields=selected_fields,
+                )
+                if fallback_items:
+                    items = fallback_items
+                    fallback_script_id = script_id
+                    fallback_reason = "stale_script_storyboard"
+
         result = []
         for i in items:
             d = dict(i)
@@ -118,8 +146,15 @@ def create_storyboard_router(
                     d["bound_assets"] = []
             result.append(d)
         payload = {"success": True, "items": result}
+        if fallback_script_id:
+            payload["fallback_script_id"] = fallback_script_id
+            payload["fallback_reason"] = fallback_reason
+            payload["fallback_scope"] = "episode"
         if include_total:
-            payload["total"] = await StoryboardDAO.count_by_episode(episode_id, script_id=script_id)
+            payload["total"] = await StoryboardDAO.count_by_episode(
+                episode_id,
+                script_id=None if fallback_script_id else script_id,
+            )
             payload["limit"] = limit
             payload["offset"] = max(0, int(offset or 0))
         return payload

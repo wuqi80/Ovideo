@@ -943,6 +943,10 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
     page_text = (root / "new_html" / "pages" / "StoryboardGenPage.tsx").read_text(encoding="utf-8")
     api_text = (root / "new_html" / "services" / "apiService.ts").read_text(encoding="utf-8")
     api_test_text = (root / "new_html" / "__tests__" / "services" / "apiService.test.ts").read_text(encoding="utf-8")
+    router_text = (root / "routers" / "storyboard.py").read_text(encoding="utf-8")
+    router_test_text = (
+        root / "tests" / "test_storyboard_stale_script_fallback.py"
+    ).read_text(encoding="utf-8")
     forbidden_snippets = [
         "forceReloadSlices('storyboardItems')",
         'forceReloadSlices("storyboardItems")',
@@ -960,6 +964,11 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         (api_text, "fallbackToEpisode", "storyboard stale script fallback option"),
         (api_text, "fallbackReason: 'empty_script_storyboard'", "storyboard stale script fallback marker"),
         (api_test_text, "falls back to episode storyboard when selected script has no rows", "storyboard fallback unit test"),
+        (router_text, "EpisodeScriptDAO.get_by_id(script_id)", "storyboard backend stale script ownership check"),
+        (router_text, 'fallback_reason = "stale_script_storyboard"', "storyboard backend stale script fallback marker"),
+        (router_text, 'payload["fallback_scope"] = "episode"', "storyboard backend fallback scope marker"),
+        (router_test_text, "test_storyboard_items_fallback_for_stale_script_id", "storyboard backend stale script fallback test"),
+        (router_test_text, "test_storyboard_items_do_not_fallback_for_valid_empty_script", "storyboard backend valid empty script test"),
     ]
     missing = [f"{label}: missing {snippet}" for text, snippet, label in required_snippets if snippet not in text]
     if missing:
