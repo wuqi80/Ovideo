@@ -2317,6 +2317,30 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "const RUNTIME_KEY_IMPORT_BODY",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "const migrateRuntimeKeys = useCallback",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "dry_run: true",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "runtimeOnlyKeyProviders",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "运行时 Key 未落库",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "迁移运行时 Key",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "测试 DB 配置",
         ),
         (

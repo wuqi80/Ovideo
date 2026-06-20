@@ -5898,3 +5898,21 @@
 ### Follow-up
 
 - Still need a browser pass on `https://mecha.one/admin` after deployment to verify the revised labels remove the previous red `未配置` vs green health confusion for the real server data.
+
+## 2026-06-20 Admin Runtime Key Migration Entry
+
+### Findings
+
+- A server dry-run showed runtime/env has importable keys while DB rows were still empty-key rows:
+  - `env_keys_imported=10`
+  - `env_keys_skipped_provider_claimed=5`
+  - `env_keys_missing=2`
+  - `updated_existing=10`
+- This explains why API health could be green while DB config diagnostics showed no saved key.
+
+### Changes
+
+- Added a dedicated `迁移运行时 Key` action to `new_html/admin/AdminSettingsPage.tsx`.
+- The action first calls `POST /api/admin/api-configs/import-presets` with `dry_run=true`, shows a confirmation with importable/skipped/missing counts, then writes runtime keys into DB only after confirmation.
+- Added a warning band when providers are using runtime/env keys but have no DB-saved key, so the API management platform clearly shows it has not fully taken over those providers yet.
+- Strengthened `scripts/check_route_contract.py` to keep the dry-run migration path and runtime-only key warning in place.

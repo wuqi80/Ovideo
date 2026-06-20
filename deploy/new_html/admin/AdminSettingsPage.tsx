@@ -223,11 +223,16 @@ interface ApiConfigWriteResponse {
 
 interface ApiConfigImportResponse {
     success: boolean;
+    dry_run?: boolean;
     imported?: number;
     skipped?: number;
+    total?: number;
     updated_existing?: number;
     env_keys_imported?: number;
     env_keys_missing?: number;
+    env_keys_existing?: number;
+    env_keys_skipped_provider_claimed?: number;
+    enabled_existing?: number;
     env_refreshed?: boolean | null;
 }
 
@@ -307,6 +312,12 @@ const CATEGORY_LABELS: Record<string, string> = {
     video: '视频生成',
     audio: '语音生成',
     other: '其他',
+};
+
+const RUNTIME_KEY_IMPORT_BODY = {
+    copy_runtime_env_keys: true,
+    update_existing_empty_keys: true,
+    enable_copied_keys: true,
 };
 
 function normalizeProvider(provider: string | undefined | null): string {
@@ -1399,6 +1410,7 @@ const ApiConfigPanel: React.FC = () => {
     const [testingAllConfigs, setTestingAllConfigs] = useState(false);
     const [reloadingEnv, setReloadingEnv] = useState(false);
     const [repairingConflicts, setRepairingConflicts] = useState(false);
+    const [migratingRuntimeKeys, setMigratingRuntimeKeys] = useState(false);
 
     const loadConfigs = useCallback(async (options?: { showLoading?: boolean }) => {
         const showLoading = options?.showLoading !== false;
@@ -1534,6 +1546,20 @@ const ApiConfigPanel: React.FC = () => {
 
     const summary = useMemo(() => {
         const providerIds = Array.from(new Set(configs.map(item => normalizeProvider(item.provider)).filter(Boolean)));
+        const dbKeyedProviders = Array.from(new Set(
+            configs
+                .filter(item => Boolean(item.api_key_encrypted))
+                .map(item => normalizeProvider(item.provider))
+                .filter(Boolean)
+        ));
+        const dbKeyedProviderSet = new Set(dbKeyedProviders);
+        const runtimeKeyedProviders = Array.from(new Set(
+            runtimeStatus
+                .filter(item => item.has_key)
+                .map(item => normalizeProvider(item.provider))
+                .filter(Boolean)
+        ));
+        const runtimeOnlyKeyProviders = runtimeKeyedProviders.filter(provider => !dbKeyedProviderSet.has(provider));
         const counts = { ok: 0, error: 0, no_key: 0, unknown: 0 };
         providerIds.forEach(provider => {
             counts[healthStatusFrom(healthMap[provider], runtimeMap.get(provider))] += 1;
@@ -1542,9 +1568,12 @@ const ApiConfigPanel: React.FC = () => {
             total: configs.length,
             providers: providerIds.length,
             configured: configs.filter(item => Boolean(item.api_key_encrypted)).length,
+            dbKeyedProviders: dbKeyedProviders.length,
+            runtimeKeyedProviders: runtimeKeyedProviders.length,
+            runtimeOnlyKeyProviders,
             counts,
         };
-    }, [configs, healthMap, runtimeMap]);
+    }, [configs, healthMap, runtimeMap, runtimeStatus]);
 
     const testProvider = useCallback(async (providerRaw: string) => {
         const provider = normalizeProvider(providerRaw);
@@ -1864,11 +1893,7 @@ const ApiConfigPanel: React.FC = () => {
         try {
             const result = await apiJson<ApiConfigImportResponse>('/api/admin/api-configs/import-presets', {
                 method: 'POST',
-                body: JSON.stringify({
-                    copy_runtime_env_keys: true,
-                    update_existing_empty_keys: true,
-                    enable_copied_keys: true,
-                }),
+                body: JSON.stringify(RUNTIME_KEY_IMPORT_BODY),
             });
             const message = `导入完成：新增 ${result.imported ?? 0}，更新 ${result.updated_existing ?? 0}，写入Key ${result.env_keys_imported ?? 0}，缺Key ${result.env_keys_missing ?? 0}`;
             if (result.env_refreshed === false) crmMessage.warning(`${message}，但运行时刷新失败`);
@@ -1877,6 +1902,46 @@ const ApiConfigPanel: React.FC = () => {
             await loadConfigs();
         } catch (err: any) {
             crmMessage.error(`导入失败：${err?.message || 'unknown'}`);
+        }
+    }, [loadConfigs]);
+
+    const migrateRuntimeKeys = useCallback(async () => {
+        setMigratingRuntimeKeys(true);
+        try {
+            const dryRun = await apiJson<ApiConfigImportResponse>('/api/admin/api-configs/import-presets', {
+                method: 'POST',
+                body: JSON.stringify({ ...RUNTIME_KEY_IMPORT_BODY, dry_run: true }),
+            });
+            const importableKeys = dryRun.env_keys_imported ?? 0;
+            const existingKeys = dryRun.env_keys_existing ?? 0;
+            const missingKeys = dryRun.env_keys_missing ?? 0;
+            const claimedKeys = dryRun.env_keys_skipped_provider_claimed ?? 0;
+            if (importableKeys <= 0) {
+                crmMessage.success(`没有可迁移的运行时 Key：已落库 ${existingKeys}，缺 Key ${missingKeys}，重复预设 ${claimedKeys}`);
+                return;
+            }
+
+            const ok = await crmConfirm({
+                title: '迁移运行时 Key',
+                message: `将把 ${importableKeys} 个运行时 Key 写入后台 DB 配置，并跳过 ${claimedKeys} 个同 provider 重复预设；缺 Key ${missingKeys}。是否继续？`,
+                type: 'warning',
+                confirmText: '迁移',
+            });
+            if (!ok) return;
+
+            const result = await apiJson<ApiConfigImportResponse>('/api/admin/api-configs/import-presets', {
+                method: 'POST',
+                body: JSON.stringify(RUNTIME_KEY_IMPORT_BODY),
+            });
+            const message = `运行时 Key 迁移完成：写入 ${result.env_keys_imported ?? 0}，更新 ${result.updated_existing ?? 0}，新增 ${result.imported ?? 0}，缺 Key ${result.env_keys_missing ?? 0}`;
+            if (result.env_refreshed === false) crmMessage.warning(`${message}，但运行时刷新失败`);
+            else crmMessage.success(message);
+            setConfigTestMap({});
+            await loadConfigs();
+        } catch (err: any) {
+            crmMessage.error(`运行时 Key 迁移失败：${err?.message || 'unknown'}`);
+        } finally {
+            setMigratingRuntimeKeys(false);
         }
     }, [loadConfigs]);
 
@@ -1971,6 +2036,15 @@ const ApiConfigPanel: React.FC = () => {
                         </button>
                         <button
                             type="button"
+                            onClick={migrateRuntimeKeys}
+                            disabled={migratingRuntimeKeys || loading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
+                        >
+                            {migratingRuntimeKeys ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                            迁移运行时 Key
+                        </button>
+                        <button
+                            type="button"
                             onClick={openLegacyApiConfig}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
                         >
@@ -2011,6 +2085,26 @@ const ApiConfigPanel: React.FC = () => {
 
                 {error && (
                     <div className="rounded-md border border-r75 bg-r50 px-3 py-2 text-sm text-danger">{error}</div>
+                )}
+
+                {summary.runtimeOnlyKeyProviders.length > 0 && (
+                    <section className="rounded-md border border-y200 bg-y50 px-3 py-2 shadow-card flex flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0 text-xs text-y400">
+                            <span className="font-semibold">运行时 Key 未落库</span>
+                            <span className="ml-2">
+                                {summary.runtimeOnlyKeyProviders.length} 个 provider 正在使用 env/运行时 Key，后台 DB 暂无保存 Key。
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={migrateRuntimeKeys}
+                            disabled={migratingRuntimeKeys || loading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-y200 bg-n0 text-y400 hover:bg-y50 disabled:opacity-60"
+                        >
+                            {migratingRuntimeKeys ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                            迁移运行时 Key
+                        </button>
+                    </section>
                 )}
 
                 <section className="space-y-2">
