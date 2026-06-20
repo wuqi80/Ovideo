@@ -2808,6 +2808,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     asset_mutation_service = new_html / "services" / "assetMutationService.ts"
     storyboard_mutation_service = new_html / "services" / "storyboardMutationService.ts"
     script_timeline_service = new_html / "services" / "scriptTimelineService.ts"
+    admin_compat_service = new_html / "services" / "adminCompatService.ts"
     use_episode_data = new_html / "hooks" / "useEpisodeData.ts"
     episode_context = new_html / "contexts" / "EpisodeContext.tsx"
     audio_stage_page = new_html / "pages" / "AudioStagePage.tsx"
@@ -2844,6 +2845,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         asset_mutation_service,
         storyboard_mutation_service,
         script_timeline_service,
+        admin_compat_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2900,6 +2902,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "from './assetMutationService';"),
         (api_service, "from './storyboardMutationService';"),
         (api_service, "from './scriptTimelineService';"),
+        (api_service, "from './adminCompatService';"),
         (api_service, "function normalizeImageSourceUrl("),
         (api_service, "function isSameOriginUrl("),
         (api_service, "secureApiUrl(absolute, { requireAuth: false })"),
@@ -2969,22 +2972,24 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (script_timeline_service, "return apiJson<any>(`/api/episodes/${episodeId}/script-segments/batch`"),
         (script_timeline_service, "return apiJson<any>(`/api/episodes/${episodeId}/timeline-tracks`"),
         (script_timeline_service, "return apiJson<any>(`/api/timeline-tracks/${trackId}`"),
+        (admin_compat_service, "import { apiJson } from './httpClient';"),
+        (admin_compat_service, "return apiJson<any>('/api/admin/users'"),
+        (admin_compat_service, "return apiJson<any>('/api/admin/users/create'"),
+        (admin_compat_service, "return apiJson<any>(`/api/admin/users/${userId}/permissions`"),
+        (admin_compat_service, "return apiJson<any>(`/api/admin/users/${userId}`"),
+        (admin_compat_service, "return apiJson<any>(`/api/admin/logs?limit=${limit}`"),
+        (admin_compat_service, "return apiJson<any>(`/api/admin/stats${qs}`"),
         (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
         (new_html / "__tests__" / "services" / "videoWorkflowService.test.ts", "fetchSeedanceOmni caches video capability responses"),
         (new_html / "__tests__" / "services" / "assetMutationService.test.ts", "shares assets to target episode and script"),
         (new_html / "__tests__" / "services" / "storyboardMutationService.test.ts", "deletes all storyboard items for a script scope"),
         (new_html / "__tests__" / "services" / "scriptTimelineService.test.ts", "batch saves and deletes script segments"),
+        (new_html / "__tests__" / "services" / "adminCompatService.test.ts", "updates user permissions by id"),
         (new_html / "__tests__" / "services" / "minimaxTTSSync.test.ts", "from '../../services/audioGenerationService'"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads same-origin image through shared authenticated blob client"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "does not attach local auth token to external image downloads"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
         (api_service, "return apiJson<any>('/api/comfyui/upload'"),
-        (api_service, "return apiJson<any>('/api/admin/users'"),
-        (api_service, "return apiJson<any>('/api/admin/users/create'"),
-        (api_service, "return apiJson<any>(`/api/admin/users/${userId}/permissions`"),
-        (api_service, "return apiJson<any>(`/api/admin/users/${userId}`"),
-        (api_service, "return apiJson<any>(`/api/admin/logs?limit=${limit}`"),
-        (api_service, "return apiJson<any>(`/api/admin/stats${qs}`"),
         (api_service, "return apiJson<any>('/api/projects/save'"),
         (api_service, "return apiJson<any>(`/api/projects/list${suffix}`"),
         (api_service, "return apiJson<any>(`/api/projects/${projectId}`"),
@@ -3060,6 +3065,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (admin_organizations_tab, "apiJson<{ users: any[] }>('/api/admin/users?limit=500'"),
         (admin_hub_page, "import { apiJson } from '../services/httpClient'"),
         (admin_hub_page, "apiJson<any>(url, { method: 'GET' }, 'Admin Hub KPI')"),
+        (admin_page, "from '../services/adminCompatService'"),
         (admin_page, "import { apiJson } from '../services/httpClient'"),
         (admin_page, "const data = (await apiJson("),
         (admin_page, ")) as ClusterNodesResponse;"),

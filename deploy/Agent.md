@@ -6314,3 +6314,24 @@
 - Server `npm run test:run -- --pool=forks __tests__/services/scriptTimelineService.test.ts __tests__/services/assetMutationService.test.ts __tests__/services/storyboardMutationService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `64/64`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Admin Compatibility Service Split
+
+### Changes
+
+- Extracted legacy admin users, stats, and generation log helpers from `new_html/services/apiService.ts` into `new_html/services/adminCompatService.ts`.
+- Kept `apiService.ts` compatibility re-exports while removing duplicated admin endpoint implementations from the monolithic file.
+- Updated `AdminPage` to import admin compatibility APIs directly from the new service.
+- Added `adminCompatService.test.ts` and strengthened `scripts/check_route_contract.py` so these legacy admin endpoint helpers stay with their new owner.
+
+### Verification
+
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6984`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `adminCompatService-*.js` (`0.70 kB`) as a separate chunk and reduced the built `apiService-*.js` chunk to `4.20 kB`.
+- Server `npm run test:run -- --pool=forks __tests__/services/adminCompatService.test.ts __tests__/services/scriptTimelineService.test.ts __tests__/services/assetMutationService.test.ts __tests__/services/storyboardMutationService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `70/70`.
+- Server `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6588`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

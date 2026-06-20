@@ -8,7 +8,7 @@ import {
     Calendar, TrendingUp, PieChart, Play, Loader2, Check
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { getUsers, getSystemStats, getGenerationLogs, updateUserPermissions, createUser, deleteUser } from '../services/apiService';
+import { getUsers, getSystemStats, getGenerationLogs, updateUserPermissions, createUser, deleteUser } from '../services/adminCompatService';
 import { apiJson } from '../services/httpClient';
 import { AdminFeatureTabs } from './AdminFeatureTabs';
 

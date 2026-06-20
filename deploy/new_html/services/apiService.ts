@@ -89,6 +89,14 @@ export {
     type CreateEpisodeScriptPayload,
     type UpdateEpisodeScriptPayload,
 } from './scriptTimelineService';
+export {
+    getUsers,
+    createUser,
+    updateUserPermissions,
+    deleteUser,
+    getGenerationLogs,
+    getSystemStats,
+} from './adminCompatService';
 
 function normalizeImageSourceUrl(imageUrl: string): string {
     if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) return imageUrl;
@@ -377,76 +385,6 @@ export async function createCanvasConnection(boardId: string, sourceNodeId: stri
 
 export async function deleteCanvasConnection(connectionId: string) {
     return apiJson<any>(`/api/canvas/connections/${connectionId}`, { method: 'DELETE' }, 'deleteCanvasConnection');
-}
-
-// ==================== 管理员API ====================
-
-/**
- * 获取用户列表（仅管理员）
- */
-export async function getUsers(): Promise<{
-    success: boolean;
-    users: any[];
-}> {
-    return apiJson<any>('/api/admin/users', { method: 'GET' }, 'getUsers');
-}
-
-/**
- * 创建新用户（仅管理员）
- */
-export async function createUser(userData: any): Promise<{
-    success: boolean;
-    user: any;
-}> {
-    return apiJson<any>('/api/admin/users/create', {
-        method: 'POST',
-        body: JSON.stringify(userData)
-    }, 'createUser');
-}
-
-/**
- * 更新用户权限（仅管理员）
- */
-export async function updateUserPermissions(userId: string, permissions: any): Promise<{
-    success: boolean;
-}> {
-    return apiJson<any>(`/api/admin/users/${userId}/permissions`, {
-        method: 'PUT',
-        body: JSON.stringify(permissions)
-    }, 'updateUserPermissions');
-}
-
-/**
- * 删除用户（仅管理员）
- */
-export async function deleteUser(userId: string): Promise<{
-    success: boolean;
-}> {
-    return apiJson<any>(`/api/admin/users/${userId}`, { method: 'DELETE' }, 'deleteUser');
-}
-
-/**
- * 获取生成日志（仅管理员）
- */
-export async function getGenerationLogs(limit: number = 100): Promise<{
-    success: boolean;
-    logs: any[];
-}> {
-    return apiJson<any>(`/api/admin/logs?limit=${limit}`, { method: 'GET' }, 'getGenerationLogs');
-}
-
-/**
- * 获取系统统计（仅管理员）
- */
-// 2026-05-26 组织管理 MVP — Slice 6: 加 group_by ('user' | 'org')
-export async function getSystemStats(groupBy?: 'user' | 'org'): Promise<{
-    success: boolean;
-    stats: any;
-    group_by?: 'none' | 'user' | 'org';
-    breakdown?: any[];
-}> {
-    const qs = groupBy ? `?group_by=${groupBy}` : '';
-    return apiJson<any>(`/api/admin/stats${qs}`, { method: 'GET' }, 'getSystemStats');
 }
 
 // =============================================
