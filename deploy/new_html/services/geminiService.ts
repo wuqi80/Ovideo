@@ -7,6 +7,7 @@ import { enqueueComfyUITask, getComfyUIQueueStatus } from './comfyuiTaskQueue';
 // 2026-05-20 (Task System Overhaul M3)：所有 ComfyUI 等待函数都把任务同步到全局
 // taskRegistry，让铃铛 / TaskBadge / 跨页通知都能感知。
 import { taskRegistry } from './taskRegistry';
+import { apiJson } from './httpClient';
 
 /**
  * 2026-05-20 (M3)：传给 wait*ComfyUITask 系列的 registry meta。
@@ -88,6 +89,29 @@ const parseJsonFromGemini = <T>(value: string): T => {
     const arrayMatch = clean.match(/\[[\s\S]*\]/);
     const json = objectMatch?.[0] || arrayMatch?.[0] || clean;
     return JSON.parse(json) as T;
+};
+
+type GenerationTaskResponse = { task_id: string };
+
+const toQueuedTask = (data: GenerationTaskResponse): { taskId: string; status: string } => ({
+    taskId: data.task_id,
+    status: 'queued',
+});
+
+const postGenerationTask = async (
+    url: string,
+    payload: Record<string, any>,
+    apiName: string,
+): Promise<{ taskId: string; status: string }> => {
+    const data = await apiJson<GenerationTaskResponse>(
+        url,
+        {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        },
+        apiName,
+    );
+    return toQueuedTask(data);
 };
 
 export const callGeminiText = async (
@@ -392,43 +416,20 @@ export const adjustImageAngle = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         // 1. 先上传图片到ComfyUI
         const { uploadImageToComfyUI } = await import('./apiService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         // 2. 使用上传后的文件名调用角度调整接口
-        const response = await fetch('/api/generate/angle-adjust', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                image_filename: uploadResult.filename,
-                prompt: prompt,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '角度调整失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/angle-adjust', {
+            image_filename: uploadResult.filename,
+            prompt: prompt,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '角度调整');
     } catch (error) {
         console.error('Angle Adjustment Error:', error);
         throw error;
@@ -447,42 +448,19 @@ export const generateHumanMultiAngle = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         // 1. 先上传图片到ComfyUI
         const { uploadImageToComfyUI } = await import('./apiService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         // 2. 使用上传后的文件名调用多角度生成接口
-        const response = await fetch('/api/generate/human-multi-angle', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                image_filename: uploadResult.filename,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '多角度人物生成失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/human-multi-angle', {
+            image_filename: uploadResult.filename,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '多角度人物生成');
     } catch (error) {
         console.error('Human Multi-Angle Generation Error:', error);
         throw error;
@@ -502,43 +480,20 @@ export const generateAroundAngle = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         // 1. 先上传图片到ComfyUI
         const { uploadImageToComfyUI } = await import('./apiService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         // 2. 使用上传后的文件名调用全景生成接口
-        const response = await fetch('/api/generate/around-angle', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                image_filename: uploadResult.filename,
-                prompt: prompt,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '全景角度生成失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/around-angle', {
+            image_filename: uploadResult.filename,
+            prompt: prompt,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '全景角度生成');
     } catch (error) {
         console.error('Around Angle Generation Error:', error);
         throw error;
@@ -561,43 +516,19 @@ export const generateWithComfyUI = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        // 获取认证token
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         // 调用后端图像生成接口
-        const response = await fetch('/api/generate/image', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                engine: 'comfyui',
-                prompt: prompt,
-                negative_prompt: 'bad quality, worst quality, blurry, distorted',
-                ref_images: referenceImages.slice(0, 6),
-                strength: strength,
-                seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '图像生成失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/image', {
+            engine: 'comfyui',
+            prompt: prompt,
+            negative_prompt: 'bad quality, worst quality, blurry, distorted',
+            ref_images: referenceImages.slice(0, 6),
+            strength: strength,
+            seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '图像生成');
     } catch (error) {
         console.error('ComfyUI Generation Error:', error);
         throw error;
@@ -621,11 +552,6 @@ export const generateWithComfyUIWorkflow = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         const { uploadImageToComfyUI } = await import('./apiService');
         const allImages = [mainImage, ...refImages].slice(0, 6);
         
@@ -649,35 +575,17 @@ export const generateWithComfyUIWorkflow = async (
         
         console.log(`✅ 成功上传${filenames.length}/${allImages.length}张图片到ComfyUI:`, filenames);
 
-        const response = await fetch('/api/generate/comfyui-workflow', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                workflow_type: workflowType,
-                prompt: prompt,
-                negative_prompt: 'bad quality, worst quality, blurry, distorted',
-                image_filenames: filenames,
-                seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || `${workflowType}工作流生成失败`);
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/comfyui-workflow', {
+            workflow_type: workflowType,
+            prompt: prompt,
+            negative_prompt: 'bad quality, worst quality, blurry, distorted',
+            image_filenames: filenames,
+            seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, `${workflowType}工作流生成`);
     } catch (error) {
         console.error(`${workflowType} Generation Error:`, error);
         throw error;
@@ -696,23 +604,12 @@ export const checkComfyUITaskStatus = async (taskId: string): Promise<{
     error?: string;
 }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录');
-        }
-
-        const response = await fetch(`/api/task/${taskId}`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('查询任务状态失败');
-        }
-
-        const data = await response.json();
+        const data = await apiJson<any>(
+            `/api/task/${taskId}`,
+            { method: 'GET' },
+            '查询任务状态',
+            { authErrorMessage: '未登录' }
+        );
         // 🔧 调试：打印完整的任务状态数据
         if (data.status === 'completed') {
             console.log(`📊 任务 ${taskId} 完成，完整结果:`, JSON.stringify(data.result, null, 2));
@@ -1031,42 +928,19 @@ export const generateMatting = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         // 先上传图片到ComfyUI
         const { uploadImageToComfyUI } = await import('./apiService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
-        const response = await fetch('/api/generate/matting', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                image_filename: uploadResult.filename,
-                matting_type: mattingType,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '抠图失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/matting', {
+            image_filename: uploadResult.filename,
+            matting_type: mattingType,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '抠图');
     } catch (error) {
         console.error('Matting Error:', error);
         throw error;
@@ -1112,11 +986,6 @@ export const generateImageFusion = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         // 上传所有图片到ComfyUI
         const { uploadImageToComfyUI } = await import('./apiService');
         const [bkResult, huResult] = await Promise.all([
@@ -1130,35 +999,17 @@ export const generateImageFusion = async (
             mbFilename = mbResult.filename;
         }
         
-        const response = await fetch('/api/generate/image-fusion', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                fusion_type: fusionType,
-                image_bk: bkResult.filename,
-                image_hu: huResult.filename,
-                image_mb: mbFilename,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '融合失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/image-fusion', {
+            fusion_type: fusionType,
+            image_bk: bkResult.filename,
+            image_hu: huResult.filename,
+            image_mb: mbFilename,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '融合');
     } catch (error) {
         console.error('Image Fusion Error:', error);
         throw error;
@@ -1197,41 +1048,18 @@ export const generatePanorama360 = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         const { uploadImageToComfyUI } = await import('./apiService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
-        const response = await fetch('/api/generate/panorama-360', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                image_filename: uploadResult.filename,
-                prompt: prompt,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '360度全景生成失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/panorama-360', {
+            image_filename: uploadResult.filename,
+            prompt: prompt,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '360度全景生成');
     } catch (error) {
         console.error('Panorama 360 Error:', error);
         throw error;
@@ -1268,11 +1096,6 @@ export const generatePanoramaFusion = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         const { uploadImageToComfyUI } = await import('./apiService');
         
         // 上传图片
@@ -1286,35 +1109,17 @@ export const generatePanoramaFusion = async (
         
         const results = await Promise.all(uploadPromises);
         
-        const response = await fetch('/api/generate/panorama-fusion', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                image_1: results[0].filename,
-                image_3: results[1].filename,
-                image_2: image2Url ? results[2].filename : undefined,
-                prompt: prompt,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '全景融合失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/panorama-fusion', {
+            image_1: results[0].filename,
+            image_3: results[1].filename,
+            image_2: image2Url ? results[2].filename : undefined,
+            prompt: prompt,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '全景融合');
     } catch (error) {
         console.error('Panorama Fusion Error:', error);
         throw error;
@@ -1351,41 +1156,18 @@ export const generateAutoStoryboard = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         const { uploadImageToComfyUI } = await import('./apiService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
-        const response = await fetch('/api/generate/auto-storyboard', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                image_filename: uploadResult.filename,
-                prompt: prompt,
-                seed: seed,
-                entity_type: entityOptions?.entityType,
-                entity_id: entityOptions?.entityId,
-                file_role: entityOptions?.fileRole,
-                episode_id: entityOptions?.episodeId,
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '自动分镜失败');
-        }
-
-        const data = await response.json();
-        return {
-            taskId: data.task_id,
-            status: 'queued'
-        };
+        return await postGenerationTask('/api/generate/auto-storyboard', {
+            image_filename: uploadResult.filename,
+            prompt: prompt,
+            seed: seed,
+            entity_type: entityOptions?.entityType,
+            entity_id: entityOptions?.entityId,
+            file_role: entityOptions?.fileRole,
+            episode_id: entityOptions?.episodeId,
+        }, '自动分镜');
     } catch (error) {
         console.error('Auto Storyboard Error:', error);
         throw error;
@@ -1424,21 +1206,12 @@ export const generateMultiGridStoryboard = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ success: boolean; images?: string[]; prompt?: string; message?: string }> => {
     try {
-        const token = localStorage.getItem('auth_token');
-        if (!token) {
-            throw new Error('未登录，请先登录');
-        }
-
         if (!referenceImage) {
             throw new Error('必须传入一张参考图像');
         }
 
-        const response = await fetch('/api/generate/multi-grid-storyboard', {
+        return await apiJson<{ success: boolean; images?: string[]; prompt?: string; message?: string }>('/api/generate/multi-grid-storyboard', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify({
                 mode: mode,
                 user_prompt: userPrompt,
@@ -1448,14 +1221,7 @@ export const generateMultiGridStoryboard = async (
                 file_role: entityOptions?.fileRole,
                 episode_id: entityOptions?.episodeId,
             })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '多宫格分镜失败');
-        }
-
-        return await response.json();
+        }, '多宫格分镜');
     } catch (error) {
         console.error('Multi Grid Storyboard Error:', error);
         throw error;

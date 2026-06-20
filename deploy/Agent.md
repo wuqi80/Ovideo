@@ -4620,6 +4620,28 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend Gemini Service HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/services/geminiService.ts` internal generation requests from repeated local `fetch()` / `auth_token` / Authorization handling to shared `apiJson()`.
+- Added a small `postGenerationTask()` helper for `/api/generate/*` task submission responses that return `task_id`.
+- Migrated `/api/task/{taskId}` polling and multi-grid storyboard generation to shared response/error handling.
+- Extended `scripts/check_route_contract.py` so `geminiService.ts` cannot reintroduce service-local `fetch()` or duplicated Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_gemini_service_httpclient_20260620140110.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend Image Loader HTTP Client Migration
 
 ### Changes
