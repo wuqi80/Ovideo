@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   uploadImageToComfyUI,
-} from '../../services/apiService';
+} from '../../services/comfyuiBridgeService';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);

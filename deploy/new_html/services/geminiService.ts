@@ -417,7 +417,7 @@ export const adjustImageAngle = async (
 ): Promise<{ taskId: string; status: string }> => {
     try {
         // 1. 先上传图片到ComfyUI
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         // 2. 使用上传后的文件名调用角度调整接口
@@ -449,7 +449,7 @@ export const generateHumanMultiAngle = async (
 ): Promise<{ taskId: string; status: string }> => {
     try {
         // 1. 先上传图片到ComfyUI
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         // 2. 使用上传后的文件名调用多角度生成接口
@@ -481,7 +481,7 @@ export const generateAroundAngle = async (
 ): Promise<{ taskId: string; status: string }> => {
     try {
         // 1. 先上传图片到ComfyUI
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         // 2. 使用上传后的文件名调用全景生成接口
@@ -552,7 +552,7 @@ export const generateWithComfyUIWorkflow = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const allImages = [mainImage, ...refImages].slice(0, 6);
         
         console.log(`🔄 开始上传${allImages.length}张图片到ComfyUI...`);
@@ -820,7 +820,7 @@ export const processMaterialImage = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const { uploadImageToComfyUI, processMaterial } = await import('./apiService');
+        const { uploadImageToComfyUI, processMaterial } = await import('./comfyuiBridgeService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         const result = await processMaterial(uploadResult.filename, workflowType, entityOptions);
@@ -929,7 +929,7 @@ export const generateMatting = async (
 ): Promise<{ taskId: string; status: string }> => {
     try {
         // 先上传图片到ComfyUI
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         return await postGenerationTask('/api/generate/matting', {
@@ -987,7 +987,7 @@ export const generateImageFusion = async (
 ): Promise<{ taskId: string; status: string }> => {
     try {
         // 上传所有图片到ComfyUI
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const [bkResult, huResult] = await Promise.all([
             uploadImageToComfyUI(imageBkUrl),
             uploadImageToComfyUI(imageHuUrl)
@@ -1048,7 +1048,7 @@ export const generatePanorama360 = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         return await postGenerationTask('/api/generate/panorama-360', {
@@ -1096,7 +1096,7 @@ export const generatePanoramaFusion = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         
         // 上传图片
         const uploadPromises = [
@@ -1156,7 +1156,7 @@ export const generateAutoStoryboard = async (
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
-        const { uploadImageToComfyUI } = await import('./apiService');
+        const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const uploadResult = await uploadImageToComfyUI(imageDataUrl);
         
         return await postGenerationTask('/api/generate/auto-storyboard', {

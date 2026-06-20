@@ -2809,6 +2809,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     storyboard_mutation_service = new_html / "services" / "storyboardMutationService.ts"
     script_timeline_service = new_html / "services" / "scriptTimelineService.ts"
     admin_compat_service = new_html / "services" / "adminCompatService.ts"
+    comfyui_bridge_service = new_html / "services" / "comfyuiBridgeService.ts"
     use_episode_data = new_html / "hooks" / "useEpisodeData.ts"
     episode_context = new_html / "contexts" / "EpisodeContext.tsx"
     audio_stage_page = new_html / "pages" / "AudioStagePage.tsx"
@@ -2846,6 +2847,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         storyboard_mutation_service,
         script_timeline_service,
         admin_compat_service,
+        comfyui_bridge_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2893,8 +2895,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "const postGenerationTask = async ("),
         (new_html / "services" / "geminiService.ts", "postGenerationTask('/api/generate/comfyui-workflow'"),
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
-        (api_service, "import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, publicBlob, secureApiUrl } from './httpClient'"),
-        (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
+        (new_html / "services" / "geminiService.ts", "await import('./comfyuiBridgeService')"),
+        (api_service, "import { apiJson } from './httpClient';"),
+        (api_service, "export { getAuthToken, getHeaders, handleResponse } from './httpClient';"),
         (api_service, "from './taskNotificationService';"),
         (api_service, "from './episodeDataService';"),
         (api_service, "from './audioGenerationService';"),
@@ -2903,12 +2906,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "from './storyboardMutationService';"),
         (api_service, "from './scriptTimelineService';"),
         (api_service, "from './adminCompatService';"),
-        (api_service, "function normalizeImageSourceUrl("),
-        (api_service, "function isSameOriginUrl("),
-        (api_service, "secureApiUrl(absolute, { requireAuth: false })"),
-        (api_service, "apiBlob("),
-        (api_service, "publicBlob(imageUrlOrDataUrl"),
-        (api_service, "publicBlob(absolute"),
+        (api_service, "from './comfyuiBridgeService';"),
         (task_notification_service, "import { apiJson } from './httpClient';"),
         (task_notification_service, "return apiJson<any>('/api/tasks/active'"),
         (task_notification_service, "return apiJson<any>(url, { method: 'GET' }, 'getTaskNotifications')"),
@@ -2979,6 +2977,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (admin_compat_service, "return apiJson<any>(`/api/admin/users/${userId}`"),
         (admin_compat_service, "return apiJson<any>(`/api/admin/logs?limit=${limit}`"),
         (admin_compat_service, "return apiJson<any>(`/api/admin/stats${qs}`"),
+        (comfyui_bridge_service, "import { apiBlob, apiJson, getAuthToken, publicBlob, secureApiUrl } from './httpClient';"),
+        (comfyui_bridge_service, "function normalizeImageSourceUrl("),
+        (comfyui_bridge_service, "function isSameOriginUrl("),
+        (comfyui_bridge_service, "secureApiUrl(absolute, { requireAuth: false })"),
+        (comfyui_bridge_service, "apiBlob("),
+        (comfyui_bridge_service, "publicBlob(imageUrlOrDataUrl"),
+        (comfyui_bridge_service, "publicBlob(absolute"),
+        (comfyui_bridge_service, "return apiJson<any>('/api/comfyui/upload'"),
+        (comfyui_bridge_service, "return apiJson<any>('/api/materials/process'"),
         (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
         (new_html / "__tests__" / "services" / "videoWorkflowService.test.ts", "fetchSeedanceOmni caches video capability responses"),
         (new_html / "__tests__" / "services" / "assetMutationService.test.ts", "shares assets to target episode and script"),
@@ -2986,17 +2993,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "__tests__" / "services" / "scriptTimelineService.test.ts", "batch saves and deletes script segments"),
         (new_html / "__tests__" / "services" / "adminCompatService.test.ts", "updates user permissions by id"),
         (new_html / "__tests__" / "services" / "minimaxTTSSync.test.ts", "from '../../services/audioGenerationService'"),
-        (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads same-origin image through shared authenticated blob client"),
-        (new_html / "__tests__" / "services" / "apiService.test.ts", "does not attach local auth token to external image downloads"),
-        (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
-        (api_service, "return apiJson<any>('/api/comfyui/upload'"),
+        (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "downloads same-origin image through shared authenticated blob client"),
+        (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "does not attach local auth token to external image downloads"),
+        (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
         (api_service, "return apiJson<any>('/api/projects/save'"),
         (api_service, "return apiJson<any>(`/api/projects/list${suffix}`"),
         (api_service, "return apiJson<any>(`/api/projects/${projectId}`"),
         (api_service, "return apiJson<any>(`/api/projects/${projectId}/members`"),
         (api_service, "return apiJson<any>(`/api/projects/${projectId}/episodes`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}`"),
-        (api_service, "return apiJson<any>('/api/materials/process'"),
         (api_service, "return apiJson<any>('/api/canvas/boards'"),
         (api_service, "return apiJson<any>(`/api/canvas/boards/${boardId}`"),
         (api_service, "return apiJson<any>('/api/canvas/nodes'"),
@@ -3114,6 +3119,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
             checks += 1
 
     api_service_text = api_service.read_text(encoding="utf-8")
+    gemini_service_text = (new_html / "services" / "geminiService.ts").read_text(encoding="utf-8")
     for snippet in [
         "const API_BASE",
         "fetch(`${API_BASE}/api/",
@@ -3122,6 +3128,11 @@ def check_frontend_http_client_contract(root: Path) -> int:
     ]:
         if snippet in api_service_text:
             fail(f"apiService must not own API-base fetch/auth plumbing: {snippet}")
+        checks += 1
+
+    for snippet in ["await import('./apiService')", 'await import("./apiService")']:
+        if snippet in gemini_service_text:
+            fail(f"geminiService ComfyUI helpers must import comfyuiBridgeService instead of apiService: {snippet}")
         checks += 1
 
     direct_auth_token_allowed = {

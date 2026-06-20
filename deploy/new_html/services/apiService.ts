@@ -2,9 +2,9 @@
  * API服务层 - 调用后端接口
  */
 
-import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, publicBlob, secureApiUrl } from './httpClient';
+import { apiJson } from './httpClient';
 
-export { getAuthToken, getHeaders, handleResponse };
+export { getAuthToken, getHeaders, handleResponse } from './httpClient';
 export {
     dismissNotification,
     getActiveTasks,
@@ -97,20 +97,12 @@ export {
     getGenerationLogs,
     getSystemStats,
 } from './adminCompatService';
-
-function normalizeImageSourceUrl(imageUrl: string): string {
-    if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) return imageUrl;
-    return '/' + imageUrl;
-}
-
-function isSameOriginUrl(url: string): boolean {
-    if (url.startsWith('/')) return true;
-    try {
-        return new URL(url).origin === window.location.origin;
-    } catch {
-        return false;
-    }
-}
+export {
+    uploadImageToComfyUI,
+    processMaterial,
+    type MaterialEntityOptions,
+    type MaterialWorkflowType,
+} from './comfyuiBridgeService';
 
 /**
  * 保存项目到后端
@@ -163,109 +155,6 @@ export async function exportToVideo(projectId: string, selectedItems: string[]):
         method: 'POST',
         body: JSON.stringify({ selected_items: selectedItems })
     }, 'exportToVideo');
-}
-
-/**
- * 上传图片到ComfyUI
- * @param dataUrl Base64格式的图片
- * @returns 上传后的文件名和URL
- */
-export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
-    success: boolean;
-    filename: string;
-    storage_url: string;
-}> {
-    // 🔧 检查URL是否有效
-    if (!imageUrlOrDataUrl || imageUrlOrDataUrl.trim() === '') {
-        throw new Error('图片URL为空，无法上传');
-    }
-    
-    let blob: Blob;
-    
-    // 🔧 智能处理：支持DataURL、Blob URL和普通URL
-    if (imageUrlOrDataUrl.startsWith('data:')) {
-        // DataURL格式：直接解码Base64
-        const base64Data = imageUrlOrDataUrl.includes(',') ? imageUrlOrDataUrl.split(',')[1] : imageUrlOrDataUrl;
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        blob = new Blob([byteArray], { type: 'image/png' });
-    } else if (imageUrlOrDataUrl.startsWith('blob:')) {
-        // Blob URL格式：通过公开下载 helper 读取，不携带站内 token
-        console.log(`🔄 下载Blob图片: ${imageUrlOrDataUrl}`);
-        blob = await publicBlob(imageUrlOrDataUrl, { method: 'GET' }, 'downloadBlobImageForComfyUI');
-    } else {
-        // 普通URL格式：先下载图片
-        const normalizedUrl = normalizeImageSourceUrl(imageUrlOrDataUrl);
-        const absolute = normalizedUrl.startsWith('http')
-            ? normalizedUrl
-            : `${window.location.origin}${normalizedUrl}`;
-        
-        console.log(`🔄 下载图片: ${imageUrlOrDataUrl} -> ${absolute}`);
-
-        if (isSameOriginUrl(normalizedUrl)) {
-            blob = await apiBlob(
-                secureApiUrl(absolute, { requireAuth: false }),
-                { method: 'GET' },
-                'downloadImageForComfyUI',
-                { requireAuth: false, includeContentType: false },
-            );
-        } else {
-            blob = await publicBlob(absolute, { method: 'GET' }, 'downloadExternalImageForComfyUI');
-        }
-    }
-    
-    // 创建FormData
-    const formData = new FormData();
-    formData.append('image', blob, `image_${Date.now()}.png`);
-    // 🔧 修复：指定 node_type='image'，确保图片上传到图像处理节点
-    formData.append('node_type', 'image');
-    
-    const token = getAuthToken();
-    if (!token) {
-        throw new Error('未登录');
-    }
-    
-    return apiJson<any>('/api/comfyui/upload', {
-        method: 'POST',
-        body: formData
-    }, 'uploadImageToComfyUI', { includeContentType: false });
-}
-
-/**
- * 素材处理（高清放大、去水印、三视图）
- * @param imageFilename ComfyUI中的图片文件名
- * @param workflowType 工作流类型
- * @returns 任务ID
- */
-export async function processMaterial(
-    imageFilename: string,
-    workflowType: 'upscale_hd' | 'remove_watermark' | 'three_view',
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
-): Promise<{
-    success: boolean;
-    task_id: string;
-    message: string;
-}> {
-    const token = getAuthToken();
-    if (!token) {
-        throw new Error('未登录');
-    }
-    
-    return apiJson<any>('/api/materials/process', {
-        method: 'POST',
-        body: JSON.stringify({
-            image_filename: imageFilename,
-            workflow_type: workflowType,
-            entity_type: entityOptions?.entityType,
-            entity_id: entityOptions?.entityId,
-            file_role: entityOptions?.fileRole,
-            episode_id: entityOptions?.episodeId,
-        })
-    }, 'processMaterial');
 }
 
 // ==================== 项目成员管理 API ====================

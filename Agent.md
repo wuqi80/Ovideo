@@ -6344,3 +6344,24 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6588`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 ComfyUI Bridge Service Split
+
+### Changes
+
+- Extracted `uploadImageToComfyUI` and `processMaterial` from `deploy/new_html/services/apiService.ts` into `deploy/new_html/services/comfyuiBridgeService.ts`.
+- Updated `geminiService.ts` dynamic imports to load the smaller ComfyUI bridge chunk instead of the full `apiService.ts` compatibility layer.
+- Kept `apiService.ts` compatibility re-exports while removing duplicated ComfyUI/material-processing implementations from the monolithic file.
+- Moved upload coverage from `apiService.test.ts` to `comfyuiBridgeService.test.ts` and strengthened `deploy/scripts/check_route_contract.py` to keep this boundary from regressing.
+
+### Verification
+
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `frontend_http_client_checks=7004`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `comfyuiBridgeService-*.js` (`1.83 kB`) as a separate chunk, reduced `apiService-*.js` to `2.76 kB`, and reduced `geminiService-*.js` to `14.90 kB`.
+- Server `npm run test:run -- --pool=forks --testTimeout=15000 __tests__/services/comfyuiBridgeService.test.ts __tests__/services/adminCompatService.test.ts __tests__/services/scriptTimelineService.test.ts __tests__/services/assetMutationService.test.ts __tests__/services/storyboardMutationService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `70/70`.
+- Server `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6608`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
