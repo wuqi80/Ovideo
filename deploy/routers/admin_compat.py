@@ -636,6 +636,8 @@ def create_admin_compat_router(
 
             if not new_username or not password:
                 raise HTTPException(status_code=400, detail="用户名和密码为必填项")
+            if len(str(password)) < 8:
+                raise HTTPException(status_code=400, detail="密码至少 8 位")
 
             # 检查用户名是否已存在
             if new_username in DEFAULT_USERS:

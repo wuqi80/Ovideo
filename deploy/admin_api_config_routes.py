@@ -47,15 +47,13 @@ async def _reload_api_env() -> bool:
     """Refresh DB-backed API config values into the runtime environment."""
     try:
         result = await load_api_configs_to_env()
-        refreshed = bool(result.get("success"))
-        if not refreshed:
-            logger.warning("API env reload returned unsuccessful result: %s", result)
-            return False
+        if not result.get("success"):
+            raise RuntimeError(str(result.get("error") or result))
         logger.info("API env reload succeeded")
         return True
     except Exception as e:
-        logger.warning("API env reload failed: %s", e)
-        return False
+        logger.error("_reload_api_env failed: %s", e, exc_info=True)
+        raise
 
 
 async def _clear_all_provider_health_cache() -> List[str]:
@@ -163,11 +161,18 @@ async def admin_reload_api_env():
     try:
         result = await load_api_configs_to_env()
     except Exception as e:
-        logger.warning("Manual API env reload failed: %s", e, exc_info=True)
+        logger.error("Manual API env reload failed: %s", e, exc_info=True)
         await _clear_all_provider_health_cache()
-        return {"success": False, "env_refreshed": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail="API env reload failed") from e
 
     refreshed = bool(result.get("success"))
+    if not refreshed:
+        logger.error("Manual API env reload returned unsuccessful result: %s", result)
+        await _clear_all_provider_health_cache()
+        raise HTTPException(
+            status_code=500,
+            detail=str(result.get("error") or "API env reload failed"),
+        )
     health_cache_invalidated = await _clear_all_provider_health_cache()
     return {
         "success": refreshed,

@@ -38,6 +38,9 @@ def create_auth_legacy_router(
         if os.getenv("ALLOW_PUBLIC_REGISTRATION", "false").lower() not in ("1", "true", "yes", "on"):
             raise HTTPException(status_code=403, detail="公开注册已关闭，请联系管理员开通账号")
         try:
+            if len(user_data.password) < 8:
+                raise HTTPException(status_code=400, detail="密码至少 8 位")
+
             existing_user = await UserDAO.get_user_by_username(user_data.username)
             if existing_user:
                 raise HTTPException(status_code=400, detail="用户名已存在")

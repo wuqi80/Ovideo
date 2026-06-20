@@ -4586,3 +4586,45 @@
 
 - MiniMax `group_id` remains the first registered extra field.
 - Future provider-specific fields should be added to `PROVIDER_EXTRA_FIELD_CATALOG` instead of hardcoding new inputs in the admin page.
+
+## 2026-06-20 P0/P1 Deployment And Security Fixes
+
+### Changes
+
+- P0 deployment path completed with `scripts/live_deploy_mvc2.sh`:
+  - remote `cluster_main.py` backup is created before upload.
+  - MVC/API management files are synced to `/home/Administrator/deploy`.
+  - `drama.service` is restarted and checked for `active`.
+- Fixed API env reload observability:
+  - `admin_api_config_routes._reload_api_env()` now logs failures with `exc_info=True` and raises instead of returning `False`.
+  - manual `/api/admin/api-configs/reload-env` now returns HTTP 500 on reload failure instead of a 200 response with `success=false`.
+  - API config write handlers naturally surface reload failures as HTTP 500 through the shared callback.
+- Raised new-password minimum length to 8 characters:
+  - admin user create body.
+  - admin reset-password body and explicit guard.
+  - legacy public registration handler, after the public-registration-disabled guard so closed registration still returns 403.
+  - legacy admin-compatible user create endpoint.
+- Added contracts:
+  - `scripts/check_provider_contract.py` checks reload failures are not swallowed.
+  - `scripts/check_route_contract.py` checks password minimum enforcement cannot regress to 4 characters.
+
+### Verification
+
+- Local checks passed:
+  - `python -m py_compile admin_api_config_routes.py admin_routes.py routers/auth_legacy.py routers/admin_compat.py scripts/check_provider_contract.py scripts/check_route_contract.py`
+  - `python scripts/check_provider_contract.py`
+  - `.venv/Scripts/python.exe scripts/check_route_contract.py`
+  - `python scripts/smoke_test.py` -> `9/9`
+- Server checks passed after final P1 redeploy:
+  - `scripts/live_deploy_mvc2.sh` -> `✅ 部署成功`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `.venv/bin/python scripts/check_provider_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+- Smoke caught and fixed one regression before final deploy:
+  - public registration is disabled, so `/api/auth/register` must return HTTP `403` before any password-length validation returns `422`.
+
+### Remaining Gap
+
+- Server SSH port `22` is still publicly exposed. This is outside the app code path and should be handled in GCP firewall/IAP or host SSH policy.

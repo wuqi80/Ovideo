@@ -698,7 +698,8 @@ def check_api_config_write_env_refresh_contract() -> int:
 
     service_tree = ast.parse(service_path.read_text(encoding="utf-8"), filename=str(service_path))
     import_tree = ast.parse(import_path.read_text(encoding="utf-8"), filename=str(import_path))
-    route_tree = ast.parse(route_path.read_text(encoding="utf-8"), filename=str(route_path))
+    route_text = route_path.read_text(encoding="utf-8")
+    route_tree = ast.parse(route_text, filename=str(route_path))
 
     violations: list[str] = []
     service_write_functions = {
@@ -733,6 +734,16 @@ def check_api_config_write_env_refresh_contract() -> int:
         )
         if not returns_bool:
             violations.append(f"admin_api_config_routes.py:{reload_func.lineno} _reload_api_env() must return bool")
+        reload_source = ast.get_source_segment(route_text, reload_func) or ""
+        reload_except_raises = any(
+            isinstance(node, ast.ExceptHandler)
+            and any(isinstance(child, ast.Raise) for child in ast.walk(node))
+            for node in ast.walk(reload_func)
+        )
+        if "return False" in reload_source or not reload_except_raises:
+            violations.append(
+                f"admin_api_config_routes.py:{reload_func.lineno} _reload_api_env() must log and raise failures"
+            )
 
     route_write_calls = {
         "admin_create_api_config": "create_api_config",
@@ -758,6 +769,12 @@ def check_api_config_write_env_refresh_contract() -> int:
         violations.append(
             f"admin_api_config_routes.py:{manual_reload.lineno} manual reload response lacks env_refreshed"
         )
+    else:
+        manual_source = ast.get_source_segment(route_text, manual_reload) or ""
+        if "raise HTTPException(status_code=500" not in manual_source:
+            violations.append(
+                f"admin_api_config_routes.py:{manual_reload.lineno} manual reload must return HTTP 500 on reload failure"
+            )
 
     if violations:
         fail("API config write operations must expose hot-reload status:\n" + "\n".join(violations))

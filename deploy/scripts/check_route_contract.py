@@ -1276,6 +1276,38 @@ def check_auth_legacy_routes_extracted(root: Path) -> int:
     return route_count
 
 
+def check_password_minimum_contract(root: Path) -> int:
+    """New password entry points must enforce at least 8 characters."""
+    required_snippets = [
+        (root / "admin_routes.py", "password: str = Field(..., min_length=8)"),
+        (root / "admin_routes.py", "new_password: str = Field(..., min_length=8)"),
+        (root / "admin_routes.py", "len(body.new_password) < 8"),
+        (root / "routers" / "auth_legacy.py", "len(user_data.password) < 8"),
+        (root / "routers" / "admin_compat.py", "len(str(password)) < 8"),
+    ]
+    for path, snippet in required_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing password minimum contract snippet in {path.relative_to(root)}: {snippet}")
+
+    forbidden_snippets = [
+        "min_length=4",
+        "min_length: 4",
+        "len(body.new_password) < 4",
+    ]
+    for path in [
+        root / "admin_routes.py",
+        root / "routers" / "auth_legacy.py",
+        root / "routers" / "admin_compat.py",
+        root / "schemas" / "auth.py",
+    ]:
+        text = path.read_text(encoding="utf-8")
+        for snippet in forbidden_snippets:
+            if snippet in text:
+                fail(f"Forbidden password minimum contract snippet in {path.relative_to(root)}: {snippet}")
+    return len(required_snippets)
+
+
 def check_admin_compat_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     admin_compat_path = root / "routers" / "admin_compat.py"
@@ -2701,6 +2733,7 @@ def main() -> int:
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
     auth_legacy_route_handlers = check_auth_legacy_routes_extracted(root)
+    password_minimum_checks = check_password_minimum_contract(root)
     admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
     project_core_route_handlers = check_project_core_routes_extracted(root)
@@ -2754,6 +2787,7 @@ def main() -> int:
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")
     print(f"  auth_legacy_route_handlers={auth_legacy_route_handlers}")
+    print(f"  password_minimum_checks={password_minimum_checks}")
     print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
     print(f"  project_core_route_handlers={project_core_route_handlers}")

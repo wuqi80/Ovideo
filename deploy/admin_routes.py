@@ -797,7 +797,7 @@ from dao_project_group import ProjectGroupDAO  # noqa: E402
 
 class AdminUserCreateBody(BaseModel):
     username: str
-    password: str
+    password: str = Field(..., min_length=8)
     email: Optional[str] = None
     role: str = 'user'
 
@@ -814,7 +814,7 @@ class AdminDisableBody(BaseModel):
 
 
 class AdminResetPasswordBody(BaseModel):
-    new_password: str
+    new_password: str = Field(..., min_length=8)
 
 
 class AdminPermissionsBody(BaseModel):
@@ -959,8 +959,8 @@ async def admin_enable_user(user_id: str, request: Request):
 @router.post("/users/{user_id}/reset-password", dependencies=[Depends(require_admin)])
 async def admin_reset_password(user_id: str, body: AdminResetPasswordBody, request: Request):
     _require_db()
-    if not body.new_password or len(body.new_password) < 4:
-        raise HTTPException(status_code=400, detail="new_password 太短")
+    if not body.new_password or len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="new_password 至少 8 位")
     ok = await UserDAO.reset_password(user_id, body.new_password)
     import admin_audit_service
     await admin_audit_service.record(
