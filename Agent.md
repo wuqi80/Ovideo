@@ -6113,3 +6113,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server route contract and architecture contract passed.
 - Online smoke test against `https://mecha.one` passed `9/9`.
 - Authenticated online check `GET /api/admin/api-configs/deepseek/health?model_name=deepseek-reasoner` returned 200 with `model_name=deepseek-reasoner`.
+
+## 2026-06-21 API Runtime Status Model Targeting
+
+### Changes
+
+- Updated `build_provider_runtime_status()` so every API preset row resolves with `resolve_provider(provider, model_name)`.
+- Passed the same row-level `model_name` into failover diagnostics, keeping admin runtime status aligned with the provider/model shown on each card.
+- Tightened provider and route contracts so runtime status rows must report `runtime_model_name == model_name` with `model_source=request`.
+
+### Verification
+
+- Local `py_compile` passed for `api_provider_runtime.py` and the touched contract scripts.
+- Local `scripts/check_provider_contract.py` passed with `runtime_status_rows=17`.
+- Local `scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=123`.

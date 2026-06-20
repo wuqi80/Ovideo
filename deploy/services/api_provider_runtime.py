@@ -466,9 +466,10 @@ def build_provider_runtime_status(
         provider = normalize_provider(preset.get("provider", ""))
         model_name = str(preset.get("model_name") or "")
         catalog = PROVIDER_CATALOG.get(provider, {})
-        resolved = resolve_provider(provider)
+        resolved = resolve_provider(provider, model_name)
         _, failover = resolve_provider_with_failover(
             provider,
+            model_name,
             provider_health=health_map,
         )
         health = health_map.get(provider) or {}

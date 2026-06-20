@@ -2227,6 +2227,14 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             '"model": "request" if model_name else',
         ),
         (
+            root / "services" / "api_provider_runtime.py",
+            "resolved = resolve_provider(provider, model_name)",
+        ),
+        (
+            root / "services" / "api_provider_runtime.py",
+            "resolve_provider_with_failover(\n            provider,\n            model_name,",
+        ),
+        (
             root / "schemas" / "generation.py",
             "model: Optional[str] = Field(None",
         ),

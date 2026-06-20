@@ -984,10 +984,10 @@ def check_runtime_status(
         fail(f"Runtime api_key_source mismatch: {row.get('api_key_source')} != {env_key}")
     if row.get("endpoint_source") != endpoint_env:
         fail(f"Runtime endpoint_source mismatch: {row.get('endpoint_source')} != {endpoint_env}")
-    if row.get("runtime_model_name") != "gemini-runtime-from-env":
-        fail(f"Runtime model override mismatch: {row.get('runtime_model_name')}")
-    if row.get("model_source") != model_env:
-        fail(f"Runtime model_source mismatch: {row.get('model_source')} != {model_env}")
+    if row.get("runtime_model_name") != row.get("model_name"):
+        fail(f"Runtime status should resolve the row model_name explicitly: {row}")
+    if row.get("model_source") != "request":
+        fail(f"Runtime model_source should be request for preset status rows: {row.get('model_source')}")
     if row.get("model_env") != model_env:
         fail(f"Runtime model_env mismatch: {row.get('model_env')} != {model_env}")
     if not row.get("custom_proxy_configured"):
