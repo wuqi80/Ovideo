@@ -3236,6 +3236,33 @@ def check_frontend_ai_chunk_split_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_workflow_chunk_contract(root: Path) -> int:
+    """Heavy workflow workbench components should be lazy-loaded by route shells."""
+    new_html = root / "new_html"
+    storyboard_page = new_html / "pages" / "StoryboardGenPage.tsx"
+    video_page = new_html / "pages" / "VideoGenPage.tsx"
+    storyboard_text = storyboard_page.read_text(encoding="utf-8")
+    video_text = video_page.read_text(encoding="utf-8")
+
+    required_snippets = [
+        (storyboard_text, "const GenerationPage = React.lazy(() => import('../components/GenerationPage')", "StoryboardGenPage lazy-loads GenerationPage"),
+        (storyboard_text, '<React.Suspense fallback={<WorkflowChunkFallback label="加载分镜工作台..." />}>', "StoryboardGenPage wraps GenerationPage in Suspense"),
+        (video_text, "const VideoPage = React.lazy(() => import('../components/VideoPage')", "VideoGenPage lazy-loads VideoPage"),
+        (video_text, '<React.Suspense fallback={<WorkflowChunkFallback label="加载视频工作台..." />}>', "VideoGenPage wraps VideoPage in Suspense"),
+    ]
+    forbidden_snippets = [
+        (storyboard_text, "import { GenerationPage } from '../components/GenerationPage';", "StoryboardGenPage must not statically import GenerationPage"),
+        (video_text, "import { VideoPage } from '../components/VideoPage';", "VideoGenPage must not statically import VideoPage"),
+    ]
+
+    checks = len(required_snippets) + len(forbidden_snippets)
+    missing = [f"{label}: missing {snippet}" for text, snippet, label in required_snippets if snippet not in text]
+    forbidden = [f"{label}: forbidden {snippet}" for text, snippet, label in forbidden_snippets if snippet in text]
+    if missing or forbidden:
+        fail("Frontend workflow chunk contract failed:\n" + "\n".join(missing + forbidden))
+    return checks
+
+
 def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
@@ -3394,6 +3421,7 @@ def main() -> int:
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
+    frontend_workflow_chunk_checks = check_frontend_workflow_chunk_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
@@ -3454,6 +3482,7 @@ def main() -> int:
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
+    print(f"  frontend_workflow_chunk_checks={frontend_workflow_chunk_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")

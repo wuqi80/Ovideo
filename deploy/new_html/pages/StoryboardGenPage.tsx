@@ -2,7 +2,6 @@ import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { GenerationPage } from '../components/GenerationPage';
 import {
   scriptToProjectFile,
   assetsToMaterialLibrary,
@@ -18,6 +17,16 @@ import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary } fro
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 
 const STORYBOARD_INITIAL_SHOT_COUNT = 10;
+const GenerationPage = React.lazy(() => import('../components/GenerationPage').then(m => ({ default: m.GenerationPage })));
+
+const WorkflowChunkFallback: React.FC<{ label: string }> = ({ label }) => (
+  <div className="h-full min-h-[240px] flex items-center justify-center text-n300">
+    <div className="flex items-center gap-2 text-sm">
+      <Loader className="w-4 h-4 animate-spin text-primary" />
+      <span>{label}</span>
+    </div>
+  </div>
+);
 
 function fmtTimeSimple(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0:00';
@@ -431,24 +440,26 @@ export const StoryboardGenPage: React.FC = () => {
         </div>
       )}
       <div className={showTimeline ? 'layout-safe flex-1 min-h-0 overflow-auto' : 'layout-safe h-full'}>
-        <GenerationPage
-          files={[enhancedFile]}
-          selectedFileId={episodeId}
-          episodeId={episodeId}
-          shotPageSize={STORYBOARD_INITIAL_SHOT_COUNT}
-          totalShotCount={storyboardTotalCount || storyboardItems.length}
-          onVisibleShotCountChange={handleVisibleShotCountChange}
-          materialLibrary={materialLibrary}
-          onUpdateStoryboardItem={handleUpdateStoryboardItem}
-          onDeleteStoryboardItem={handleDeleteStoryboardItem}
-          onBatchDeleteStoryboardItems={handleBatchDeleteStoryboardItems}
-          onSaveVersion={noopSaveVersion}
-          onRestoreVersion={noopRestoreVersion}
-          onDeleteVersion={noopDeleteVersion}
-          onForceSave={handleForceSave}
-          onExportNext={handleExportNext}
-          onImportProject={noopImportProject}
-        />
+        <React.Suspense fallback={<WorkflowChunkFallback label="加载分镜工作台..." />}>
+          <GenerationPage
+            files={[enhancedFile]}
+            selectedFileId={episodeId}
+            episodeId={episodeId}
+            shotPageSize={STORYBOARD_INITIAL_SHOT_COUNT}
+            totalShotCount={storyboardTotalCount || storyboardItems.length}
+            onVisibleShotCountChange={handleVisibleShotCountChange}
+            materialLibrary={materialLibrary}
+            onUpdateStoryboardItem={handleUpdateStoryboardItem}
+            onDeleteStoryboardItem={handleDeleteStoryboardItem}
+            onBatchDeleteStoryboardItems={handleBatchDeleteStoryboardItems}
+            onSaveVersion={noopSaveVersion}
+            onRestoreVersion={noopRestoreVersion}
+            onDeleteVersion={noopDeleteVersion}
+            onForceSave={handleForceSave}
+            onExportNext={handleExportNext}
+            onImportProject={noopImportProject}
+          />
+        </React.Suspense>
       </div>
       {showTimeline && (
         <div className="shrink-0 border-t border-n40 bg-n20 relative">

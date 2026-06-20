@@ -1,5 +1,35 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Workflow Workbench Chunk Split
+
+### Changes
+
+- Deferred heavy workflow workbench components behind route-shell `React.lazy()` boundaries:
+  - `StoryboardGenPage.tsx` now lazy-loads `components/GenerationPage`.
+  - `VideoGenPage.tsx` now lazy-loads `components/VideoPage`.
+- Added lightweight in-page fallbacks so the route shell can render while the heavy workbench chunk downloads.
+- Strengthened `scripts/check_route_contract.py` with `frontend_workflow_chunk_checks` to prevent static imports of those heavy workbench components from returning.
+
+### Verification
+
+- `py_compile`: passed for `scripts/check_route_contract.py`.
+- `scripts/check_architecture_contracts.py`: 9/9 passed locally, including `frontend_workflow_chunk_checks=6`.
+- `scripts/smoke_test.py`: 9/9 passed locally.
+- Server deploy completed; Vite build passed and `drama.service` stayed active.
+- Server Vite build confirmed route shell/workbench split:
+  - `StoryboardGenPage-*.js`: about 23 KB
+  - `VideoGenPage-*.js`: about 13 KB
+  - `GenerationPage-*.js` and `VideoPage-*.js` remain separate heavy chunks loaded by the lazy boundaries.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed, including `frontend_workflow_chunk_checks=6`.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Recent `drama.service` logs showed no errors after deployment.
+
+### Notes
+
+- `MultiAngle3DController` was already lazy-loaded and is a separate large chunk; this pass focused on route-level workflow shells that still statically imported heavier workbench components.
+- Local Vite/Vitest still cannot run because the Windows workspace `node_modules` is missing Rollup's `@rollup/rollup-win32-x64-msvc` optional package. Server build remains the frontend bundling authority.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Storyboard Script Scope Recovery
 
 ### Changes

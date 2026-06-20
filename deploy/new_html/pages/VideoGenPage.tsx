@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { VideoPage } from '../components/VideoPage';
 import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
 import * as videoService from '../services/videoService';
 import { estimateDurationMs } from '../utils/durationMapping';
@@ -9,6 +8,16 @@ import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } f
 import { secureApiUrl } from '../services/httpClient';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
+const VideoPage = React.lazy(() => import('../components/VideoPage').then(m => ({ default: m.VideoPage })));
+
+const WorkflowChunkFallback: React.FC<{ label: string }> = ({ label }) => (
+  <div className="h-full min-h-[240px] flex items-center justify-center text-n300">
+    <div className="flex items-center gap-2 text-sm">
+      <Loader size={16} className="animate-spin text-primary" />
+      <span>{label}</span>
+    </div>
+  </div>
+);
 
 function secureMediaUrl(url: string | null): string | null {
   if (!url) return null;
@@ -542,14 +551,16 @@ export const VideoGenPage: React.FC = () => {
 
       {/* Embedded old VideoPage */}
       <div className="layout-safe flex-1 min-h-0 overflow-auto">
-        <VideoPage
-          isActive={true}
-          sessionScope={sessionScope}
-          episodeId={episodeId || ''}
-          storyboardItems={allStoryboardItems}
-          onRequestReimport={handleImportAll}
-          key={`${sessionScope}-${importDone}-${syncNonce}`}
-        />
+        <React.Suspense fallback={<WorkflowChunkFallback label="加载视频工作台..." />}>
+          <VideoPage
+            isActive={true}
+            sessionScope={sessionScope}
+            episodeId={episodeId || ''}
+            storyboardItems={allStoryboardItems}
+            onRequestReimport={handleImportAll}
+            key={`${sessionScope}-${importDone}-${syncNonce}`}
+          />
+        </React.Suspense>
       </div>
     </div>
   );
