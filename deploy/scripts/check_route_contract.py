@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import ast
 import os
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -2764,6 +2765,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     """Service layer should not grow new direct SQL outside tracked transaction exceptions."""
     allowed_direct_sql: set[Path] = set()
     service_root = root / "services"
+    dao_root = root / "dao"
     forbidden_snippets = [
         "SELECT ",
         "INSERT ",
@@ -2772,6 +2774,24 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         "conn.fetch",
         "conn.execute",
         "pool.acquire(",
+        "db.acquire(",
+        "db.pool.acquire(",
+        "from database import",
+        "import database",
+        "get_pool(",
+        "get_connection(",
+        "conn=",
+        "conn =",
+    ]
+    forbidden_service_patterns = [
+        (re.compile(r"\bconn\.(fetch|fetchrow|fetchval|execute|executemany)\s*\("), "connection operation"),
+        (re.compile(r"\bpool\.(fetch|fetchrow|fetchval|execute|executemany|acquire)\s*\("), "pool operation"),
+        (re.compile(r"\bdb\.(fetch|fetchrow|fetchval|execute|executemany|acquire)\s*\("), "database operation"),
+        (re.compile(r"\b(pool|conn|connection)\s*="), "service-local DB handle"),
+    ]
+    forbidden_dao_exposure_patterns = [
+        (re.compile(r"\breturn\s+(conn|connection|pool|db)\b"), "DAO returns a DB handle"),
+        (re.compile(r"\b(?:async\s+)?def\s+(?:get_)?(?:conn|connection|pool)\s*\("), "DAO exposes a DB handle getter"),
     ]
     violations: list[str] = []
     checks = 0
@@ -2782,6 +2802,17 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         for snippet in forbidden_snippets:
             if snippet in text:
                 violations.append(f"{path.relative_to(root)} contains direct DB operation: {snippet}")
+            checks += 1
+        for pattern, label in forbidden_service_patterns:
+            if pattern.search(text):
+                violations.append(f"{path.relative_to(root)} contains direct {label}")
+            checks += 1
+
+    for path in dao_root.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for pattern, label in forbidden_dao_exposure_patterns:
+            if pattern.search(text):
+                violations.append(f"{path.relative_to(root)} exposes connection plumbing: {label}")
             checks += 1
 
     required_snippets = [

@@ -5000,3 +5000,20 @@
   - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
+
+## 2026-06-20 Mapper Purity Contract Expansion
+
+### Changes
+
+- Re-audited `services/` for direct SQL, database pool access, connection operations, and `conn=` plumbing; no service-layer SQL or connection ownership remains.
+- Expanded `scripts/check_route_contract.py` so Mapper purity is enforced by contract:
+  - blocks service-layer `db.acquire()`, `pool.acquire()`, `conn.fetch/execute`, direct database imports, `get_pool()`, `get_connection()`, and local DB handle assignments.
+  - blocks DAO code from adding public connection/pool getters or returning DB handles.
+- Kept the scope intentionally narrow: existing DAO-internal transaction helpers were not refactored in this pass, but service-layer transaction leakage is now guarded.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `service_mapper_purity_checks=438`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/smoke_test.py` -> `9/9`
