@@ -4,6 +4,7 @@ import { Sparkles, BookOpen, ScrollText, LayoutDashboard, FileText, Settings, Pl
 import { AppView, AiModel, TaskNotification } from '../types';
 import { NotificationPanel } from './NotificationPanel';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import { apiFetch } from '../services/httpClient';
 
 interface HeaderProps {
   visibleColumns: boolean[];
@@ -45,10 +46,9 @@ export const Header: React.FC<HeaderProps> = ({
   // 登出处理
   const handleLogout = useCallback(async () => {
     try {
-      await fetch('/api/logout', {
+      await apiFetch('/api/logout', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` }
-      });
+      }, { apiName: 'logout' });
     } catch (e) {
       console.warn('登出请求失败', e);
     }

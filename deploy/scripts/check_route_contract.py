@@ -2576,6 +2576,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
     video_page = new_html / "components" / "VideoPage.tsx"
     project_hub = new_html / "components" / "ProjectHub.tsx"
     episode_hub = new_html / "pages" / "EpisodeHubPage.tsx"
+    history_page = new_html / "components" / "HistoryPage.tsx"
+    header = new_html / "components" / "Header.tsx"
     migrated_services = [
         new_html / "services" / "videoService.ts",
         new_html / "services" / "videoReverseService.ts",
@@ -2588,11 +2590,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
     migrated_pages = [
         project_hub,
         episode_hub,
+        history_page,
+        header,
     ]
 
     required_snippets = [
         (http_client, "export function buildAuthHeaders("),
         (http_client, "includeContentType?: boolean"),
+        (http_client, "export function authTokenFromHeaders("),
+        (http_client, "export function secureApiUrl("),
         (http_client, "export async function apiBlob("),
         (new_html / "services" / "entityFileService.ts", "{ includeContentType: false }"),
         (new_html / "services" / "mediaLibraryService.ts", "{ includeContentType: false }"),
@@ -2607,6 +2613,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (project_hub, "apiJson<any>(`/api/projects?"),
         (episode_hub, "import { apiJson } from '../services/httpClient'"),
         (episode_hub, "apiJson<any>(`/api/projects/${projectId}/episodes`"),
+        (history_page, "import { apiJson, secureApiUrl } from '../services/httpClient'"),
+        (history_page, "secureApiUrl(file.fileUrl, { absolute: true })"),
+        (header, "import { apiFetch } from '../services/httpClient'"),
+        (header, "apiFetch('/api/logout'"),
     ]
     forbidden_snippets = [
         "function getHeaders",

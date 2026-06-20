@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, HardDrive, ShieldAlert } from 'lucide-react';
 import { fetchUserFiles, deleteEntityFile, hardDeleteEntityFile, hardDeleteEntityFiles, type EntityFile } from '../services/entityFileService';
 import { LazyVideo } from './LazyVideo';
+import { apiJson, secureApiUrl } from '../services/httpClient';
 
 interface HistoryPageProps {
   // 预留扩展
@@ -18,9 +19,6 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
   const [hardDelete, setHardDelete] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
-
-  const getApiBaseUrl = () => window.location.origin;
-  const getToken = () => localStorage.getItem('auth_token') || '';
 
   const loadHistory = useCallback(async () => {
     setIsLoading(true);
@@ -51,11 +49,12 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
   }, []);
 
   const loadTaskImages = async (): Promise<EntityFile[]> => {
-    const response = await fetch(`${getApiBaseUrl()}/api/tasks?limit=100`, {
-      headers: { 'Authorization': `Bearer ${getToken()}` }
-    });
-    if (!response.ok) return [];
-    const data = await response.json();
+    let data: { tasks?: any[] };
+    try {
+      data = await apiJson<{ tasks?: any[] }>('/api/tasks?limit=100', {}, '加载任务图片');
+    } catch {
+      return [];
+    }
     const taskFiles: EntityFile[] = [];
     for (const task of (data.tasks || [])) {
       if (task.status !== 'completed') continue;
@@ -86,11 +85,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
 
   const loadActiveTasks = useCallback(async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/tasks?status=processing,queued&limit=20`, {
-        headers: { 'Authorization': `Bearer ${getToken()}` }
-      });
-      if (!response.ok) return;
-      const data = await response.json();
+      const data = await apiJson<{ tasks?: any[] }>('/api/tasks?status=processing,queued&limit=20', {}, '加载进行中任务');
       setActiveTasks((data.tasks || []).filter((t: any) =>
         t.status === 'processing' || t.status === 'queued'
       ));
@@ -214,13 +209,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
   // 获取媒体URL（原图）
   const getMediaUrl = (file: EntityFile): string | null => {
     if (!file.fileUrl) return null;
-    const baseUrl = file.fileUrl.startsWith('http')
-      ? file.fileUrl
-      : `${getApiBaseUrl()}${file.fileUrl}`;
-    if (!baseUrl.includes('token=')) {
-      return baseUrl + (baseUrl.includes('?') ? '&' : '?') + `token=${getToken()}`;
-    }
-    return baseUrl;
+    return secureApiUrl(file.fileUrl, { absolute: true });
   };
 
   const getThumbnailUrl = (file: EntityFile): string | null => {

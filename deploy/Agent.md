@@ -4664,3 +4664,21 @@
   - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
+
+## 2026-06-20 Frontend History/Header HTTP Client Migration
+
+### Changes
+
+- Extended `new_html/services/httpClient.ts` with:
+  - `authTokenFromHeaders()` to reuse the shared auth header source without direct localStorage reads in pages.
+  - `secureApiUrl()` to append the runtime auth token to media URLs consistently.
+- Migrated `new_html/components/HistoryPage.tsx`:
+  - fallback task image query now uses `apiJson()`.
+  - active task polling now uses `apiJson()`.
+  - media/thumbnail URLs now use `secureApiUrl()` instead of page-local token handling.
+- Migrated `new_html/components/Header.tsx` logout request to `apiFetch()`.
+- Extended `scripts/check_route_contract.py` so `HistoryPage.tsx` and `Header.tsx` cannot reintroduce page-local `fetch()` / Authorization logic.
+
+### Notes
+
+- `AdminFeatureTabs.tsx` still has a separate admin-session-token helper and should be migrated carefully with the `/admin` login/session split in mind.

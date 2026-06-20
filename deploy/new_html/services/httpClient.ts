@@ -66,6 +66,29 @@ export function buildJsonHeaders(
   return buildAuthHeaders(extraHeaders, { ...options, includeContentType: true });
 }
 
+export function authTokenFromHeaders(options: HeaderOptions = {}): string {
+  const headers = buildAuthHeaders(undefined, {
+    requireAuth: options.requireAuth,
+    authErrorMessage: options.authErrorMessage,
+    includeContentType: false,
+  });
+  const auth = headers.Authorization || headers.authorization || '';
+  return auth.replace(/^Bearer\s+/i, '').trim();
+}
+
+export function secureApiUrl(url: string, options: { absolute?: boolean; requireAuth?: boolean } = {}): string {
+  if (!url) return url;
+  const base = options.absolute && url.startsWith('/')
+    ? `${window.location.origin}${url}`
+    : url;
+  if (base.includes('token=')) return base;
+
+  const token = authTokenFromHeaders({ requireAuth: options.requireAuth ?? false });
+  if (!token) return base;
+
+  return `${base}${base.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+}
+
 export async function apiFetch(
   url: string,
   options: RequestInit = {},
