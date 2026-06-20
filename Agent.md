@@ -6021,3 +6021,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server build succeeded and split `MultiAngle3DController` down to 11.46 kB while moving Three.js to a cacheable `three-vendor` chunk.
 - Server route/architecture contracts passed.
 - Online smoke test passed `9/9`.
+
+## 2026-06-21 React Flow Chunk Split
+
+### Changes
+
+- Added a dedicated Vite `flow-vendor` manual chunk for the Canvas route.
+- Added route contract guards so `@xyflow/react` imports stay inside `CanvasPage` and the `canvas/` node boundary.
+
+### Verification
+
+- Local route contract passed with `frontend_flow_chunk_checks=4`.
+- Local architecture contract suite passed `9/9`.
+- Server build succeeded and split `CanvasPage` down to 7.39 kB while moving React Flow to a cacheable `flow-vendor` chunk.
+- Server route/architecture contracts passed.
+- Online smoke test passed `9/9`.

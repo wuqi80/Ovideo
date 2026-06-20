@@ -6004,3 +6004,21 @@
   - `three-vendor-*.js`: 512.05 kB build output, 501K on disk
 - Server route contract and architecture contract passed.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 React Flow Chunk Split
+
+### Changes
+
+- Added a dedicated Vite `flow-vendor` manual chunk so the Canvas route no longer carries React Flow inside its business page chunk.
+- Added `check_frontend_flow_chunk_contract()` to keep `@xyflow/react` imports scoped to `CanvasPage` and the `canvas/` node boundary, and to preserve the `flow-vendor` split.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_flow_chunk_checks=4`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `live_deploy_mvc2.sh` built successfully.
+- Server build output split:
+  - `CanvasPage-*.js`: 7.39 kB build output, 7.3K on disk
+  - `flow-vendor-*.js`: 181.80 kB build output, 178K on disk
+- Server route contract and architecture contract passed.
+- Online smoke test against `https://mecha.one` passed `9/9`.

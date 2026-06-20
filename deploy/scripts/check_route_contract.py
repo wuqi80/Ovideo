@@ -3512,6 +3512,46 @@ def check_frontend_three_chunk_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_flow_chunk_contract(root: Path) -> int:
+    """React Flow should stay in a cacheable chunk scoped to the Canvas route."""
+    vite_config = root / "new_html" / "vite.config.ts"
+    canvas_page = root / "new_html" / "pages" / "CanvasPage.tsx"
+    config_text = vite_config.read_text(encoding="utf-8")
+    canvas_text = canvas_page.read_text(encoding="utf-8")
+    required_snippets = [
+        (config_text, "'flow-vendor': ['@xyflow/react']", "Vite manualChunks splits React Flow"),
+        (canvas_text, "from '@xyflow/react';", "CanvasPage owns the React Flow workbench import"),
+        (canvas_text, "import '@xyflow/react/dist/style.css';", "CanvasPage owns the React Flow stylesheet"),
+    ]
+
+    new_html = root / "new_html"
+    flow_import_violations: list[str] = []
+    flow_import_re = re.compile(r"from\s+['\"]@xyflow/react['\"]|import\s+['\"]@xyflow/react")
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "node_modules" in path.parts or "dist" in path.parts:
+            continue
+        if path == canvas_page or "canvas" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for idx, line in enumerate(text.splitlines(), start=1):
+            if flow_import_re.search(line):
+                flow_import_violations.append(f"{path.relative_to(root)}:{idx}: {line.strip()}")
+
+    checks = len(required_snippets) + 1
+    missing = [f"{label}: missing {snippet}" for text, snippet, label in required_snippets if snippet not in text]
+    if missing or flow_import_violations:
+        fail(
+            "Frontend flow chunk contract failed:\n"
+            + "\n".join(missing + [
+                "Unexpected React Flow imports outside Canvas boundary:",
+                *flow_import_violations,
+            ] if flow_import_violations else missing)
+        )
+    return checks
+
+
 def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
@@ -3678,6 +3718,7 @@ def main() -> int:
     frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
     frontend_workflow_chunk_checks = check_frontend_workflow_chunk_contract(root)
     frontend_three_chunk_checks = check_frontend_three_chunk_contract(root)
+    frontend_flow_chunk_checks = check_frontend_flow_chunk_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
@@ -3740,6 +3781,7 @@ def main() -> int:
     print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
     print(f"  frontend_workflow_chunk_checks={frontend_workflow_chunk_checks}")
     print(f"  frontend_three_chunk_checks={frontend_three_chunk_checks}")
+    print(f"  frontend_flow_chunk_checks={frontend_flow_chunk_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
