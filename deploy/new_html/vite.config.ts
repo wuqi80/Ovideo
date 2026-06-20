@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => {
           output: {
             manualChunks: {
               vendor: ['react', 'react-dom'],
+              'three-vendor': ['three'],
               utils: ['uuid', 'lucide-react']
             }
           }

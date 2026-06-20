@@ -5985,3 +5985,22 @@
 - Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `entity_file_route_handlers=13` including purity guards.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
 - Runtime route/service DB plumbing search now only finds `cluster_main.py` DB lifecycle initialization/shutdown.
+
+## 2026-06-21 Three.js Chunk Split
+
+### Changes
+
+- Added a dedicated Vite `three-vendor` manual chunk so the optional 3D angle controller no longer carries Three.js inside its business component chunk.
+- Added `check_frontend_three_chunk_contract()` to keep Three.js imports limited to the optional 3D controller boundary and to preserve the `three-vendor` split.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_three_chunk_checks=3`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Local frontend build could not run because the Windows `node_modules` tree is missing Rollup's optional native package and this shell has no npm/corepack; server build is authoritative for this change.
+- Server `live_deploy_mvc2.sh` built successfully.
+- Server build output split:
+  - `MultiAngle3DController-*.js`: 11.46 kB build output, 12K on disk
+  - `three-vendor-*.js`: 512.05 kB build output, 501K on disk
+- Server route contract and architecture contract passed.
+- Online smoke test against `https://mecha.one` passed `9/9`.

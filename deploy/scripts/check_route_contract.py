@@ -3473,6 +3473,45 @@ def check_frontend_workflow_chunk_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_three_chunk_contract(root: Path) -> int:
+    """Three.js should stay in its own cacheable chunk for the optional 3D controller."""
+    vite_config = root / "new_html" / "vite.config.ts"
+    multi_angle = root / "new_html" / "components" / "MultiAngle3DController.tsx"
+    config_text = vite_config.read_text(encoding="utf-8")
+    multi_angle_text = multi_angle.read_text(encoding="utf-8")
+    required_snippets = [
+        (config_text, "'three-vendor': ['three']", "Vite manualChunks splits three"),
+        (multi_angle_text, "import * as THREE from 'three';", "3D controller owns the only runtime three import"),
+    ]
+
+    new_html = root / "new_html"
+    three_import_violations: list[str] = []
+    three_import_re = re.compile(r"from\s+['\"]three['\"]|import\s+['\"]three['\"]")
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "node_modules" in path.parts or "dist" in path.parts:
+            continue
+        if path == multi_angle or "multiangle" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for idx, line in enumerate(text.splitlines(), start=1):
+            if three_import_re.search(line):
+                three_import_violations.append(f"{path.relative_to(root)}:{idx}: {line.strip()}")
+
+    checks = len(required_snippets) + 1
+    missing = [f"{label}: missing {snippet}" for text, snippet, label in required_snippets if snippet not in text]
+    if missing or three_import_violations:
+        fail(
+            "Frontend three chunk contract failed:\n"
+            + "\n".join(missing + [
+                "Unexpected static three imports outside MultiAngle3DController:",
+                *three_import_violations,
+            ] if three_import_violations else missing)
+        )
+    return checks
+
+
 def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
@@ -3638,6 +3677,7 @@ def main() -> int:
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
     frontend_workflow_chunk_checks = check_frontend_workflow_chunk_contract(root)
+    frontend_three_chunk_checks = check_frontend_three_chunk_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
@@ -3699,6 +3739,7 @@ def main() -> int:
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
     print(f"  frontend_workflow_chunk_checks={frontend_workflow_chunk_checks}")
+    print(f"  frontend_three_chunk_checks={frontend_three_chunk_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")

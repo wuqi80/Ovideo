@@ -6006,3 +6006,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local route contract passed with `openapi_paths=231`, `openapi_operations=287`, `entity_file_route_handlers=13`.
 - Local architecture contract suite passed `9/9`.
 - Runtime route/service DB plumbing search now only finds `cluster_main.py` lifecycle DB management.
+
+## 2026-06-21 Three.js Chunk Split
+
+### Changes
+
+- Added a dedicated Vite `three-vendor` manual chunk for the optional 3D angle controller.
+- Added route contract guards so Three.js imports stay inside the optional 3D controller boundary.
+
+### Verification
+
+- Local route contract passed with `frontend_three_chunk_checks=3`.
+- Local architecture contract suite passed `9/9`.
+- Server build succeeded and split `MultiAngle3DController` down to 11.46 kB while moving Three.js to a cacheable `three-vendor` chunk.
+- Server route/architecture contracts passed.
+- Online smoke test passed `9/9`.
