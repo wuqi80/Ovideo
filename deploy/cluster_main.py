@@ -828,7 +828,6 @@ app.include_router(
         require_auth_dependency=require_auth,
         security_dependency=security,
         verify_token=jwt_auth.verify_token,
-        get_db_manager=lambda: db_manager,
     )
 )
 logger.info("✅ File API 路由已注册 (/api/upload, /api/thumbnail)")

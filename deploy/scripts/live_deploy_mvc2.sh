@@ -44,6 +44,7 @@ FILES=(
   scripts/check_*.py
   tests/test_admin_stats_logs.py
   tests/test_auth_user_service.py
+  tests/test_content_file_dao.py
   tests/test_minimax_audio_runtime.py
   tests/test_project_read_access.py
   tests/test_storyboard_stale_script_fallback.py

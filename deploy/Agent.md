@@ -5949,3 +5949,21 @@
 - Local `pytest tests/test_auth_user_service.py tests/test_user_dao_admin_delete.py -q` passed `10/10`.
 - Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `auth_route_handlers=8`.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
+
+## 2026-06-21 Files Router DB Plumbing Cleanup
+
+### Changes
+
+- Removed the `get_db_manager` dependency from `routers/files.py` and its `cluster_main.py` registration.
+- Let the thumbnail `/api/thumbnail` `/api/files/{file_id}` path resolve through `FileDAO.get_file()` directly.
+- Added a DB-unavailable fallback to `FileDAO.get_file()` so routes receive `None` instead of connection plumbing exceptions.
+- Added `tests/test_content_file_dao.py` for the DB-unavailable and query-shape paths.
+- Strengthened `scripts/check_route_contract.py` so `routers/files.py` cannot receive or call DB connection plumbing again.
+- Added the new DAO test to `scripts/live_deploy_mvc2.sh`.
+
+### Verification
+
+- Local `py_compile` passed for `routers/files.py`, `dao/content/content.py`, `cluster_main.py`, and the route contract script.
+- Local `pytest tests/test_content_file_dao.py tests/test_task_read_service.py -q` passed `7/7`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `service_mapper_purity_checks=587`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.

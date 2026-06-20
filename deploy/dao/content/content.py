@@ -4,9 +4,12 @@
 """
 import uuid
 import json
+import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from db_manager import get_db_manager
+
+logger = logging.getLogger(__name__)
 
 class ProjectDAO:
     """项目数据访问对象"""
@@ -431,6 +434,9 @@ class FileDAO:
     async def get_file(file_id: str) -> Optional[Dict[str, Any]]:
         """获取文件详情"""
         db = get_db_manager()
+        if not db:
+            logger.warning("get_file skipped because database manager is unavailable: %s", file_id)
+            return None
         query = "SELECT * FROM files WHERE file_id = $1 AND is_deleted = FALSE"
         return await db.fetchrow(query, file_id)
     

@@ -5973,3 +5973,19 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `pytest tests/test_auth_user_service.py tests/test_user_dao_admin_delete.py -q` passed `10/10`.
 - Local route contract passed with `openapi_paths=231`, `openapi_operations=287`.
 - Local architecture contract suite passed `9/9`.
+
+## 2026-06-21 Files Router DB Plumbing Cleanup
+
+### Changes
+
+- Removed `get_db_manager` plumbing from `deploy/routers/files.py` and from the `cluster_main.py` file router registration.
+- Let thumbnail lookup for `/api/files/{file_id}` rely on `FileDAO.get_file()` directly.
+- Added a DB-unavailable fallback to `FileDAO.get_file()`.
+- Added `deploy/tests/test_content_file_dao.py`, route contract guards, and deploy-script inclusion for the new test.
+
+### Verification
+
+- Local `py_compile` passed for touched backend files.
+- Local `pytest tests/test_content_file_dao.py tests/test_task_read_service.py -q` passed `7/7`.
+- Local route contract passed with `openapi_paths=231`, `openapi_operations=287`, `service_mapper_purity_checks=587`.
+- Local architecture contract suite passed `9/9`.

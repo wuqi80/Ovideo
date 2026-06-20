@@ -119,7 +119,6 @@ def create_files_router(
     require_auth_dependency,
     security_dependency,
     verify_token: Callable[[str], Optional[str]],
-    get_db_manager: Callable[[], object],
 ) -> APIRouter:
     router = APIRouter()
 
@@ -167,13 +166,12 @@ def create_files_router(
                 parts = url.split("/")
                 if len(parts) >= 4:
                     file_id = parts[3]
-                    if get_db_manager():
-                        try:
-                            file_record = await FileDAO.get_file(file_id)
-                            if file_record:
-                                file_path = file_record.get("file_path")
-                        except Exception as e:
-                            logger.warning("从数据库获取文件失败: %s", e)
+                    try:
+                        file_record = await FileDAO.get_file(file_id)
+                        if file_record:
+                            file_path = file_record.get("file_path")
+                    except Exception as e:
+                        logger.warning("从数据库获取文件失败: %s", e)
 
             if not file_path or not os.path.exists(file_path):
                 logger.warning("缩略图文件不存在: %s", file_path)

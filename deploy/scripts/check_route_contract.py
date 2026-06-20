@@ -3192,6 +3192,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "business" / "task.py", "async def get_terminal_tasks_for_notifications("),
         (root / "dao" / "business" / "task.py", "if not db:\n            return None"),
         (root / "dao" / "content" / "content.py", "async def soft_delete_user_files_by_path_fragment("),
+        (root / "dao" / "content" / "content.py", "get_file skipped because database manager is unavailable"),
         (root / "dao" / "content" / "content.py", "async def update_project_metadata("),
         (root / "dao" / "creative" / "episode.py", "async def get_project_id("),
         (root / "dao" / "creative" / "asset.py", "async def create_missing_episode_assets_transactional("),
@@ -3308,6 +3309,20 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         if snippet in task_read_service_text:
             violations.append(f"services/task_read_service.py must not receive DB connection plumbing: {snippet}")
         checks += 1
+
+    files_router_text = (root / "routers" / "files.py").read_text(encoding="utf-8")
+    cluster_main_text = (root / "cluster_main.py").read_text(encoding="utf-8")
+    for snippet in [
+        "get_db_manager",
+        "if get_db_manager():",
+        "get_db_manager=lambda",
+    ]:
+        if snippet in files_router_text:
+            violations.append(f"routers/files.py must delegate DB availability to FileDAO: {snippet}")
+        checks += 1
+    if re.search(r"create_files_router\([\s\S]{0,400}get_db_manager\s*=", cluster_main_text):
+        violations.append("cluster_main.py still passes DB plumbing into create_files_router")
+    checks += 1
 
     project_admin_router_text = (root / "routers" / "project_admin.py").read_text(encoding="utf-8")
     for snippet in [
