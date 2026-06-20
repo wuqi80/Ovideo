@@ -33,8 +33,8 @@ export const StoryboardGenPage: React.FC = () => {
     episodeId, projectId, selectedScriptId,
     script, storyboardItems, assets,
     storyboardTotalCount,
-    isLoading, error, reload,
-    loadSlices, loadSlicesQuiet, forceReloadSlices, loadStoryboardItemsPage,
+    isLoading, error,
+    loadSlicesQuiet, forceReloadSlices, loadStoryboardItemsPage,
   } = useEpisode();
 
   // 2026-06-14：进入分镜页强制刷新——loadSlices 对已加载 slice 会跳过，
@@ -193,9 +193,14 @@ export const StoryboardGenPage: React.FC = () => {
   );
 
   const handleForceSave = useCallback(() => {
-    loadStoryboardItemsPage({ limit: visibleEntityShotCount, includeTotal: true });
-    reload();
-  }, [loadStoryboardItemsPage, reload, visibleEntityShotCount]);
+    void Promise.all([
+      loadStoryboardItemsPage({ limit: visibleEntityShotCount, includeTotal: true }),
+      forceReloadSlices('script'),
+      loadSlicesQuiet('assets'),
+    ]).catch(err => {
+      console.warn('StoryboardGenPage visible refresh failed:', err);
+    });
+  }, [forceReloadSlices, loadSlicesQuiet, loadStoryboardItemsPage, visibleEntityShotCount]);
 
   const reloadVisibleStoryboardPage = useCallback(async () => {
     await loadStoryboardItemsPage({ limit: visibleEntityShotCount, includeTotal: true });

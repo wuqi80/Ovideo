@@ -945,6 +945,7 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
     forbidden_snippets = [
         "forceReloadSlices('storyboardItems')",
         'forceReloadSlices("storyboardItems")',
+        "reload();",
     ]
     forbidden = [snippet for snippet in forbidden_snippets if snippet in page_text]
     if forbidden:

@@ -1,5 +1,21 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Storyboard Visible Refresh Guard
+
+### Changes
+
+- Updated `new_html/pages/StoryboardGenPage.tsx` so force-save/refresh no longer calls the episode-wide `reload()` path.
+- The page now refreshes only:
+  - the current visible storyboard page via `loadStoryboardItemsPage({ limit: visibleEntityShotCount })`
+  - the script slice
+  - assets in the quiet/idle path
+- Extended `scripts/check_route_contract.py` so `StoryboardGenPage.tsx` cannot regress to full `reload();` or force-reload all storyboard items.
+
+### Notes
+
+- This preserves the existing 10-shot initial render and prevents later save/refresh actions from undoing storyboard pagination on large episodes.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Admin API Config Runtime Test Alignment
 
 ### Changes
