@@ -8,9 +8,10 @@ import os
 import time
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
+from urllib.parse import quote
 
 from services.api_config_health_service import check_provider_health
-from services.api_provider_registry import PROVIDER_CATALOG, normalize_provider
+from services.api_provider_registry import PROVIDER_CATALOG, get_api_model_presets, normalize_provider
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +78,64 @@ def set_provider_health_redis(redis_client: Any) -> None:
     _redis_client = redis_client
 
 
-def provider_health_cache_key(provider: str) -> str:
-    return f"{HEALTH_CACHE_PREFIX}{normalize_provider(provider)}"
+def provider_health_cache_key(provider: str, model_name: Optional[str] = None) -> str:
+    provider_key = normalize_provider(provider)
+    model_key = str(model_name or "").strip()
+    if not model_key:
+        return f"{HEALTH_CACHE_PREFIX}{provider_key}"
+    return f"{HEALTH_CACHE_PREFIX}{provider_key}:{quote(model_key, safe='')}"
+
+
+def provider_health_cache_targets(
+    providers: Optional[Iterable[str]] = None,
+    targets: Optional[Iterable[Any]] = None,
+) -> List[Dict[str, Optional[str]]]:
+    """Return provider/model cache targets, including known preset models."""
+    raw_targets: List[Any] = []
+    if targets is not None:
+        raw_targets.extend(targets)
+    else:
+        provider_filter = {normalize_provider(p) for p in providers} if providers is not None else None
+        for provider in provider_filter or sorted(PROVIDER_CATALOG):
+            raw_targets.append({"provider": provider, "model_name": None})
+        for preset in get_api_model_presets():
+            preset_provider = normalize_provider(str(preset.get("provider") or ""))
+            if provider_filter is not None and preset_provider not in provider_filter:
+                continue
+            raw_targets.append(
+                {
+                    "provider": preset_provider,
+                    "model_name": preset.get("model_name"),
+                }
+            )
+
+    out: List[Dict[str, Optional[str]]] = []
+    seen: set[str] = set()
+    for item in raw_targets:
+        if isinstance(item, str):
+            provider = normalize_provider(item)
+            model_name = None
+        elif isinstance(item, dict):
+            provider = normalize_provider(str(item.get("provider") or ""))
+            model_name = str(item.get("model_name") or "").strip() or None
+        else:
+            continue
+        if not provider:
+            continue
+        key = provider_health_cache_key(provider, model_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"provider": provider, "model_name": model_name})
+    return out
 
 
 def _safe_health_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     payload = dict(result or {})
     provider = normalize_provider(str(payload.get("provider") or ""))
     payload["provider"] = provider
+    model_name = str(payload.get("model_name") or "").strip()
+    payload["model_name"] = model_name or None
     payload.setdefault("success", True)
     payload.setdefault("cached_at", datetime.utcnow().isoformat(timespec="seconds") + "Z")
     return payload
@@ -99,18 +150,20 @@ async def cache_provider_health_result(
     client = redis_client if redis_client is not None else _redis_client
     payload = _safe_health_payload(result)
     provider = normalize_provider(str(payload.get("provider") or ""))
+    model_name = str(payload.get("model_name") or "").strip() or None
     if not client or not provider:
         return payload
 
     ttl = ttl_seconds or int(provider_health_monitor_settings()["ttl_seconds"])
     data = json.dumps(payload, ensure_ascii=False)
-    await client.set(provider_health_cache_key(provider), data, ex=ttl)
+    await client.set(provider_health_cache_key(provider, model_name), data, ex=ttl)
     return payload
 
 
 async def get_cached_provider_health(
     provider: str,
     *,
+    model_name: Optional[str] = None,
     redis_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     client = redis_client if redis_client is not None else _redis_client
@@ -118,7 +171,7 @@ async def get_cached_provider_health(
     if not client or not normalized:
         return None
 
-    raw = await client.get(provider_health_cache_key(normalized))
+    raw = await client.get(provider_health_cache_key(normalized, model_name))
     if not raw:
         return None
     if isinstance(raw, bytes):
@@ -130,12 +183,14 @@ async def get_cached_provider_health(
     if not isinstance(data, dict):
         return None
     data["provider"] = normalize_provider(str(data.get("provider") or normalized))
+    data["model_name"] = str(data.get("model_name") or model_name or "").strip() or None
     return data
 
 
 async def delete_cached_provider_health(
     provider: str,
     *,
+    model_name: Optional[str] = None,
     redis_client: Any = None,
 ) -> bool:
     client = redis_client if redis_client is not None else _redis_client
@@ -143,7 +198,16 @@ async def delete_cached_provider_health(
     if not client or not normalized:
         return False
 
-    deleted = await client.delete(provider_health_cache_key(normalized))
+    if model_name:
+        keys = [provider_health_cache_key(normalized, model_name)]
+    else:
+        keys = [
+            provider_health_cache_key(target["provider"] or "", target.get("model_name"))
+            for target in provider_health_cache_targets(providers=[normalized])
+        ]
+    deleted = 0
+    for key in keys:
+        deleted += int(await client.delete(key) or 0)
     try:
         return int(deleted) > 0
     except (TypeError, ValueError):
@@ -170,12 +234,16 @@ async def delete_cached_provider_health_many(
 async def list_cached_provider_health(
     providers: Optional[Iterable[str]] = None,
     *,
+    targets: Optional[Iterable[Any]] = None,
     redis_client: Any = None,
 ) -> List[Dict[str, Any]]:
-    provider_ids = [normalize_provider(p) for p in (providers or sorted(PROVIDER_CATALOG))]
     out: List[Dict[str, Any]] = []
-    for provider in provider_ids:
-        cached = await get_cached_provider_health(provider, redis_client=redis_client)
+    for target in provider_health_cache_targets(providers=providers, targets=targets):
+        cached = await get_cached_provider_health(
+            target["provider"] or "",
+            model_name=target.get("model_name"),
+            redis_client=redis_client,
+        )
         if cached:
             out.append(cached)
     return out
@@ -215,9 +283,10 @@ def _normalize_sweep_targets(
             model_name = str(item.get("model_name") or "").strip() or None
         else:
             continue
-        if not provider or provider in seen:
+        key = provider_health_cache_key(provider, model_name)
+        if not provider or key in seen:
             continue
-        seen.add(provider)
+        seen.add(key)
         out.append({"provider": provider, "model_name": model_name})
     return out
 

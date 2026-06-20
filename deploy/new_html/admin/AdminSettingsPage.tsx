@@ -330,6 +330,34 @@ function runtimeStatusKey(provider: string | undefined | null, modelName?: strin
     return `${providerKey}::${modelKey}`;
 }
 
+function providerHealthKey(provider: string | undefined | null, modelName?: string | null): string {
+    const providerKey = normalizeProvider(provider);
+    const modelKey = String(modelName || '').trim().toLowerCase();
+    return modelKey ? `${providerKey}::${modelKey}` : providerKey;
+}
+
+function putProviderHealth(
+    map: Record<string, ProviderHealth>,
+    item: ProviderHealth,
+    fallbackModelName?: string | null,
+) {
+    const provider = normalizeProvider(item.provider);
+    if (!provider) return;
+    const modelName = item.model_name || fallbackModelName || null;
+    map[providerHealthKey(provider, modelName)] = item;
+    if (!modelName) map[provider] = item;
+}
+
+function providerHealthFrom(
+    map: Record<string, ProviderHealth>,
+    provider: string | undefined | null,
+    modelName?: string | null,
+): ProviderHealth | undefined {
+    const providerKey = normalizeProvider(provider);
+    if (!providerKey) return undefined;
+    return map[providerHealthKey(providerKey, modelName)] || map[providerKey];
+}
+
 function formatEndpoint(endpoint?: string): string {
     if (!endpoint) return '-';
     return endpoint.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -1425,8 +1453,7 @@ const ApiConfigPanel: React.FC = () => {
             setMonitorState(data.monitor_state || null);
             const nextHealth: Record<string, ProviderHealth> = {};
             (data.provider_health || []).forEach(item => {
-                const provider = normalizeProvider(item.provider);
-                if (provider) nextHealth[provider] = item;
+                putProviderHealth(nextHealth, item);
             });
             setHealthMap(nextHealth);
         } catch (err: any) {
@@ -1451,8 +1478,7 @@ const ApiConfigPanel: React.FC = () => {
             setHealthMap(prev => {
                 const next = { ...prev };
                 rows.forEach(item => {
-                    const provider = normalizeProvider(item.provider);
-                    if (provider) next[provider] = item;
+                    putProviderHealth(next, item);
                 });
                 return next;
             });
@@ -1562,7 +1588,8 @@ const ApiConfigPanel: React.FC = () => {
         const runtimeOnlyKeyProviders = runtimeKeyedProviders.filter(provider => !dbKeyedProviderSet.has(provider));
         const counts = { ok: 0, error: 0, no_key: 0, unknown: 0 };
         providerIds.forEach(provider => {
-            counts[healthStatusFrom(healthMap[provider], runtimeMap.get(provider))] += 1;
+            const runtime = runtimeMap.get(provider);
+            counts[healthStatusFrom(providerHealthFrom(healthMap, provider, runtime?.runtime_model_name), runtime)] += 1;
         });
         return {
             total: configs.length,
@@ -1583,10 +1610,15 @@ const ApiConfigPanel: React.FC = () => {
         if (model) query.set('model_name', model);
         const suffix = query.toString() ? `?${query.toString()}` : '';
         const displayName = model ? `${provider} / ${model}` : provider;
-        setChecking(prev => ({ ...prev, [provider]: true }));
+        const checkKey = providerHealthKey(provider, model);
+        setChecking(prev => ({ ...prev, [checkKey]: true }));
         try {
             const result = await apiJson<ProviderHealth>(`/api/admin/api-configs/${encodeURIComponent(provider)}/health${suffix}`);
-            setHealthMap(prev => ({ ...prev, [provider]: result }));
+            setHealthMap(prev => {
+                const next = { ...prev };
+                putProviderHealth(next, result, model);
+                return next;
+            });
             await loadConfigs({ showLoading: false });
             const status = healthStatusFromResult(result);
             if (status === 'ok') {
@@ -1599,7 +1631,7 @@ const ApiConfigPanel: React.FC = () => {
         } catch (err: any) {
             crmMessage.error(`${provider} 测试失败：${err?.message || 'unknown'}`);
         } finally {
-            setChecking(prev => ({ ...prev, [provider]: false }));
+            setChecking(prev => ({ ...prev, [checkKey]: false }));
         }
     }, [loadConfigs]);
 
@@ -1680,8 +1712,7 @@ const ApiConfigPanel: React.FC = () => {
             setHealthMap(prev => {
                 const next = { ...prev };
                 rows.forEach(item => {
-                    const provider = normalizeProvider(item.provider);
-                    if (provider) next[provider] = item;
+                    putProviderHealth(next, item);
                 });
                 return next;
             });
@@ -2144,15 +2175,17 @@ const ApiConfigPanel: React.FC = () => {
                             const provider = normalizeProvider(meta.provider);
                             const providerConfigs = configsByProvider.get(provider) || [];
                             const primaryConfig = bestConfigForProvider(providerConfigs, provider);
+                            const runtime = primaryConfig ? runtimeForConfig(primaryConfig) : runtimeMap.get(provider);
+                            const modelName = primaryConfig?.model_name || runtime?.runtime_model_name || meta.default_model_name || null;
                             return (
                                 <ProviderQuickCard
                                     key={provider}
                                     meta={meta}
                                     configs={providerConfigs}
-                                    runtime={runtimeMap.get(provider)}
-                                    health={healthMap[provider]}
+                                    runtime={runtime}
+                                    health={providerHealthFrom(healthMap, provider, modelName)}
                                     configTest={primaryConfig ? configTestMap[primaryConfig.config_id] : undefined}
-                                    checking={Boolean(checking[provider])}
+                                    checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                     testingConfig={testingAllConfigs || Boolean(primaryConfig && testingConfig[primaryConfig.config_id])}
                                     onConfigure={openProviderConfig}
                                     onEditConfig={openEdit}
@@ -2187,15 +2220,17 @@ const ApiConfigPanel: React.FC = () => {
                                     <div className="grid gap-3">
                                         {items.map(config => {
                                             const provider = normalizeProvider(config.provider);
+                                            const runtime = runtimeForConfig(config);
+                                            const modelName = config.model_name || runtime?.runtime_model_name || null;
                                             return (
                                                 <ApiConfigCard
                                                     key={config.config_id}
                                                     config={config}
                                                     meta={providerMetaMap.get(provider)}
-                                                    runtime={runtimeForConfig(config)}
-                                                    health={healthMap[provider]}
+                                                    runtime={runtime}
+                                                    health={providerHealthFrom(healthMap, provider, modelName)}
                                                     configTest={configTestMap[config.config_id]}
-                                                    checking={Boolean(checking[provider])}
+                                                    checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                                     testingConfig={testingAllConfigs || Boolean(testingConfig[config.config_id])}
                                                     onCheck={testProvider}
                                                     onTestConfig={testConfig}

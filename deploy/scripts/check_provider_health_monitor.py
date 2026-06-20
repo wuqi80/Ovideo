@@ -60,7 +60,7 @@ async def main() -> int:
         return {
             "success": True,
             "provider": provider,
-            "model_name": model_name or "model-a",
+            "model_name": model_name or None,
             "status": "ok" if provider == "deepseek" else "no_key",
             "latency_ms": 12 if provider == "deepseek" else None,
             "checked_at": "2026-06-18T00:00:00Z",
@@ -107,11 +107,20 @@ async def main() -> int:
     )
     if [(item.get("provider"), item.get("model_name")) for item in target_results] != [
         ("dashscope", "wan2.6-i2v"),
+        ("dashscope", "kling/kling-v3-video-generation"),
         ("seedance", "doubao-seedance-2-0-260128"),
     ]:
-        fail(f"Target sweep did not dedupe by provider and preserve model_name: {target_results}")
+        fail(f"Target sweep did not dedupe by provider/model and preserve model_name: {target_results}")
+    if not await monitor.get_cached_provider_health(
+        "dashscope",
+        model_name="kling/kling-v3-video-generation",
+        redis_client=fake_redis,
+    ):
+        fail("Model-specific provider health cache row was not written")
     await monitor.delete_cached_provider_health("dashscope", redis_client=fake_redis)
     await monitor.delete_cached_provider_health("seedance", redis_client=fake_redis)
+    if await monitor.get_cached_provider_health("dashscope", model_name="wan2.6-i2v", redis_client=fake_redis):
+        fail("Provider health delete did not clear model-specific cache rows")
 
     cached = await monitor.get_cached_provider_health("deepseek", redis_client=fake_redis)
     if not cached or cached.get("status") != "ok" or cached.get("latency_ms") != 12:
@@ -191,7 +200,7 @@ async def main() -> int:
     print("  cached_provider_health=2")
     print("  admin_health_cache_endpoint=1")
     print("  sweep_results=2")
-    print("  sweep_target_model_checks=2")
+    print("  sweep_target_model_checks=4")
     print("  api_config_response_provider_health=2")
     print("  provider_monitor_state=1")
     return 0

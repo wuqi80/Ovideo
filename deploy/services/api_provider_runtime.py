@@ -74,6 +74,12 @@ class ResolvedProviderConfig:
 ProviderHealthMap = Dict[str, Dict[str, Any]]
 
 
+def provider_health_key(provider: str, model_name: Optional[str] = None) -> str:
+    provider_id = normalize_provider(provider)
+    model_key = str(model_name or "").strip().lower()
+    return f"{provider_id}::{model_key}" if model_key else provider_id
+
+
 def normalize_provider_health_map(provider_health: Optional[Any]) -> ProviderHealthMap:
     if not provider_health:
         return {}
@@ -89,23 +95,54 @@ def normalize_provider_health_map(provider_health: Optional[Any]) -> ProviderHea
         if not isinstance(item, dict):
             continue
         provider = normalize_provider(str(item.get("provider") or ""))
+        model_name = str(item.get("model_name") or "").strip()
         if provider:
-            out[provider] = dict(item)
+            out[provider_health_key(provider, model_name)] = dict(item)
     return out
 
 
-def provider_health_status(provider: str, provider_health: Optional[Any] = None) -> Optional[str]:
-    health = normalize_provider_health_map(provider_health).get(normalize_provider(provider))
+def provider_health_entry(
+    provider: str,
+    provider_health: Optional[Any] = None,
+    *,
+    model_name: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    health_map = normalize_provider_health_map(provider_health)
+    provider_id = normalize_provider(provider)
+    if model_name:
+        exact = health_map.get(provider_health_key(provider_id, model_name))
+        if exact:
+            return exact
+    return health_map.get(provider_id)
+
+
+def provider_health_status(
+    provider: str,
+    provider_health: Optional[Any] = None,
+    *,
+    model_name: Optional[str] = None,
+) -> Optional[str]:
+    health = provider_health_entry(provider, provider_health, model_name=model_name)
     status = str(health.get("status") or "").strip().lower() if health else ""
     return status or None
 
 
-def provider_is_down(provider: str, provider_health: Optional[Any] = None) -> bool:
-    return provider_health_status(provider, provider_health) in {"error"}
+def provider_is_down(
+    provider: str,
+    provider_health: Optional[Any] = None,
+    *,
+    model_name: Optional[str] = None,
+) -> bool:
+    return provider_health_status(provider, provider_health, model_name=model_name) in {"error"}
 
 
-def provider_is_usable(provider: str, provider_health: Optional[Any] = None) -> bool:
-    status = provider_health_status(provider, provider_health)
+def provider_is_usable(
+    provider: str,
+    provider_health: Optional[Any] = None,
+    *,
+    model_name: Optional[str] = None,
+) -> bool:
+    status = provider_health_status(provider, provider_health, model_name=model_name)
     # Missing cache should not mark a provider down; health sweeps are best effort.
     return status not in {"error", "no_key"}
 
@@ -151,9 +188,9 @@ def _candidate_skip_reasons(
         reasons.append("missing_key")
     if not config.endpoint:
         reasons.append("missing_endpoint")
-    if provider_is_down(config.provider, provider_health):
+    if provider_is_down(config.provider, provider_health, model_name=config.model_name):
         reasons.append("health_error")
-    if not is_primary and provider_health_status(config.provider, provider_health) == "no_key":
+    if not is_primary and provider_health_status(config.provider, provider_health, model_name=config.model_name) == "no_key":
         reasons.append("health_no_key")
     return reasons
 
@@ -187,7 +224,7 @@ def resolve_provider_with_failover(
             "selected": not primary_reasons,
             "usable": not primary_reasons,
             "skip_reasons": primary_reasons,
-            "health_status": provider_health_status(primary.provider, health_map),
+            "health_status": provider_health_status(primary.provider, health_map, model_name=primary.model_name),
             "has_key": primary.has_key,
             "has_endpoint": bool(primary.endpoint),
         }
@@ -224,7 +261,7 @@ def resolve_provider_with_failover(
                 "selected": selected,
                 "usable": selected,
                 "skip_reasons": fallback_reasons,
-                "health_status": provider_health_status(fallback.provider, health_map),
+                "health_status": provider_health_status(fallback.provider, health_map, model_name=fallback.model_name),
                 "has_key": fallback.has_key,
                 "has_endpoint": bool(fallback.endpoint),
                 "fallback_for": provider_id,
@@ -472,8 +509,8 @@ def build_provider_runtime_status(
             model_name,
             provider_health=health_map,
         )
-        health = health_map.get(provider) or {}
-        health_status = provider_health_status(provider, health_map)
+        health = provider_health_entry(provider, health_map, model_name=model_name) or {}
+        health_status = provider_health_status(provider, health_map, model_name=model_name)
         health_payload = health.get("health") if isinstance(health.get("health"), dict) else {}
         db_source = db_sources.get(provider)
         db_effective = db_source.get("effective") if db_source else None

@@ -308,10 +308,14 @@ def check_provider_health_map_contract(normalize_provider_health_map) -> int:
         {
             "gemini-text": {"provider": "gemini-text", "status": "ok"},
             "bad-value": "error",
-            "deepseek": {"provider": "deepseek", "status": "error"},
+            "deepseek": {
+                "provider": "deepseek",
+                "model_name": "deepseek-reasoner",
+                "status": "error",
+            },
         }
     )
-    if sorted(health_map) != ["deepseek", "gemini-text"]:
+    if sorted(health_map) != ["deepseek::deepseek-reasoner", "gemini-text"]:
         fail(f"Mixed provider health map dropped valid rows: {health_map}")
     return 1
 

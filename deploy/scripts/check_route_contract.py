@@ -3693,9 +3693,14 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "function healthStatusFromResult",
         "const status = healthStatusFromResult(result)",
         "function runtimeStatusKey",
+        "function providerHealthKey",
+        "function providerHealthFrom",
         "const runtimeByKey = useMemo",
         "const runtimeForConfig = useCallback",
-        "runtime={runtimeForConfig(config)}",
+        "const runtime = runtimeForConfig(config);",
+        "runtime={runtime}",
+        "health={providerHealthFrom(healthMap, provider, modelName)}",
+        "checking={Boolean(checking[providerHealthKey(provider, modelName)])}",
         "interface ProviderHealthMonitorState",
         "monitor_state?: ProviderHealthMonitorState",
         "const ProviderHealthMonitorStrip",
@@ -3706,6 +3711,7 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "onCheck(provider, config.model_name || runtime?.runtime_model_name || null)",
         "onCheck(provider, model || null)",
         "body: JSON.stringify({ targets })",
+        "putProviderHealth(next, item)",
     ]
     forbidden_snippets = [
         "const status = healthStatusFrom(result, runtimeMap.get(provider))",

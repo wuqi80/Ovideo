@@ -12,6 +12,7 @@ from services.api_config_health_service import test_api_config_health
 from services.api_provider_health_monitor import (
     delete_cached_provider_health_many,
     list_cached_provider_health,
+    provider_health_cache_key,
     provider_health_monitor_state,
 )
 from services.api_provider_registry import (
@@ -74,6 +75,18 @@ def _row_provider(row: Any) -> str:
         return str(row["provider"] or "").strip()
     except (KeyError, IndexError, TypeError):
         return str(getattr(row, "provider", "") or "").strip()
+
+
+def _row_model_name(row: Any) -> str:
+    if not row:
+        return ""
+    getter = getattr(row, "get", None)
+    if callable(getter):
+        return str(getter("model_name", "") or "").strip()
+    try:
+        return str(row["model_name"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        return str(getattr(row, "model_name", "") or "").strip()
 
 
 def _row_config_id(row: Any) -> str:
@@ -150,7 +163,24 @@ async def _invalidate_provider_health(providers: Iterable[str]) -> None:
 
 async def list_api_configs() -> Dict[str, Any]:
     rows = await ApiConfigDAO.list_all()
-    provider_health = await list_cached_provider_health()
+    provider_health_targets = [
+        {
+            "provider": _row_provider(row),
+            "model_name": _row_model_name(row) or None,
+        }
+        for row in rows
+        if _row_provider(row)
+    ]
+    provider_health_by_key: Dict[str, Dict[str, Any]] = {}
+    for item in await list_cached_provider_health():
+        provider_health_by_key[
+            provider_health_cache_key(str(item.get("provider") or ""), item.get("model_name"))
+        ] = item
+    for item in await list_cached_provider_health(targets=provider_health_targets):
+        provider_health_by_key[
+            provider_health_cache_key(str(item.get("provider") or ""), item.get("model_name"))
+        ] = item
+    provider_health = list(provider_health_by_key.values())
     return {
         "success": True,
         "api_configs": [mask_api_config_row(row) for row in rows],

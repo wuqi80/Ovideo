@@ -6118,3 +6118,24 @@
 - Local `py_compile` passed for `api_provider_runtime.py` and the touched contract scripts.
 - Local `scripts/check_provider_contract.py` passed with `runtime_status_rows=17`.
 - Local `scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=123`.
+
+## 2026-06-21 API Provider Health Cache Model Keys
+
+### Changes
+
+- Changed provider health normalization, runtime diagnostics, Redis cache keys, and admin UI state maps to prefer `provider + model_name` health rows.
+- Kept provider-only health rows as a fallback for legacy/background checks while preventing same-provider models from overwriting each other.
+- Updated health sweeps to dedupe by provider/model target, and made `/api/admin/api-configs` include cached health for DB custom model rows.
+- Added frontend and backend contracts for model-specific health cache behavior.
+
+### Verification
+
+- Local `py_compile` passed for touched backend services and contract scripts.
+- Local `scripts/check_provider_contract.py` passed with `health_map_checks=1`.
+- Local `scripts/check_provider_health_monitor.py` passed with `sweep_target_model_checks=4`.
+- Local `scripts/check_route_contract.py` passed with `admin_api_config_ui_checks=23`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `live_deploy_mvc2.sh` built frontend and restarted `drama.service` successfully.
+- Server architecture contract suite passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
+- Authenticated online check confirmed `deepseek / deepseek-reasoner` health is cached and returned by `/api/admin/api-configs`.
