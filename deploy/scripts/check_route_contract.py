@@ -2987,6 +2987,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         "conn =",
     ]
     forbidden_service_patterns = [
+        (re.compile(r"(['\"]{3}|['\"])\s*(SELECT|INSERT|UPDATE|DELETE)\b", re.IGNORECASE), "SQL literal"),
         (re.compile(r"\bconn\.(fetch|fetchrow|fetchval|execute|executemany)\s*\("), "connection operation"),
         (re.compile(r"\bpool\.(fetch|fetchrow|fetchval|execute|executemany|acquire)\s*\("), "pool operation"),
         (re.compile(r"\bdb\.(fetch|fetchrow|fetchval|execute|executemany|acquire)\s*\("), "database operation"),
@@ -3032,6 +3033,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "creative" / "asset.py", "async def create_missing_episode_assets_transactional("),
         (root / "dao" / "creative" / "storyboard.py", "async def export_script_transaction("),
         (root / "dao" / "creative" / "storyboard.py", "async def delete_by_episode_transactional("),
+        (root / "dao" / "user" / "user.py", "async def delete_user_by_id("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
@@ -3042,6 +3044,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
         (root / "routers" / "project_admin.py", "ProjectDAO.update_project_metadata("),
         (root / "routers" / "storyboard.py", "StoryboardDAO.export_script_transaction("),
+        (root / "routers" / "admin_compat.py", "UserDAO.delete_user_by_id("),
     ]
     for path, snippet in required_snippets:
         if snippet not in path.read_text(encoding="utf-8"):
@@ -3067,6 +3070,14 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     ]:
         if snippet in task_notifications_router_text:
             violations.append(f"routers/task_notifications.py must delegate task lookups to TaskDAO: {snippet}")
+        checks += 1
+
+    admin_compat_router_text = (root / "routers" / "admin_compat.py").read_text(encoding="utf-8")
+    for snippet in [
+        "DELETE FROM users WHERE user_id",
+    ]:
+        if snippet in admin_compat_router_text:
+            violations.append(f"routers/admin_compat.py must delegate user deletion to UserDAO: {snippet}")
         checks += 1
 
     episode_video_router_text = (root / "routers" / "episode_video.py").read_text(encoding="utf-8")

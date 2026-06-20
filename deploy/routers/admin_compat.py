@@ -712,10 +712,8 @@ def create_admin_compat_router(
             if db_manager:
                 try:
                     # 删除用户记录（使用user_id字段，不是username）
-                    result = await db_manager.execute(
-                        "DELETE FROM users WHERE user_id = $1",
-                        user_id
-                    )
+                    from dao_user import UserDAO
+                    result = await UserDAO.delete_user_by_id(user_id)
 
                     logger.info(f"✅ 管理员 {username} 删除了用户: {user_id}，影响行数: {result}")
                     return {

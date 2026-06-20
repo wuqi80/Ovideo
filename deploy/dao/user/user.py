@@ -61,6 +61,15 @@ class UserDAO:
             WHERE user_id = $1 AND is_active = TRUE
         """
         return await db.fetchrow(query, user_id)
+
+    @staticmethod
+    async def delete_user_by_id(user_id: str) -> str:
+        """Hard-delete a user row by user_id for the legacy admin endpoint."""
+        db = get_db_manager()
+        return await db.execute(
+            "DELETE FROM users WHERE user_id = $1",
+            user_id,
+        )
     
     @staticmethod
     async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:

@@ -5503,3 +5503,15 @@
 
 - Keeps nonessential global admin/CRM UI code off the initial route shell.
 - `crmMessage`, `crmConfirm`, and `crmPrompt` still use the same module and state; messages triggered before the idle host mounts are retained and render once the host loads.
+
+## 2026-06-20 Admin Compat User Delete Mapper Purity
+
+### Changes
+
+- Added `UserDAO.delete_user_by_id()` for the legacy admin user delete endpoint.
+- Replaced `routers/admin_compat.py` direct `DELETE FROM users` with the DAO method.
+- Strengthened `service_mapper_purity_checks` so `services/` SQL literals are caught case-insensitively and `routers/admin_compat.py` cannot reintroduce direct user-delete SQL.
+
+### Follow-up
+
+- `routers/admin_compat.py` still contains larger admin statistics/reporting SQL blocks. Treat those as a later DAO/reporting-service extraction, not as general service-layer code.
