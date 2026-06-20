@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-vi.mock('../../services/apiService', () => ({
+vi.mock('../../services/audioGenerationService', () => ({
   // 2026-05-25：试听切到 fast-path /api/minimax/tts/sync 一次拿结果。
   // minimaxTTS（worker 路径）保留 mock，因为别处仍可能用，但 system 试听不再调它。
   minimaxTTSSync: vi.fn().mockResolvedValue({
@@ -54,7 +54,7 @@ describe('VoiceSidebar.handlePreview — fast-path 同步 (2026-05-25)', () => {
   });
 
   it('点击试听后调 minimaxTTSSync 一次拿到 audio_url（不再轮询）', async () => {
-    const { minimaxTTSSync, minimaxTTS } = await import('../../services/apiService');
+    const { minimaxTTSSync, minimaxTTS } = await import('../../services/audioGenerationService');
     const { pollTtsTaskUntilDone } = await import('../../services/ttsTaskPoller');
 
     render(<VoiceDrawer {...baseProps} open />);
@@ -80,7 +80,7 @@ describe('VoiceSidebar.handlePreview — fast-path 同步 (2026-05-25)', () => {
   });
 
   it('Drawer 关闭时 AbortController 必须取消进行中的 fast-path 请求', async () => {
-    const { minimaxTTSSync } = await import('../../services/apiService');
+    const { minimaxTTSSync } = await import('../../services/audioGenerationService');
     let abortSignal: AbortSignal | undefined;
     (minimaxTTSSync as any).mockImplementation((_p: any, signal: AbortSignal) => {
       abortSignal = signal;
@@ -96,7 +96,7 @@ describe('VoiceSidebar.handlePreview — fast-path 同步 (2026-05-25)', () => {
   });
 
   it('克隆模式点击生成试听会上传音频并调用 voice-clone', async () => {
-    const { minimaxFileUpload, minimaxVoiceClone, minimaxTTSSync } = await import('../../services/apiService');
+    const { minimaxFileUpload, minimaxVoiceClone, minimaxTTSSync } = await import('../../services/audioGenerationService');
     (minimaxFileUpload as any).mockResolvedValue({ success: true, file_id: '123456789' });
     (minimaxVoiceClone as any).mockResolvedValue({
       success: true,

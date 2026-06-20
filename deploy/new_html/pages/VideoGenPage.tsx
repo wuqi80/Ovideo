@@ -4,7 +4,7 @@ import { useEpisode } from '../contexts/EpisodeContext';
 import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
 import * as videoService from '../services/videoService';
 import { estimateDurationMs } from '../utils/durationMapping';
-import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/apiService';
+import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { secureApiUrl } from '../services/httpClient';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;

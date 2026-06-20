@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Play, Pause, Video, Image as ImageIcon, Clock, Film, Plus, Loader, RefreshCw } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { createVideoSegment, getStoryboardItems, getVideoSegments } from '../services/apiService';
+import { createVideoSegment } from '../services/apiService';
+import { getStoryboardItems, getVideoSegments } from '../services/episodeDataService';
 import { secureApiUrl } from '../services/httpClient';
 import type { AudioTrack, StoryboardItemDB, VideoSegment } from '../types';
 import { MediaImage } from '../components/MediaImage';

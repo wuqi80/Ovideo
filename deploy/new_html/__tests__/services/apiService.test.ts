@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createAsset,
   deleteAsset,
-  generateSpeech,
   getTimelineTracks,
   uploadImageToComfyUI,
 } from '../../services/apiService';
@@ -101,19 +100,6 @@ describe('deleteAsset', () => {
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe('/api/assets/asset_abc');
     expect(opts.method).toBe('DELETE');
-  });
-});
-
-describe('generateSpeech', () => {
-  it('sends POST with text and options', async () => {
-    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, audio_url: '/audio/test.wav', duration_ms: 3000 }));
-    await generateSpeech({ text: 'hello', persona: 'narrator', emotion: 'neutral' });
-    const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe('/api/audio/generate-speech');
-    expect(opts.method).toBe('POST');
-    const body = JSON.parse(opts.body);
-    expect(body.text).toBe('hello');
-    expect(body.persona).toBe('narrator');
   });
 });
 

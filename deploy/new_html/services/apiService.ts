@@ -27,6 +27,28 @@ export {
     updateStoryboardItem,
     type StoryboardItemsQueryOptions,
 } from './episodeDataService';
+export {
+    createAudioTrack,
+    deleteAudioTrack,
+    generateSpeech,
+    generateSFX,
+    generateMusic,
+    createCharacterVoice,
+    updateCharacterVoice,
+    deleteCharacterVoice,
+    minimaxVoiceDesign,
+    minimaxVoiceClone,
+    minimaxListVoices,
+    minimaxGetVoice,
+    minimaxDeleteVoice,
+    minimaxTTS,
+    minimaxTTSSync,
+    minimaxMusic,
+    minimaxLyrics,
+    minimaxFileUpload,
+    minimaxFileRetrieve,
+    minimaxFileDelete,
+} from './audioGenerationService';
 
 function normalizeImageSourceUrl(imageUrl: string): string {
     if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) return imageUrl;
@@ -458,19 +480,6 @@ export async function updateVideoSegment(segmentId: string, data: any) {
     }, 'updateVideoSegment');
 }
 
-// ===== Audio Track APIs =====
-
-export async function createAudioTrack(episodeId: string, data: any) {
-    return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`, {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'createAudioTrack');
-}
-
-export async function deleteAudioTrack(trackId: string) {
-    return apiJson<any>(`/api/audio-tracks/${trackId}`, { method: 'DELETE' }, 'deleteAudioTrack');
-}
-
 // ===== Video Capabilities =====
 
 // 模块级缓存：所有卡片共享一次查询，避免每个 SeedanceCard 各发一次。
@@ -541,32 +550,6 @@ export async function startCompose(episodeId: string, selections?: Record<string
 
 export async function getComposeStatus(episodeId: string): Promise<ComposeStatus> {
     return apiJson<any>(`/api/episodes/${episodeId}/compose/status`, { method: 'GET' }, 'getComposeStatus');
-}
-
-// ===== Audio Generation APIs =====
-
-export async function generateSpeech(data: {
-    text: string; persona?: string; emotion?: string;
-    entity_type?: string; entity_id?: string; file_role?: string; episode_id?: string;
-}) {
-    return apiJson<any>('/api/audio/generate-speech', {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'generateSpeech');
-}
-
-export async function generateSFX(data: { description: string }) {
-    return apiJson<any>('/api/audio/generate-sfx', {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'generateSFX');
-}
-
-export async function generateMusic(data: { description: string; duration_ms?: number }) {
-    return apiJson<any>('/api/audio/generate-music', {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'generateMusic');
 }
 
 // ===== Episode Script APIs =====
@@ -645,31 +628,6 @@ export async function updateTimelineTrack(trackId: string, data: any) {
     }, 'updateTimelineTrack');
 }
 
-// ===== Character Voice APIs =====
-
-export async function createCharacterVoice(data: {
-    project_id: string; character_name: string;
-    asset_id?: string; voice_provider?: string;
-    voice_model_id?: string; voice_name?: string;
-    voice_params?: Record<string, any>; sample_audio_url?: string;
-}) {
-    return apiJson<any>('/api/character-voices', {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'createCharacterVoice');
-}
-
-export async function updateCharacterVoice(voiceId: string, data: Record<string, any>) {
-    return apiJson<any>(`/api/character-voices/${voiceId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateCharacterVoice');
-}
-
-export async function deleteCharacterVoice(voiceId: string) {
-    return apiJson<any>(`/api/character-voices/${voiceId}`, { method: 'DELETE' }, 'deleteCharacterVoice');
-}
-
 // ===== Batch Operations =====
 
 export async function shareAsset(assetId: string, targetEpisodeId: string, targetScriptId: string) {
@@ -677,145 +635,6 @@ export async function shareAsset(assetId: string, targetEpisodeId: string, targe
         method: 'POST',
         body: JSON.stringify({ target_episode_id: targetEpisodeId, target_script_id: targetScriptId })
     }, 'shareAsset');
-}
-
-// ===== MiniMax Audio APIs =====
-
-export async function minimaxVoiceDesign(prompt: string, previewText: string, voiceId?: string) {
-    return apiJson<any>('/api/minimax/voice-design', {
-        method: 'POST',
-        body: JSON.stringify({ prompt, preview_text: previewText, voice_id: voiceId })
-    }, 'minimaxVoiceDesign');
-}
-
-export async function minimaxVoiceClone(
-    fileId: string,
-    voiceId?: string,
-    demoText = '你好，这是一段测试语音。',
-    voiceIdPrefix = 'clone',
-) {
-    return apiJson<any>('/api/minimax/voice-clone', {
-        method: 'POST',
-        body: JSON.stringify({
-            file_id: fileId,
-            voice_id: voiceId,
-            demo_text: demoText,
-            voice_id_prefix: voiceIdPrefix,
-        })
-    }, 'minimaxVoiceClone');
-}
-
-export async function minimaxListVoices(voiceType = 'all') {
-    return apiJson<any>(`/api/minimax/voices?voice_type=${encodeURIComponent(voiceType)}`, { method: 'GET' }, 'minimaxListVoices');
-}
-
-export async function minimaxGetVoice(voiceId: string) {
-    return apiJson<any>(`/api/minimax/voices/${voiceId}`, { method: 'GET' }, 'minimaxGetVoice');
-}
-
-export async function minimaxDeleteVoice(voiceId: string, voiceType = 'voice_cloning') {
-    return apiJson<any>(`/api/minimax/voices/${voiceId}?voice_type=${encodeURIComponent(voiceType)}`, { method: 'DELETE' }, 'minimaxDeleteVoice');
-}
-
-/**
- * 提交 MiniMax TTS 任务（异步）。
- *
- * 2026-05-24 改造：从"同步阻塞等 audio_url"改为"立即入队拿 task_id"。
- * 调用方需要用 getTaskStatus(task_id) 轮询，或用 ttsTaskPoller。
- *
- * @returns { success: true, task_id: <数据库 task_id> }
- */
-export async function minimaxTTS(data: {
-    text: string; voice_id: string; model?: string;
-    speed?: number; pitch?: number; emotion?: string;
-    entity_type?: string; entity_id?: string; file_role?: string; episode_id?: string;
-    bind_to_character_voice_id?: string;  // 2026-05-24 新增：worker 完成后回写 sample_audio_url
-}, signal?: AbortSignal): Promise<{ success: true; task_id: string }> {
-    return apiJson<any>('/api/minimax/tts', {
-        method: 'POST',
-        body: JSON.stringify(data),
-        signal,
-    }, 'minimaxTTS');
-}
-
-/**
- * Synchronous MiniMax TTS — fast-path for short-text preview (≤1000 chars).
- *
- * 2026-05-25 引入：原 minimaxTTS 走 worker 异步（入队 + 轮询），对试听场景太重。
- * 这个 fast-path 在后端 handler 内同步调 /v1/t2a_v2（典型 1-15s）拿到音频
- * → 入库 → 直接返回 audio_url。试听几乎无感等待。
- *
- * 何时用：
- *   - VoiceSidebar 试听（≤1000 字符的对白片段）
- *   - 单条对白「立即生成并播放」场景
- *
- * 何时不用（保留 minimaxTTS 走 worker 异步）：
- *   - 批量生成全集（一集 200 条对白）
- *   - text > 1000 字符（后端返回 413，调用方应 fallback 到 minimaxTTS）
- *   - 需要 worker 级 retry / 并发限流
- *
- * Plan: docs/superpowers/plans/2026-05-25-minimax-tts-fastpath.md
- */
-export async function minimaxTTSSync(data: {
-    text: string;
-    voice_id: string;
-    model?: string;
-    speed?: number;
-    pitch?: number;
-    emotion?: string;
-    entity_type?: string;
-    entity_id?: string;
-    file_role?: string;
-    episode_id?: string;
-    bind_to_character_voice_id?: string;
-}, signal?: AbortSignal): Promise<{
-    success: true;
-    audio_url: string;
-    file_id: string;
-    file_url: string;
-    duration_ms?: number;
-    minimax_trace_id?: string;
-}> {
-    return apiJson<any>('/api/minimax/tts/sync', {
-        method: 'POST',
-        body: JSON.stringify(data),
-        signal,
-    }, 'minimaxTTSSync');
-}
-
-// 注意：legacy minimaxTTSQuery 已删除。
-// 用 getTaskStatus(task_id) 通过数据库 task_id 查询，不再直查 MiniMax 端。
-
-export async function minimaxMusic(lyrics = '', referVoice = '', referInstrumental = '') {
-    return apiJson<any>('/api/minimax/music', {
-        method: 'POST',
-        body: JSON.stringify({ lyrics, refer_voice: referVoice, refer_instrumental: referInstrumental })
-    }, 'minimaxMusic');
-}
-
-export async function minimaxLyrics(text: string, language = 'zh') {
-    return apiJson<any>('/api/minimax/lyrics', {
-        method: 'POST',
-        body: JSON.stringify({ text, language })
-    }, 'minimaxLyrics');
-}
-
-export async function minimaxFileUpload(file: File, purpose = 'voice_clone') {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('purpose', purpose);
-    return apiJson<any>('/api/minimax/files/upload', {
-        method: 'POST',
-        body: formData
-    }, 'minimaxFileUpload', { includeContentType: false });
-}
-
-export async function minimaxFileRetrieve(fileId: string) {
-    return apiJson<any>(`/api/minimax/files/${fileId}`, { method: 'GET' }, 'minimaxFileRetrieve');
-}
-
-export async function minimaxFileDelete(fileId: string) {
-    return apiJson<any>(`/api/minimax/files/${fileId}`, { method: 'DELETE' }, 'minimaxFileDelete');
 }
 
 export async function exportScript(episodeId: string, data: {

@@ -16,7 +16,8 @@ import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, Material
 import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { estimateDurationMs } from './utils/durationMapping';
-import { extractToAssets, batchCreateStoryboardItems, deleteAllStoryboardItems, exportScript, getEpisodeScript, updateEpisodeScript, getStoryboardItems, listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, updateStoryboardItem, deleteStoryboardItem, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/apiService';
+import { deleteAllStoryboardItems, exportScript, listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, deleteStoryboardItem, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/apiService';
+import { extractToAssets, batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
 
 const loadAiModelService = () => import('./services/aiModelService');

@@ -7,7 +7,8 @@ import {
   assetsToMaterialLibrary,
   storyboardItemToDbUpdate,
 } from '../utils/episodeAdapters';
-import { updateStoryboardItem, createStoryboardItem, deleteStoryboardItem } from '../services/apiService';
+import { createStoryboardItem, deleteStoryboardItem } from '../services/apiService';
+import { updateStoryboardItem } from '../services/episodeDataService';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
 import { fetchEntityFiles } from '../services/entityFileService';
 import { useSelectFileMutation, useDeleteFileMutation } from '../hooks/useFilesMutation';

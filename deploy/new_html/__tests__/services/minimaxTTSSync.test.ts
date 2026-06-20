@@ -9,7 +9,7 @@
 // Plan: docs/superpowers/plans/2026-05-25-minimax-tts-fastpath.md (Task 2)
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { minimaxTTSSync } from '../../services/apiService';
+import { minimaxTTSSync } from '../../services/audioGenerationService';
 
 function jsonResponse(body: any, status = 200) {
   return {

@@ -7,7 +7,7 @@ import {
   createCharacterVoice, updateCharacterVoice, deleteCharacterVoice,
   minimaxVoiceDesign, minimaxVoiceClone, minimaxFileUpload,
   minimaxTTSSync,
-} from '../../services/apiService';
+} from '../../services/audioGenerationService';
 // 2026-05-25：试听切到 minimaxTTSSync (POST /api/minimax/tts/sync) 一步同步拿结果，
 // 不再走 worker 入队 + 轮询。本组件不再 import ttsTaskPoller / TtsTimeoutError。
 // 批量场景（AudioStagePage.runGenerate）仍用 worker 路径，那里继续 import minimaxTTS。

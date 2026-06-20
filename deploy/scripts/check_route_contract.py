@@ -2803,8 +2803,14 @@ def check_frontend_http_client_contract(root: Path) -> int:
     global_task_manager = new_html / "services" / "globalTaskManager.ts"
     task_notification_service = new_html / "services" / "taskNotificationService.ts"
     episode_data_service = new_html / "services" / "episodeDataService.ts"
+    audio_generation_service = new_html / "services" / "audioGenerationService.ts"
     use_episode_data = new_html / "hooks" / "useEpisodeData.ts"
     episode_context = new_html / "contexts" / "EpisodeContext.tsx"
+    audio_stage_page = new_html / "pages" / "AudioStagePage.tsx"
+    enhance_page = new_html / "pages" / "EnhancePage.tsx"
+    workflow_materials_page = new_html / "pages" / "MaterialsPage.tsx"
+    voice_sidebar = new_html / "components" / "audio" / "VoiceSidebar.tsx"
+    music_modal = new_html / "components" / "audio" / "MusicModal.tsx"
     admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
     design_page = new_html / "pages" / "DesignPage.tsx"
     material_page = new_html / "components" / "MaterialPage.tsx"
@@ -2826,6 +2832,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         new_html / "services" / "organizationService.ts",
         task_notification_service,
         episode_data_service,
+        audio_generation_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2877,6 +2884,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "export { getAuthToken, getHeaders, handleResponse };"),
         (api_service, "from './taskNotificationService';"),
         (api_service, "from './episodeDataService';"),
+        (api_service, "from './audioGenerationService';"),
         (api_service, "function normalizeImageSourceUrl("),
         (api_service, "function isSameOriginUrl("),
         (api_service, "secureApiUrl(absolute, { requireAuth: false })"),
@@ -2904,6 +2912,26 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (episode_data_service, "return apiJson<any>(`/api/projects/${projectId}/character-voices`"),
         (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/batch`"),
         (episode_data_service, "return apiJson<any>(`/api/episodes/${episodeId}/extract-to-assets`"),
+        (audio_generation_service, "import { apiJson } from './httpClient';"),
+        (audio_generation_service, "return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`"),
+        (audio_generation_service, "return apiJson<any>(`/api/audio-tracks/${trackId}`"),
+        (audio_generation_service, "return apiJson<any>('/api/audio/generate-speech'"),
+        (audio_generation_service, "return apiJson<any>('/api/audio/generate-sfx'"),
+        (audio_generation_service, "return apiJson<any>('/api/audio/generate-music'"),
+        (audio_generation_service, "return apiJson<any>('/api/character-voices'"),
+        (audio_generation_service, "return apiJson<any>(`/api/character-voices/${voiceId}`"),
+        (audio_generation_service, "return apiJson<any>('/api/minimax/voice-design'"),
+        (audio_generation_service, "return apiJson<any>('/api/minimax/voice-clone'"),
+        (audio_generation_service, "return apiJson<any>(`/api/minimax/voices?voice_type=${encodeURIComponent(voiceType)}`"),
+        (audio_generation_service, "return apiJson<any>(`/api/minimax/voices/${voiceId}`"),
+        (audio_generation_service, "return apiJson<any>('/api/minimax/tts'"),
+        (audio_generation_service, "return apiJson<any>('/api/minimax/tts/sync'"),
+        (audio_generation_service, "return apiJson<any>('/api/minimax/music'"),
+        (audio_generation_service, "return apiJson<any>('/api/minimax/lyrics'"),
+        (audio_generation_service, "return apiJson<any>('/api/minimax/files/upload'"),
+        (audio_generation_service, "return apiJson<any>(`/api/minimax/files/${fileId}`"),
+        (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
+        (new_html / "__tests__" / "services" / "minimaxTTSSync.test.ts", "from '../../services/audioGenerationService'"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads same-origin image through shared authenticated blob client"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "does not attach local auth token to external image downloads"),
         (new_html / "__tests__" / "services" / "apiService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
@@ -2928,34 +2956,17 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/reorder`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/video-segments`"),
         (api_service, "return apiJson<any>(`/api/video-segments/${segmentId}`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`"),
-        (api_service, "return apiJson<any>(`/api/audio-tracks/${trackId}`"),
         (api_service, "apiJson<any>('/api/video/capabilities'"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/video-takes`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/compose`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/compose/status`"),
-        (api_service, "return apiJson<any>('/api/audio/generate-speech'"),
-        (api_service, "return apiJson<any>('/api/audio/generate-sfx'"),
-        (api_service, "return apiJson<any>('/api/audio/generate-music'"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/scripts`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/scripts/${scriptId}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/script-segments${qs}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/script-segments/batch`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/timeline-tracks`"),
         (api_service, "return apiJson<any>(`/api/timeline-tracks/${trackId}`"),
-        (api_service, "return apiJson<any>('/api/character-voices'"),
-        (api_service, "return apiJson<any>(`/api/character-voices/${voiceId}`"),
         (api_service, "return apiJson<any>(`/api/assets/${assetId}/share`"),
-        (api_service, "return apiJson<any>('/api/minimax/voice-design'"),
-        (api_service, "return apiJson<any>('/api/minimax/voice-clone'"),
-        (api_service, "return apiJson<any>(`/api/minimax/voices?voice_type=${encodeURIComponent(voiceType)}`"),
-        (api_service, "return apiJson<any>(`/api/minimax/voices/${voiceId}`"),
-        (api_service, "return apiJson<any>('/api/minimax/tts'"),
-        (api_service, "return apiJson<any>('/api/minimax/tts/sync'"),
-        (api_service, "return apiJson<any>('/api/minimax/music'"),
-        (api_service, "return apiJson<any>('/api/minimax/lyrics'"),
-        (api_service, "return apiJson<any>('/api/minimax/files/upload'"),
-        (api_service, "return apiJson<any>(`/api/minimax/files/${fileId}`"),
         (api_service, "return apiJson<any>(`/api/episodes/${episodeId}/export-script`"),
         (api_service, "return apiJson<any>('/api/canvas/boards'"),
         (api_service, "return apiJson<any>(`/api/canvas/boards/${boardId}`"),
@@ -2987,6 +2998,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (global_task_manager, "authTokenFromHeaders({ requireAuth: false })"),
         (episode_context, "from '../services/episodeDataService'"),
         (use_episode_data, "from '../services/episodeDataService'"),
+        (workspace_app, "from './services/episodeDataService'"),
+        (audio_stage_page, "from '../services/audioGenerationService'"),
+        (audio_stage_page, "from '../services/episodeDataService'"),
+        (workflow_generation_page, "from '../services/episodeDataService'"),
+        (video_gen_page, "from '../services/episodeDataService'"),
+        (enhance_page, "from '../services/episodeDataService'"),
+        (workflow_materials_page, "from '../services/episodeDataService'"),
+        (voice_sidebar, "from '../../services/audioGenerationService'"),
+        (music_modal, "from '../../services/audioGenerationService'"),
         (admin_login_page, "import { apiJson } from '../services/httpClient'"),
         (admin_login_page, "apiJson<any>('/api/login'"),
         (admin_login_page, "{ requireAuth: false }"),

@@ -6231,3 +6231,23 @@
 - Server `npm run test:run -- --pool=forks __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts` passed `37/37`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Audio Generation Service Split
+
+### Changes
+
+- Extracted audio track writes, audio generation, character voice writes, and MiniMax audio helpers from `new_html/services/apiService.ts` into `new_html/services/audioGenerationService.ts`.
+- Kept `apiService.ts` compatibility re-exports while removing the duplicated audio/Minimax endpoint implementations from the monolithic file.
+- Updated `AudioStagePage`, `VoiceSidebar`, `MusicModal`, and MiniMax TTS tests to import audio APIs directly from the new service.
+- Moved remaining storyboard/video read helpers in workflow pages and `WorkspaceApp` to `episodeDataService.ts`.
+- Added `audioGenerationService.test.ts` and strengthened `scripts/check_route_contract.py` so audio endpoint ownership stays in the new service.
+
+### Verification
+
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6881`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build kept `apiService-*.js` at 8.26 kB and `index-*.js` at 240.50 kB after the service-boundary split.
+- Server `npm run test:run -- --pool=forks __tests__/services/apiService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/services/minimaxTTSSync.test.ts __tests__/components/VoiceSidebar.handlePreview.test.tsx __tests__/services/episodeDataService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `51/51`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

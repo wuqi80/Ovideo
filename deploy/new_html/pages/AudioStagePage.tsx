@@ -7,11 +7,10 @@ import {
   // 配音页所有 TTS 统一走 MiniMax；没有绑定 voice_id 的角色用 MINIMAX_DEFAULT_VOICE 兜底，
   // 历史持久化里残留的 legacy persona 字符串（'narrator'/'male_young'/...）通过
   // LEGACY_VOICE_ALIAS 转译成 MiniMax 官方音色 id。
-  minimaxTTS,
-  getStoryboardItems,
-  updateStoryboardItem as apiUpdateStoryboardItem,
   createStoryboardItem as apiCreateStoryboardItem,
 } from '../services/apiService';
+import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
+import { minimaxTTS } from '../services/audioGenerationService';
 import { crmMessage } from '../admin/crmUI';
 
 // MiniMax 默认音色（与 VoiceSidebar 的 SYSTEM_VOICE_DEFAULT 对齐）

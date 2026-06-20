@@ -8,11 +8,10 @@ import {
   dbItemToStoryboardItem,
 } from '../utils/episodeAdapters';
 import {
-  getStoryboardItems,
-  updateStoryboardItem as apiUpdateStoryboardItem,
   updateAsset as apiUpdateAsset,
   createAsset as apiCreateAsset,
 } from '../services/apiService';
+import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { Image as ImageIcon, Loader } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { MaterialLibrary, Material, FileVersion, StoryboardItemDB } from '../types';

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { X, FileText, Music, Wand2, Loader } from 'lucide-react';
-import { minimaxLyrics, minimaxMusic, createAudioTrack } from '../../services/apiService';
+import { minimaxLyrics, minimaxMusic, createAudioTrack } from '../../services/audioGenerationService';
 
 function resolveUrl(path: string) {
   if (!path) return '';
