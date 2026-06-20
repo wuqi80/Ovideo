@@ -59,6 +59,16 @@ class EpisodeDAO:
         )
 
     @staticmethod
+    async def get_project_id(episode_id: str) -> Optional[str]:
+        db = get_db_manager()
+        if not db:
+            return None
+        return await db.fetchval(
+            "SELECT project_id FROM episodes WHERE episode_id=$1",
+            episode_id
+        )
+
+    @staticmethod
     async def update_episode(
         episode_id: str,
         episode_name: str = None,

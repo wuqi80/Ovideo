@@ -5168,3 +5168,22 @@
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
   - `service_mapper_purity_checks=450`
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+
+## 2026-06-20 Episode Video Router Mapper Cleanup
+
+### Changes
+
+- Added `EpisodeDAO.get_project_id()` as a semantic mapper method for episode-to-project resolution.
+- Moved `/api/episodes/{episode_id}/compose` project lookup out of `routers/episode_video.py` and into `EpisodeDAO`.
+- Removed unused `get_db_manager_func` injection from `create_task_notifications_router()` after its SQL was moved to `TaskDAO`.
+- Updated `api_routes.py` wiring so episode video routes receive `episode_dao` instead of raw DB access.
+- Extended `scripts/check_route_contract.py` so `episode_video.py` cannot reintroduce direct `episodes` SQL or DB fetch calls.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/api_routes.py deploy/routers/episode_video.py deploy/routers/task_notifications.py deploy/dao/creative/episode.py deploy/scripts/check_route_contract.py`
+  - `rg -n "SELECT project_id FROM episodes|get_db_manager_func|db\.fetchrow\(" deploy/routers/episode_video.py deploy/routers/task_notifications.py` -> no matches
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `service_mapper_purity_checks=456`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`

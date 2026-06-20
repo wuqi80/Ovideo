@@ -31,11 +31,12 @@ def create_episode_video_router(
     *,
     get_current_user_dependency: Any,
     video_segment_dao: Any,
-    get_db_manager_func: Any,
+    episode_dao: Any,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
     VideoSegmentDAO = video_segment_dao
+    EpisodeDAO = episode_dao
 
     @router.get("/api/episodes/{episode_id}/video-segments")
     async def get_video_segments(episode_id: str, user_id: str = Depends(get_current_user)):
@@ -53,9 +54,8 @@ def create_episode_video_router(
     @router.post("/api/episodes/{episode_id}/compose")
     async def compose_episode_endpoint(episode_id: str, request: Request, user_id: str = Depends(get_current_user)):
         """Start async episode composition; frontend polls `/compose/status`."""
-        db = get_db_manager_func()
-        row = await db.fetchrow("SELECT project_id FROM episodes WHERE episode_id = $1", episode_id)
-        if not row:
+        project_id = await EpisodeDAO.get_project_id(episode_id)
+        if not project_id:
             raise HTTPException(status_code=404, detail="集不存在")
         selections = None
         try:
@@ -65,7 +65,7 @@ def create_episode_video_router(
             selections = None
         import compose_service
 
-        job = compose_service.start_compose(episode_id, user_id, row["project_id"], selections)
+        job = compose_service.start_compose(episode_id, user_id, project_id, selections)
         return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
 
     @router.get("/api/episodes/{episode_id}/compose/status")

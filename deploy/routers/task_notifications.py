@@ -16,7 +16,6 @@ def create_task_notifications_router(
     *,
     get_current_user_dependency: Any,
     task_dao: Any,
-    get_db_manager_func: Any,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency

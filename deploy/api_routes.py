@@ -136,7 +136,6 @@ router.include_router(
     create_task_notifications_router(
         get_current_user_dependency=get_current_user,
         task_dao=TaskDAO,
-        get_db_manager_func=get_db_manager,
     )
 )
 
@@ -179,7 +178,7 @@ router.include_router(
     create_episode_video_router(
         get_current_user_dependency=get_current_user,
         video_segment_dao=VideoSegmentDAO,
-        get_db_manager_func=get_db_manager,
+        episode_dao=EpisodeDAO,
     )
 )
 

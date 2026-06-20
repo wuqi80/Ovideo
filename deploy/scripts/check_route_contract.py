@@ -2977,11 +2977,13 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "business" / "credit.py", "async def confirm_task_freeze("),
         (root / "dao" / "business" / "task.py", "async def get_active_tasks_for_user("),
         (root / "dao" / "business" / "task.py", "async def get_terminal_tasks_for_notifications("),
+        (root / "dao" / "creative" / "episode.py", "async def get_project_id("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
+        (root / "routers" / "episode_video.py", "EpisodeDAO.get_project_id("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
     ]
     for path, snippet in required_snippets:
@@ -3002,11 +3004,22 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     task_notifications_router_text = (root / "routers" / "task_notifications.py").read_text(encoding="utf-8")
     for snippet in [
         "SELECT task_id, task_type, status, project_id, category",
+        "get_db_manager_func",
         "db = get_db_manager_func()",
         "tasks = await db.fetch(query",
     ]:
         if snippet in task_notifications_router_text:
             violations.append(f"routers/task_notifications.py must delegate task lookups to TaskDAO: {snippet}")
+        checks += 1
+
+    episode_video_router_text = (root / "routers" / "episode_video.py").read_text(encoding="utf-8")
+    for snippet in [
+        "SELECT project_id FROM episodes",
+        "get_db_manager_func",
+        "db.fetchrow(",
+    ]:
+        if snippet in episode_video_router_text:
+            violations.append(f"routers/episode_video.py must delegate episode project lookup to EpisodeDAO: {snippet}")
         checks += 1
 
     if violations:
