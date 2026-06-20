@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import os
 import re
 import sys
@@ -3625,6 +3626,54 @@ def check_frontend_utility_vendor_chunk_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_dependency_contract(root: Path) -> int:
+    """Keep unused Markdown renderer packages out of the production dependency set."""
+    new_html = root / "new_html"
+    package_json_path = new_html / "package.json"
+    package_lock_path = new_html / "package-lock.json"
+    package_data = json.loads(package_json_path.read_text(encoding="utf-8"))
+    lock_data = json.loads(package_lock_path.read_text(encoding="utf-8"))
+    lock_packages = lock_data.get("packages", {})
+    root_lock_package = lock_packages.get("", {})
+
+    forbidden_packages = ("react-markdown", "remark-gfm")
+    package_sections = {
+        "dependencies": package_data.get("dependencies", {}),
+        "devDependencies": package_data.get("devDependencies", {}),
+        "lock.dependencies": root_lock_package.get("dependencies", {}),
+        "lock.devDependencies": root_lock_package.get("devDependencies", {}),
+    }
+
+    violations: list[str] = []
+    checks = 0
+    for package_name in forbidden_packages:
+        for section, values in package_sections.items():
+            checks += 1
+            if package_name in values:
+                violations.append(f"{package_name} is still listed in package.json/package-lock {section}")
+        checks += 1
+        if f"node_modules/{package_name}" in lock_packages:
+            violations.append(f"{package_name} still has a package-lock node_modules entry")
+
+    import_re = re.compile(
+        r"(?:from\s+|import\s*\(\s*|import\s+)['\"](react-markdown|remark-gfm)['\"]"
+    )
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "node_modules" in path.parts or "dist" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for idx, line in enumerate(text.splitlines(), start=1):
+            if import_re.search(line):
+                violations.append(f"{path.relative_to(root)}:{idx}: forbidden Markdown renderer import")
+    checks += 1
+
+    if violations:
+        fail("Frontend dependency contract failed:\n" + "\n".join(violations))
+    return checks
+
+
 def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
@@ -3804,6 +3853,7 @@ def main() -> int:
     frontend_flow_chunk_checks = check_frontend_flow_chunk_contract(root)
     frontend_core_vendor_chunk_checks = check_frontend_core_vendor_chunk_contract(root)
     frontend_utility_vendor_chunk_checks = check_frontend_utility_vendor_chunk_contract(root)
+    frontend_dependency_checks = check_frontend_dependency_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
@@ -3869,6 +3919,7 @@ def main() -> int:
     print(f"  frontend_flow_chunk_checks={frontend_flow_chunk_checks}")
     print(f"  frontend_core_vendor_chunk_checks={frontend_core_vendor_chunk_checks}")
     print(f"  frontend_utility_vendor_chunk_checks={frontend_utility_vendor_chunk_checks}")
+    print(f"  frontend_dependency_checks={frontend_dependency_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")

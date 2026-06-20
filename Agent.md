@@ -6180,3 +6180,23 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `py_compile` passed for `check_ai_proxy_failover.py`.
 - Local `scripts/check_ai_proxy_failover.py` passed with `gemini_text_model_health_failover=1`.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
+
+## 2026-06-21 Frontend Markdown Dependency Cleanup
+
+### Changes
+
+- Removed unused `react-markdown` and `remark-gfm` from `deploy/new_html/package.json`.
+- Regenerated `deploy/new_html/package-lock.json` with the server npm result, pruning the unused Markdown renderer packages and their unreachable dependency tree.
+- Added `check_frontend_dependency_contract()` to `deploy/scripts/check_route_contract.py` so those packages cannot be reintroduced through dependencies, lockfile entries, or frontend source imports.
+
+### Verification
+
+- Deployed the cleanup build with `scripts/live_deploy_mvc2.sh`; server Vite build passed and `drama.service` stayed `active`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`, including `frontend_dependency_checks=11`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
+- Local exact search found no `react-markdown`, `remark-gfm`, `ReactMarkdown`, or `remarkGfm` references in frontend source/config after cleanup.
+- Server npm lockfile verification passed with `npm install --package-lock-only --ignore-scripts`; npm normalized the lockfile to 241 package entries.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `frontend_dependency_checks=11`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Note: server npm audit still reports existing dependency audit findings (`1 low`, `2 moderate`, `6 high`); this cleanup removes unused packages but does not attempt a broad dependency upgrade.
