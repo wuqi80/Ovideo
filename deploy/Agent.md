@@ -4681,7 +4681,7 @@
 
 ### Notes
 
-- `AdminFeatureTabs.tsx` still has a separate admin-session-token helper and should be migrated carefully with the `/admin` login/session split in mind.
+- The next frontend HTTP client section closes the `AdminFeatureTabs.tsx` admin-session-token helper gap.
 
 ### Verification
 
@@ -4747,3 +4747,31 @@
   - `.venv/bin/python scripts/check_route_contract.py`
   - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
   - temporary credit ledger probe -> `credit_ledger_mapper_smoke_ok` and cleanup completed
+
+## 2026-06-20 Frontend Admin Feature HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/components/AdminFeatureTabs.tsx` from a local admin-token `fetch()` wrapper to shared `apiJson()`:
+  - users
+  - project groups
+  - credit accounts
+  - credit transactions
+  - admin media library
+  - audit logs
+- Migrated `new_html/admin/AdminOrganizationsTab.tsx` admin-user lookup to `apiJson()`.
+- Extended `scripts/check_route_contract.py` so both admin panels cannot reintroduce page-local `fetch()` / Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Local Vite build is blocked by a missing Windows Rollup optional package in `node_modules`; server build was used as the authoritative frontend build check.
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_admin_features_httpclient_20260620124827.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`

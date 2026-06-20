@@ -22,47 +22,25 @@ import {
   adminListCreditRules, adminCreateCreditRule, adminUpdateCreditRule, adminDeleteCreditRule,
   CreditRule,
 } from '../services/creditService';
+import { apiJson } from '../services/httpClient';
 import AdminOrganizationsTab from '../admin/AdminOrganizationsTab';
 import {
   crmMessage, crmConfirm, crmPrompt,
   CrmToolbar, CrmPrimaryButton, CrmTag, CrmActionLink, CrmActionSep, CrmPagination, CrmTable,
 } from '../admin/crmUI';
 
-const API_BASE = '';
-
-// 2026-05-26：admin 路由下优先用 sessionStorage.admin_session_token，与主站登录隔离
-function getHeaders(): HeadersInit {
-  let token: string | null = null;
-  try {
-    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-      token = sessionStorage.getItem('admin_session_token');
-    }
-  } catch {}
-  if (!token) token = localStorage.getItem('auth_token');
-  const h: HeadersInit = { 'Content-Type': 'application/json' };
-  if (token) (h as any).Authorization = `Bearer ${token}`;
-  return h;
-}
-
+// Admin requests share httpClient auth/error handling; /admin paths use the admin session token.
 async function apiGet<T>(url: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${url}`, { method: 'GET', headers: getHeaders() });
-  if (!r.ok) throw new Error(`${url} -> ${r.status}`);
-  return r.json();
+  return apiJson<T>(url, { method: 'GET' }, 'Admin API');
 }
 async function apiPost<T>(url: string, body?: any): Promise<T> {
-  const r = await fetch(`${API_BASE}${url}`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(body || {}) });
-  if (!r.ok) throw new Error(`${url} -> ${r.status}: ${await r.text()}`);
-  return r.json();
+  return apiJson<T>(url, { method: 'POST', body: JSON.stringify(body || {}) }, 'Admin API');
 }
 async function apiPut<T>(url: string, body?: any): Promise<T> {
-  const r = await fetch(`${API_BASE}${url}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(body || {}) });
-  if (!r.ok) throw new Error(`${url} -> ${r.status}: ${await r.text()}`);
-  return r.json();
+  return apiJson<T>(url, { method: 'PUT', body: JSON.stringify(body || {}) }, 'Admin API');
 }
 async function apiDelete<T>(url: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${url}`, { method: 'DELETE', headers: getHeaders() });
-  if (!r.ok) throw new Error(`${url} -> ${r.status}`);
-  return r.json();
+  return apiJson<T>(url, { method: 'DELETE' }, 'Admin API');
 }
 
 // 2026-05-26：抽取错误 detail（FastAPI 标准 { detail } 形状）→ 让 alert 显示中文，不再只看 stack。

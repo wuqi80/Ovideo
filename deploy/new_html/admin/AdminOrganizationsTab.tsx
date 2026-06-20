@@ -26,7 +26,7 @@ import {
   Organization,
   OrganizationMember,
 } from '../services/organizationService';
-import { getHeaders } from '../services/apiService';
+import { apiJson } from '../services/httpClient';
 
 
 // ── 小型本地 hook：admin users 列表（与 AdminFeatureTabs 同源端点，独立缓存）
@@ -34,10 +34,8 @@ import { getHeaders } from '../services/apiService';
 let _adminUsersCache: any[] | null = null;
 async function fetchAdminUsersOnce(): Promise<any[]> {
   if (_adminUsersCache) return _adminUsersCache;
-  const resp = await fetch('/api/admin/users?limit=500', { headers: getHeaders() });
-  if (!resp.ok) return [];
-  const j = await resp.json();
-  _adminUsersCache = j?.users || [];
+  const data = await apiJson<{ users: any[] }>('/api/admin/users?limit=500', { method: 'GET' }, 'Admin Users');
+  _adminUsersCache = data?.users || [];
   return _adminUsersCache!;
 }
 function useAdminUsers() {
