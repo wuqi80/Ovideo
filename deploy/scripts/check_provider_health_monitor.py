@@ -93,6 +93,25 @@ async def main() -> int:
     if fake_redis.ttl.get(monitor.provider_health_cache_key("deepseek")) is None:
         fail("Health cache did not set a TTL")
 
+    default_redis = FakeRedis()
+    default_results = await monitor.run_provider_health_sweep(
+        redis_client=default_redis,
+        check_fn=fake_check,
+        concurrency=8,
+        record_state=False,
+        sweep_source="background",
+    )
+    if len(default_results) <= len(monitor.PROVIDER_CATALOG):
+        fail(f"Default sweep did not expand provider/model targets: {len(default_results)}")
+    if not any(item.get("model_name") for item in default_results):
+        fail(f"Default sweep did not include model-specific targets: {default_results[:3]}")
+    if not await monitor.get_cached_provider_health(
+        "deepseek",
+        model_name="deepseek-reasoner",
+        redis_client=default_redis,
+    ):
+        fail("Default sweep did not cache the deepseek model-specific row")
+
     target_results = await monitor.run_provider_health_sweep(
         targets=[
             {"provider": "dashscope", "model_name": "wan2.6-i2v"},
@@ -201,6 +220,7 @@ async def main() -> int:
     print("  admin_health_cache_endpoint=1")
     print("  sweep_results=2")
     print("  sweep_target_model_checks=4")
+    print("  default_model_sweep_checks=3")
     print("  api_config_response_provider_health=2")
     print("  provider_monitor_state=1")
     return 0

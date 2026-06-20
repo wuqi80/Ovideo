@@ -266,12 +266,14 @@ def _normalize_sweep_targets(
     providers: Optional[Iterable[str]] = None,
     targets: Optional[Iterable[Any]] = None,
 ) -> List[Dict[str, Optional[str]]]:
-    raw_targets: Iterable[Any]
     if targets is not None:
-        raw_targets = targets
-    else:
-        raw_targets = [{"provider": provider} for provider in (providers or sorted(PROVIDER_CATALOG))]
+        return provider_health_cache_targets(targets=targets)
+    if providers is None:
+        return provider_health_cache_targets()
 
+    # Explicit provider sweeps keep the legacy provider-only behavior. The
+    # background/default sweep expands to provider+model targets above.
+    raw_targets: Iterable[Any] = [{"provider": provider, "model_name": None} for provider in providers]
     out: List[Dict[str, Optional[str]]] = []
     seen: set[str] = set()
     for item in raw_targets:

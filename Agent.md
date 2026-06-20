@@ -6148,3 +6148,21 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server architecture contract suite passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
 - Authenticated online check confirmed `deepseek / deepseek-reasoner` health is cached and returned by `/api/admin/api-configs`.
+
+## 2026-06-21 API Provider Health Default Model Sweep
+
+### Changes
+
+- Updated the default/background provider health sweep to expand registry presets into provider/model targets.
+- Kept explicit `providers=[...]` sweeps provider-only for quick targeted checks and backward compatibility.
+- Added contract coverage proving default sweeps cache model-specific rows such as `deepseek / deepseek-reasoner`.
+
+### Verification
+
+- Local `py_compile` passed for `api_provider_health_monitor.py` and `check_provider_health_monitor.py`.
+- Local `scripts/check_provider_health_monitor.py` passed with `default_model_sweep_checks=3`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `live_deploy_mvc2.sh` built frontend and restarted `drama.service` successfully.
+- Server `scripts/check_provider_health_monitor.py` passed with `default_model_sweep_checks=3`.
+- Server architecture contract suite passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
