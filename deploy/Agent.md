@@ -1,5 +1,36 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Admin API Config UI Clarification
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` so provider quick cards separate three different operations:
+  - `编辑当前配置` opens the active DB config editor when a provider already has a saved config.
+  - `测试 DB 配置` calls `POST /api/admin/api-configs/{config_id}/test` for the selected DB row and displays its latency/status/error on the quick card.
+  - `刷新生效健康` calls `GET /api/admin/api-configs/{provider_id}/health` for the actual runtime provider health.
+- Providers without saved config now show `新增配置`, making the manual API key/endpoint entry path explicit.
+- The legacy API editor button now navigates directly to `/admin-legacy/?page=apiconfig` instead of first forcing `/admin/login`, which could bounce back into the new admin shell.
+- Strengthened `scripts/check_route_contract.py` so the quick-card DB test/edit/runtime-health controls and direct legacy navigation are contract-checked.
+
+### Verification
+
+- `scripts/check_route_contract.py`: passed locally.
+- `scripts/check_architecture_contracts.py`: 9/9 passed locally.
+- `git diff --check`: passed locally.
+- Local `tsc --noEmit` still reports existing project-wide TypeScript debt outside this change.
+- Local Vite build still cannot run because the Windows `node_modules` tree is missing Rollup's `@rollup/rollup-win32-x64-msvc` optional package; server Linux build remains the frontend bundle authority.
+- Server deploy refreshed `/home/Administrator/deploy/dist` from `new_html` and `drama.service` was manually restarted after the long frontend build fallback finished.
+- Server build artifact `dist/assets/AdminSettingsPage-*.js` contains `编辑当前配置`, `测试 DB 配置`, and `刷新生效健康`.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Server probes returned 200 for both `/admin/settings?item=apiconfig` and `/admin-legacy/?page=apiconfig`.
+- Recent `drama.service` logs showed a clean restart at `2026-06-20 12:43:23 UTC` and the service remained active.
+
+### Follow-up
+
+- User reported storyboard rows appeared missing yesterday; keep storyboard recovery/verification as the next workflow item after this admin API UI fix is deployed and smoke-tested.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Workflow Workbench Chunk Split
 
 ### Changes

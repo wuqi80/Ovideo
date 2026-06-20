@@ -22,7 +22,6 @@ import {
     Timer,
     Trash2,
 } from 'lucide-react';
-import { getAdminToken, setAdminPostLoginRedirect } from './adminAuth';
 import { crmConfirm, crmMessage } from './crmUI';
 import { apiJson } from '../services/httpClient';
 
@@ -1119,10 +1118,14 @@ const ProviderQuickCard: React.FC<{
     configs: ApiConfig[];
     runtime?: RuntimeStatus;
     health?: ProviderHealth;
+    configTest?: ApiConfigTest;
     checking: boolean;
+    testingConfig: boolean;
     onConfigure: (meta: ProviderMeta) => void;
+    onEditConfig: (config: ApiConfig) => void;
+    onTestConfig: (config: ApiConfig) => void;
     onCheck: (provider: string) => void;
-}> = ({ meta, configs, runtime, health, checking, onConfigure, onCheck }) => {
+}> = ({ meta, configs, runtime, health, configTest, checking, testingConfig, onConfigure, onEditConfig, onTestConfig, onCheck }) => {
     const provider = normalizeProvider(meta.provider);
     const primaryConfig = bestConfigForProvider(configs, provider);
     const hasSavedKey = configs.some(config => Boolean(config.api_key_encrypted));
@@ -1136,6 +1139,19 @@ const ProviderQuickCard: React.FC<{
     const enabledCount = configs.filter(config => config.enabled !== false).length;
     const keySource = keySourceText(runtime, hasSavedKey);
     const keySourceClass = runtimeHasKey || hasSavedKey ? 'text-g400' : 'text-r400';
+    const quickConfigTestNoKey = isNoKeyTest(configTest);
+    const quickConfigTestClass = configTest?.ok
+        ? 'border-g75 bg-g50 text-g400'
+        : quickConfigTestNoKey
+            ? 'border-y200 bg-y50 text-y400'
+        : 'border-r75 bg-r50 text-r400';
+    const quickConfigTestLabel = !configTest
+        ? ''
+        : configTest.ok
+            ? 'DB 配置可用'
+            : quickConfigTestNoKey
+                ? 'DB 配置未保存 Key'
+                : 'DB 配置异常';
 
     return (
         <article className={`bg-n0 border rounded-md shadow-card p-4 min-w-0 ${
@@ -1196,14 +1212,37 @@ const ProviderQuickCard: React.FC<{
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                    type="button"
-                    onClick={() => onConfigure(meta)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
-                >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    配置 / 修改 API Key
-                </button>
+                {primaryConfig ? (
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => onEditConfig(primaryConfig)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                        >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            编辑当前配置
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onTestConfig(primaryConfig)}
+                            disabled={testingConfig || !primaryConfig.config_id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                            title="测试这条数据库配置保存的 Key 和 Endpoint"
+                        >
+                            {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+                            测试 DB 配置
+                        </button>
+                    </>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => onConfigure(meta)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                    >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        新增配置
+                    </button>
+                )}
                 <button
                     type="button"
                     onClick={() => onCheck(provider)}
@@ -1212,9 +1251,21 @@ const ProviderQuickCard: React.FC<{
                     title="测试实际生成调用会使用的生效 Key 和 Endpoint"
                 >
                     {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    测试连通性
+                    刷新生效健康
                 </button>
             </div>
+
+            {configTest && (
+                <div className={`mt-2 rounded border px-2 py-1.5 text-[11px] break-words ${quickConfigTestClass}`}>
+                    <span className="font-semibold">DB 配置测试：</span>
+                    <span>{quickConfigTestLabel}</span>
+                    <span className="mx-1 text-n100">/</span>
+                    <span className="font-mono text-n700">{typeof configTest.latency_ms === 'number' ? `${configTest.latency_ms} ms` : '- ms'}</span>
+                    <span className="mx-1 text-n100">/</span>
+                    <span className="font-mono text-n700">HTTP {configTest.status_code || '-'}</span>
+                    {configTest.error && <div className="mt-1">{configTest.error}</div>}
+                </div>
+            )}
         </article>
     );
 };
@@ -1715,11 +1766,6 @@ const ApiConfigPanel: React.FC = () => {
     }, [loadConfigs]);
 
     const openLegacyApiConfig = useCallback(() => {
-        setAdminPostLoginRedirect(LEGACY_API_CONFIG_ROUTE);
-        if (!getAdminToken()) {
-            window.location.assign(`/admin/login?redirect=${encodeURIComponent(LEGACY_API_CONFIG_ROUTE)}`);
-            return;
-        }
         window.location.assign(LEGACY_API_CONFIG_ROUTE);
     }, []);
 
@@ -1871,15 +1917,21 @@ const ApiConfigPanel: React.FC = () => {
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                         {quickProviders.map(meta => {
                             const provider = normalizeProvider(meta.provider);
+                            const providerConfigs = configsByProvider.get(provider) || [];
+                            const primaryConfig = bestConfigForProvider(providerConfigs, provider);
                             return (
                                 <ProviderQuickCard
                                     key={provider}
                                     meta={meta}
-                                    configs={configsByProvider.get(provider) || []}
+                                    configs={providerConfigs}
                                     runtime={runtimeMap.get(provider)}
                                     health={healthMap[provider]}
+                                    configTest={primaryConfig ? configTestMap[primaryConfig.config_id] : undefined}
                                     checking={Boolean(checking[provider])}
+                                    testingConfig={testingAllConfigs || Boolean(primaryConfig && testingConfig[primaryConfig.config_id])}
                                     onConfigure={openProviderConfig}
+                                    onEditConfig={openEdit}
+                                    onTestConfig={testConfig}
                                     onCheck={testProvider}
                                 />
                             );

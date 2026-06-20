@@ -2237,6 +2237,22 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "编辑当前配置",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "测试 DB 配置",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "刷新生效健康",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "window.location.assign(LEGACY_API_CONFIG_ROUTE);",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "高级诊断",
         ),
         (
