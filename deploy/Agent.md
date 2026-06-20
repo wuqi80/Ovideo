@@ -5039,3 +5039,35 @@
   - `PYTHONIOENCODING=utf-8 python deploy/scripts/smoke_test.py` -> `9/9`
 - Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
 - `tsc --noEmit` still fails on existing baseline fixture/component type errors, but the `apiService` migration no longer leaks `unknown` return types because migrated calls use `apiJson<any>()`.
+
+## 2026-06-20 Frontend API Service Episode Production HTTP Client Migration
+
+### Changes
+
+- Migrated another `new_html/services/apiService.ts` JSON batch from local `fetch()` / `getHeaders()` calls to shared `apiJson<any>()`:
+  - video segments
+  - audio tracks
+  - video capability checks
+  - video takes and compose status
+  - speech/SFX/music generation
+  - episode script and multi-script CRUD
+  - script segments and timeline tracks
+  - character voices
+  - storyboard batch create, extract-to-assets, asset sharing
+  - MiniMax voice/tts/music/lyrics/file metadata JSON APIs
+  - export script
+- Left special binary/FormData flows untouched for a focused follow-up:
+  - image/blob downloads
+  - ComfyUI image upload
+  - MiniMax file upload
+- Left legacy admin helpers untouched; newer admin UI pages already route through `httpClient`.
+- Extended `scripts/check_route_contract.py` so the migrated episode-production and MiniMax JSON endpoints cannot reintroduce direct `fetch()` calls.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `frontend_http_client_checks=396`
+  - `PYTHONIOENCODING=utf-8 python deploy/scripts/smoke_test.py` -> `9/9`
+- Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
+- `tsc --noEmit` still fails on existing baseline fixture/component type errors, with no new `apiService` unknown-return regressions observed.

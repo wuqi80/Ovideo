@@ -530,54 +530,38 @@ export async function reorderStoryboardItems(episodeId: string, itemIds: string[
 // ===== Video Segment APIs =====
 
 export async function getVideoSegments(episodeId: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/video-segments`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getVideoSegments');
+    return apiJson<any>(`/api/episodes/${episodeId}/video-segments`, { method: 'GET' }, 'getVideoSegments');
 }
 
 export async function createVideoSegment(episodeId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/video-segments`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/video-segments`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'createVideoSegment');
+    }, 'createVideoSegment');
 }
 
 export async function updateVideoSegment(segmentId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/video-segments/${segmentId}`, {
+    return apiJson<any>(`/api/video-segments/${segmentId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateVideoSegment');
+    }, 'updateVideoSegment');
 }
 
 // ===== Audio Track APIs =====
 
 export async function getAudioTracks(episodeId: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/audio-tracks`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getAudioTracks');
+    return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`, { method: 'GET' }, 'getAudioTracks');
 }
 
 export async function createAudioTrack(episodeId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/audio-tracks`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/audio-tracks`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'createAudioTrack');
+    }, 'createAudioTrack');
 }
 
 export async function deleteAudioTrack(trackId: string) {
-    const response = await fetch(`${API_BASE}/api/audio-tracks/${trackId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteAudioTrack');
+    return apiJson<any>(`/api/audio-tracks/${trackId}`, { method: 'DELETE' }, 'deleteAudioTrack');
 }
 
 // ===== Video Capabilities =====
@@ -590,8 +574,7 @@ let _seedanceOmniPromise: Promise<boolean> | null = null;
 export function fetchSeedanceOmni(): Promise<boolean> {
     if (_seedanceOmniCache !== null) return Promise.resolve(_seedanceOmniCache);
     if (!_seedanceOmniPromise) {
-        _seedanceOmniPromise = fetch(`${API_BASE}/api/video/capabilities`, { headers: getHeaders() })
-            .then(r => (r.ok ? r.json() : { seedance_omni: false }))
+        _seedanceOmniPromise = apiJson<any>('/api/video/capabilities', { method: 'GET' }, 'fetchSeedanceOmni')
             .then(j => { _seedanceOmniCache = !!j.seedance_omni; return _seedanceOmniCache; })
             .catch(() => { _seedanceOmniCache = false; return false; });
     }
@@ -604,8 +587,7 @@ let _comfyAvailPromise: Promise<boolean> | null = null;
 export function fetchComfyuiAvailable(): Promise<boolean> {
     if (_comfyAvailCache !== null) return Promise.resolve(_comfyAvailCache);
     if (!_comfyAvailPromise) {
-        _comfyAvailPromise = fetch(`${API_BASE}/api/video/capabilities`, { headers: getHeaders() })
-            .then(r => (r.ok ? r.json() : { comfyui_available: false }))
+        _comfyAvailPromise = apiJson<any>('/api/video/capabilities', { method: 'GET' }, 'fetchComfyuiAvailable')
             .then(j => { _comfyAvailCache = !!j.comfyui_available; return _comfyAvailCache; })
             .catch(() => { _comfyAvailCache = false; return false; });
     }
@@ -639,27 +621,19 @@ export interface VideoShot {
 }
 
 export async function getVideoTakes(episodeId: string): Promise<{ success: boolean; shots: VideoShot[] }> {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/video-takes`, {
-        headers: getHeaders(),
-    });
-    return handleResponse(response, 'getVideoTakes');
+    return apiJson<any>(`/api/episodes/${episodeId}/video-takes`, { method: 'GET' }, 'getVideoTakes');
 }
 
 // selections: { [item_id]: segment_id } 指定每镜用哪条 take；不传则后端用最新。
 export async function startCompose(episodeId: string, selections?: Record<string, string>): Promise<ComposeStatus> {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/compose`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/compose`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(selections ? { selections } : {}),
-    });
-    return handleResponse(response, 'startCompose');
+    }, 'startCompose');
 }
 
 export async function getComposeStatus(episodeId: string): Promise<ComposeStatus> {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/compose/status`, {
-        headers: getHeaders(),
-    });
-    return handleResponse(response, 'getComposeStatus');
+    return apiJson<any>(`/api/episodes/${episodeId}/compose/status`, { method: 'GET' }, 'getComposeStatus');
 }
 
 // ===== Audio Generation APIs =====
@@ -668,57 +642,43 @@ export async function generateSpeech(data: {
     text: string; persona?: string; emotion?: string;
     entity_type?: string; entity_id?: string; file_role?: string; episode_id?: string;
 }) {
-    const response = await fetch(`${API_BASE}/api/audio/generate-speech`, {
+    return apiJson<any>('/api/audio/generate-speech', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'generateSpeech');
+    }, 'generateSpeech');
 }
 
 export async function generateSFX(data: { description: string }) {
-    const response = await fetch(`${API_BASE}/api/audio/generate-sfx`, {
+    return apiJson<any>('/api/audio/generate-sfx', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'generateSFX');
+    }, 'generateSFX');
 }
 
 export async function generateMusic(data: { description: string; duration_ms?: number }) {
-    const response = await fetch(`${API_BASE}/api/audio/generate-music`, {
+    return apiJson<any>('/api/audio/generate-music', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'generateMusic');
+    }, 'generateMusic');
 }
 
 // ===== Episode Script APIs =====
 
 export async function getEpisodeScript(episodeId: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/script`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getEpisodeScript');
+    return apiJson<any>(`/api/episodes/${episodeId}/script`, { method: 'GET' }, 'getEpisodeScript');
 }
 
 export async function updateEpisodeScript(episodeId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/script`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/script`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateEpisodeScript');
+    }, 'updateEpisodeScript');
 }
 
 // ===== 多文件剧本 APIs =====
 
 export async function listEpisodeScripts(episodeId: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/scripts`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'listEpisodeScripts');
+    return apiJson<any>(`/api/episodes/${episodeId}/scripts`, { method: 'GET' }, 'listEpisodeScripts');
 }
 
 export async function createEpisodeScript(episodeId: string, data: {
@@ -728,12 +688,10 @@ export async function createEpisodeScript(episodeId: string, data: {
     sort_order?: number;
     metadata?: any;
 }) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/scripts`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/scripts`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'createEpisodeScript');
+    }, 'createEpisodeScript');
 }
 
 export async function updateEpisodeScriptById(episodeId: string, scriptId: string, data: {
@@ -742,84 +700,59 @@ export async function updateEpisodeScriptById(episodeId: string, scriptId: strin
     adapted_script?: string;
     metadata?: any;
 }) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/scripts/${scriptId}`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/scripts/${scriptId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateEpisodeScriptById');
+    }, 'updateEpisodeScriptById');
 }
 
 export async function deleteEpisodeScript(episodeId: string, scriptId: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/scripts/${scriptId}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteEpisodeScript');
+    return apiJson<any>(`/api/episodes/${episodeId}/scripts/${scriptId}`, { method: 'DELETE' }, 'deleteEpisodeScript');
 }
 
 // ===== 剧本分段 APIs（2026-05-29 三步生成 Stage 1）=====
 
 export async function listEpisodeScriptSegments(episodeId: string, scriptId?: string) {
     const qs = scriptId ? `?script_id=${encodeURIComponent(scriptId)}` : '';
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/script-segments${qs}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'listEpisodeScriptSegments');
+    return apiJson<any>(`/api/episodes/${episodeId}/script-segments${qs}`, { method: 'GET' }, 'listEpisodeScriptSegments');
 }
 
 export async function batchSaveScriptSegments(episodeId: string, scriptId: string | null, segments: any[]) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/script-segments/batch`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/script-segments/batch`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify({ script_id: scriptId, segments })
-    });
-    return handleResponse(response, 'batchSaveScriptSegments');
+    }, 'batchSaveScriptSegments');
 }
 
 export async function deleteScriptSegments(episodeId: string, scriptId?: string) {
     const qs = scriptId ? `?script_id=${encodeURIComponent(scriptId)}` : '';
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/script-segments${qs}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteScriptSegments');
+    return apiJson<any>(`/api/episodes/${episodeId}/script-segments${qs}`, { method: 'DELETE' }, 'deleteScriptSegments');
 }
 
 // ===== Timeline Track APIs =====
 
 export async function getTimelineTracks(episodeId: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/timeline-tracks`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getTimelineTracks');
+    return apiJson<any>(`/api/episodes/${episodeId}/timeline-tracks`, { method: 'GET' }, 'getTimelineTracks');
 }
 
 export async function createTimelineTrack(episodeId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/timeline-tracks`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/timeline-tracks`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'createTimelineTrack');
+    }, 'createTimelineTrack');
 }
 
 export async function updateTimelineTrack(trackId: string, data: any) {
-    const response = await fetch(`${API_BASE}/api/timeline-tracks/${trackId}`, {
+    return apiJson<any>(`/api/timeline-tracks/${trackId}`, {
         method: 'PUT',
-        headers: getHeaders(),
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateTimelineTrack');
+    }, 'updateTimelineTrack');
 }
 
 // ===== Character Voice APIs =====
 
 export async function getCharacterVoices(projectId: string) {
-    const response = await fetch(`${API_BASE}/api/projects/${projectId}/character-voices`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'getCharacterVoices');
+    return apiJson<any>(`/api/projects/${projectId}/character-voices`, { method: 'GET' }, 'getCharacterVoices');
 }
 
 export async function createCharacterVoice(data: {
@@ -828,62 +761,53 @@ export async function createCharacterVoice(data: {
     voice_model_id?: string; voice_name?: string;
     voice_params?: Record<string, any>; sample_audio_url?: string;
 }) {
-    const response = await fetch(`${API_BASE}/api/character-voices`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>('/api/character-voices', {
+        method: 'POST',
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'createCharacterVoice');
+    }, 'createCharacterVoice');
 }
 
 export async function updateCharacterVoice(voiceId: string, data: Record<string, any>) {
-    const response = await fetch(`${API_BASE}/api/character-voices/${voiceId}`, {
-        method: 'PUT', headers: getHeaders(),
+    return apiJson<any>(`/api/character-voices/${voiceId}`, {
+        method: 'PUT',
         body: JSON.stringify(data)
-    });
-    return handleResponse(response, 'updateCharacterVoice');
+    }, 'updateCharacterVoice');
 }
 
 export async function deleteCharacterVoice(voiceId: string) {
-    const response = await fetch(`${API_BASE}/api/character-voices/${voiceId}`, {
-        method: 'DELETE', headers: getHeaders()
-    });
-    return handleResponse(response, 'deleteCharacterVoice');
+    return apiJson<any>(`/api/character-voices/${voiceId}`, { method: 'DELETE' }, 'deleteCharacterVoice');
 }
 
 // ===== Batch Operations =====
 
 export async function batchCreateStoryboardItems(episodeId: string, items: any[], scriptId?: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/storyboard-items/batch`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/batch`, {
+        method: 'POST',
         body: JSON.stringify({ items, script_id: scriptId })
-    });
-    return handleResponse(response, 'batchCreateStoryboardItems');
+    }, 'batchCreateStoryboardItems');
 }
 
 export async function extractToAssets(episodeId: string, characters: any[], scenes: any[], scriptId?: string) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/extract-to-assets`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>(`/api/episodes/${episodeId}/extract-to-assets`, {
+        method: 'POST',
         body: JSON.stringify({ characters, scenes, script_id: scriptId })
-    });
-    return handleResponse(response, 'extractToAssets');
+    }, 'extractToAssets');
 }
 
 export async function shareAsset(assetId: string, targetEpisodeId: string, targetScriptId: string) {
-    const response = await fetch(`${API_BASE}/api/assets/${assetId}/share`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>(`/api/assets/${assetId}/share`, {
+        method: 'POST',
         body: JSON.stringify({ target_episode_id: targetEpisodeId, target_script_id: targetScriptId })
-    });
-    return handleResponse(response, 'shareAsset');
+    }, 'shareAsset');
 }
 
 // ===== MiniMax Audio APIs =====
 
 export async function minimaxVoiceDesign(prompt: string, previewText: string, voiceId?: string) {
-    const response = await fetch(`${API_BASE}/api/minimax/voice-design`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>('/api/minimax/voice-design', {
+        method: 'POST',
         body: JSON.stringify({ prompt, preview_text: previewText, voice_id: voiceId })
-    });
-    return handleResponse(response, 'minimaxVoiceDesign');
+    }, 'minimaxVoiceDesign');
 }
 
 export async function minimaxVoiceClone(
@@ -892,37 +816,27 @@ export async function minimaxVoiceClone(
     demoText = '你好，这是一段测试语音。',
     voiceIdPrefix = 'clone',
 ) {
-    const response = await fetch(`${API_BASE}/api/minimax/voice-clone`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>('/api/minimax/voice-clone', {
+        method: 'POST',
         body: JSON.stringify({
             file_id: fileId,
             voice_id: voiceId,
             demo_text: demoText,
             voice_id_prefix: voiceIdPrefix,
         })
-    });
-    return handleResponse(response, 'minimaxVoiceClone');
+    }, 'minimaxVoiceClone');
 }
 
 export async function minimaxListVoices(voiceType = 'all') {
-    const response = await fetch(`${API_BASE}/api/minimax/voices?voice_type=${encodeURIComponent(voiceType)}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'minimaxListVoices');
+    return apiJson<any>(`/api/minimax/voices?voice_type=${encodeURIComponent(voiceType)}`, { method: 'GET' }, 'minimaxListVoices');
 }
 
 export async function minimaxGetVoice(voiceId: string) {
-    const response = await fetch(`${API_BASE}/api/minimax/voices/${voiceId}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'minimaxGetVoice');
+    return apiJson<any>(`/api/minimax/voices/${voiceId}`, { method: 'GET' }, 'minimaxGetVoice');
 }
 
 export async function minimaxDeleteVoice(voiceId: string, voiceType = 'voice_cloning') {
-    const response = await fetch(`${API_BASE}/api/minimax/voices/${voiceId}?voice_type=${encodeURIComponent(voiceType)}`, {
-        method: 'DELETE', headers: getHeaders()
-    });
-    return handleResponse(response, 'minimaxDeleteVoice');
+    return apiJson<any>(`/api/minimax/voices/${voiceId}?voice_type=${encodeURIComponent(voiceType)}`, { method: 'DELETE' }, 'minimaxDeleteVoice');
 }
 
 /**
@@ -939,13 +853,11 @@ export async function minimaxTTS(data: {
     entity_type?: string; entity_id?: string; file_role?: string; episode_id?: string;
     bind_to_character_voice_id?: string;  // 2026-05-24 新增：worker 完成后回写 sample_audio_url
 }, signal?: AbortSignal): Promise<{ success: true; task_id: string }> {
-    const response = await fetch(`${API_BASE}/api/minimax/tts`, {
+    return apiJson<any>('/api/minimax/tts', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data),
         signal,
-    });
-    return handleResponse(response, 'minimaxTTS');
+    }, 'minimaxTTS');
 }
 
 /**
@@ -986,32 +898,28 @@ export async function minimaxTTSSync(data: {
     duration_ms?: number;
     minimax_trace_id?: string;
 }> {
-    const response = await fetch(`${API_BASE}/api/minimax/tts/sync`, {
+    return apiJson<any>('/api/minimax/tts/sync', {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data),
         signal,
-    });
-    return handleResponse(response, 'minimaxTTSSync');
+    }, 'minimaxTTSSync');
 }
 
 // 注意：legacy minimaxTTSQuery 已删除。
 // 用 getTaskStatus(task_id) 通过数据库 task_id 查询，不再直查 MiniMax 端。
 
 export async function minimaxMusic(lyrics = '', referVoice = '', referInstrumental = '') {
-    const response = await fetch(`${API_BASE}/api/minimax/music`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>('/api/minimax/music', {
+        method: 'POST',
         body: JSON.stringify({ lyrics, refer_voice: referVoice, refer_instrumental: referInstrumental })
-    });
-    return handleResponse(response, 'minimaxMusic');
+    }, 'minimaxMusic');
 }
 
 export async function minimaxLyrics(text: string, language = 'zh') {
-    const response = await fetch(`${API_BASE}/api/minimax/lyrics`, {
-        method: 'POST', headers: getHeaders(),
+    return apiJson<any>('/api/minimax/lyrics', {
+        method: 'POST',
         body: JSON.stringify({ text, language })
-    });
-    return handleResponse(response, 'minimaxLyrics');
+    }, 'minimaxLyrics');
 }
 
 export async function minimaxFileUpload(file: File, purpose = 'voice_clone') {
@@ -1028,17 +936,11 @@ export async function minimaxFileUpload(file: File, purpose = 'voice_clone') {
 }
 
 export async function minimaxFileRetrieve(fileId: string) {
-    const response = await fetch(`${API_BASE}/api/minimax/files/${fileId}`, {
-        headers: getHeaders()
-    });
-    return handleResponse(response, 'minimaxFileRetrieve');
+    return apiJson<any>(`/api/minimax/files/${fileId}`, { method: 'GET' }, 'minimaxFileRetrieve');
 }
 
 export async function minimaxFileDelete(fileId: string) {
-    const response = await fetch(`${API_BASE}/api/minimax/files/${fileId}`, {
-        method: 'DELETE', headers: getHeaders()
-    });
-    return handleResponse(response, 'minimaxFileDelete');
+    return apiJson<any>(`/api/minimax/files/${fileId}`, { method: 'DELETE' }, 'minimaxFileDelete');
 }
 
 export async function exportScript(episodeId: string, data: {
@@ -1050,10 +952,8 @@ export async function exportScript(episodeId: string, data: {
     scenes: { name: string; description: string }[];
     script_id?: string | null;
 }) {
-    const response = await fetch(`${API_BASE}/api/episodes/${episodeId}/export-script`, {
+    return apiJson<any>(`/api/episodes/${episodeId}/export-script`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify(data),
-    });
-    return handleResponse(response, 'exportScript');
+    }, 'exportScript');
 }
