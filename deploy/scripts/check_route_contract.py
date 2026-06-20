@@ -1076,6 +1076,7 @@ def check_generation_lightweight_storyboard_contract(root: Path) -> int:
     forbidden_snippets = [
         "loadSlices('storyboardItems'",
         'loadSlices("storyboardItems"',
+        "getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'video' })",
     ]
     forbidden = [snippet for snippet in forbidden_snippets if snippet in page_text]
     if forbidden:
@@ -1083,6 +1084,10 @@ def check_generation_lightweight_storyboard_contract(root: Path) -> int:
 
     required_snippets = {
         "fields: 'video'": "GenerationPage lightweight video field query",
+        "limit: fetchLimit": "GenerationPage bounded video field query",
+        "includeTotal: true": "GenerationPage total-aware video field query",
+        "storyboardVideoTotalCount": "GenerationPage tracks backend storyboard total",
+        "storyboardScopeRef": "GenerationPage resets bounded query by episode/script scope",
         "GENERATION_INITIAL_STORYBOARD_COUNT = 10": "bounded initial storyboard card render",
         "visibleStoryboardItems": "visible storyboard card list",
         "loading=\"lazy\"": "lazy storyboard image loading",

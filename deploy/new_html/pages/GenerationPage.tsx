@@ -140,8 +140,10 @@ function normalizeStoryboardVideoItem(r: any): StoryboardItemDB {
 export const GenerationPage: React.FC = () => {
   const { episodeId, selectedScriptId, isLoading, error, audioTracks, videoSegments, reload, loadSlices } = useEpisode();
   const [storyboardVideoItems, setStoryboardVideoItems] = useState<StoryboardItemDB[]>([]);
+  const [storyboardVideoTotalCount, setStoryboardVideoTotalCount] = useState(0);
   const [storyboardVideoReloadKey, setStoryboardVideoReloadKey] = useState(0);
   const [visibleStoryboardCount, setVisibleStoryboardCount] = useState(GENERATION_INITIAL_STORYBOARD_COUNT);
+  const storyboardScopeRef = React.useRef('');
 
   useEffect(() => {
     loadSlices('audioTracks', 'videoSegments');
@@ -155,19 +157,45 @@ export const GenerationPage: React.FC = () => {
     let active = true;
     if (!episodeId) {
       setStoryboardVideoItems([]);
+      setStoryboardVideoTotalCount(0);
+      storyboardScopeRef.current = '';
       return () => { active = false; };
     }
-    getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'video' })
+    const scopeKey = `${episodeId}:${selectedScriptId || ''}`;
+    const isNewScope = storyboardScopeRef.current !== scopeKey;
+    if (isNewScope) {
+      storyboardScopeRef.current = scopeKey;
+      if (visibleStoryboardCount !== GENERATION_INITIAL_STORYBOARD_COUNT) {
+        setVisibleStoryboardCount(GENERATION_INITIAL_STORYBOARD_COUNT);
+      }
+      setStoryboardVideoItems([]);
+      setStoryboardVideoTotalCount(0);
+    }
+    const fetchLimit = isNewScope ? GENERATION_INITIAL_STORYBOARD_COUNT : visibleStoryboardCount;
+    getStoryboardItems(episodeId, selectedScriptId || undefined, {
+      fields: 'video',
+      limit: fetchLimit,
+      includeTotal: true,
+    })
       .then(res => {
         if (!active) return;
-        setStoryboardVideoItems(res.success ? (res.items || []).map(normalizeStoryboardVideoItem) : []);
+        const nextItems = res.success ? (res.items || []).map(normalizeStoryboardVideoItem) : [];
+        setStoryboardVideoItems(nextItems);
+        setStoryboardVideoTotalCount(
+          res.success && typeof (res as any).total === 'number'
+            ? (res as any).total
+            : nextItems.length,
+        );
       })
       .catch(err => {
         console.warn('storyboard video fields load failed:', err);
-        if (active) setStoryboardVideoItems([]);
+        if (active) {
+          setStoryboardVideoItems([]);
+          setStoryboardVideoTotalCount(0);
+        }
       });
     return () => { active = false; };
-  }, [episodeId, selectedScriptId, storyboardVideoReloadKey]);
+  }, [episodeId, selectedScriptId, storyboardVideoReloadKey, visibleStoryboardCount]);
 
   const sortedItems = useMemo(
     () => [...storyboardVideoItems].sort(
@@ -181,7 +209,7 @@ export const GenerationPage: React.FC = () => {
     [sortedItems, visibleStoryboardCount],
   );
 
-  const hasMoreStoryboardItems = visibleStoryboardCount < sortedItems.length;
+  const hasMoreStoryboardItems = storyboardVideoTotalCount > sortedItems.length;
 
   const itemStartMs = useMemo(() => {
     const map = new Map<string, number>();
@@ -197,6 +225,14 @@ export const GenerationPage: React.FC = () => {
     return map;
   }, [sortedItems]);
 
+  const visibleVideoSegments = useMemo(
+    () => videoSegments.filter((seg) => {
+      const sid = segStoryboardItemId(seg as VideoSegment & Record<string, unknown>);
+      return !sid || itemStartMs.has(sid);
+    }),
+    [videoSegments, itemStartMs],
+  );
+
   const totalTimelineMs = useMemo(() => {
     let sum = 0;
     for (const raw of sortedItems) {
@@ -205,7 +241,7 @@ export const GenerationPage: React.FC = () => {
       sum += d != null && d > 0 ? d : 4000;
     }
     if (sum < 1) sum = 8000;
-    for (const seg of videoSegments) {
+    for (const seg of visibleVideoSegments) {
       const s = seg as VideoSegment & Record<string, unknown>;
       const sid = segStoryboardItemId(s);
       if (!sid) continue;
@@ -223,7 +259,7 @@ export const GenerationPage: React.FC = () => {
       sum = Math.max(sum, start + len);
     }
     return sum;
-  }, [sortedItems, videoSegments, audioTracks, itemStartMs]);
+  }, [sortedItems, visibleVideoSegments, audioTracks, itemStartMs]);
 
   const latestSegmentByStoryboardId = useMemo(() => {
     const map = new Map<string, VideoSegment & Record<string, unknown>>();
@@ -423,10 +459,14 @@ export const GenerationPage: React.FC = () => {
             {hasMoreStoryboardItems && (
               <button
                 type="button"
-                onClick={() => setVisibleStoryboardCount(count => Math.min(count + GENERATION_STORYBOARD_PAGE_SIZE, sortedItems.length))}
+                onClick={() => setVisibleStoryboardCount(count => (
+                  storyboardVideoTotalCount > 0
+                    ? Math.min(count + GENERATION_STORYBOARD_PAGE_SIZE, storyboardVideoTotalCount)
+                    : count + GENERATION_STORYBOARD_PAGE_SIZE
+                ))}
                 className="w-full mt-1.5 px-3 py-2 rounded-lg border border-n40 bg-n0 hover:border-primary hover:text-primary text-xs text-n300 transition-colors"
               >
-                加载更多镜头（{Math.min(visibleStoryboardCount, sortedItems.length)} / {sortedItems.length}）
+                加载更多镜头（{Math.min(sortedItems.length, storyboardVideoTotalCount)} / {storyboardVideoTotalCount}）
               </button>
             )}
           </div>
@@ -533,12 +573,12 @@ export const GenerationPage: React.FC = () => {
                 <Film size={11} /> 视频轨
               </div>
               <div className="h-9 bg-n30 rounded-md relative overflow-hidden">
-                {videoSegments.length === 0 ? (
+                {visibleVideoSegments.length === 0 ? (
                   <div className="absolute inset-0 flex items-center justify-center text-[11px] text-n100">
                     无视频片段
                   </div>
                 ) : (
-                  videoSegments.map((seg) => {
+                  visibleVideoSegments.map((seg) => {
                     const s = seg as VideoSegment & Record<string, unknown>;
                     const sid = segStoryboardItemId(s);
                     const startMs2 = sid ? itemStartMs.get(sid) ?? 0 : 0;

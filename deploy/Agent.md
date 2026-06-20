@@ -5837,3 +5837,27 @@
 ### Follow-up
 
 - The aggregate totals and generation logs in `routers/admin_compat.py` still contain direct reporting SQL. Continue extracting them into admin DAO/reporting helpers in small slices.
+
+## 2026-06-20 Generation Workflow Bounded Storyboard Video Fields
+
+### Changes
+
+- Updated `new_html/pages/GenerationPage.tsx` so the generation workflow requests storyboard video fields with `limit` and `include_total=true` instead of loading every shot's video metadata up front.
+- Load-more now increases the backend query limit by 10 shots at a time, using the backend `total` count for the button state.
+- Added `visibleVideoSegments` so timeline duration and video track rendering only use video segments whose storyboard rows are currently loaded. This avoids placing unloaded-shot segments at `0s`.
+- Strengthened `scripts/check_route_contract.py` so `GenerationPage` cannot return to the old unbounded `fields=video` request shape.
+
+### Verification
+
+- Local checks passed:
+  - `git diff --check`
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_architecture_contracts.py`
+- Route contract remains:
+  - `openapi_paths=231`
+  - `openapi_operations=287`
+  - `generation_lightweight_storyboard_checks=11`
+
+### Follow-up
+
+- User reported that storyboard content disappeared yesterday. Keep this as the next dedicated recovery investigation: verify whether the rows still exist in DB, whether the selected script scope is stale, and whether frontend fallback clears the script selection correctly on the affected project/episode.
