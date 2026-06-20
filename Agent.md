@@ -6303,3 +6303,23 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `npm run test:run -- --pool=forks __tests__/services/assetMutationService.test.ts __tests__/services/storyboardMutationService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `59/59`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Script Timeline Service Split
+
+### Changes
+
+- Extracted multi-script CRUD, script segment batch operations, and timeline track helpers from `deploy/new_html/services/apiService.ts` into `deploy/new_html/services/scriptTimelineService.ts`.
+- Kept `apiService.ts` compatibility re-exports while removing duplicated script/timeline implementations from the monolithic file.
+- Updated `WorkspaceApp` to import script/timeline APIs directly from the new service.
+- Added `scriptTimelineService.test.ts` and strengthened `deploy/scripts/check_route_contract.py` so script/timeline endpoint ownership stays in the new service.
+
+### Verification
+
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `frontend_http_client_checks=6965`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `scriptTimelineService-*.js` (`0.82 kB`) as a separate chunk and reduced the built `apiService-*.js` chunk to `4.73 kB`.
+- Server `npm run test:run -- --pool=forks __tests__/services/scriptTimelineService.test.ts __tests__/services/assetMutationService.test.ts __tests__/services/storyboardMutationService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `64/64`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

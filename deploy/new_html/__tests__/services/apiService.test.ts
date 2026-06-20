@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  getTimelineTracks,
   uploadImageToComfyUI,
 } from '../../services/apiService';
 
@@ -77,14 +76,5 @@ describe('uploadImageToComfyUI', () => {
     expect(downloadOpts.method).toBe('GET');
     expect(downloadOpts.headers.Authorization).toBeUndefined();
     expect(downloadOpts.headers['Content-Type']).toBeUndefined();
-  });
-});
-
-describe('getTimelineTracks', () => {
-  it('calls correct URL', async () => {
-    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, tracks: [] }));
-    await getTimelineTracks('ep_1');
-    const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe('/api/episodes/ep_1/timeline-tracks');
   });
 });
