@@ -57,6 +57,7 @@ async def run_case(
     *,
     env: dict[str, str],
     health_rows: list[dict[str, Any]],
+    request_model: str | None = None,
     expected_health_scope: list[str],
     expected_url: str,
     expected_provider: str,
@@ -82,7 +83,12 @@ async def run_case(
     try:
         for key, value in env.items():
             os.environ[key] = value
-        result = await proxy.generate_gemini_text_result(prompt="hello", system_prompt="system", temperature=0.3)
+        result = await proxy.generate_gemini_text_result(
+            prompt="hello",
+            system_prompt="system",
+            temperature=0.3,
+            model=request_model,
+        )
     finally:
         proxy.list_cached_provider_health = original_health
         proxy.requests.post = original_post
@@ -168,10 +174,31 @@ async def main() -> int:
             expected_failover_active=False,
         )
 
+    with EnvGuard(managed_env):
+        await run_case(
+            proxy,
+            env={
+                "GEMINI_TEXT_API_KEY": "gemini-key",
+                "DEEPSEEK_API_KEY": "deepseek-key",
+            },
+            health_rows=[
+                {"provider": "gemini-text", "status": "ok"},
+                {"provider": "gemini-text", "model_name": "gemini-2.5-flash", "status": "error"},
+                {"provider": "deepseek", "status": "ok"},
+            ],
+            expected_health_scope=["gemini-text", "deepseek"],
+            expected_url="https://api.deepseek.com/chat/completions",
+            expected_provider="deepseek",
+            expected_model="deepseek-reasoner",
+            expected_auth="Bearer deepseek-key",
+            expected_failover_active=True,
+        )
+
     print("AI proxy failover contract OK")
     print("  failover_health_scope_from_registry=1")
     print("  gemini_text_failover_to_deepseek=1")
     print("  gemini_text_primary_stays_when_healthy=1")
+    print("  gemini_text_model_health_failover=1")
     return 0
 
 

@@ -6166,3 +6166,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `scripts/check_provider_health_monitor.py` passed with `default_model_sweep_checks=3`.
 - Server architecture contract suite passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 AI Proxy Model Health Failover Contract
+
+### Changes
+
+- Added a contract case proving Gemini text generation honors model-specific health cache rows during call-level failover.
+- Covered the case where `gemini-text` provider-level health is `ok`, but `gemini-2.5-flash` health is `error`, and the actual text call selects DeepSeek.
+- No runtime code changed; this protects the existing model-aware resolver behavior from regressing to provider-only health checks.
+
+### Verification
+
+- Local `py_compile` passed for `check_ai_proxy_failover.py`.
+- Local `scripts/check_ai_proxy_failover.py` passed with `gemini_text_model_health_failover=1`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
