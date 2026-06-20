@@ -6356,3 +6356,24 @@
 - Server `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6608`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Project Workflow Service Split
+
+### Changes
+
+- Extracted project CRUD, project member management, episode management, and export-to-video helpers from `new_html/services/apiService.ts` into `new_html/services/projectWorkflowService.ts`.
+- Updated `new_html/components/ShareResourceDialog.tsx` and `new_html/WorkspaceApp.tsx` to import the project workflow API directly from the new service.
+- Kept `apiService.ts` compatibility re-exports while removing duplicated project and episode implementations from the monolithic file.
+- Added `projectWorkflowService.test.ts` and strengthened `scripts/check_route_contract.py` so project workflow endpoint ownership stays with the new service.
+
+### Verification
+
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=7026`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `projectWorkflowService-*.js` (`0.58 kB`) as a separate chunk and no longer emitted a separate built `apiService-*.js` business chunk for this path.
+- Server `npm run test:run -- --pool=forks --testTimeout=15000 __tests__/services/projectWorkflowService.test.ts __tests__/services/comfyuiBridgeService.test.ts __tests__/services/adminCompatService.test.ts __tests__/services/scriptTimelineService.test.ts __tests__/services/assetMutationService.test.ts __tests__/services/storyboardMutationService.test.ts __tests__/services/videoWorkflowService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `75/75`.
+- Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6630`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

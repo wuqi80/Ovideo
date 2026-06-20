@@ -2810,6 +2810,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     script_timeline_service = new_html / "services" / "scriptTimelineService.ts"
     admin_compat_service = new_html / "services" / "adminCompatService.ts"
     comfyui_bridge_service = new_html / "services" / "comfyuiBridgeService.ts"
+    project_workflow_service = new_html / "services" / "projectWorkflowService.ts"
     use_episode_data = new_html / "hooks" / "useEpisodeData.ts"
     episode_context = new_html / "contexts" / "EpisodeContext.tsx"
     audio_stage_page = new_html / "pages" / "AudioStagePage.tsx"
@@ -2848,6 +2849,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         script_timeline_service,
         admin_compat_service,
         comfyui_bridge_service,
+        project_workflow_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2907,6 +2909,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "from './scriptTimelineService';"),
         (api_service, "from './adminCompatService';"),
         (api_service, "from './comfyuiBridgeService';"),
+        (api_service, "from './projectWorkflowService';"),
         (task_notification_service, "import { apiJson } from './httpClient';"),
         (task_notification_service, "return apiJson<any>('/api/tasks/active'"),
         (task_notification_service, "return apiJson<any>(url, { method: 'GET' }, 'getTaskNotifications')"),
@@ -2986,6 +2989,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (comfyui_bridge_service, "publicBlob(absolute"),
         (comfyui_bridge_service, "return apiJson<any>('/api/comfyui/upload'"),
         (comfyui_bridge_service, "return apiJson<any>('/api/materials/process'"),
+        (project_workflow_service, "import { apiJson } from './httpClient';"),
+        (project_workflow_service, "return apiJson<any>('/api/projects/save'"),
+        (project_workflow_service, "return apiJson<any>(`/api/projects/list${suffix}`"),
+        (project_workflow_service, "return apiJson<any>(`/api/projects/${projectId}`"),
+        (project_workflow_service, "return apiJson<any>(`/api/projects/${projectId}/export-to-video`"),
+        (project_workflow_service, "return apiJson<any>(`/api/projects/${projectId}/members`"),
+        (project_workflow_service, "return apiJson<any>(`/api/projects/${projectId}/members/${memberUserId}`"),
+        (project_workflow_service, "return apiJson<any>(`/api/projects/${projectId}/episodes`"),
+        (project_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}`"),
         (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
         (new_html / "__tests__" / "services" / "videoWorkflowService.test.ts", "fetchSeedanceOmni caches video capability responses"),
         (new_html / "__tests__" / "services" / "assetMutationService.test.ts", "shares assets to target episode and script"),
@@ -2996,12 +3008,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "downloads same-origin image through shared authenticated blob client"),
         (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "does not attach local auth token to external image downloads"),
         (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
-        (api_service, "return apiJson<any>('/api/projects/save'"),
-        (api_service, "return apiJson<any>(`/api/projects/list${suffix}`"),
-        (api_service, "return apiJson<any>(`/api/projects/${projectId}`"),
-        (api_service, "return apiJson<any>(`/api/projects/${projectId}/members`"),
-        (api_service, "return apiJson<any>(`/api/projects/${projectId}/episodes`"),
-        (api_service, "return apiJson<any>(`/api/episodes/${episodeId}`"),
+        (new_html / "__tests__" / "services" / "projectWorkflowService.test.ts", "exports selected storyboard items to video"),
         (api_service, "return apiJson<any>('/api/canvas/boards'"),
         (api_service, "return apiJson<any>(`/api/canvas/boards/${boardId}`"),
         (api_service, "return apiJson<any>('/api/canvas/nodes'"),
@@ -3035,6 +3042,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (workspace_app, "from './services/episodeDataService'"),
         (workspace_app, "from './services/storyboardMutationService'"),
         (workspace_app, "from './services/scriptTimelineService'"),
+        (workspace_app, "import('./services/projectWorkflowService')"),
         (audio_stage_page, "from '../services/audioGenerationService'"),
         (audio_stage_page, "from '../services/episodeDataService'"),
         (audio_stage_page, "from '../services/storyboardMutationService'"),
@@ -3076,6 +3084,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (admin_page, ")) as ClusterNodesResponse;"),
         (admin_settings_page, "import { apiJson } from '../services/httpClient'"),
         (admin_settings_page, "apiJson<ApiConfigsResponse>('/api/admin/api-configs')"),
+        (new_html / "components" / "ShareResourceDialog.tsx", "from '../services/projectWorkflowService'"),
     ]
     forbidden_snippets = [
         "function getHeaders",

@@ -754,7 +754,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       const storageKey = `anime-current-project-id-${username}`;
       localStorage.setItem(storageKey, projectId);
       
-      const { exportToVideo } = await import('./services/apiService');
+      const { exportToVideo } = await import('./services/projectWorkflowService');
       
       try {
         const result = await exportToVideo(projectId, selectedItems);

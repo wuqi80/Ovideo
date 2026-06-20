@@ -103,121 +103,46 @@ export {
     type MaterialEntityOptions,
     type MaterialWorkflowType,
 } from './comfyuiBridgeService';
+export {
+    saveProject,
+    listProjects,
+    getProject,
+    updateProject,
+    deleteProject,
+    exportToVideo,
+    getProjectMembers,
+    addProjectMember,
+    updateProjectMember,
+    removeProjectMember,
+    getEpisodes,
+    createEpisode,
+    updateEpisode,
+    deleteEpisode,
+    type UpdateEpisodePayload,
+    type UpdateProjectMemberPayload,
+    type UpdateProjectPayload,
+} from './projectWorkflowService';
 
 /**
  * 保存项目到后端
  */
-export async function saveProject(projectData: any): Promise<{ success: boolean; project_id: string }> {
-    return apiJson<any>('/api/projects/save', {
-        method: 'POST',
-        body: JSON.stringify(projectData)
-    }, 'saveProject');
-}
-
 /**
  * 获取项目列表
  */
-export async function listProjects(
-    limit: number = 100,
-    orgId?: string,
-): Promise<{ success: boolean; projects: any[] }> {
-    // 2026-05-26 组织管理 MVP — 可选 org_id（个人 workspace 不传）
-    const qs = new URLSearchParams();
-    if (limit !== 100) qs.set('limit', String(limit));
-    if (orgId) qs.set('org_id', orgId);
-    const suffix = qs.toString() ? `?${qs.toString()}` : '';
-    return apiJson<any>(`/api/projects/list${suffix}`, { method: 'GET' }, 'listProjects');
-}
-
 /**
  * 获取项目详情
  */
-export async function getProject(projectId: string): Promise<{ success: boolean; project: any }> {
-    return apiJson<any>(`/api/projects/${projectId}`, { method: 'GET' }, 'getProject');
-}
-
 /**
  * 删除项目
  */
-export async function deleteProject(projectId: string): Promise<{ success: boolean }> {
-    return apiJson<any>(`/api/projects/${projectId}`, { method: 'DELETE' }, 'deleteProject');
-}
-
 /**
  * 导出到视频生成阶段
  */
-export async function exportToVideo(projectId: string, selectedItems: string[]): Promise<{
-    success: boolean;
-    exported_count: number;
-    video_tasks: any[];
-}> {
-    return apiJson<any>(`/api/projects/${projectId}/export-to-video`, {
-        method: 'POST',
-        body: JSON.stringify({ selected_items: selectedItems })
-    }, 'exportToVideo');
-}
-
 // ==================== 项目成员管理 API ====================
-
-export async function getProjectMembers(projectId: string) {
-    return apiJson<any>(`/api/projects/${projectId}/members`, { method: 'GET' }, 'getProjectMembers');
-}
-
-export async function addProjectMember(projectId: string, userId: string, role = 'member', responsibility = 'all') {
-    return apiJson<any>(`/api/projects/${projectId}/members`, {
-        method: 'POST',
-        body: JSON.stringify({ user_id: userId, role, responsibility })
-    }, 'addProjectMember');
-}
-
-export async function updateProjectMember(projectId: string, memberUserId: string, data: { role?: string; responsibility?: string }) {
-    return apiJson<any>(`/api/projects/${projectId}/members/${memberUserId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateProjectMember');
-}
-
-export async function removeProjectMember(projectId: string, memberUserId: string) {
-    return apiJson<any>(`/api/projects/${projectId}/members/${memberUserId}`, { method: 'DELETE' }, 'removeProjectMember');
-}
 
 // ==================== 项目更新 API ====================
 
-export async function updateProject(projectId: string, data: {
-    project_name?: string;
-    description?: string;
-    cover_url?: string;
-    tags?: string[];
-}) {
-    return apiJson<any>(`/api/projects/${projectId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateProject');
-}
-
 // ==================== 集数管理 API ====================
-
-export async function getEpisodes(projectId: string) {
-    return apiJson<any>(`/api/projects/${projectId}/episodes`, { method: 'GET' }, 'getEpisodes');
-}
-
-export async function createEpisode(projectId: string, episodeName = '', description = '') {
-    return apiJson<any>(`/api/projects/${projectId}/episodes`, {
-        method: 'POST',
-        body: JSON.stringify({ project_id: projectId, episode_name: episodeName, description })
-    }, 'createEpisode');
-}
-
-export async function updateEpisode(episodeId: string, data: { episode_name?: string; description?: string; status?: string }) {
-    return apiJson<any>(`/api/episodes/${episodeId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateEpisode');
-}
-
-export async function deleteEpisode(episodeId: string) {
-    return apiJson<any>(`/api/episodes/${episodeId}`, { method: 'DELETE' }, 'deleteEpisode');
-}
 
 // ==================== 画布 API ====================
 

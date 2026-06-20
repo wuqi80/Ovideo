@@ -13,7 +13,7 @@ import {
   listShares, createShare, deleteShare,
   ShareResourceType, ShareTargetType, ResourceShare,
 } from '../services/shareService';
-import { listProjects } from '../services/apiService';
+import { listProjects } from '../services/projectWorkflowService';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 
 
