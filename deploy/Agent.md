@@ -1,5 +1,30 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 API Service Image Download HttpClient Cleanup
+
+### Changes
+
+- Audited `deploy/services/` for direct SQL and did not find service-layer SQL calls that need DAO migration in this pass.
+- Updated `new_html/services/apiService.ts` so same-origin image downloads inside `uploadImageToComfyUI()` use the shared HTTP client path:
+  - `secureApiUrl()` keeps tokenized local media access consistent
+  - `apiBlob()` centralizes auth/error handling for binary downloads
+  - external image URLs still use native `fetch()` without local auth headers
+- Added `new_html/__tests__/services/apiService.test.ts` coverage for same-origin authenticated blob downloads and external unauthenticated image downloads.
+- Extended `scripts/check_route_contract.py` so this behavior is covered by `frontend_http_client_checks`.
+
+### Verification
+
+- Local route contract passed with `frontend_http_client_checks=6655`.
+- Local smoke test passed: `9/9`.
+- Server deploy verification passed: `drama.service` is active.
+- Server smoke test passed: `9/9`.
+- Server frontend test passed: `apiService.test.ts` `19/19`.
+
+### Follow-up
+
+- User reported that storyboard items disappeared yesterday. Track this as a separate restore task before the next storyboard workflow release.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Storyboard Visible Refresh Guard
 
 ### Changes

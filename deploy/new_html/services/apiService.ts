@@ -2,9 +2,23 @@
  * API服务层 - 调用后端接口
  */
 
-import { apiJson, getAuthToken, getHeaders, handleResponse } from './httpClient';
+import { apiBlob, apiJson, getAuthToken, getHeaders, handleResponse, secureApiUrl } from './httpClient';
 
 export { getAuthToken, getHeaders, handleResponse };
+
+function normalizeImageSourceUrl(imageUrl: string): string {
+    if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) return imageUrl;
+    return '/' + imageUrl;
+}
+
+function isSameOriginUrl(url: string): boolean {
+    if (url.startsWith('/')) return true;
+    try {
+        return new URL(url).origin === window.location.origin;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * 保存项目到后端
@@ -99,30 +113,29 @@ export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
         blob = await response.blob();
     } else {
         // 普通URL格式：先下载图片
-        const token = getAuthToken();
-        
-        // 🔧 确保URL以斜杠开头（修复相对路径问题）
-        let normalizedUrl = imageUrlOrDataUrl;
-        if (!imageUrlOrDataUrl.startsWith('http') && !imageUrlOrDataUrl.startsWith('/')) {
-            normalizedUrl = '/' + imageUrlOrDataUrl;
-        }
-        
-        const absolute = normalizedUrl.startsWith('http') 
-            ? normalizedUrl 
+        const normalizedUrl = normalizeImageSourceUrl(imageUrlOrDataUrl);
+        const absolute = normalizedUrl.startsWith('http')
+            ? normalizedUrl
             : `${window.location.origin}${normalizedUrl}`;
-        const secured = token ? `${absolute}${absolute.includes('?') ? '&' : '?'}token=${token}` : absolute;
         
         console.log(`🔄 下载图片: ${imageUrlOrDataUrl} -> ${absolute}`);
-        
-        const response = await fetch(secured, {
-            headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
-        });
-        
-        if (!response.ok) {
-            throw new Error(`无法下载图片: ${imageUrlOrDataUrl} (${response.status})`);
+
+        if (isSameOriginUrl(normalizedUrl)) {
+            blob = await apiBlob(
+                secureApiUrl(absolute, { requireAuth: false }),
+                { method: 'GET' },
+                'downloadImageForComfyUI',
+                { requireAuth: false, includeContentType: false },
+            );
+        } else {
+            const response = await fetch(absolute);
+
+            if (!response.ok) {
+                throw new Error(`无法下载图片: ${imageUrlOrDataUrl} (${response.status})`);
+            }
+
+            blob = await response.blob();
         }
-        
-        blob = await response.blob();
     }
     
     // 创建FormData

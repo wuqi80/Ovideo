@@ -12,6 +12,15 @@ function mockJsonResponse(data: any) {
   };
 }
 
+function mockBlobResponse(blob: Blob = new Blob(['image-bytes'], { type: 'image/png' })) {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': blob.type }),
+    blob: async () => blob,
+  };
+}
+
 beforeEach(() => {
   vi.resetModules();
   mockFetch.mockReset();
@@ -47,6 +56,42 @@ describe('createAsset', () => {
     expect(url).toBe('/api/assets');
     expect(opts.method).toBe('POST');
     expect(JSON.parse(opts.body).name).toBe('角色');
+  });
+});
+
+describe('uploadImageToComfyUI', () => {
+  it('downloads same-origin image through shared authenticated blob client', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockBlobResponse())
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, filename: 'image.png', storage_url: '/uploads/image.png' }));
+
+    const { uploadImageToComfyUI } = await import('../../services/apiService');
+    const result = await uploadImageToComfyUI('/storage/source.png');
+
+    expect(result.success).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const [downloadUrl, downloadOpts] = mockFetch.mock.calls[0];
+    expect(downloadUrl).toBe(`${window.location.origin}/storage/source.png?token=test-token`);
+    expect(downloadOpts.headers.Authorization).toBe('Bearer test-token');
+    expect(downloadOpts.headers['Content-Type']).toBeUndefined();
+
+    const [uploadUrl, uploadOpts] = mockFetch.mock.calls[1];
+    expect(uploadUrl).toBe('/api/comfyui/upload');
+    expect(uploadOpts.method).toBe('POST');
+    expect(uploadOpts.body).toBeInstanceOf(FormData);
+  });
+
+  it('does not attach local auth token to external image downloads', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockBlobResponse())
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, filename: 'image.png', storage_url: '/uploads/image.png' }));
+
+    const { uploadImageToComfyUI } = await import('../../services/apiService');
+    await uploadImageToComfyUI('https://cdn.example.test/source.png');
+
+    const [downloadUrl, downloadOpts] = mockFetch.mock.calls[0];
+    expect(downloadUrl).toBe('https://cdn.example.test/source.png');
+    expect(downloadOpts).toBeUndefined();
   });
 });
 
