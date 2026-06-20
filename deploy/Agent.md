@@ -6377,3 +6377,26 @@
 - Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6630`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Canvas Service Split
+
+### Changes
+
+- Extracted canvas board, node, and connection helpers from `new_html/services/apiService.ts` into `new_html/services/canvasService.ts`.
+- Kept `apiService.ts` as a thin compatibility re-export layer; it no longer imports `apiJson` or contains `/api/canvas/*` calls.
+- Added `canvasService.test.ts` for board/node/connection request contracts.
+- Strengthened `scripts/check_route_contract.py` so canvas endpoint ownership stays in `canvasService.ts`.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=7046`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Local Vitest was unavailable because `npm` was not on the Windows PATH.
+- Server build completed successfully after the initial live deploy command timed out while `npm run build` was still running; the build was completed manually, then `drama.service` was restarted and reported `active`.
+- Server production assets no longer include `apiService-*.js` or `canvasService-*.js`; the compatibility layer is tree-shaken for this path.
+- Server `npm run test:run -- --pool=forks --testTimeout=15000 __tests__/services/canvasService.test.ts __tests__/services/apiService.handleResponse.test.ts` passed `6/6`.
+- Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6650`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

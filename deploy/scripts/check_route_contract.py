@@ -2811,6 +2811,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     admin_compat_service = new_html / "services" / "adminCompatService.ts"
     comfyui_bridge_service = new_html / "services" / "comfyuiBridgeService.ts"
     project_workflow_service = new_html / "services" / "projectWorkflowService.ts"
+    canvas_service = new_html / "services" / "canvasService.ts"
     use_episode_data = new_html / "hooks" / "useEpisodeData.ts"
     episode_context = new_html / "contexts" / "EpisodeContext.tsx"
     audio_stage_page = new_html / "pages" / "AudioStagePage.tsx"
@@ -2850,6 +2851,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         admin_compat_service,
         comfyui_bridge_service,
         project_workflow_service,
+        canvas_service,
         global_task_manager,
     ]
     migrated_pages = [
@@ -2898,7 +2900,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "postGenerationTask('/api/generate/comfyui-workflow'"),
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
         (new_html / "services" / "geminiService.ts", "await import('./comfyuiBridgeService')"),
-        (api_service, "import { apiJson } from './httpClient';"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse } from './httpClient';"),
         (api_service, "from './taskNotificationService';"),
         (api_service, "from './episodeDataService';"),
@@ -2910,6 +2911,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (api_service, "from './adminCompatService';"),
         (api_service, "from './comfyuiBridgeService';"),
         (api_service, "from './projectWorkflowService';"),
+        (api_service, "from './canvasService';"),
         (task_notification_service, "import { apiJson } from './httpClient';"),
         (task_notification_service, "return apiJson<any>('/api/tasks/active'"),
         (task_notification_service, "return apiJson<any>(url, { method: 'GET' }, 'getTaskNotifications')"),
@@ -2998,6 +3000,14 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (project_workflow_service, "return apiJson<any>(`/api/projects/${projectId}/members/${memberUserId}`"),
         (project_workflow_service, "return apiJson<any>(`/api/projects/${projectId}/episodes`"),
         (project_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}`"),
+        (canvas_service, "import { apiJson } from './httpClient';"),
+        (canvas_service, "return apiJson<any>('/api/canvas/boards'"),
+        (canvas_service, "return apiJson<any>(`/api/canvas/boards?${qs.toString()}`"),
+        (canvas_service, "return apiJson<any>(`/api/canvas/boards/${boardId}`"),
+        (canvas_service, "return apiJson<any>('/api/canvas/nodes'"),
+        (canvas_service, "return apiJson<any>(`/api/canvas/nodes/${nodeId}`"),
+        (canvas_service, "return apiJson<any>('/api/canvas/connections'"),
+        (canvas_service, "return apiJson<any>(`/api/canvas/connections/${connectionId}`"),
         (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
         (new_html / "__tests__" / "services" / "videoWorkflowService.test.ts", "fetchSeedanceOmni caches video capability responses"),
         (new_html / "__tests__" / "services" / "assetMutationService.test.ts", "shares assets to target episode and script"),
@@ -3009,10 +3019,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "does not attach local auth token to external image downloads"),
         (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
         (new_html / "__tests__" / "services" / "projectWorkflowService.test.ts", "exports selected storyboard items to video"),
-        (api_service, "return apiJson<any>('/api/canvas/boards'"),
-        (api_service, "return apiJson<any>(`/api/canvas/boards/${boardId}`"),
-        (api_service, "return apiJson<any>('/api/canvas/nodes'"),
-        (api_service, "return apiJson<any>('/api/canvas/connections'"),
+        (new_html / "__tests__" / "services" / "canvasService.test.ts", "creates, lists, updates, and deletes canvas boards"),
         (video_page, "videoService.secureMediaUrl("),
         (video_page, "videoService.getProjectVideoTasks("),
         (video_page, "videoService.clearProjectVideoTasks("),
