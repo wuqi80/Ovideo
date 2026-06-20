@@ -3111,6 +3111,33 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     return checks
 
 
+def check_admin_api_config_ui_contract(root: Path) -> int:
+    """Admin API config UI should avoid stale or provider-only runtime status."""
+    page_path = root / "new_html" / "admin" / "AdminSettingsPage.tsx"
+    text = page_path.read_text(encoding="utf-8")
+    required_snippets = [
+        "function healthStatusFromResult",
+        "const status = healthStatusFromResult(result)",
+        "function runtimeStatusKey",
+        "const runtimeByKey = useMemo",
+        "const runtimeForConfig = useCallback",
+        "runtime={runtimeForConfig(config)}",
+    ]
+    forbidden_snippets = [
+        "const status = healthStatusFrom(result, runtimeMap.get(provider))",
+    ]
+    checks = 0
+    for snippet in required_snippets:
+        if snippet not in text:
+            fail(f"Missing admin API config UI contract snippet in {page_path.relative_to(root)}: {snippet}")
+        checks += 1
+    for snippet in forbidden_snippets:
+        if snippet in text:
+            fail(f"Forbidden provider-only admin API runtime snippet in {page_path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def format_duplicates(
     duplicates: Iterable[tuple[str, str]],
     routes: dict[tuple[str, str], list[tuple[int, str | None, str | None]]],
@@ -3155,6 +3182,7 @@ def main() -> int:
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
+    admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
     auth_route_handlers = check_auth_routes_extracted(root)
@@ -3211,6 +3239,7 @@ def main() -> int:
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
+    print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")
     print(f"  auth_route_handlers={auth_route_handlers}")

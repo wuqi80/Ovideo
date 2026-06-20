@@ -5255,3 +5255,21 @@
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
   - `live_deploy_frontend_checks=8`
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+
+## 2026-06-20 Admin API Runtime Status Model Matching
+
+### Changes
+
+- Updated `AdminSettingsPage.tsx` so individual API config cards resolve runtime diagnostics by `provider + model_name` first, then fall back to provider-level status.
+- Kept quick provider cards on provider-level status because those cards are summary/configure entry points.
+- Added `admin_api_config_ui_checks` to `scripts/check_route_contract.py` to guard the fresh health result path and model-aware runtime mapping.
+
+### Verification
+
+- Provider/API contracts passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_provider_contract.py`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `admin_api_config_ui_checks=7`
+- Local smoke passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+- Deployed to `https://mecha.one`; remote Vite build completed, `drama.service` stayed `active`, and remote smoke passed `9/9`.

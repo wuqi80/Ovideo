@@ -293,6 +293,12 @@ function normalizeProvider(provider: string | undefined | null): string {
     return String(provider || '').trim().toLowerCase();
 }
 
+function runtimeStatusKey(provider: string | undefined | null, modelName?: string | null): string {
+    const providerKey = normalizeProvider(provider);
+    const modelKey = String(modelName || '').trim().toLowerCase();
+    return `${providerKey}::${modelKey}`;
+}
+
 function formatEndpoint(endpoint?: string): string {
     if (!endpoint) return '-';
     return endpoint.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -1297,6 +1303,24 @@ const ApiConfigPanel: React.FC = () => {
         return out;
     }, [runtimeStatus]);
 
+    const runtimeByKey = useMemo(() => {
+        const out = new Map<string, RuntimeStatus>();
+        runtimeStatus.forEach(item => {
+            const provider = normalizeProvider(item.provider);
+            if (!provider) return;
+            const key = runtimeStatusKey(provider, item.model_name || item.runtime_model_name);
+            if (!out.has(key)) out.set(key, item);
+        });
+        return out;
+    }, [runtimeStatus]);
+
+    const runtimeForConfig = useCallback((config: ApiConfig): RuntimeStatus | undefined => {
+        const provider = normalizeProvider(config.provider);
+        if (!provider) return undefined;
+        const modelName = config.model_name || '';
+        return runtimeByKey.get(runtimeStatusKey(provider, modelName)) || runtimeMap.get(provider);
+    }, [runtimeByKey, runtimeMap]);
+
     const grouped = useMemo(() => {
         const out: Record<string, ApiConfig[]> = {};
         configs.forEach(config => {
@@ -1891,7 +1915,7 @@ const ApiConfigPanel: React.FC = () => {
                                                     key={config.config_id}
                                                     config={config}
                                                     meta={providerMetaMap.get(provider)}
-                                                    runtime={runtimeMap.get(provider)}
+                                                    runtime={runtimeForConfig(config)}
                                                     health={healthMap[provider]}
                                                     configTest={configTestMap[config.config_id]}
                                                     checking={Boolean(checking[provider])}
