@@ -4665,6 +4665,28 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend Admin Hub HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/admin/AdminHubPage.tsx` KPI preview calls from page-local `fetch()` and manual token headers to shared `apiJson()`.
+- Migrated `new_html/components/AdminPage.tsx` cluster-node loading from page-local `fetch()` and manual Authorization headers to shared `apiJson()`.
+- Extended `scripts/check_route_contract.py` so both admin entry pages cannot reintroduce page-local `fetch()` / Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Local targeted TypeScript check is still blocked by pre-existing admin table `never` type errors in `AdminFeatureTabs.tsx` / `AdminOrganizationsTab.tsx`.
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_admin_hub_httpclient_20260620125804.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend History/Header HTTP Client Migration
 
 ### Changes

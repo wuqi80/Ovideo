@@ -14,6 +14,7 @@ import {
     Cpu, Settings as SettingsIcon, Users, FolderTree, Activity,
     ExternalLink, ChevronRight, ScrollText, Image as ImageIcon, ShieldCheck,
 } from 'lucide-react';
+import { apiJson } from '../services/httpClient';
 
 interface KPI {
     users: number;
@@ -80,17 +81,14 @@ export const AdminHubPage: React.FC = () => {
         let alive = true;
         (async () => {
             try {
-                const headers: HeadersInit = { 'Content-Type': 'application/json' };
-                const token = sessionStorage.getItem('admin_session_token') || localStorage.getItem('auth_token');
-                if (token) (headers as any).Authorization = `Bearer ${token}`;
                 // 这些接口都不强求成功，仪表盘只是预览，404/500 静默退化为 0
-                const safeFetch = async (url: string) => {
-                    try { const r = await fetch(url, { headers }); if (!r.ok) return null; return await r.json(); }
+                const safeJson = async (url: string) => {
+                    try { return await apiJson<any>(url, { method: 'GET' }, 'Admin Hub KPI'); }
                     catch { return null; }
                 };
                 const [statsRes, usersRes] = await Promise.all([
-                    safeFetch('/api/admin/stats'),
-                    safeFetch('/api/admin/users?limit=1'),
+                    safeJson('/api/admin/stats'),
+                    safeJson('/api/admin/users?limit=1'),
                 ]);
                 if (!alive) return;
                 setKpi({

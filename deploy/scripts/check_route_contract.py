@@ -2580,6 +2580,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
     header = new_html / "components" / "Header.tsx"
     admin_feature_tabs = new_html / "components" / "AdminFeatureTabs.tsx"
     admin_organizations_tab = new_html / "admin" / "AdminOrganizationsTab.tsx"
+    admin_hub_page = new_html / "admin" / "AdminHubPage.tsx"
+    admin_page = new_html / "components" / "AdminPage.tsx"
     migrated_services = [
         new_html / "services" / "videoService.ts",
         new_html / "services" / "videoReverseService.ts",
@@ -2596,6 +2598,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         header,
         admin_feature_tabs,
         admin_organizations_tab,
+        admin_hub_page,
+        admin_page,
     ]
 
     required_snippets = [
@@ -2625,6 +2629,11 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (admin_feature_tabs, "apiJson<T>(url, { method: 'GET' }, 'Admin API')"),
         (admin_organizations_tab, "import { apiJson } from '../services/httpClient'"),
         (admin_organizations_tab, "apiJson<{ users: any[] }>('/api/admin/users?limit=500'"),
+        (admin_hub_page, "import { apiJson } from '../services/httpClient'"),
+        (admin_hub_page, "apiJson<any>(url, { method: 'GET' }, 'Admin Hub KPI')"),
+        (admin_page, "import { apiJson } from '../services/httpClient'"),
+        (admin_page, "const data = (await apiJson("),
+        (admin_page, ")) as ClusterNodesResponse;"),
     ]
     forbidden_snippets = [
         "function getHeaders",

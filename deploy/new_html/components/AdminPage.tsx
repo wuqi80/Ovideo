@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { getUsers, getSystemStats, getGenerationLogs, updateUserPermissions, createUser, deleteUser } from '../services/apiService';
+import { apiJson } from '../services/httpClient';
 import { AdminFeatureTabs } from './AdminFeatureTabs';
 
 interface AdminPageProps {
@@ -22,6 +23,11 @@ interface AdminPageProps {
     // refactor/v2：统一后台壳通过 embedTab 直接驱动当前面板（菜单点哪个就显示哪个），
     // 同时隐藏 AdminPage 自带的侧栏与页头——避免「后台里又套一个后台」的割裂感。
     embedTab?: 'users' | 'stats' | 'results' | 'system' | 'features';
+}
+
+interface ClusterNodesResponse {
+    success?: boolean;
+    nodes?: Record<string, any>;
 }
 
 // 可用模型列表（按类型分组）
@@ -298,13 +304,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
     // 从后端加载集群节点
     const loadClusterNodes = async () => {
         try {
-            const response = await fetch('/api/cluster/nodes', {
-                headers: {
-                    // 2026-05-26：admin 路由独立 session token
-                    'Authorization': `Bearer ${(typeof window !== 'undefined' && window.location.pathname.startsWith('/admin') && sessionStorage.getItem('admin_session_token')) || localStorage.getItem('auth_token')}`
-                }
-            });
-            const data = await response.json();
+            const data = (await apiJson(
+                '/api/cluster/nodes',
+                { method: 'GET' },
+                'Cluster Nodes',
+            )) as ClusterNodesResponse;
             
             if (data.success && data.nodes) {
                 const nodesList: ServerNode[] = Object.entries(data.nodes).map(([nodeId, nodeData]: [string, any]) => ({
