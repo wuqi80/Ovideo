@@ -2578,6 +2578,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     episode_hub = new_html / "pages" / "EpisodeHubPage.tsx"
     history_page = new_html / "components" / "HistoryPage.tsx"
     header = new_html / "components" / "Header.tsx"
+    project_context = new_html / "contexts" / "ProjectContext.tsx"
     admin_feature_tabs = new_html / "components" / "AdminFeatureTabs.tsx"
     admin_organizations_tab = new_html / "admin" / "AdminOrganizationsTab.tsx"
     admin_hub_page = new_html / "admin" / "AdminHubPage.tsx"
@@ -2597,6 +2598,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         episode_hub,
         history_page,
         header,
+        project_context,
         admin_feature_tabs,
         admin_organizations_tab,
         admin_hub_page,
@@ -2627,6 +2629,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (history_page, "secureApiUrl(file.fileUrl, { absolute: true })"),
         (header, "import { apiFetch } from '../services/httpClient'"),
         (header, "apiFetch('/api/logout'"),
+        (project_context, "import { apiJson } from '../services/httpClient'"),
+        (project_context, "apiJson<any>(`/api/projects/${projectId}`"),
         (admin_feature_tabs, "import { apiJson } from '../services/httpClient'"),
         (admin_feature_tabs, "apiJson<T>(url, { method: 'GET' }, 'Admin API')"),
         (admin_organizations_tab, "import { apiJson } from '../services/httpClient'"),

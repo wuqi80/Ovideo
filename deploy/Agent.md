@@ -4665,6 +4665,27 @@
   - `drama.service` -> `active`
   - `GET https://mecha.one/health` -> HTTP `200`
 
+## 2026-06-20 Frontend Project Context HTTP Client Migration
+
+### Changes
+
+- Migrated `new_html/contexts/ProjectContext.tsx` project-detail loading from page-local `fetch()` / `getHeaders()` to shared `apiJson()`.
+- Preserved explicit 403/404 project-access messages via the shared httpClient error status.
+- Extended `scripts/check_route_contract.py` so `ProjectContext.tsx` cannot reintroduce page-local `fetch()` or duplicated Authorization handling.
+
+### Verification
+
+- Local checks passed:
+  - `deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `python deploy/scripts/smoke_test.py` -> `9/9`
+- Server checks passed:
+  - backup: `/home/Administrator/deploy_backups/frontend_project_context_httpclient_20260620131808.tgz`
+  - `cd /home/Administrator/deploy/new_html && npm run build`
+  - `.venv/bin/python scripts/check_route_contract.py`
+  - `/tmp/smoke_test.py https://mecha.one <admin-password>` -> `9/9`
+  - `drama.service` -> `active`
+  - `GET https://mecha.one/health` -> HTTP `200`
+
 ## 2026-06-20 Frontend Admin Settings HTTP Client Migration
 
 ### Changes

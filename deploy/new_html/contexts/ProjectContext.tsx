@@ -5,9 +5,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import type { ProjectInfo, ProjectMember, ProjectRole } from '../types';
-import { getHeaders } from '../services/apiService';
-
-const API_BASE = '';
+import { apiJson } from '../services/httpClient';
 
 interface ProjectContextValue {
     projectId: string;
@@ -46,15 +44,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch(`${API_BASE}/api/projects/${projectId}`, {
-                headers: getHeaders()
-            });
-            if (!res.ok) {
-                if (res.status === 403) throw new Error('无权访问此项目');
-                if (res.status === 404) throw new Error('项目不存在');
-                throw new Error(`加载项目失败 (${res.status})`);
-            }
-            const data = await res.json();
+            const data = await apiJson<any>(`/api/projects/${projectId}`, { method: 'GET' }, '加载项目');
             if (data.success) {
                 const p = data.project;
                 const tags = typeof p.tags === 'string' ? JSON.parse(p.tags) : (p.tags || []);
@@ -90,7 +80,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 }
             }
         } catch (e: any) {
-            setError(e.message);
+            if (e?.status === 403) {
+                setError('无权访问此项目');
+            } else if (e?.status === 404) {
+                setError('项目不存在');
+            } else {
+                setError(e.message);
+            }
         } finally {
             setLoading(false);
         }
