@@ -61,13 +61,7 @@ def create_entity_files_router(
                 except Exception:
                     item["metadata"] = {}
             items.append(item)
-        count_query = "SELECT COUNT(*) FROM files WHERE user_id = $1 AND is_deleted = FALSE"
-        args = [user_id]
-        if file_type:
-            count_query += " AND file_type = $2"
-            args.append(file_type)
-        db = get_db_manager_func()
-        total = await db.fetchval(count_query, *args) or 0
+        total = await EntityFileDAO.count_user_files(user_id, file_type)
         return {"success": True, "items": items, "total": total}
 
     @router.get("/api/entity-files")

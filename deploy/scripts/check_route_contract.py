@@ -2973,16 +2973,28 @@ def check_service_mapper_purity_contract(root: Path) -> int:
 
     required_snippets = [
         (root / "dao" / "content" / "entity_file.py", "async def sync_legacy_url("),
+        (root / "dao" / "content" / "entity_file.py", "async def count_user_files("),
         (root / "dao" / "business" / "credit.py", "class CreditLedgerDAO:"),
         (root / "dao" / "business" / "credit.py", "async def freeze_credits("),
         (root / "dao" / "business" / "credit.py", "async def confirm_task_freeze("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
+        (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
         (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
     ]
     for path, snippet in required_snippets:
         if snippet not in path.read_text(encoding="utf-8"):
             violations.append(f"Missing mapper purity snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+
+    entity_files_router_text = (root / "routers" / "entity_files.py").read_text(encoding="utf-8")
+    for snippet in [
+        "SELECT COUNT(*) FROM files WHERE user_id",
+        "fetchval(count_query",
+        "count_query =",
+    ]:
+        if snippet in entity_files_router_text:
+            violations.append(f"routers/entity_files.py must delegate user file counts to EntityFileDAO: {snippet}")
         checks += 1
 
     if violations:

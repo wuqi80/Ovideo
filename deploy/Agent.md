@@ -5134,3 +5134,19 @@
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
   - `rg -n "API_BASE" deploy/new_html --glob "*.ts" --glob "*.tsx"` -> no production frontend matches
 - `tsc --noEmit` still fails on existing baseline fixture/component type errors; this cleanup did not add new `videoService.ts` type errors in the latest run.
+
+## 2026-06-20 Entity Files Router Mapper Cleanup
+
+### Changes
+
+- Moved the `/api/user-files` total-count SQL out of `routers/entity_files.py` into `EntityFileDAO.count_user_files()`.
+- Kept the router behavior unchanged: rows still come from `FileDAO.get_user_files()`, and total count now comes from the DAO semantic method.
+- Extended `scripts/check_route_contract.py` so `routers/entity_files.py` cannot reintroduce the old `count_query` / direct `fetchval` path.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `service_mapper_purity_checks=443`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+  - `deploy/.venv/Scripts/python.exe -m py_compile deploy/routers/entity_files.py deploy/dao/content/entity_file.py deploy/scripts/check_route_contract.py`

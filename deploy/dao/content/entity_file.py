@@ -8,6 +8,24 @@ from db_manager import get_db_manager
 
 class EntityFileDAO:
     @staticmethod
+    async def count_user_files(user_id: str, file_type: Optional[str] = None) -> int:
+        db = get_db_manager()
+        if not db:
+            return 0
+
+        conditions = ["user_id = $1", "is_deleted = FALSE"]
+        params: list[Any] = [user_id]
+        if file_type:
+            conditions.append("file_type = $2")
+            params.append(file_type)
+
+        total = await db.fetchval(
+            f"SELECT COUNT(*) FROM files WHERE {' AND '.join(conditions)}",
+            *params,
+        )
+        return int(total or 0)
+
+    @staticmethod
     async def get_entity_files(
         entity_type: str,
         entity_id: str,
