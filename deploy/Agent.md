@@ -1,5 +1,32 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Admin Stats Summary DAO Move
+
+### Changes
+
+- Moved `/api/admin/stats` summary aggregation out of `routers/admin_compat.py` and into `dao/admin/admin_stats.py`.
+- Added `AdminStatsDAO.get_summary_stats()` to own project totals, legacy storyboard JSON counts, modern table counts, video-generation counts, and storage estimate calculation.
+- Kept `routers/admin_compat.py` focused on admin auth, `group_by` validation, DAO calls, and response shaping.
+- Strengthened `scripts/check_route_contract.py` so admin stats summary SQL cannot be reintroduced into `routers/admin_compat.py`.
+
+### Verification
+
+- `py_compile`: passed for `dao/admin/admin_stats.py`, `routers/admin_compat.py`, and `scripts/check_route_contract.py`.
+- `scripts/check_route_contract.py`: passed locally.
+- `scripts/check_architecture_contracts.py`: 9/9 passed locally.
+- `scripts/smoke_test.py`: 9/9 passed locally.
+- Server deploy completed; `drama.service` stayed active and Vite build artifacts refreshed.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Server probes for `/api/admin/stats`, `/api/admin/stats?group_by=user`, and `/api/admin/stats?group_by=org`: all returned 200 with `source=backend`.
+- Recent `drama.service` logs showed no admin stats errors after deployment.
+
+### Follow-up
+
+- `/api/admin/logs` in `routers/admin_compat.py` still contains legacy direct SQL and should be the next admin compatibility mapper-purity target.
+- User reported seeing storyboard data disappear yesterday; keep that as a separate restore/verification task after this DAO cleanup lands.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Frontend Direct Fetch Consolidation
 
 ### Changes
