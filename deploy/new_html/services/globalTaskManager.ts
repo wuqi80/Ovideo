@@ -4,6 +4,7 @@
  */
 import type { GlobalTask, TaskNotification } from '../types';
 import { getActiveTasks, getTaskNotifications } from './apiService';
+import { authTokenFromHeaders } from './httpClient';
 
 export type TaskEventType = 'tasks_updated' | 'notification' | 'progress';
 export type TaskEventCallback = (
@@ -48,14 +49,14 @@ export class GlobalTaskManager {
     }
 
     private trySSE() {
-        const token = localStorage.getItem('auth_token');
+        const token = authTokenFromHeaders({ requireAuth: false });
         if (!token) {
             this.startPollingFallback();
             return;
         }
 
         try {
-            this.eventSource = new EventSource(`/api/tasks/stream?token=${token}`);
+            this.eventSource = new EventSource(`/api/tasks/stream?token=${encodeURIComponent(token)}`);
 
             this.eventSource.onopen = () => {
                 console.log('[TaskManager] SSE 已连接');

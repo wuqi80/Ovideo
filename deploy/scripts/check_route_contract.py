@@ -2581,6 +2581,11 @@ def check_frontend_http_client_contract(root: Path) -> int:
     history_page = new_html / "components" / "HistoryPage.tsx"
     header = new_html / "components" / "Header.tsx"
     project_context = new_html / "contexts" / "ProjectContext.tsx"
+    workspace_app = new_html / "WorkspaceApp.tsx"
+    workflow_generation_page = new_html / "pages" / "GenerationPage.tsx"
+    video_gen_page = new_html / "pages" / "VideoGenPage.tsx"
+    dash_scope_cards = new_html / "components" / "video" / "DashScopeCards.tsx"
+    global_task_manager = new_html / "services" / "globalTaskManager.ts"
     admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
     design_page = new_html / "pages" / "DesignPage.tsx"
     material_page = new_html / "components" / "MaterialPage.tsx"
@@ -2600,10 +2605,13 @@ def check_frontend_http_client_contract(root: Path) -> int:
         new_html / "services" / "mediaLibraryService.ts",
         new_html / "services" / "creditService.ts",
         new_html / "services" / "organizationService.ts",
+        global_task_manager,
     ]
     migrated_pages = [
         project_hub,
         episode_hub,
+        workflow_generation_page,
+        video_gen_page,
         history_page,
         header,
         project_context,
@@ -2619,9 +2627,11 @@ def check_frontend_http_client_contract(root: Path) -> int:
     ]
 
     required_snippets = [
+        (http_client, "import { pickTokenForCurrentRoute } from '../admin/adminAuth';"),
         (http_client, "export function buildAuthHeaders("),
         (http_client, "export async function handleResponse("),
         (http_client, "export function getAuthToken("),
+        (http_client, "return pickTokenForCurrentRoute();"),
         (http_client, "export function getHeaders("),
         (http_client, "includeContentType?: boolean"),
         (http_client, "export function authTokenFromHeaders("),
@@ -2718,6 +2728,16 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (header, "apiFetch('/api/logout'"),
         (project_context, "import { apiJson } from '../services/httpClient'"),
         (project_context, "apiJson<any>(`/api/projects/${projectId}`"),
+        (workspace_app, "import { getAuthToken } from './services/httpClient'"),
+        (workspace_app, "const token = getAuthToken();"),
+        (workflow_generation_page, "import { secureApiUrl } from '../services/httpClient'"),
+        (workflow_generation_page, "return secureApiUrl(url, { requireAuth: false });"),
+        (video_gen_page, "import { secureApiUrl } from '../services/httpClient'"),
+        (video_gen_page, "return secureApiUrl(url, { absolute: true, requireAuth: false });"),
+        (dash_scope_cards, "import { secureApiUrl } from '../../services/httpClient'"),
+        (dash_scope_cards, "secureApiUrl(firstRefUrl, { absolute: true, requireAuth: false })"),
+        (global_task_manager, "import { authTokenFromHeaders } from './httpClient'"),
+        (global_task_manager, "authTokenFromHeaders({ requireAuth: false })"),
         (admin_login_page, "import { apiJson } from '../services/httpClient'"),
         (admin_login_page, "apiJson<any>('/api/login'"),
         (admin_login_page, "{ requireAuth: false }"),
@@ -2792,6 +2812,23 @@ def check_frontend_http_client_contract(root: Path) -> int:
         if snippet in api_service_text:
             fail(f"apiService must not own API-base fetch/auth plumbing: {snippet}")
         checks += 1
+
+    direct_auth_token_allowed = {
+        new_html / "admin" / "adminAuth.ts",
+    }
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"} or "__tests__" in path.parts:
+            continue
+        if path in direct_auth_token_allowed:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for snippet in [
+            "localStorage.getItem('auth_token')",
+            'localStorage.getItem("auth_token")',
+        ]:
+            if snippet in text:
+                fail(f"Frontend auth token reads must go through httpClient/adminAuth: {path.relative_to(root)}")
+            checks += 1
 
     for snippet in [
         "fetch(`${API_BASE}/api/tasks/active`",

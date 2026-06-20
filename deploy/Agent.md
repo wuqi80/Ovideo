@@ -5094,3 +5094,26 @@
   - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
 - Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
 - `tsc --noEmit` still fails on existing baseline fixture/component type errors, with the temporary `apiService.ts` `downloadedBlob` regression fixed and no remaining `apiService` type errors in the latest run.
+
+## 2026-06-20 Frontend Auth Token Read Consolidation
+
+### Changes
+
+- Consolidated remaining direct frontend `auth_token` reads through shared auth helpers:
+  - `services/httpClient.ts` now delegates `getAuthToken()` to `admin/adminAuth.ts`'s route-aware token picker.
+  - `WorkspaceApp.tsx` uses `getAuthToken()` for login-state checks before saving episode scripts.
+  - `services/globalTaskManager.ts` uses `authTokenFromHeaders()` for SSE token setup.
+  - `pages/GenerationPage.tsx`, `pages/VideoGenPage.tsx`, and `components/video/DashScopeCards.tsx` use `secureApiUrl()` for authenticated media URLs.
+- Extended `scripts/check_route_contract.py` with a global frontend guard:
+  - `localStorage.getItem('auth_token')` is only allowed in `admin/adminAuth.ts` (tests excluded).
+  - newly migrated pages/services are covered by required `httpClient` snippets.
+
+### Verification
+
+- Local checks passed:
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/check_route_contract.py`
+  - `frontend_http_client_checks=6639`
+  - `PYTHONIOENCODING=utf-8 deploy/.venv/Scripts/python.exe deploy/scripts/smoke_test.py` -> `9/9`
+- Direct `auth_token` reads in production frontend code now resolve to `admin/adminAuth.ts` only.
+- Local frontend build remains blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
+- `tsc --noEmit` still fails on existing baseline fixture/component type errors; no new changed-file auth helper type errors appeared in the latest run.

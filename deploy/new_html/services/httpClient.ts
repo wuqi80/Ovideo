@@ -1,3 +1,5 @@
+import { pickTokenForCurrentRoute } from '../admin/adminAuth';
+
 type HeaderMap = Record<string, string>;
 
 interface HeaderOptions {
@@ -95,14 +97,7 @@ export async function handleResponse(response: Response, apiName: string = 'API'
  * Admin 路由下优先使用独立的 sessionStorage admin token，避免后台登录态和主站登录态互相污染。
  */
 export function getAuthToken(): string | null {
-  if (typeof window !== 'undefined') {
-    try {
-      if (window.location.pathname.startsWith('/admin')) {
-        return sessionStorage.getItem('admin_session_token');
-      }
-    } catch {}
-  }
-  return localStorage.getItem('auth_token');
+  return pickTokenForCurrentRoute();
 }
 
 export function getHeaders(): HeadersInit {

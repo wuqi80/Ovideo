@@ -28,6 +28,7 @@ import type {
     ViduSubModel, DashScopeResolution, DashScopeAspectRatio, HappyHorseRatio,
     ViduResolution, HhResolution, HhRatio,
 } from '../../services/videoService';
+import { secureApiUrl } from '../../services/httpClient';
 
 // ─── 主题色板（对应修真境界视觉气质） ─────────────────────────────────────────
 
@@ -908,12 +909,9 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
     const firstRefUrl = refs[0]?.url || '';
     useEffect(() => {
         if (userSetRatioRef.current || !firstRefUrl) return;
-        let src = firstRefUrl;
-        const token = (typeof localStorage !== 'undefined' && localStorage.getItem('auth_token')) || '';
-        if (token && !src.startsWith('data:') && !src.startsWith('blob:') && !src.includes('token=')) {
-            const abs = src.startsWith('http') ? src : `${window.location.origin}${src.startsWith('/') ? '' : '/'}${src}`;
-            src = `${abs}${abs.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
-        }
+        const src = firstRefUrl.startsWith('data:') || firstRefUrl.startsWith('blob:')
+            ? firstRefUrl
+            : secureApiUrl(firstRefUrl, { absolute: true, requireAuth: false });
         const im = new Image();
         im.onload = () => {
             if (userSetRatioRef.current) return;

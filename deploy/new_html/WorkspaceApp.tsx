@@ -23,6 +23,7 @@ import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { estimateDurationMs } from './utils/durationMapping';
 import { extractToAssets, batchCreateStoryboardItems, deleteAllStoryboardItems, exportScript, getEpisodeScript, updateEpisodeScript, getStoryboardItems, listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, updateStoryboardItem, deleteStoryboardItem, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/apiService';
+import { getAuthToken } from './services/httpClient';
 
 /**
  * ✅ localStorage使用说明：
@@ -328,7 +329,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
     // 🔧 通过 filesRef 读取最新文件，避免闭包内 files 过期（链式 pipeline 同一异步内 Stage3 保存丢失刚生成的 items）
     const currentFiles = filesRef.current;
     if (!propEpisodeId || currentFiles.length === 0 || isLoadingProjects) return;
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     if (!token) return;
 
     try {

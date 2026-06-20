@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Play, Pause, Video, Image as ImageIcon, Clock, Film, Plus, Loader, RefreshCw } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { createVideoSegment, getStoryboardItems, getVideoSegments } from '../services/apiService';
+import { secureApiUrl } from '../services/httpClient';
 import type { AudioTrack, StoryboardItemDB, VideoSegment } from '../types';
 import { MediaImage } from '../components/MediaImage';
 
@@ -13,10 +14,7 @@ type SegmentUiStatus = 'pending' | 'generating' | 'completed' | 'error';
 function withAuthParam(url: string): string {
   if (!url) return url;
   if (url.startsWith('blob:') || url.startsWith('data:')) return url;
-  const token = localStorage.getItem('auth_token');
-  if (!token) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${encodeURIComponent(token)}`;
+  return secureApiUrl(url, { requireAuth: false });
 }
 
 function sbId(item: StoryboardItemDB & Record<string, unknown>): string {

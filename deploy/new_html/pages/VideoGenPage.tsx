@@ -6,20 +6,14 @@ import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 
 import * as videoService from '../services/videoService';
 import { estimateDurationMs } from '../utils/durationMapping';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/apiService';
+import { secureApiUrl } from '../services/httpClient';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 
 function secureMediaUrl(url: string | null): string | null {
   if (!url) return null;
-  const token = localStorage.getItem('auth_token');
-  if (!token || url.startsWith('data:') || url.startsWith('blob:')) return url;
-  let absolute = url;
-  if (!url.startsWith('http')) {
-    const path = url.startsWith('/') ? url : `/${url}`;
-    absolute = `${window.location.origin}${path}`;
-  }
-  if (absolute.includes('token=')) return absolute;
-  return `${absolute}${absolute.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  return secureApiUrl(url, { absolute: true, requireAuth: false });
 }
 
 export const VideoGenPage: React.FC = () => {
