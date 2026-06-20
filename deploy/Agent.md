@@ -1,5 +1,22 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-20 Storyboard Recovery Probe
+
+### Changes
+
+- Added `scripts/check_storyboard_recovery.py`, a read-only incident probe for "storyboard disappeared" reports.
+- The probe logs in, verifies optional project detail access, lists episode scripts, checks episode-level storyboard count, checks each script's storyboard count, and verifies stale script-id fallback returns episode storyboard rows.
+- The script is parameterized by `--base-url`, `--username`, `--password`, `--project-id`, and `--episode-id`; it does not hardcode credentials or write data.
+
+### Verification
+
+- Local `py_compile` for `scripts/check_storyboard_recovery.py`: passed.
+- Production probe against `https://mecha.one`, project `proj_05d34fc535e2`, episode `ep_2fc899a228f5`: passed.
+- Server copy at `/home/Administrator/deploy/scripts/check_storyboard_recovery.py`: ran successfully against `https://mecha.one`.
+- Probe result: `script_count=1`, episode storyboard `items=10`, `total=152`; current script `script_a7314932ac1b` has `total=152`; stale script fallback returned `items=5`, `total=152`, `fallback_reason=stale_script_storyboard`.
+- Conclusion: the reported missing storyboard is not data loss for this target episode; data and fallback are present server-side.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Storyboard/Video Bounded Loading Follow-up
 
 ### Changes
