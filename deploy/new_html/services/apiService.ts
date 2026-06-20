@@ -49,6 +49,18 @@ export {
     minimaxFileRetrieve,
     minimaxFileDelete,
 } from './audioGenerationService';
+export {
+    createVideoSegment,
+    updateVideoSegment,
+    fetchSeedanceOmni,
+    fetchComfyuiAvailable,
+    getVideoTakes,
+    startCompose,
+    getComposeStatus,
+    type ComposeStatus,
+    type VideoTake,
+    type VideoShot,
+} from './videoWorkflowService';
 
 function normalizeImageSourceUrl(imageUrl: string): string {
     if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) return imageUrl;
@@ -462,94 +474,6 @@ export async function reorderStoryboardItems(episodeId: string, itemIds: string[
         method: 'POST',
         body: JSON.stringify({ item_ids: itemIds })
     }, 'reorderStoryboardItems');
-}
-
-// ===== Video Segment APIs =====
-
-export async function createVideoSegment(episodeId: string, data: any) {
-    return apiJson<any>(`/api/episodes/${episodeId}/video-segments`, {
-        method: 'POST',
-        body: JSON.stringify(data)
-    }, 'createVideoSegment');
-}
-
-export async function updateVideoSegment(segmentId: string, data: any) {
-    return apiJson<any>(`/api/video-segments/${segmentId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }, 'updateVideoSegment');
-}
-
-// ===== Video Capabilities =====
-
-// 模块级缓存：所有卡片共享一次查询，避免每个 SeedanceCard 各发一次。
-let _seedanceOmniCache: boolean | null = null;
-let _seedanceOmniPromise: Promise<boolean> | null = null;
-
-/** Seedance「全能参考」是否可用（后端按实际型号判断：仅 2.0 支持，1.0 Pro 不支持）。 */
-export function fetchSeedanceOmni(): Promise<boolean> {
-    if (_seedanceOmniCache !== null) return Promise.resolve(_seedanceOmniCache);
-    if (!_seedanceOmniPromise) {
-        _seedanceOmniPromise = apiJson<any>('/api/video/capabilities', { method: 'GET' }, 'fetchSeedanceOmni')
-            .then(j => { _seedanceOmniCache = !!j.seedance_omni; return _seedanceOmniCache; })
-            .catch(() => { _seedanceOmniCache = false; return false; });
-    }
-    return _seedanceOmniPromise;
-}
-
-// ComfyUI agent 是否在线（GPU 节点类任务如 upscale 放大需要它；无则前端禁用相关按钮）。
-let _comfyAvailCache: boolean | null = null;
-let _comfyAvailPromise: Promise<boolean> | null = null;
-export function fetchComfyuiAvailable(): Promise<boolean> {
-    if (_comfyAvailCache !== null) return Promise.resolve(_comfyAvailCache);
-    if (!_comfyAvailPromise) {
-        _comfyAvailPromise = apiJson<any>('/api/video/capabilities', { method: 'GET' }, 'fetchComfyuiAvailable')
-            .then(j => { _comfyAvailCache = !!j.comfyui_available; return _comfyAvailCache; })
-            .catch(() => { _comfyAvailCache = false; return false; });
-    }
-    return _comfyAvailPromise;
-}
-
-// ===== 一键合成成片 =====
-// 后台把本集视频段+配音拼成完整 mp4 存入成品页；耗时较长，前端轮询 status。
-export interface ComposeStatus {
-    success?: boolean;
-    status: 'idle' | 'running' | 'done' | 'failed';
-    total: number;
-    done: number;
-    url?: string | null;
-    duration?: number;
-    error?: string | null;
-}
-
-export interface VideoTake {
-    segment_id: string;
-    video_url: string;
-    thumbnail_url?: string | null;
-    created_at?: string | null;
-}
-export interface VideoShot {
-    item_id: string;
-    sort_order: number;
-    scene?: string;
-    dialogue?: string;
-    takes: VideoTake[];
-}
-
-export async function getVideoTakes(episodeId: string): Promise<{ success: boolean; shots: VideoShot[] }> {
-    return apiJson<any>(`/api/episodes/${episodeId}/video-takes`, { method: 'GET' }, 'getVideoTakes');
-}
-
-// selections: { [item_id]: segment_id } 指定每镜用哪条 take；不传则后端用最新。
-export async function startCompose(episodeId: string, selections?: Record<string, string>): Promise<ComposeStatus> {
-    return apiJson<any>(`/api/episodes/${episodeId}/compose`, {
-        method: 'POST',
-        body: JSON.stringify(selections ? { selections } : {}),
-    }, 'startCompose');
-}
-
-export async function getComposeStatus(episodeId: string): Promise<ComposeStatus> {
-    return apiJson<any>(`/api/episodes/${episodeId}/compose/status`, { method: 'GET' }, 'getComposeStatus');
 }
 
 // ===== Episode Script APIs =====

@@ -5,7 +5,7 @@ import {
     SeedanceMediaInput, SeedanceMediaRole, SeedanceParams,
     uploadImage, uploadAudio, uploadVideoFile,
 } from '../services/videoService';
-import { fetchSeedanceOmni } from '../services/apiService';
+import { fetchSeedanceOmni } from '../services/videoWorkflowService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { SeedanceMentionPromptEditor } from './SeedanceMentionPromptEditor';
 import { SeedanceAssetPickerModal } from './SeedanceAssetPickerModal';

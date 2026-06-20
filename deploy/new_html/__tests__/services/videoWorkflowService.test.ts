@@ -1,0 +1,106 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mockFetch = vi.fn();
+vi.stubGlobal('fetch', mockFetch);
+
+function mockJsonResponse(data: any) {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => data,
+  };
+}
+
+async function loadService() {
+  return import('../../services/videoWorkflowService');
+}
+
+beforeEach(() => {
+  vi.resetModules();
+  mockFetch.mockReset();
+  localStorage.setItem('auth_token', 'test-token');
+});
+
+describe('video workflow service', () => {
+  it('creates video segments through the episode endpoint', async () => {
+    const { createVideoSegment } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, segment_id: 'seg_1' }));
+
+    await createVideoSegment('ep_1', { storyboard_item_id: 'sb_1', video_url: '/v.mp4' });
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/video-segments');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers.Authorization).toBe('Bearer test-token');
+    expect(JSON.parse(opts.body).storyboard_item_id).toBe('sb_1');
+  });
+
+  it('updates video segments by segment id', async () => {
+    const { updateVideoSegment } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true }));
+
+    await updateVideoSegment('seg_1', { status: 'completed' });
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/video-segments/seg_1');
+    expect(opts.method).toBe('PUT');
+    expect(JSON.parse(opts.body).status).toBe('completed');
+  });
+
+  it('fetchSeedanceOmni caches video capability responses', async () => {
+    const { fetchSeedanceOmni } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, seedance_omni: true }));
+
+    await expect(fetchSeedanceOmni()).resolves.toBe(true);
+    await expect(fetchSeedanceOmni()).resolves.toBe(true);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/video/capabilities');
+  });
+
+  it('fetchComfyuiAvailable caches video capability responses', async () => {
+    const { fetchComfyuiAvailable } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, comfyui_available: true }));
+
+    await expect(fetchComfyuiAvailable()).resolves.toBe(true);
+    await expect(fetchComfyuiAvailable()).resolves.toBe(true);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/video/capabilities');
+  });
+
+  it('loads video takes for the final compose picker', async () => {
+    const { getVideoTakes } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, shots: [] }));
+
+    await getVideoTakes('ep_1');
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/video-takes');
+    expect(opts.method).toBe('GET');
+  });
+
+  it('starts episode compose with explicit selections', async () => {
+    const { startCompose } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ status: 'running', total: 2, done: 0 }));
+
+    await startCompose('ep_1', { sb_1: 'seg_1' });
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/compose');
+    expect(opts.method).toBe('POST');
+    expect(JSON.parse(opts.body).selections.sb_1).toBe('seg_1');
+  });
+
+  it('loads episode compose status', async () => {
+    const { getComposeStatus } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ status: 'done', total: 2, done: 2 }));
+
+    await getComposeStatus('ep_1');
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/compose/status');
+    expect(opts.method).toBe('GET');
+  });
+});

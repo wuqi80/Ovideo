@@ -6251,3 +6251,24 @@
 - Server `npm run test:run -- --pool=forks __tests__/services/apiService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/services/minimaxTTSSync.test.ts __tests__/components/VoiceSidebar.handlePreview.test.tsx __tests__/services/episodeDataService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `51/51`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Video Workflow Service Split
+
+### Changes
+
+- Extracted video segment writes, Seedance/ComfyUI capability probes, video takes, and final compose helpers from `new_html/services/apiService.ts` into `new_html/services/videoWorkflowService.ts`.
+- Kept `apiService.ts` compatibility re-exports while removing the duplicated video workflow implementation from the monolithic file.
+- Updated `FinalProductPage`, `EnhancePage`, `GenerationPage`, `VideoPage`, and `SeedanceMultimodalPanel` to import video workflow APIs directly from the new service.
+- Added `videoWorkflowService.test.ts` and strengthened `scripts/check_route_contract.py` so video workflow endpoint ownership stays in the new service.
+
+### Verification
+
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6904`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Local Vitest could not run because the Windows `node_modules` is missing Rollup optional dependency `@rollup/rollup-win32-x64-msvc`; server tests below are authoritative.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+- Server build emitted `videoWorkflowService-*.js` as a separate `0.94 kB` chunk and reduced the built `apiService-*.js` chunk to `7.49 kB`.
+- Server `npm run test:run -- --pool=forks __tests__/services/videoWorkflowService.test.ts __tests__/services/apiService.test.ts __tests__/services/episodeDataService.test.ts __tests__/services/audioGenerationService.test.ts __tests__/contexts/EpisodeContext.test.tsx __tests__/routing/routing.test.tsx` passed `52/52`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

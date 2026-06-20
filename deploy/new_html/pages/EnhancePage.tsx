@@ -11,7 +11,7 @@ import type { VideoSegment, StoryboardItemDB } from '../types';
 // 到 taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
 // dub / lipSync）后端目前没 worker，明确提示用户而非用假进度误导。
 import * as videoService from '../services/videoService';
-import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/apiService';
+import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
 

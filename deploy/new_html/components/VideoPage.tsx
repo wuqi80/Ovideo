@@ -34,7 +34,7 @@ import { SeedanceDetailModal } from './video/SeedanceDetailModal';
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
 // DashScopeVideoCard 不再直接 import — 走 DashScopeCardWithCandidates 包装器以注入 mention candidates。
 import { makeDefaultDashScopeParams, type DashScopeVideoParams } from '../services/videoService';
-import { createVideoSegment } from '../services/apiService';
+import { createVideoSegment } from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';

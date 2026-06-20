@@ -10,7 +10,7 @@ import { useParams } from 'react-router-dom';
 import { Clapperboard, Download, Film, AlertCircle, Loader2, Wand2, Check, X, RefreshCw } from 'lucide-react';
 import { listMediaItems } from '../services/mediaLibraryService';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { getVideoTakes, startCompose, getComposeStatus, type VideoShot, type ComposeStatus } from '../services/apiService';
+import { getVideoTakes, startCompose, getComposeStatus, type VideoShot, type ComposeStatus } from '../services/videoWorkflowService';
 import { LazyVideo } from '../components/LazyVideo';
 
 const isFinalFilm = (title: string | null | undefined) =>
