@@ -2297,7 +2297,23 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "编辑当前配置",
+            "function dbKeyStateText",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "生效 Key：",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "DB Key：",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "DB 未保存 Key，真实调用使用运行时 Key",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "DB 未保存 Key，已借用生效运行时 Key",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",

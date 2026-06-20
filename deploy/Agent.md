@@ -5884,3 +5884,17 @@
   - `openapi_paths=231`
   - `openapi_operations=287`
   - `admin_compat_route_handlers=7` including the new DB-plumbing purity guards.
+
+## 2026-06-20 Admin API Provider Card Status Clarity
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` provider cards so every provider has an obvious `配置 / 修改 API Key` primary action.
+- Split provider card status text into `生效 Key` and `DB Key`, making it clear when real generation calls are using a runtime/env key while the DB row itself has no saved key.
+- Labeled provider health badges as `生效状态` so `/api/admin/api-configs/{provider}/health` is visually separated from per-row DB diagnostics.
+- Expanded DB config test feedback to show when a test borrowed the effective runtime key instead of using a saved DB key.
+- Strengthened `scripts/check_route_contract.py` so the admin API config UI keeps these runtime-vs-DB status cues.
+
+### Follow-up
+
+- Still need a browser pass on `https://mecha.one/admin` after deployment to verify the revised labels remove the previous red `未配置` vs green health confusion for the real server data.

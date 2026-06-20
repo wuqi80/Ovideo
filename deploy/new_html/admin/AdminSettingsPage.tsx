@@ -617,6 +617,18 @@ function keySourceText(runtime?: RuntimeStatus, configHasKey?: boolean): string 
     return '未配置 Key';
 }
 
+function dbKeyStateText(hasSavedKey: boolean, runtimeHasKey: boolean): string {
+    if (hasSavedKey) return 'DB 已保存 Key';
+    if (runtimeHasKey) return 'DB 未保存 Key，真实调用使用运行时 Key';
+    return 'DB 未保存 Key';
+}
+
+function dbKeyStateClass(hasSavedKey: boolean, runtimeHasKey: boolean): string {
+    if (hasSavedKey) return 'text-g400';
+    if (runtimeHasKey) return 'text-y400';
+    return 'text-r400';
+}
+
 function isNoKeyTest(test?: ApiConfigTest): boolean {
     return test?.error === 'No API key configured';
 }
@@ -995,11 +1007,14 @@ const ApiConfigCard: React.FC<{
                                 {!config.enabled && (
                                     <span className="rounded bg-r50 text-danger px-1.5 py-0.5 text-[10px] font-semibold">禁用</span>
                                 )}
-                                {!configHasKey && (
-                                    <span className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">DB 记录未保存 Key</span>
+                                {!configHasKey && !runtimeHasKey && (
+                                    <span className="rounded bg-r50 text-r400 px-1.5 py-0.5 text-[10px] font-semibold">DB 未保存 Key</span>
+                                )}
+                                {!configHasKey && runtimeHasKey && (
+                                    <span className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">DB 未保存 Key</span>
                                 )}
                                 {runtimeHasKey && !configHasKey && (
-                                    <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">运行时有 Key</span>
+                                    <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">运行时 Key 可用</span>
                                 )}
                             </div>
                             <div className="mt-1 flex items-center gap-2 text-[11px] text-n100 flex-wrap">
@@ -1129,6 +1144,7 @@ const ApiConfigCard: React.FC<{
 
                         <div className="min-w-0 rounded bg-n20 border border-n40 px-3 py-2">
                             <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] text-n100">生效状态</span>
                                 <HealthBadge status={status} />
                                 <span className="text-[11px] text-n100 font-mono">{health?.health?.status_code || '-'}</span>
                             </div>
@@ -1210,6 +1226,8 @@ const ProviderQuickCard: React.FC<{
     const enabledCount = configs.filter(config => config.enabled !== false).length;
     const keySource = keySourceText(runtime, hasSavedKey);
     const keySourceClass = runtimeHasKey || hasSavedKey ? 'text-g400' : 'text-r400';
+    const dbKeyText = dbKeyStateText(hasSavedKey, runtimeHasKey);
+    const dbKeyClass = dbKeyStateClass(hasSavedKey, runtimeHasKey);
     const quickConfigTestNoKey = isNoKeyTest(configTest);
     const quickConfigTestClass = configTest?.ok
         ? 'border-g75 bg-g50 text-g400'
@@ -1219,10 +1237,21 @@ const ProviderQuickCard: React.FC<{
     const quickConfigTestLabel = !configTest
         ? ''
         : configTest.ok
-            ? 'DB 配置可用'
+            ? configTest.used_runtime_key
+                ? 'DB 未保存 Key，已借用生效运行时 Key'
+                : 'DB 配置可用'
             : quickConfigTestNoKey
                 ? 'DB 配置未保存 Key'
                 : 'DB 配置异常';
+    const quickConfigTestKeySource = !configTest
+        ? ''
+        : configTest.used_runtime_key
+            ? `运行时 ${configTest.key_env || 'Key'}`
+            : configTest.key_source === 'db'
+                ? 'DB 保存 Key'
+                : configTest.key_source === 'missing'
+                    ? '未配置 Key'
+                    : configTest.key_source || '';
 
     return (
         <article className={`bg-n0 border rounded-md shadow-card p-4 min-w-0 ${
@@ -1241,7 +1270,10 @@ const ProviderQuickCard: React.FC<{
                         {meta.vendor || '-'} · {CATEGORY_LABELS[categoryFromProviderMeta(meta)] || '其他'}
                     </div>
                 </div>
-                <HealthBadge status={status} />
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-[10px] uppercase tracking-wider text-n100">生效状态</span>
+                    <HealthBadge status={status} />
+                </div>
             </div>
 
             <div className="mt-3 grid gap-2 text-[11px]">
@@ -1268,7 +1300,10 @@ const ProviderQuickCard: React.FC<{
                     </div>
                 </div>
                 <div className="text-[11px] text-n100">
-                    Key 来源：<span className={`font-mono break-words ${keySourceClass}`}>{keySource}</span>
+                    生效 Key：<span className={`font-mono break-words ${keySourceClass}`}>{keySource}</span>
+                </div>
+                <div className="text-[11px] text-n100">
+                    DB Key：<span className={`font-mono break-words ${dbKeyClass}`}>{dbKeyText}</span>
                 </div>
                 <div className="text-[11px] text-n100">
                     最后检测：<span className="font-mono text-n700 break-words">{formatTime(checkedAt)}</span>
@@ -1289,9 +1324,10 @@ const ProviderQuickCard: React.FC<{
                             type="button"
                             onClick={() => onEditConfig(primaryConfig)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                            title="打开配置弹窗，可修改 Endpoint、模型名和 API Key"
                         >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            编辑当前配置
+                            <KeyRound className="w-3.5 h-3.5" />
+                            配置 / 修改 API Key
                         </button>
                         <button
                             type="button"
@@ -1309,9 +1345,10 @@ const ProviderQuickCard: React.FC<{
                         type="button"
                         onClick={() => onConfigure(meta)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                        title="新增此厂商的 Endpoint、模型名和 API Key"
                     >
                         <KeyRound className="w-3.5 h-3.5" />
-                        新增配置
+                        配置 / 修改 API Key
                     </button>
                 )}
                 <button
@@ -1330,6 +1367,9 @@ const ProviderQuickCard: React.FC<{
                 <div className={`mt-2 rounded border px-2 py-1.5 text-[11px] break-words ${quickConfigTestClass}`}>
                     <span className="font-semibold">DB 配置测试：</span>
                     <span>{quickConfigTestLabel}</span>
+                    {quickConfigTestKeySource && (
+                        <span className="ml-1">Key 来源：{quickConfigTestKeySource}</span>
+                    )}
                     <span className="mx-1 text-n100">/</span>
                     <span className="font-mono text-n700">{typeof configTest.latency_ms === 'number' ? `${configTest.latency_ms} ms` : '- ms'}</span>
                     <span className="mx-1 text-n100">/</span>
