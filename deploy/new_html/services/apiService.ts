@@ -470,7 +470,7 @@ export async function getStoryboardItems(
     scriptId?: string,
     options: StoryboardItemsQueryOptions = {},
 ) {
-    const result = await getStoryboardItemsRaw(episodeId, scriptId, options);
+    const result = normalizeStoryboardFallbackResult(await getStoryboardItemsRaw(episodeId, scriptId, options));
     const shouldFallback =
         !!scriptId &&
         options.fallbackToEpisode !== false &&
@@ -493,6 +493,18 @@ export async function getStoryboardItems(
         };
     }
     return result;
+}
+
+function normalizeStoryboardFallbackResult(result: any) {
+    if (!result || typeof result !== 'object') return result;
+    const fallbackScriptId = result.fallbackScriptId ?? result.fallback_script_id;
+    const fallbackReason = result.fallbackReason ?? result.fallback_reason;
+    if (!fallbackScriptId && !fallbackReason) return result;
+    return {
+        ...result,
+        fallbackScriptId,
+        fallbackReason,
+    };
 }
 
 export async function createStoryboardItem(episodeId: string, data: any) {

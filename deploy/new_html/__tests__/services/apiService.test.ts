@@ -154,6 +154,23 @@ describe('getStoryboardItems', () => {
     expect(result.fallbackScriptId).toBe('stale_script');
   });
 
+  it('normalizes backend storyboard fallback metadata', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      items: [{ item_id: 'sb_1' }],
+      total: 23,
+      fallback_script_id: 'stale_script',
+      fallback_reason: 'stale_script_storyboard',
+    }));
+    const { getStoryboardItems } = await import('../../services/apiService');
+    const result = await getStoryboardItems('ep_1', 'stale_script', { limit: 10, includeTotal: true });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.items).toHaveLength(1);
+    expect(result.fallbackScriptId).toBe('stale_script');
+    expect(result.fallbackReason).toBe('stale_script_storyboard');
+  });
+
   it('supports lightweight field sets', async () => {
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, items: [] }));
     const { getStoryboardItems } = await import('../../services/apiService');

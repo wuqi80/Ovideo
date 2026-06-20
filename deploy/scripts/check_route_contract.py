@@ -942,7 +942,11 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
     """Storyboard workflow should keep large episodes paged after mutations."""
     page_text = (root / "new_html" / "pages" / "StoryboardGenPage.tsx").read_text(encoding="utf-8")
     api_text = (root / "new_html" / "services" / "apiService.ts").read_text(encoding="utf-8")
+    context_text = (root / "new_html" / "contexts" / "EpisodeContext.tsx").read_text(encoding="utf-8")
     api_test_text = (root / "new_html" / "__tests__" / "services" / "apiService.test.ts").read_text(encoding="utf-8")
+    context_test_text = (
+        root / "new_html" / "__tests__" / "contexts" / "EpisodeContext.test.tsx"
+    ).read_text(encoding="utf-8")
     router_text = (root / "routers" / "storyboard.py").read_text(encoding="utf-8")
     router_test_text = (
         root / "tests" / "test_storyboard_stale_script_fallback.py"
@@ -962,8 +966,14 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         (page_text, "reloadVisibleStoryboardPage", "paged post-mutation reload helper"),
         (page_text, "loadStoryboardItemsPage({ limit: visibleEntityShotCount", "current-page storyboard reload"),
         (api_text, "fallbackToEpisode", "storyboard stale script fallback option"),
+        (api_text, "function normalizeStoryboardFallbackResult(", "storyboard backend fallback metadata normalizer"),
+        (api_text, "result.fallbackScriptId ?? result.fallback_script_id", "storyboard fallback script id supports snake case"),
         (api_text, "fallbackReason: 'empty_script_storyboard'", "storyboard stale script fallback marker"),
         (api_test_text, "falls back to episode storyboard when selected script has no rows", "storyboard fallback unit test"),
+        (api_test_text, "normalizes backend storyboard fallback metadata", "storyboard backend fallback metadata unit test"),
+        (context_text, "clearStaleScriptSelectionFromStoryboardFallback", "storyboard context clears stale script fallback"),
+        (context_text, "res?.fallbackScriptId ?? res?.fallback_script_id", "storyboard context supports snake fallback metadata"),
+        (context_test_text, "clears stale script selection when storyboard falls back to episode scope", "storyboard stale script context unit test"),
         (router_text, "EpisodeScriptDAO.get_by_id(script_id)", "storyboard backend stale script ownership check"),
         (router_text, 'fallback_reason = "stale_script_storyboard"', "storyboard backend stale script fallback marker"),
         (router_text, 'payload["fallback_scope"] = "episode"', "storyboard backend fallback scope marker"),

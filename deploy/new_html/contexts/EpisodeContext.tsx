@@ -213,7 +213,16 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
 
   const loadedSlicesRef = useRef<Set<DataSlice>>(new Set());
   const selectedScriptIdRef = useRef<string | null>(null);
+  const prevScriptIdRef = useRef<string | null>(null);
   selectedScriptIdRef.current = selectedScriptId;
+
+  const clearStaleScriptSelectionFromStoryboardFallback = useCallback((res: any, sid?: string) => {
+    const fallbackScriptId = res?.fallbackScriptId ?? res?.fallback_script_id;
+    if (!sid || !fallbackScriptId || fallbackScriptId !== sid) return;
+    selectedScriptIdRef.current = null;
+    prevScriptIdRef.current = null;
+    setSelectedScriptId(null);
+  }, []);
 
   const fetchSlices = useCallback(async (optionsOrFirst?: DataSlice | { quiet?: boolean }, ...rest: DataSlice[]) => {
     const quiet = typeof optionsOrFirst === 'object';
@@ -233,6 +242,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
         const sid = selectedScriptIdRef.current || undefined;
         const res = await getStoryboardItems(episodeId, sid).catch(() => ({ success: false, items: [] }));
         if (res.success) {
+          clearStaleScriptSelectionFromStoryboardFallback(res, sid);
           const items = (res.items || []).map(normalizeStoryboardItem);
           setStoryboardItems(items);
           setStoryboardTotalCount(typeof (res as any).total === 'number' ? (res as any).total : items.length);
@@ -271,7 +281,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     } finally {
       if (!quiet) setIsLoading(false);
     }
-  }, [episodeId, projectId]);
+  }, [episodeId, projectId, clearStaleScriptSelectionFromStoryboardFallback]);
 
   const loadSlices = useCallback(async (...slices: DataSlice[]) => {
     const newSlices = slices.filter(s => !loadedSlicesRef.current.has(s));
@@ -296,6 +306,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       includeTotal: options.includeTotal !== false,
     }).catch(() => ({ success: false, items: [], total: 0 }));
     if (!res.success) return;
+    clearStaleScriptSelectionFromStoryboardFallback(res, sid);
 
     const nextItems = (res.items || []).map(normalizeStoryboardItem);
     setStoryboardItems(prev => {
@@ -308,7 +319,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     setStoryboardTotalCount(prev =>
       typeof total === 'number' ? total : Math.max(prev, offset + nextItems.length),
     );
-  }, [episodeId]);
+  }, [episodeId, clearStaleScriptSelectionFromStoryboardFallback]);
 
   const reload = useCallback(async () => {
     const slices = Array.from(loadedSlicesRef.current) as DataSlice[];
@@ -331,7 +342,6 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     setIsLoading(false);
   }, [episodeId]);
 
-  const prevScriptIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!selectedScriptId) return;
     if (prevScriptIdRef.current === null) {

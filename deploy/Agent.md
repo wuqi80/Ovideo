@@ -5445,3 +5445,36 @@
   - `cd deploy && PYTHONUTF8=1 PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -m pytest tests/test_storyboard_stale_script_fallback.py -q` -> `4 passed`
   - `cd deploy && PYTHONUTF8=1 PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe scripts/check_route_contract.py`
   - `service_mapper_purity_checks=479`
+
+## 2026-06-20 Storyboard Stale Script UI Recovery
+
+### Diagnosis
+
+- `https://mecha.one` target episode `ep_2fc899a228f5` returns intact storyboard data:
+  - paged endpoint: `items=10`, `total=152`
+  - `fields=video`: `items=10`, `total=152`
+  - bogus stale `script_id`: `items=10`, `total=152`, `fallback_reason=stale_script_storyboard`
+- Backend fallback restored the visible storyboard list, but the frontend context could still keep the stale `selectedScriptId`, causing later asset loads or writes to keep using the dead script scope.
+
+### Changes
+
+- Normalized backend `fallback_script_id` / `fallback_reason` to frontend `fallbackScriptId` / `fallbackReason` in `getStoryboardItems()`.
+- Updated `EpisodeContext` to clear stale `selectedScriptId` when storyboard loading falls back to episode scope.
+- Updated `EpisodeContext` tests to reflect the current lazy-loading contract: pages explicitly request slices instead of the provider loading everything on mount.
+- Extended `scripts/check_route_contract.py` with fallback metadata and context-cleanup guards.
+
+### Verification
+
+- Server deployment completed; Vite production build passed and `drama.service` stayed `active`.
+- Server smoke passed:
+  - `/tmp/smoke_test.py https://mecha.one <admin password>` -> `9/9`
+- Server API spot-check for `ep_2fc899a228f5` passed:
+  - `GET /api/episodes/ep_2fc899a228f5/storyboard-items?limit=10&include_total=true` -> `items=10`, `total=152`
+  - `GET /api/episodes/ep_2fc899a228f5/storyboard-items?fields=video&limit=10&include_total=true` -> `items=10`, `total=152`
+  - stale script probe -> `items=10`, `total=152`, `fallback_reason=stale_script_storyboard`
+- Server frontend tests passed:
+  - `npm run test:run -- --pool=threads __tests__/contexts/EpisodeContext.test.tsx` -> `6 passed`
+  - `npm run test:run -- --pool=threads __tests__/services/apiService.test.ts` -> `21 passed`
+- Server architecture contracts passed:
+  - `scripts/check_architecture_contracts.py` -> `9/9`
+  - `storyboard_paged_reload_checks=16`
