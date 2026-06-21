@@ -7573,3 +7573,6 @@
 - Local `scripts/check_route_contract.py`, `scripts/check_architecture_contracts.py`, `scripts/smoke_test.py`, and `git diff --check` passed.
 - Local TypeScript output has no `LazyImage` errors after the test cast fix; full `tsc --noEmit` still reports unrelated pre-existing project errors.
 - Local frontend `vitest`/`vite build` is blocked by missing Windows Rollup optional package `@rollup/rollup-win32-x64-msvc` in `new_html/node_modules`; use remote Linux build during deploy for final frontend verification.
+- Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `frontend_lazy_image_checks=9`.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+- Server sync check confirmed `new_html/components/LazyImage.tsx` exists on `/home/Administrator/deploy`.
