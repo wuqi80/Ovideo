@@ -7374,3 +7374,17 @@
 - Live deploy to `https://mecha.one/` passed; remote architecture contracts passed 10/10 and online smoke passed 9/9.
 - Remote sync check: `cluster_main.py` has 999 lines, `admin_routes.py` has 1502 lines, and `dao/` contains 36 Python files recursively.
 - Remote generated CORS check confirmed `cluster_config_generated.py` reports the explicit origin list without wildcard CORS, and `auto_deploy_cluster.py` contains `https://mecha.one` without the old local-only default.
+
+## 2026-06-22 Admin API Runtime Model Selection
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` so provider quick cards and manual provider sweeps select runtime status by `provider + model`, not by provider alone.
+- This keeps multi-model providers such as DashScope and Seedance from showing the first provider runtime row when the card is actually displaying another preset/model.
+- Strengthened `scripts/check_route_contract.py` so the admin API config UI must keep the model-aware runtime helper and cannot regress to the old provider-only quick-card lookup.
+
+### Verification
+
+- Local `py_compile`, `check_route_contract.py`, `check_architecture_contracts.py`, and `git diff --check` passed.
+- Local Vite build remains blocked by the known missing Windows Rollup optional package `@rollup/rollup-win32-x64-msvc`; local `tsc --noEmit` remains blocked by existing project-wide TypeScript debt outside `AdminSettingsPage.tsx`.
+- Live deploy to `https://mecha.one/` passed; remote Vite build completed, remote architecture contracts passed 10/10, and online smoke passed 9/9.
