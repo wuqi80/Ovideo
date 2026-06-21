@@ -11,7 +11,7 @@
 import React, {
   createContext, useContext, useEffect, useState, useCallback, useMemo,
 } from 'react';
-import { listMyOrganizations, Organization } from '../services/organizationService';
+import type { Organization } from '../services/organizationService';
 
 export type WorkspaceId = 'personal' | string;   // 'personal' 或 org_id
 
@@ -65,6 +65,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch {}
     setLoading(true);
     try {
+      const { listMyOrganizations } = await import('../services/organizationService');
       const r = await listMyOrganizations();
       setOrganizations(r.organizations || []);
 

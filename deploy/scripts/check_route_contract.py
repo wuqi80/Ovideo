@@ -3971,9 +3971,12 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
     task_context_path = root / "new_html" / "contexts" / "TaskContext.tsx"
+    workspace_context_path = root / "new_html" / "contexts" / "WorkspaceContext.tsx"
     sse_hook_path = root / "new_html" / "hooks" / "useSSEInvalidation.ts"
     app_text = app_path.read_text(encoding="utf-8")
     task_context_text = task_context_path.read_text(encoding="utf-8")
+    workspace_context_text = workspace_context_path.read_text(encoding="utf-8")
+    required_source = "\n".join([app_text, task_context_text, workspace_context_text])
     required_snippets = [
         "const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));",
         "const DeferredCrmHost: React.FC = () => {",
@@ -3985,6 +3988,7 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         "import('../services/taskControlService')",
         "import('../services/globalTaskManager')",
         "import('../services/taskNotificationService')",
+        "import('../services/organizationService')",
         "queryClient.invalidateQueries({ queryKey: ['storyboardItems', n.episodeId] })",
     ]
     forbidden_snippets = [
@@ -4000,13 +4004,15 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         (task_context_text, 'from "../services/globalTaskManager";', task_context_path),
         (task_context_text, "from '../services/taskNotificationService';", task_context_path),
         (task_context_text, 'from "../services/taskNotificationService";', task_context_path),
+        (workspace_context_text, "import { listMyOrganizations", workspace_context_path),
+        (workspace_context_text, 'import { listMyOrganizations', workspace_context_path),
         (task_context_text, "from '../services/videoTaskService';", task_context_path),
         (task_context_text, 'from "../services/videoTaskService";', task_context_path),
         (task_context_text, "import('../services/videoTaskService')", task_context_path),
     ]
     checks = 0
     for snippet in required_snippets:
-        if snippet not in app_text and snippet not in task_context_text:
+        if snippet not in required_source:
             fail(f"Missing frontend app-shell chunk snippet: {snippet}")
         checks += 1
     for text, snippet, path in forbidden_snippets:

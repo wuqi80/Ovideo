@@ -6801,3 +6801,24 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=27`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Workspace Organization Service Runtime Split
+
+### Changes
+
+- Converted `deploy/new_html/contexts/WorkspaceContext.tsx` to import `Organization` as type-only and load `listMyOrganizations()` via dynamic `import('../services/organizationService')`.
+- Kept `/admin/*` workspace skip behavior unchanged while removing user/admin organization service code from the app shell.
+- Strengthened `deploy/scripts/check_route_contract.py` so `WorkspaceContext` cannot regress to a static `listMyOrganizations` import.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=30`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `index-Cp3pjs-n.js` at `206.53 kB`, down from the prior `index-bLIzdp-w.js` at `212.30 kB`.
+- Server build split `organizationService-B_RBM9-T.js` at `1.46 kB` and `httpClient-DncKv2Q5.js` at `3.99 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=30`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
