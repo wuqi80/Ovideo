@@ -2810,6 +2810,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     video_workspace_service = new_html / "services" / "videoWorkspaceService.ts"
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
     video_media_service = new_html / "services" / "videoMediaService.ts"
+    comfyui_generation_service = new_html / "services" / "comfyuiGenerationService.ts"
     asset_mutation_service = new_html / "services" / "assetMutationService.ts"
     storyboard_mutation_service = new_html / "services" / "storyboardMutationService.ts"
     script_timeline_service = new_html / "services" / "scriptTimelineService.ts"
@@ -2839,7 +2840,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
     migrated_services = [
         new_html / "services" / "videoReverseService.ts",
         new_html / "services" / "imageLoaderService.ts",
-        new_html / "services" / "geminiService.ts",
         new_html / "services" / "shareService.ts",
         new_html / "services" / "entityFileService.ts",
         new_html / "services" / "mediaLibraryService.ts",
@@ -2852,6 +2852,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         video_workspace_service,
         video_workflow_service,
         video_media_service,
+        comfyui_generation_service,
         asset_mutation_service,
         storyboard_mutation_service,
         script_timeline_service,
@@ -2914,11 +2915,13 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "imageLoaderService.ts", "import { apiBlob, apiJson, secureApiUrl } from './httpClient'"),
         (new_html / "services" / "imageLoaderService.ts", "apiJson<any>(\n        `/api/projects/${projectId}/images/${shotId}`"),
         (new_html / "services" / "imageLoaderService.ts", "apiBlob(securedUrl, { method: 'GET' }, '下载图片'"),
-        (new_html / "services" / "geminiService.ts", "import { apiJson } from './httpClient'"),
-        (new_html / "services" / "geminiService.ts", "const postGenerationTask = async ("),
-        (new_html / "services" / "geminiService.ts", "postGenerationTask('/api/generate/comfyui-workflow'"),
-        (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
-        (new_html / "services" / "geminiService.ts", "await import('./comfyuiBridgeService')"),
+        (new_html / "services" / "geminiService.ts", "import { callGeminiProxyWithRetry } from './geminiProxyService';"),
+        (new_html / "services" / "geminiService.ts", "export * from './comfyuiGenerationService';"),
+        (comfyui_generation_service, "import { apiJson } from './httpClient'"),
+        (comfyui_generation_service, "const postGenerationTask = async ("),
+        (comfyui_generation_service, "postGenerationTask('/api/generate/comfyui-workflow'"),
+        (comfyui_generation_service, "apiJson<any>(\n            `/api/task/${taskId}`"),
+        (comfyui_generation_service, "await import('./comfyuiBridgeService')"),
         (new_html / "services" / "videoService.ts", "from './videoTaskService';"),
         (new_html / "services" / "videoService.ts", "from './videoModelService';"),
         (new_html / "services" / "videoService.ts", "from './videoTaskTypes';"),
@@ -3144,6 +3147,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (material_page, "secureApiUrl(normalized, { absolute: true })"),
         (material_page, "apiBlob(downloadUrl, { method: 'GET' }, '下载生成的图片'"),
         (generation_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
+        (generation_page, "from '../services/comfyuiGenerationService'"),
+        (material_page, "from '../services/comfyuiGenerationService'"),
+        (design_page, "from '../services/comfyuiGenerationService'"),
         (generation_page, "function normalizeImageDownloadUrl("),
         (generation_page, "downloadImageBlob(imageUrl, '加载完整图片')"),
         (admin_feature_tabs, "import { apiJson } from '../services/httpClient'"),
@@ -3202,7 +3208,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
             checks += 1
 
     api_service_text = api_service.read_text(encoding="utf-8")
-    gemini_service_text = (new_html / "services" / "geminiService.ts").read_text(encoding="utf-8")
+    comfyui_generation_service_text = comfyui_generation_service.read_text(encoding="utf-8")
     for snippet in [
         "const API_BASE",
         "fetch(`${API_BASE}/api/",
@@ -3214,8 +3220,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         checks += 1
 
     for snippet in ["await import('./apiService')", 'await import("./apiService")']:
-        if snippet in gemini_service_text:
-            fail(f"geminiService ComfyUI helpers must import comfyuiBridgeService instead of apiService: {snippet}")
+        if snippet in comfyui_generation_service_text:
+            fail(f"comfyuiGenerationService must import comfyuiBridgeService instead of apiService: {snippet}")
         checks += 1
 
     direct_auth_token_allowed = {

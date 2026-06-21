@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { createAsset, deleteAsset, updateAsset } from '../services/assetMutationService';
-import { generateGeminiImageVariant, adjustImageAngle, waitForComfyUITask, processMaterialImage, generateHumanMultiAngleQueued } from '../services/geminiService';
+import { generateGeminiImageVariant } from '../services/geminiService';
+import { adjustImageAngle, waitForComfyUITask, processMaterialImage, generateHumanMultiAngleQueued } from '../services/comfyuiGenerationService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { callAI } from '../services/aiService';
 import { crmMessage } from '../admin/crmUI';

@@ -4,7 +4,8 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion } from '../types';
 import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { generateGeminiImageVariant, adjustImageAngle, waitForComfyUITask } from '../services/geminiService';
+import { generateGeminiImageVariant } from '../services/geminiService';
+import { adjustImageAngle, waitForComfyUITask } from '../services/comfyuiGenerationService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { generateThumbnail } from '../utils/imageOptimization';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
@@ -526,7 +527,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     try {
         setCameraGeneratingTag(tagName);
         
-        const { processMaterialImage, waitForComfyUITask } = await import('../services/geminiService');
+        const { processMaterialImage, waitForComfyUITask } = await import('../services/comfyuiGenerationService');
         const { taskId } = await processMaterialImage(targetMaterial.url, workflow);
         const resultUrl = await waitForComfyUITask(taskId);
 

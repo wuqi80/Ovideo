@@ -6,7 +6,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, ReferenceType, GeneratedImage, FileVersion } from '../types';
 import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3, Clapperboard } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { generateFinalIllustration, generateWithComfyUIWorkflowQueued, generateHumanMultiAngleQueued, generateAroundAngleQueued, adjustImageAngleQueued, getComfyUIQueueStatus, generateMattingQueued, generateImageFusionQueued, generatePanorama360Queued, generatePanoramaFusionQueued, generateAutoStoryboardQueued, generateMultiGridStoryboard, waitForComfyUITaskAllImages } from '../services/geminiService';
+import { generateFinalIllustration } from '../services/geminiService';
+import { generateWithComfyUIWorkflowQueued, generateHumanMultiAngleQueued, generateAroundAngleQueued, adjustImageAngleQueued, getComfyUIQueueStatus, generateMattingQueued, generateImageFusionQueued, generatePanorama360Queued, generatePanoramaFusionQueued, generateAutoStoryboardQueued, generateMultiGridStoryboard, waitForComfyUITaskAllImages } from '../services/comfyuiGenerationService';
 // 2026-05-21：分镜页 GPT Image 2 系列 + 化神参数面板
 import { generateGptImage, type GptImageQuality } from '../services/gptImageService';
 import {
@@ -18,7 +19,7 @@ import {
   type GptImageRatio,
   type GptImageK,
 } from '../utils/gptImageSizeMap';
-import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/geminiService';
+import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/comfyuiGenerationService';
 import type { TaskKind } from '../types';
 import { generateThumbnail } from '../utils/imageOptimization';
 import { loadShotImages, clearImageCache, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache } from '../services/imageLoaderService';

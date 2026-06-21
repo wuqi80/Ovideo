@@ -6515,3 +6515,25 @@
 - Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6679`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 ComfyUI Generation Service Split
+
+### Changes
+
+- Extracted ComfyUI generation task submission, task polling, task registry synchronization, queued wrappers, material processing, matting, image fusion, panorama, auto-storyboard, and multi-grid storyboard helpers from `new_html/services/geminiService.ts` into `new_html/services/comfyuiGenerationService.ts`.
+- Reduced `new_html/services/geminiService.ts` to Gemini text/proxy image helpers plus a compatibility re-export for existing imports.
+- Updated `GenerationPage`, `MaterialPage`, and `DesignPage` to import ComfyUI generation helpers directly from `comfyuiGenerationService.ts`.
+- Strengthened `scripts/check_route_contract.py` so ComfyUI generation endpoint ownership and direct page imports stay guarded.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7153`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Local npm remains unavailable on Windows PATH, so frontend build was verified on the server.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `geminiService-*.js` at `15.60 kB`; app shell `index-*.js` stayed at `236.01 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6021`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
