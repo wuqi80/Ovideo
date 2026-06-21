@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,121 +8,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <title>MECHA Storyboard AI</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      // refactor/v2：注册 Atlassian 设计体系命名色（移植自 wk_crm 前端 var.scss）。
-      // 组件迁移时改用 bg-n20 / text-n800 / bg-primary / shadow-card 等；
-      // 旧的 gray-750/850/950 暂留以兼容尚未迁移的暗色组件。
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Noto Sans SC', 'system-ui', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            colors: {
-              // 中性色阶
-              n0:'#FFFFFF', n10:'#FAFBFC', n20:'#F4F5F7', n30:'#EBECF0', n40:'#DFE1E6',
-              n50:'#C1C7D0', n60:'#B3BAC5', n70:'#A5ADBA', n80:'#97A0AF', n90:'#8993A4',
-              n100:'#7A869A', n200:'#6B778C', n300:'#5E6C84', n400:'#505F79', n500:'#42526E',
-              n600:'#344563', n700:'#253858', n800:'#172B4D', n900:'#091E42',
-              // 功能色（扁平别名 bg-r50/text-b400/... CDN Tailwind 才能生成；嵌套会变成带连字符的 bg-r-50）
-              r50:'#FFEBE6',r75:'#FFBDAD',r100:'#FF8F73',r200:'#FF7452',r300:'#FF5630',r400:'#DE350B',r500:'#BF2600',
-              y50:'#FFFAE6',y75:'#FFF0B3',y100:'#FFE380',y200:'#FFC400',y300:'#FFAB00',y400:'#FF991F',y500:'#FF8B00',
-              g50:'#E3FCEF',g75:'#ABF5D1',g100:'#79F2C0',g200:'#57D9A3',g300:'#36B37E',g400:'#00875A',g500:'#006644',
-              b50:'#DEEBFF',b75:'#B3D4FF',b100:'#4C9AFF',b200:'#2684FF',b300:'#0065FF',b400:'#0052CC',b500:'#0747A6',
-              p50:'#EAE6FF',p75:'#C0B6F2',p100:'#998DD9',p200:'#8777D9',p300:'#6554C0',p400:'#5243AA',p500:'#403294',
-              t50:'#E6FCFF',t75:'#B3F5FF',t100:'#79E2F2',t200:'#00C7E6',t300:'#00B8D9',t400:'#00A3BF',t500:'#008DA6',
-              // 语义色（nested DEFAULT+light → bg-primary / bg-primary-light / bg-success-light 均可用）
-              primary:{DEFAULT:'#0052CC', hover:'#0065FF', active:'#0747A6', light:'#DEEBFF'},
-              success:{DEFAULT:'#36B37E', light:'#E3FCEF'},
-              warning:{DEFAULT:'#FFAB00', light:'#FFFAE6'},
-              danger:{DEFAULT:'#FF5630', light:'#FFEBE6'},
-              teal:'#00B8D9',
-              // 兼容旧暗色组件（待 P2 迁移后移除）
-              gray: { 750: '#2d3748', 850: '#1a202c', 950: '#0d1117' },
-            },
-            boxShadow: {
-              'card': '0 1px 2px rgba(9,30,66,0.08), 0 0 1px rgba(9,30,66,0.31)',
-              'atlas': '0px 2px 8px 0px rgba(23,43,77,0.10)',
-              'bottom': 'rgba(9,30,66,0.25) 0px 4px 8px -2px, rgba(9,30,66,0.31) 0px 0px 1px',
-            },
-          }
-        }
-      }
-    </script>
-    <style>
-      /* refactor/v2：同步设定浅色底，消除刷新时的黑屏闪烁（CDN Tailwind 异步加载前生效） */
-      html, body { background-color: #F4F5F7; }
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes scaleIn {
-        from { transform: scale(0.9); opacity: 0; }
-        to { transform: scale(1); opacity: 1; }
-      }
-      .animate-fadeIn {
-        animation: fadeIn 0.2s ease-out;
-      }
-      .animate-scaleIn {
-        animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
-      @keyframes slideUp {
-        from { opacity: 0; transform: translateY(12px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes slideDown {
-        from { opacity: 0; transform: translateY(-8px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .animate-slideUp {
-        animation: slideUp 0.3s ease-out both;
-      }
-      .animate-slideDown {
-        animation: slideDown 0.25s ease-out both;
-      }
-      
-      /* 隐藏滚动条但保持滚动功能 */
-      .scrollbar-hide::-webkit-scrollbar {
-        display: none;
-      }
-      .scrollbar-hide {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-      
-      /* 自定义滚动条样式（用于右侧面板） */
-      .scrollbar-thin::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      .scrollbar-thin::-webkit-scrollbar-track {
-        background: #1e293b;
-      }
-      .scrollbar-thin::-webkit-scrollbar-thumb {
-        background: #475569;
-        border-radius: 3px;
-      }
-      .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-        background: #64748b;
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0"
-  }
-}
-</script>
-</head>
+  </head>
   <body class="bg-n20 text-n800 antialiased overflow-x-hidden" style="background-color:#F4F5F7">
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

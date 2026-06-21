@@ -4,6 +4,10 @@
  * 企业级浅色主题。所有组件应优先使用这些 CSS 变量 / 对应的 Tailwind 命名色（见 index.html）。
  */
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   /* ---------- 中性色阶 n0~n900 ---------- */
   --n0:   #FFFFFF;
@@ -336,3 +340,66 @@ body.theme-light {
 .scrollbar-atlas::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-atlas::-webkit-scrollbar-thumb { background: var(--n50); border-radius: 4px; }
 .scrollbar-atlas::-webkit-scrollbar-thumb:hover { background: var(--n70); }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out both;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.25s ease-out both;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}

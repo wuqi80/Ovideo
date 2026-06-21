@@ -4219,6 +4219,10 @@ def check_frontend_dependency_contract(root: Path) -> int:
     lock_data = json.loads(package_lock_path.read_text(encoding="utf-8"))
     lock_packages = lock_data.get("packages", {})
     root_lock_package = lock_packages.get("", {})
+    index_html = (new_html / "index.html").read_text(encoding="utf-8")
+    design_tokens_css = (new_html / "styles" / "design-tokens.css").read_text(encoding="utf-8")
+    tailwind_config_path = new_html / "tailwind.config.cjs"
+    postcss_config_path = new_html / "postcss.config.cjs"
 
     forbidden_packages = ("react-markdown", "remark-gfm")
     package_sections = {
@@ -4238,6 +4242,46 @@ def check_frontend_dependency_contract(root: Path) -> int:
         checks += 1
         if f"node_modules/{package_name}" in lock_packages:
             violations.append(f"{package_name} still has a package-lock node_modules entry")
+
+    for package_name in ("tailwindcss", "postcss", "autoprefixer"):
+        checks += 1
+        if package_name not in package_sections["devDependencies"]:
+            violations.append(f"{package_name} must be listed in package.json devDependencies")
+        checks += 1
+        if package_name not in package_sections["lock.devDependencies"]:
+            violations.append(f"{package_name} must be listed in package-lock root devDependencies")
+        checks += 1
+        if f"node_modules/{package_name}" not in lock_packages:
+            violations.append(f"{package_name} must have a package-lock node_modules entry")
+
+    for path in (tailwind_config_path, postcss_config_path):
+        checks += 1
+        if not path.exists():
+            violations.append(f"{path.relative_to(root)} is required for local Tailwind builds")
+
+    required_frontend_build_snippets = [
+        (design_tokens_css, "@tailwind base;", new_html / "styles" / "design-tokens.css"),
+        (design_tokens_css, "@tailwind components;", new_html / "styles" / "design-tokens.css"),
+        (design_tokens_css, "@tailwind utilities;", new_html / "styles" / "design-tokens.css"),
+        (tailwind_config_path.read_text(encoding="utf-8") if tailwind_config_path.exists() else "", "content: [", tailwind_config_path),
+        (tailwind_config_path.read_text(encoding="utf-8") if tailwind_config_path.exists() else "", "primary: {", tailwind_config_path),
+        (postcss_config_path.read_text(encoding="utf-8") if postcss_config_path.exists() else "", "tailwindcss: {}", postcss_config_path),
+        (postcss_config_path.read_text(encoding="utf-8") if postcss_config_path.exists() else "", "autoprefixer: {}", postcss_config_path),
+    ]
+    for text, snippet, path in required_frontend_build_snippets:
+        checks += 1
+        if snippet not in text:
+            violations.append(f"Missing local Tailwind build snippet in {path.relative_to(root)}: {snippet}")
+
+    for snippet in (
+        "cdn.tailwindcss.com",
+        "tailwind.config",
+        "type=\"importmap\"",
+        "aistudiocdn.com",
+    ):
+        checks += 1
+        if snippet in index_html:
+            violations.append(f"new_html/index.html must not depend on runtime CDN/importmap: {snippet}")
 
     import_re = re.compile(
         r"(?:from\s+|import\s*\(\s*|import\s+)['\"](react-markdown|remark-gfm)['\"]"
