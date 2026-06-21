@@ -19,6 +19,9 @@
 - Local `py_compile` for `services/api_config_service.py` and `scripts/check_admin_api_config_crud.py`: passed.
 - Local `scripts/check_admin_api_config_crud.py`: passed.
 - Local `scripts/check_architecture_contracts.py`: 10/10 passed.
+- `scripts/live_deploy_mvc2.sh`: deployed to `https://mecha.one/`; remote Vite build passed and `drama.service` stayed active.
+- Server `scripts/check_architecture_contracts.py`: 10/10 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
 - Local Vite build is still blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
 - Local `tsc --noEmit` is still blocked by existing project-wide TypeScript debt outside this API config change.
 - No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.

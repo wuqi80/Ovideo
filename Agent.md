@@ -20,6 +20,10 @@
   - 当 DB 配置测试借用了运行时 Key，但 DB endpoint 与实际 runtime endpoint 不一致时，前端会明确显示“与运行时 Endpoint 不一致”。
 - `deploy/new_html/admin/AdminSettingsPage.tsx` 已在单配置卡片和 provider 快速卡片中显示该差异，减少“DB 配置测试异常，但刷新生效健康正常”的排查成本。
 - `deploy/scripts/check_admin_api_config_crud.py` 增加 `health_wrapper_endpoint_diagnostics` 契约，防止诊断字段回退。
+- 已部署到 `https://mecha.one/`：
+  - 服务器远端 Vite build 通过，`drama.service` 为 `active`。
+  - 服务器 `scripts/check_architecture_contracts.py` 10/10 通过。
+  - 线上 smoke test 9/9 通过。
 
 ## 2026-06-21 Service/DAO 分层守卫记录
 
