@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { computeReactiveDuration, clampSec } from '../utils/durationMapping';
-import type { StoryboardMeta } from '../services/videoService';
+import type { StoryboardMeta } from '../services/videoWorkspaceService';
 
 export interface UseReactiveDurationProps {
     groupUuid: string;

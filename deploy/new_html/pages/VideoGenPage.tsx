@@ -3,6 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
 import * as videoService from '../services/videoService';
+import type { SeedanceParams, ShotType, VideoModel } from '../services/videoModelService';
+import type { TaskGroup, UploadedImage } from '../services/videoTaskTypes';
+import {
+  computeReactiveDurationFromMeta,
+  loadWorkspaceSession,
+  patchWorkspaceSession,
+  saveWorkspaceSession,
+  type StoryboardMeta,
+} from '../services/videoWorkspaceService';
 import { estimateDurationMs } from '../utils/durationMapping';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { secureApiUrl } from '../services/httpClient';
@@ -106,11 +115,11 @@ export const VideoGenPage: React.FC = () => {
     try {
       const storyboardItemsForImport = await ensureAllStoryboardItemsForImport();
       if (storyboardItemsForImport.length === 0) return;
-      const images: videoService.UploadedImage[] = [];
+      const images: UploadedImage[] = [];
       const prompts: Record<string, string> = {};
-      const meta: Record<string, videoService.StoryboardMeta> = {};
-      const seedanceParams: Record<string, videoService.SeedanceParams> = {};
-      const groups: videoService.TaskGroup[] = [];
+      const meta: Record<string, StoryboardMeta> = {};
+      const seedanceParams: Record<string, SeedanceParams> = {};
+      const groups: TaskGroup[] = [];
       const skipped: { id: string; reason: string; sample?: string }[] = [];
 
       for (const item of storyboardItemsForImport) {
@@ -145,7 +154,7 @@ export const VideoGenPage: React.FC = () => {
           }
         }
 
-        const upImg: videoService.UploadedImage = {
+        const upImg: UploadedImage = {
           id: itemId,
           url: imgUrl,
           filename: imgUrl ? `storyboard_${sortOrder + 1}.png` : `placeholder_${sortOrder + 1}`,
@@ -188,15 +197,15 @@ export const VideoGenPage: React.FC = () => {
           lastSyncedAt: Date.now(),
         };
 
-        const initialDuration = videoService.computeReactiveDurationFromMeta(meta[itemId]);
+        const initialDuration = computeReactiveDurationFromMeta(meta[itemId]);
 
         // 默认模型 = Seedance2（飞升）
         const groupUuid = videoService.generateUUID();
-        const group: videoService.TaskGroup = {
+        const group: TaskGroup = {
           uuid: groupUuid,
           ids: [itemId],
-          model: 'Seedance2' as videoService.VideoModel,
-          shotType: 'single' as videoService.ShotType,
+          model: 'Seedance2' as VideoModel,
+          shotType: 'single' as ShotType,
           duration: initialDuration,
           durationUserOverride: false,
         };
@@ -204,7 +213,7 @@ export const VideoGenPage: React.FC = () => {
         upImg.linkedGroupUuids = [groupUuid];
 
         // 初始 SeedanceParams：占位卡 prompt = '@'，方便 mention popover 自动打开
-        const sp: videoService.SeedanceParams = {
+        const sp: SeedanceParams = {
           sub_model: 'standard',
           prompt: isPlaceholder ? '@' : (prompt || ''),
           // Default to reference_image (all-purpose reference / 全能参考).
@@ -257,7 +266,7 @@ export const VideoGenPage: React.FC = () => {
       });
 
       // 1) 立即保存会话，让用户先看到所有卡片（混音稍后异步完成）
-      const saveRes = await videoService.saveWorkspaceSession({
+      const saveRes = await saveWorkspaceSession({
         uploaded_images: images,
         task_groups: groups,
         image_prompts: prompts,
@@ -286,7 +295,7 @@ export const VideoGenPage: React.FC = () => {
               narration_url: m.audioUrls?.narration,
               sfx_url:       m.audioUrls?.sfx,
             });
-            await videoService.patchWorkspaceSession(sessionScope, (cur) => {
+            await patchWorkspaceSession(sessionScope, (cur) => {
               const newMeta = {
                 ...(cur.storyboard_meta || {}),
                 [itemId]: {
@@ -336,7 +345,7 @@ export const VideoGenPage: React.FC = () => {
     if (allStoryboardItems.length === 0) return;
     (async () => {
       try {
-        const existing = await videoService.loadWorkspaceSession(sessionScope);
+        const existing = await loadWorkspaceSession(sessionScope);
         const sess: any = existing.session;
         const groupCount = sess?.task_groups?.length || 0;
         // 真实图（非占位、有 url）数量。某些旧会话在分镜图生成前导入，全是占位符（url 空），
@@ -385,7 +394,7 @@ export const VideoGenPage: React.FC = () => {
     let alive = true;
     (async () => {
       try {
-        const r = await videoService.loadWorkspaceSession(sessionScope);
+        const r = await loadWorkspaceSession(sessionScope);
         if (!alive || !r.success || !r.session) { if (alive) setChangedCount(0); return; }
         let n = 0;
         for (const img of (r.session.uploaded_images || [])) {
@@ -403,7 +412,7 @@ export const VideoGenPage: React.FC = () => {
   const handleSyncImages = useCallback(async () => {
     setSyncing(true);
     try {
-      const r = await videoService.loadWorkspaceSession(sessionScope);
+      const r = await loadWorkspaceSession(sessionScope);
       if (!r.success || !r.session || !(r.session.task_groups?.length)) {
         // 没有会话可同步 —— 退化为全量导入
         handleImportAll();
@@ -428,7 +437,7 @@ export const VideoGenPage: React.FC = () => {
           }
         }
       }
-      await videoService.patchWorkspaceSession(sessionScope, () => ({ uploaded_images: newImages, seedance_params: newSP }));
+      await patchWorkspaceSession(sessionScope, () => ({ uploaded_images: newImages, seedance_params: newSP }));
       setChangedCount(0);
       setSyncNonce(n => n + 1); // 重挂载 VideoPage，从更新后的会话重新加载
       setImportMsg({ kind: 'info', text: '已同步最新分镜图（保留已生成的视频）' });

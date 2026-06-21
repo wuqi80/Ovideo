@@ -11,13 +11,22 @@
 // 这里集中复刻为内部 helper buildArtifacts，避免两处漂移。
 
 import type { SyncMode } from '../components/video/StoryboardSyncModal';
-import * as videoService from '../services/videoService';
+import { generateUUID } from '../services/videoService';
+import type { SeedanceParams, ShotType, VideoModel } from '../services/videoModelService';
+import type { TaskGroup, UploadedImage } from '../services/videoTaskTypes';
+import {
+    computeReactiveDurationFromMeta,
+    patchWorkspaceSession,
+    saveWorkspaceSession,
+    type StoryboardMeta,
+    type WorkspaceSession,
+} from '../services/videoWorkspaceService';
 
 interface PerItemArtifacts {
-    image: videoService.UploadedImage;
-    group: videoService.TaskGroup;
-    sp: videoService.SeedanceParams;
-    meta: videoService.StoryboardMeta;
+    image: UploadedImage;
+    group: TaskGroup;
+    sp: SeedanceParams;
+    meta: StoryboardMeta;
     prompt: string;
 }
 
@@ -51,7 +60,7 @@ function buildArtifacts(item: any): PerItemArtifacts | null {
         narration: item.narration_audio_url ?? item.narrationAudioUrl ?? undefined,
         sfx:       item.sfx_audio_url ?? item.sfxAudioUrl ?? undefined,
     };
-    const meta: videoService.StoryboardMeta = {
+    const meta: StoryboardMeta = {
         plannedDurationMs: item.planned_duration_ms ?? item.plannedDurationMs ?? undefined,
         audioDurationMs:   item.audio_duration_ms ?? item.audioDurationMs ?? undefined,
         audioUrls: (audioUrls.dialogue || audioUrls.narration || audioUrls.sfx) ? audioUrls : undefined,
@@ -62,10 +71,10 @@ function buildArtifacts(item: any): PerItemArtifacts | null {
         lastSyncedAt: Date.now(),
     };
 
-    const initialDuration = videoService.computeReactiveDurationFromMeta(meta);
-    const groupUuid = videoService.generateUUID();
+    const initialDuration = computeReactiveDurationFromMeta(meta);
+    const groupUuid = generateUUID();
 
-    const image: videoService.UploadedImage = {
+    const image: UploadedImage = {
         id: itemId,
         url: imgUrl,
         filename: imgUrl ? `storyboard_${sortOrder + 1}.png` : `placeholder_${sortOrder + 1}`,
@@ -76,15 +85,15 @@ function buildArtifacts(item: any): PerItemArtifacts | null {
         tags: [],
         linkedGroupUuids: [groupUuid],
     };
-    const group: videoService.TaskGroup = {
+    const group: TaskGroup = {
         uuid: groupUuid,
         ids: [itemId],
-        model: 'Seedance2' as videoService.VideoModel,
-        shotType: 'single' as videoService.ShotType,
+        model: 'Seedance2' as VideoModel,
+        shotType: 'single' as ShotType,
         duration: initialDuration,
         durationUserOverride: false,
     };
-    const sp: videoService.SeedanceParams = {
+    const sp: SeedanceParams = {
         sub_model: 'standard',
         prompt: isPlaceholder ? '@' : prompt,
         // Mirrors VideoGenPage.handleImportAll: reference_image is the default.
@@ -125,11 +134,11 @@ export interface ApplySyncResult {
 export async function applySyncStrategy(
     mode: SyncMode,
     storyboardItems: any[],
-    session: videoService.WorkspaceSession,
+    session: WorkspaceSession,
     scope: string | undefined,
 ): Promise<ApplySyncResult> {
     if (mode === 'full_reset') {
-        await videoService.saveWorkspaceSession({
+        await saveWorkspaceSession({
             uploaded_images: [],
             task_groups: [],
             image_prompts: {},
@@ -151,11 +160,11 @@ export async function applySyncStrategy(
         });
         if (newItems.length === 0) return {};
 
-        const addImages: videoService.UploadedImage[] = [];
-        const addGroups: videoService.TaskGroup[] = [];
+        const addImages: UploadedImage[] = [];
+        const addGroups: TaskGroup[] = [];
         const addPrompts: Record<string, string> = {};
-        const addMeta: Record<string, videoService.StoryboardMeta> = {};
-        const addSP: Record<string, videoService.SeedanceParams> = {};
+        const addMeta: Record<string, StoryboardMeta> = {};
+        const addSP: Record<string, SeedanceParams> = {};
 
         for (const it of newItems) {
             const a = buildArtifacts(it);
@@ -167,7 +176,7 @@ export async function applySyncStrategy(
             addSP[a.group.uuid] = a.sp;
         }
 
-        await videoService.patchWorkspaceSession(scope, (cur) => ({
+        await patchWorkspaceSession(scope, (cur) => ({
             uploaded_images: [...(cur.uploaded_images || []), ...addImages],
             task_groups:     [...(cur.task_groups || []), ...addGroups],
             image_prompts:   { ...(cur.image_prompts || {}), ...addPrompts },
@@ -190,13 +199,13 @@ export async function applySyncStrategy(
     const meta = session.storyboard_meta || {};
 
     const newPrompts: Record<string, string> = {};
-    const newSP: Record<string, videoService.SeedanceParams> = {};
-    const newMeta: Record<string, videoService.StoryboardMeta> = {};
-    const newImages = new Map<string, videoService.UploadedImage>();
+    const newSP: Record<string, SeedanceParams> = {};
+    const newMeta: Record<string, StoryboardMeta> = {};
+    const newImages = new Map<string, UploadedImage>();
     for (const img of session.uploaded_images || []) {
         newImages.set(img.id, img);
     }
-    const newGroups: videoService.TaskGroup[] = [];
+    const newGroups: TaskGroup[] = [];
 
     for (const g of groups) {
         const itemId = g.ids?.[0];
@@ -230,7 +239,7 @@ export async function applySyncStrategy(
         if (m) newMeta[itemId] = m;
     }
 
-    await videoService.patchWorkspaceSession(scope, (cur) => ({
+    await patchWorkspaceSession(scope, (cur) => ({
         uploaded_images: Array.from(newImages.values()),
         task_groups: newGroups,
         image_prompts: { ...(cur.image_prompts || {}), ...newPrompts },

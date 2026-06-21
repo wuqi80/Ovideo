@@ -9,6 +9,12 @@ import {
 } from 'lucide-react';
 import * as videoService from '../services/videoService';
 import type { SeedanceParams } from '../services/videoModelService';
+import {
+    computeReactiveDurationFromMeta,
+    loadWorkspaceSession,
+    saveWorkspaceSession,
+    type StoryboardMeta,
+} from '../services/videoWorkspaceService';
 import { AppView, TaskNotification } from '../types';
 import {
     getCardHeightClass,
@@ -215,7 +221,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     } | null>(null);
 
     // Task 6：分镜元信息（音轨 URL / 时长 / 已混音）按 itemId 索引
-    const [storyboardMetaByItemId, setStoryboardMetaByItemId] = useState<Record<string, videoService.StoryboardMeta>>({});
+    const [storyboardMetaByItemId, setStoryboardMetaByItemId] = useState<Record<string, StoryboardMeta>>({});
 
     // Task 6：↻ 同步分镜弹窗
     const [syncModalOpen, setSyncModalOpen] = useState(false);
@@ -263,7 +269,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         // 端写入的最小 2000ms 一致——只有当 DB/meta 全空时才会走到这里。
         const itemId = group?.ids?.[0];
         const meta = itemId ? storyboardMetaByItemId[itemId] : undefined;
-        const reactiveDur = meta ? videoService.computeReactiveDurationFromMeta(meta) : undefined;
+        const reactiveDur = meta ? computeReactiveDurationFromMeta(meta) : undefined;
         const dur = group?.duration ?? reactiveDur ?? 3;
 
         // 2026-05-20 (Bug 3b)：切到 Seedance 时自动带本分镜的参考音
@@ -626,7 +632,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         setIsLoading(true);
         try {
             // 加载保存的会话数据
-            const result = await videoService.loadWorkspaceSession(sessionScope);
+            const result = await loadWorkspaceSession(sessionScope);
             let existingImages: videoService.UploadedImage[] = [];
             let existingGroups: videoService.TaskGroup[] = [];
             let existingPrompts: Record<string, string> = {};
@@ -694,7 +700,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 } else {
                     setSeedanceParamsByUuid({});
                 }
-                const sessMeta = (session as any).storyboard_meta as Record<string, videoService.StoryboardMeta> | undefined;
+                const sessMeta = (session as any).storyboard_meta as Record<string, StoryboardMeta> | undefined;
                 if (sessMeta && typeof sessMeta === 'object') {
                     setStoryboardMetaByItemId(sessMeta);
                 } else {
@@ -898,7 +904,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             return true;
         });
         
-        await videoService.saveWorkspaceSession({
+        await saveWorkspaceSession({
             task_groups: taskGroups,
             uploaded_images: validImages,
             image_prompts: imagePrompts,

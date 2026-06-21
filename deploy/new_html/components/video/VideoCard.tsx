@@ -12,8 +12,9 @@
 
 import React, { useCallback, useMemo } from 'react';
 import { ImageOff } from 'lucide-react';
-import * as videoService from '../../services/videoService';
 import type { SeedanceParams, SeedanceMediaInput, DashScopeVideoParams } from '../../services/videoModelService';
+import type { TaskGroup, UploadedImage } from '../../services/videoTaskTypes';
+import type { StoryboardMeta } from '../../services/videoWorkspaceService';
 import { SeedanceMultimodalPanel } from '../SeedanceMultimodalPanel';
 import { SeedanceMentionPromptEditor } from '../SeedanceMentionPromptEditor';
 import { DashScopeVideoCard, type DashScopePromptEditorProps } from './DashScopeCards';
@@ -129,9 +130,9 @@ export const DashScopeCardWithCandidates: React.FC<DashScopeCardWithCandidatesPr
 // ============================================================================
 
 export interface DurationFieldForGroupProps {
-    group: videoService.TaskGroup;
-    meta: Partial<videoService.StoryboardMeta> | undefined;
-    onPatchGroup: (uuid: string, patch: Partial<videoService.TaskGroup>) => void;
+    group: TaskGroup;
+    meta: Partial<StoryboardMeta> | undefined;
+    onPatchGroup: (uuid: string, patch: Partial<TaskGroup>) => void;
     disabled?: boolean;
 }
 
@@ -161,8 +162,8 @@ export const DurationFieldForGroup: React.FC<DurationFieldForGroupProps> = ({
 // ============================================================================
 
 export interface StoryboardImageAreaProps {
-    image: videoService.UploadedImage;
-    meta?: Partial<videoService.StoryboardMeta>;
+    image: UploadedImage;
+    meta?: Partial<StoryboardMeta>;
     /**
      * 真实图片的 className（兼容卡片视图与列表视图的不同高度）
      */
@@ -206,7 +207,7 @@ export const StoryboardImageArea: React.FC<StoryboardImageAreaProps> = ({
 // ============================================================================
 
 export interface AudioBadgesRowProps {
-    meta?: Partial<videoService.StoryboardMeta>;
+    meta?: Partial<StoryboardMeta>;
 }
 
 export const AudioBadgesRow: React.FC<AudioBadgesRowProps> = ({ meta }) => {
@@ -235,11 +236,11 @@ export const AudioBadgesRow: React.FC<AudioBadgesRowProps> = ({ meta }) => {
 // ============================================================================
 
 export interface VideoCardProps {
-    group: videoService.TaskGroup;
-    image: videoService.UploadedImage;
+    group: TaskGroup;
+    image: UploadedImage;
     seedanceParams?: SeedanceParams;
-    meta?: Partial<videoService.StoryboardMeta>;
-    onPatchGroup: (uuid: string, patch: Partial<videoService.TaskGroup>) => void;
+    meta?: Partial<StoryboardMeta>;
+    onPatchGroup: (uuid: string, patch: Partial<TaskGroup>) => void;
     onPatchSeedance: (uuid: string, params: SeedanceParams) => void;
     disabled?: boolean;
 }

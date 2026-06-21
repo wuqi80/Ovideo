@@ -22,7 +22,7 @@ const noopPick = () => {};
 const noopPreview = () => {};
 
 describe('KlingCard 多镜头模式', () => {
-    it('显示 5 个 mode toggle：T2V / I2V / Morph / Omni / Multi', () => {
+    it('显示简化后的 mode toggle：Omni / Multi', () => {
         const params = makeDefaultDashScopeParams('Kling');
         render(
             <KlingCard
@@ -32,9 +32,6 @@ describe('KlingCard 多镜头模式', () => {
                 onPreviewImage={noopPreview}
             />,
         );
-        expect(screen.getByRole('button', { name: /T2V/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /I2V/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Morph/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Omni/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Multi|多镜头/i })).toBeInTheDocument();
     });

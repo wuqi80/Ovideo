@@ -6215,6 +6215,32 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=6829`.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
 - Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+
+## 2026-06-21 Video Workspace Service Split
+
+### Changes
+
+- Extracted pure video task/session types into `deploy/new_html/services/videoTaskTypes.ts`.
+- Extracted workspace session persistence, storyboard metadata, and reactive duration mapping into `deploy/new_html/services/videoWorkspaceService.ts`.
+- Kept `deploy/new_html/services/videoService.ts` as a compatibility re-export while removing duplicated task/session type and workspace API implementations from it.
+- Updated `VideoGenPage`, `VideoPage`, `VideoCard`, `storyboardSync`, `useReactiveDuration`, `StoryboardSyncModal`, and `videoTaskInsert` to consume the narrower type/workspace services directly.
+- Strengthened `deploy/scripts/check_route_contract.py` to guard `videoTaskTypes.ts`, `videoWorkspaceService.ts`, and the direct workspace-service imports.
+- Updated `DashScopeCards.test.tsx` to match the current Kling mode toggle behavior: `Omni` / `Multi`.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7125`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Local UTF-8 scan passed for `deploy/new_html/**/*.ts*`.
+- Local npm was unavailable on Windows PATH, so frontend build/tests were verified on the server.
+- Server `scripts/live_deploy_mvc2.sh` timed out locally while remote build was still running; the remote build was completed manually with `npm run build`, then `drama.service` was restarted and reported `active`.
+- Server build emitted a standalone `videoWorkspaceService-*.js` chunk at `1.11 kB`; app shell `index-*.js` is `236.01 kB`.
+- Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=5993`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server Vitest subset passed `56/56`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
 - Server build split `apiService-*.js` into a separate 10.29 kB chunk and reduced the main `index-*.js` chunk from about 250.7 kB to 240.4 kB.
 - Server `npm run test:run -- --pool=forks __tests__/services/globalTaskManager.test.ts` passed `2/2`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.

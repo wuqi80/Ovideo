@@ -8,7 +8,7 @@
 // 仅作展示 + 触发：实际写入逻辑在 utils/storyboardSync.ts 中。
 import React, { useMemo } from 'react';
 import { X } from 'lucide-react';
-import type { WorkspaceSession } from '../../services/videoService';
+import type { WorkspaceSession } from '../../services/videoWorkspaceService';
 
 export type SyncMode = 'add_new' | 'overwrite_unmodified' | 'full_reset';
 

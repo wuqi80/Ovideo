@@ -3,7 +3,6 @@
  */
 
 import { enqueueComfyUITask, getComfyUIQueueStatus } from './comfyuiTaskQueue';
-import { computeReactiveDuration as _crd } from '../utils/durationMapping';
 import { apiFetch, apiJson, buildAuthHeaders } from './httpClient';
 import {
     inferDashScopeTaskType,
@@ -16,6 +15,23 @@ import {
     type ShotType,
     type VideoModel,
 } from './videoModelService';
+import type { VideoTask } from './videoTaskTypes';
+export type {
+    MergedCardSnapshot,
+    TaskGroup,
+    TaskState,
+    TaskStatus,
+    UploadedImage,
+    VideoTask,
+} from './videoTaskTypes';
+export {
+    computeReactiveDurationFromMeta,
+    loadWorkspaceSession,
+    patchWorkspaceSession,
+    saveWorkspaceSession,
+    type StoryboardMeta,
+    type WorkspaceSession,
+} from './videoWorkspaceService';
 export {
     clearProjectVideoTasks,
     cropVideo,
@@ -64,83 +80,6 @@ export {
 export { getComfyUIQueueStatus };
 
 // ==================== 视频生成任务相关类型 ====================
-
-export type TaskState = 'idle' | 'pending' | 'running' | 'processing' | 'done' | 'failed';
-
-export interface UploadedImage {
-    id: string;
-    url: string;                          // 空分镜时为空字符串
-    filename: string;
-    storageUrl?: string;
-    comfyuiFilename?: string;
-    uploadTime: number;
-    isUploading?: boolean;
-    uploadFailed?: boolean;
-    uploadProgress?: number;
-    isPlaceholder?: boolean;              // ⭐ true = 空分镜
-    storyboardItemId?: string;            // ⭐ 反查 storyboard_meta
-    sortOrder?: number;                   // ⭐ 显示顺序
-    tags?: string[];                      // legacy: VideoGenPage 导入时初始化为 []
-    linkedGroupUuids?: string[];          // legacy: 反查所属 task_group
-}
-
-export interface TaskGroup {
-    uuid: string;
-    ids: string[];                        // 图片ID列表 (1个=I2V, 2个=Morph)
-    model: VideoModel;
-    createdAt?: number;
-    shotType?: ShotType;                  // 仅大能模型使用
-    duration?: number;                    // 通用时长（秒，3–15）
-    durationUserOverride?: boolean;       // true 后响应式规则不再自动改
-    // 2026-06-05：合并相邻同模型卡片时记录各子卡快照，供「拆分」原位还原。
-    // 仅 Seedance / DashScope 卡可合并；每次合并把当前卡（若已是合并卡则展开其 mergedFrom）追加进来。
-    mergedFrom?: MergedCardSnapshot[];
-}
-
-export interface MergedCardSnapshot {
-    uuid: string;
-    ids: string[];
-    model: VideoModel;
-    prompt: string;
-    seedanceParams?: SeedanceParams;
-    dashScopeParams?: DashScopeVideoParams;
-}
-
-export interface TaskStatus {
-    state?: TaskState;
-    taskId?: string;
-    progress?: number;
-    result?: string;
-    videos?: string[];
-    videoGenerateTimes?: number[];
-    totalGenerationTime?: number;
-    isUpscaled?: boolean;
-    isExpired?: boolean;
-    keepResult?: boolean;
-    selected?: boolean;
-    originalResult?: string;
-    error?: string;
-}
-
-export interface VideoTask {
-    task_id: string;
-    status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
-    task_type: string;
-    created_at: string;
-    completed_at?: string;
-    started_at?: string;
-    progress?: number;  // 后端返回的真实进度 (0-100)
-    data?: {
-        prompt?: string;
-        model?: string;
-    };
-    result?: {
-        videos?: Array<{ url: string; filename?: string; generateTime?: number }>;
-        images?: Array<{ url: string; filename?: string }>;
-        error?: string;
-    };
-    error?: string;
-}
 
 function hasAuthHeader(): boolean {
     const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
@@ -475,80 +414,6 @@ export async function deleteTask(taskId: string): Promise<void> {
 
 // ==================== 会话管理 ====================
 
-export interface StoryboardMeta {
-    plannedDurationMs?: number;
-    audioDurationMs?: number;
-    audioUrls?: {
-        dialogue?: string;
-        narration?: string;
-        sfx?: string;
-    };
-    mixedAudioUrl?: string;
-    mixedAudioHash?: string;
-    sceneHeading?: string;
-    dialogue?: string;
-    lastSyncedAt?: number;
-}
-
-export interface WorkspaceSession {
-    task_groups: TaskGroup[];
-    uploaded_images: UploadedImage[];
-    image_prompts: Record<string, string>;
-    tasks_status: Record<string, TaskStatus>;
-    seedance_params?: Record<string /* groupUuid */, SeedanceParams>;
-    storyboard_meta?: Record<string /* itemId */, StoryboardMeta>;
-}
-
-/**
- * 保存工作区会话
- * @param scope 作用域（如 "ep_xxx:script_yyy"），为空时使用用户级全局会话
- */
-export async function saveWorkspaceSession(session: WorkspaceSession, scope?: string): Promise<{ success: boolean }> {
-    try {
-        const response = await apiFetch('/api/workspace/save-session', {
-            method: 'POST',
-            body: JSON.stringify({ ...session, scope: scope || '' })
-        }, { apiName: 'saveWorkspaceSession' });
-
-        if (!response.ok) {
-            console.error('保存会话失败:', response.statusText);
-            return { success: false };
-        }
-
-        return await response.json();
-    } catch (e) {
-        console.error('保存会话失败:', e);
-        return { success: false };
-    }
-}
-
-/**
- * 加载工作区会话
- * @param scope 作用域（如 "ep_xxx:script_yyy"），为空时使用用户级全局会话
- */
-export async function loadWorkspaceSession(scope?: string): Promise<{ success: boolean; session: WorkspaceSession | null }> {
-    const params = scope ? `?scope=${encodeURIComponent(scope)}` : '';
-    try {
-        const response = await apiFetch(`/api/workspace/load-session${params}`, {
-            method: 'GET',
-        }, { apiName: 'loadWorkspaceSession' });
-
-        if (!response.ok) {
-            console.error('加载会话失败:', response.statusText);
-            return { success: false, session: null };
-        }
-
-        return await response.json();
-    } catch (e) {
-        console.error('加载会话失败:', e);
-        return { success: false, session: null };
-    }
-}
-
-// ==================== 视频操作 ====================
-
-// ==================== 工具函数 ====================
-
 /**
  * 生成UUID
  */
@@ -868,17 +733,6 @@ export async function mixStoryboardAudio(
 // ==================== Task 6 helpers ====================
 
 /**
- * StoryboardMeta 的部分字段 → 响应式时长（秒）。
- * 优先 audioDurationMs；否则 plannedDurationMs；否则默认值。
- */
-export function computeReactiveDurationFromMeta(meta: Partial<StoryboardMeta>): number {
-    return _crd({
-        audioDurationMs: meta.audioDurationMs,
-        plannedDurationMs: meta.plannedDurationMs,
-    });
-}
-
-/**
  * 并发受限的 async 批处理。
  * - items: 输入列表
  * - limit: 同时运行的 worker 上限
@@ -900,23 +754,4 @@ export async function runWithConcurrency<T, R>(
     });
     await Promise.all(workers);
     return out;
-}
-
-/**
- * 拉取当前 workspace 会话，应用 mutator 返回的 patch，再保存合并后的整体。
- * - 适合在异步流程（如 mix-audio 后）打补丁，而不会覆盖期间用户做的其他改动。
- * - mutator 必须是纯函数：返回浅 patch 对象，由本函数与最新会话合并后写回。
- * - 没有当前会话时静默警告并直接返回（不会抛错，避免后台任务把页面打崩）。
- */
-export async function patchWorkspaceSession(
-    scope: string | undefined,
-    mutator: (current: WorkspaceSession) => Partial<WorkspaceSession>,
-): Promise<void> {
-    const cur = await loadWorkspaceSession(scope);
-    if (!cur?.success || !cur.session) {
-        console.warn('[patchWorkspaceSession] no current session; skip patch');
-        return;
-    }
-    const patch = mutator(cur.session);
-    await saveWorkspaceSession({ ...cur.session, ...patch }, scope);
 }

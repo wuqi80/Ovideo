@@ -2805,6 +2805,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
     episode_data_service = new_html / "services" / "episodeDataService.ts"
     audio_generation_service = new_html / "services" / "audioGenerationService.ts"
     video_model_service = new_html / "services" / "videoModelService.ts"
+    video_task_types = new_html / "services" / "videoTaskTypes.ts"
+    video_workspace_service = new_html / "services" / "videoWorkspaceService.ts"
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
     video_media_service = new_html / "services" / "videoMediaService.ts"
     asset_mutation_service = new_html / "services" / "assetMutationService.ts"
@@ -2846,6 +2848,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         task_notification_service,
         episode_data_service,
         audio_generation_service,
+        video_workspace_service,
         video_workflow_service,
         video_media_service,
         asset_mutation_service,
@@ -2916,6 +2919,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
         (new_html / "services" / "geminiService.ts", "await import('./comfyuiBridgeService')"),
         (new_html / "services" / "videoService.ts", "from './videoModelService';"),
+        (new_html / "services" / "videoService.ts", "from './videoTaskTypes';"),
+        (new_html / "services" / "videoService.ts", "from './videoWorkspaceService';"),
         (video_model_service, "export type VideoModel ="),
         (video_model_service, "export interface SeedanceParams"),
         (video_model_service, "export function inferSeedanceTaskType("),
@@ -2926,6 +2931,20 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_model_service, "export const ALL_MODELS: VideoModel[]"),
         (video_model_service, "export const SELECTABLE_MODELS: VideoModel[]"),
         (video_model_service, "'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI'"),
+        (video_task_types, "export interface UploadedImage"),
+        (video_task_types, "export interface TaskGroup"),
+        (video_task_types, "export interface TaskStatus"),
+        (video_task_types, "export interface VideoTask"),
+        (video_workspace_service, "import { apiFetch } from './httpClient';"),
+        (video_workspace_service, "export interface StoryboardMeta"),
+        (video_workspace_service, "export interface WorkspaceSession"),
+        (video_workspace_service, "export async function saveWorkspaceSession("),
+        (video_workspace_service, "export async function loadWorkspaceSession("),
+        (video_workspace_service, "export function computeReactiveDurationFromMeta("),
+        (video_workspace_service, "export async function patchWorkspaceSession("),
+        (video_gen_page, "from '../services/videoWorkspaceService'"),
+        (video_page, "from '../services/videoWorkspaceService'"),
+        (new_html / "components" / "video" / "VideoCard.tsx", "from '../../services/videoWorkspaceService'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse } from './httpClient';"),
         (api_service, "from './taskNotificationService';"),
         (api_service, "from './episodeDataService';"),
