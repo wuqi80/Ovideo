@@ -3971,6 +3971,7 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
     task_context_path = root / "new_html" / "contexts" / "TaskContext.tsx"
+    sse_hook_path = root / "new_html" / "hooks" / "useSSEInvalidation.ts"
     app_text = app_path.read_text(encoding="utf-8")
     task_context_text = task_context_path.read_text(encoding="utf-8")
     required_snippets = [
@@ -3979,12 +3980,21 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         "requestIdleCallback",
         "<DeferredCrmHost />",
         "import('../services/taskControlService')",
+        "import('../services/globalTaskManager')",
+        "import('../services/taskNotificationService')",
+        "queryClient.invalidateQueries({ queryKey: ['storyboardItems', n.episodeId] })",
     ]
     forbidden_snippets = [
         (app_text, "import { CrmHost } from './admin/crmUI';", app_path),
         (app_text, 'import { CrmHost } from "./admin/crmUI";', app_path),
         (app_text, "import * as crmUI from './admin/crmUI';", app_path),
         (app_text, 'import * as crmUI from "./admin/crmUI";', app_path),
+        (app_text, "useSSEInvalidation", app_path),
+        (app_text, "SSEInvalidationProvider", app_path),
+        (task_context_text, "from '../services/globalTaskManager';", task_context_path),
+        (task_context_text, 'from "../services/globalTaskManager";', task_context_path),
+        (task_context_text, "from '../services/taskNotificationService';", task_context_path),
+        (task_context_text, 'from "../services/taskNotificationService";', task_context_path),
         (task_context_text, "from '../services/videoTaskService';", task_context_path),
         (task_context_text, 'from "../services/videoTaskService";', task_context_path),
         (task_context_text, "import('../services/videoTaskService')", task_context_path),
@@ -3998,6 +4008,9 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         if snippet in text:
             fail(f"Forbidden eager app-shell import in {path.relative_to(root)}: {snippet}")
         checks += 1
+    checks += 1
+    if sse_hook_path.exists():
+        fail("hooks/useSSEInvalidation.ts should stay deleted; TaskContext owns task runtime invalidation")
     return checks
 
 

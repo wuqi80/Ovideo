@@ -6747,3 +6747,27 @@
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=12`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Task Runtime App Shell Split
+
+### Changes
+
+- Removed the top-level `useSSEInvalidation` wrapper from `new_html/App.tsx`.
+- Moved task notification query invalidation into `new_html/contexts/TaskContext.tsx`, so task events are handled by one runtime owner.
+- Converted `globalTaskManager`, `taskNotificationService`, and `notificationMapping` from static `TaskContext` imports into dynamic runtime chunks.
+- Deleted `new_html/hooks/useSSEInvalidation.ts` to prevent task transport from drifting back into the app shell.
+- Strengthened `scripts/check_route_contract.py` so app shell chunk contracts reject static task runtime imports and require the new dynamic wiring.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=22`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Local Vite build could not run because the Windows `node_modules` tree is missing Rollup optional package `@rollup/rollup-win32-x64-msvc`; no package files were changed for this local environment issue.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `index-B2nTUbrg.js` at `216.45 kB`, down from the prior `index-DZIRn4Bt.js` at `223.36 kB`.
+- Server build split task runtime chunks: `globalTaskManager-DwHjopXU.js` at `4.98 kB`, `taskNotificationService-D9URRPBR.js` at `1.18 kB`, and `notificationMapping-D7Y2oSEc.js` at `2.31 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=22`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

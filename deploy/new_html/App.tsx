@@ -25,7 +25,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskProvider } from './contexts/TaskContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
 import { GlobalToast } from './components/GlobalToast';
-import { useSSEInvalidation } from './hooks/useSSEInvalidation';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,11 +37,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-function SSEInvalidationProvider({ children }: { children: React.ReactNode }) {
-  useSSEInvalidation();
-  return <>{children}</>;
-}
 
 const ProjectHub = React.lazy(() => import('./components/ProjectHub'));
 const ProjectWorkspace = React.lazy(() => import('./components/ProjectWorkspace'));
@@ -131,7 +125,6 @@ const DeferredCrmHost: React.FC = () => {
 const App: React.FC = () => {
     return (
         <QueryClientProvider client={queryClient}>
-        <SSEInvalidationProvider>
         <BrowserRouter>
             <WorkspaceProvider>
             <TaskProvider>
@@ -208,7 +201,6 @@ const App: React.FC = () => {
             </TaskProvider>
             </WorkspaceProvider>
         </BrowserRouter>
-        </SSEInvalidationProvider>
         </QueryClientProvider>
     );
 };
