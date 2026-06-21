@@ -7368,3 +7368,5 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `deploy/scripts/check_route_contract.py` passed with `video_client_base_checks=54`.
   - Local `deploy/scripts/check_architecture_contracts.py` passed 10/10.
   - Local `git diff --check` passed.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=54`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
