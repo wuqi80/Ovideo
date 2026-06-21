@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from external_api.video.base import download_streaming_video
+from external_api.video.base import download_streaming_video, request_json
 from services.api_provider_endpoints import derive_dashscope_video_urls
 from services.api_provider_registry import DASHSCOPE_DEFAULT_MODEL_MAP
 from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
@@ -106,9 +106,14 @@ class Wan26Client:
         self._refresh_runtime_config()
         url = f"{self.base_url}/tasks/{task_id}"
         try:
-            response = requests.get(url, headers=self.headers, timeout=30, **self._requests_kwargs)
-            response.raise_for_status()
-            return response.json()
+            return request_json(
+                "GET",
+                url,
+                headers=self.headers,
+                request_kwargs=self._requests_kwargs,
+                logger=logger,
+                label="Wan2.6 query",
+            )
         except Exception as exc:
             logger.error("Wan2.6 query failed: %s", exc)
             raise

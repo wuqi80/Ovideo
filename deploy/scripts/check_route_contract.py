@@ -4562,6 +4562,10 @@ def check_video_client_base_contract(root: Path) -> int:
     base_path = video_dir / "base.py"
     base_text = base_path.read_text(encoding="utf-8")
     required_base_snippets = [
+        "def request_json(",
+        "response = requests.request(",
+        "response.raise_for_status()",
+        "return data",
         "def download_streaming_video(",
         "response = requests.get(",
         "stream=True",
@@ -4575,7 +4579,8 @@ def check_video_client_base_contract(root: Path) -> int:
         video_dir / "wan2.py",
     ]
     required_client_snippets = [
-        "from external_api.video.base import download_streaming_video",
+        "from external_api.video.base import download_streaming_video, request_json",
+        "return request_json(",
         "return download_streaming_video(",
     ]
     forbidden_client_snippets = [
@@ -4583,6 +4588,8 @@ def check_video_client_base_contract(root: Path) -> int:
         "for chunk in resp.iter_content",
         "video_bytes = b",
         "chunks: List[bytes] = []",
+        "return response.json()",
+        "return resp.json()",
     ]
 
     checks = 0

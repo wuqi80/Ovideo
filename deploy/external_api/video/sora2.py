@@ -9,7 +9,7 @@ import logging
 from typing import Optional, Dict, Any
 from PIL import Image
 import io
-from external_api.video.base import download_streaming_video
+from external_api.video.base import download_streaming_video, request_json
 from services.api_provider_registry import (
     SORA2_DEFAULT_VIDEO_MODEL,
     normalize_sora2_video_model,
@@ -177,9 +177,14 @@ class Sora2Client:
         url = f"{self.base_url}/videos/{video_id}"
         
         try:
-            response = requests.get(url, headers=self.headers, timeout=30, **self._request_kwargs)
-            response.raise_for_status()
-            return response.json()
+            return request_json(
+                "GET",
+                url,
+                headers=self.headers,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Sora2 query",
+            )
         
         except Exception as e:
             logger.error(f"❌ Sora2 查询任务失败: {e}")

@@ -7,7 +7,7 @@ import requests
 import time
 import logging
 from typing import Optional, Dict, Any, List
-from external_api.video.base import download_streaming_video
+from external_api.video.base import download_streaming_video, request_json
 from services.api_provider_registry import (
     VEO_DEFAULT_VIDEO_MODEL,
     normalize_veo_video_model,
@@ -113,9 +113,14 @@ class VeoClient:
         url = f"{self.base_url}/videos/{video_id}"
         
         try:
-            response = requests.get(url, headers=self.headers, timeout=30, **self._request_kwargs)
-            response.raise_for_status()
-            return response.json()
+            return request_json(
+                "GET",
+                url,
+                headers=self.headers,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Veo query",
+            )
         
         except Exception as e:
             logger.error(f"❌ Veo 查询任务失败: {e}")
@@ -135,9 +140,14 @@ class VeoClient:
         url = f"{self.base_url}/videos/{video_id}/content"
         
         try:
-            response = requests.get(url, headers=self.headers, timeout=30, **self._request_kwargs)
-            response.raise_for_status()
-            return response.json()
+            return request_json(
+                "GET",
+                url,
+                headers=self.headers,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Veo content",
+            )
         
         except Exception as e:
             logger.error(f"❌ Veo 获取视频内容失败: {e}")

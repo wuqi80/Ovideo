@@ -7339,3 +7339,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `git diff --check` passed.
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=29`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 Video Client Shared JSON Request Base
+
+- Extended `deploy/external_api/video/base.py` with `request_json()` to centralize synchronous video-provider JSON requests.
+- Updated `deploy/external_api/video/seedance.py`, `sora2.py`, `veo.py`, and `wan2.py` task-query/content-query paths to use `request_json()` while preserving provider-specific URLs, headers, runtime proxy kwargs, and timeout behavior.
+- Moved non-2xx response-body logging into the shared helper so provider query failures stay diagnosable.
+- Extended `deploy/tests/test_video_client_base.py` to cover method normalization, params/header/timeout/proxy forwarding, `raise_for_status()`, and JSON return behavior.
+- Strengthened `deploy/scripts/check_route_contract.py` so these synchronous video clients must use both shared JSON request and streaming download helpers.
+- Verification:
+  - Local `pytest deploy/tests/test_video_client_base.py -q` passed with 2 tests.
+  - Local `py_compile` passed for the helper, updated clients, and route contract script.
+  - Local `deploy/scripts/check_route_contract.py` passed with `video_client_base_checks=45`.
+  - Local `deploy/scripts/check_architecture_contracts.py` passed 10/10.
+  - Local `git diff --check` passed.

@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from external_api.video.base import download_streaming_video
+from external_api.video.base import download_streaming_video, request_json
 from services.api_provider_registry import SEEDANCE_DEFAULT_MODEL_MAP, normalize_seedance_sub_model
 from services.api_provider_runtime import resolve_provider, resolve_seedance_model_name
 
@@ -115,11 +115,14 @@ class SeedanceClient:
         self._refresh_runtime_config()
         url = f"{self.base_url.rstrip('/')}/{task_id}"
         try:
-            resp = requests.get(url, headers=self.headers, timeout=30, **self._request_kwargs)
-            if not resp.ok:
-                logger.error("Seedance query failed: HTTP %s body=%s", resp.status_code, resp.text[:500])
-            resp.raise_for_status()
-            return resp.json()
+            return request_json(
+                "GET",
+                url,
+                headers=self.headers,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Seedance query",
+            )
         except Exception as exc:
             logger.error("Seedance query failed: %s", exc)
             raise
