@@ -15,6 +15,9 @@
 - Local `py_compile` for `scripts/check_route_contract.py`: passed.
 - Local `scripts/check_route_contract.py`: passed, including `frontend_video_preload_checks=13`.
 - Local `scripts/check_architecture_contracts.py`: 10/10 passed.
+- `scripts/live_deploy_mvc2.sh`: deployed to `https://mecha.one/`; remote Vite build passed and `drama.service` stayed active.
+- Server `scripts/check_architecture_contracts.py`: 10/10 passed, including `frontend_video_preload_checks=13`.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
 - No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
 
 ## 2026-06-21 API Config Endpoint Diagnostics

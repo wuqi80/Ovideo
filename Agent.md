@@ -22,6 +22,10 @@
   - 所有裸 `<video>` 必须显式声明 `preload`。
   - 高密度视频列表必须保留 `preload="none"`。
 - 验证：`py_compile`、`check_route_contract.py` 和 `check_architecture_contracts.py` 均通过，新增 `frontend_video_preload_checks=13`。
+- 已部署到 `https://mecha.one/`：
+  - 服务器远端 Vite build 通过，`drama.service` 为 `active`。
+  - 服务器 `scripts/check_architecture_contracts.py` 10/10 通过，包含 `frontend_video_preload_checks=13`。
+  - 线上 smoke test 9/9 通过。
 
 ## 2026-06-21 API 配置诊断增强记录
 
