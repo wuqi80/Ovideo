@@ -7371,4 +7371,6 @@
 
 - Local CORS parser check confirmed active config modules, generated config, and auto-deploy template default to the explicit origin list and contain no wildcard CORS default.
 - Local `git diff --check`, deploy script syntax check, route contract, and architecture contract passed.
-- Live deploy to `https://mecha.one/` passed; remote architecture contracts passed 10/10, online smoke passed 9/9, and remote `cluster_config.py`/`config.py` report no wildcard CORS origin.
+- Live deploy to `https://mecha.one/` passed; remote architecture contracts passed 10/10 and online smoke passed 9/9.
+- Remote sync check: `cluster_main.py` has 999 lines, `admin_routes.py` has 1502 lines, and `dao/` contains 36 Python files recursively.
+- Remote generated CORS check confirmed `cluster_config_generated.py` reports the explicit origin list without wildcard CORS, and `auto_deploy_cluster.py` contains `https://mecha.one` without the old local-only default.
