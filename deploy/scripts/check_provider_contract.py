@@ -1137,14 +1137,20 @@ def check_video_default_model_registry_wiring(registry) -> int:
     checks += 2
 
     audio_client = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
-    if "MINIMAX_DEFAULT_VIDEO_MODEL" not in audio_client:
-        fail("external_api/audio/minimax_audio.py must resolve MiniMax preset through registry MINIMAX_DEFAULT_VIDEO_MODEL")
+    if not hasattr(registry, "MINIMAX_DEFAULT_PROVIDER_MODEL"):
+        fail("Registry missing MINIMAX_DEFAULT_PROVIDER_MODEL")
+    if registry.MINIMAX_DEFAULT_PROVIDER_MODEL != registry.MINIMAX_DEFAULT_VIDEO_MODEL:
+        fail("MINIMAX_DEFAULT_PROVIDER_MODEL should alias the current MiniMax provider default")
+    if "MINIMAX_DEFAULT_PROVIDER_MODEL" not in audio_client:
+        fail("external_api/audio/minimax_audio.py must resolve MiniMax preset through registry MINIMAX_DEFAULT_PROVIDER_MODEL")
+    if "MINIMAX_DEFAULT_VIDEO_MODEL" in audio_client:
+        fail("external_api/audio/minimax_audio.py must not depend on video-named MiniMax defaults")
     if registry.MINIMAX_DEFAULT_VIDEO_MODEL in audio_client:
         fail(
             "external_api/audio/minimax_audio.py must not hardcode "
             f"MiniMax default model literal {registry.MINIMAX_DEFAULT_VIDEO_MODEL!r}"
         )
-    checks += 2
+    checks += 5
 
     for registry_name, literal in (
         ("SORA2_DEFAULT_VIDEO_MODEL", registry.SORA2_DEFAULT_VIDEO_MODEL),

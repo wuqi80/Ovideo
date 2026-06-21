@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import minimax_audio
+from services.api_provider_registry import MINIMAX_DEFAULT_PROVIDER_MODEL
 
 
 @dataclass
@@ -57,7 +58,7 @@ def test_minimax_audio_client_uses_runtime_endpoint_proxy_and_group(monkeypatch)
 
     client = minimax_audio.MinimaxAudioClient()
 
-    assert calls == [("minimax", "MiniMax-Hailuo-02")]
+    assert calls == [("minimax", MINIMAX_DEFAULT_PROVIDER_MODEL)]
     assert client.api_key == "runtime-minimax-key"
     assert client.base_url == "https://minimax-runtime.example.test/v1"
     assert client._aiohttp_proxy == "http://runtime-proxy.example.test:8080"

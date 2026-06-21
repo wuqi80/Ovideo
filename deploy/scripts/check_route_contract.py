@@ -2346,7 +2346,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "external_api" / "audio" / "minimax_audio.py",
-            'config = resolve_provider("minimax", MINIMAX_DEFAULT_VIDEO_MODEL)',
+            'config = resolve_provider("minimax", MINIMAX_DEFAULT_PROVIDER_MODEL)',
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "MINIMAX_DEFAULT_PROVIDER_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL",
         ),
         (
             root / "external_api" / "audio" / "minimax_audio.py",
