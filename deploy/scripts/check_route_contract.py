@@ -2947,13 +2947,17 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         'label="DeepSeek",',
         'label="Gemini text",',
         'label="Gemini image",',
+        "def _post_form_request(",
+        "async def _post_form_request_async(",
+        'label="GPT Image edit",',
+        'label="GPT Image generate",',
         'label="Doubao image",',
     ):
         if snippet not in ai_proxy_text:
             fail(f"AI proxy JSON providers must route through shared helper: {snippet}")
         checks += 1
-    if ai_proxy_text.count("requests.post(") > 4:
-        fail("AI proxy service should keep direct requests.post limited to helper, streaming, and GPT image paths")
+    if ai_proxy_text.count("requests.post(") > 3:
+        fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and streaming")
     checks += 1
     return checks
 

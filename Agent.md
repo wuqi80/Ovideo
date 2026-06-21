@@ -7458,3 +7458,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=171`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `_post_json_request()` is present and called by DeepSeek, Gemini text, Gemini image, and Doubao image paths.
+
+## 2026-06-22 GPT Image Proxy Request Consolidation
+
+- Added shared response parsing and `_post_form_request()` / `_post_form_request_async()` in `deploy/services/ai_proxy_service.py` so GPT Image multipart edit requests use the same timeout, proxy kwargs, upstream logging, HTTP status, and JSON parse handling as JSON provider calls.
+- Routed GPT Image generation through `_post_json_request_async()` and GPT Image edits through `_post_form_request_async()`, preserving tier/provider resolution, request model, endpoint/key lookup, and returned image parsing.
+- Added runtime tests for GPT Image VIP generation and official edit paths in `deploy/tests/test_api_provider_runtime_model_env.py`.
+- Strengthened `deploy/scripts/check_route_contract.py` so direct `requests.post` in AI proxy stays limited to JSON helper, form helper, and DeepSeek streaming.
+- Verification:
+  - Local `pytest deploy/tests/test_api_provider_runtime_model_env.py -q` passed with 29 tests.
+  - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local route contract passed with `api_provider_runtime_model_checks=175`.

@@ -73,6 +73,32 @@ def _default_upstream_detail(label: str) -> Callable[[str, int], str]:
     return lambda upstream, status_code: f"{label} API 调用失败: {upstream[:200] or status_code}"
 
 
+def _read_post_json_response(
+    *,
+    label: str,
+    response: Any,
+    parse_error_message: str,
+    expected_status: Optional[int] = None,
+    upstream_detail: Optional[Callable[[str, int], str]] = None,
+    upstream_status_code: int = 502,
+) -> Dict[str, Any]:
+    failed = response.status_code >= 400 if expected_status is None else response.status_code != expected_status
+    if failed:
+        upstream = (response.text or "")[:500]
+        logger.error("%s upstream failed: status=%s body=%s", label, response.status_code, upstream)
+        detail_factory = upstream_detail or _default_upstream_detail(label)
+        raise AIProxyUpstreamError(
+            detail_factory(upstream, response.status_code),
+            status_code=upstream_status_code,
+            upstream=upstream,
+        )
+    try:
+        return response.json()
+    except ValueError as e:
+        logger.error("%s response JSON parse failed: %s", label, e, exc_info=True)
+        raise AIProxyUpstreamError(parse_error_message) from e
+
+
 def _post_json_request(
     *,
     label: str,
@@ -98,17 +124,14 @@ def _post_json_request(
             timeout=timeout,
             **(request_kwargs or {}),
         )
-        failed = response.status_code >= 400 if expected_status is None else response.status_code != expected_status
-        if failed:
-            upstream = (response.text or "")[:500]
-            logger.error("%s upstream failed: status=%s body=%s", label, response.status_code, upstream)
-            detail_factory = upstream_detail or _default_upstream_detail(label)
-            raise AIProxyUpstreamError(
-                detail_factory(upstream, response.status_code),
-                status_code=upstream_status_code,
-                upstream=upstream,
-            )
-        return response.json()
+        return _read_post_json_response(
+            label=label,
+            response=response,
+            parse_error_message=parse_error_message,
+            expected_status=expected_status,
+            upstream_detail=upstream_detail,
+            upstream_status_code=upstream_status_code,
+        )
     except AIProxyError:
         raise
     except requests.Timeout as e:
@@ -116,13 +139,58 @@ def _post_json_request(
     except requests.RequestException as e:
         logger.error("%s request failed: %s", label, e, exc_info=True)
         raise AIProxyUpstreamError(request_error_message) from e
-    except ValueError as e:
-        logger.error("%s response JSON parse failed: %s", label, e, exc_info=True)
-        raise AIProxyUpstreamError(parse_error_message) from e
 
 
 async def _post_json_request_async(**kwargs: Any) -> Dict[str, Any]:
     return await asyncio.to_thread(_post_json_request, **kwargs)
+
+
+def _post_form_request(
+    *,
+    label: str,
+    url: str,
+    headers: Dict[str, str],
+    data: Dict[str, str],
+    files: Any,
+    timeout: Any,
+    timeout_message: str,
+    request_error_message: str,
+    parse_error_message: str,
+    request_kwargs: Optional[Dict[str, Any]] = None,
+    expected_status: Optional[int] = None,
+    timeout_status_code: int = 504,
+    upstream_detail: Optional[Callable[[str, int], str]] = None,
+    upstream_status_code: int = 502,
+) -> Dict[str, Any]:
+    """POST provider multipart/form-data while sharing upstream response handling."""
+    try:
+        response = requests.post(
+            url,
+            headers=headers,
+            data=data,
+            files=files,
+            timeout=timeout,
+            **(request_kwargs or {}),
+        )
+        return _read_post_json_response(
+            label=label,
+            response=response,
+            parse_error_message=parse_error_message,
+            expected_status=expected_status,
+            upstream_detail=upstream_detail,
+            upstream_status_code=upstream_status_code,
+        )
+    except AIProxyError:
+        raise
+    except requests.Timeout as e:
+        raise AIProxyUpstreamError(timeout_message, status_code=timeout_status_code) from e
+    except requests.RequestException as e:
+        logger.error("%s request failed: %s", label, e, exc_info=True)
+        raise AIProxyUpstreamError(request_error_message) from e
+
+
+async def _post_form_request_async(**kwargs: Any) -> Dict[str, Any]:
+    return await asyncio.to_thread(_post_form_request, **kwargs)
 
 
 def _unique_provider_ids(items: List[Optional[str]]) -> List[str]:
@@ -599,87 +667,74 @@ async def generate_gpt_images(
     if not config.endpoint:
         raise AIProxyConfigError(f"图像生成服务 endpoint 未配置 {key_hint}，请管理员在后台填入 endpoint")
 
-    try:
-        if references:
-            data = build_gpt_image_edit_data(
-                model=model,
-                prompt=prompt,
-                n=n,
-                size=size,
-                quality=quality,
-            )
-            files = [
-                ("image[]", (ref.filename, io.BytesIO(ref.content), ref.mime_type))
-                for ref in references
-            ]
-            headers = {"Authorization": f"Bearer {config.api_key}"}
-            url = config.url_for("images/edits")
-            logger.info(
-                "GPT Image edit -> tier=%s model=%s refs=%s size=%s quality=%s",
-                resolved_tier,
-                model,
-                len(references),
-                data["size"],
-                data["quality"],
-            )
-            response = await asyncio.to_thread(
-                requests.post,
-                url,
-                headers=headers,
-                data=data,
-                files=files,
-                timeout=240,
-                **config.requests_kwargs(),
-            )
-        else:
-            payload = build_gpt_image_generation_payload(
-                model=model,
-                prompt=prompt,
-                n=n,
-                size=size,
-                quality=quality,
-            )
-            headers = {
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            }
-            url = config.url_for("images/generations")
-            logger.info(
-                "GPT Image generate -> tier=%s model=%s size=%s quality=%s",
-                resolved_tier,
-                model,
-                payload["size"],
-                payload["quality"],
-            )
-            response = await asyncio.to_thread(
-                requests.post,
-                url,
-                headers=headers,
-                json=payload,
-                timeout=240,
-                **config.requests_kwargs(),
-            )
-
-        if response.status_code >= 400:
-            upstream = (response.text or "")[:500]
-            logger.error("GPT Image upstream failed: status=%s body=%s", response.status_code, upstream)
-            raise AIProxyUpstreamError(
-                f"上游图像生成失败 ({response.status_code})，请检查 API Key 或稍后重试",
-                status_code=502,
-                upstream=upstream,
-            )
-        result = response.json()
-    except AIProxyError:
-        raise
-    except requests.Timeout as e:
-        logger.error("GPT Image request timeout: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("图像生成超时，请稍后重试", status_code=504) from e
-    except requests.RequestException as e:
-        logger.error("GPT Image request failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("图像生成失败，请稍后重试") from e
-    except ValueError as e:
-        logger.error("GPT Image response JSON parse failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("GPT Image 响应格式异常") from e
+    upstream_detail = lambda _upstream, status_code: f"上游图像生成失败 ({status_code})，请检查 API Key 或稍后重试"
+    if references:
+        data = build_gpt_image_edit_data(
+            model=model,
+            prompt=prompt,
+            n=n,
+            size=size,
+            quality=quality,
+        )
+        files = [
+            ("image[]", (ref.filename, io.BytesIO(ref.content), ref.mime_type))
+            for ref in references
+        ]
+        headers = {"Authorization": f"Bearer {config.api_key}"}
+        url = config.url_for("images/edits")
+        logger.info(
+            "GPT Image edit -> tier=%s model=%s refs=%s size=%s quality=%s",
+            resolved_tier,
+            model,
+            len(references),
+            data["size"],
+            data["quality"],
+        )
+        result = await _post_form_request_async(
+            label="GPT Image edit",
+            url=url,
+            headers=headers,
+            data=data,
+            files=files,
+            timeout=240,
+            timeout_message="图像生成超时，请稍后重试",
+            request_error_message="图像生成失败，请稍后重试",
+            parse_error_message="GPT Image 响应格式异常",
+            request_kwargs=config.requests_kwargs(),
+            upstream_detail=upstream_detail,
+        )
+    else:
+        payload = build_gpt_image_generation_payload(
+            model=model,
+            prompt=prompt,
+            n=n,
+            size=size,
+            quality=quality,
+        )
+        headers = {
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        }
+        url = config.url_for("images/generations")
+        logger.info(
+            "GPT Image generate -> tier=%s model=%s size=%s quality=%s",
+            resolved_tier,
+            model,
+            payload["size"],
+            payload["quality"],
+        )
+        result = await _post_json_request_async(
+            label="GPT Image generate",
+            url=url,
+            headers=headers,
+            payload=payload,
+            timeout=240,
+            timeout_message="图像生成超时，请稍后重试",
+            request_error_message="图像生成失败，请稍后重试",
+            parse_error_message="GPT Image 响应格式异常",
+            request_kwargs=config.requests_kwargs(),
+            upstream_detail=upstream_detail,
+        )
 
     images = parse_openai_image_response(result)
     if not images:

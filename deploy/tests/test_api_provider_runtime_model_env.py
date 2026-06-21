@@ -218,6 +218,14 @@ class _DoubaoResponse:
         return {"data": [{"b64_json": "ZG91YmFv"}]}
 
 
+class _OpenAIImageResponse:
+    status_code = 200
+    text = ""
+
+    def json(self):
+        return {"data": [{"b64_json": "Z3B0LWltYWdl"}]}
+
+
 class _MinimaxTaskResponse:
     def raise_for_status(self):
         return None
@@ -323,6 +331,82 @@ async def test_doubao_image_explicit_model_overrides_runtime_model(monkeypatch):
     assert images == ["data:image/png;base64,ZG91YmFv"]
     assert calls[0]["url"] == "https://doubao-runtime.example.test/api/v3/images/generations"
     assert calls[0]["json"]["model"] == "doubao-explicit-image-model"
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_generation_uses_runtime_endpoint(monkeypatch):
+    env_key = get_provider_env_key("laozhang-gpt-image")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-gpt-image-key")
+    monkeypatch.setenv(endpoint_env, "https://gpt-image-runtime.example.test/v1")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _OpenAIImageResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    images, model, tier = await ai_proxy_service.generate_gpt_images(
+        tier="vip",
+        prompt="draw",
+        references=[],
+        n=2,
+        size="1024x1024",
+        quality="high",
+    )
+
+    assert images == ["data:image/png;base64,Z3B0LWltYWdl"]
+    assert model == "gpt-image-2-vip"
+    assert tier == "vip"
+    assert calls[0]["url"] == "https://gpt-image-runtime.example.test/v1/images/generations"
+    assert calls[0]["headers"]["Authorization"] == "Bearer test-gpt-image-key"
+    assert calls[0]["json"]["model"] == "gpt-image-2-vip"
+    assert calls[0]["json"]["size"] == "1024x1024"
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_edit_uses_runtime_endpoint(monkeypatch):
+    env_key = get_provider_env_key("laozhang-sora2")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-official-gpt-image-key")
+    monkeypatch.setenv(endpoint_env, "https://official-gpt-image-runtime.example.test/v1")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _OpenAIImageResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    images, model, tier = await ai_proxy_service.generate_gpt_images(
+        tier="official",
+        prompt="edit",
+        references=[
+            ai_proxy_service.GptImageReferenceInput(
+                filename="reference.png",
+                content=b"image-bytes",
+                mime_type="image/png",
+            )
+        ],
+        n=1,
+        size="auto",
+        quality="auto",
+    )
+
+    assert images == ["data:image/png;base64,Z3B0LWltYWdl"]
+    assert model == "gpt-image-2"
+    assert tier == "official"
+    assert calls[0]["url"] == "https://official-gpt-image-runtime.example.test/v1/images/edits"
+    assert calls[0]["headers"]["Authorization"] == "Bearer test-official-gpt-image-key"
+    assert calls[0]["data"]["model"] == "gpt-image-2"
+    assert calls[0]["files"][0][0] == "image[]"
+    assert calls[0]["files"][0][1][0] == "reference.png"
+    assert calls[0]["files"][0][1][2] == "image/png"
 
 
 def test_minimax_video_uses_runtime_model_when_worker_passes_legacy_default(monkeypatch):
