@@ -7370,3 +7370,20 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `git diff --check` passed.
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=54`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 Live Deploy Directory Sync + Video Create Requests
+
+- Verified `deploy/scripts/live_deploy_mvc2.sh` now syncs the whole `dao`, `services`, and `utils` directories instead of relying on an old partial service-file list.
+- Confirmed the deploy script still avoids the red-zone `pipeline/`, `agent_routes.py`, and `workflows/*.json` paths.
+- Updated `deploy/external_api/video/seedance.py`, `veo.py`, and `wan2.py` so pure JSON task-creation requests use shared `external_api.video.base.request_json()`.
+- Left `deploy/external_api/video/sora2.py` direct POST handling in place for its multipart upload branch.
+- Strengthened `deploy/scripts/check_route_contract.py` so JSON-only synchronous video clients cannot reintroduce direct `requests.*` calls.
+- Updated `deploy/tests/test_api_provider_runtime_model_env.py` to patch the shared request path for Seedance, Veo, and Wan2.6 create-task tests.
+- Verification:
+  - Local `pytest deploy/tests/test_video_client_base.py deploy/tests/test_api_provider_runtime_model_env.py -q` passed with 29 tests.
+  - Local `py_compile`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, and `git diff --check` passed.
+  - Local route contract passed with `video_client_base_checks=58`.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=58`.
+  - Server sync check: local and remote SHA256 hashes match for `cluster_main.py`, `admin_routes.py`, and `scripts/live_deploy_mvc2.sh`.
+  - `dao/` recursive file count matches locally and remotely at 72 files; the top-level `ls dao | wc -l` count is 8 because DAO files are grouped under subdirectories.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.

@@ -3,7 +3,6 @@ Veo-3.1 API 客户端
 用于调用老张 Veo-3.1 视频生成 API
 """
 
-import requests
 import time
 import logging
 from typing import Optional, Dict, Any, List
@@ -88,10 +87,15 @@ class VeoClient:
             }
             
             logger.info(f"🎬 Veo 创建任务: {model}, {len(image_urls) if image_urls else 0}张图片")
-            response = requests.post(url, headers=self.headers, json=data, timeout=30, **self._request_kwargs)
-            response.raise_for_status()
-            
-            result = response.json()
+            result = request_json(
+                "POST",
+                url,
+                headers=self.headers,
+                json=data,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Veo create",
+            )
             logger.info(f"✅ Veo 任务创建成功: {result.get('id')}")
             return result
         

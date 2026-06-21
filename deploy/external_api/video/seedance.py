@@ -4,8 +4,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-import requests
-
 from external_api.video.base import download_streaming_video, request_json
 from services.api_provider_registry import SEEDANCE_DEFAULT_MODEL_MAP, normalize_seedance_sub_model
 from services.api_provider_runtime import resolve_provider, resolve_seedance_model_name
@@ -85,22 +83,16 @@ class SeedanceClient:
             len(contents),
         )
         try:
-            resp = requests.post(
+            data = request_json(
+                "POST",
                 self.base_url,
                 headers=self.headers,
                 json=payload,
                 timeout=180,
-                **self._request_kwargs,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Seedance create",
             )
-            if not resp.ok:
-                logger.error(
-                    "Seedance task create failed: HTTP %s model=%s body=%s",
-                    resp.status_code,
-                    payload["model"],
-                    resp.text[:1000],
-                )
-            resp.raise_for_status()
-            data = resp.json()
             task_id = data.get("id")
             if not task_id:
                 raise ValueError(f"Seedance response missing task id: {data}")

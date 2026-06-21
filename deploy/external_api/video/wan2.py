@@ -5,8 +5,6 @@ import logging
 import time
 from typing import Any, Dict, Optional
 
-import requests
-
 from external_api.video.base import download_streaming_video, request_json
 from services.api_provider_endpoints import derive_dashscope_video_urls
 from services.api_provider_registry import DASHSCOPE_DEFAULT_MODEL_MAP
@@ -90,9 +88,15 @@ class Wan26Client:
                 shot_type,
             )
             headers = {**self.headers, "Content-Type": "application/json"}
-            response = requests.post(url, headers=headers, json=data, timeout=30, **self._requests_kwargs)
-            response.raise_for_status()
-            result = response.json()
+            result = request_json(
+                "POST",
+                url,
+                headers=headers,
+                json=data,
+                request_kwargs=self._requests_kwargs,
+                logger=logger,
+                label="Wan2.6 create",
+            )
             task_id = result.get("output", {}).get("task_id")
             task_status = result.get("output", {}).get("task_status")
             logger.info("Wan2.6 task created: %s status=%s", task_id, task_status)

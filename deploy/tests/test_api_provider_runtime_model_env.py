@@ -471,16 +471,17 @@ def test_veo_video_uses_runtime_model_env_when_request_omits_model(monkeypatch):
     monkeypatch.setenv(endpoint_env, "https://veo-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "veo-runtime-video-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _VeoTaskResponse()
 
-    monkeypatch.setattr(veo_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = veo_video.VeoClient()
     result = client.create_video_task(prompt="move gently")
 
     assert result == {"id": "veo-video-1"}
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://veo-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == "veo-runtime-video-model"
 
@@ -496,11 +497,11 @@ def test_veo_video_explicit_non_default_model_overrides_runtime_model(monkeypatc
     monkeypatch.setenv(endpoint_env, "https://veo-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "veo-runtime-video-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _VeoTaskResponse()
 
-    monkeypatch.setattr(veo_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = veo_video.VeoClient()
     client.create_video_task(
@@ -508,6 +509,7 @@ def test_veo_video_explicit_non_default_model_overrides_runtime_model(monkeypatc
         model="veo-explicit-video-model",
     )
 
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://veo-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == "veo-explicit-video-model"
 
@@ -523,15 +525,16 @@ def test_veo_video_legacy_model_env_maps_to_callable_default(monkeypatch):
     monkeypatch.setenv(endpoint_env, "https://veo-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "veo-3.1")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _VeoTaskResponse()
 
-    monkeypatch.setattr(veo_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = veo_video.VeoClient()
     client.create_video_task(prompt="move gently")
 
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://veo-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == veo_video.DEFAULT_VEO_VIDEO_MODEL
 
@@ -547,16 +550,17 @@ def test_seedance_video_uses_standard_sub_model_runtime_env(monkeypatch):
     monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
     monkeypatch.setenv(standard_env, "seedance-standard-runtime-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _SeedanceTaskResponse()
 
-    monkeypatch.setattr(seedance_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = seedance_video.SeedanceClient()
     task_id = client.create_video_task("standard", [{"type": "text", "text": "move gently"}])
 
     assert task_id == "seedance-task-1"
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
     assert calls[0]["json"]["model"] == "seedance-standard-runtime-model"
 
@@ -572,16 +576,17 @@ def test_seedance_video_uses_fast_sub_model_runtime_env(monkeypatch):
     monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
     monkeypatch.setenv(fast_env, "seedance-fast-runtime-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _SeedanceTaskResponse()
 
-    monkeypatch.setattr(seedance_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = seedance_video.SeedanceClient()
     task_id = client.create_video_task("fast", [{"type": "text", "text": "move gently"}])
 
     assert task_id == "seedance-task-1"
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
     assert calls[0]["json"]["model"] == "seedance-fast-runtime-model"
 
@@ -599,15 +604,16 @@ def test_seedance_video_uses_callable_default_when_runtime_model_missing(monkeyp
     monkeypatch.delenv(get_seedance_sub_model_env_key("standard"), raising=False)
     monkeypatch.delenv(get_seedance_sub_model_env_key("fast"), raising=False)
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _SeedanceTaskResponse()
 
-    monkeypatch.setattr(seedance_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = seedance_video.SeedanceClient()
     client.create_video_task("standard", [{"type": "text", "text": "move gently"}])
 
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
     assert calls[0]["json"]["model"] == SEEDANCE_DEFAULT_MODEL_MAP["standard"]
 
@@ -626,16 +632,17 @@ def test_wan26_video_uses_runtime_sub_model_env(monkeypatch):
     )
     monkeypatch.setenv(wan26_env, "wan2.6-runtime-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _Wan26TaskResponse()
 
-    monkeypatch.setattr(wan2_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = wan2_video.Wan26Client()
     result = client.create_video_task(prompt="move gently", img_url="https://cdn.example.test/frame.png")
 
     assert result["output"]["task_id"] == "wan26-task-1"
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://dashscope-runtime.example.test/api/v1/services/aigc/video-generation/video-synthesis"
     assert calls[0]["json"]["model"] == "wan2.6-runtime-model"
 
@@ -655,15 +662,16 @@ def test_wan26_video_uses_callable_default_when_runtime_model_missing(monkeypatc
     monkeypatch.delenv(model_env, raising=False)
     monkeypatch.delenv(get_dashscope_sub_model_env_key("wan26"), raising=False)
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _Wan26TaskResponse()
 
-    monkeypatch.setattr(wan2_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = wan2_video.Wan26Client()
     client.create_video_task(prompt="move gently", img_url="https://cdn.example.test/frame.png")
 
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://dashscope-runtime.example.test/api/v1/services/aigc/video-generation/video-synthesis"
     assert calls[0]["json"]["model"] == DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]
 

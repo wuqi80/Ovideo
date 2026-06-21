@@ -4579,6 +4579,12 @@ def check_video_client_base_contract(root: Path) -> int:
         video_dir / "veo.py",
         video_dir / "wan2.py",
     ]
+    json_only_client_files = [
+        video_dir / "minimax.py",
+        video_dir / "seedance.py",
+        video_dir / "veo.py",
+        video_dir / "wan2.py",
+    ]
     required_client_snippets = [
         "from external_api.video.base import download_streaming_video, request_json",
         "return request_json(",
@@ -4608,6 +4614,11 @@ def check_video_client_base_contract(root: Path) -> int:
             if snippet in text:
                 fail(f"Video client has duplicated streaming download code in {path.relative_to(root)}: {snippet}")
             checks += 1
+    for path in json_only_client_files:
+        text = path.read_text(encoding="utf-8")
+        if "requests." in text or "import requests" in text:
+            fail(f"JSON-only video client must route HTTP through external_api.video.base: {path.relative_to(root)}")
+        checks += 1
     return checks
 
 
