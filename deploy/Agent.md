@@ -7229,3 +7229,29 @@
 - Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
 - Remote file check confirmed `DASHSCOPE_VIDU_REFERENCE_SUB_MODEL_MAP`, `resolve_dashscope_default_model_name`, and `dashscope_vidu_reference_sub_model` are present in deployed registry/runtime/client paths.
 - Online smoke test against `https://mecha.one` passed: 9/9.
+
+## 2026-06-21 MiniMax Provider Default Registry Alias
+
+### Changes
+
+- Added `MINIMAX_DEFAULT_PROVIDER_MODEL` in `services/api_provider_registry.py` as the provider-level default alias for the shared MiniMax API provider.
+- Updated `external_api/audio/minimax_audio.py` so audio runtime config resolves MiniMax through the provider-level alias instead of a video-named constant.
+- Strengthened `scripts/check_provider_contract.py`, `scripts/check_route_contract.py`, and `tests/test_minimax_audio_runtime.py` so MiniMax audio stays wired to the provider-level default.
+- Verified `scripts/live_deploy_mvc2.sh` already syncs directory-level `dao`, `services`, `utils`, `routers`, and `schemas`; no `pipeline/`, `agent_routes.py`, or `workflows/` entries are present.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `scripts/check_provider_contract.py` passed with `video_default_model_checks=68`.
+- Local targeted pytest passed: `tests/test_minimax_audio_runtime.py` + `tests/test_api_provider_runtime_model_env.py`, 34 passed.
+- Local `scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=152`.
+- Local `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+
+### Deployment
+
+- Pushed commit `4e9eeca` (`refactor(api-provider): clarify minimax provider default model`) to `origin/refactor/v2`.
+- Ran `scripts/live_deploy_mvc2.sh`; server restart finished with service status `active`.
+- Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+- Remote file sync check: `cluster_main.py` 985 lines, `admin_routes.py` 1502 lines, `dao/` 72 files recursively.
+- Remote file check confirmed `MINIMAX_DEFAULT_PROVIDER_MODEL` is present in deployed registry and MiniMax audio client paths.
+- Online smoke test against `https://mecha.one` passed: 9/9.
