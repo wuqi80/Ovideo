@@ -1,5 +1,21 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 Service/DAO Boundary Contract
+
+### Changes
+
+- Added `scripts/check_service_dao_boundary.py` to keep business services persistence-agnostic:
+  - Services may not import direct database primitives such as `asyncpg` or `get_db_manager()`.
+  - Services may not call raw DB methods such as `execute()`, `fetchrow()`, or `fetchval()`.
+  - Services may not contain raw SQL strings; persistence logic should live in DAO modules.
+- Added the new contract to `scripts/check_architecture_contracts.py` so the architecture suite guards this boundary on future refactors.
+- This is a runtime-neutral architecture guard for the Mapper/DAO purity direction.
+
+### Verification
+
+- Local scan found no raw SQL or direct DB connection access in `services/`.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-21 Provider Endpoint Single-Source Contract
 
 ### Changes

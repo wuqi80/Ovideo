@@ -31,6 +31,7 @@ CONTRACT_SCRIPTS: tuple[ContractScript, ...] = (
     ContractScript("provider-health-monitor", "scripts/check_provider_health_monitor.py"),
     ContractScript("ai-proxy-failover", "scripts/check_ai_proxy_failover.py"),
     ContractScript("audio-provider-runtime", "scripts/check_audio_provider_runtime.py"),
+    ContractScript("service-dao-boundary", "scripts/check_service_dao_boundary.py"),
     ContractScript("route-mvc-frontend-contract", "scripts/check_route_contract.py"),
 )
 
