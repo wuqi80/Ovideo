@@ -7266,3 +7266,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Built-in admin password values shorter than 8 characters now disable the built-in login path instead of silently accepting a weak password.
 - Updated local/test verification scripts and deployment docs to prefer `ADMIN_PASSWORD` and describe the development-only fallback.
 - Strengthened `deploy/scripts/check_route_contract.py` so `ADMIN_PASSWORD` cannot regain an `admin123` default.
+- Verification:
+  - Local route contract, architecture contract, targeted auth pytest, and script py_compile passed.
+  - Runtime matrix confirmed: no env rejects `admin123`; dev flag accepts it; strong `ADMIN_PASSWORD` works; short `ADMIN_PASSWORD` is disabled.
+  - Live deploy to `https://mecha.one/` passed; `drama.service` stayed `active`, remote architecture contracts passed 10/10, online smoke passed 9/9, and `admin / admin123` returned 401.
