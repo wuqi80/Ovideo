@@ -23,7 +23,7 @@ import {
 import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/comfyuiTaskWaitService';
 import type { TaskKind } from '../types';
 import { generateThumbnail } from '../utils/imageOptimization';
-import { loadShotImages, clearImageCache, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache } from '../services/imageLoaderService';
+import { loadShotImages, clearImageCache, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache, getImageThumbnailUrl } from '../services/imageLoaderService';
 import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../services/taskRecovery';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
@@ -2000,7 +2000,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             ? item.generatedImages?.find(img => img.id === item.selectedImageId)
                             : item.generatedImages?.[0];
                        
-                       const thumb = selectedImg?.thumbnail || selectedImg?.url || item.generatedImage;
+                       const rawThumb = selectedImg?.thumbnail || selectedImg?.url || item.generatedImage;
+                       const thumb = rawThumb ? getImageThumbnailUrl(rawThumb, 144, 96) : undefined;
 
                        return (
                            <div 
@@ -2645,7 +2646,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                         }}
                                     >
                                         <img 
-                                            src={img.thumbnail || img.url}
+                                            src={getImageThumbnailUrl(img.thumbnail || img.url, 360, 220)}
                                             loading="lazy"
                                             decoding="async"
                                             alt=""

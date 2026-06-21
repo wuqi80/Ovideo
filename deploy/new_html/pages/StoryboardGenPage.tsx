@@ -17,6 +17,7 @@ import { TimelineTrack, type TimelineClip } from '../components/TimelineTrack';
 import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { runWhenIdle } from '../utils/idleScheduler';
+import { getImageThumbnailUrl } from '../services/imageLoaderService';
 
 const STORYBOARD_INITIAL_SHOT_COUNT = 10;
 const GenerationPage = React.lazy(() => import('../components/GenerationPage').then(m => ({ default: m.GenerationPage })));
@@ -313,7 +314,7 @@ export const StoryboardGenPage: React.FC = () => {
           id: `img_${item.itemId}`,
           label: item.sceneHeading || `#${item.sortOrder}`,
           track: 'image',
-          imageUrl: imgUrl,
+          imageUrl: getImageThumbnailUrl(imgUrl, 320, 180),
           durationMs: durMs,
           startMs: cursorMs,
         });

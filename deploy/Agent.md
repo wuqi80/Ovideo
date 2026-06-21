@@ -1,5 +1,23 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 Storyboard Thumbnail Delivery Optimization
+
+### Changes
+
+- Added `getImageThumbnailUrl()` in `new_html/services/imageLoaderService.ts` to route local file/storage/upload image previews through the existing cached `/api/thumbnail` backend endpoint.
+- Updated the storyboard workflow list in `new_html/components/GenerationPage.tsx` so shot cards and generated-image result cards render cached thumbnails instead of full-size files.
+- Updated `new_html/pages/StoryboardGenPage.tsx` so the bottom image/audio timeline uses cached thumbnail URLs for image preview clips.
+- Strengthened `scripts/check_route_contract.py` with `frontend_thumbnail_checks` to keep small workflow preview surfaces from regressing to direct full-image downloads.
+
+### Verification
+
+- Local `git diff --check`: passed.
+- Local `py_compile` for `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed, including `frontend_thumbnail_checks=7`.
+- Local Vite build cannot run on the Windows workspace because `node_modules` is missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package.
+- Local `tsc --noEmit` is still blocked by existing project-wide TypeScript debt outside this thumbnail change.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-20 Task Route Read Service Extraction
 
 ### Changes

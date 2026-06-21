@@ -200,6 +200,46 @@ export function removeImageFromCache(shotId: string, imageId: string): void {
     removeCachedBlobUrl(cacheKey);
 }
 
+function normalizeThumbnailSource(imageUrl: string): string | null {
+    if (!imageUrl || imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+        return null;
+    }
+
+    let source = imageUrl;
+    try {
+        if (/^https?:\/\//i.test(imageUrl)) {
+            if (typeof window === 'undefined') return null;
+            const parsed = new URL(imageUrl, window.location.origin);
+            if (parsed.origin !== window.location.origin) return null;
+            source = `${parsed.pathname}${parsed.search}`;
+        }
+    } catch {
+        return null;
+    }
+
+    const path = source.split('#')[0];
+    if (path.startsWith('/api/thumbnail')) return null;
+    if (
+        path.startsWith('/api/files/') ||
+        path.startsWith('/storage/') ||
+        path.startsWith('/uploads/')
+    ) {
+        return path;
+    }
+    return null;
+}
+
+/**
+ * 构造后端缓存缩略图地址。小卡片/时间轴用这个，高清预览继续使用原图 URL。
+ */
+export function getImageThumbnailUrl(imageUrl: string, width = 320, height = 180): string {
+    const source = normalizeThumbnailSource(imageUrl);
+    if (!source) return imageUrl;
+
+    const thumbUrl = `/api/thumbnail?url=${encodeURIComponent(source)}&width=${Math.max(1, Math.round(width))}&height=${Math.max(1, Math.round(height))}`;
+    return secureApiUrl(thumbUrl, { requireAuth: false });
+}
+
 /**
  * 清除镜头的所有图片缓存
  */

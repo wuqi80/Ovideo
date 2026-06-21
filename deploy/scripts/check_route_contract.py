@@ -3751,6 +3751,31 @@ def check_frontend_lazy_video_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_thumbnail_contract(root: Path) -> int:
+    """Workflow thumbnail surfaces should use cached server thumbnails instead of full files."""
+    image_loader = root / "new_html" / "services" / "imageLoaderService.ts"
+    generation_page = root / "new_html" / "components" / "GenerationPage.tsx"
+    storyboard_page = root / "new_html" / "pages" / "StoryboardGenPage.tsx"
+
+    required_snippets = [
+        (image_loader, "export function getImageThumbnailUrl"),
+        (image_loader, "`/api/thumbnail?url=${encodeURIComponent(source)}"),
+        (image_loader, "return secureApiUrl(thumbUrl, { requireAuth: false });"),
+        (generation_page, "getImageThumbnailUrl(rawThumb, 144, 96)"),
+        (generation_page, "getImageThumbnailUrl(img.thumbnail || img.url, 360, 220)"),
+        (storyboard_page, "import { getImageThumbnailUrl } from '../services/imageLoaderService';"),
+        (storyboard_page, "imageUrl: getImageThumbnailUrl(imgUrl, 320, 180),"),
+    ]
+
+    checks = 0
+    for path, snippet in required_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing frontend thumbnail contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def check_frontend_ai_chunk_split_contract(root: Path) -> int:
     """AI model service should stay out of the initial script workspace chunk."""
     new_html = root / "new_html"
@@ -4272,6 +4297,7 @@ def main() -> int:
     frontend_http_client_checks = check_frontend_http_client_contract(root)
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
+    frontend_thumbnail_checks = check_frontend_thumbnail_contract(root)
     frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
     frontend_workflow_chunk_checks = check_frontend_workflow_chunk_contract(root)
     frontend_three_chunk_checks = check_frontend_three_chunk_contract(root)
@@ -4339,6 +4365,7 @@ def main() -> int:
     print(f"  frontend_http_client_checks={frontend_http_client_checks}")
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
+    print(f"  frontend_thumbnail_checks={frontend_thumbnail_checks}")
     print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
     print(f"  frontend_workflow_chunk_checks={frontend_workflow_chunk_checks}")
     print(f"  frontend_three_chunk_checks={frontend_three_chunk_checks}")

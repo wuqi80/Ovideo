@@ -4,6 +4,26 @@
 工作目录：`D:\Codex\Drama`  
 应用代码目录：`D:\Codex\Drama\deploy`
 
+## 2026-06-21 本轮性能/部署记录
+
+- 分镜工作流的小图加载改为使用后端缓存缩略图：`/api/thumbnail`。
+- 涉及文件：
+  - `deploy/new_html/services/imageLoaderService.ts`
+  - `deploy/new_html/components/GenerationPage.tsx`
+  - `deploy/new_html/pages/StoryboardGenPage.tsx`
+  - `deploy/scripts/check_route_contract.py`
+  - `deploy/Agent.md`
+- 影响范围：
+  - 分镜左侧镜头卡片缩略图。
+  - 当前镜头生成结果网格的小图。
+  - 底部图音联合时间轴预览图。
+- 原图 URL 不写回数据库，仍用于高清预览、选图和导出，缩略图只在渲染阶段派生。
+- 验证：
+  - `git diff --check` 通过。
+  - `python -m py_compile deploy/scripts/check_route_contract.py` 通过。
+  - `deploy/scripts/check_route_contract.py` 通过，包含 `frontend_thumbnail_checks=7`。
+  - Windows 本地 Vite 构建仍受 Rollup 可选依赖 `@rollup/rollup-win32-x64-msvc` 缺失影响，服务器 Linux 构建仍作为前端上线验证准则。
+
 ## 当前本地部署状态
 
 本地部署已跑通，访问地址：
