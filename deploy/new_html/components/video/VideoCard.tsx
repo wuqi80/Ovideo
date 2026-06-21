@@ -5,6 +5,7 @@ import { ImageOff } from 'lucide-react';
 import type { TaskGroup, UploadedImage } from '../../services/videoTaskTypes';
 import type { StoryboardMeta } from '../../services/videoWorkspaceService';
 import { useReactiveDuration } from '../../hooks/useReactiveDuration';
+import { LazyImage } from '../LazyImage';
 import { CardDurationField } from './CardDurationField';
 
 export interface DurationFieldForGroupProps {
@@ -71,7 +72,7 @@ export const StoryboardImageArea: React.FC<StoryboardImageAreaProps> = ({
                     <div className="text-[9px] mt-0.5">@ 选首帧</div>
                 </div>
             ) : (
-                <img src={image.url} alt={image.filename} className={realImgClass} />
+                <LazyImage src={image.url} alt={image.filename} className={realImgClass} />
             )}
             {showBadges && <AudioBadgesRow meta={meta} />}
         </div>

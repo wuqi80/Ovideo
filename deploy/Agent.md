@@ -7558,3 +7558,18 @@
 - Same-counter line check is `cluster_main.py=999`, `admin_routes.py=1502`; the older `846/1289` expectation is stale for this branch.
 - `dao/` recursive file count matches locally and remotely at 72 files; top-level `ls dao | wc -l` remains 8 because DAO files are grouped under subdirectories.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 Video Card Lazy Image Binding
+
+### Changes
+
+- Added `new_html/components/LazyImage.tsx`, mirroring the existing `LazyVideo` pattern for images: keep layout mounted, but do not bind `src` until the element is near the viewport.
+- Updated `new_html/components/video/VideoCard.tsx` so storyboard preview images use `LazyImage` instead of eager `<img src={image.url}>`.
+- Added `new_html/__tests__/components/LazyImage.test.tsx` to prove `src` remains unset before the intersection observer fires.
+- Strengthened `scripts/check_route_contract.py` with `frontend_lazy_image_checks` so the shared card cannot drift back to eager image loading.
+
+### Verification
+
+- Local `scripts/check_route_contract.py`, `scripts/check_architecture_contracts.py`, `scripts/smoke_test.py`, and `git diff --check` passed.
+- Local TypeScript output has no `LazyImage` errors after the test cast fix; full `tsc --noEmit` still reports unrelated pre-existing project errors.
+- Local frontend `vitest`/`vite build` is blocked by missing Windows Rollup optional package `@rollup/rollup-win32-x64-msvc` in `new_html/node_modules`; use remote Linux build during deploy for final frontend verification.

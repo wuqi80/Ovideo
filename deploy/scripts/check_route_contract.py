@@ -4029,6 +4029,40 @@ def check_frontend_lazy_video_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_lazy_image_contract(root: Path) -> int:
+    """Storyboard/video preview images should delay binding src until near viewport."""
+    lazy_image = root / "new_html" / "components" / "LazyImage.tsx"
+    video_card = root / "new_html" / "components" / "video" / "VideoCard.tsx"
+    lazy_image_test = root / "new_html" / "__tests__" / "components" / "LazyImage.test.tsx"
+
+    required_snippets = [
+        (lazy_image, "IntersectionObserver"),
+        (lazy_image, "src={inView ? src : undefined}"),
+        (lazy_image, "loading={loading}"),
+        (lazy_image, "decoding={decoding}"),
+        (video_card, "import { LazyImage } from '../LazyImage';"),
+        (video_card, "<LazyImage src={image.url}"),
+        (lazy_image_test, "does not bind src until the image enters the viewport"),
+        (lazy_image_test, "expect(img.getAttribute('src')).toBeNull()"),
+    ]
+    forbidden_snippets = [
+        (video_card, "<img src={image.url}"),
+    ]
+
+    checks = 0
+    for path, snippet in required_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing frontend lazy-image contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    for path, snippet in forbidden_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet in text:
+            fail(f"Forbidden eager image snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    return checks
+
+
 def check_frontend_video_preload_contract(root: Path) -> int:
     """Video previews must not rely on browser-default eager preload behavior."""
     new_html = root / "new_html"
@@ -4827,6 +4861,7 @@ def main() -> int:
     frontend_http_client_checks = check_frontend_http_client_contract(root)
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
+    frontend_lazy_image_checks = check_frontend_lazy_image_contract(root)
     frontend_video_preload_checks = check_frontend_video_preload_contract(root)
     frontend_thumbnail_checks = check_frontend_thumbnail_contract(root)
     frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
@@ -4899,6 +4934,7 @@ def main() -> int:
     print(f"  frontend_http_client_checks={frontend_http_client_checks}")
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
+    print(f"  frontend_lazy_image_checks={frontend_lazy_image_checks}")
     print(f"  frontend_video_preload_checks={frontend_video_preload_checks}")
     print(f"  frontend_thumbnail_checks={frontend_thumbnail_checks}")
     print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
