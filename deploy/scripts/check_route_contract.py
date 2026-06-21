@@ -2567,6 +2567,14 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "_raise_for_minimax_response",
         ),
         (
+            root / "external_api" / "audio" / "minimax_audio.py",
+            "async def _request_json(",
+        ),
+        (
+            root / "external_api" / "audio" / "minimax_audio.py",
+            "async def _download_bytes(",
+        ),
+        (
             root / "external_api" / "video" / "minimax.py",
             "model: Optional[str] = None",
         ),
@@ -2906,7 +2914,20 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     seedance_text = (root / "external_api" / "video" / "seedance.py").read_text(encoding="utf-8")
     if "os.getenv" in seedance_text or "import os" in seedance_text:
         fail("Seedance client must not cache/read model env directly; use runtime resolver helpers")
-    checks += 3
+    minimax_audio_text = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
+    for snippet in (
+        'data = await self._request_json(\n            "post",\n            "/voice_clone"',
+        'return await self._request_json(\n            "get",\n            "/query/t2a_async_query_v2"',
+        'data = await self._request_json(\n            "post",\n            "/music_generation"',
+        'return await self._request_json("get", "/files/retrieve", params=params)',
+        'content = await self._download_bytes(download_url, action="tts_download")',
+    ):
+        if snippet not in minimax_audio_text:
+            fail(f"MiniMax audio client must route runtime request through shared helper: {snippet}")
+        checks += 1
+    if minimax_audio_text.count("aiohttp.ClientSession(") > 4:
+        fail("MiniMax audio client should keep aiohttp sessions centralized except helper, tts_sync retry, and file_upload")
+    checks += 4
     return checks
 
 

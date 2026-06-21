@@ -46,7 +46,7 @@ EXTERNAL_API_RUNTIME_REFRESH_METHODS: dict[str, dict[str, Any]] = {
             "file_retrieve",
             "file_delete",
         },
-        "refresh_via": {"_refresh_runtime_config", "_url"},
+        "refresh_via": {"_refresh_runtime_config", "_url", "_request_json", "_download_bytes"},
     },
     "external_api/video/minimax.py": {
         "class": "MinimaxClient",
@@ -621,6 +621,24 @@ def check_external_api_clients_refresh_runtime_config() -> int:
                 violations.append(f"{relative_path}:{class_node.lineno} {class_name} refresh_via includes _url but _url() is missing")
             elif not method_calls_self_helper(url_method, {"_refresh_runtime_config"}):
                 violations.append(f"{relative_path}:{url_method.lineno} {class_name}._url() must refresh runtime config")
+        if "_request_json" in refresh_via:
+            request_json_method = class_method_by_name(class_node, "_request_json")
+            if request_json_method is None:
+                violations.append(
+                    f"{relative_path}:{class_node.lineno} {class_name} refresh_via includes _request_json but _request_json() is missing"
+                )
+            elif not method_calls_self_helper(request_json_method, {"_url"}):
+                violations.append(f"{relative_path}:{request_json_method.lineno} {class_name}._request_json() must use _url()")
+        if "_download_bytes" in refresh_via:
+            download_method = class_method_by_name(class_node, "_download_bytes")
+            if download_method is None:
+                violations.append(
+                    f"{relative_path}:{class_node.lineno} {class_name} refresh_via includes _download_bytes but _download_bytes() is missing"
+                )
+            elif not method_calls_self_helper(download_method, {"_refresh_runtime_config"}):
+                violations.append(
+                    f"{relative_path}:{download_method.lineno} {class_name}._download_bytes() must refresh runtime config"
+                )
 
         for method_name in sorted(spec["methods"]):
             method = class_method_by_name(class_node, method_name)

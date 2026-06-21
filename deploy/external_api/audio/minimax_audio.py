@@ -107,6 +107,46 @@ class MinimaxAudioClient:
         self._refresh_runtime_config()
         return f"{self.base_url}{path}"
 
+    async def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: Optional[Dict[str, Any]] = None,
+        json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        action: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run a MiniMax JSON request through the resolved runtime config."""
+        url = self._url(path)
+        request_kwargs: Dict[str, Any] = {
+            "params": self._group_params(params),
+            "headers": headers or self.headers,
+            **self._aiohttp_kwargs(),
+        }
+        if json is not None:
+            request_kwargs["json"] = json
+
+        async with aiohttp.ClientSession() as session:
+            request = getattr(session, method.lower())
+            async with request(url, **request_kwargs) as resp:
+                data = await resp.json()
+                if action:
+                    _raise_for_minimax_response(action, resp.status, data)
+                return data
+
+    async def _download_bytes(self, url: str, *, action: str) -> bytes:
+        """Download binary audio with the current runtime proxy settings."""
+        self._refresh_runtime_config()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, **self._aiohttp_kwargs()) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    raise RuntimeError(
+                        f"{action} failed: http_status={resp.status} body={body[:300]}"
+                    )
+                return await resp.read()
+
     # ------------------------------------------------------------------
     # 声音设计  POST /v1/voice_design
     # ------------------------------------------------------------------
@@ -135,16 +175,12 @@ class MinimaxAudioClient:
             payload["voice_id"] = voice_id
         if aigc_watermark:
             payload["aigc_watermark"] = aigc_watermark
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/voice_design"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                _raise_for_minimax_response("voice_design", resp.status, data)
+        data = await self._request_json(
+            "post",
+            "/voice_design",
+            json=payload,
+            action="voice_design",
+        )
 
         trial_hex = data.get("trial_audio") or ""
         if trial_hex:
@@ -190,33 +226,25 @@ class MinimaxAudioClient:
         if demo_text:
             payload["text"] = demo_text
             payload["model"] = model
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/voice_clone"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                _raise_for_minimax_response("voice_clone", resp.status, data)
+        data = await self._request_json(
+            "post",
+            "/voice_clone",
+            json=payload,
+            action="voice_clone",
+        )
         data.setdefault("voice_id", resolved_voice_id)
 
         demo_url = data.get("demo_audio") or ""
         if demo_url and demo_url.startswith("http"):
             try:
-                self._refresh_runtime_config()
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(demo_url, **self._aiohttp_kwargs()) as r:
-                        if r.status == 200:
-                            audio_bytes = await r.read()
-                            Path(AUDIO_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
-                            filename = f"voice_clone_{uuid.uuid4().hex[:8]}.mp3"
-                            filepath = os.path.join(AUDIO_UPLOAD_DIR, filename)
-                            with open(filepath, "wb") as f:
-                                f.write(audio_bytes)
-                            data["audio_url"] = f"/storage/audio/{filename}"
-                            data["duration_ms"] = self._estimate_mp3_duration(len(audio_bytes))
+                audio_bytes = await self._download_bytes(demo_url, action="voice_clone_demo")
+                Path(AUDIO_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+                filename = f"voice_clone_{uuid.uuid4().hex[:8]}.mp3"
+                filepath = os.path.join(AUDIO_UPLOAD_DIR, filename)
+                with open(filepath, "wb") as f:
+                    f.write(audio_bytes)
+                data["audio_url"] = f"/storage/audio/{filename}"
+                data["duration_ms"] = self._estimate_mp3_duration(len(audio_bytes))
             except Exception as e:
                 logger.warning(f"voice_clone 试听音频下载失败: {e}")
         return data
@@ -227,17 +255,12 @@ class MinimaxAudioClient:
     async def list_voices(self, voice_type: str = "all") -> Dict[str, Any]:
         """查询可用音色 POST /v1/get_voice"""
         payload = {"voice_type": voice_type}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/get_voice"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                _raise_for_minimax_response("list_voices", resp.status, data)
-                return data
+        return await self._request_json(
+            "post",
+            "/get_voice",
+            json=payload,
+            action="list_voices",
+        )
 
     async def get_voice(self, voice_id: str) -> Dict[str, Any]:
         """从 list_voices(all) 结果中查找单个 voice_id"""
@@ -255,17 +278,12 @@ class MinimaxAudioClient:
         self, voice_id: str, voice_type: str = "voice_cloning"
     ) -> Dict[str, Any]:
         payload = {"voice_type": voice_type, "voice_id": voice_id}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/delete_voice"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                _raise_for_minimax_response("delete_voice", resp.status, data)
-                return data
+        return await self._request_json(
+            "post",
+            "/delete_voice",
+            json=payload,
+            action="delete_voice",
+        )
 
     # ------------------------------------------------------------------
     # 同步 TTS  POST /v1/t2a_v2
@@ -463,32 +481,23 @@ class MinimaxAudioClient:
             },
             "language_boost": language_boost,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/t2a_async_v2"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                _raise_for_minimax_response("tts_async", resp.status, data)
-                return data
+        return await self._request_json(
+            "post",
+            "/t2a_async_v2",
+            json=payload,
+            action="tts_async",
+        )
 
     # ------------------------------------------------------------------
     # 查询 TTS 任务  GET /v1/query/t2a_async_query_v2
     # ------------------------------------------------------------------
     async def tts_query(self, task_id: str) -> Dict[str, Any]:
         params = {"task_id": task_id}
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                self._url("/query/t2a_async_query_v2"),
-                params=self._group_params(params),
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                return data
+        return await self._request_json(
+            "get",
+            "/query/t2a_async_query_v2",
+            params=params,
+        )
 
     async def tts_wait_and_download(
         self,
@@ -537,12 +546,9 @@ class MinimaxAudioClient:
         filename = f"tts_{uuid.uuid4().hex[:8]}.mp3"
         filepath = os.path.join(AUDIO_UPLOAD_DIR, filename)
 
-        self._refresh_runtime_config()
-        async with aiohttp.ClientSession() as session:
-            async with session.get(download_url, **self._aiohttp_kwargs()) as resp:
-                content = await resp.read()
-                with open(filepath, "wb") as f:
-                    f.write(content)
+        content = await self._download_bytes(download_url, action="tts_download")
+        with open(filepath, "wb") as f:
+            f.write(content)
 
         duration_ms = self._estimate_mp3_duration(len(content))
 
@@ -593,30 +599,26 @@ class MinimaxAudioClient:
         if refer_instrumental:
             payload["refer_instrumental"] = refer_instrumental
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/music_generation"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                _raise_for_minimax_response("music_generate", resp.status, data)
+        data = await self._request_json(
+            "post",
+            "/music_generation",
+            json=payload,
+            action="music_generate",
+        )
 
-                audio_hex = data.get("data", {}).get("audio", "")
-                if audio_hex:
-                    Path(AUDIO_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
-                    filename = f"music_{uuid.uuid4().hex[:8]}.mp3"
-                    filepath = os.path.join(AUDIO_UPLOAD_DIR, filename)
-                    with open(filepath, "wb") as f:
-                        f.write(bytes.fromhex(audio_hex))
-                    data["audio_url"] = f"/storage/audio/{filename}"
-                    data["duration_ms"] = self._estimate_mp3_duration(
-                        len(audio_hex) // 2, bitrate
-                    )
+        audio_hex = data.get("data", {}).get("audio", "")
+        if audio_hex:
+            Path(AUDIO_UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+            filename = f"music_{uuid.uuid4().hex[:8]}.mp3"
+            filepath = os.path.join(AUDIO_UPLOAD_DIR, filename)
+            with open(filepath, "wb") as f:
+                f.write(bytes.fromhex(audio_hex))
+            data["audio_url"] = f"/storage/audio/{filename}"
+            data["duration_ms"] = self._estimate_mp3_duration(
+                len(audio_hex) // 2, bitrate
+            )
 
-                return data
+        return data
 
     # ------------------------------------------------------------------
     # 歌词生成  POST /v1/lyrics_generation
@@ -632,17 +634,12 @@ class MinimaxAudioClient:
             "text": text,
             "language": language,
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self._url("/lyrics_generation"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                _raise_for_minimax_response("lyrics_generate", resp.status, data)
-                return data
+        return await self._request_json(
+            "post",
+            "/lyrics_generation",
+            json=payload,
+            action="lyrics_generate",
+        )
 
     # ------------------------------------------------------------------
     # 文件上传  POST /v1/files/upload
@@ -681,31 +678,14 @@ class MinimaxAudioClient:
     # ------------------------------------------------------------------
     async def file_retrieve(self, file_id: str) -> Dict[str, Any]:
         params = {"file_id": file_id}
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                self._url("/files/retrieve"),
-                params=self._group_params(params),
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                return data
+        return await self._request_json("get", "/files/retrieve", params=params)
 
     # ------------------------------------------------------------------
     # 文件删除  DELETE /v1/files/delete
     # ------------------------------------------------------------------
     async def file_delete(self, file_id: str) -> Dict[str, Any]:
         payload = {"file_id": file_id}
-        async with aiohttp.ClientSession() as session:
-            async with session.delete(
-                self._url("/files/delete"),
-                params=self._group_params(),
-                json=payload,
-                headers=self.headers,
-                **self._aiohttp_kwargs(),
-            ) as resp:
-                data = await resp.json()
-                return data
+        return await self._request_json("delete", "/files/delete", json=payload)
 
 
 # 全局单例

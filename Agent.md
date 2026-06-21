@@ -7387,3 +7387,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Server sync check: local and remote SHA256 hashes match for `cluster_main.py`, `admin_routes.py`, and `scripts/live_deploy_mvc2.sh`.
   - `dao/` recursive file count matches locally and remotely at 72 files; the top-level `ls dao | wc -l` count is 8 because DAO files are grouped under subdirectories.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 MiniMax Audio Runtime Request Consolidation
+
+- Added `_request_json()` and `_download_bytes()` inside `deploy/external_api/audio/minimax_audio.py` so MiniMax audio JSON calls and binary demo/TTS downloads share runtime endpoint, proxy, headers, and GroupId handling.
+- Updated voice design, voice clone, voice list/delete, async TTS create/query, music generation, lyrics generation, file retrieve, and file delete to use the shared helpers.
+- Kept `tts_sync` on its dedicated timeout/retry path and `file_upload` on its multipart form path.
+- Updated `deploy/scripts/check_provider_contract.py` so provider runtime refresh checks understand shared helper refresh paths and still verify `_request_json()` calls `_url()` and `_download_bytes()` refreshes runtime config.
+- Strengthened `deploy/scripts/check_route_contract.py` so the MiniMax audio client cannot drift back to scattered JSON request sessions.
+- Verification:
+  - Local `pytest deploy/tests/test_minimax_audio_runtime.py deploy/tests/test_audio_provider.py -q` passed with 15 tests.
+  - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_audio_provider_runtime.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
