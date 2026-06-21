@@ -9,8 +9,9 @@
 ```
 deploy/
 ├── cluster_main.py            # FastAPI 入口（路由注册 + lifespan + 静态挂载）
-├── api_routes.py / admin_routes.py / *_routes.py   # 路由（暂未拆分，见“后续”）
-├── api_router.py / config.py / cluster_config*.py  # 入口级配置（未动）
+├── api_routes.py / admin_routes.py / *_routes.py   # 兼容路由聚合层（持续拆分中）
+├── routers/                    # MVC 增量拆出的领域路由
+├── config.py / cluster_config*.py  # 入口级配置
 │
 ├── core/                      # 核心基础设施
 │   ├── db_manager.py          # asyncpg 连接池

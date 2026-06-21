@@ -4165,6 +4165,41 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
     return checks
 
 
+def check_current_architecture_docs_contract(root: Path) -> int:
+    """Current architecture docs must describe the active API provider path."""
+    docs = {
+        "ARCHITECTURE.md": (root / "ARCHITECTURE.md").read_text(encoding="utf-8"),
+        "docs/安全加固清单.md": (root / "docs" / "安全加固清单.md").read_text(encoding="utf-8"),
+        "docs/架构审计与重构计划.md": (root / "docs" / "架构审计与重构计划.md").read_text(encoding="utf-8"),
+    }
+    required = [
+        ("ARCHITECTURE.md", "routers/                    # MVC 增量拆出的领域路由"),
+        ("docs/安全加固清单.md", "旧 `SmartApiRouter custom proxy` 死代码已删除"),
+        ("docs/架构审计与重构计划.md", "DB `api_configs.endpoint` 已变活"),
+        ("docs/架构审计与重构计划.md", "Provider runtime 已落地"),
+        ("docs/架构审计与重构计划.md", "旧 `api_router.py` / `SmartApiRouter` 已删除"),
+        ("docs/架构审计与重构计划.md", "自建 API provider adapter 接入"),
+    ]
+    forbidden = [
+        ("ARCHITECTURE.md", "api_router.py / config.py"),
+        ("docs/安全加固清单.md", "api_router.py:55,68"),
+        ("docs/架构审计与重构计划.md", "DB endpoint 列是死配置"),
+        ("docs/架构审计与重构计划.md", "可作为抽象层骨架"),
+        ("docs/架构审计与重构计划.md", "api_router.py:87-89"),
+        ("docs/架构审计与重构计划.md", "ProviderConfig 解析器（DB endpoint 变活）"),
+    ]
+    checks = 0
+    for rel, snippet in required:
+        if snippet not in docs[rel]:
+            fail(f"Missing current architecture doc snippet in {rel}: {snippet}")
+        checks += 1
+    for rel, snippet in forbidden:
+        if snippet in docs[rel]:
+            fail(f"Stale current architecture doc snippet in {rel}: {snippet}")
+        checks += 1
+    return checks
+
+
 def check_architecture_contract_runner(root: Path) -> int:
     """Architecture checks should have a single pre-refactor runner."""
     script_path = root / "scripts" / "check_architecture_contracts.py"
@@ -4245,6 +4280,7 @@ def main() -> int:
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
+    current_architecture_docs_checks = check_current_architecture_docs_contract(root)
     architecture_contract_runner_checks = check_architecture_contract_runner(root)
     fallback_static_route_handlers = check_fallback_static_routes_extracted(root)
     generation_route_handlers = check_generation_routes_extracted(root)
@@ -4311,6 +4347,7 @@ def main() -> int:
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
+    print(f"  current_architecture_docs_checks={current_architecture_docs_checks}")
     print(f"  architecture_contract_runner_checks={architecture_contract_runner_checks}")
     print(f"  fallback_static_route_handlers={fallback_static_route_handlers}")
     print(f"  generation_route_handlers={generation_route_handlers}")

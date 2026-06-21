@@ -6945,3 +6945,19 @@
 - Local Git Bash `bash -n scripts/live_deploy_mvc2.sh` passed.
 - Local `scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=127`, `frontend_http_client_checks=7304`, and `live_deploy_frontend_checks=13`.
 - Local `scripts/check_architecture_contracts.py` passed with `contracts=9`.
+
+## 2026-06-21 Current Architecture Docs API Runtime Refresh
+
+### Changes
+
+- Updated `ARCHITECTURE.md` so the current backend map points to `routers/` and no longer lists the deleted `api_router.py` as entry-level infrastructure.
+- Updated `docs/安全加固清单.md` so the old SmartApiRouter custom-proxy risk is marked closed rather than active.
+- Updated `docs/架构审计与重构计划.md` to reflect the current provider registry/runtime/API proxy baseline, mark DB endpoint hot-update as live, and move the next API replacement step to self-hosted provider adapters.
+- Strengthened `scripts/check_route_contract.py` with a current-docs contract so active architecture docs cannot drift back to the removed SmartApiRouter model.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile scripts/check_route_contract.py` passed.
+- Local `scripts/check_route_contract.py` passed with `current_architecture_docs_checks=12`, `api_provider_runtime_model_checks=127`, and `live_deploy_frontend_checks=13`.
+- Local `scripts/check_architecture_contracts.py` passed with `contracts=9`.
