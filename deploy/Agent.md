@@ -7304,3 +7304,21 @@
 - Live deploy to `https://mecha.one/`: remote Vite build completed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
 - Server grep found no `fonts.googleapis.com`, `fonts.gstatic.com`, `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `unpkg.com`, `aistudiocdn.com`, or `importmap` in deployed app shell/login/admin CSS assets.
+
+## 2026-06-22 Self-contained Static Login
+
+### Changes
+
+- Removed the remaining `/static/js/auth.js` dependency from `login.html`.
+- The static `/login` page now performs its own minimal unauthenticated `POST /api/login`, writes `auth_token` and `username` to `localStorage`, and redirects to `/projects`.
+- Strengthened `scripts/check_route_contract.py` so `login.html` must contain the inline login/token path and must not depend on `/static/js/auth.js`, `/static/js/api.js`, `Auth.login`, or runtime CDN/webfont snippets.
+
+### Verification
+
+- Local HTML parse for `login.html` and `new_html/index.html`: passed.
+- Local `git diff --check`: passed.
+- Local `scripts/check_route_contract.py`: passed with `frontend_dependency_checks=406`.
+- Local `scripts/check_architecture_contracts.py`: 10/10 passed.
+- Live deploy to `https://mecha.one/`: remote Vite build completed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+- Live `/login` HTML contains `fetch('/api/login')` and `localStorage.setItem(TOKEN_KEY)`, with no `/static/js/auth.js`, `Auth.login`, Tailwind CDN, Google Fonts, or jsDelivr references.

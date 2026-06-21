@@ -7230,4 +7230,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Server temporary `new_html` build passed after `npm ci`; generated `dist/index.html` is 811 bytes.
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
-  - Server grep found no `fonts.googleapis.com`, `fonts.gstatic.com`, `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `unpkg.com`, `aistudiocdn.com`, or `importmap` in deployed app shell/login/admin CSS assets.
+- Server grep found no `fonts.googleapis.com`, `fonts.gstatic.com`, `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `unpkg.com`, `aistudiocdn.com`, or `importmap` in deployed app shell/login/admin CSS assets.
+
+## 2026-06-22 Self-contained Static Login
+
+- Removed the remaining `/static/js/auth.js` dependency from `deploy/login.html`.
+- The static `/login` page now performs its own minimal unauthenticated `POST /api/login`, writes `auth_token` and `username` to `localStorage`, and redirects to `/projects`.
+- Strengthened `deploy/scripts/check_route_contract.py` so `login.html` must contain the inline login/token path and must not depend on `/static/js/auth.js`, `/static/js/api.js`, `Auth.login`, or runtime CDN/webfont snippets.
+- Verification:
+  - Local HTML parse for `deploy/login.html` and `deploy/new_html/index.html`: passed.
+  - Local `git diff --check`: passed.
+  - Local `check_route_contract.py`: passed with `frontend_dependency_checks=406`.
+  - Local `check_architecture_contracts.py`: 10/10 passed.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Live `/login` HTML contains `fetch('/api/login')` and `localStorage.setItem(TOKEN_KEY)`, with no `/static/js/auth.js`, `Auth.login`, Tailwind CDN, Google Fonts, or jsDelivr references.
