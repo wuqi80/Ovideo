@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeDefaultDashScopeParams } from '../../services/videoService';
+import { makeDefaultDashScopeParams } from '../../services/videoModelService';
 
 /**
  * 2026-05-24 — Task 2 of dashscope-cards-redesign plan.

@@ -2,7 +2,7 @@
 // Pure function: builds the SeedanceAssetCandidate[] for the @-mention popover
 // from EpisodeContext slices, current SeedanceParams, history, and user files.
 
-import type { SeedanceParams } from '../services/videoService';
+import type { SeedanceParams } from '../services/videoModelService';
 import type { SeedanceAssetCandidate, SeedanceMediaKind } from './seedanceMedia';
 
 export interface CandidateBuildContext {

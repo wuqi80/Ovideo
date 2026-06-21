@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
 import { KlingCard, ViduCard, HappyHorseCard } from '../../components/video/DashScopeCards';
-import { makeDefaultDashScopeParams } from '../../services/videoService';
+import { makeDefaultDashScopeParams } from '../../services/videoModelService';
 
 /**
  * 2026-05-24 — Task 3 of dashscope-cards-redesign plan.
@@ -14,7 +14,7 @@ import { makeDefaultDashScopeParams } from '../../services/videoService';
  * Tests below use English identifiers per execution constraint
  * "favor matching existing app conventions, not the plan literal".
  *
- * Source of truth for makeDefaultDashScopeParams is `services/videoService.ts`
+ * Source of truth for makeDefaultDashScopeParams is `services/videoModelService.ts`
  * (legacy copy under `components/video/DashScopeCards.tsx` removed in Task 3 cleanup).
  */
 

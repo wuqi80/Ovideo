@@ -2804,6 +2804,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     task_notification_service = new_html / "services" / "taskNotificationService.ts"
     episode_data_service = new_html / "services" / "episodeDataService.ts"
     audio_generation_service = new_html / "services" / "audioGenerationService.ts"
+    video_model_service = new_html / "services" / "videoModelService.ts"
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
     video_media_service = new_html / "services" / "videoMediaService.ts"
     asset_mutation_service = new_html / "services" / "assetMutationService.ts"
@@ -2914,6 +2915,17 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "postGenerationTask('/api/generate/comfyui-workflow'"),
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
         (new_html / "services" / "geminiService.ts", "await import('./comfyuiBridgeService')"),
+        (new_html / "services" / "videoService.ts", "from './videoModelService';"),
+        (video_model_service, "export type VideoModel ="),
+        (video_model_service, "export interface SeedanceParams"),
+        (video_model_service, "export function inferSeedanceTaskType("),
+        (video_model_service, "export interface DashScopeVideoParams"),
+        (video_model_service, "export function makeDefaultDashScopeParams("),
+        (video_model_service, "export function inferDashScopeTaskType("),
+        (video_model_service, "export function getModelDisplayName("),
+        (video_model_service, "export const ALL_MODELS: VideoModel[]"),
+        (video_model_service, "export const SELECTABLE_MODELS: VideoModel[]"),
+        (video_model_service, "'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse } from './httpClient';"),
         (api_service, "from './taskNotificationService';"),
         (api_service, "from './episodeDataService';"),
@@ -3025,6 +3037,8 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "__tests__" / "services" / "audioGenerationService.test.ts", "starts asynchronous MiniMax TTS tasks with AbortSignal passthrough"),
         (new_html / "__tests__" / "services" / "videoWorkflowService.test.ts", "fetchSeedanceOmni caches video capability responses"),
         (new_html / "__tests__" / "services" / "videoMediaService.test.ts", "secures media URLs with the current auth token"),
+        (new_html / "__tests__" / "services" / "dashScopeParams.test.ts", "from '../../services/videoModelService'"),
+        (new_html / "__tests__" / "components" / "DashScopeCards.test.tsx", "from '../../services/videoModelService'"),
         (new_html / "__tests__" / "services" / "assetMutationService.test.ts", "shares assets to target episode and script"),
         (new_html / "__tests__" / "services" / "storyboardMutationService.test.ts", "deletes all storyboard items for a script scope"),
         (new_html / "__tests__" / "services" / "scriptTimelineService.test.ts", "batch saves and deletes script segments"),

@@ -1,0 +1,224 @@
+// Shared video model names, parameter types, and pure inference helpers.
+
+const COMFYUI_MODELS: string[] = ['Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'];
+
+export type VideoModel =
+  | 'Wan2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶'
+  | 'Veo' | 'Sora2' | 'MINI' | '大能'
+  | 'Seedance2' | 'Seedance2Fast'
+  | 'Kling' | 'Vidu' | 'HappyHorse';
+
+export type DashScopeVideoModel = 'Kling' | 'Vidu' | 'HappyHorse';
+
+export function isComfyUIModel(model: VideoModel): boolean {
+  return COMFYUI_MODELS.includes(model);
+}
+
+export function isDashScopeVideoModel(model: VideoModel): model is DashScopeVideoModel {
+  return model === 'Kling' || model === 'Vidu' || model === 'HappyHorse';
+}
+
+export type ShotType = 'multi' | 'single';
+
+export type SeedanceMediaKind = 'image' | 'video' | 'audio';
+export type SeedanceMediaRole = 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio';
+
+export interface SeedanceMediaInput {
+  kind: SeedanceMediaKind;
+  url: string;
+  role?: SeedanceMediaRole;
+  file_id?: string;
+}
+
+export interface SeedanceParams {
+  sub_model: 'standard' | 'fast';
+  prompt: string;
+  media_inputs: SeedanceMediaInput[];
+  resolution?: '480p' | '720p' | '1080p';
+  ratio?: 'adaptive' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9';
+  duration?: number;
+  seed?: number;
+  watermark?: boolean;
+  generate_audio?: boolean;
+  camera_fixed?: boolean;
+}
+
+export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: boolean): string {
+  if (hasDraftId) return 'seedance_draft';
+  if (!media || media.length === 0) return 'seedance_t2v';
+  const images = media.filter((m) => m.kind === 'image');
+  const hasFirst = images.some((m) => m.role === 'first_frame');
+  const hasLast = images.some((m) => m.role === 'last_frame');
+  if (hasFirst && hasLast) return 'seedance_morph';
+  if (media.length === 1 && images.length === 1 && !images[0].role) return 'seedance_i2v';
+  return 'seedance_multi';
+}
+
+export type KlingMode = 'std' | 'pro';
+export type KlingSubModel = 'standard' | 'omni';
+
+export type ViduSubModel =
+  | 'q3-mix' | 'q3' | 'q3-turbo' | 'q3-pro'
+  | 'q2' | 'q2-pro' | 'q2-turbo';
+
+export type DashScopeResolution = '540P' | '720P' | '1080P';
+export type DashScopeAspectRatio = '16:9' | '9:16' | '1:1';
+export type HappyHorseRatio = '16:9' | '9:16' | '3:4' | '4:3' | '4:5' | '5:4' | '1:1' | '9:21' | '21:9';
+
+export type KlingShotType = 'intelligence' | 'customize';
+export interface KlingMultiPromptItem {
+  index: number;
+  prompt: string;
+  duration: number;
+}
+
+export type ViduResolution = DashScopeResolution;
+export type HhResolution = '720P' | '1080P';
+export type HhRatio = HappyHorseRatio;
+
+export interface DashScopeVideoParams {
+  model: DashScopeVideoModel;
+  prompt: string;
+  media_inputs?: SeedanceMediaInput[];
+
+  duration?: number;
+  seed?: number;
+  watermark?: boolean;
+
+  sub_model_kling?: KlingSubModel;
+  mode?: KlingMode;
+  aspect_ratio?: DashScopeAspectRatio;
+  audio?: boolean;
+
+  sub_model_vidu?: ViduSubModel;
+  resolution?: DashScopeResolution;
+  size?: string;
+
+  ratio?: HappyHorseRatio;
+
+  kling_multi_shot?: boolean;
+  kling_shot_type?: KlingShotType;
+  kling_multi_prompt?: KlingMultiPromptItem[];
+  kling_keep_original_sound?: 'yes' | 'no';
+  kling_active_mode?: 'auto' | 'omni' | 'multi';
+
+  vidu_resolution?: ViduResolution;
+  vidu_size?: string;
+  vidu_seed?: number;
+  vidu_audio?: boolean;
+
+  hh_resolution?: HhResolution;
+  hh_ratio?: HhRatio;
+  hh_duration?: number;
+  hh_watermark?: boolean;
+  hh_seed?: number;
+}
+
+export function makeDefaultDashScopeParams(
+  model: DashScopeVideoModel,
+  prompt: string = '',
+  seedMedia: SeedanceMediaInput[] = [],
+): DashScopeVideoParams {
+  const base: DashScopeVideoParams = {
+    model,
+    prompt,
+    media_inputs: seedMedia,
+    duration: 5,
+    seed: -1,
+    watermark: false,
+  };
+
+  if (model === 'Kling') {
+    return {
+      ...base,
+      sub_model_kling: 'standard',
+      mode: 'std',
+      aspect_ratio: '16:9',
+      audio: false,
+      kling_multi_shot: false,
+      kling_shot_type: 'intelligence',
+      kling_multi_prompt: [],
+      kling_keep_original_sound: 'no',
+      kling_active_mode: 'auto',
+    };
+  }
+
+  if (model === 'Vidu') {
+    return {
+      ...base,
+      sub_model_vidu: 'q3',
+      resolution: '720P',
+      audio: false,
+      vidu_resolution: '720P',
+      vidu_size: '1280*720',
+      vidu_audio: false,
+    };
+  }
+
+  return {
+    ...base,
+    resolution: '720P',
+    ratio: '16:9',
+    hh_resolution: '1080P',
+    hh_ratio: '16:9',
+    hh_duration: 5,
+    hh_watermark: true,
+  };
+}
+
+export function inferDashScopeTaskType(
+  model: DashScopeVideoModel,
+  media: SeedanceMediaInput[] = [],
+): string {
+  const images = media.filter((m) => m.kind === 'image');
+  const hasFirst = images.some((m) => m.role === 'first_frame');
+  const hasLast = images.some((m) => m.role === 'last_frame');
+
+  if (model === 'Kling') {
+    if (!media.length) return 'kling_t2v';
+    if (hasFirst && hasLast) return 'kling_morph';
+    if (hasFirst && !hasLast) return 'kling_i2v';
+    return 'kling_refer';
+  }
+
+  if (model === 'Vidu') {
+    if (hasFirst && hasLast) return 'vidu_morph';
+    return 'vidu_r2v';
+  }
+
+  return 'happyhorse_r2v';
+}
+
+export function getModelDisplayName(model: VideoModel): string {
+  const modelNameMap: Record<VideoModel, string> = {
+    Wan2: '练气',
+    '一阶': '一阶',
+    '二阶': '二阶',
+    '三阶': '三阶',
+    '四阶': '四阶',
+    '五阶': '五阶',
+    '六阶': '六阶',
+    '七阶': '七阶',
+    Veo: '筑基',
+    MINI: '金丹',
+    Sora2: '化神',
+    '大能': '大能',
+    Seedance2: '飞升',
+    Seedance2Fast: '渡劫',
+    Kling: '合体',
+    Vidu: '大乘',
+    HappyHorse: '炼虚',
+  };
+  return modelNameMap[model] || model;
+}
+
+export const ALL_MODELS: VideoModel[] = [
+  'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
+  'Veo', 'Sora2', 'MINI', '大能',
+  'Seedance2', 'Seedance2Fast',
+  'Kling', 'Vidu', 'HappyHorse',
+];
+
+export const SELECTABLE_MODELS: VideoModel[] = [
+  'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI',
+];

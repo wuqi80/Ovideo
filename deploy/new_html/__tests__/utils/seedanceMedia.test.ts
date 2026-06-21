@@ -7,7 +7,7 @@ import {
     shouldEnableWebSearch,
     parseArkAssetId,
 } from '../../utils/seedanceMedia';
-import type { SeedanceParams } from '../../services/videoService';
+import type { SeedanceParams } from '../../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../../utils/seedanceMedia';
 
 const baseParams = (over: Partial<SeedanceParams> = {}): SeedanceParams => ({

@@ -6220,6 +6220,23 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
 
+## 2026-06-21 Video Model Service Split
+
+### Changes
+
+- Extracted pure video model names/types, Seedance media params, DashScope params/defaults, model display names, selectable model list, and task-type inference helpers from `deploy/new_html/services/videoService.ts` into `deploy/new_html/services/videoModelService.ts`.
+- Kept `videoService.ts` compatibility re-exports while task submission remains in the generation service.
+- Updated DashScope cards/tests, Seedance helper components, video card layout helpers, and `VideoPage.tsx` imports to use `videoModelService.ts` directly.
+- Strengthened `deploy/scripts/check_route_contract.py` so pure model-service ownership and the production `SELECTABLE_MODELS` whitelist stay guarded.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7091`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` built frontend successfully and kept `drama.service` active.
+
 ## 2026-06-21 Episode Data Service Split
 
 ### Changes

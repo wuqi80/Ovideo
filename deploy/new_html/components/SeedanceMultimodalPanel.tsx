@@ -2,7 +2,7 @@ import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import ReactDOM from 'react-dom';
 import { Upload, X, AlertCircle, Info, Plus, Maximize2 } from 'lucide-react';
 import { uploadAudio, uploadImage, uploadVideoFile } from '../services/videoMediaService';
-import type { SeedanceMediaInput, SeedanceMediaRole, SeedanceParams } from '../services/videoService';
+import type { SeedanceMediaInput, SeedanceMediaRole, SeedanceParams } from '../services/videoModelService';
 import { fetchSeedanceOmni } from '../services/videoWorkflowService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { SeedanceMentionPromptEditor } from './SeedanceMentionPromptEditor';

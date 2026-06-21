@@ -10,7 +10,7 @@
 // 视觉锚点交给独立组件，是改造代价最小的方案（参见 docs/conventions.md）。
 import React, { useState } from 'react';
 import { ImageIcon, Music, Video as VideoIcon, X } from 'lucide-react';
-import type { SeedanceParams, SeedanceMediaInput } from '../services/videoService';
+import type { SeedanceParams, SeedanceMediaInput } from '../services/videoModelService';
 import { removeMediaInput, TOKEN_PREFIX } from '../utils/seedanceMedia';
 
 export interface SeedanceMentionTokensRowProps {

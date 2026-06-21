@@ -27,7 +27,7 @@ import type {
     SeedanceMediaInput, KlingMode, KlingSubModel,
     ViduSubModel, DashScopeResolution, DashScopeAspectRatio, HappyHorseRatio,
     ViduResolution, HhResolution, HhRatio,
-} from '../../services/videoService';
+} from '../../services/videoModelService';
 import { secureApiUrl } from '../../services/httpClient';
 
 // ─── 主题色板（对应修真境界视觉气质） ─────────────────────────────────────────
@@ -1068,5 +1068,5 @@ export const DashScopeVideoCard: React.FC<DashScopeCardProps> = (props) => {
 };
 
 // 2026-05-24 Task 3：legacy `makeDefaultDashScopeParams` 已迁移到
-// `new_html/services/videoService.ts`（包含 Kling 多镜头 / Vidu vidu_* / HappyHorse hh_* 默认值）。
+// `new_html/services/videoModelService.ts`（包含 Kling 多镜头 / Vidu vidu_* / HappyHorse hh_* 默认值）。
 // VideoPage 等消费方应从 service 层导入，本文件不再重新导出工厂函数。

@@ -1,5 +1,4 @@
-import type { VideoModel } from '../services/videoService';
-import { isDashScopeVideoModel } from '../services/videoService';
+import { isDashScopeVideoModel, type VideoModel } from '../services/videoModelService';
 
 /**
  * 2026-05-25 四次收紧 — 左右卡片像素级对齐策略

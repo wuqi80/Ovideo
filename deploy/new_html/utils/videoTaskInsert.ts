@@ -1,5 +1,6 @@
 import { generateUUID } from '../services/videoService';
-import type { VideoModel, UploadedImage, TaskGroup } from '../services/videoService';
+import type { UploadedImage, TaskGroup } from '../services/videoService';
+import type { VideoModel } from '../services/videoModelService';
 
 /**
  * 2026-05-25：构造一个"空卡"任务对——一个 placeholder UploadedImage + 一个关联它的 TaskGroup。

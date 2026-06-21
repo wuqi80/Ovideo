@@ -1,13 +1,13 @@
 // new_html/utils/seedanceMedia.ts
 // Pure types for Seedance @-mention support. Helpers live below in Task 3.
-// Re-uses SeedanceMediaInput / SeedanceMediaKind / SeedanceMediaRole from videoService.ts.
+// Re-uses SeedanceMediaInput / SeedanceMediaKind / SeedanceMediaRole from videoModelService.ts.
 
 import type {
     SeedanceMediaInput,
     SeedanceMediaKind,
     SeedanceMediaRole,
     SeedanceParams,
-} from '../services/videoService';
+} from '../services/videoModelService';
 
 export type { SeedanceMediaInput, SeedanceMediaKind, SeedanceMediaRole };
 
@@ -195,7 +195,7 @@ export function canonicalizePrompt(value: SeedanceParams): CanonicalizeResult {
 export function shouldEnableWebSearch(value: SeedanceParams): boolean {
     if (value.media_inputs.length > 0) return false;
     if (!(value.prompt || '').trim()) return false;
-    // sub_model whitelist matches videoService.SeedanceParams.sub_model union
+    // sub_model whitelist matches videoModelService.SeedanceParams.sub_model union
     return value.sub_model === 'standard' || value.sub_model === 'fast';
 }
 

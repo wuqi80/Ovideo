@@ -1,7 +1,7 @@
 // new_html/components/SeedanceAssetPickerModal.tsx
 import React, { useState } from 'react';
 import { X, Plus } from 'lucide-react';
-import type { SeedanceParams } from '../services/videoService';
+import type { SeedanceParams } from '../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { insertMention, parseArkAssetId } from '../utils/seedanceMedia';
 

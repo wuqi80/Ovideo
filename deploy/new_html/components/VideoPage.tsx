@@ -8,7 +8,7 @@ import {
     Combine, Split
 } from 'lucide-react';
 import * as videoService from '../services/videoService';
-import type { SeedanceParams } from '../services/videoService';
+import type { SeedanceParams } from '../services/videoModelService';
 import { AppView, TaskNotification } from '../types';
 import {
     getCardHeightClass,
@@ -30,10 +30,10 @@ import {
 import { MediaBadges } from './video/MediaBadges';
 import { SeedanceDetailModal } from './video/SeedanceDetailModal';
 // 2026-05-24 — DashScope 共享 API：合体(Kling) / 大乘(Vidu) / 炼虚(HappyHorse)
-// Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoService.ts，
+// Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoModelService.ts，
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
 // DashScopeVideoCard 不再直接 import — 走 DashScopeCardWithCandidates 包装器以注入 mention candidates。
-import { makeDefaultDashScopeParams, type DashScopeVideoParams } from '../services/videoService';
+import { makeDefaultDashScopeParams, type DashScopeVideoParams } from '../services/videoModelService';
 import { createVideoSegment } from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';

@@ -9,7 +9,7 @@
 //   - hover tooltip shows up to first 3 filenames per kind, "+N more" suffix
 
 import React from 'react';
-import type { SeedanceParams } from '../../services/videoService';
+import type { SeedanceParams } from '../../services/videoModelService';
 
 export interface MediaBadgesProps {
     params: SeedanceParams;

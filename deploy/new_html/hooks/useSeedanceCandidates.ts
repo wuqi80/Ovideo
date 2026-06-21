@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { SeedanceParams } from '../services/videoService';
+import type { SeedanceParams } from '../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { buildCandidates } from '../utils/seedanceCandidateBuilder';
 import { useEpisode } from '../contexts/EpisodeContext';

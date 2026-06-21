@@ -1,7 +1,7 @@
 // new_html/components/SeedanceMentionPromptEditor.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import type { SeedanceParams, SeedanceMediaInput } from '../services/videoService';
+import type { SeedanceParams, SeedanceMediaInput } from '../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { insertMention, parseArkAssetId, removeMediaInput, TOKEN_PREFIX } from '../utils/seedanceMedia';
 import { SeedanceMentionTokensRow } from './SeedanceMentionTokensRow';

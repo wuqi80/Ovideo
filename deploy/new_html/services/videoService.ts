@@ -5,6 +5,17 @@
 import { enqueueComfyUITask, getComfyUIQueueStatus } from './comfyuiTaskQueue';
 import { computeReactiveDuration as _crd } from '../utils/durationMapping';
 import { apiFetch, apiJson, buildAuthHeaders } from './httpClient';
+import {
+    inferDashScopeTaskType,
+    inferSeedanceTaskType,
+    isComfyUIModel,
+    type DashScopeVideoModel,
+    type DashScopeVideoParams,
+    type SeedanceMediaInput,
+    type SeedanceParams,
+    type ShotType,
+    type VideoModel,
+} from './videoModelService';
 export {
     clearProjectVideoTasks,
     cropVideo,
@@ -19,84 +30,40 @@ export {
     type UploadOptions,
     type UploadProgress,
 } from './videoMediaService';
+export {
+    ALL_MODELS,
+    SELECTABLE_MODELS,
+    getModelDisplayName,
+    inferDashScopeTaskType,
+    inferSeedanceTaskType,
+    isComfyUIModel,
+    isDashScopeVideoModel,
+    makeDefaultDashScopeParams,
+    type DashScopeAspectRatio,
+    type DashScopeResolution,
+    type DashScopeVideoModel,
+    type DashScopeVideoParams,
+    type HappyHorseRatio,
+    type HhRatio,
+    type HhResolution,
+    type KlingMode,
+    type KlingMultiPromptItem,
+    type KlingShotType,
+    type KlingSubModel,
+    type SeedanceMediaInput,
+    type SeedanceMediaKind,
+    type SeedanceMediaRole,
+    type SeedanceParams,
+    type ShotType,
+    type ViduResolution,
+    type ViduSubModel,
+    type VideoModel,
+} from './videoModelService';
 
 // 重新导出队列状态
 export { getComfyUIQueueStatus };
 
-// ComfyUI模型列表（需要排队）
-const COMFYUI_MODELS: string[] = ['Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'];
-
-// 外部API模型列表（不需要排队）
-// 2026-05-24 新增 DashScope 视频族：合体(Kling) / 大乘(Vidu) / 炼虚(HappyHorse)
-const EXTERNAL_API_MODELS: string[] = ['MINI', 'Sora2', 'Veo', '大能', 'Seedance2', 'Seedance2Fast', 'Kling', 'Vidu', 'HappyHorse'];
-
-/**
- * 判断模型是否需要ComfyUI队列
- */
-export function isComfyUIModel(model: VideoModel): boolean {
-    return COMFYUI_MODELS.includes(model);
-}
-
 // ==================== 视频生成任务相关类型 ====================
-
-export type VideoModel =
-    | 'Wan2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶'
-    | 'Veo' | 'Sora2' | 'MINI' | '大能'
-    | 'Seedance2' | 'Seedance2Fast'
-    // 2026-05-24 DashScope 共享 API 三家
-    | 'Kling' | 'Vidu' | 'HappyHorse';
-
-/** 2026-05-24：DashScope 共享 API 的三家视频模型。 */
-export type DashScopeVideoModel = 'Kling' | 'Vidu' | 'HappyHorse';
-export function isDashScopeVideoModel(model: VideoModel): model is DashScopeVideoModel {
-    return model === 'Kling' || model === 'Vidu' || model === 'HappyHorse';
-}
-export type ShotType = 'multi' | 'single';
-
-// ==================== Seedance 2.0 (飞升/渡劫) 类型定义 ====================
-
-export type SeedanceMediaKind = 'image' | 'video' | 'audio';
-export type SeedanceMediaRole = 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio';
-
-export interface SeedanceMediaInput {
-    kind: SeedanceMediaKind;
-    url: string;          // 持久化 URL（已上传）
-    role?: SeedanceMediaRole;
-    file_id?: string;
-}
-
-export interface SeedanceParams {
-    sub_model: 'standard' | 'fast';
-    prompt: string;
-    media_inputs: SeedanceMediaInput[];
-    resolution?: '480p' | '720p' | '1080p';
-    ratio?: 'adaptive' | '16:9' | '4:3' | '1:1' | '3:4' | '9:16' | '21:9';
-    duration?: number;     // 4-15 或 -1 (智能)
-    seed?: number;         // -1 = 随机
-    watermark?: boolean;
-    generate_audio?: boolean;
-    camera_fixed?: boolean;
-}
-
-/**
- * 根据 media_inputs 推断 Seedance task_type。
- * - 无媒体且无 prompt 不能调用（前端校验）
- * - 仅 prompt → seedance_t2v
- * - 单图无 role → seedance_i2v
- * - 2 张图带 first_frame + last_frame → seedance_morph
- * - 其他（带 reference_image / 多模态混合）→ seedance_multi
- * - 传入 draftTaskId → seedance_draft
- */
-export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: boolean): string {
-    if (hasDraftId) return 'seedance_draft';
-    if (!media || media.length === 0) return 'seedance_t2v';
-    const images = media.filter(m => m.kind === 'image');
-    const hasFirst = images.some(m => m.role === 'first_frame');
-    const hasLast = images.some(m => m.role === 'last_frame');
-    if (hasFirst && hasLast) return 'seedance_morph';
-    if (media.length === 1 && images.length === 1 && !images[0].role) return 'seedance_i2v';
-    return 'seedance_multi';
-}
 
 export type TaskState = 'idle' | 'pending' | 'running' | 'processing' | 'done' | 'failed';
 
@@ -594,51 +561,6 @@ export function generateUUID(): string {
 }
 
 /**
- * 获取模型显示名称
- */
-export function getModelDisplayName(model: VideoModel): string {
-    const modelNameMap: Record<VideoModel, string> = {
-        'Wan2': '练气',
-        '一阶': '一阶',
-        '二阶': '二阶',
-        '三阶': '三阶',
-        '四阶': '四阶',
-        '五阶': '五阶',
-        '六阶': '六阶',
-        '七阶': '七阶',
-        'Veo': '筑基',
-        'MINI': '金丹',
-        'Sora2': '化神',
-        '大能': '大能',
-        'Seedance2': '飞升',
-        'Seedance2Fast': '渡劫',
-        // 2026-05-24 DashScope 共享 API
-        'Kling': '合体',
-        'Vidu': '大乘',
-        'HappyHorse': '炼虚',
-    };
-    return modelNameMap[model] || model;
-}
-
-/**
- * 所有可用模型
- */
-export const ALL_MODELS: VideoModel[] = [
-    'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
-    'Veo', 'Sora2', 'MINI', '大能',
-    'Seedance2', 'Seedance2Fast',
-    'Kling', 'Vidu', 'HappyHorse',
-];
-
-// 2026-06-15：下拉只放开实测可用的模型，临时屏蔽：
-//   - Wan2/一阶~七阶（ComfyUI 档，需 GPU agent，本部署无）
-//   - Veo(筑基) / Sora2(化神)（laozhang 上游持续 503）
-// 上游恢复 / 接入 GPU agent 后，把对应项加回此列表即可。炼虚为默认，放首位。
-export const SELECTABLE_MODELS: VideoModel[] = [
-    'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI',
-];
-
-/**
  * 格式化时间
  */
 export function formatUploadTime(timestamp: number): string {
@@ -818,204 +740,6 @@ export async function submitSeedanceTask(
 }
 
 // ==================== DashScope 共享 API · 三家视频模型 ====================
-// 2026-05-24 新增：合体(Kling) / 大乘(Vidu) / 炼虚(HappyHorse)
-// 全部走阿里云百炼 DashScope endpoint，共享 DASHSCOPE_API_KEY。
-// 设计与 SeedanceParams 平行，复用 SeedanceMediaInput（已包含 first/last/reference_image 角色）。
-
-export type KlingMode = 'std' | 'pro';           // std=720P / pro=1080P
-export type KlingSubModel = 'standard' | 'omni'; // omni 支持多参考图、参考视频、多分镜
-
-export type ViduSubModel =
-    | 'q3-mix' | 'q3' | 'q3-turbo' | 'q3-pro'
-    | 'q2' | 'q2-pro' | 'q2-turbo';
-
-export type DashScopeResolution = '540P' | '720P' | '1080P';
-export type DashScopeAspectRatio = '16:9' | '9:16' | '1:1';
-export type HappyHorseRatio = '16:9' | '9:16' | '3:4' | '4:3' | '4:5' | '5:4' | '1:1' | '9:21' | '21:9';
-
-// 2026-05-24 — Task 2 of dashscope-cards-redesign：三家专属新增字段类型。
-// Kling 多镜头模式（kling/kling-v3-* 都支持，最多 6 个分镜）
-export type KlingShotType = 'intelligence' | 'customize';
-export interface KlingMultiPromptItem {
-    index: number;
-    prompt: string;
-    duration: number;
-}
-// Vidu 真实支持的分辨率档（与既有 DashScopeResolution 同义；保留独立别名以便 UI 引用）
-export type ViduResolution = DashScopeResolution;
-// HappyHorse 仅支持 720P / 1080P 两档（不含 540P）
-export type HhResolution = '720P' | '1080P';
-// HappyHorse 9 种比例（与既有 HappyHorseRatio 同义；保留独立别名以贴近 plan 命名约定）
-export type HhRatio = HappyHorseRatio;
-
-export interface DashScopeVideoParams {
-    /** 必填：模型选择 */
-    model: DashScopeVideoModel;
-    /** 必填：文本提示词 */
-    prompt: string;
-    /** 媒体输入（first_frame / last_frame / reference_image），url 可填 file_id 或公网 URL，worker 自动 Base64 转换 */
-    media_inputs?: SeedanceMediaInput[];
-
-    // ─── 公共 ─────────────────────────────────────────────────────────
-    /** 时长（秒）：Kling 3-15 / Vidu q3 1-16 / Vidu q2 1-10 / HappyHorse 3-15 */
-    duration?: number;
-    /** 随机种子，-1 自动 */
-    seed?: number;
-    /** 水印 */
-    watermark?: boolean;
-
-    // ─── Kling ────────────────────────────────────────────────────────
-    /** Kling 子型号：standard(kling-v3) / omni(kling-v3-omni) */
-    sub_model_kling?: KlingSubModel;
-    /** Kling 模式：std(720P) / pro(1080P) */
-    mode?: KlingMode;
-    /** Kling 文生/参考生视频画面比例（图生视频以图为基准不必传） */
-    aspect_ratio?: DashScopeAspectRatio;
-    /** Kling/Vidu 是否生成有声视频 */
-    audio?: boolean;
-
-    // ─── Vidu ─────────────────────────────────────────────────────────
-    /** Vidu 子型号：q3-mix / q3 / q3-turbo / q3-pro / q2 / q2-pro / q2-turbo */
-    sub_model_vidu?: ViduSubModel;
-    /** Vidu / HappyHorse 分辨率档：540P/720P/1080P */
-    resolution?: DashScopeResolution;
-    /** Vidu 自定义 size，如 "1280*720"，与 resolution 二选一或同传 */
-    size?: string;
-
-    // ─── HappyHorse ──────────────────────────────────────────────────
-    /** HappyHorse 宽高比（9 档可选） */
-    ratio?: HappyHorseRatio;
-
-    // 2026-05-24 — Task 2 of dashscope-cards-redesign：补齐三家真实文档字段。
-    // 既有的 resolution / aspect_ratio / audio / ratio 是早期通用别名；
-    // 下面是各家独占命名空间字段（kling_* / vidu_* / hh_*），与后端 payload 序列化一一对应。
-
-    /** Kling：多镜头能力开关（kling/kling-v3-* 都支持） */
-    kling_multi_shot?: boolean;
-    /** Kling：多镜头分镜模式（intelligence=智能拆分 / customize=逐镜头自定义） */
-    kling_shot_type?: KlingShotType;
-    /** Kling：customize 模式下的逐分镜列表，最多 6 个 */
-    kling_multi_prompt?: KlingMultiPromptItem[];
-    /** Kling：omni 模式接收 type=base/feature 视频时是否保留原声 */
-    kling_keep_original_sound?: 'yes' | 'no';
-
-    // 2026-05-25 — Kling 卡片 UI 显式 state，避免从 media_inputs 反推引起的"切换后卡住"bug。
-    // 后端真实 task_type 仍由 inferDashScopeTaskType 推导（这里只是 UI 状态）。
-    // 'auto'：跟随 storyboard 注入的 media（单图→i2v / 双图→morph / 无→t2v）—— 默认值
-    // 'omni'：用户额外提供多参考图（卡内 MultiRefRow）
-    // 'multi'：多镜头脚本
-    kling_active_mode?: 'auto' | 'omni' | 'multi';
-
-    /** Vidu：分辨率档 540P/720P/1080P（独占命名空间，避免与公共 resolution 互相覆盖） */
-    vidu_resolution?: ViduResolution;
-    /** Vidu：像素尺寸字符串，如 "1280*720" */
-    vidu_size?: string;
-    /** Vidu：种子；undefined = 随机 */
-    vidu_seed?: number;
-    /** Vidu：是否生成有声视频；仅 q3 系列子模型生效 */
-    vidu_audio?: boolean;
-
-    /** HappyHorse：分辨率档（仅 720P / 1080P；文档默认 1080P） */
-    hh_resolution?: HhResolution;
-    /** HappyHorse：宽高比（9 档可选） */
-    hh_ratio?: HhRatio;
-    /** HappyHorse：时长 3-15 秒，文档默认 5 */
-    hh_duration?: number;
-    /** HappyHorse：水印；文档默认 true */
-    hh_watermark?: boolean;
-    /** HappyHorse：种子；undefined = 随机 */
-    hh_seed?: number;
-}
-
-/**
- * 2026-05-24 — Task 2 of dashscope-cards-redesign：DashScope 三家视频参数默认值工厂。
- *
- * 项目里历史上同名函数住在 `components/video/DashScopeCards.tsx`，沿用 3 参数签名
- * (model, prompt, seedMedia)。本版本提供 service 层的"单一可信源"实现，
- * 字段默认值按真实 API 文档补齐：
- * - Kling：kling_multi_shot=false / kling_shot_type='intelligence' /
- *   kling_multi_prompt=[] / kling_keep_original_sound='no'
- * - Vidu：vidu_resolution='720P' / vidu_size='1280*720' / vidu_audio=false
- *   （vidu_seed undefined 表示随机）
- * - HappyHorse：hh_resolution='1080P' / hh_ratio='16:9' / hh_duration=5 /
- *   hh_watermark=true（按文档默认开启）/ hh_seed undefined
- *
- * 模型名沿用项目既有 `DashScopeVideoModel`（'Kling' | 'Vidu' | 'HappyHorse'），
- * 而非 plan literal 里的中文别名（'合体' / '大乘' / '炼虚'），保持跨文件类型一致。
- */
-export function makeDefaultDashScopeParams(
-    model: DashScopeVideoModel,
-    prompt: string = '',
-    seedMedia: SeedanceMediaInput[] = [],
-): DashScopeVideoParams {
-    const base: DashScopeVideoParams = {
-        model,
-        prompt,
-        media_inputs: seedMedia,
-        duration: 5,
-        seed: -1,
-        watermark: false,
-    };
-
-    if (model === 'Kling') {
-        return {
-            ...base,
-            sub_model_kling: 'standard',
-            mode: 'std',
-            aspect_ratio: '16:9',
-            audio: false,
-            kling_multi_shot: false,
-            kling_shot_type: 'intelligence',
-            kling_multi_prompt: [],
-            kling_keep_original_sound: 'no',
-            kling_active_mode: 'auto',
-        };
-    }
-    if (model === 'Vidu') {
-        return {
-            ...base,
-            sub_model_vidu: 'q3',
-            resolution: '720P',
-            audio: false,
-            vidu_resolution: '720P',
-            vidu_size: '1280*720',
-            vidu_audio: false,
-        };
-    }
-    return {
-        ...base,
-        resolution: '720P',
-        ratio: '16:9',
-        hh_resolution: '1080P',
-        hh_ratio: '16:9',
-        hh_duration: 5,
-        hh_watermark: true,
-    };
-}
-
-/**
- * 根据 model + media_inputs 推断对应 task_type（与后端 worker 派发 elif 对齐）。
- */
-export function inferDashScopeTaskType(
-    model: DashScopeVideoModel,
-    media: SeedanceMediaInput[] = [],
-): string {
-    const images = media.filter(m => m.kind === 'image');
-    const hasFirst = images.some(m => m.role === 'first_frame');
-    const hasLast = images.some(m => m.role === 'last_frame');
-
-    if (model === 'Kling') {
-        if (!media.length) return 'kling_t2v';
-        if (hasFirst && hasLast) return 'kling_morph';
-        if (hasFirst && !hasLast) return 'kling_i2v';
-        return 'kling_refer';   // omni 多参考图
-    }
-    if (model === 'Vidu') {
-        if (hasFirst && hasLast) return 'vidu_morph';
-        return 'vidu_r2v';
-    }
-    return 'happyhorse_r2v';
-}
 
 /**
  * 提交 DashScope 共享 API 视频任务（合体/大乘/炼虚专用入口）。

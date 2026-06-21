@@ -13,7 +13,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { ImageOff } from 'lucide-react';
 import * as videoService from '../../services/videoService';
-import type { SeedanceParams, SeedanceMediaInput, DashScopeVideoParams } from '../../services/videoService';
+import type { SeedanceParams, SeedanceMediaInput, DashScopeVideoParams } from '../../services/videoModelService';
 import { SeedanceMultimodalPanel } from '../SeedanceMultimodalPanel';
 import { SeedanceMentionPromptEditor } from '../SeedanceMentionPromptEditor';
 import { DashScopeVideoCard, type DashScopePromptEditorProps } from './DashScopeCards';

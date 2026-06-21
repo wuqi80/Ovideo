@@ -9,7 +9,7 @@
 
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
-import type { SeedanceParams, SeedanceMediaInput } from '../../services/videoService';
+import type { SeedanceParams, SeedanceMediaInput } from '../../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../../utils/seedanceMedia';
 import { SeedanceMultimodalPanel } from '../SeedanceMultimodalPanel';
 
