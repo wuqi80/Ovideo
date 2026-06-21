@@ -7126,3 +7126,11 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local targeted pytest passed: `tests/test_api_provider_runtime_model_env.py` + `tests/test_minimax_audio_runtime.py`, 32 passed.
 - Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=144`.
 - Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=10`.
+
+### Deployment
+
+- Pushed commit `d0a9901` (`refactor(api-provider): centralize minimax video model resolution`) to `origin/refactor/v2`.
+- Ran `deploy/scripts/live_deploy_mvc2.sh`; server restart finished with service status `active`.
+- Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+- Remote file check confirmed `minimax_runtime_model_override` and `normalize_minimax_video_model` are present in the deployed registry/client path.
+- Online smoke test against `https://mecha.one` passed: 9/9.
