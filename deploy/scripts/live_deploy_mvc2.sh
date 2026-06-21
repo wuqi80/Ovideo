@@ -38,6 +38,7 @@ FILES=(
   "external_api/audio/minimax_audio.py"
   "scripts/live_deploy_mvc2.sh"
   scripts/check_*.py
+  tests/test_api_provider_runtime_model_env.py
   tests/test_admin_stats_logs.py
   tests/test_auth_user_service.py
   tests/test_content_file_dao.py

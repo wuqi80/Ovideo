@@ -11,11 +11,17 @@ from services import ai_proxy_service, video_reverse_service
 from services.api_provider_registry import (
     SEEDANCE_DEFAULT_MODEL_MAP,
     DASHSCOPE_DEFAULT_MODEL_MAP,
+    SORA2_DEFAULT_VIDEO_MODEL,
+    VEO_DEFAULT_VIDEO_MODEL,
     get_endpoint_env_key,
     get_dashscope_sub_model_env_key,
     get_model_env_key,
     get_provider_env_key,
     get_seedance_sub_model_env_key,
+    normalize_sora2_video_model,
+    normalize_veo_video_model,
+    sora2_runtime_model_override,
+    veo_runtime_model_override,
 )
 from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
 
@@ -33,6 +39,22 @@ def test_resolve_provider_uses_runtime_model_env(monkeypatch):
     assert config.model_name == "gemini-runtime-model"
     assert config.model_env == model_env
     assert config.source["model"] == model_env
+
+
+def test_sora2_and_veo_video_alias_helpers_live_in_registry():
+    assert sora2_runtime_model_override(None) is None
+    assert sora2_runtime_model_override(SORA2_DEFAULT_VIDEO_MODEL) is None
+    assert sora2_runtime_model_override("sora-2") is None
+    assert normalize_sora2_video_model("sora-2") == SORA2_DEFAULT_VIDEO_MODEL
+    assert sora2_runtime_model_override("sora2-custom") == "sora2-custom"
+    assert normalize_sora2_video_model("sora2-custom") == "sora2-custom"
+
+    assert veo_runtime_model_override(None) is None
+    assert veo_runtime_model_override(VEO_DEFAULT_VIDEO_MODEL) is None
+    assert veo_runtime_model_override("veo-3.1") is None
+    assert normalize_veo_video_model("veo-3") == VEO_DEFAULT_VIDEO_MODEL
+    assert veo_runtime_model_override("veo-custom") == "veo-custom"
+    assert normalize_veo_video_model("veo-custom") == "veo-custom"
 
 
 def test_explicit_model_overrides_runtime_model_env(monkeypatch):

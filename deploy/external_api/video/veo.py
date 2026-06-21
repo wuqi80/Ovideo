@@ -7,28 +7,16 @@ import requests
 import time
 import logging
 from typing import Optional, Dict, Any, List
-from services.api_provider_registry import VEO_DEFAULT_VIDEO_MODEL
+from services.api_provider_registry import (
+    VEO_DEFAULT_VIDEO_MODEL,
+    normalize_veo_video_model,
+    veo_runtime_model_override,
+)
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_VEO_VIDEO_MODEL = VEO_DEFAULT_VIDEO_MODEL
-LEGACY_VEO_VIDEO_MODELS = {"veo-3", "veo-3.1"}
-
-
-def _runtime_model_override(model: Optional[str]) -> Optional[str]:
-    """Treat legacy/default names as fallback so admin runtime config can win."""
-    normalized = (model or "").strip()
-    if not normalized or normalized == DEFAULT_VEO_VIDEO_MODEL or normalized in LEGACY_VEO_VIDEO_MODELS:
-        return None
-    return normalized
-
-
-def _normalize_veo_model(model: Optional[str]) -> str:
-    normalized = (model or "").strip()
-    if not normalized or normalized in LEGACY_VEO_VIDEO_MODELS:
-        return DEFAULT_VEO_VIDEO_MODEL
-    return normalized
 
 
 class VeoClient:
@@ -45,11 +33,11 @@ class VeoClient:
             logger.warning("⚠️ VEO_API_KEY 未设置")
 
     def _refresh_runtime_config(self, model: Optional[str] = None) -> None:
-        model_override = _runtime_model_override(model)
+        model_override = veo_runtime_model_override(model)
         config = resolve_provider("veo", model_override)
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
-        self.model_name = _normalize_veo_model(config.model_name or model_override)
+        self.model_name = normalize_veo_video_model(config.model_name or model_override)
         self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",

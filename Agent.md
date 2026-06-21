@@ -7081,3 +7081,22 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local Git Bash `bash -n deploy/scripts/live_deploy_mvc2.sh` passed.
 - Local `deploy/scripts/check_route_contract.py` passed with `current_architecture_docs_checks=12` and `live_deploy_frontend_checks=15`.
 - Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=9`.
+
+## 2026-06-21 Video Legacy Model Alias Registry
+
+### Changes
+
+- Moved Sora2/Veo legacy video model alias handling into `deploy/services/api_provider_registry.py`.
+- Updated `deploy/external_api/video/sora2.py` and `deploy/external_api/video/veo.py` to call registry helpers instead of defining local alias normalization functions.
+- Updated `deploy/services/api_config_runtime_loader.py` so default provider seeding checks Sora2/Veo legacy model names through registry constants.
+- Strengthened `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, and `deploy/tests/test_api_provider_runtime_model_env.py` so future clients cannot drift back to local hardcoded legacy aliases.
+- Updated `deploy/scripts/live_deploy_mvc2.sh` to sync the runtime model env test to the server with live deployments.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile` passed for the changed Python modules and contract scripts.
+- Local `deploy/scripts/check_provider_contract.py` passed with `video_default_model_checks=38`.
+- Local targeted pytest passed: `tests/test_api_provider_runtime_model_env.py` + `tests/test_minimax_audio_runtime.py`, 32 passed.
+- Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=139`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=10`.

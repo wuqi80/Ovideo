@@ -9,28 +9,16 @@ import logging
 from typing import Optional, Dict, Any
 from PIL import Image
 import io
-from services.api_provider_registry import SORA2_DEFAULT_VIDEO_MODEL
+from services.api_provider_registry import (
+    SORA2_DEFAULT_VIDEO_MODEL,
+    normalize_sora2_video_model,
+    sora2_runtime_model_override,
+)
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SORA2_VIDEO_MODEL = SORA2_DEFAULT_VIDEO_MODEL
-LEGACY_SORA2_VIDEO_MODELS = {"sora-2"}
-
-
-def _runtime_model_override(model: Optional[str]) -> Optional[str]:
-    """Treat legacy/default names as fallback so admin runtime config can win."""
-    normalized = (model or "").strip()
-    if not normalized or normalized == DEFAULT_SORA2_VIDEO_MODEL or normalized in LEGACY_SORA2_VIDEO_MODELS:
-        return None
-    return normalized
-
-
-def _normalize_sora2_model(model: Optional[str]) -> str:
-    normalized = (model or "").strip()
-    if not normalized or normalized in LEGACY_SORA2_VIDEO_MODELS:
-        return DEFAULT_SORA2_VIDEO_MODEL
-    return normalized
 
 
 class Sora2Client:
@@ -47,11 +35,11 @@ class Sora2Client:
             logger.warning("⚠️ SORA2_API_KEY 未设置")
 
     def _refresh_runtime_config(self, model: Optional[str] = None):
-        model_override = _runtime_model_override(model)
+        model_override = sora2_runtime_model_override(model)
         config = resolve_provider("sora2", model_override)
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
-        self.model_name = _normalize_sora2_model(config.model_name or model_override)
+        self.model_name = normalize_sora2_video_model(config.model_name or model_override)
         self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Authorization": f"Bearer {self.api_key}"

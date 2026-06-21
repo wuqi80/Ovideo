@@ -1037,6 +1037,52 @@ def check_video_default_model_registry_wiring(registry) -> int:
             fail(f"{rel} must not hardcode video default model literal {literal!r}")
         checks += 3
 
+    video_alias_cases = [
+        (
+            "sora2",
+            registry.SORA2_DEFAULT_VIDEO_MODEL,
+            registry.SORA2_LEGACY_VIDEO_MODELS,
+            registry.sora2_runtime_model_override,
+            registry.normalize_sora2_video_model,
+            root / "external_api" / "video" / "sora2.py",
+            ("LEGACY_SORA2_VIDEO_MODELS", "_normalize_sora2_model", "def _runtime_model_override"),
+        ),
+        (
+            "veo",
+            registry.VEO_DEFAULT_VIDEO_MODEL,
+            registry.VEO_LEGACY_VIDEO_MODELS,
+            registry.veo_runtime_model_override,
+            registry.normalize_veo_video_model,
+            root / "external_api" / "video" / "veo.py",
+            ("LEGACY_VEO_VIDEO_MODELS", "_normalize_veo_model", "def _runtime_model_override"),
+        ),
+    ]
+    for provider, default_model, legacy_models, override_fn, normalize_fn, client_path, forbidden in video_alias_cases:
+        if not legacy_models:
+            fail(f"Registry legacy video model set missing for {provider}")
+        if override_fn(None) is not None or override_fn(default_model) is not None:
+            fail(f"Registry runtime override helper should ignore empty/default model for {provider}")
+        legacy_model = next(iter(legacy_models))
+        if override_fn(legacy_model) is not None:
+            fail(f"Registry runtime override helper should ignore legacy model {legacy_model!r} for {provider}")
+        if normalize_fn(legacy_model) != default_model:
+            fail(f"Registry normalize helper should map legacy {provider} model to default")
+        custom_model = f"{provider}-custom-runtime-model"
+        if override_fn(custom_model) != custom_model or normalize_fn(custom_model) != custom_model:
+            fail(f"Registry helpers should preserve custom explicit {provider} models")
+
+        client_text = client_path.read_text(encoding="utf-8")
+        for snippet in forbidden:
+            if snippet in client_text:
+                fail(f"{client_path.relative_to(root)} must not define local video alias helper: {snippet}")
+        checks += 6 + len(forbidden)
+
+    runtime_loader = (root / "services" / "api_config_runtime_loader.py").read_text(encoding="utf-8")
+    for legacy_name in ("SORA2_LEGACY_VIDEO_MODELS", "VEO_LEGACY_VIDEO_MODELS"):
+        if legacy_name not in runtime_loader:
+            fail(f"api_config_runtime_loader.py must use registry {legacy_name}")
+        checks += 1
+
     audio_client = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
     if "MINIMAX_DEFAULT_VIDEO_MODEL" not in audio_client:
         fail("external_api/audio/minimax_audio.py must resolve MiniMax preset through registry MINIMAX_DEFAULT_VIDEO_MODEL")
@@ -1047,7 +1093,6 @@ def check_video_default_model_registry_wiring(registry) -> int:
         )
     checks += 2
 
-    runtime_loader = (root / "services" / "api_config_runtime_loader.py").read_text(encoding="utf-8")
     for registry_name, literal in (
         ("SORA2_DEFAULT_VIDEO_MODEL", registry.SORA2_DEFAULT_VIDEO_MODEL),
         ("VEO_DEFAULT_VIDEO_MODEL", registry.VEO_DEFAULT_VIDEO_MODEL),

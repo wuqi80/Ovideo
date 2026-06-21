@@ -2501,12 +2501,36 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             '"model_name": SORA2_DEFAULT_VIDEO_MODEL',
         ),
         (
+            root / "services" / "api_provider_registry.py",
+            "SORA2_LEGACY_VIDEO_MODELS",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "def sora2_runtime_model_override",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "def normalize_sora2_video_model",
+        ),
+        (
             root / "services" / "api_config_runtime_loader.py",
             "SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL",
         ),
         (
+            root / "services" / "api_config_runtime_loader.py",
+            "SORA2_LEGACY_VIDEO_MODELS",
+        ),
+        (
             root / "external_api" / "video" / "sora2.py",
             "DEFAULT_SORA2_VIDEO_MODEL =",
+        ),
+        (
+            root / "external_api" / "video" / "sora2.py",
+            "sora2_runtime_model_override(model)",
+        ),
+        (
+            root / "external_api" / "video" / "sora2.py",
+            "normalize_sora2_video_model",
         ),
         (
             root / "external_api" / "video" / "sora2.py",
@@ -2529,12 +2553,36 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             '"model_name": VEO_DEFAULT_VIDEO_MODEL',
         ),
         (
+            root / "services" / "api_provider_registry.py",
+            "VEO_LEGACY_VIDEO_MODELS",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "def veo_runtime_model_override",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "def normalize_veo_video_model",
+        ),
+        (
             root / "services" / "api_config_runtime_loader.py",
             "VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL",
         ),
         (
+            root / "services" / "api_config_runtime_loader.py",
+            "VEO_LEGACY_VIDEO_MODELS",
+        ),
+        (
             root / "external_api" / "video" / "veo.py",
             "DEFAULT_VEO_VIDEO_MODEL =",
+        ),
+        (
+            root / "external_api" / "video" / "veo.py",
+            "veo_runtime_model_override(model)",
+        ),
+        (
+            root / "external_api" / "video" / "veo.py",
+            "normalize_veo_video_model",
         ),
         (
             root / "external_api" / "video" / "veo.py",
@@ -4252,6 +4300,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         '"services"',
         '"utils"',
         "scripts/check_*.py",
+        "tests/test_api_provider_runtime_model_env.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "new_html-src.tgz",
         "--exclude='new_html/node_modules'",

@@ -18,7 +18,9 @@ from services.api_provider_registry import (
     PROVIDER_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
     SORA2_DEFAULT_VIDEO_MODEL,
+    SORA2_LEGACY_VIDEO_MODELS,
     VEO_DEFAULT_VIDEO_MODEL,
+    VEO_LEGACY_VIDEO_MODELS,
     dashscope_sub_model_for_model,
     get_api_model_preset,
     get_custom_proxy_env_key,
@@ -54,9 +56,7 @@ GEMINI_IMAGE_LEGACY_MODELS = {
 GEMINI_IMAGE_NEW_MODEL = "gemini-3.1-flash-image-preview"
 GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash"}
 GEMINI_TTS_NEW_MODEL = "gemini-2.5-flash-preview-tts"
-SORA2_LEGACY_MODELS = {"sora-2"}
 SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL
-VEO_LEGACY_MODELS = {"veo-3", "veo-3.1"}
 VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL
 
 
@@ -302,7 +302,7 @@ async def seed_default_api_providers() -> Dict[str, Any]:
             if provider != "sora2":
                 continue
             model_name = str(_config_get(row, "model_name", "") or "").strip()
-            if model_name not in SORA2_LEGACY_MODELS:
+            if model_name not in SORA2_LEGACY_VIDEO_MODELS:
                 continue
 
             old_name = str(_config_get(row, "name", "") or "")
@@ -320,7 +320,7 @@ async def seed_default_api_providers() -> Dict[str, Any]:
             if provider != "veo":
                 continue
             model_name = str(_config_get(row, "model_name", "") or "").strip()
-            if model_name not in VEO_LEGACY_MODELS:
+            if model_name not in VEO_LEGACY_VIDEO_MODELS:
                 continue
 
             old_name = str(_config_get(row, "name", "") or "")

@@ -62,7 +62,9 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
 
 MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
 SORA2_DEFAULT_VIDEO_MODEL = "sora_video2-landscape-15s"
+SORA2_LEGACY_VIDEO_MODELS = frozenset({"sora-2"})
 VEO_DEFAULT_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
+VEO_LEGACY_VIDEO_MODELS = frozenset({"veo-3", "veo-3.1"})
 
 DASHSCOPE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     "wan26": "wan2.6-i2v",
@@ -497,6 +499,64 @@ def normalize_gemini_image_model(model: Optional[str]) -> Optional[str]:
     if not requested:
         return None
     return GEMINI_IMAGE_MODEL_ALIASES.get(requested, requested)
+
+
+def _runtime_model_override(
+    model: Optional[str],
+    *,
+    default_model: str,
+    legacy_models: frozenset[str],
+) -> Optional[str]:
+    normalized = (model or "").strip()
+    if not normalized or normalized == default_model or normalized in legacy_models:
+        return None
+    return normalized
+
+
+def _normalize_video_model(
+    model: Optional[str],
+    *,
+    default_model: str,
+    legacy_models: frozenset[str],
+) -> str:
+    normalized = (model or "").strip()
+    if not normalized or normalized in legacy_models:
+        return default_model
+    return normalized
+
+
+def sora2_runtime_model_override(model: Optional[str]) -> Optional[str]:
+    """Treat legacy/default Sora2 names as fallback so runtime config can win."""
+    return _runtime_model_override(
+        model,
+        default_model=SORA2_DEFAULT_VIDEO_MODEL,
+        legacy_models=SORA2_LEGACY_VIDEO_MODELS,
+    )
+
+
+def normalize_sora2_video_model(model: Optional[str]) -> str:
+    return _normalize_video_model(
+        model,
+        default_model=SORA2_DEFAULT_VIDEO_MODEL,
+        legacy_models=SORA2_LEGACY_VIDEO_MODELS,
+    )
+
+
+def veo_runtime_model_override(model: Optional[str]) -> Optional[str]:
+    """Treat legacy/default Veo names as fallback so runtime config can win."""
+    return _runtime_model_override(
+        model,
+        default_model=VEO_DEFAULT_VIDEO_MODEL,
+        legacy_models=VEO_LEGACY_VIDEO_MODELS,
+    )
+
+
+def normalize_veo_video_model(model: Optional[str]) -> str:
+    return _normalize_video_model(
+        model,
+        default_model=VEO_DEFAULT_VIDEO_MODEL,
+        legacy_models=VEO_LEGACY_VIDEO_MODELS,
+    )
 
 
 def normalize_provider(provider: str) -> str:
