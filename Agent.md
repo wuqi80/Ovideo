@@ -7108,3 +7108,21 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Remote file sync check passed: `cluster_main.py` 985 lines, `admin_routes.py` 1502 lines, `dao/` 72 files.
 - Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
 - Online smoke test against `https://mecha.one` passed: 9/9.
+
+## 2026-06-21 MiniMax Video Runtime Model Registry
+
+### Changes
+
+- Moved MiniMax video runtime model override and normalization helpers into `deploy/services/api_provider_registry.py`.
+- Updated `deploy/external_api/video/minimax.py` so it no longer defines local runtime-model override logic.
+- Extended `deploy/scripts/check_provider_contract.py` and `deploy/scripts/check_route_contract.py` to keep MiniMax/Sora2/Veo video model rules registry-owned.
+- Extended `deploy/tests/test_api_provider_runtime_model_env.py` with registry helper coverage for MiniMax.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile` passed for the changed Python modules and contract scripts.
+- Local `deploy/scripts/check_provider_contract.py` passed with `video_default_model_checks=50`.
+- Local targeted pytest passed: `tests/test_api_provider_runtime_model_env.py` + `tests/test_minimax_audio_runtime.py`, 32 passed.
+- Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=144`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=10`.

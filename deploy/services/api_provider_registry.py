@@ -61,6 +61,7 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
 }
 
 MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
+MINIMAX_LEGACY_VIDEO_MODELS = frozenset()
 SORA2_DEFAULT_VIDEO_MODEL = "sora_video2-landscape-15s"
 SORA2_LEGACY_VIDEO_MODELS = frozenset({"sora-2"})
 VEO_DEFAULT_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
@@ -523,6 +524,23 @@ def _normalize_video_model(
     if not normalized or normalized in legacy_models:
         return default_model
     return normalized
+
+
+def minimax_runtime_model_override(model: Optional[str]) -> Optional[str]:
+    """Treat MiniMax empty/default names as fallback so runtime config can win."""
+    return _runtime_model_override(
+        model,
+        default_model=MINIMAX_DEFAULT_VIDEO_MODEL,
+        legacy_models=MINIMAX_LEGACY_VIDEO_MODELS,
+    )
+
+
+def normalize_minimax_video_model(model: Optional[str]) -> str:
+    return _normalize_video_model(
+        model,
+        default_model=MINIMAX_DEFAULT_VIDEO_MODEL,
+        legacy_models=MINIMAX_LEGACY_VIDEO_MODELS,
+    )
 
 
 def sora2_runtime_model_override(model: Optional[str]) -> Optional[str]:

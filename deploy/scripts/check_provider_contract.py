@@ -1039,6 +1039,15 @@ def check_video_default_model_registry_wiring(registry) -> int:
 
     video_alias_cases = [
         (
+            "minimax",
+            registry.MINIMAX_DEFAULT_VIDEO_MODEL,
+            registry.MINIMAX_LEGACY_VIDEO_MODELS,
+            registry.minimax_runtime_model_override,
+            registry.normalize_minimax_video_model,
+            root / "external_api" / "video" / "minimax.py",
+            ("def _runtime_model_override", "_normalize_minimax_model"),
+        ),
+        (
             "sora2",
             registry.SORA2_DEFAULT_VIDEO_MODEL,
             registry.SORA2_LEGACY_VIDEO_MODELS,
@@ -1058,15 +1067,16 @@ def check_video_default_model_registry_wiring(registry) -> int:
         ),
     ]
     for provider, default_model, legacy_models, override_fn, normalize_fn, client_path, forbidden in video_alias_cases:
-        if not legacy_models:
-            fail(f"Registry legacy video model set missing for {provider}")
         if override_fn(None) is not None or override_fn(default_model) is not None:
             fail(f"Registry runtime override helper should ignore empty/default model for {provider}")
-        legacy_model = next(iter(legacy_models))
-        if override_fn(legacy_model) is not None:
-            fail(f"Registry runtime override helper should ignore legacy model {legacy_model!r} for {provider}")
-        if normalize_fn(legacy_model) != default_model:
-            fail(f"Registry normalize helper should map legacy {provider} model to default")
+        if normalize_fn(None) != default_model or normalize_fn(default_model) != default_model:
+            fail(f"Registry normalize helper should map empty/default {provider} model to default")
+        if legacy_models:
+            legacy_model = next(iter(legacy_models))
+            if override_fn(legacy_model) is not None:
+                fail(f"Registry runtime override helper should ignore legacy model {legacy_model!r} for {provider}")
+            if normalize_fn(legacy_model) != default_model:
+                fail(f"Registry normalize helper should map legacy {provider} model to default")
         custom_model = f"{provider}-custom-runtime-model"
         if override_fn(custom_model) != custom_model or normalize_fn(custom_model) != custom_model:
             fail(f"Registry helpers should preserve custom explicit {provider} models")
@@ -1076,6 +1086,8 @@ def check_video_default_model_registry_wiring(registry) -> int:
             if snippet in client_text:
                 fail(f"{client_path.relative_to(root)} must not define local video alias helper: {snippet}")
         checks += 6 + len(forbidden)
+        if legacy_models:
+            checks += 2
 
     runtime_loader = (root / "services" / "api_config_runtime_loader.py").read_text(encoding="utf-8")
     for legacy_name in ("SORA2_LEGACY_VIDEO_MODELS", "VEO_LEGACY_VIDEO_MODELS"):

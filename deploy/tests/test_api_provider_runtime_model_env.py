@@ -11,6 +11,7 @@ from services import ai_proxy_service, video_reverse_service
 from services.api_provider_registry import (
     SEEDANCE_DEFAULT_MODEL_MAP,
     DASHSCOPE_DEFAULT_MODEL_MAP,
+    MINIMAX_DEFAULT_VIDEO_MODEL,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
     get_endpoint_env_key,
@@ -18,6 +19,8 @@ from services.api_provider_registry import (
     get_model_env_key,
     get_provider_env_key,
     get_seedance_sub_model_env_key,
+    minimax_runtime_model_override,
+    normalize_minimax_video_model,
     normalize_sora2_video_model,
     normalize_veo_video_model,
     sora2_runtime_model_override,
@@ -41,7 +44,13 @@ def test_resolve_provider_uses_runtime_model_env(monkeypatch):
     assert config.source["model"] == model_env
 
 
-def test_sora2_and_veo_video_alias_helpers_live_in_registry():
+def test_minimax_sora2_and_veo_video_alias_helpers_live_in_registry():
+    assert minimax_runtime_model_override(None) is None
+    assert minimax_runtime_model_override(MINIMAX_DEFAULT_VIDEO_MODEL) is None
+    assert normalize_minimax_video_model(None) == MINIMAX_DEFAULT_VIDEO_MODEL
+    assert minimax_runtime_model_override("minimax-custom") == "minimax-custom"
+    assert normalize_minimax_video_model("minimax-custom") == "minimax-custom"
+
     assert sora2_runtime_model_override(None) is None
     assert sora2_runtime_model_override(SORA2_DEFAULT_VIDEO_MODEL) is None
     assert sora2_runtime_model_override("sora-2") is None

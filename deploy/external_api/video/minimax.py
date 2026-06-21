@@ -7,20 +7,16 @@ import requests
 import time
 import logging
 from typing import Optional, Dict, Any
-from services.api_provider_registry import MINIMAX_DEFAULT_VIDEO_MODEL
+from services.api_provider_registry import (
+    MINIMAX_DEFAULT_VIDEO_MODEL,
+    minimax_runtime_model_override,
+    normalize_minimax_video_model,
+)
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MINIMAX_VIDEO_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL
-
-
-def _runtime_model_override(model: Optional[str]) -> Optional[str]:
-    """Treat the old worker default as fallback so admin runtime config can win."""
-    normalized = (model or "").strip()
-    if not normalized or normalized == DEFAULT_MINIMAX_VIDEO_MODEL:
-        return None
-    return normalized
 
 
 class MinimaxClient:
@@ -37,11 +33,11 @@ class MinimaxClient:
             logger.warning("⚠️ MINIMAX_API_KEY 未设置")
 
     def _refresh_runtime_config(self, model: Optional[str] = None):
-        model_override = _runtime_model_override(model)
+        model_override = minimax_runtime_model_override(model)
         config = resolve_provider("minimax", model_override)
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
-        self.model_name = config.model_name or model_override or DEFAULT_MINIMAX_VIDEO_MODEL
+        self.model_name = normalize_minimax_video_model(config.model_name or model_override)
         self._request_kwargs = config.requests_kwargs()
         self.headers = {
             "Content-Type": "application/json",

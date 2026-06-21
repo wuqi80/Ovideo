@@ -2325,6 +2325,22 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "DEFAULT_MINIMAX_VIDEO_MODEL =",
         ),
         (
+            root / "services" / "api_provider_registry.py",
+            "def minimax_runtime_model_override",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "def normalize_minimax_video_model",
+        ),
+        (
+            root / "external_api" / "video" / "minimax.py",
+            "minimax_runtime_model_override(model)",
+        ),
+        (
+            root / "external_api" / "video" / "minimax.py",
+            "normalize_minimax_video_model",
+        ),
+        (
             root / "external_api" / "video" / "minimax.py",
             'config = resolve_provider("minimax", model_override)',
         ),
@@ -2495,6 +2511,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_minimax_video_explicit_non_default_model_overrides_runtime_model",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_minimax_sora2_and_veo_video_alias_helpers_live_in_registry",
         ),
         (
             root / "services" / "api_provider_registry.py",
