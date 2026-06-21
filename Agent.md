@@ -12,6 +12,15 @@
   - 清理了 `deploy/external_api/video/dashscope.py` 与 `deploy/services/video_reverse_service.py` 中过期的 provider endpoint/key 文档描述。
 - 这个变更不改变运行时行为，用于支持后续把第三方 API 切换成自建 API 时只改注册表/后台配置。
 
+## 2026-06-21 API 配置诊断增强记录
+
+- 后台 API 配置的“高级诊断”返回值补充 Endpoint 来源信息：
+  - `key_source/key_env/used_runtime_key` 继续说明 Key 来自 DB、运行时或缺失。
+  - 新增 `endpoint_source/used_runtime_endpoint/runtime_endpoint/runtime_endpoint_source/runtime_endpoint_env/endpoint_matches_runtime`。
+  - 当 DB 配置测试借用了运行时 Key，但 DB endpoint 与实际 runtime endpoint 不一致时，前端会明确显示“与运行时 Endpoint 不一致”。
+- `deploy/new_html/admin/AdminSettingsPage.tsx` 已在单配置卡片和 provider 快速卡片中显示该差异，减少“DB 配置测试异常，但刷新生效健康正常”的排查成本。
+- `deploy/scripts/check_admin_api_config_crud.py` 增加 `health_wrapper_endpoint_diagnostics` 契约，防止诊断字段回退。
+
 ## 2026-06-21 Service/DAO 分层守卫记录
 
 - 新增 `deploy/scripts/check_service_dao_boundary.py`：

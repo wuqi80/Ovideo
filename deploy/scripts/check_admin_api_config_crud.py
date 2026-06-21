@@ -238,8 +238,10 @@ async def main() -> int:
             }
 
         previous_gpt_image_key = os.environ.get("GPT_IMAGE_API_KEY")
+        previous_gpt_image_endpoint = os.environ.get("GPT_IMAGE_ENDPOINT")
         service.test_api_config_health = fake_test_health
         os.environ["GPT_IMAGE_API_KEY"] = "runtime-secret"
+        os.environ["GPT_IMAGE_ENDPOINT"] = "https://runtime-gpt-image.example.test/v1"
         try:
             health = await service.test_saved_api_config_health("apicfg_empty")
             test = health.get("test") or {}
@@ -249,12 +251,24 @@ async def main() -> int:
                 fail(f"runtime fallback key source not reported: {test}")
             if test.get("used_runtime_key") is not True:
                 fail(f"runtime fallback flag not reported: {test}")
+            if test.get("endpoint_source") != "db" or test.get("used_runtime_endpoint") is not False:
+                fail(f"DB config test should keep DB endpoint when present: {test}")
+            if test.get("runtime_endpoint") != "https://runtime-gpt-image.example.test/v1":
+                fail(f"runtime endpoint diagnostic not reported: {test}")
+            if test.get("runtime_endpoint_source") != "GPT_IMAGE_ENDPOINT" or test.get("runtime_endpoint_env") != "GPT_IMAGE_ENDPOINT":
+                fail(f"runtime endpoint source not reported: {test}")
+            if test.get("endpoint_matches_runtime") is not False:
+                fail(f"endpoint mismatch diagnostic not reported: {test}")
         finally:
             service.test_api_config_health = original_test_health
             if previous_gpt_image_key is None:
                 os.environ.pop("GPT_IMAGE_API_KEY", None)
             else:
                 os.environ["GPT_IMAGE_API_KEY"] = previous_gpt_image_key
+            if previous_gpt_image_endpoint is None:
+                os.environ.pop("GPT_IMAGE_ENDPOINT", None)
+            else:
+                os.environ["GPT_IMAGE_ENDPOINT"] = previous_gpt_image_endpoint
 
         deleted = await service.delete_api_config("apicfg_empty", reload_api_env=fake_reload)
         if deleted != {"success": True, "deleted": True, "env_refreshed": True}:
@@ -368,6 +382,7 @@ async def main() -> int:
     print("  provider_health_invalidations=4")
     print("  health_wrapper_no_key=1")
     print("  health_wrapper_runtime_key_fallback=1")
+    print("  health_wrapper_endpoint_diagnostics=1")
     return 0
 
 

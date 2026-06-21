@@ -1,5 +1,28 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 API Config Endpoint Diagnostics
+
+### Changes
+
+- Enhanced admin API config health test results with safe endpoint diagnostics:
+  - `endpoint_source`
+  - `used_runtime_endpoint`
+  - `runtime_endpoint`
+  - `runtime_endpoint_source`
+  - `runtime_endpoint_env`
+  - `endpoint_matches_runtime`
+- Updated `new_html/admin/AdminSettingsPage.tsx` so advanced config diagnostics clearly show when a DB config endpoint differs from the runtime endpoint that real generation calls use.
+- Strengthened `scripts/check_admin_api_config_crud.py` with `health_wrapper_endpoint_diagnostics`.
+
+### Verification
+
+- Local `py_compile` for `services/api_config_service.py` and `scripts/check_admin_api_config_crud.py`: passed.
+- Local `scripts/check_admin_api_config_crud.py`: passed.
+- Local `scripts/check_architecture_contracts.py`: 10/10 passed.
+- Local Vite build is still blocked by the existing missing Rollup optional package `@rollup/rollup-win32-x64-msvc`.
+- Local `tsc --noEmit` is still blocked by existing project-wide TypeScript debt outside this API config change.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-21 Service/DAO Boundary Contract
 
 ### Changes

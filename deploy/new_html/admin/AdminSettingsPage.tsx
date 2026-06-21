@@ -177,6 +177,13 @@ interface ApiConfigTest {
     key_source?: 'db' | 'runtime' | 'missing' | string;
     key_env?: string | null;
     used_runtime_key?: boolean;
+    endpoint_source?: 'db' | 'runtime' | 'missing' | string;
+    used_runtime_endpoint?: boolean;
+    runtime_endpoint?: string | null;
+    runtime_endpoint_source?: string | null;
+    runtime_endpoint_env?: string | null;
+    runtime_model_name?: string | null;
+    endpoint_matches_runtime?: boolean | null;
 }
 
 interface ApiConfigTestResponse {
@@ -653,6 +660,24 @@ function keySourceText(runtime?: RuntimeStatus, configHasKey?: boolean): string 
     return '未配置 Key';
 }
 
+function configTestEndpointText(test?: ApiConfigTest): string {
+    if (!test) return '';
+    const parts: string[] = [];
+    if (test.used_runtime_endpoint) {
+        parts.push(`Endpoint 来源：运行时 ${sourceText(test.runtime_endpoint_source, test.runtime_endpoint_env)}`);
+    } else if (test.endpoint_source === 'db') {
+        parts.push('Endpoint 来源：DB 记录');
+    } else if (test.endpoint_source === 'missing') {
+        parts.push('Endpoint 未配置');
+    } else if (test.endpoint_source) {
+        parts.push(`Endpoint 来源：${test.endpoint_source}`);
+    }
+    if (test.endpoint_matches_runtime === false) {
+        parts.push('与运行时 Endpoint 不一致');
+    }
+    return parts.join('；');
+}
+
 function dbKeyStateText(hasSavedKey: boolean, runtimeHasKey: boolean): string {
     if (hasSavedKey) return 'DB 已保存 Key';
     if (runtimeHasKey) return 'DB 未保存 Key，真实调用使用运行时 Key';
@@ -1033,6 +1058,7 @@ const ApiConfigCard: React.FC<{
                 : configTest.key_source === 'missing'
                     ? '未配置 Key'
                     : configTest.key_source || '';
+    const configTestEndpoint = configTestEndpointText(configTest);
 
     return (
         <article className="bg-n0 border border-n40 rounded-md shadow-card p-4 min-w-0">
@@ -1213,6 +1239,9 @@ const ApiConfigCard: React.FC<{
                             {configTestKeySource && (
                                 <span className="ml-1">；Key 来源：{configTestKeySource}</span>
                             )}
+                            {configTestEndpoint && (
+                                <span className="ml-1">；{configTestEndpoint}</span>
+                            )}
                             <span className="mx-1 text-n100">/</span>
                             <span className="font-mono text-n700">
                                 {typeof configTest.latency_ms === 'number' ? `${configTest.latency_ms} ms` : '- ms'}
@@ -1223,6 +1252,11 @@ const ApiConfigCard: React.FC<{
                             <span>{formatTime(configTest.checked_at)}</span>
                             {configTest.url && (
                                 <div className="mt-1 font-mono text-n700 break-all">{formatEndpoint(configTest.url)}</div>
+                            )}
+                            {configTest.endpoint_matches_runtime === false && configTest.runtime_endpoint && (
+                                <div className="mt-1 font-mono text-y400 break-all">
+                                    运行时 Endpoint: {formatEndpoint(configTest.runtime_endpoint)}
+                                </div>
                             )}
                             {configTest.error && (
                                 <div className="mt-1">{configTest.error}</div>
@@ -1294,6 +1328,7 @@ const ProviderQuickCard: React.FC<{
                 : configTest.key_source === 'missing'
                     ? '未配置 Key'
                     : configTest.key_source || '';
+    const quickConfigTestEndpoint = configTestEndpointText(configTest);
 
     return (
         <article className={`bg-n0 border rounded-md shadow-card p-4 min-w-0 ${
@@ -1412,10 +1447,18 @@ const ProviderQuickCard: React.FC<{
                     {quickConfigTestKeySource && (
                         <span className="ml-1">Key 来源：{quickConfigTestKeySource}</span>
                     )}
+                    {quickConfigTestEndpoint && (
+                        <span className="ml-1">；{quickConfigTestEndpoint}</span>
+                    )}
                     <span className="mx-1 text-n100">/</span>
                     <span className="font-mono text-n700">{typeof configTest.latency_ms === 'number' ? `${configTest.latency_ms} ms` : '- ms'}</span>
                     <span className="mx-1 text-n100">/</span>
                     <span className="font-mono text-n700">HTTP {configTest.status_code || '-'}</span>
+                    {configTest.endpoint_matches_runtime === false && configTest.runtime_endpoint && (
+                        <div className="mt-1 font-mono text-y400 break-all">
+                            运行时 Endpoint: {formatEndpoint(configTest.runtime_endpoint)}
+                        </div>
+                    )}
                     {configTest.error && <div className="mt-1">{configTest.error}</div>}
                 </div>
             )}

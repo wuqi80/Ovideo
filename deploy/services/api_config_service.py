@@ -125,6 +125,64 @@ def _row_has_key(row: Any) -> bool:
         return bool(getattr(row, "api_key_encrypted", ""))
 
 
+def _endpoint_key(value: Any) -> str:
+    return str(value or "").strip().rstrip("/").lower()
+
+
+def _runtime_for_row(row: Any) -> Any:
+    provider = normalize_provider(_row_provider(row))
+    model_name = _row_model_name(row) or None
+    return resolve_provider(provider, model_name)
+
+
+def _test_row_and_endpoint_source(row: Any, runtime: Any) -> tuple[Dict[str, Any], str, bool]:
+    test_row = _row_to_jsonable(row)
+    row_endpoint = str(test_row.get("endpoint") or "").strip()
+    if row_endpoint:
+        return test_row, "db", False
+    runtime_endpoint = str(getattr(runtime, "endpoint", "") or "").strip() if runtime else ""
+    if not runtime_endpoint:
+        return test_row, "missing", False
+    test_row["endpoint"] = runtime_endpoint
+    proxy_config = getattr(runtime, "proxy_config", {}) or {}
+    test_row["proxy_mode"] = proxy_config.get("mode") or test_row.get("proxy_mode") or "direct"
+    test_row["custom_proxy"] = proxy_config.get("custom_proxy") or test_row.get("custom_proxy") or ""
+    return test_row, "runtime", True
+
+
+def _annotate_config_health_test(
+    test: Dict[str, Any],
+    *,
+    row: Any,
+    runtime: Any,
+    key_source: str,
+    key_env: Optional[str],
+    endpoint_source: str,
+    used_runtime_endpoint: bool,
+) -> None:
+    test["key_source"] = key_source
+    test["key_env"] = key_env
+    test["used_runtime_key"] = key_source == "runtime"
+    test["endpoint_source"] = endpoint_source
+    test["used_runtime_endpoint"] = used_runtime_endpoint
+
+    row_endpoint = str(_row_to_jsonable(row).get("endpoint") or "").strip()
+    runtime_endpoint = str(getattr(runtime, "endpoint", "") or "").strip() if runtime else ""
+    if runtime_endpoint:
+        source = getattr(runtime, "source", {}) or {}
+        test["runtime_endpoint"] = runtime_endpoint
+        test["runtime_endpoint_source"] = source.get("endpoint") or "missing"
+        test["runtime_endpoint_env"] = getattr(runtime, "endpoint_env", None)
+        test["runtime_model_name"] = getattr(runtime, "model_name", "") or None
+        test["endpoint_matches_runtime"] = (
+            _endpoint_key(row_endpoint) == _endpoint_key(runtime_endpoint)
+            if row_endpoint
+            else used_runtime_endpoint
+        )
+    else:
+        test["endpoint_matches_runtime"] = None
+
+
 async def _disable_conflicting_provider_configs(row: Any) -> List[str]:
     """Keep at most one enabled keyed config per provider.
 
@@ -345,27 +403,32 @@ async def test_saved_api_config_health(config_id: str) -> Dict[str, Any]:
     row = await ApiConfigDAO.get_by_id(config_id)
     if not row:
         raise ApiConfigNotFound("Config not found")
+    runtime = None
+    try:
+        runtime = _runtime_for_row(row)
+    except Exception as exc:
+        logger.warning("Runtime config lookup failed for config %s: %s", config_id, exc, exc_info=True)
     key = await ApiConfigDAO.get_decrypted_key(config_id)
     key_source = "db" if key else "missing"
     key_env: Optional[str] = None
-    if not key:
-        provider = normalize_provider(row.get("provider") or "")
-        model_name = str(row.get("model_name") or "") or None
-        try:
-            runtime = resolve_provider(provider, model_name)
-            if runtime.has_key:
-                key = runtime.api_key
-                key_source = "runtime"
-                key_env = runtime.api_key_env
-        except Exception as exc:
-            logger.warning("Runtime key fallback failed for config %s: %s", config_id, exc, exc_info=True)
+    if not key and runtime and runtime.has_key:
+        key = runtime.api_key
+        key_source = "runtime"
+        key_env = runtime.api_key_env
 
-    result = await test_api_config_health(row, key or "")
+    test_row, endpoint_source, used_runtime_endpoint = _test_row_and_endpoint_source(row, runtime)
+    result = await test_api_config_health(test_row, key or "")
     test = result.get("test")
     if isinstance(test, dict):
-        test["key_source"] = key_source
-        test["key_env"] = key_env
-        test["used_runtime_key"] = key_source == "runtime"
+        _annotate_config_health_test(
+            test,
+            row=row,
+            runtime=runtime,
+            key_source=key_source,
+            key_env=key_env,
+            endpoint_source=endpoint_source,
+            used_runtime_endpoint=used_runtime_endpoint,
+        )
     return result
 
 
@@ -415,22 +478,35 @@ async def test_all_saved_api_config_health(
         config_id = str(row.get("config_id") or "")
         async with sem:
             try:
+                runtime = None
+                try:
+                    runtime = _runtime_for_row(row)
+                except Exception as exc:
+                    logger.warning(
+                        "Runtime config lookup failed for config %s: %s",
+                        config_id,
+                        exc,
+                        exc_info=True,
+                    )
                 key = await ApiConfigDAO.get_decrypted_key(config_id)
                 key_source = "db" if key else "missing"
                 key_env: Optional[str] = None
-                if not key:
-                    provider = normalize_provider(row.get("provider") or "")
-                    model_name = str(row.get("model_name") or "") or None
-                    runtime = resolve_provider(provider, model_name)
-                    if runtime.has_key:
-                        key = runtime.api_key
-                        key_source = "runtime"
-                        key_env = runtime.api_key_env
-                result = await test_api_config_health(row, key or "")
+                if not key and runtime and runtime.has_key:
+                    key = runtime.api_key
+                    key_source = "runtime"
+                    key_env = runtime.api_key_env
+                test_row, endpoint_source, used_runtime_endpoint = _test_row_and_endpoint_source(row, runtime)
+                result = await test_api_config_health(test_row, key or "")
                 test = result.get("test") or {}
-                test["key_source"] = key_source
-                test["key_env"] = key_env
-                test["used_runtime_key"] = key_source == "runtime"
+                _annotate_config_health_test(
+                    test,
+                    row=row,
+                    runtime=runtime,
+                    key_source=key_source,
+                    key_env=key_env,
+                    endpoint_source=endpoint_source,
+                    used_runtime_endpoint=used_runtime_endpoint,
+                )
             except Exception as exc:
                 logger.warning("API config batch test failed for %s: %s", config_id, exc, exc_info=True)
                 test = {
