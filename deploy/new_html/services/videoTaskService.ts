@@ -1,5 +1,5 @@
 import { enqueueComfyUITask } from './comfyuiTaskQueue';
-import { apiFetch, apiJson, buildAuthHeaders } from './httpClient';
+import { apiFetch, apiJson, buildAuthHeaders, handleUnauthorized } from './httpClient';
 import {
     inferDashScopeTaskType,
     inferSeedanceTaskType,
@@ -309,9 +309,7 @@ export async function getTasks(limit = 100): Promise<{ tasks: VideoTask[] }> {
 
     if (!response.ok) {
         if (response.status === 401) {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('username');
-            throw new Error('登录已过期');
+            handleUnauthorized('getTasks');
         }
         throw new Error('加载历史任务失败');
     }

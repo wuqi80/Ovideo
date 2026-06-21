@@ -6832,3 +6832,19 @@
 
 - Local `py_compile` passed for `scripts/check_provider_contract.py`.
 - Local `scripts/check_provider_contract.py` passed with `external_runtime_refresh_checks=31`.
+
+## 2026-06-21 Frontend Unauthorized Handling Consolidation
+
+### Changes
+
+- Added `handleUnauthorized()` to `new_html/services/httpClient.ts` as the shared 401/session-expiry handler for both normal fetch clients and special transports.
+- Updated `new_html/services/videoMediaService.ts` so XHR uploads keep upload progress support but reuse the shared 401 redirect/session cleanup behavior.
+- Updated `new_html/services/videoTaskService.ts` so historical task loading no longer clears auth state directly.
+- Strengthened `scripts/check_route_contract.py` so migrated frontend services cannot reintroduce direct `localStorage.removeItem('auth_token')` cleanup and must use the shared unauthorized handler.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=7299`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Local targeted Vitest could not run because the Windows `node_modules` tree is still missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package; pnpm execution was also blocked by a local symlink permission error.

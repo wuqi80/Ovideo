@@ -1,4 +1,4 @@
-import { apiJson, buildAuthHeaders, secureApiUrl } from './httpClient';
+import { apiJson, buildAuthHeaders, handleUnauthorized, secureApiUrl } from './httpClient';
 
 export interface UploadProgress {
   percent: number;
@@ -45,10 +45,11 @@ function xhrUpload(url: string, formData: FormData, options: UploadOptions = {})
 
     xhr.onload = () => {
       if (xhr.status === 401) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('username');
-        window.location.href = '/login';
-        reject(new Error('登录已过期'));
+        try {
+          handleUnauthorized('uploadMedia');
+        } catch (error) {
+          reject(error);
+        }
         return;
       }
 

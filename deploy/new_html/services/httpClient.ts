@@ -24,29 +24,33 @@ interface ApiFetchConfig extends HeaderOptions {
  *   - 在 /admin/login 或 /login 自身上 401 → 不再跳（防死循环）
  * 旧 bug：admin 路径下 401 清的是主站 token，跳 /login 又被 App.tsx 的 path="*" 兜底到 /projects。
  */
+export function handleUnauthorized(apiName: string = 'API'): never {
+  const path = typeof window !== 'undefined' ? window.location.pathname : '';
+  const isAdminPath = path.startsWith('/admin');
+  const isLoginPage = path === '/login' || path === '/admin/login';
+  console.error(`${apiName} 返回401，token可能已失效（path=${path}, isAdmin=${isAdminPath}）`);
+
+  if (isAdminPath) {
+    try {
+      sessionStorage.removeItem('admin_session_token');
+      sessionStorage.removeItem('admin_session_username');
+      sessionStorage.removeItem('admin_session_login_at');
+    } catch {}
+    if (!isLoginPage) {
+      const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.href = `/admin/login?redirect=${encodeURIComponent(from)}`;
+    }
+  } else {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('username');
+    if (!isLoginPage) window.location.href = '/login';
+  }
+  throw new Error('未授权，请重新登录');
+}
+
 export async function handleResponse(response: Response, apiName: string = 'API'): Promise<any> {
   if (response.status === 401) {
-    const path = typeof window !== 'undefined' ? window.location.pathname : '';
-    const isAdminPath = path.startsWith('/admin');
-    const isLoginPage = path === '/login' || path === '/admin/login';
-    console.error(`${apiName} 返回401，token可能已失效（path=${path}, isAdmin=${isAdminPath}）`);
-
-    if (isAdminPath) {
-      try {
-        sessionStorage.removeItem('admin_session_token');
-        sessionStorage.removeItem('admin_session_username');
-        sessionStorage.removeItem('admin_session_login_at');
-      } catch {}
-      if (!isLoginPage) {
-        const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        window.location.href = `/admin/login?redirect=${encodeURIComponent(from)}`;
-      }
-    } else {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('username');
-      if (!isLoginPage) window.location.href = '/login';
-    }
-    throw new Error('未授权，请重新登录');
+    handleUnauthorized(apiName);
   }
 
   const contentType = response.headers.get('content-type');
