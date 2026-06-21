@@ -352,6 +352,14 @@ function putProviderHealth(
     if (!modelName) map[provider] = item;
 }
 
+function buildProviderHealthMap(rows: ProviderHealth[] = []): Record<string, ProviderHealth> {
+    const next: Record<string, ProviderHealth> = {};
+    rows.forEach(item => {
+        putProviderHealth(next, item);
+    });
+    return next;
+}
+
 function providerHealthFrom(
     map: Record<string, ProviderHealth>,
     provider: string | undefined | null,
@@ -1497,11 +1505,7 @@ const ApiConfigPanel: React.FC = () => {
             setProviders(data.providers || []);
             setRuntimeStatus(data.runtime_status || []);
             setMonitorState(data.monitor_state || null);
-            const nextHealth: Record<string, ProviderHealth> = {};
-            (data.provider_health || []).forEach(item => {
-                putProviderHealth(nextHealth, item);
-            });
-            setHealthMap(nextHealth);
+            setHealthMap(buildProviderHealthMap(data.provider_health || []));
         } catch (err: any) {
             const message = err?.message || '加载 API 配置失败';
             setError(message);
@@ -1521,13 +1525,7 @@ const ApiConfigPanel: React.FC = () => {
             const result = await apiJson<ProviderHealthCacheResponse>('/api/admin/api-configs/health/cache');
             const rows = result.provider_health || [];
             setMonitorState(result.monitor_state || null);
-            setHealthMap(prev => {
-                const next = { ...prev };
-                rows.forEach(item => {
-                    putProviderHealth(next, item);
-                });
-                return next;
-            });
+            setHealthMap(buildProviderHealthMap(rows));
             const summary = result.summary || {};
             crmMessage.success(`状态已刷新：ok ${summary.ok ?? 0} / error ${summary.error ?? 0} / no_key ${summary.no_key ?? 0}`);
         } catch (err: any) {

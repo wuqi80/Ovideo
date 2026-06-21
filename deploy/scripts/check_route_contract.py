@@ -4563,6 +4563,7 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "const status = healthStatusFromResult(result)",
         "function runtimeStatusKey",
         "function providerHealthKey",
+        "function buildProviderHealthMap",
         "function providerHealthFrom",
         "const runtimeByKey = useMemo",
         "const runtimeForProviderModel = useCallback",
@@ -4579,8 +4580,10 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "monitor_state?: ProviderHealthMonitorState",
         "const ProviderHealthMonitorStrip",
         "setMonitorState(data.monitor_state || null)",
+        "setHealthMap(buildProviderHealthMap(data.provider_health || []))",
         "<ProviderHealthMonitorStrip state={monitorState} />",
         "setMonitorState(result.monitor_state || null)",
+        "setHealthMap(buildProviderHealthMap(rows))",
         "query.set('model_name', model)",
         "onCheck(provider, config.model_name || runtime?.runtime_model_name || null)",
         "onCheck(provider, model || null)",
@@ -4600,6 +4603,13 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         if snippet in text:
             fail(f"Forbidden provider-only admin API runtime snippet in {page_path.relative_to(root)}: {snippet}")
         checks += 1
+    try:
+        refresh_block = text.split("const refreshHealthCache = useCallback", 1)[1].split("const providerMetaMap", 1)[0]
+    except IndexError:
+        fail(f"Could not locate refreshHealthCache block in {page_path.relative_to(root)}")
+    if "setHealthMap(prev =>" in refresh_block:
+        fail(f"refreshHealthCache must replace healthMap from cache response, not merge stale state in {page_path.relative_to(root)}")
+    checks += 1
     return checks
 
 

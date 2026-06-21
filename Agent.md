@@ -7308,3 +7308,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Health monitor contract covers global prefix cache clearing and admin reload fallback behavior.
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed, remote architecture contracts passed 10/10, and online smoke passed 9/9.
   - Follow-up deploy for global reload cache clearing passed remote Vite build, remote architecture contracts 10/10, and online smoke 9/9.
+
+## 2026-06-22 Admin API Health Cache UI Reset
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so provider health cache payloads are normalized through `buildProviderHealthMap()`.
+- The "refresh status" action now replaces the local health map from `/api/admin/api-configs/health/cache` instead of merging into stale React state.
+- This keeps the native API management page from showing old green/error indicators after backend cache clears from runtime reloads, preset imports, or provider config changes.
+- Strengthened `deploy/scripts/check_route_contract.py` so `refreshHealthCache` cannot regress to merging stale `healthMap` state.
+- Verification:
+  - Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+  - Local `deploy/scripts/check_route_contract.py` passed with `admin_api_config_ui_checks=33`.
+  - Local `deploy/scripts/check_architecture_contracts.py` passed 10/10.
+  - Local TypeScript filter check reported no `AdminSettingsPage.tsx` errors.
+  - Local `git diff --check` passed.
