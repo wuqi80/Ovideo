@@ -2689,6 +2689,26 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "def resolve_dashscope_model_name",
         ),
         (
+            root / "services" / "api_provider_runtime.py",
+            "def resolve_dashscope_default_model_name",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_VIDU_REFERENCE_SUB_MODEL_MAP",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "DASHSCOPE_VIDU_STARTEND_SUB_MODEL_MAP",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "def dashscope_vidu_reference_sub_model",
+        ),
+        (
+            root / "services" / "api_provider_registry.py",
+            "def dashscope_vidu_startend_sub_model",
+        ),
+        (
             root / "services" / "api_config_runtime_loader.py",
             "dashscope_sub_model_for_model(model_name)",
         ),
@@ -2714,11 +2734,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "external_api" / "video" / "dashscope.py",
-            "VIDU_REFERENCE_SUB_MODEL_MAP",
+            "dashscope_vidu_reference_sub_model(sub_vidu)",
         ),
         (
             root / "external_api" / "video" / "dashscope.py",
-            "VIDU_STARTEND_SUB_MODEL_MAP",
+            "dashscope_vidu_startend_sub_model(sub_vidu)",
         ),
         (
             root / "external_api" / "video" / "dashscope.py",
@@ -2730,7 +2750,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "external_api" / "video" / "dashscope.py",
-            "_resolve_default_dashscope_model(model)",
+            "resolve_dashscope_default_model_name(model)",
         ),
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
@@ -2747,6 +2767,14 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
             "test_dashscope_vidu_ignores_unrelated_generic_model_env",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_dashscope_vidu_sub_model_helpers_live_in_registry",
+        ),
+        (
+            root / "tests" / "test_api_provider_runtime_model_env.py",
+            "test_dashscope_default_model_name_resolves_through_sub_model_runtime_env",
         ),
         (
             root / "tests" / "test_dashscope_video_payload_extension.py",

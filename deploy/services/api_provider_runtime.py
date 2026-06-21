@@ -15,6 +15,7 @@ from services.api_provider_registry import (
     PROVIDER_CATALOG,
     SEEDANCE_DEFAULT_MODEL_MAP,
     dashscope_model_matches_sub_model,
+    dashscope_sub_model_for_model,
     get_api_model_preset,
     get_api_model_presets,
     get_custom_proxy_env_key,
@@ -400,6 +401,14 @@ def resolve_dashscope_model_name(sub_model: str, model_name: Optional[str] = Non
         return generic_model
 
     return DASHSCOPE_DEFAULT_MODEL_MAP[normalized_sub_model]
+
+
+def resolve_dashscope_default_model_name(model_name: str) -> str:
+    """Map registry default DashScope model names through runtime sub-model env."""
+    sub_model = dashscope_sub_model_for_model(model_name)
+    if sub_model:
+        return resolve_dashscope_model_name(sub_model)
+    return model_name
 
 
 def resolve_provider(provider: str, model_name: Optional[str] = None) -> ResolvedProviderConfig:

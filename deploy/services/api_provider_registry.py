@@ -83,6 +83,21 @@ DASHSCOPE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     "happyhorse": "happyhorse-1.0-r2v",
 }
 
+DASHSCOPE_VIDU_REFERENCE_SUB_MODEL_MAP: Dict[str, str] = {
+    "q3-mix": "vidu-reference-q3-mix",
+    "q3": "vidu-reference-q3",
+    "q3-turbo": "vidu-reference-q3-turbo",
+    "q2-pro": "vidu-reference-q2-pro",
+    "q2": "vidu-reference-q2",
+}
+
+DASHSCOPE_VIDU_STARTEND_SUB_MODEL_MAP: Dict[str, str] = {
+    "q3-pro": "vidu-startend-q3-pro",
+    "q3-turbo": "vidu-startend-q3-turbo",
+    "q2-pro": "vidu-startend-q2-pro",
+    "q2-turbo": "vidu-startend-q2-turbo",
+}
+
 DASHSCOPE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "wan26": "DASHSCOPE_MODEL_WAN26",
     "kling-standard": "DASHSCOPE_MODEL_KLING_STANDARD",
@@ -124,6 +139,16 @@ def normalize_dashscope_sub_model(sub_model: Optional[str]) -> str:
 
 def get_dashscope_sub_model_env_key(sub_model: Optional[str]) -> str:
     return DASHSCOPE_SUB_MODEL_ENV_MAP[normalize_dashscope_sub_model(sub_model)]
+
+
+def dashscope_vidu_reference_sub_model(value: Optional[str]) -> str:
+    variant = (value or "q3").strip().lower()
+    return DASHSCOPE_VIDU_REFERENCE_SUB_MODEL_MAP.get(variant, "vidu-reference-q3")
+
+
+def dashscope_vidu_startend_sub_model(value: Optional[str]) -> str:
+    variant = (value or "q3-turbo").strip().lower()
+    return DASHSCOPE_VIDU_STARTEND_SUB_MODEL_MAP.get(variant, "vidu-startend-q3-turbo")
 
 
 def is_dashscope_wan26_model(model_name: Optional[str]) -> bool:

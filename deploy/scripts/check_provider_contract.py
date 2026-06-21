@@ -1095,6 +1095,47 @@ def check_video_default_model_registry_wiring(registry) -> int:
             fail(f"api_config_runtime_loader.py must use registry {legacy_name}")
         checks += 1
 
+    dashscope_client = (root / "external_api" / "video" / "dashscope.py").read_text(encoding="utf-8")
+    dashscope_runtime = (root / "services" / "api_provider_runtime.py").read_text(encoding="utf-8")
+    for registry_name in (
+        "DASHSCOPE_VIDU_REFERENCE_SUB_MODEL_MAP",
+        "DASHSCOPE_VIDU_STARTEND_SUB_MODEL_MAP",
+    ):
+        if not hasattr(registry, registry_name):
+            fail(f"Registry missing DashScope Vidu map: {registry_name}")
+        checks += 1
+    if registry.dashscope_vidu_reference_sub_model("q3-mix") != "vidu-reference-q3-mix":
+        fail("Registry DashScope Vidu reference helper should resolve q3-mix")
+    if registry.dashscope_vidu_reference_sub_model("unknown") != "vidu-reference-q3":
+        fail("Registry DashScope Vidu reference helper should fall back to q3")
+    if registry.dashscope_vidu_startend_sub_model("q3-pro") != "vidu-startend-q3-pro":
+        fail("Registry DashScope Vidu start/end helper should resolve q3-pro")
+    if registry.dashscope_vidu_startend_sub_model("unknown") != "vidu-startend-q3-turbo":
+        fail("Registry DashScope Vidu start/end helper should fall back to q3-turbo")
+    checks += 4
+    for forbidden in (
+        "VIDU_REFERENCE_SUB_MODEL_MAP =",
+        "VIDU_STARTEND_SUB_MODEL_MAP =",
+        "DEFAULT_DASHSCOPE_MODEL_TO_SUB_MODEL",
+        "def _resolve_default_dashscope_model",
+    ):
+        if forbidden in dashscope_client:
+            fail(f"external_api/video/dashscope.py must not define local DashScope model mapping: {forbidden}")
+        checks += 1
+    for required in (
+        "dashscope_vidu_reference_sub_model",
+        "dashscope_vidu_startend_sub_model",
+        "resolve_dashscope_default_model_name",
+    ):
+        if required not in dashscope_client:
+            fail(f"external_api/video/dashscope.py must use {required}")
+        checks += 1
+    if "def resolve_dashscope_default_model_name" not in dashscope_runtime:
+        fail("api_provider_runtime.py must own resolve_dashscope_default_model_name")
+    if "dashscope_sub_model_for_model(model_name)" not in dashscope_runtime:
+        fail("resolve_dashscope_default_model_name must use registry dashscope_sub_model_for_model")
+    checks += 2
+
     audio_client = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
     if "MINIMAX_DEFAULT_VIDEO_MODEL" not in audio_client:
         fail("external_api/audio/minimax_audio.py must resolve MiniMax preset through registry MINIMAX_DEFAULT_VIDEO_MODEL")

@@ -19,6 +19,8 @@ from services.api_provider_registry import (
     get_model_env_key,
     get_provider_env_key,
     get_seedance_sub_model_env_key,
+    dashscope_vidu_reference_sub_model,
+    dashscope_vidu_startend_sub_model,
     minimax_runtime_model_override,
     normalize_minimax_video_model,
     normalize_sora2_video_model,
@@ -26,7 +28,11 @@ from services.api_provider_registry import (
     sora2_runtime_model_override,
     veo_runtime_model_override,
 )
-from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
+from services.api_provider_runtime import (
+    resolve_dashscope_default_model_name,
+    resolve_dashscope_model_name,
+    resolve_provider,
+)
 
 
 def test_resolve_provider_uses_runtime_model_env(monkeypatch):
@@ -64,6 +70,16 @@ def test_minimax_sora2_and_veo_video_alias_helpers_live_in_registry():
     assert normalize_veo_video_model("veo-3") == VEO_DEFAULT_VIDEO_MODEL
     assert veo_runtime_model_override("veo-custom") == "veo-custom"
     assert normalize_veo_video_model("veo-custom") == "veo-custom"
+
+
+def test_dashscope_vidu_sub_model_helpers_live_in_registry():
+    assert dashscope_vidu_reference_sub_model(None) == "vidu-reference-q3"
+    assert dashscope_vidu_reference_sub_model("q3-mix") == "vidu-reference-q3-mix"
+    assert dashscope_vidu_reference_sub_model("unknown") == "vidu-reference-q3"
+
+    assert dashscope_vidu_startend_sub_model(None) == "vidu-startend-q3-turbo"
+    assert dashscope_vidu_startend_sub_model("q3-pro") == "vidu-startend-q3-pro"
+    assert dashscope_vidu_startend_sub_model("unknown") == "vidu-startend-q3-turbo"
 
 
 def test_explicit_model_overrides_runtime_model_env(monkeypatch):
@@ -669,6 +685,17 @@ def test_dashscope_vidu_ignores_unrelated_generic_model_env(monkeypatch):
     monkeypatch.delenv(get_dashscope_sub_model_env_key("vidu-reference-q3"), raising=False)
 
     assert resolve_dashscope_model_name("vidu-reference-q3") == DASHSCOPE_DEFAULT_MODEL_MAP["vidu-reference-q3"]
+
+
+def test_dashscope_default_model_name_resolves_through_sub_model_runtime_env(monkeypatch):
+    vidu_env = get_dashscope_sub_model_env_key("vidu-reference-q3")
+    monkeypatch.setenv(vidu_env, "vidu-reference-runtime-model")
+
+    assert (
+        resolve_dashscope_default_model_name(DASHSCOPE_DEFAULT_MODEL_MAP["vidu-reference-q3"])
+        == "vidu-reference-runtime-model"
+    )
+    assert resolve_dashscope_default_model_name("custom-dashscope-model") == "custom-dashscope-model"
 
 
 def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(monkeypatch):

@@ -7134,3 +7134,21 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
 - Remote file check confirmed `minimax_runtime_model_override` and `normalize_minimax_video_model` are present in the deployed registry/client path.
 - Online smoke test against `https://mecha.one` passed: 9/9.
+
+## 2026-06-21 DashScope Vidu Model Registry
+
+### Changes
+
+- Moved DashScope Vidu reference/start-end sub-model maps into `deploy/services/api_provider_registry.py`.
+- Added `resolve_dashscope_default_model_name()` in `deploy/services/api_provider_runtime.py` so default DashScope model names resolve through runtime sub-model env values outside the client.
+- Updated `deploy/external_api/video/dashscope.py` to call registry/runtime helpers instead of defining local Vidu maps or default-model reverse lookup.
+- Strengthened `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, and `deploy/tests/test_api_provider_runtime_model_env.py` so DashScope model rules stay centralized.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile` passed for the changed Python modules and contract scripts.
+- Local `deploy/scripts/check_provider_contract.py` passed with `video_default_model_checks=65`.
+- Local targeted pytest passed: `tests/test_api_provider_runtime_model_env.py` + `tests/test_dashscope_video_payload_extension.py`, 39 passed.
+- Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=151`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=10`.
