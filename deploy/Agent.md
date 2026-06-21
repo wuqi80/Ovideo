@@ -7553,3 +7553,8 @@
 - Local `pytest tests/test_dashscope_video_payload_extension.py -q` passed with 12 tests.
 - Local `py_compile`, `scripts/check_route_contract.py`, `scripts/check_provider_contract.py`, `scripts/check_architecture_contracts.py`, `scripts/smoke_test.py`, and `git diff --check` passed.
 - Local route contract passed with `api_provider_runtime_model_checks=164`.
+- Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=164`.
+- Server sync check: local and remote SHA256 hashes match for `cluster_main.py`, `admin_routes.py`, `scripts/live_deploy_mvc2.sh`, `external_api/video/dashscope.py`, and `scripts/check_route_contract.py`.
+- Same-counter line check is `cluster_main.py=999`, `admin_routes.py=1502`; the older `846/1289` expectation is stale for this branch.
+- `dao/` recursive file count matches locally and remotely at 72 files; top-level `ls dao | wc -l` remains 8 because DAO files are grouped under subdirectories.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
