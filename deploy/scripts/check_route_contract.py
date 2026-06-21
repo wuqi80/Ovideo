@@ -2830,6 +2830,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
     voice_sidebar = new_html / "components" / "audio" / "VoiceSidebar.tsx"
     music_modal = new_html / "components" / "audio" / "MusicModal.tsx"
     seedance_multimodal_panel = new_html / "components" / "SeedanceMultimodalPanel.tsx"
+    video_card = new_html / "components" / "video" / "VideoCard.tsx"
+    seedance_panel_with_candidates = new_html / "components" / "video" / "SeedancePanelWithCandidates.tsx"
+    dash_scope_card_with_candidates = new_html / "components" / "video" / "DashScopeCardWithCandidates.tsx"
     admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
     design_page = new_html / "pages" / "DesignPage.tsx"
     material_page = new_html / "components" / "MaterialPage.tsx"
@@ -3107,6 +3110,14 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_page, "secureMediaUrl("),
         (video_page, "getProjectVideoTasks("),
         (video_page, "clearProjectVideoTasks("),
+        (video_page, "import('./video/SeedancePanelWithCandidates')"),
+        (video_page, "import('./video/DashScopeCardWithCandidates')"),
+        (video_page, "VideoProviderPanelFallback"),
+        (video_card, "Heavy provider panels live in separate lazy-loaded modules."),
+        (seedance_panel_with_candidates, "from '../SeedanceMultimodalPanel'"),
+        (seedance_panel_with_candidates, "useSeedanceCandidates"),
+        (dash_scope_card_with_candidates, "from './DashScopeCards'"),
+        (dash_scope_card_with_candidates, "SeedanceMentionPromptEditor"),
         (project_hub, "import { apiJson } from '../services/httpClient'"),
         (project_hub, "apiJson<any>(`/api/projects?"),
         (episode_hub, "import { apiJson } from '../services/httpClient'"),
@@ -3206,6 +3217,17 @@ def check_frontend_http_client_contract(root: Path) -> int:
         text = path.read_text(encoding="utf-8")
         if snippet not in text:
             fail(f"Missing frontend httpClient contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+
+    video_card_text = video_card.read_text(encoding="utf-8")
+    for snippet in [
+        "SeedanceMultimodalPanel",
+        "DashScopeCards",
+        "DashScopeVideoCard",
+        "SeedanceMentionPromptEditor",
+    ]:
+        if snippet in video_card_text:
+            fail(f"VideoCard core must not statically import heavy provider panels: {snippet}")
         checks += 1
 
     for path in migrated_services:

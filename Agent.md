@@ -6609,3 +6609,24 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6047`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Video Provider Panel Chunk Split
+
+### Changes
+
+- Split `deploy/new_html/components/video/SeedancePanelWithCandidates.tsx` and `deploy/new_html/components/video/DashScopeCardWithCandidates.tsx` out of `deploy/new_html/components/video/VideoCard.tsx`.
+- Converted `VideoPage` provider panels to `React.lazy` chunks with stable-height fallbacks, so Seedance/DashScope UI loads only for cards that need those provider controls.
+- Kept `VideoCard.tsx` as a lightweight shared primitive module for duration fields, audio badges, and storyboard image display.
+- Strengthened `deploy/scripts/check_route_contract.py` so `VideoCard.tsx` cannot regress to statically importing `SeedanceMultimodalPanel`, `DashScopeCards`, `DashScopeVideoCard`, or `SeedanceMentionPromptEditor`.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7223`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `VideoPage-pELF8rue.js` at `136.13 kB`, down from the prior `VideoPage-CDrwW23j.js` at `154.53 kB`; provider panels split into `DashScopeCardWithCandidates-BO6mW1KA.js` at `20.31 kB` and `SeedancePanelWithCandidates-C63PjtFh.js` at `0.94 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6091`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

@@ -63,8 +63,6 @@ import {
     RESULT_PROMPT_READONLY_CLASS,
 } from '../utils/videoCardLayout';
 import {
-    SeedancePanelWithCandidates,
-    DashScopeCardWithCandidates,
     DurationFieldForGroup,
     AudioBadgesRow,
 } from './video/VideoCard';
@@ -97,6 +95,24 @@ import {
     getVideoPollTaskId,
     isVideoPollActive,
 } from '../services/videoTaskPoller';
+
+const SeedancePanelWithCandidates = React.lazy(() =>
+    import('./video/SeedancePanelWithCandidates').then(module => ({
+        default: module.SeedancePanelWithCandidates,
+    }))
+);
+
+const DashScopeCardWithCandidates = React.lazy(() =>
+    import('./video/DashScopeCardWithCandidates').then(module => ({
+        default: module.DashScopeCardWithCandidates,
+    }))
+);
+
+const VideoProviderPanelFallback: React.FC<{ label: string }> = ({ label }) => (
+    <div className="min-h-[144px] rounded-md border border-n40 bg-n20 animate-pulse flex items-center justify-center text-xs text-n100">
+        {label}
+    </div>
+);
 
 // ==================== 类型定义 ====================
 
@@ -2904,30 +2920,34 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             className={PLACEHOLDER_PROMPT_TEXTAREA_CLASS}
                         />
                     ) : (group.model === 'Seedance2' || group.model === 'Seedance2Fast') ? (
-                        <SeedancePanelWithCandidates
-                            value={getSeedanceParams(group.uuid, group.model)}
-                            onChange={(next) => setSeedanceParams(group.uuid, next)}
-                            autoOpenMentionOnMount={!!img1.isPlaceholder && (getSeedanceParams(group.uuid, group.model).prompt || '').trim() === '@'}
-                            storyboardItemId={getStoryboardItemId(group.uuid)}
-                            onPreviewMedia={(url, kind) => {
-                                if (kind === 'audio') { showToast('音频点击预览（请在浏览器新标签播放）'); window.open(url, '_blank'); return; }
-                                setLightboxUrl(url);
-                                setLightboxType(kind === 'video' ? 'video' : 'image');
-                            }}
-                        />
+                        <React.Suspense fallback={<VideoProviderPanelFallback label="加载 Seedance 面板..." />}>
+                            <SeedancePanelWithCandidates
+                                value={getSeedanceParams(group.uuid, group.model)}
+                                onChange={(next) => setSeedanceParams(group.uuid, next)}
+                                autoOpenMentionOnMount={!!img1.isPlaceholder && (getSeedanceParams(group.uuid, group.model).prompt || '').trim() === '@'}
+                                storyboardItemId={getStoryboardItemId(group.uuid)}
+                                onPreviewMedia={(url, kind) => {
+                                    if (kind === 'audio') { showToast('音频点击预览（请在浏览器新标签播放）'); window.open(url, '_blank'); return; }
+                                    setLightboxUrl(url);
+                                    setLightboxType(kind === 'video' ? 'video' : 'image');
+                                }}
+                            />
+                        </React.Suspense>
                     ) : isDashScopeVideoModel(group.model) ? (
-                        <DashScopeCardWithCandidates
-                            params={getDashScopeParams(group.uuid, group.model)}
-                            onChange={(next) => setDashScopeParams(group.uuid, next)}
-                            onPickImage={(cb) => openDashScopePicker(group.uuid, cb)}
-                            onPreviewImage={(url) => { setLightboxUrl(url); setLightboxType('image'); }}
-                            storyboardItemId={getStoryboardItemId(group.uuid)}
-                            onPreviewMedia={(url, kind) => {
-                                if (kind === 'audio') { showToast('音频点击预览（请在浏览器新标签播放）'); window.open(url, '_blank'); return; }
-                                setLightboxUrl(url);
-                                setLightboxType(kind === 'video' ? 'video' : 'image');
-                            }}
-                        />
+                        <React.Suspense fallback={<VideoProviderPanelFallback label="加载视频模型面板..." />}>
+                            <DashScopeCardWithCandidates
+                                params={getDashScopeParams(group.uuid, group.model)}
+                                onChange={(next) => setDashScopeParams(group.uuid, next)}
+                                onPickImage={(cb) => openDashScopePicker(group.uuid, cb)}
+                                onPreviewImage={(url) => { setLightboxUrl(url); setLightboxType('image'); }}
+                                storyboardItemId={getStoryboardItemId(group.uuid)}
+                                onPreviewMedia={(url, kind) => {
+                                    if (kind === 'audio') { showToast('音频点击预览（请在浏览器新标签播放）'); window.open(url, '_blank'); return; }
+                                    setLightboxUrl(url);
+                                    setLightboxType(kind === 'video' ? 'video' : 'image');
+                                }}
+                            />
+                        </React.Suspense>
                     ) : (
                         <textarea
                             value={imagePrompts[group.ids[0]] || ''}
