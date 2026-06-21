@@ -7304,3 +7304,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Strengthened `deploy/scripts/check_provider_health_monitor.py` and `deploy/scripts/check_admin_api_config_crud.py` to cover exact model cache deletion and CRUD-triggered provider/model invalidation.
 - Verification:
   - Local `py_compile`, targeted health monitor contract, targeted admin API config CRUD contract, full architecture contracts, and `git diff --check` passed.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed, remote architecture contracts passed 10/10, and online smoke passed 9/9.
