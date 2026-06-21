@@ -1138,6 +1138,12 @@ def check_audio_stage_lightweight_storyboard_contract(root: Path) -> int:
 
     required_snippets = {
         "fields: 'audio_stage'": "AudioStagePage lightweight audio-stage field query",
+        "AUDIO_STAGE_STORYBOARD_INITIAL_LOAD_LIMIT = 20": "AudioStagePage bounded initial audio-stage field request",
+        "AUDIO_STAGE_STORYBOARD_BACKGROUND_PAGE_SIZE = 80": "AudioStagePage background audio-stage field page size",
+        "includeTotal: true": "AudioStagePage total-aware initial audio-stage field query",
+        "offset: nextOffset": "AudioStagePage background paged audio-stage field query",
+        "loadRemainingAudioStageStoryboardPages": "AudioStagePage idle background storyboard completion",
+        "waitForStoryboardIdle()": "AudioStagePage idle background paging",
         "normalizeAudioStageStoryboardItem": "AudioStagePage audio-stage normalizer",
         "updateAudioStageStoryboardItem": "AudioStagePage local patch helper",
         "forceReloadSlices('assets', 'characterVoices', 'script', 'audioTracks')": "AudioStagePage non-storyboard force refresh",
@@ -1179,6 +1185,12 @@ def check_materials_lightweight_storyboard_contract(root: Path) -> int:
 
     required_snippets = {
         "fields: 'materials'": "MaterialsPage lightweight material field query",
+        "MATERIALS_STORYBOARD_INITIAL_LOAD_LIMIT = 20": "MaterialsPage bounded initial material field request",
+        "MATERIALS_STORYBOARD_BACKGROUND_PAGE_SIZE = 80": "MaterialsPage background material field page size",
+        "includeTotal: true": "MaterialsPage total-aware initial material field query",
+        "offset: nextOffset": "MaterialsPage background paged material field query",
+        "loadRemainingMaterialsStoryboardPages": "MaterialsPage idle background storyboard completion",
+        "waitForStoryboardIdle()": "MaterialsPage idle background paging",
         "normalizeMaterialsStoryboardItem": "MaterialsPage material normalizer",
         "updateMaterialsStoryboardItem": "MaterialsPage local patch helper",
         "forceReloadSlices('assets', 'script')": "MaterialsPage non-storyboard force refresh",

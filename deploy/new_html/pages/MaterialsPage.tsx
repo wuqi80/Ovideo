@@ -66,6 +66,34 @@ function applyMaterialsStoryboardPatch(item: StoryboardItemDB, patch: Record<str
   };
 }
 
+const MATERIALS_STORYBOARD_INITIAL_LOAD_LIMIT = 20;
+const MATERIALS_STORYBOARD_BACKGROUND_PAGE_SIZE = 80;
+
+function sortMaterialsStoryboardItems(items: StoryboardItemDB[]): StoryboardItemDB[] {
+  return [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+function mergeMaterialsStoryboardItems(existing: StoryboardItemDB[], incoming: StoryboardItemDB[]): StoryboardItemDB[] {
+  const byId = new Map(existing.map(item => [item.itemId, item]));
+  for (const item of incoming) {
+    if (!byId.has(item.itemId)) byId.set(item.itemId, item);
+  }
+  return sortMaterialsStoryboardItems(Array.from(byId.values()));
+}
+
+function waitForStoryboardIdle(): Promise<void> {
+  return new Promise(resolve => {
+    const requestIdleCallback = typeof window !== 'undefined'
+      ? (window as any).requestIdleCallback
+      : undefined;
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => resolve(), { timeout: 1200 });
+      return;
+    }
+    globalThis.setTimeout(resolve, 0);
+  });
+}
+
 export const MaterialsPage: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -90,12 +118,51 @@ export const MaterialsPage: React.FC = () => {
       setStoryboardItems([]);
       return () => { active = false; };
     }
+    const currentEpisodeId = episodeId;
+    const scriptId = selectedScriptId || undefined;
+
+    const loadRemainingMaterialsStoryboardPages = async (offset: number, total: number) => {
+      let nextOffset = offset;
+      while (active && nextOffset < total) {
+        await waitForStoryboardIdle();
+        if (!active) return;
+        try {
+          const res = await getStoryboardItems(currentEpisodeId, scriptId, {
+            fields: 'materials',
+            limit: MATERIALS_STORYBOARD_BACKGROUND_PAGE_SIZE,
+            offset: nextOffset,
+          });
+          if (!active) return;
+          const pageItems = res.success
+            ? (res.items || []).map(normalizeMaterialsStoryboardItem)
+            : [];
+          if (!pageItems.length) return;
+          setStoryboardItems(prev => mergeMaterialsStoryboardItems(prev, pageItems));
+          nextOffset += pageItems.length;
+          if (pageItems.length < MATERIALS_STORYBOARD_BACKGROUND_PAGE_SIZE) return;
+        } catch (err) {
+          console.warn('storyboard material background fields load failed:', err);
+          return;
+        }
+      }
+    };
+
     setStoryboardLoading(true);
     setStoryboardError(null);
-    getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'materials' })
+    getStoryboardItems(currentEpisodeId, scriptId, {
+      fields: 'materials',
+      limit: MATERIALS_STORYBOARD_INITIAL_LOAD_LIMIT,
+      includeTotal: true,
+    })
       .then(res => {
         if (!active) return;
-        setStoryboardItems(res.success ? (res.items || []).map(normalizeMaterialsStoryboardItem) : []);
+        const items = res.success ? (res.items || []).map(normalizeMaterialsStoryboardItem) : [];
+        const sortedItems = sortMaterialsStoryboardItems(items);
+        setStoryboardItems(sortedItems);
+        const total = typeof res.total === 'number' ? res.total : sortedItems.length;
+        if (total > sortedItems.length) {
+          void loadRemainingMaterialsStoryboardPages(sortedItems.length, total);
+        }
       })
       .catch(err => {
         console.warn('storyboard material fields load failed:', err);
@@ -138,20 +205,29 @@ export const MaterialsPage: React.FC = () => {
   }, [assets]);
 
   // Auto-patch: add char:/scene: tags to storyboard items that lack them
-  const patchedRef = useRef(false);
+  const patchedItemIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (patchedRef.current || !storyboardItems.length || !assets.length) return;
+    patchedItemIdsRef.current.clear();
+  }, [episodeId, selectedScriptId]);
+
+  useEffect(() => {
+    if (!storyboardItems.length || !assets.length) return;
     const charAssets = assets.filter(a => a.assetType === 'character' && a.name);
     const sceneAssets = assets.filter(a => a.assetType === 'scene' && a.name);
     if (!charAssets.length && !sceneAssets.length) return;
 
-    const needsPatch = storyboardItems.filter(item => {
+    const uncheckedItems = storyboardItems.filter(item =>
+      item.itemId && !patchedItemIdsRef.current.has(item.itemId)
+    );
+    if (!uncheckedItems.length) return;
+
+    const needsPatch = uncheckedItems.filter(item => {
       const bound = Array.isArray(item.boundAssets) ? item.boundAssets : [];
       return !bound.some((b: string) => typeof b === 'string' && (b.startsWith('char:') || b.startsWith('scene:')));
     });
+    uncheckedItems.forEach(item => patchedItemIdsRef.current.add(item.itemId));
     if (!needsPatch.length) return;
 
-    patchedRef.current = true;
     const doPatch = async () => {
       let patched = 0;
       for (const item of needsPatch) {

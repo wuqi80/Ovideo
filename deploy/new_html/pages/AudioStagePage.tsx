@@ -105,6 +105,34 @@ function applyAudioStageStoryboardPatch(item: StoryboardItemDB, patch: Record<st
   };
 }
 
+const AUDIO_STAGE_STORYBOARD_INITIAL_LOAD_LIMIT = 20;
+const AUDIO_STAGE_STORYBOARD_BACKGROUND_PAGE_SIZE = 80;
+
+function sortAudioStageStoryboardItems(items: StoryboardItemDB[]): StoryboardItemDB[] {
+  return [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+}
+
+function mergeAudioStageStoryboardItems(existing: StoryboardItemDB[], incoming: StoryboardItemDB[]): StoryboardItemDB[] {
+  const byId = new Map(existing.map(item => [item.itemId, item]));
+  for (const item of incoming) {
+    if (!byId.has(item.itemId)) byId.set(item.itemId, item);
+  }
+  return sortAudioStageStoryboardItems(Array.from(byId.values()));
+}
+
+function waitForStoryboardIdle(): Promise<void> {
+  return new Promise(resolve => {
+    const requestIdleCallback = typeof window !== 'undefined'
+      ? (window as any).requestIdleCallback
+      : undefined;
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => resolve(), { timeout: 1200 });
+      return;
+    }
+    globalThis.setTimeout(resolve, 0);
+  });
+}
+
 export const AudioStagePage: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -176,12 +204,51 @@ export const AudioStagePage: React.FC = () => {
       setStoryboardItems([]);
       return () => { active = false; };
     }
+    const currentEpisodeId = episodeId;
+    const scriptId = selectedScriptId || undefined;
+
+    const loadRemainingAudioStageStoryboardPages = async (offset: number, total: number) => {
+      let nextOffset = offset;
+      while (active && nextOffset < total) {
+        await waitForStoryboardIdle();
+        if (!active) return;
+        try {
+          const res = await getStoryboardItems(currentEpisodeId, scriptId, {
+            fields: 'audio_stage',
+            limit: AUDIO_STAGE_STORYBOARD_BACKGROUND_PAGE_SIZE,
+            offset: nextOffset,
+          });
+          if (!active) return;
+          const pageItems = res.success
+            ? (res.items || []).map(normalizeAudioStageStoryboardItem)
+            : [];
+          if (!pageItems.length) return;
+          setStoryboardItems(prev => mergeAudioStageStoryboardItems(prev, pageItems));
+          nextOffset += pageItems.length;
+          if (pageItems.length < AUDIO_STAGE_STORYBOARD_BACKGROUND_PAGE_SIZE) return;
+        } catch (err) {
+          console.warn('storyboard audio-stage background fields load failed:', err);
+          return;
+        }
+      }
+    };
+
     setStoryboardLoading(true);
     setStoryboardError(null);
-    getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'audio_stage' })
+    getStoryboardItems(currentEpisodeId, scriptId, {
+      fields: 'audio_stage',
+      limit: AUDIO_STAGE_STORYBOARD_INITIAL_LOAD_LIMIT,
+      includeTotal: true,
+    })
       .then(res => {
         if (!active) return;
-        setStoryboardItems(res.success ? (res.items || []).map(normalizeAudioStageStoryboardItem) : []);
+        const items = res.success ? (res.items || []).map(normalizeAudioStageStoryboardItem) : [];
+        const sortedItems = sortAudioStageStoryboardItems(items);
+        setStoryboardItems(sortedItems);
+        const total = typeof res.total === 'number' ? res.total : sortedItems.length;
+        if (total > sortedItems.length) {
+          void loadRemainingAudioStageStoryboardPages(sortedItems.length, total);
+        }
       })
       .catch(err => {
         console.warn('storyboard audio-stage fields load failed:', err);

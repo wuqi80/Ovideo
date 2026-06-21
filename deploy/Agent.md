@@ -6848,3 +6848,21 @@
 - Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=7299`.
 - Local `scripts/check_architecture_contracts.py` passed `9/9`.
 - Local targeted Vitest could not run because the Windows `node_modules` tree is still missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package; pnpm execution was also blocked by a local symlink permission error.
+
+## 2026-06-21 Materials/Audio Progressive Storyboard Field Loading
+
+### Changes
+
+- Changed `new_html/pages/MaterialsPage.tsx` to request only the first 20 `fields=materials` storyboard rows with `include_total=true`, then fill the rest in idle-time background pages of 80 rows.
+- Changed `new_html/pages/AudioStagePage.tsx` to use the same first-screen limit and idle background paging for `fields=audio_stage`.
+- Kept existing bounded rendering in `MaterialPage` and `DubbingPanel`; this change reduces the initial data request instead of only hiding already-loaded cards.
+- Updated the material auto-binding patcher to track checked storyboard item ids so rows loaded later in background pages are still eligible for `char:/scene:` tag patching.
+- Strengthened `scripts/check_route_contract.py` so both pages must keep limit, total, offset, and idle background paging.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`, including `audio_stage_lightweight_storyboard_checks=15` and `materials_lightweight_storyboard_checks=15`.
+- Local `vite build` could not run because the Windows `node_modules` tree is still missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package.
+- Local `tsc --noEmit` still reports pre-existing project type errors outside this change; the new progressive loading code was not listed.
