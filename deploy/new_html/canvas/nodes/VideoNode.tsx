@@ -16,7 +16,7 @@ export const VideoNode = memo(({ data, id }: NodeProps) => {
         <span style={{ fontSize: '12px', color: '#888' }}>视频节点</span>
       </div>
       {videoUrl ? (
-        <video controls src={videoUrl} style={{
+        <video controls preload="metadata" src={videoUrl} style={{
           width: '100%', borderRadius: '8px', maxHeight: '160px'
         }} />
       ) : (

@@ -186,6 +186,7 @@ export const FinalProductPage: React.FC = () => {
                   <div key={v.library_item_id} className="bg-n0 border border-n40 rounded-md overflow-hidden shadow-card">
                     <LazyVideo
                       src={v.file_url}
+                      preload="none"
                       controls
                       muted={false}
                       firstFrame={false}
@@ -244,7 +245,7 @@ export const FinalProductPage: React.FC = () => {
                           }`}
                           title={ti === 0 ? '最新' : `第 ${s.takes.length - ti} 次生成`}
                         >
-                          <LazyVideo src={t.video_url} className="w-full h-full object-contain bg-black" />
+                          <LazyVideo src={t.video_url} preload="none" className="w-full h-full object-contain bg-black" />
                           {ti === 0 && <span className="absolute top-0.5 left-0.5 bg-n800/70 text-white text-[9px] px-1 rounded">最新</span>}
                           {selected && (
                             <span className="absolute bottom-0.5 right-0.5 bg-primary text-white rounded-full p-0.5"><Check className="w-3 h-3" /></span>

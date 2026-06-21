@@ -487,6 +487,7 @@ export const EnhancePage: React.FC = () => {
               {videoUnderPlayhead?.url ? (
                 <video
                   src={videoUnderPlayhead.url}
+                  preload="none"
                   controls={false}
                   className="w-full h-full object-contain"
                 />

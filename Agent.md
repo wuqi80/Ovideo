@@ -9,8 +9,19 @@
 - Provider endpoint 单一来源补强：
   - 第三方 provider 域名（laozhang、DeepSeek、Gemini、火山 Ark、DashScope、MiniMax）只允许集中出现在 `deploy/services/api_provider_registry.py`。
   - `deploy/scripts/check_route_contract.py` 新增 `provider_endpoint_single_source_checks`，阻止 runtime 客户端、路由或服务重新硬编码外部 API 域名。
-  - 清理了 `deploy/external_api/video/dashscope.py` 与 `deploy/services/video_reverse_service.py` 中过期的 provider endpoint/key 文档描述。
+- 清理了 `deploy/external_api/video/dashscope.py` 与 `deploy/services/video_reverse_service.py` 中过期的 provider endpoint/key 文档描述。
 - 这个变更不改变运行时行为，用于支持后续把第三方 API 切换成自建 API 时只改注册表/后台配置。
+
+## 2026-06-21 视频预加载性能记录
+
+- 视频工作流和相关页面的默认视频预览不再依赖浏览器默认 preload 行为：
+  - 高密度视频列表/卡片的 `LazyVideo` 改为 `preload="none"`。
+  - 视频预览区、美化时间轴预览区使用 `preload="none"`，点击播放时再加载。
+  - 弹窗/画布里的用户主动打开视频预览显式使用 `preload="metadata"`。
+- `deploy/scripts/check_route_contract.py` 新增 `check_frontend_video_preload_contract`：
+  - 所有裸 `<video>` 必须显式声明 `preload`。
+  - 高密度视频列表必须保留 `preload="none"`。
+- 验证：`py_compile`、`check_route_contract.py` 和 `check_architecture_contracts.py` 均通过，新增 `frontend_video_preload_checks=13`。
 
 ## 2026-06-21 API 配置诊断增强记录
 

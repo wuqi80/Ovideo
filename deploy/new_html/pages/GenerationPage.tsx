@@ -485,6 +485,7 @@ export const GenerationPage: React.FC = () => {
                 <video
                   ref={videoRef}
                   src={previewUrl}
+                  preload="none"
                   className="max-w-full rounded-lg bg-black"
                   style={{ maxHeight: 'calc(100% - 56px)' }}
                   controls={false}

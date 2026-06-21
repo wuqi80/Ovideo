@@ -1,5 +1,22 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 Video Preload Guard
+
+### Changes
+
+- Added explicit video preload behavior across workflow media previews:
+  - Dense video cards/lists use `LazyVideo preload="none"`.
+  - Workflow preview panes that should not auto-fetch media use raw `<video preload="none">`.
+  - User-opened modal/canvas video players use explicit `preload="metadata"`.
+- Strengthened `scripts/check_route_contract.py` with `check_frontend_video_preload_contract` so future raw `<video>` tags must declare preload and dense lists keep `preload="none"`.
+
+### Verification
+
+- Local `py_compile` for `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed, including `frontend_video_preload_checks=13`.
+- Local `scripts/check_architecture_contracts.py`: 10/10 passed.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-21 API Config Endpoint Diagnostics
 
 ### Changes

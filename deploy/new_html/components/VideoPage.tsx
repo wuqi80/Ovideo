@@ -2358,6 +2358,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {status.state === 'done' && videos.length > 0 ? (
                         <LazyVideo
                             src={videos[0]}
+                            preload="none"
                             className="w-full h-full object-cover cursor-pointer"
                             onClick={() => { setLightboxUrl(videos[0]); setLightboxType('video'); }}
                         />
@@ -3052,6 +3053,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     >
                                         <LazyVideo
                                             src={videoUrl}
+                                            preload="none"
                                             className="w-full h-full object-contain cursor-pointer"
                                             onClick={() => { setLightboxUrl(videoUrl); setLightboxType('video'); }}
                                         />
@@ -3105,6 +3107,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     >
                         <LazyVideo
                             src={videos[0]}
+                            preload="none"
                             className="w-full h-full object-contain cursor-pointer"
                             onClick={() => { setLightboxUrl(videos[0]); setLightboxType('video'); }}
                         />
@@ -3285,6 +3288,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <div className="mb-4">
                         <video 
                             src={videos[selectedVideoIndex]}
+                            preload="metadata"
                             className="w-full rounded border border-n40"
                             controls
                         />
@@ -3472,6 +3476,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <video 
                             ref={editVideoRef}
                             src={currentVideoUrl}
+                            preload="metadata"
                             className="w-full rounded border border-n40"
                             controls
                         />
@@ -3959,6 +3964,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {lightboxType === 'video' ? (
                         <video
                             src={lightboxUrl}
+                            preload="metadata"
                             className="max-w-[90vw] max-h-[90vh]"
                             controls
                             autoPlay

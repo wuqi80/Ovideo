@@ -372,6 +372,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                         {isVideoFile ? (
                           <LazyVideo
                             src={mediaUrl}
+                            preload="none"
                             className="w-full h-full object-cover"
                             muted
                             loop
@@ -566,6 +567,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
             {previewType === 'video' ? (
               <video
                 src={previewUrl}
+                preload="metadata"
                 className="max-w-full max-h-[85vh] rounded-lg"
                 controls
                 autoPlay

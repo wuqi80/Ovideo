@@ -3819,6 +3819,64 @@ def check_frontend_lazy_video_contract(root: Path) -> int:
     return checks
 
 
+def check_frontend_video_preload_contract(root: Path) -> int:
+    """Video previews must not rely on browser-default eager preload behavior."""
+    new_html = root / "new_html"
+    violations: list[str] = []
+    checks = 0
+
+    for path in new_html.rglob("*.tsx"):
+        if "node_modules" in path.parts or "dist" in path.parts:
+            continue
+        if path.name == "LazyVideo.tsx":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"<video\b(?P<body>[\s\S]*?)(?:/>|>)", text):
+            checks += 1
+            body = match.group("body")
+            if "preload=" not in body:
+                line = text[: match.start()].count("\n") + 1
+                violations.append(f"{path.relative_to(root)}:{line}: raw <video> must set preload explicitly")
+
+    high_density_expectations = [
+        (
+            root / "new_html" / "components" / "VideoPage.tsx",
+            3,
+            "Video workflow result lists should keep LazyVideo preload='none'",
+        ),
+        (
+            root / "new_html" / "components" / "HistoryPage.tsx",
+            1,
+            "History video grid should keep LazyVideo preload='none'",
+        ),
+        (
+            root / "new_html" / "pages" / "FinalProductPage.tsx",
+            2,
+            "Final product video grids should keep LazyVideo preload='none'",
+        ),
+        (
+            root / "new_html" / "pages" / "GenerationPage.tsx",
+            1,
+            "Workflow video preview should use preload='none'",
+        ),
+        (
+            root / "new_html" / "pages" / "EnhancePage.tsx",
+            1,
+            "Enhance timeline video preview should use preload='none'",
+        ),
+    ]
+    for path, minimum, label in high_density_expectations:
+        text = path.read_text(encoding="utf-8")
+        count = text.count('preload="none"')
+        checks += 1
+        if count < minimum:
+            violations.append(f"{label}: expected at least {minimum}, found {count} in {path.relative_to(root)}")
+
+    if violations:
+        fail("Frontend video preload contract failed:\n" + "\n".join(violations))
+    return checks
+
+
 def check_frontend_thumbnail_contract(root: Path) -> int:
     """Workflow thumbnail surfaces should use cached server thumbnails instead of full files."""
     image_loader = root / "new_html" / "services" / "imageLoaderService.ts"
@@ -4366,6 +4424,7 @@ def main() -> int:
     frontend_http_client_checks = check_frontend_http_client_contract(root)
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
     frontend_lazy_video_checks = check_frontend_lazy_video_contract(root)
+    frontend_video_preload_checks = check_frontend_video_preload_contract(root)
     frontend_thumbnail_checks = check_frontend_thumbnail_contract(root)
     frontend_ai_chunk_split_checks = check_frontend_ai_chunk_split_contract(root)
     frontend_workflow_chunk_checks = check_frontend_workflow_chunk_contract(root)
@@ -4435,6 +4494,7 @@ def main() -> int:
     print(f"  frontend_http_client_checks={frontend_http_client_checks}")
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
     print(f"  frontend_lazy_video_checks={frontend_lazy_video_checks}")
+    print(f"  frontend_video_preload_checks={frontend_video_preload_checks}")
     print(f"  frontend_thumbnail_checks={frontend_thumbnail_checks}")
     print(f"  frontend_ai_chunk_split_checks={frontend_ai_chunk_split_checks}")
     print(f"  frontend_workflow_chunk_checks={frontend_workflow_chunk_checks}")
