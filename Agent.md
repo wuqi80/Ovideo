@@ -6920,3 +6920,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `python -m py_compile deploy/scripts/check_route_contract.py` passed.
 - Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=124`, `frontend_http_client_checks=7304`, `frontend_dependency_checks=349`, and `frontend_app_shell_chunk_checks=36`.
 - Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=9`.
+
+## 2026-06-21 Admin API Settings Legacy Parameter Compatibility
+
+### Changes
+
+- Changed `deploy/new_html/admin/AdminSettingsPage.tsx` so `/admin/settings?item=legacy-apiconfig` now renders the native API provider management panel instead of the old `/admin-legacy` iframe.
+- Updated `deploy/new_html/admin/adminMenu.ts` so legacy API config bookmarks keep the normal `系统设置 / API 厂商配置` breadcrumb rather than advertising an old edit surface.
+- Strengthened `deploy/scripts/check_route_contract.py` so `legacy-apiconfig` cannot be mapped back to the legacy iframe and old edit labels cannot reappear.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile deploy/scripts/check_route_contract.py` passed.
+- Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=127`, `frontend_http_client_checks=7304`, `frontend_dependency_checks=349`, and `admin_api_config_ui_checks=23`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=9`.

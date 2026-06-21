@@ -98,7 +98,7 @@ export const ADMIN_MENU: MenuSection[] = [
 export function getActiveTrail(pathname: string, search: string): string[] {
   const cur = new URLSearchParams(search);
   if (pathname === '/admin/settings' && cur.get('item') === 'legacy-apiconfig') {
-    return ['系统设置', 'API 厂商配置', '旧版编辑'];
+    return ['系统设置', 'API 厂商配置'];
   }
 
   for (const sec of ADMIN_MENU) {

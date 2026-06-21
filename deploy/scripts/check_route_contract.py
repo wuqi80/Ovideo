@@ -2433,6 +2433,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "raw === 'apiconfig' || raw === 'legacy-apiconfig'",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "Key 来源",
         ),
         (
@@ -2713,8 +2717,13 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "LEGACY_API_CONFIG_ROUTE",
         "打开旧版 API 编辑",
         "window.location.assign(LEGACY_API_CONFIG_ROUTE);",
+        "'legacy-apiconfig': 'apiconfig'",
+        "旧版编辑",
     ):
-        if forbidden in admin_settings_text:
+        target_text = admin_settings_text
+        if forbidden == "旧版编辑":
+            target_text = (root / "new_html" / "admin" / "adminMenu.ts").read_text(encoding="utf-8")
+        if forbidden in target_text:
             fail(f"Admin API settings page must not route API editing back to legacy console: {forbidden}")
         checks += 1
     cluster_text = (root / "cluster_main.py").read_text(encoding="utf-8")

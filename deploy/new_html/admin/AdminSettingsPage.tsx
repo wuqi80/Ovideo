@@ -26,7 +26,6 @@ import { apiJson } from '../services/httpClient';
 
 const LEGACY_VER = '20260619c';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
-    'legacy-apiconfig': 'apiconfig',
     cluster: 'cluster',
     workflows: 'workflows',
     dashboard: 'dashboard',
@@ -2264,7 +2263,7 @@ export const AdminSettingsPage: React.FC = () => {
     const [sp] = useSearchParams();
     const raw = sp.get('item') || 'apiconfig';
 
-    if (raw === 'apiconfig') {
+    if (raw === 'apiconfig' || raw === 'legacy-apiconfig') {
         return <ApiConfigPanel />;
     }
 
