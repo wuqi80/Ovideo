@@ -7281,3 +7281,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Verification:
   - Local CORS parser check confirmed both config modules default to the same explicit origin list and contain no wildcard CORS default.
   - Local `git diff --check`, deploy script syntax check, route contract, and architecture contract passed.
+  - Live deploy to `https://mecha.one/` passed; remote architecture contracts passed 10/10, online smoke passed 9/9, and remote `cluster_config.py`/`config.py` report no wildcard CORS origin.
