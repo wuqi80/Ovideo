@@ -7469,3 +7469,6 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest deploy/tests/test_api_provider_runtime_model_env.py -q` passed with 29 tests.
   - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
   - Local route contract passed with `api_provider_runtime_model_checks=175`.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=175`.
+  - Server sync check: `cluster_main.py=999` lines, `admin_routes.py=1502` lines, and `dao/` contains 72 recursive files; top-level `ls dao | wc -l` is 8 because DAO files are grouped under subdirectories.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
