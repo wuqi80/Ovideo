@@ -7255,3 +7255,31 @@
 - Remote file sync check: `cluster_main.py` 985 lines, `admin_routes.py` 1502 lines, `dao/` 72 files recursively.
 - Remote file check confirmed `MINIMAX_DEFAULT_PROVIDER_MODEL` is present in deployed registry and MiniMax audio client paths.
 - Online smoke test against `https://mecha.one` passed: 9/9.
+
+## 2026-06-21 Frontend Local Tailwind Build
+
+### Changes
+
+- Replaced the production `new_html/index.html` Tailwind CDN runtime config with local Tailwind/PostCSS build files.
+- Added `new_html/tailwind.config.cjs` and `new_html/postcss.config.cjs`, moving the Atlassian color, font, and shadow tokens into the build pipeline.
+- Added Tailwind directives to `new_html/styles/design-tokens.css` and moved the existing animation/scrollbar helper CSS out of inline HTML.
+- Removed the unused importmap CDN block for React, uuid, lucide, and Google GenAI from the Vite entry HTML.
+- Extended `scripts/check_route_contract.py` so frontend dependency contracts reject runtime Tailwind/importmap CDN regressions and require local Tailwind lockfile/config wiring.
+
+### Verification
+
+- Remote temporary build with `npm ci && npm run build` passed before deployment.
+- Production build output changed from runtime Tailwind CDN to a local CSS asset: `index-D1kXhn4K.css` 90.52 KB, gzip 15.64 KB.
+- Built `dist/index.html` and assets were checked for `cdn.tailwindcss.com`, `aistudiocdn.com`, and `importmap`; no matches.
+- Local `package.json` and `package-lock.json` parse check passed.
+- Local `scripts/check_route_contract.py` passed with `frontend_dependency_checks=371`.
+- Local `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+
+### Deployment
+
+- Pushed commit `976f179` (`perf(frontend): build tailwind locally instead of runtime CDN`) to `origin/refactor/v2`.
+- Ran `scripts/live_deploy_mvc2.sh`; server restart finished with service status `active`.
+- Remote frontend build recovered as expected after `npm ci` installed the new Tailwind dependencies, then produced the local CSS asset.
+- Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+- Remote dist check confirmed no Tailwind/importmap CDN strings and `dist/assets/index-D1kXhn4K.css` is 89 KB on disk.
+- Online smoke test against `https://mecha.one` passed: 9/9.
