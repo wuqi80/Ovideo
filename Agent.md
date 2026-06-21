@@ -6672,3 +6672,24 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_workflow_chunk_checks=20`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Workspace Editor Column Chunk Split
+
+### Changes
+
+- Converted the legacy editor columns in `deploy/new_html/WorkspaceApp.tsx` (`FileColumn`, `ViewerColumn`, `ScriptColumn`, `StoryboardColumn`) from static imports to `React.lazy` chunks.
+- Added `LegacyColumnFallback` so each old editor column can load independently without changing props, resize state, or editor workflow behavior.
+- Strengthened `deploy/scripts/check_route_contract.py` so `WorkspaceApp` must lazy-load editor columns and cannot regress to static imports.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_workflow_chunk_checks=29`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `WorkspaceApp-BbSuuWpT.js` at `67.71 kB`, down from the prior `WorkspaceApp-4C9Q9N6Y.js` at `142.14 kB`.
+- Server build split editor columns into `FileColumn-C1r1P__t.js` at `14.15 kB`, `ViewerColumn-CXj8ZXoL.js` at `3.74 kB`, `ScriptColumn-CuUAcLga.js` at `30.24 kB`, and `StoryboardColumn-Do3vooFZ.js` at `28.28 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_workflow_chunk_checks=29`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

@@ -6,10 +6,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
-import { FileColumn } from './components/FileColumn';
-import { ViewerColumn } from './components/ViewerColumn';
-import { ScriptColumn } from './components/ScriptColumn';
-import { StoryboardColumn } from './components/StoryboardColumn';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { SkeletonScreen } from './components/SkeletonScreen';
 import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock } from './types';
@@ -24,6 +20,10 @@ import { getAuthToken } from './services/httpClient';
 const loadAiModelService = () => import('./services/aiModelService');
 
 const WORKSPACE_INITIAL_STORYBOARD_COUNT = 10;
+const FileColumn = React.lazy(() => import('./components/FileColumn').then(m => ({ default: m.FileColumn })));
+const ViewerColumn = React.lazy(() => import('./components/ViewerColumn').then(m => ({ default: m.ViewerColumn })));
+const ScriptColumn = React.lazy(() => import('./components/ScriptColumn').then(m => ({ default: m.ScriptColumn })));
+const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn').then(m => ({ default: m.StoryboardColumn })));
 const LegacyMaterialPage = React.lazy(() => import('./components/MaterialPage').then(m => ({ default: m.MaterialPage })));
 const LegacyGenerationPage = React.lazy(() => import('./components/GenerationPage').then(m => ({ default: m.GenerationPage })));
 const LegacyVideoPage = React.lazy(() => import('./components/VideoPage').then(m => ({ default: m.VideoPage })));
@@ -32,6 +32,12 @@ const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').th
 
 const LegacyViewFallback: React.FC<{ label: string }> = ({ label }) => (
   <div className="h-full w-full flex items-center justify-center text-sm text-n300">
+    Loading {label}...
+  </div>
+);
+
+const LegacyColumnFallback: React.FC<{ label: string }> = ({ label }) => (
+  <div className="h-full w-full flex items-center justify-center bg-n10 text-xs text-n300">
     Loading {label}...
   </div>
 );
@@ -2462,6 +2468,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     style={{ width: isFullView ? `${colWidths[0]}%` : undefined }} 
                     className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300`}
                 >
+                    <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
                     <FileColumn 
                     files={files} 
                     selectedFileId={selectedFileId} 
@@ -2481,6 +2488,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     onToggleExpand={() => {}}
                     onReorderFiles={handleReorderFiles}
                     />
+                    </React.Suspense>
                 </div>
                 )}
 
@@ -2494,6 +2502,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300 flex flex-col`}
                 >
                     <div className="flex-1 min-h-0 overflow-hidden relative">
+                    <React.Suspense fallback={<LegacyColumnFallback label="viewer" />}>
                     <ViewerColumn 
                         selectedFile={selectedFile}
                         files={files}
@@ -2510,6 +2519,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                         aiModel={aiModel}
                         onChangeModel={setAiModel}
                     />
+                    </React.Suspense>
                     </div>
                     {selectedFile && (
                       <div className="flex-shrink-0 m-2 rounded-md border border-n40 bg-n0 p-3 text-sm shadow-card">
@@ -2566,6 +2576,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     style={{ width: isFullView ? `${colWidths[2]}%` : undefined }}
                     className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300`}
                 >
+                    <React.Suspense fallback={<LegacyColumnFallback label="script" />}>
                     <ScriptColumn 
                         selectedFile={selectedFile}
                         checkedCount={checkedFileIds.size}
@@ -2589,6 +2600,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                         canUndo={canUndo}
                         canRedo={canRedo}
                     />
+                    </React.Suspense>
                 </div>
                 )}
 
@@ -2601,6 +2613,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     style={{ width: isFullView ? `${colWidths[3]}%` : undefined }}
                     className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300`}
                 >
+                    <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
                     <StoryboardColumn 
                         selectedFile={selectedFile}
                         onGenerateStoryboard={handleGenerateStoryboard}
@@ -2628,6 +2641,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                         onRestoreStoryboard={(version) => selectedFileId && handleRestoreStoryboard(selectedFileId, version)}
                         onDeleteVersion={(versionId) => selectedFileId && handleDeleteVersion(selectedFileId, versionId)}
                     />
+                    </React.Suspense>
                 </div>
                 )}
             </div>

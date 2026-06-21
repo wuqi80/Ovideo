@@ -3754,7 +3754,12 @@ def check_frontend_workflow_chunk_contract(root: Path) -> int:
         (workspace_text, "const LegacyVideoPage = React.lazy(() => import('./components/VideoPage')", "WorkspaceApp lazy-loads legacy VideoPage"),
         (workspace_text, "const LegacyAdminPage = React.lazy(() => import('./components/AdminPage')", "WorkspaceApp lazy-loads legacy AdminPage"),
         (workspace_text, "const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage')", "WorkspaceApp lazy-loads legacy HistoryPage"),
+        (workspace_text, "const FileColumn = React.lazy(() => import('./components/FileColumn')", "WorkspaceApp lazy-loads FileColumn"),
+        (workspace_text, "const ViewerColumn = React.lazy(() => import('./components/ViewerColumn')", "WorkspaceApp lazy-loads ViewerColumn"),
+        (workspace_text, "const ScriptColumn = React.lazy(() => import('./components/ScriptColumn')", "WorkspaceApp lazy-loads ScriptColumn"),
+        (workspace_text, "const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn')", "WorkspaceApp lazy-loads StoryboardColumn"),
         (workspace_text, '<React.Suspense fallback={<LegacyViewFallback label="video" />}>', "WorkspaceApp wraps lazy legacy VideoPage locally"),
+        (workspace_text, '<React.Suspense fallback={<LegacyColumnFallback label="script" />}>', "WorkspaceApp wraps lazy ScriptColumn locally"),
         (video_text, '<React.Suspense fallback={<WorkflowChunkFallback label="加载视频工作台..." />}>', "VideoGenPage wraps VideoPage in Suspense"),
     ]
     forbidden_snippets = [
@@ -3766,6 +3771,10 @@ def check_frontend_workflow_chunk_contract(root: Path) -> int:
         (workspace_text, "import { VideoPage } from './components/VideoPage';", "WorkspaceApp must not statically import legacy VideoPage"),
         (workspace_text, "import { AdminPage } from './components/AdminPage';", "WorkspaceApp must not statically import legacy AdminPage"),
         (workspace_text, "import { HistoryPage } from './components/HistoryPage';", "WorkspaceApp must not statically import legacy HistoryPage"),
+        (workspace_text, "import { FileColumn } from './components/FileColumn';", "WorkspaceApp must not statically import FileColumn"),
+        (workspace_text, "import { ViewerColumn } from './components/ViewerColumn';", "WorkspaceApp must not statically import ViewerColumn"),
+        (workspace_text, "import { ScriptColumn } from './components/ScriptColumn';", "WorkspaceApp must not statically import ScriptColumn"),
+        (workspace_text, "import { StoryboardColumn } from './components/StoryboardColumn';", "WorkspaceApp must not statically import StoryboardColumn"),
     ]
 
     checks = len(required_snippets) + len(forbidden_snippets)
