@@ -30,6 +30,7 @@ from services.api_config_service import (
 )
 from services.api_provider_health_monitor import (
     cache_provider_health_result,
+    clear_all_cached_provider_health,
     delete_cached_provider_health_many,
     list_cached_provider_health,
     provider_health_monitor_settings,
@@ -59,6 +60,9 @@ async def _reload_api_env() -> bool:
 
 async def _clear_all_provider_health_cache() -> List[str]:
     try:
+        cleared = await clear_all_cached_provider_health()
+        if cleared:
+            return cleared
         return await delete_cached_provider_health_many(PROVIDER_CATALOG)
     except Exception as e:
         logger.warning("Provider health cache invalidation failed: %s", e, exc_info=True)

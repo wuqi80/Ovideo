@@ -40,6 +40,12 @@ class FakeRedis:
         self.ttl.pop(key, None)
         return 1 if existed else 0
 
+    async def scan_iter(self, match: str):
+        prefix = match[:-1] if match.endswith("*") else match
+        for key in list(self.store):
+            if key.startswith(prefix):
+                yield key
+
 
 async def main() -> int:
     root = deploy_root()
@@ -156,6 +162,65 @@ async def main() -> int:
         fail("Exact provider/model health target delete did not report a cleared custom model row")
     if await monitor.get_cached_provider_health("dashscope", model_name="custom-admin-model", redis_client=fake_redis):
         fail("Exact provider/model health target delete did not remove custom model cache row")
+    all_redis = FakeRedis()
+    await monitor.cache_provider_health_result(
+        {
+            "success": True,
+            "provider": "custom-provider",
+            "model_name": "admin-custom-model",
+            "status": "ok",
+            "latency_ms": 7,
+            "checked_at": "2026-06-18T00:00:02Z",
+            "health": {"ok": True, "reachable": True, "auth_ok": True, "status_code": 200},
+        },
+        redis_client=all_redis,
+    )
+    all_redis.store["not-provider-health:keep"] = "{}"
+    cleared_all = await monitor.clear_all_cached_provider_health(redis_client=all_redis)
+    if not any("custom-provider" in key for key in cleared_all):
+        fail(f"Global provider health clear did not remove custom provider/model cache: {cleared_all}")
+    if any(key.startswith(monitor.HEALTH_CACHE_PREFIX) for key in all_redis.store):
+        fail(f"Global provider health clear left managed keys behind: {all_redis.store}")
+    if "not-provider-health:keep" not in all_redis.store:
+        fail("Global provider health clear removed an unrelated Redis key")
+
+    clear_calls = 0
+    fallback_calls = 0
+    original_clear_all = admin_api_config_routes.clear_all_cached_provider_health
+    original_delete_many = admin_api_config_routes.delete_cached_provider_health_many
+
+    async def fake_clear_all():
+        nonlocal clear_calls
+        clear_calls += 1
+        return ["provider:health:custom-provider:admin-custom-model"]
+
+    async def fake_delete_many(_providers):
+        nonlocal fallback_calls
+        fallback_calls += 1
+        return ["fallback"]
+
+    admin_api_config_routes.clear_all_cached_provider_health = fake_clear_all
+    admin_api_config_routes.delete_cached_provider_health_many = fake_delete_many
+    try:
+        route_clear = await admin_api_config_routes._clear_all_provider_health_cache()
+    finally:
+        admin_api_config_routes.clear_all_cached_provider_health = original_clear_all
+        admin_api_config_routes.delete_cached_provider_health_many = original_delete_many
+    if route_clear != ["provider:health:custom-provider:admin-custom-model"] or clear_calls != 1 or fallback_calls:
+        fail(f"Admin global health clear did not prefer prefix clear: clear={route_clear} calls={clear_calls}/{fallback_calls}")
+
+    async def fake_empty_clear_all():
+        return []
+
+    admin_api_config_routes.clear_all_cached_provider_health = fake_empty_clear_all
+    admin_api_config_routes.delete_cached_provider_health_many = fake_delete_many
+    try:
+        route_fallback = await admin_api_config_routes._clear_all_provider_health_cache()
+    finally:
+        admin_api_config_routes.clear_all_cached_provider_health = original_clear_all
+        admin_api_config_routes.delete_cached_provider_health_many = original_delete_many
+    if route_fallback != ["fallback"] or fallback_calls != 1:
+        fail(f"Admin global health clear did not fall back to provider catalog clear: {route_fallback}, calls={fallback_calls}")
     await monitor.delete_cached_provider_health("dashscope", redis_client=fake_redis)
     await monitor.delete_cached_provider_health("seedance", redis_client=fake_redis)
     if await monitor.get_cached_provider_health("dashscope", model_name="wan2.6-i2v", redis_client=fake_redis):
@@ -241,6 +306,8 @@ async def main() -> int:
     print("  sweep_results=2")
     print("  sweep_target_model_checks=4")
     print("  exact_model_cache_delete_checks=2")
+    print("  global_cache_clear_checks=5")
+    print("  admin_reload_cache_clear_checks=2")
     print("  default_model_sweep_checks=3")
     print("  api_config_response_provider_health=2")
     print("  provider_monitor_state=1")

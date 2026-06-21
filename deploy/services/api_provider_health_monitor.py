@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -249,6 +250,54 @@ async def delete_cached_provider_health_targets(
     for target in provider_health_cache_targets(targets=targets):
         provider = target["provider"] or ""
         key = provider_health_cache_key(provider, target.get("model_name"))
+        deleted = int(await client.delete(key) or 0)
+        if deleted:
+            cleared.append(key)
+    return cleared
+
+
+def _decode_redis_key(key: Any) -> str:
+    if isinstance(key, bytes):
+        return key.decode("utf-8", errors="ignore")
+    return str(key)
+
+
+async def _iter_health_cache_keys(client: Any):
+    pattern = f"{HEALTH_CACHE_PREFIX}*"
+    scan_iter = getattr(client, "scan_iter", None)
+    if callable(scan_iter):
+        try:
+            iterator = scan_iter(match=pattern)
+        except TypeError:
+            iterator = scan_iter(pattern)
+        async for key in iterator:
+            decoded = _decode_redis_key(key)
+            if decoded.startswith(HEALTH_CACHE_PREFIX):
+                yield decoded
+        return
+
+    keys_fn = getattr(client, "keys", None)
+    if callable(keys_fn):
+        result = keys_fn(pattern)
+        if inspect.isawaitable(result):
+            result = await result
+        for key in result or []:
+            decoded = _decode_redis_key(key)
+            if decoded.startswith(HEALTH_CACHE_PREFIX):
+                yield decoded
+
+
+async def clear_all_cached_provider_health(
+    *,
+    redis_client: Any = None,
+) -> List[str]:
+    """Clear every cached provider health entry under the managed prefix."""
+    client = redis_client if redis_client is not None else _redis_client
+    if not client:
+        return []
+
+    cleared: List[str] = []
+    async for key in _iter_health_cache_keys(client):
         deleted = int(await client.delete(key) or 0)
         if deleted:
             cleared.append(key)

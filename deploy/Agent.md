@@ -7395,9 +7395,11 @@
 
 - Added exact provider/model health cache clearing in `services/api_provider_health_monitor.py`.
 - Updated `services/api_config_service.py` so API config create/update/delete and conflict repair invalidate both provider-level health and affected provider/model rows, including custom models and automatically disabled conflicting configs.
+- Added prefix-level health cache clearing for `reload-env`, so full runtime reloads also remove custom provider/model cache entries that are not present in the registry preset list.
 - Strengthened `scripts/check_provider_health_monitor.py` and `scripts/check_admin_api_config_crud.py` to cover exact model cache deletion and CRUD-triggered provider/model invalidation.
 
 ### Verification
 
 - Local `py_compile`, targeted health monitor contract, targeted admin API config CRUD contract, full architecture contracts, and `git diff --check` passed.
+- Health monitor contract covers global prefix cache clearing and admin reload fallback behavior.
 - Live deploy to `https://mecha.one/` passed; remote Vite build completed, remote architecture contracts passed 10/10, and online smoke passed 9/9.
