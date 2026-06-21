@@ -6736,3 +6736,23 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, `frontend_http_client_checks=6119`, and `frontend_app_shell_chunk_checks=12`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Gemini Image Alias Registry Move
+
+### Changes
+
+- Moved Gemini image model aliases from `deploy/services/ai_proxy_service.py` into `deploy/services/api_provider_registry.py`.
+- Added registry-owned `normalize_gemini_image_model()` so AI proxy handlers consume provider/model metadata from the provider registry.
+- Strengthened `deploy/scripts/check_provider_contract.py` so `GEMINI_IMAGE_MODEL_ALIASES` and `normalize_gemini_image_model()` cannot drift back into `ai_proxy_service.py`.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `deploy/scripts/check_provider_contract.py` passed with `providers=12`, `presets=17`, and `gemini_image_alias_checks=5`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=12`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `index-DZIRn4Bt.js` at `223.36 kB`, `WorkspaceApp-WwKkM-rG.js` at `67.79 kB`, and `videoTaskService-1SkFLo-c.js` at `9.19 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=12`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
