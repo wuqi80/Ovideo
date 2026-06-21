@@ -60,6 +60,7 @@ async def main() -> int:
     updates: list[tuple[str, dict[str, Any]]] = []
     deletes: list[str] = []
     invalidations: list[tuple[str, ...]] = []
+    target_invalidations: list[tuple[tuple[str, str | None], ...]] = []
     reload_calls = 0
 
     class FakeDAO:
@@ -122,11 +123,24 @@ async def main() -> int:
         invalidations.append(tuple(providers))
         return sorted(set(providers))
 
+    async def fake_target_invalidate(targets):
+        normalized = tuple(
+            (
+                str(item.get("provider") or ""),
+                str(item.get("model_name") or "").strip() or None,
+            )
+            for item in targets
+        )
+        target_invalidations.append(normalized)
+        return [f"{provider}::{model or ''}" for provider, model in normalized]
+
     original_dao = service.ApiConfigDAO
     original_invalidate = service.delete_cached_provider_health_many
+    original_target_invalidate = service.delete_cached_provider_health_targets
     original_test_health = service.test_api_config_health
     service.ApiConfigDAO = FakeDAO
     service.delete_cached_provider_health_many = fake_invalidate
+    service.delete_cached_provider_health_targets = fake_target_invalidate
     try:
         presets = service.get_api_config_presets()
         if len(presets.get("presets") or []) != 17:
@@ -175,6 +189,10 @@ async def main() -> int:
             fail(f"create_api_config should reload once, got {reload_calls}")
         if invalidations[-1] != ("deepseek",):
             fail(f"create_api_config should invalidate created provider health cache: {invalidations}")
+        if ("deepseek", "deepseek-chat") not in target_invalidations[-1]:
+            fail(f"create_api_config should invalidate created model health cache: {target_invalidations}")
+        if ("deepseek", "deepseek-reasoner") not in target_invalidations[-1]:
+            fail(f"create_api_config should invalidate disabled conflicting model health cache: {target_invalidations}")
 
         empty_update = await service.update_api_config("apicfg_existing", {}, reload_api_env=fake_reload)
         if empty_update["api_config"]["config_id"] != "apicfg_existing":
@@ -183,6 +201,8 @@ async def main() -> int:
             fail("empty update should not reload API env")
         if len(invalidations) != 1:
             fail("empty update should not invalidate provider health cache")
+        if len(target_invalidations) != 1:
+            fail("empty update should not invalidate provider/model health cache")
 
         updated = await service.update_api_config(
             "apicfg_existing",
@@ -204,6 +224,10 @@ async def main() -> int:
             fail(f"update_api_config should reload once, got {reload_calls}")
         if "deepseek" not in invalidations[-1]:
             fail(f"update_api_config should invalidate updated provider health cache: {invalidations}")
+        if ("deepseek", "deepseek-reasoner") not in target_invalidations[-1]:
+            fail(f"update_api_config should invalidate updated model health cache: {target_invalidations}")
+        if ("deepseek", "deepseek-chat") not in target_invalidations[-1]:
+            fail(f"update_api_config should invalidate disabled conflicting model health cache: {target_invalidations}")
 
         previous_gpt_image_key = os.environ.pop("GPT_IMAGE_API_KEY", None)
         try:
@@ -277,6 +301,8 @@ async def main() -> int:
             fail(f"delete_api_config should reload once, got {reload_calls}")
         if invalidations[-1] != ("laozhang-gpt-image",):
             fail(f"delete_api_config should invalidate deleted provider health cache: {invalidations}")
+        if ("laozhang-gpt-image", "gpt-image-2-vip") not in target_invalidations[-1]:
+            fail(f"delete_api_config should invalidate deleted model health cache: {target_invalidations}")
 
         try:
             await service.delete_api_config("missing", reload_api_env=fake_reload)
@@ -366,10 +392,13 @@ async def main() -> int:
             fail("repair should reload API env exactly once")
         if invalidations[-1] != ("minimax",):
             fail(f"repair should invalidate repaired provider health cache: {invalidations}")
+        if ("minimax", "MiniMax-Hailuo-02") not in target_invalidations[-1]:
+            fail(f"repair should invalidate repaired model health cache: {target_invalidations}")
 
     finally:
         service.ApiConfigDAO = original_dao
         service.delete_cached_provider_health_many = original_invalidate
+        service.delete_cached_provider_health_targets = original_target_invalidate
         service.test_api_config_health = original_test_health
 
     print("Admin API config CRUD contract OK")
@@ -380,6 +409,7 @@ async def main() -> int:
     print("  same_provider_conflict_disabled=1")
     print("  historical_conflict_repair=1")
     print("  provider_health_invalidations=4")
+    print("  provider_model_health_invalidations=4")
     print("  health_wrapper_no_key=1")
     print("  health_wrapper_runtime_key_fallback=1")
     print("  health_wrapper_endpoint_diagnostics=1")

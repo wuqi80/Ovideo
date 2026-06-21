@@ -136,6 +136,26 @@ async def main() -> int:
         redis_client=fake_redis,
     ):
         fail("Model-specific provider health cache row was not written")
+    await monitor.cache_provider_health_result(
+        {
+            "success": True,
+            "provider": "dashscope",
+            "model_name": "custom-admin-model",
+            "status": "ok",
+            "latency_ms": 9,
+            "checked_at": "2026-06-18T00:00:01Z",
+            "health": {"ok": True, "reachable": True, "auth_ok": True, "status_code": 200},
+        },
+        redis_client=fake_redis,
+    )
+    cleared_custom = await monitor.delete_cached_provider_health_targets(
+        [{"provider": "dashscope", "model_name": "custom-admin-model"}],
+        redis_client=fake_redis,
+    )
+    if not cleared_custom:
+        fail("Exact provider/model health target delete did not report a cleared custom model row")
+    if await monitor.get_cached_provider_health("dashscope", model_name="custom-admin-model", redis_client=fake_redis):
+        fail("Exact provider/model health target delete did not remove custom model cache row")
     await monitor.delete_cached_provider_health("dashscope", redis_client=fake_redis)
     await monitor.delete_cached_provider_health("seedance", redis_client=fake_redis)
     if await monitor.get_cached_provider_health("dashscope", model_name="wan2.6-i2v", redis_client=fake_redis):
@@ -220,6 +240,7 @@ async def main() -> int:
     print("  admin_health_cache_endpoint=1")
     print("  sweep_results=2")
     print("  sweep_target_model_checks=4")
+    print("  exact_model_cache_delete_checks=2")
     print("  default_model_sweep_checks=3")
     print("  api_config_response_provider_health=2")
     print("  provider_monitor_state=1")

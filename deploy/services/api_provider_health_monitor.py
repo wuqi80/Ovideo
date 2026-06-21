@@ -231,6 +231,30 @@ async def delete_cached_provider_health_many(
     return cleared
 
 
+async def delete_cached_provider_health_targets(
+    targets: Iterable[Any],
+    *,
+    redis_client: Any = None,
+) -> List[str]:
+    """Clear exact provider/model health cache entries.
+
+    Catalog-level clearing only knows about presets. Saved admin configs can
+    carry custom model names, so config writes also clear exact runtime targets.
+    """
+    client = redis_client if redis_client is not None else _redis_client
+    if not client:
+        return []
+
+    cleared: List[str] = []
+    for target in provider_health_cache_targets(targets=targets):
+        provider = target["provider"] or ""
+        key = provider_health_cache_key(provider, target.get("model_name"))
+        deleted = int(await client.delete(key) or 0)
+        if deleted:
+            cleared.append(key)
+    return cleared
+
+
 async def list_cached_provider_health(
     providers: Optional[Iterable[str]] = None,
     *,

@@ -7296,3 +7296,11 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile`, `check_route_contract.py`, `check_architecture_contracts.py`, and `git diff --check` passed.
   - Local Vite build remains blocked by the known missing Windows Rollup optional package `@rollup/rollup-win32-x64-msvc`; local `tsc --noEmit` remains blocked by existing project-wide TypeScript debt outside `AdminSettingsPage.tsx`.
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed, remote architecture contracts passed 10/10, and online smoke passed 9/9.
+
+## 2026-06-22 API Health Cache Invalidation Precision
+
+- Added exact provider/model health cache clearing in `deploy/services/api_provider_health_monitor.py`.
+- Updated `deploy/services/api_config_service.py` so API config create/update/delete and conflict repair invalidate both provider-level health and affected provider/model rows, including custom models and automatically disabled conflicting configs.
+- Strengthened `deploy/scripts/check_provider_health_monitor.py` and `deploy/scripts/check_admin_api_config_crud.py` to cover exact model cache deletion and CRUD-triggered provider/model invalidation.
+- Verification:
+  - Local `py_compile`, targeted health monitor contract, targeted admin API config CRUD contract, full architecture contracts, and `git diff --check` passed.

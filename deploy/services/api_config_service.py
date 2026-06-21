@@ -11,6 +11,7 @@ from dao_api_config import ApiConfigDAO
 from services.api_config_health_service import test_api_config_health
 from services.api_provider_health_monitor import (
     delete_cached_provider_health_many,
+    delete_cached_provider_health_targets,
     list_cached_provider_health,
     provider_health_cache_key,
     provider_health_monitor_state,
@@ -183,7 +184,7 @@ def _annotate_config_health_test(
         test["endpoint_matches_runtime"] = None
 
 
-async def _disable_conflicting_provider_configs(row: Any) -> List[str]:
+async def _disable_conflicting_provider_configs(row: Any) -> tuple[List[str], List[Any]]:
     """Keep at most one enabled keyed config per provider.
 
     Runtime env has one key/endpoint slot per provider, so multiple enabled
@@ -193,9 +194,10 @@ async def _disable_conflicting_provider_configs(row: Any) -> List[str]:
     provider = _row_provider(row)
     keep_id = _row_config_id(row)
     if not provider or not keep_id or not _row_enabled(row) or not _row_has_key(row):
-        return []
+        return [], []
 
     disabled: List[str] = []
+    disabled_rows: List[Any] = []
     for other in await ApiConfigDAO.list_all():
         other_id = _row_config_id(other)
         if not other_id or other_id == keep_id:
@@ -206,15 +208,43 @@ async def _disable_conflicting_provider_configs(row: Any) -> List[str]:
             continue
         await ApiConfigDAO.update(other_id, enabled=False)
         disabled.append(other_id)
-    return disabled
+        disabled_rows.append(other)
+    return disabled, disabled_rows
 
 
-async def _invalidate_provider_health(providers: Iterable[str]) -> None:
-    provider_ids = [provider for provider in providers if provider]
+def _provider_health_invalidation_targets(items: Iterable[Any]) -> tuple[List[str], List[Dict[str, Optional[str]]]]:
+    provider_ids: List[str] = []
+    targets: List[Dict[str, Optional[str]]] = []
+    seen_providers: set[str] = set()
+    seen_targets: set[tuple[str, Optional[str]]] = set()
+    for item in items:
+        if isinstance(item, str):
+            provider = normalize_provider(item)
+            model_name = None
+        else:
+            provider = normalize_provider(_row_provider(item))
+            model_name = _row_model_name(item) or None
+        if not provider:
+            continue
+        if provider not in seen_providers:
+            provider_ids.append(provider)
+            seen_providers.add(provider)
+        for target_model in (None, model_name):
+            target_key = (provider, target_model)
+            if target_key in seen_targets:
+                continue
+            seen_targets.add(target_key)
+            targets.append({"provider": provider, "model_name": target_model})
+    return provider_ids, targets
+
+
+async def _invalidate_provider_health(items: Iterable[Any]) -> None:
+    provider_ids, targets = _provider_health_invalidation_targets(items)
     if not provider_ids:
         return
     try:
         await delete_cached_provider_health_many(provider_ids)
+        await delete_cached_provider_health_targets(targets)
     except Exception as exc:
         logger.warning("Failed to invalidate provider health cache: %s", exc, exc_info=True)
 
@@ -286,9 +316,9 @@ async def create_api_config(
     )
     if not row:
         raise ApiConfigCreateFailed("Failed to create API config")
-    disabled_conflicts = await _disable_conflicting_provider_configs(row)
+    disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(row)
     env_refreshed = await reload_api_env() if reload_api_env else None
-    await _invalidate_provider_health([_row_provider(row)])
+    await _invalidate_provider_health([row, *disabled_conflict_rows])
     return {
         "success": True,
         "api_config": mask_api_config_row(row),
@@ -313,9 +343,9 @@ async def update_api_config(
     updated = await ApiConfigDAO.update(config_id, **fields)
     if not updated:
         raise ApiConfigNotFound("Config not found")
-    disabled_conflicts = await _disable_conflicting_provider_configs(updated)
+    disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(updated)
     env_refreshed = await reload_api_env() if reload_api_env else None
-    await _invalidate_provider_health([_row_provider(before), _row_provider(updated)])
+    await _invalidate_provider_health([before, updated, *disabled_conflict_rows])
     return {
         "success": True,
         "api_config": mask_api_config_row(updated),
@@ -334,7 +364,7 @@ async def delete_api_config(
     if not ok:
         raise ApiConfigNotFound("Config not found")
     env_refreshed = await reload_api_env() if reload_api_env else None
-    await _invalidate_provider_health([_row_provider(before)])
+    await _invalidate_provider_health([before])
     return {"success": True, "deleted": True, "env_refreshed": env_refreshed}
 
 
@@ -359,7 +389,7 @@ async def repair_api_config_provider_conflicts(
         grouped.setdefault(provider, []).append(row)
 
     conflicts: List[Dict[str, Any]] = []
-    touched_providers: List[str] = []
+    touched_items: List[Any] = []
     total_disabled = 0
     for provider, provider_rows in grouped.items():
         if len(provider_rows) <= 1:
@@ -371,7 +401,7 @@ async def repair_api_config_provider_conflicts(
             for config_id in disabled_ids:
                 await ApiConfigDAO.update(config_id, enabled=False)
         total_disabled += len(disabled_ids)
-        touched_providers.append(provider)
+        touched_items.extend(provider_rows)
         conflicts.append(
             {
                 "provider": provider,
@@ -385,8 +415,8 @@ async def repair_api_config_provider_conflicts(
     env_refreshed = None
     if total_disabled and not dry_run and reload_api_env:
         env_refreshed = await reload_api_env()
-    if touched_providers and not dry_run:
-        await _invalidate_provider_health(touched_providers)
+    if touched_items and not dry_run:
+        await _invalidate_provider_health(touched_items)
 
     return {
         "success": True,
