@@ -7169,3 +7169,11 @@
 - Local targeted pytest passed: `tests/test_api_provider_runtime_model_env.py` + `tests/test_minimax_audio_runtime.py`, 32 passed.
 - Local `scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=139`.
 - Local `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+
+### Deployment
+
+- Pushed commit `0b839e3` (`refactor(api-provider): centralize video legacy model aliases`) to `origin/refactor/v2`.
+- Ran `scripts/live_deploy_mvc2.sh`; the local wrapper timed out after service restart, then manual verification confirmed the server was active and the updated files were present.
+- Remote file sync check passed: `cluster_main.py` 985 lines, `admin_routes.py` 1502 lines, `dao/` 72 files.
+- Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+- Online smoke test against `https://mecha.one` passed: 9/9.
