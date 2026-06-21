@@ -4640,6 +4640,13 @@ def check_video_client_base_contract(root: Path) -> int:
         if "requests." in text or "import requests" in text:
             fail(f"JSON-only video client must route HTTP through external_api.video.base: {path.relative_to(root)}")
         checks += 1
+    sora2_text = (video_dir / "sora2.py").read_text(encoding="utf-8")
+    if 'label="Sora2 create"' not in sora2_text:
+        fail("Sora2 text-to-video create path must use shared request_json helper")
+    checks += 1
+    if sora2_text.count("requests.post(") != 1:
+        fail("Sora2 direct requests.post should remain only for multipart image upload")
+    checks += 1
     return checks
 
 

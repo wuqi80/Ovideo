@@ -395,16 +395,17 @@ def test_sora2_video_uses_runtime_model_env_when_request_omits_model(monkeypatch
     monkeypatch.setenv(endpoint_env, "https://sora2-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "sora2-runtime-video-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _Sora2TaskResponse()
 
-    monkeypatch.setattr(sora2_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = sora2_video.Sora2Client()
     result = client.create_video_task(prompt="move gently")
 
     assert result == {"id": "sora2-video-1"}
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://sora2-runtime.example.test/v1/videos"
     assert calls[0]["json"]["model"] == "sora2-runtime-video-model"
 
@@ -420,11 +421,11 @@ def test_sora2_video_explicit_non_default_model_overrides_runtime_model(monkeypa
     monkeypatch.setenv(endpoint_env, "https://sora2-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "sora2-runtime-video-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _Sora2TaskResponse()
 
-    monkeypatch.setattr(sora2_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = sora2_video.Sora2Client()
     client.create_video_task(
@@ -432,6 +433,7 @@ def test_sora2_video_explicit_non_default_model_overrides_runtime_model(monkeypa
         model="sora2-explicit-video-model",
     )
 
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://sora2-runtime.example.test/v1/videos"
     assert calls[0]["json"]["model"] == "sora2-explicit-video-model"
 
@@ -447,15 +449,16 @@ def test_sora2_video_legacy_model_env_maps_to_callable_default(monkeypatch):
     monkeypatch.setenv(endpoint_env, "https://sora2-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "sora-2")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _Sora2TaskResponse()
 
-    monkeypatch.setattr(sora2_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = sora2_video.Sora2Client()
     client.create_video_task(prompt="move gently")
 
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://sora2-runtime.example.test/v1/videos"
     assert calls[0]["json"]["model"] == sora2_video.DEFAULT_SORA2_VIDEO_MODEL
 

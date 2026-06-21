@@ -7401,3 +7401,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - First live deploy attempt hit a transient SCP connection reset during backend upload; rollback ran and `drama.service` stayed `active`.
   - Retry live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=160`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 Sora2 JSON Create Request Consolidation
+
+- Updated `deploy/external_api/video/sora2.py` so text-to-video task creation uses shared `external_api.video.base.request_json()`.
+- Kept the Sora2 image-to-video multipart upload branch on direct `requests.post()`, because it carries file upload semantics.
+- Updated Sora2 runtime-model tests to patch the shared video request helper instead of the old direct `requests.post()` path.
+- Strengthened `deploy/scripts/check_route_contract.py` so Sora2 must use the shared helper for JSON create requests and can keep only one direct `requests.post()` for multipart upload.
+- Verification:
+  - Local `pytest deploy/tests/test_video_client_base.py deploy/tests/test_api_provider_runtime_model_env.py -q` passed with 29 tests.
+  - Local `py_compile`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local route contract passed with `video_client_base_checks=60`.

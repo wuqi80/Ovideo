@@ -152,7 +152,18 @@ class Sora2Client:
                     "size": size,
                     "seconds": seconds
                 }
-                response = requests.post(url, headers=headers, json=data, timeout=30, **self._request_kwargs)
+                result = request_json(
+                    "POST",
+                    url,
+                    headers=headers,
+                    json=data,
+                    timeout=30,
+                    request_kwargs=self._request_kwargs,
+                    logger=logger,
+                    label="Sora2 create",
+                )
+                logger.info(f"鉁?Sora2 浠诲姟鍒涘缓鎴愬姛: {result.get('id')}")
+                return result
             
             response.raise_for_status()
             result = response.json()
