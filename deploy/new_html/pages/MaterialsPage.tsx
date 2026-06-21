@@ -12,6 +12,7 @@ import {
   createAsset as apiCreateAsset,
 } from '../services/assetMutationService';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
+import { waitForIdle } from '../utils/idleScheduler';
 import { Image as ImageIcon, Loader } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { MaterialLibrary, Material, FileVersion, StoryboardItemDB } from '../types';
@@ -81,19 +82,6 @@ function mergeMaterialsStoryboardItems(existing: StoryboardItemDB[], incoming: S
   return sortMaterialsStoryboardItems(Array.from(byId.values()));
 }
 
-function waitForStoryboardIdle(): Promise<void> {
-  return new Promise(resolve => {
-    const requestIdleCallback = typeof window !== 'undefined'
-      ? (window as any).requestIdleCallback
-      : undefined;
-    if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(() => resolve(), { timeout: 1200 });
-      return;
-    }
-    globalThis.setTimeout(resolve, 0);
-  });
-}
-
 export const MaterialsPage: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -124,7 +112,7 @@ export const MaterialsPage: React.FC = () => {
     const loadRemainingMaterialsStoryboardPages = async (offset: number, total: number) => {
       let nextOffset = offset;
       while (active && nextOffset < total) {
-        await waitForStoryboardIdle();
+        await waitForIdle();
         if (!active) return;
         try {
           const res = await getStoryboardItems(currentEpisodeId, scriptId, {

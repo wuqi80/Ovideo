@@ -32,6 +32,7 @@ function resolveMinimaxVoiceId(modelId?: string | null): string {
 }
 import { parseBoundAssetTags } from '../utils/episodeAdapters';
 import { stripDialogueMarkers, extractSpokenDialogue } from '../utils/scriptPipelineParsers';
+import { waitForIdle } from '../utils/idleScheduler';
 import { VoiceSidebar } from '../components/audio/VoiceSidebar';
 import { DubbingPanel, type DubbingPanelHandle } from '../components/audio/DubbingPanel';
 import { MultiTrackTimeline } from '../components/audio/MultiTrackTimeline';
@@ -120,19 +121,6 @@ function mergeAudioStageStoryboardItems(existing: StoryboardItemDB[], incoming: 
   return sortAudioStageStoryboardItems(Array.from(byId.values()));
 }
 
-function waitForStoryboardIdle(): Promise<void> {
-  return new Promise(resolve => {
-    const requestIdleCallback = typeof window !== 'undefined'
-      ? (window as any).requestIdleCallback
-      : undefined;
-    if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(() => resolve(), { timeout: 1200 });
-      return;
-    }
-    globalThis.setTimeout(resolve, 0);
-  });
-}
-
 export const AudioStagePage: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -210,7 +198,7 @@ export const AudioStagePage: React.FC = () => {
     const loadRemainingAudioStageStoryboardPages = async (offset: number, total: number) => {
       let nextOffset = offset;
       while (active && nextOffset < total) {
-        await waitForStoryboardIdle();
+        await waitForIdle();
         if (!active) return;
         try {
           const res = await getStoryboardItems(currentEpisodeId, scriptId, {

@@ -16,6 +16,7 @@ import { LayoutGrid, Loader, ChevronDown, ChevronRight, GripHorizontal } from 'l
 import { TimelineTrack, type TimelineClip } from '../components/TimelineTrack';
 import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
+import { runWhenIdle } from '../utils/idleScheduler';
 
 const STORYBOARD_INITIAL_SHOT_COUNT = 10;
 const GenerationPage = React.lazy(() => import('../components/GenerationPage').then(m => ({ default: m.GenerationPage })));
@@ -51,18 +52,21 @@ export const StoryboardGenPage: React.FC = () => {
   // 导致在「素材」改了人物绑定/在别处生成了新图后，跳到分镜仍显示会话缓存的旧数据
   //（用户反馈「导入到分镜始终只有这 8 个、没有新的」的真因）。改用 forceReload 拉最新。
   useEffect(() => {
+    let active = true;
+    let cancelIdle = () => {};
     setVisibleEntityShotCount(STORYBOARD_INITIAL_SHOT_COUNT);
     Promise.all([
       loadStoryboardItemsPage({ limit: STORYBOARD_INITIAL_SHOT_COUNT, includeTotal: true }),
       forceReloadSlices('script'),
     ]).then(() => {
+      if (!active) return;
       const run = () => loadSlicesQuiet('assets');
-      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(run, { timeout: 1500 });
-      } else {
-        setTimeout(run, 0);
-      }
+      cancelIdle = runWhenIdle(run, { timeout: 1500 });
     });
+    return () => {
+      active = false;
+      cancelIdle();
+    };
   }, [forceReloadSlices, loadSlicesQuiet, loadStoryboardItemsPage, selectedScriptId]);
 
   const [visibleEntityShotCount, setVisibleEntityShotCount] = useState(STORYBOARD_INITIAL_SHOT_COUNT);

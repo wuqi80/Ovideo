@@ -1040,6 +1040,10 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         (router_text, 'payload["fallback_scope"] = "episode"', "storyboard backend fallback scope marker"),
         (router_test_text, "test_storyboard_items_fallback_for_stale_script_id", "storyboard backend stale script fallback test"),
         (router_test_text, "test_storyboard_items_do_not_fallback_for_valid_empty_script", "storyboard backend valid empty script test"),
+        (page_text, "import { runWhenIdle } from '../utils/idleScheduler';", "StoryboardGenPage uses shared idle scheduler"),
+        (page_text, "cancelIdle = runWhenIdle(run, { timeout: 1500 })", "StoryboardGenPage idle asset preload can be cancelled"),
+        (video_page_text, "import { runWhenIdle } from '../utils/idleScheduler';", "VideoGenPage uses shared idle scheduler"),
+        (video_page_text, "return runWhenIdle(loadSupportSlices, { timeout: 1500 })", "VideoGenPage idle support slice preload can be cancelled"),
     ]
     missing = [f"{label}: missing {snippet}" for text, snippet, label in required_snippets if snippet not in text]
     if missing:
@@ -1143,7 +1147,7 @@ def check_audio_stage_lightweight_storyboard_contract(root: Path) -> int:
         "includeTotal: true": "AudioStagePage total-aware initial audio-stage field query",
         "offset: nextOffset": "AudioStagePage background paged audio-stage field query",
         "loadRemainingAudioStageStoryboardPages": "AudioStagePage idle background storyboard completion",
-        "waitForStoryboardIdle()": "AudioStagePage idle background paging",
+        "waitForIdle()": "AudioStagePage shared idle background paging",
         "normalizeAudioStageStoryboardItem": "AudioStagePage audio-stage normalizer",
         "updateAudioStageStoryboardItem": "AudioStagePage local patch helper",
         "forceReloadSlices('assets', 'characterVoices', 'script', 'audioTracks')": "AudioStagePage non-storyboard force refresh",
@@ -1190,7 +1194,7 @@ def check_materials_lightweight_storyboard_contract(root: Path) -> int:
         "includeTotal: true": "MaterialsPage total-aware initial material field query",
         "offset: nextOffset": "MaterialsPage background paged material field query",
         "loadRemainingMaterialsStoryboardPages": "MaterialsPage idle background storyboard completion",
-        "waitForStoryboardIdle()": "MaterialsPage idle background paging",
+        "waitForIdle()": "MaterialsPage shared idle background paging",
         "normalizeMaterialsStoryboardItem": "MaterialsPage material normalizer",
         "updateMaterialsStoryboardItem": "MaterialsPage local patch helper",
         "forceReloadSlices('assets', 'script')": "MaterialsPage non-storyboard force refresh",
@@ -3988,17 +3992,23 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     task_context_path = root / "new_html" / "contexts" / "TaskContext.tsx"
     workspace_context_path = root / "new_html" / "contexts" / "WorkspaceContext.tsx"
     sse_hook_path = root / "new_html" / "hooks" / "useSSEInvalidation.ts"
+    idle_scheduler_path = root / "new_html" / "utils" / "idleScheduler.ts"
     app_text = app_path.read_text(encoding="utf-8")
     task_context_text = task_context_path.read_text(encoding="utf-8")
     workspace_context_text = workspace_context_path.read_text(encoding="utf-8")
-    required_source = "\n".join([app_text, task_context_text, workspace_context_text])
+    idle_scheduler_text = idle_scheduler_path.read_text(encoding="utf-8")
+    required_source = "\n".join([app_text, task_context_text, workspace_context_text, idle_scheduler_text])
     required_snippets = [
+        "import { runWhenIdle } from './utils/idleScheduler';",
+        "export function runWhenIdle(",
+        "export function waitForIdle(",
         "const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));",
         "const DeferredCrmHost: React.FC = () => {",
-        "requestIdleCallback",
+        "runWhenIdle(() => setMounted(true), { timeout: 1500, fallbackDelayMs: 300 })",
         "<DeferredCrmHost />",
         "const GlobalToast = React.lazy(() => import('./components/GlobalToast').then(m => ({ default: m.GlobalToast })));",
         "const DeferredGlobalToastWithNav: React.FC = () => {",
+        "runWhenIdle(() => setMounted(true), { timeout: 1200, fallbackDelayMs: 250 })",
         "<DeferredGlobalToastWithNav />",
         "import('../services/taskControlService')",
         "import('../services/globalTaskManager')",
@@ -4013,6 +4023,8 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         (app_text, 'import * as crmUI from "./admin/crmUI";', app_path),
         (app_text, "import { GlobalToast } from './components/GlobalToast';", app_path),
         (app_text, 'import { GlobalToast } from "./components/GlobalToast";', app_path),
+        (app_text, "requestIdleCallback", app_path),
+        (app_text, "cancelIdleCallback", app_path),
         (app_text, "useSSEInvalidation", app_path),
         (app_text, "SSEInvalidationProvider", app_path),
         (task_context_text, "from '../services/globalTaskManager';", task_context_path),

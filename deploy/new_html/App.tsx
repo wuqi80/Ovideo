@@ -24,6 +24,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useSear
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskProvider } from './contexts/TaskContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
+import { runWhenIdle } from './utils/idleScheduler';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,13 +103,7 @@ const DeferredGlobalToastWithNav: React.FC = () => {
             }
         } catch {}
 
-        const mount = () => setMounted(true);
-        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-            const id = (window as any).requestIdleCallback(mount, { timeout: 1200 });
-            return () => (window as any).cancelIdleCallback?.(id);
-        }
-        const id = window.setTimeout(mount, 250);
-        return () => window.clearTimeout(id);
+        return runWhenIdle(() => setMounted(true), { timeout: 1200, fallbackDelayMs: 250 });
     }, []);
 
     if (!mounted) return null;
@@ -126,13 +121,7 @@ const DeferredGlobalToastWithNav: React.FC = () => {
 const DeferredCrmHost: React.FC = () => {
     const [mounted, setMounted] = React.useState(false);
     React.useEffect(() => {
-        const mount = () => setMounted(true);
-        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-            const id = (window as any).requestIdleCallback(mount, { timeout: 1500 });
-            return () => (window as any).cancelIdleCallback?.(id);
-        }
-        const id = window.setTimeout(mount, 300);
-        return () => window.clearTimeout(id);
+        return runWhenIdle(() => setMounted(true), { timeout: 1500, fallbackDelayMs: 300 });
     }, []);
 
     if (!mounted) return null;

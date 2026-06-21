@@ -6874,3 +6874,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`, including `audio_stage_lightweight_storyboard_checks=15` and `materials_lightweight_storyboard_checks=15`.
 - Local `vite build` could not run because the Windows `node_modules` tree is still missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package.
 - Local `tsc --noEmit` still reports pre-existing project type errors outside this change; the new progressive loading code was not listed.
+
+## 2026-06-21 Frontend Idle Scheduler Consolidation
+
+### Changes
+
+- Added `deploy/new_html/utils/idleScheduler.ts` with shared `runWhenIdle()` and `waitForIdle()` helpers.
+- Replaced duplicated `requestIdleCallback` fallback logic in `deploy/new_html/App.tsx`, `VideoGenPage.tsx`, `StoryboardGenPage.tsx`, `MaterialsPage.tsx`, and `AudioStagePage.tsx`.
+- `StoryboardGenPage` now cancels the idle asset preload if the page unmounts before the deferred callback runs.
+- Strengthened `deploy/scripts/check_route_contract.py` so App shell, storyboard, video, material, and audio workflows keep using the shared idle scheduler.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `storyboard_paged_reload_checks=33`, `frontend_app_shell_chunk_checks=36`, and `materials/audio lightweight checks=15/15`.

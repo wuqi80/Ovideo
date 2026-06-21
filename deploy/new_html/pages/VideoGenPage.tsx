@@ -19,6 +19,7 @@ import {
 import { estimateDurationMs } from '../utils/durationMapping';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { secureApiUrl } from '../services/httpClient';
+import { runWhenIdle } from '../utils/idleScheduler';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 const VideoPage = React.lazy(() => import('../components/VideoPage').then(m => ({ default: m.VideoPage })));
@@ -55,13 +56,7 @@ export const VideoGenPage: React.FC = () => {
     const loadSupportSlices = () => {
       void loadSlicesQuiet('audioTracks', 'characterVoices', 'assets');
     };
-    if (typeof window === 'undefined') {
-      loadSupportSlices();
-    } else if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(loadSupportSlices, { timeout: 1500 });
-    } else {
-      window.setTimeout(loadSupportSlices, 0);
-    }
+    return runWhenIdle(loadSupportSlices, { timeout: 1500 });
   }, [loadStoryboardItemsPage, loadSlicesQuiet, selectedScriptId]);
   const [showImportPanel, setShowImportPanel] = useState(true);
   const [importing, setImporting] = useState(false);
