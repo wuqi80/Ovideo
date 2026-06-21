@@ -5,7 +5,11 @@
 import pytest
 import asyncio
 import json
+import os
 from httpx import AsyncClient, ASGITransport
+
+
+os.environ.setdefault("ALLOW_DEV_ADMIN_PASSWORD", "true")
 
 
 @pytest.fixture(scope="session")

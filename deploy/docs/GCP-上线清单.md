@@ -168,16 +168,19 @@ sudo ln -s /etc/nginx/sites-available/drama /etc/nginx/sites-enabled/ && sudo ng
 
 ---
 
-## 8. ⚠️ 安全：改默认管理员密码（上线必做）
+## 8. ⚠️ 安全：配置管理员密码（上线必做）
 
-默认 `admin / admin123` —— **任何人都能进后台，必须改**：
+生产环境必须通过 systemd 环境变量显式注入强管理员密码；源码不再默认接受
+`admin / admin123`：
 
 ```bash
-# 方式一：改代码里的默认密码（cluster_main.py DEFAULT_USERS['admin']）后重启
-# 方式二（推荐）：上线后用 admin 登录 → 后台「账号管理」给 admin 重置一个强密码
+sudo systemctl edit drama.service
+# Environment="ADMIN_PASSWORD=强密码"
+sudo systemctl restart drama.service
 ```
 
-> `require_admin` 内置允许 `admin / lllsdhr`，启动时 `seed_admin_roles` 自动把它们的角色校正为 admin/super_admin —— **admin 开箱即可进后台，无需手动改库**。
+仅本地开发可显式设置 `ALLOW_DEV_ADMIN_PASSWORD=true` 后使用临时开发弱口令
+`admin / admin123`。
 
 ---
 
@@ -190,7 +193,7 @@ sudo ln -s /etc/nginx/sites-available/drama /etc/nginx/sites-enabled/ && sudo ng
 - [ ] 后台 `/admin` 各面板能打开（账号/积分/素材/审计/系统设置）
 - [ ] 「系统设置 › API 厂商配置」把缺的真实密钥补上、点测试通过
 - [ ] 新建一个项目 → 跑一遍：剧本 → 设计出图（**默认化神，走 API 不卡**）→ 配音 → 分镜 → 视频
-- [ ] 改完默认 admin 密码
+- [ ] 已通过 systemd 环境变量配置强 `ADMIN_PASSWORD`
 
 ---
 

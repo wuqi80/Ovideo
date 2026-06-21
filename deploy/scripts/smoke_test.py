@@ -3,13 +3,14 @@
 
 用法： python smoke_test.py [BASE_URL] [ADMIN_PASSWORD]
   BASE_URL 默认 http://127.0.0.1:6006
-  ADMIN_PASSWORD 默认 admin123（线上设了强密码则传入）
+  ADMIN_PASSWORD 默认读取环境变量 ADMIN_PASSWORD；未设置时仅回退到本地开发弱口令 admin123。
+  服务端只有显式设置 ALLOW_DEV_ADMIN_PASSWORD=true 时才接受该开发弱口令。
 退出码 0=全过，非0=有失败。
 """
-import sys, json, ssl, time, hmac, hashlib, base64, urllib.request, urllib.error
+import os, sys, json, ssl, time, hmac, hashlib, base64, urllib.request, urllib.error
 
 BASE = sys.argv[1].rstrip('/') if len(sys.argv) > 1 else "http://127.0.0.1:6006"
-ADMIN_PW = sys.argv[2] if len(sys.argv) > 2 else "admin123"
+ADMIN_PW = sys.argv[2] if len(sys.argv) > 2 else os.getenv("ADMIN_PASSWORD", "admin123")
 CTX = ssl.create_default_context()
 results = []
 

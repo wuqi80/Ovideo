@@ -560,14 +560,16 @@ redis-cli keys "comfyui:task:*"         # 查看任务键
 
 ---
 
-## 12. 默认账号
+## 12. 管理员账号
 
-系统预置以下账号（首次启动自动创建）：
+生产环境必须通过环境变量显式配置管理员密码：
 
-| 用户名 | 密码 | 角色 |
-|--------|------|------|
-| admin | admin123 | 管理员 |
-| lllsdhr | <DB_PASSWORD> | 超级管理员 |
+```bash
+ADMIN_PASSWORD=<强密码，至少 8 位>
+```
+
+如果 `ADMIN_PASSWORD` 未配置，内置 `admin` 登录会被禁用。仅本地开发可显式设置
+`ALLOW_DEV_ADMIN_PASSWORD=true` 后使用临时开发弱口令 `admin / admin123`。
 
 ---
 

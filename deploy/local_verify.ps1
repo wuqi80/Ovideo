@@ -7,7 +7,13 @@ if ($health.status -ne "healthy") {
     throw "Health check failed"
 }
 
-$loginBody = @{ username = "admin"; password = "admin123" } | ConvertTo-Json
+$AdminPassword = $env:ADMIN_PASSWORD
+if (-not $AdminPassword) {
+    $AdminPassword = "admin123"
+    Write-Host "ADMIN_PASSWORD is not set; using local development password. The server must set ALLOW_DEV_ADMIN_PASSWORD=true."
+}
+
+$loginBody = @{ username = "admin"; password = $AdminPassword } | ConvertTo-Json
 $login = Invoke-RestMethod -Uri "http://localhost:6006/api/login" -Method Post -ContentType "application/json" -Body $loginBody
 if (-not $login.token) {
     throw "Login did not return token"

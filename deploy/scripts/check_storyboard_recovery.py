@@ -37,7 +37,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=os.getenv("BASE_URL", "http://127.0.0.1:6006"))
     parser.add_argument("--username", default=os.getenv("ADMIN_USERNAME", "admin"))
-    parser.add_argument("--password", default=os.getenv("ADMIN_PASSWORD", "admin123"))
+    parser.add_argument(
+        "--password",
+        default=os.getenv("ADMIN_PASSWORD", "admin123"),
+        help=(
+            "Admin password. Defaults to ADMIN_PASSWORD; falls back to the local "
+            "development password only when the server has ALLOW_DEV_ADMIN_PASSWORD=true."
+        ),
+    )
     parser.add_argument("--project-id", default=os.getenv("PROJECT_ID", ""))
     parser.add_argument("--episode-id", default=os.getenv("EPISODE_ID", ""))
     parser.add_argument("--limit", type=int, default=10)

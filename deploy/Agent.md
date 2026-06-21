@@ -7338,3 +7338,13 @@
 - Live deploy to `https://mecha.one/`: remote Vite build passed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
 - Server sync check matched current local code: `cluster_main.py` 985 lines, `admin_routes.py` 1502 lines, `dao/` 36 recursive Python files plus 28 legacy root `dao_*.py` files.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 Built-in Admin Password Hardening
+
+### Changes
+
+- Removed the implicit `admin / admin123` fallback from `cluster_main.py`; built-in admin login now requires an explicit `ADMIN_PASSWORD`.
+- Added an explicit local-development escape hatch: `ALLOW_DEV_ADMIN_PASSWORD=true` enables the temporary `admin / admin123` password only for development/test environments.
+- Built-in admin password values shorter than 8 characters now disable the built-in login path instead of silently accepting a weak password.
+- Updated local/test verification scripts and deployment docs to prefer `ADMIN_PASSWORD` and describe the development-only fallback.
+- Strengthened `scripts/check_route_contract.py` so `ADMIN_PASSWORD` cannot regain an `admin123` default.

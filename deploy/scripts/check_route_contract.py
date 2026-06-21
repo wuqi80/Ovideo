@@ -1420,6 +1420,11 @@ def check_password_minimum_contract(root: Path) -> int:
         (root / "admin_routes.py", "len(body.new_password) < 8"),
         (root / "routers" / "auth_legacy.py", "len(user_data.password) < 8"),
         (root / "routers" / "admin_compat.py", "len(str(password)) < 8"),
+        (root / "cluster_main.py", "def _load_builtin_users() -> dict[str, str]:"),
+        (root / "cluster_main.py", 'os.getenv("ADMIN_PASSWORD")'),
+        (root / "cluster_main.py", 'if _env_bool("ALLOW_DEV_ADMIN_PASSWORD", False):'),
+        (root / "cluster_main.py", "len(admin_password) < 8"),
+        (root / "cluster_main.py", "Built-in admin login disabled because ADMIN_PASSWORD is not configured"),
     ]
     for path, snippet in required_snippets:
         text = path.read_text(encoding="utf-8")
@@ -1436,11 +1441,21 @@ def check_password_minimum_contract(root: Path) -> int:
         root / "routers" / "auth_legacy.py",
         root / "routers" / "admin_compat.py",
         root / "schemas" / "auth.py",
+        root / "cluster_main.py",
     ]:
         text = path.read_text(encoding="utf-8")
         for snippet in forbidden_snippets:
             if snippet in text:
                 fail(f"Forbidden password minimum contract snippet in {path.relative_to(root)}: {snippet}")
+    cluster_main_text = (root / "cluster_main.py").read_text(encoding="utf-8")
+    for snippet in [
+        "os.getenv('ADMIN_PASSWORD', 'admin123')",
+        'os.getenv("ADMIN_PASSWORD", "admin123")',
+        "os.environ.get('ADMIN_PASSWORD', 'admin123')",
+        'os.environ.get("ADMIN_PASSWORD", "admin123")',
+    ]:
+        if snippet in cluster_main_text:
+            fail(f"Forbidden built-in admin default password in cluster_main.py: {snippet}")
     return len(required_snippets)
 
 

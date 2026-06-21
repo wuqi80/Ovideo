@@ -753,11 +753,25 @@ jwt_auth.init()
 # 在线用户追踪（仅用于 admin 面板显示，不用于认证）
 _online_users: dict = {}
 
-# 内置账号：仅保留 admin（DB 同步账号）。
-# 生产应设强密码环境变量覆盖：ADMIN_PASSWORD。
-DEFAULT_USERS = {
-    'admin': os.getenv('ADMIN_PASSWORD', 'admin123'),
-}
+def _load_builtin_users() -> dict[str, str]:
+    """Load optional built-in admin credentials from explicit environment config."""
+    admin_password = (os.getenv("ADMIN_PASSWORD") or "").strip()
+    if admin_password:
+        if len(admin_password) < 8:
+            logger.error("ADMIN_PASSWORD is set but shorter than 8 characters; built-in admin login disabled")
+            return {}
+        return {"admin": admin_password}
+
+    if _env_bool("ALLOW_DEV_ADMIN_PASSWORD", False):
+        logger.warning("Development admin password enabled by ALLOW_DEV_ADMIN_PASSWORD; do not use in production")
+        return {"admin": "admin123"}
+
+    logger.info("Built-in admin login disabled because ADMIN_PASSWORD is not configured")
+    return {}
+
+
+# 内置账号：仅作为 DB 登录路径的兼容兜底；生产必须显式配置 ADMIN_PASSWORD。
+DEFAULT_USERS = _load_builtin_users()
 
 # 超级管理员账号（历史保留，不再注册内置密码）
 SUPER_ADMIN = 'admin'
