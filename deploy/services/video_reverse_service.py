@@ -7,7 +7,7 @@ Video Reverse Prompt Service
 
 外部依赖：
 - ffmpeg 命令行（系统 PATH，或环境变量 FFMPEG_BIN 指定）
-- GEMINI_TEXT_API_KEY（用于视觉理解；缺失时回退为只生成结构化骨架，不调用大模型）
+- provider=gemini-text 的运行时配置（用于视觉理解；缺失时回退为只生成结构化骨架，不调用大模型）
 
 详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
 """

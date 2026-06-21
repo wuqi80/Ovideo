@@ -9,8 +9,8 @@ DashScope 视频生成共享异步客户端
   - (Wan2.6 现已有专用客户端 wan2_dashscope_api.py，本模块不重复)
 
 三家完全共享：
-  - Endpoint: https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis
-  - Auth:     Authorization: Bearer $DASHSCOPE_API_KEY  +  X-DashScope-Async: enable
+  - Endpoint: 由 provider runtime registry/admin 配置解析
+  - Auth:     Authorization: Bearer <runtime key> + X-DashScope-Async: enable
   - 异步轮询: POST 创建 task_id → GET /api/v1/tasks/{task_id}
   - 状态:     PENDING → RUNNING → SUCCEEDED / FAILED / CANCELED / UNKNOWN
   - task_id 有效期 24h

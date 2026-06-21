@@ -1,5 +1,24 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 Provider Endpoint Single-Source Contract
+
+### Changes
+
+- Updated stale provider docs in:
+  - `external_api/video/dashscope.py`
+  - `services/video_reverse_service.py`
+- Strengthened `scripts/check_route_contract.py` with `provider_endpoint_single_source_checks`:
+  - Third-party provider hostnames such as laozhang, DeepSeek, Gemini, Volcengine Ark, DashScope, and MiniMax must be centralized in `services/api_provider_registry.py`.
+  - Runtime clients, routers, and services are blocked from reintroducing hardcoded provider endpoint domains.
+- This supports the upcoming self-hosted API replacement work: switching providers should happen through the registry/admin runtime config instead of scattered URL edits.
+
+### Verification
+
+- Local `git diff --check`: passed.
+- Local `py_compile` for `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed, including `provider_endpoint_single_source_checks`.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-21 Frontend Network Boundary Contract
 
 ### Changes

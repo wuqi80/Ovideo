@@ -2748,6 +2748,54 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     return checks
 
 
+def check_provider_endpoint_single_source_contract(root: Path) -> int:
+    """Third-party provider hostnames must live in the provider registry only."""
+    registry = root / "services" / "api_provider_registry.py"
+    allowed_paths = {registry}
+    provider_domains = [
+        "api.laozhang.ai",
+        "api.deepseek.com",
+        "generativelanguage.googleapis.com",
+        "ark.cn-beijing.volces.com",
+        "dashscope.aliyuncs.com",
+        "api.minimaxi.com",
+    ]
+
+    checks = 0
+    registry_text = registry.read_text(encoding="utf-8")
+    for domain in provider_domains:
+        if domain not in registry_text:
+            fail(f"Provider endpoint registry is missing expected domain: {domain}")
+        checks += 1
+
+    scan_roots = [
+        root / "external_api",
+        root / "routers",
+        root / "services",
+    ]
+    scan_files: list[Path] = [root / "cluster_main.py", root / "api_routes.py"]
+    for scan_root in scan_roots:
+        scan_files.extend(scan_root.rglob("*.py"))
+
+    violations: list[str] = []
+    for path in sorted(set(scan_files)):
+        if not path.exists() or path in allowed_paths or "__pycache__" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for domain in provider_domains:
+            if domain in text:
+                rel = path.relative_to(root)
+                violations.append(f"{rel}: hardcoded provider endpoint domain {domain}")
+            checks += 1
+
+    if violations:
+        fail(
+            "Provider endpoint domains must stay centralized in services/api_provider_registry.py:\n"
+            + "\n".join(violations)
+        )
+    return checks
+
+
 def check_frontend_ai_proxy_contract(root: Path) -> int:
     """Frontend AI text calls must route through backend provider management."""
     new_html = root / "new_html"
@@ -4313,6 +4361,7 @@ def main() -> int:
     audio_stage_lightweight_storyboard_checks = check_audio_stage_lightweight_storyboard_contract(root)
     materials_lightweight_storyboard_checks = check_materials_lightweight_storyboard_contract(root)
     api_provider_runtime_model_checks = check_api_provider_runtime_model_contract(root)
+    provider_endpoint_single_source_checks = check_provider_endpoint_single_source_contract(root)
     frontend_ai_proxy_checks = check_frontend_ai_proxy_contract(root)
     frontend_http_client_checks = check_frontend_http_client_contract(root)
     service_mapper_purity_checks = check_service_mapper_purity_contract(root)
@@ -4381,6 +4430,7 @@ def main() -> int:
     print(f"  audio_stage_lightweight_storyboard_checks={audio_stage_lightweight_storyboard_checks}")
     print(f"  materials_lightweight_storyboard_checks={materials_lightweight_storyboard_checks}")
     print(f"  api_provider_runtime_model_checks={api_provider_runtime_model_checks}")
+    print(f"  provider_endpoint_single_source_checks={provider_endpoint_single_source_checks}")
     print(f"  frontend_ai_proxy_checks={frontend_ai_proxy_checks}")
     print(f"  frontend_http_client_checks={frontend_http_client_checks}")
     print(f"  service_mapper_purity_checks={service_mapper_purity_checks}")
