@@ -7274,11 +7274,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 ## 2026-06-22 CORS Allowlist Defaults
 
 - Unified CORS defaults in `deploy/cluster_config.py` and legacy `deploy/config.py` around an explicit allowlist: `https://mecha.one`, backend local dev, and Vite local dev origins.
+- Aligned `deploy/cluster_config_generated.py` and the config template emitted by `deploy/auto_deploy_cluster.py` to the same allowlist helper, so generated configs cannot drift back to local-only defaults.
 - Added `parse_cors_allow_origins()` so `CORS_ALLOW_ORIGINS` remains the single runtime override mechanism.
 - Updated `deploy/scripts/live_deploy_mvc2.sh` to sync `cluster_config.py` and `config.py`; otherwise server deployments could miss security/config changes.
+- Updated `deploy/scripts/live_deploy_mvc2.sh` to also sync `cluster_config_generated.py` and `auto_deploy_cluster.py`.
 - Updated `deploy/docs/deployment.md` to remove the obsolete `ALLOW_ORIGINS = ["*"]` guidance.
 - Strengthened `deploy/scripts/check_route_contract.py` with a CORS allowlist contract that rejects wildcard CORS defaults and requires the official domain.
 - Verification:
-  - Local CORS parser check confirmed both config modules default to the same explicit origin list and contain no wildcard CORS default.
+  - Local CORS parser check confirmed active config modules, generated config, and auto-deploy template default to the explicit origin list and contain no wildcard CORS default.
   - Local `git diff --check`, deploy script syntax check, route contract, and architecture contract passed.
   - Live deploy to `https://mecha.one/` passed; remote architecture contracts passed 10/10, online smoke passed 9/9, and remote `cluster_config.py`/`config.py` report no wildcard CORS origin.

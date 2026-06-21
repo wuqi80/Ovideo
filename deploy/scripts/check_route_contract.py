@@ -1470,6 +1470,12 @@ def check_cors_allowlist_contract(root: Path) -> int:
         (root / "config.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
         (root / "config.py", '"https://mecha.one,"'),
         (root / "config.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
+        (root / "cluster_config_generated.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
+        (root / "cluster_config_generated.py", '"https://mecha.one,"'),
+        (root / "cluster_config_generated.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
+        (root / "auto_deploy_cluster.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
+        (root / "auto_deploy_cluster.py", '"https://mecha.one,"'),
+        (root / "auto_deploy_cluster.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
         (root / "cluster_main.py", "allow_origins=SystemConfig.ALLOW_ORIGINS"),
     ]
     checks = 0
@@ -1485,7 +1491,13 @@ def check_cors_allowlist_contract(root: Path) -> int:
         'allow_origins=["*"]',
         "allow_origins=['*']",
     ]
-    for path in [root / "cluster_config.py", root / "config.py", root / "cluster_main.py"]:
+    for path in [
+        root / "cluster_config.py",
+        root / "config.py",
+        root / "cluster_config_generated.py",
+        root / "auto_deploy_cluster.py",
+        root / "cluster_main.py",
+    ]:
         text = path.read_text(encoding="utf-8")
         for snippet in forbidden_snippets:
             if snippet in text:
@@ -4477,7 +4489,9 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     required_snippets = [
         '"dao"',
         '"cluster_config.py"',
+        '"cluster_config_generated.py"',
         '"config.py"',
+        '"auto_deploy_cluster.py"',
         '"ARCHITECTURE.md"',
         '"Agent.md"',
         '"login.html"',

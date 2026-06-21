@@ -20,7 +20,9 @@ fi
 FILES=(
   "cluster_main.py"
   "cluster_config.py"
+  "cluster_config_generated.py"
   "config.py"
+  "auto_deploy_cluster.py"
   "admin_routes.py"
   "admin_api_config_routes.py"
   "api_routes.py"

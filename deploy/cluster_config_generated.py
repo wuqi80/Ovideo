@@ -166,6 +166,20 @@ class MonitorConfig:
         "nodes_active"
     ]
 
+DEFAULT_CORS_ALLOW_ORIGINS = (
+    "https://mecha.one,"
+    "http://localhost:6006,"
+    "http://127.0.0.1:6006,"
+    "http://localhost:5173,"
+    "http://127.0.0.1:5173"
+)
+
+
+def parse_cors_allow_origins(value: str | None = None) -> list[str]:
+    raw = value if value is not None else os.getenv("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ALLOW_ORIGINS)
+    return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+
+
 class SystemConfig:
     HOST = "0.0.0.0"
     PORT = 6006
@@ -177,7 +191,7 @@ class SystemConfig:
         "description": "分布式图像生成服务",
         "version": "2.0.0"
     }
-    ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:6006,http://127.0.0.1:6006").split(",") if o.strip()]
+    ALLOW_ORIGINS = parse_cors_allow_origins()
     SESSION_TIMEOUT = 86400
     UPLOAD_DIR = "uploads"
     OUTPUT_DIR = "outputs"
