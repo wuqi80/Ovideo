@@ -4,6 +4,14 @@
 工作目录：`D:\Codex\Drama`  
 应用代码目录：`D:\Codex\Drama\deploy`
 
+## 2026-06-21 架构守卫记录
+
+- 前端网络请求边界补强：
+  - `deploy/scripts/check_route_contract.py` 继续禁止业务文件直接 `fetch()`，只能通过 `deploy/new_html/services/httpClient.ts`。
+  - 新增 `XMLHttpRequest` 边界：只允许 `deploy/new_html/services/videoMediaService.ts` 因上传进度事件使用 XHR。
+  - 允许的 XHR 上传路径必须继续复用 `buildAuthHeaders()` 和 `handleUnauthorized()`。
+- 该变更不改变运行时行为，用于防止后续开发把认证、错误处理和请求逻辑重新散落到页面/业务服务里。
+
 ## 2026-06-21 本轮性能/部署记录
 
 - 分镜工作流的小图加载改为使用后端缓存缩略图：`/api/thumbnail`。

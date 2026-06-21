@@ -1,5 +1,22 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 Frontend Network Boundary Contract
+
+### Changes
+
+- Strengthened `scripts/check_route_contract.py` so frontend direct network calls are guarded beyond `fetch()`:
+  - `fetch()` remains allowed only in `services/httpClient.ts`.
+  - `XMLHttpRequest` is now allowed only in `services/videoMediaService.ts`, where upload progress needs XHR events.
+  - The allowed XHR path must continue to use `buildAuthHeaders()` and `handleUnauthorized()` from the shared http client.
+- This closes the remaining frontend request-boundary gap from the API/platform cleanup plan without changing runtime behavior.
+
+### Verification
+
+- Local `git diff --check`: passed.
+- Local `py_compile` for `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed, including the expanded `frontend_http_client_checks`.
+- No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
+
 ## 2026-06-21 Storyboard Thumbnail Delivery Optimization
 
 ### Changes

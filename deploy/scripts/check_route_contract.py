@@ -3379,6 +3379,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
     direct_fetch_allowed = {
         new_html / "services" / "httpClient.ts",
     }
+    direct_xhr_allowed = {
+        video_media_service,
+    }
     for path in new_html.rglob("*"):
         if path.suffix not in {".ts", ".tsx"}:
             continue
@@ -3392,6 +3395,23 @@ def check_frontend_http_client_contract(root: Path) -> int:
         text = path.read_text(encoding="utf-8")
         if "fetch(" in text:
             fail(f"Frontend direct fetch must go through services/httpClient.ts: {path.relative_to(root)}")
+        checks += 1
+
+        if "XMLHttpRequest" in text and path not in direct_xhr_allowed:
+            fail(
+                "Frontend XMLHttpRequest is only allowed in services/videoMediaService.ts "
+                f"for upload progress: {path.relative_to(root)}"
+            )
+        checks += 1
+
+    video_media_service_text = video_media_service.read_text(encoding="utf-8")
+    for snippet in [
+        "const xhr = new XMLHttpRequest();",
+        "const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });",
+        "handleUnauthorized('uploadMedia')",
+    ]:
+        if snippet not in video_media_service_text:
+            fail(f"videoMediaService upload XHR must stay on shared auth/error helpers: missing {snippet}")
         checks += 1
 
     for snippet in [
