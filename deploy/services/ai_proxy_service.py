@@ -69,6 +69,62 @@ class TextGenerationResult:
 DEEPSEEK_SYSTEM_PROMPT = "You are a helpful assistant for storyboard generation tasks."
 
 
+def _default_upstream_detail(label: str) -> Callable[[str, int], str]:
+    return lambda upstream, status_code: f"{label} API 调用失败: {upstream[:200] or status_code}"
+
+
+def _post_json_request(
+    *,
+    label: str,
+    url: str,
+    headers: Dict[str, str],
+    payload: Dict[str, Any],
+    timeout: Any,
+    timeout_message: str,
+    request_error_message: str,
+    parse_error_message: str,
+    request_kwargs: Optional[Dict[str, Any]] = None,
+    expected_status: Optional[int] = None,
+    timeout_status_code: int = 504,
+    upstream_detail: Optional[Callable[[str, int], str]] = None,
+    upstream_status_code: int = 502,
+) -> Dict[str, Any]:
+    """POST provider JSON while keeping provider-specific detail at call sites."""
+    try:
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=timeout,
+            **(request_kwargs or {}),
+        )
+        failed = response.status_code >= 400 if expected_status is None else response.status_code != expected_status
+        if failed:
+            upstream = (response.text or "")[:500]
+            logger.error("%s upstream failed: status=%s body=%s", label, response.status_code, upstream)
+            detail_factory = upstream_detail or _default_upstream_detail(label)
+            raise AIProxyUpstreamError(
+                detail_factory(upstream, response.status_code),
+                status_code=upstream_status_code,
+                upstream=upstream,
+            )
+        return response.json()
+    except AIProxyError:
+        raise
+    except requests.Timeout as e:
+        raise AIProxyUpstreamError(timeout_message, status_code=timeout_status_code) from e
+    except requests.RequestException as e:
+        logger.error("%s request failed: %s", label, e, exc_info=True)
+        raise AIProxyUpstreamError(request_error_message) from e
+    except ValueError as e:
+        logger.error("%s response JSON parse failed: %s", label, e, exc_info=True)
+        raise AIProxyUpstreamError(parse_error_message) from e
+
+
+async def _post_json_request_async(**kwargs: Any) -> Dict[str, Any]:
+    return await asyncio.to_thread(_post_json_request, **kwargs)
+
+
 def _unique_provider_ids(items: List[Optional[str]]) -> List[str]:
     seen: set[str] = set()
     out: List[str] = []
@@ -212,32 +268,19 @@ def generate_deepseek_text(
         temperature=temperature,
         stream=False,
     )
-    try:
-        response = requests.post(
-            url,
-            json=payload,
-            timeout=180,
-            **request_kwargs,
-        )
-        if response.status_code >= 400:
-            upstream = (response.text or "")[:500]
-            logger.error("DeepSeek upstream failed: status=%s body=%s", response.status_code, upstream)
-            raise AIProxyUpstreamError(
-                f"DeepSeek API 调用失败: {upstream[:200] or response.status_code}",
-                status_code=502,
-                upstream=upstream,
-            )
-        result = response.json()
-    except AIProxyError:
-        raise
-    except requests.Timeout as e:
-        raise AIProxyUpstreamError("DeepSeek API 调用超时，请稍后重试", status_code=504) from e
-    except requests.RequestException as e:
-        logger.error("DeepSeek request failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("DeepSeek API 调用失败，请稍后重试") from e
-    except ValueError as e:
-        logger.error("DeepSeek response JSON parse failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("DeepSeek 响应格式异常") from e
+    headers = request_kwargs.get("headers", {})
+    result = _post_json_request(
+        label="DeepSeek",
+        url=url,
+        headers=headers,
+        payload=payload,
+        timeout=180,
+        timeout_message="DeepSeek API 调用超时，请稍后重试",
+        request_error_message="DeepSeek API 调用失败，请稍后重试",
+        parse_error_message="DeepSeek 响应格式异常",
+        request_kwargs={k: v for k, v in request_kwargs.items() if k != "headers"},
+        upstream_detail=lambda upstream, status_code: f"DeepSeek API 调用失败: {upstream[:200] or status_code}",
+    )
 
     message = (result.get("choices") or [{}])[0].get("message") or {}
     content = message.get("content", "")
@@ -365,30 +408,19 @@ async def generate_gemini_text_result(
         temperature=temperature,
     )
 
-    try:
-        response = await asyncio.to_thread(
-            requests.post,
-            url,
-            headers=headers,
-            json=payload,
-            timeout=120,
-            **config.requests_kwargs(),
-        )
-        response.raise_for_status()
-        result = response.json()
-    except requests.HTTPError as e:
-        upstream = ""
-        if getattr(e, "response", None) is not None:
-            upstream = (e.response.text or "")[:500]
-        logger.error("Gemini text upstream HTTP error: %s | upstream=%s", e, upstream)
-        detail = f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试"
-        raise AIProxyUpstreamError(detail, upstream=upstream) from e
-    except requests.RequestException as e:
-        logger.error("Gemini text request failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("文本生成失败，请稍后重试") from e
-    except ValueError as e:
-        logger.error("Gemini text response JSON parse failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("文本生成服务响应格式异常") from e
+    result = await _post_json_request_async(
+        label="Gemini text",
+        url=url,
+        headers=headers,
+        payload=payload,
+        timeout=120,
+        timeout_message="文本生成失败，请稍后重试",
+        timeout_status_code=500,
+        request_error_message="文本生成失败，请稍后重试",
+        parse_error_message="文本生成服务响应格式异常",
+        request_kwargs=config.requests_kwargs(),
+        upstream_detail=lambda upstream, _status_code: f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试",
+    )
 
     content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
     return TextGenerationResult(
@@ -463,30 +495,19 @@ async def generate_gemini_images(
         image_size=image_size,
     )
 
-    try:
-        response = await asyncio.to_thread(
-            requests.post,
-            url,
-            headers=headers,
-            json=payload,
-            timeout=180,
-            **config.requests_kwargs(),
-        )
-        response.raise_for_status()
-        result = response.json()
-    except requests.HTTPError as e:
-        upstream = ""
-        if getattr(e, "response", None) is not None:
-            upstream = (e.response.text or "")[:500]
-        logger.error("Gemini image upstream HTTP error: %s | upstream=%s", e, upstream)
-        detail = f"图像生成失败：{upstream[:200]}" if upstream else "图像生成失败，请稍后重试"
-        raise AIProxyUpstreamError(detail, upstream=upstream) from e
-    except requests.RequestException as e:
-        logger.error("Gemini image request failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("图像生成失败，请稍后重试") from e
-    except ValueError as e:
-        logger.error("Gemini image response JSON parse failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("图像生成服务响应格式异常") from e
+    result = await _post_json_request_async(
+        label="Gemini image",
+        url=url,
+        headers=headers,
+        payload=payload,
+        timeout=180,
+        timeout_message="图像生成失败，请稍后重试",
+        timeout_status_code=500,
+        request_error_message="图像生成失败，请稍后重试",
+        parse_error_message="图像生成服务响应格式异常",
+        request_kwargs=config.requests_kwargs(),
+        upstream_detail=lambda upstream, _status_code: f"图像生成失败：{upstream[:200]}" if upstream else "图像生成失败，请稍后重试",
+    )
 
     images: List[str] = []
     for candidate in result.get("candidates", []):
@@ -721,28 +742,21 @@ async def generate_doubao_images(
         "Content-Type": "application/json",
         "Authorization": f"Bearer {config.api_key}",
     }
-    try:
-        response = await asyncio.to_thread(
-            requests.post,
-            config.url_for(),
-            headers=headers,
-            json=payload,
-            timeout=120,
-            **config.requests_kwargs(),
-        )
-        if response.status_code != 200:
-            upstream = (response.text or "")[:500]
-            logger.error("Doubao image upstream failed: status=%s body=%s", response.status_code, upstream)
-            raise AIProxyUpstreamError(f"豆包生成失败: {upstream[:200]}", upstream=upstream)
-        result = response.json()
-    except AIProxyError:
-        raise
-    except requests.RequestException as e:
-        logger.error("Doubao image request failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("图像生成失败，请稍后重试") from e
-    except ValueError as e:
-        logger.error("Doubao image response JSON parse failed: %s", e, exc_info=True)
-        raise AIProxyUpstreamError("豆包响应格式异常") from e
+    result = await _post_json_request_async(
+        label="Doubao image",
+        url=config.url_for(),
+        headers=headers,
+        payload=payload,
+        timeout=120,
+        timeout_message="图像生成失败，请稍后重试",
+        timeout_status_code=500,
+        request_error_message="图像生成失败，请稍后重试",
+        parse_error_message="豆包响应格式异常",
+        request_kwargs=config.requests_kwargs(),
+        expected_status=200,
+        upstream_detail=lambda upstream, _status_code: f"豆包生成失败: {upstream[:200]}",
+        upstream_status_code=500,
+    )
 
     images: List[str] = []
     for item in result.get("data", []):

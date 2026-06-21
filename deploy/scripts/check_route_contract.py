@@ -2940,6 +2940,21 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     if dashscope_video_text.count("aiohttp.ClientSession(") != 1:
         fail("DashScope video client should centralize aiohttp session creation in _request_json")
     checks += 1
+    ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
+    for snippet in (
+        "def _post_json_request(",
+        "async def _post_json_request_async(",
+        'label="DeepSeek",',
+        'label="Gemini text",',
+        'label="Gemini image",',
+        'label="Doubao image",',
+    ):
+        if snippet not in ai_proxy_text:
+            fail(f"AI proxy JSON providers must route through shared helper: {snippet}")
+        checks += 1
+    if ai_proxy_text.count("requests.post(") > 4:
+        fail("AI proxy service should keep direct requests.post limited to helper, streaming, and GPT image paths")
+    checks += 1
     return checks
 
 

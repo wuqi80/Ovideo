@@ -7444,3 +7444,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `frontend_lazy_image_checks=9`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `new_html/components/LazyImage.tsx` exists on `/home/Administrator/deploy`.
+
+## 2026-06-22 AI Proxy JSON Request Consolidation
+
+- Added `_post_json_request()` and `_post_json_request_async()` in `deploy/services/ai_proxy_service.py` so provider JSON calls share POST, proxy kwargs, timeout, upstream-body logging, HTTP status, and JSON parse handling.
+- Routed DeepSeek non-stream chat, Gemini text, Gemini image, and Doubao image generation through the shared helper while keeping provider-specific config resolution, model selection, expected status, and user-facing error messages at call sites.
+- Left DeepSeek streaming and GPT Image multipart/generation paths unchanged for a later focused cut.
+- Strengthened `deploy/scripts/check_route_contract.py` so these AI proxy JSON providers must keep using the shared helper and direct `requests.post` usage cannot creep upward.
+- Verification:
+  - Local `pytest deploy/tests/test_api_provider_runtime_model_env.py -q` passed with 27 tests.
+  - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local route contract passed with `api_provider_runtime_model_checks=171`.
