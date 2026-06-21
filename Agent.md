@@ -7214,3 +7214,20 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Remote `deploy/scripts/check_architecture_contracts.py` passed with `contracts=10`.
 - Remote dist check confirmed no Tailwind/importmap CDN strings and `dist/assets/index-D1kXhn4K.css` is 89 KB on disk.
 - Online smoke test against `https://mecha.one` passed: 9/9.
+
+## 2026-06-22 Runtime CDN/WebFont Removal
+
+- Removed runtime Google Fonts links from `deploy/new_html/index.html`.
+- Switched `deploy/new_html/tailwind.config.cjs`, `deploy/new_html/styles/design-tokens.css`, and admin inline mono labels to system font stacks.
+- Rebuilt `deploy/login.html` as a self-contained static page with inline CSS/SVG icons instead of Tailwind CDN, Google Fonts, and jsDelivr lucide.
+- Removed Google Fonts `@import` from `deploy/admin/style.css`.
+- Updated `deploy/scripts/live_deploy_mvc2.sh` to sync `login.html`, the legacy `admin` directory, and `deploy/Agent.md`, so these entrypoint fixes deploy with the rest of the app.
+- Strengthened `deploy/scripts/check_route_contract.py` to reject runtime CDN/importmap/webfont dependencies in `new_html/index.html`, `login.html`, and `admin/style.css`.
+- Verification:
+  - Local `py_compile` for `check_route_contract.py`: passed.
+  - Local `check_route_contract.py`: passed with `frontend_dependency_checks=395` and `live_deploy_frontend_checks=37`.
+  - Local `check_architecture_contracts.py`: 10/10 passed.
+  - Server temporary `new_html` build passed after `npm ci`; generated `dist/index.html` is 811 bytes.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server grep found no `fonts.googleapis.com`, `fonts.gstatic.com`, `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `unpkg.com`, `aistudiocdn.com`, or `importmap` in deployed app shell/login/admin CSS assets.
