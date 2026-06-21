@@ -23,6 +23,9 @@
   - `python -m py_compile deploy/scripts/check_route_contract.py` 通过。
   - `deploy/scripts/check_route_contract.py` 通过，包含 `frontend_thumbnail_checks=7`。
   - Windows 本地 Vite 构建仍受 Rollup 可选依赖 `@rollup/rollup-win32-x64-msvc` 缺失影响，服务器 Linux 构建仍作为前端上线验证准则。
+  - `deploy/scripts/live_deploy_mvc2.sh` 已部署成功，远端 Vite 构建通过，`drama.service` 为 `active`。
+  - 服务器 `check_route_contract.py`、`check_architecture_contracts.py` 和线上 smoke test 均通过。
+  - 线上缩略图探测：目标剧集分镜图片经 `/api/thumbnail` 返回 `200 image/jpeg`，`144x96` 缩略图约 `3401` 字节。
 
 ## 当前本地部署状态
 

@@ -16,6 +16,11 @@
 - Local `scripts/check_route_contract.py`: passed, including `frontend_thumbnail_checks=7`.
 - Local Vite build cannot run on the Windows workspace because `node_modules` is missing Rollup's optional `@rollup/rollup-win32-x64-msvc` package.
 - Local `tsc --noEmit` is still blocked by existing project-wide TypeScript debt outside this thumbnail change.
+- `scripts/live_deploy_mvc2.sh`: deployed successfully; remote Vite build passed and `drama.service` stayed active.
+- Server `scripts/check_route_contract.py`: passed, including `frontend_thumbnail_checks=7`.
+- Server `scripts/check_architecture_contracts.py`: 9/9 passed.
+- Server smoke test against `https://mecha.one`: 9/9 passed.
+- Production thumbnail probe for `ep_2fc899a228f5` returned `200 image/jpeg` for a storyboard image thumbnail (`3401` bytes at `144x96`).
 - No files under `pipeline/`, `agent_routes.py`, or `workflows/*.json` were modified.
 
 ## 2026-06-20 Task Route Read Service Extraction
