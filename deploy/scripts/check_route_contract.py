@@ -4095,6 +4095,8 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     text = script_path.read_text(encoding="utf-8")
     required_snippets = [
         '"dao"',
+        '"ARCHITECTURE.md"',
+        '"docs"',
         '"scripts/live_deploy_mvc2.sh"',
         "scripts/check_*.py",
         "tests/test_storyboard_stale_script_fallback.py",

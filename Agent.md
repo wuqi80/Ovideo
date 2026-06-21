@@ -6969,3 +6969,19 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `python -m py_compile deploy/scripts/check_route_contract.py` passed.
 - Local `deploy/scripts/check_route_contract.py` passed with `current_architecture_docs_checks=12`, `api_provider_runtime_model_checks=127`, and `live_deploy_frontend_checks=13`.
 - Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=9`.
+
+## 2026-06-21 Live Deploy Current Docs Sync
+
+### Changes
+
+- Updated `deploy/scripts/live_deploy_mvc2.sh` so current architecture docs (`deploy/ARCHITECTURE.md` and `deploy/docs/`) are uploaded with each live deployment.
+- Strengthened `deploy/scripts/check_route_contract.py` so future deployments keep those docs in the synced file set.
+- This keeps the server-side route/architecture contracts aligned with the current provider-runtime documentation.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile deploy/scripts/check_route_contract.py` passed.
+- Local Git Bash `bash -n deploy/scripts/live_deploy_mvc2.sh` passed.
+- Local `deploy/scripts/check_route_contract.py` passed with `current_architecture_docs_checks=12` and `live_deploy_frontend_checks=15`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=9`.

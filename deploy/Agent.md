@@ -6961,3 +6961,19 @@
 - Local `python -m py_compile scripts/check_route_contract.py` passed.
 - Local `scripts/check_route_contract.py` passed with `current_architecture_docs_checks=12`, `api_provider_runtime_model_checks=127`, and `live_deploy_frontend_checks=13`.
 - Local `scripts/check_architecture_contracts.py` passed with `contracts=9`.
+
+## 2026-06-21 Live Deploy Current Docs Sync
+
+### Changes
+
+- Updated `scripts/live_deploy_mvc2.sh` so current architecture docs (`ARCHITECTURE.md` and `docs/`) are uploaded with each live deployment.
+- Strengthened `scripts/check_route_contract.py` so future deployments keep those docs in the synced file set.
+- This keeps the server-side route/architecture contracts aligned with the current provider-runtime documentation.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile scripts/check_route_contract.py` passed.
+- Local Git Bash `bash -n scripts/live_deploy_mvc2.sh` passed.
+- Local `scripts/check_route_contract.py` passed with `current_architecture_docs_checks=12` and `live_deploy_frontend_checks=15`.
+- Local `scripts/check_architecture_contracts.py` passed with `contracts=9`.
