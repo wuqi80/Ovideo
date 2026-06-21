@@ -7321,3 +7321,5 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `deploy/scripts/check_architecture_contracts.py` passed 10/10.
   - Local TypeScript filter check reported no `AdminSettingsPage.tsx` errors.
   - Local `git diff --check` passed.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
