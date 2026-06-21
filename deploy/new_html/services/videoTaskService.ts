@@ -13,6 +13,7 @@ import {
 import type { VideoTask } from './videoTaskTypes';
 
 export type { VideoTask } from './videoTaskTypes';
+export { cancelTask, deleteTask } from './taskControlService';
 
 function hasAuthHeader(): boolean {
     const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
@@ -316,33 +317,6 @@ export async function getTasks(limit = 100): Promise<{ tasks: VideoTask[] }> {
     }
 
     return await response.json();
-}
-
-/**
- * 取消任务（后端会把状态落为 cancelled 并从队列移除，
- * 避免前端刷新后从 /api/tasks/active 重新拉回）。
- */
-export async function cancelTask(taskId: string): Promise<void> {
-    const response = await apiFetch(`/api/task/${taskId}`, {
-        method: 'DELETE',
-    }, { apiName: 'cancelTask' });
-
-    if (!response.ok) {
-        await throwResponseError(response, '取消失败');
-    }
-}
-
-/**
- * 删除任务
- */
-export async function deleteTask(taskId: string): Promise<void> {
-    const response = await apiFetch(`/api/task/${taskId}/delete`, {
-        method: 'DELETE',
-    }, { apiName: 'deleteTask' });
-
-    if (!response.ok) {
-        await throwResponseError(response, '删除失败');
-    }
 }
 
 // ==================== 会话管理 ====================

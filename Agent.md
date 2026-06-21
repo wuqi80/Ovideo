@@ -6714,3 +6714,25 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, `frontend_http_client_checks=6098`, and `frontend_app_shell_chunk_checks=11`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Task Control Service Split
+
+### Changes
+
+- Added `deploy/new_html/services/taskControlService.ts` for lightweight task control calls (`cancelTask`, `deleteTask`).
+- Updated `deploy/new_html/contexts/TaskContext.tsx` to dynamically import `taskControlService` instead of `videoTaskService` when cancelling a task.
+- Kept `deploy/new_html/services/videoTaskService.ts` backward-compatible by re-exporting `cancelTask` and `deleteTask`, while removing the direct implementations from the video generation service.
+- Strengthened `deploy/scripts/check_route_contract.py` so task control ownership stays in `taskControlService`, and the app shell cannot regress to loading `videoTaskService` for cancellation.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, `frontend_http_client_checks=7251`, and `frontend_app_shell_chunk_checks=12`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `taskControlService-boNdFV2m.js` at `0.50 kB`, replacing the cancellation-time load of the full `videoTaskService` chunk.
+- Server build emitted `videoTaskService-1SkFLo-c.js` at `9.19 kB`, down from the prior `videoTaskService-D_YRmEfM.js` at `9.69 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, `frontend_http_client_checks=6119`, and `frontend_app_shell_chunk_checks=12`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

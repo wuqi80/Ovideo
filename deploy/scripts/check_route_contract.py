@@ -2806,6 +2806,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     audio_generation_service = new_html / "services" / "audioGenerationService.ts"
     video_model_service = new_html / "services" / "videoModelService.ts"
     video_task_service = new_html / "services" / "videoTaskService.ts"
+    task_control_service = new_html / "services" / "taskControlService.ts"
     video_task_types = new_html / "services" / "videoTaskTypes.ts"
     video_workspace_service = new_html / "services" / "videoWorkspaceService.ts"
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
@@ -2853,6 +2854,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         task_notification_service,
         episode_data_service,
         audio_generation_service,
+        task_control_service,
         video_task_service,
         video_workspace_service,
         video_workflow_service,
@@ -2982,7 +2984,11 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (enhance_page, "from '../services/videoTaskService'"),
         (new_html / "services" / "videoTaskPoller.ts", "from './videoTaskService'"),
         (new_html / "services" / "ttsTaskPoller.ts", "from './videoTaskService'"),
-        (new_html / "contexts" / "TaskContext.tsx", "import('../services/videoTaskService')"),
+        (new_html / "contexts" / "TaskContext.tsx", "import('../services/taskControlService')"),
+        (task_control_service, "import { apiFetch } from './httpClient';"),
+        (task_control_service, "export async function cancelTask("),
+        (task_control_service, "export async function deleteTask("),
+        (video_task_service, "export { cancelTask, deleteTask } from './taskControlService';"),
         (new_html / "components" / "video" / "VideoCard.tsx", "from '../../services/videoWorkspaceService'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse } from './httpClient';"),
         (api_service, "from './taskNotificationService';"),
@@ -3242,6 +3248,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
     ]:
         if snippet in video_page_text:
             fail(f"VideoPage must lazy-load modal/provider chunks: {snippet}")
+        checks += 1
+
+    video_task_service_text = video_task_service.read_text(encoding="utf-8")
+    for snippet in [
+        "export async function cancelTask(",
+        "export async function deleteTask(",
+    ]:
+        if snippet in video_task_service_text:
+            fail(f"videoTaskService must delegate task controls to taskControlService: {snippet}")
         checks += 1
 
     for path in migrated_services:
@@ -3963,7 +3978,7 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         "const DeferredCrmHost: React.FC = () => {",
         "requestIdleCallback",
         "<DeferredCrmHost />",
-        "import('../services/videoTaskService')",
+        "import('../services/taskControlService')",
     ]
     forbidden_snippets = [
         (app_text, "import { CrmHost } from './admin/crmUI';", app_path),
@@ -3972,6 +3987,7 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         (app_text, 'import * as crmUI from "./admin/crmUI";', app_path),
         (task_context_text, "from '../services/videoTaskService';", task_context_path),
         (task_context_text, 'from "../services/videoTaskService";', task_context_path),
+        (task_context_text, "import('../services/videoTaskService')", task_context_path),
     ]
     checks = 0
     for snippet in required_snippets:
