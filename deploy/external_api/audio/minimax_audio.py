@@ -15,6 +15,7 @@ import aiohttp
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
+from services.api_provider_registry import MINIMAX_DEFAULT_VIDEO_MODEL
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class MinimaxAudioClient:
             logger.warning("MINIMAX_API_KEY 未设置，音频功能不可用")
 
     def _refresh_runtime_config(self) -> None:
-        config = resolve_provider("minimax", "MiniMax-Hailuo-02")
+        config = resolve_provider("minimax", MINIMAX_DEFAULT_VIDEO_MODEL)
         self.api_key = self._explicit_api_key or config.api_key or ""
         extra = getattr(config, "extra", {}) or {}
         self.group_id = self._explicit_group_id or extra.get("group_id") or ""

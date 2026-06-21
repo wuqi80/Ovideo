@@ -7,11 +7,12 @@ import requests
 import time
 import logging
 from typing import Optional, Dict, Any
+from services.api_provider_registry import MINIMAX_DEFAULT_VIDEO_MODEL
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MINIMAX_VIDEO_MODEL = "MiniMax-Hailuo-02"
+DEFAULT_MINIMAX_VIDEO_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL
 
 
 def _runtime_model_override(model: Optional[str]) -> Optional[str]:

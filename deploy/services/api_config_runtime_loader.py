@@ -17,6 +17,8 @@ from services.api_provider_registry import (
     PROVIDER_EXTRA_ENV_MAP,
     PROVIDER_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
+    SORA2_DEFAULT_VIDEO_MODEL,
+    VEO_DEFAULT_VIDEO_MODEL,
     dashscope_sub_model_for_model,
     get_api_model_preset,
     get_custom_proxy_env_key,
@@ -53,9 +55,9 @@ GEMINI_IMAGE_NEW_MODEL = "gemini-3.1-flash-image-preview"
 GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash"}
 GEMINI_TTS_NEW_MODEL = "gemini-2.5-flash-preview-tts"
 SORA2_LEGACY_MODELS = {"sora-2"}
-SORA2_NEW_MODEL = "sora_video2-landscape-15s"
+SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL
 VEO_LEGACY_MODELS = {"veo-3", "veo-3.1"}
-VEO_NEW_MODEL = "veo-3.1-landscape-fast-fl"
+VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL
 
 
 def managed_api_env_keys() -> set[str]:

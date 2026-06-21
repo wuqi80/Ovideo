@@ -8,11 +8,12 @@ from typing import Any, Dict, Optional
 import requests
 
 from services.api_provider_endpoints import derive_dashscope_video_urls
+from services.api_provider_registry import DASHSCOPE_DEFAULT_MODEL_MAP
 from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WAN26_VIDEO_MODEL = "wan2.6-i2v"
+DEFAULT_WAN26_VIDEO_MODEL = DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]
 
 
 class Wan26Client:

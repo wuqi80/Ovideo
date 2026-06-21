@@ -7,11 +7,12 @@ import requests
 import time
 import logging
 from typing import Optional, Dict, Any, List
+from services.api_provider_registry import VEO_DEFAULT_VIDEO_MODEL
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_VEO_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
+DEFAULT_VEO_VIDEO_MODEL = VEO_DEFAULT_VIDEO_MODEL
 LEGACY_VEO_VIDEO_MODELS = {"veo-3", "veo-3.1"}
 
 

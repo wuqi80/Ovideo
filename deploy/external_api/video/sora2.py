@@ -9,11 +9,12 @@ import logging
 from typing import Optional, Dict, Any
 from PIL import Image
 import io
+from services.api_provider_registry import SORA2_DEFAULT_VIDEO_MODEL
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SORA2_VIDEO_MODEL = "sora_video2-landscape-15s"
+DEFAULT_SORA2_VIDEO_MODEL = SORA2_DEFAULT_VIDEO_MODEL
 LEGACY_SORA2_VIDEO_MODELS = {"sora-2"}
 
 

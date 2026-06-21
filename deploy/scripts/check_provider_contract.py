@@ -997,6 +997,70 @@ def check_gemini_image_alias_wiring(registry) -> int:
     return len(aliases) + 3
 
 
+def check_video_default_model_registry_wiring(registry) -> int:
+    root = deploy_root()
+    checks = 0
+    expected = [
+        (
+            "external_api/video/minimax.py",
+            "DEFAULT_MINIMAX_VIDEO_MODEL",
+            "MINIMAX_DEFAULT_VIDEO_MODEL",
+            registry.MINIMAX_DEFAULT_VIDEO_MODEL,
+        ),
+        (
+            "external_api/video/sora2.py",
+            "DEFAULT_SORA2_VIDEO_MODEL",
+            "SORA2_DEFAULT_VIDEO_MODEL",
+            registry.SORA2_DEFAULT_VIDEO_MODEL,
+        ),
+        (
+            "external_api/video/veo.py",
+            "DEFAULT_VEO_VIDEO_MODEL",
+            "VEO_DEFAULT_VIDEO_MODEL",
+            registry.VEO_DEFAULT_VIDEO_MODEL,
+        ),
+        (
+            "external_api/video/wan2.py",
+            "DEFAULT_WAN26_VIDEO_MODEL",
+            'DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]',
+            registry.DASHSCOPE_DEFAULT_MODEL_MAP["wan26"],
+        ),
+    ]
+    for rel, local_name, registry_name, literal in expected:
+        path = root / rel
+        text = path.read_text(encoding="utf-8")
+        if registry_name not in text:
+            fail(f"{rel} must source {local_name} from registry via {registry_name}")
+        if f"{local_name} = {registry_name}" not in text:
+            fail(f"{rel} must keep {local_name} as a registry-backed compatibility alias")
+        if literal in text:
+            fail(f"{rel} must not hardcode video default model literal {literal!r}")
+        checks += 3
+
+    audio_client = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
+    if "MINIMAX_DEFAULT_VIDEO_MODEL" not in audio_client:
+        fail("external_api/audio/minimax_audio.py must resolve MiniMax preset through registry MINIMAX_DEFAULT_VIDEO_MODEL")
+    if registry.MINIMAX_DEFAULT_VIDEO_MODEL in audio_client:
+        fail(
+            "external_api/audio/minimax_audio.py must not hardcode "
+            f"MiniMax default model literal {registry.MINIMAX_DEFAULT_VIDEO_MODEL!r}"
+        )
+    checks += 2
+
+    runtime_loader = (root / "services" / "api_config_runtime_loader.py").read_text(encoding="utf-8")
+    for registry_name, literal in (
+        ("SORA2_DEFAULT_VIDEO_MODEL", registry.SORA2_DEFAULT_VIDEO_MODEL),
+        ("VEO_DEFAULT_VIDEO_MODEL", registry.VEO_DEFAULT_VIDEO_MODEL),
+    ):
+        if registry_name not in runtime_loader:
+            fail(f"api_config_runtime_loader.py must use registry {registry_name} for legacy model upgrades")
+        if literal in runtime_loader:
+            fail(f"api_config_runtime_loader.py must not hardcode video default model literal {literal!r}")
+        checks += 2
+
+    return checks
+
+
 def check_env_key_helpers(registry) -> int:
     derived: set[str] = set()
     for env_key in registry.PROVIDER_ENV_MAP.values():
@@ -1212,6 +1276,7 @@ def main() -> int:
     api_config_env_refresh_checks = check_api_config_write_env_refresh_contract()
     gpt_image_tier_provider_count = check_gpt_image_tier_wiring(registry)
     gemini_image_alias_checks = check_gemini_image_alias_wiring(registry)
+    video_default_model_checks = check_video_default_model_registry_wiring(registry)
     derived_env_count = check_env_key_helpers(registry)
     provider_extra_env_checks = check_provider_extra_env_contract(registry, resolve_provider)
     provider_catalog_default_checks = check_provider_catalog_defaults(registry)
@@ -1244,6 +1309,7 @@ def main() -> int:
     print(f"  api_config_env_refresh_checks={api_config_env_refresh_checks}")
     print(f"  gpt_image_tier_providers={gpt_image_tier_provider_count}")
     print(f"  gemini_image_alias_checks={gemini_image_alias_checks}")
+    print(f"  video_default_model_checks={video_default_model_checks}")
     print(f"  derived_env_keys={derived_env_count}")
     print(f"  provider_extra_env_checks={provider_extra_env_checks}")
     print(f"  provider_catalog_default_checks={provider_catalog_default_checks}")

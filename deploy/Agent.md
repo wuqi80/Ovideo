@@ -1,5 +1,24 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 Video Provider Default Model Registry Move
+
+### Changes
+
+- Added registry-owned default video model constants for MiniMax, Sora2, and Veo in `services/api_provider_registry.py`.
+- Reused the existing DashScope default model map for Wan2.6 presets and client defaults.
+- Updated MiniMax, Sora2, Veo, and Wan2.6 video clients so their `DEFAULT_*` constants are compatibility aliases sourced from the registry.
+- Updated MiniMax audio runtime resolution to use the registry-backed MiniMax default model as the preset anchor.
+- Updated Sora2/Veo legacy model upgrade constants in `services/api_config_runtime_loader.py` to reuse registry constants.
+- Strengthened `scripts/check_provider_contract.py` and `scripts/check_route_contract.py` so default video model literals cannot drift back into external API clients.
+
+### Verification
+
+- Local `py_compile` passed for registry, runtime loader, affected audio/video clients, and provider contract.
+- Local `scripts/check_provider_contract.py`: passed with `video_default_model_checks=18`.
+- Local targeted pytest: `tests/test_api_provider_runtime_model_env.py` and `tests/test_minimax_audio_runtime.py` passed `31/31`.
+- Local `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+
 ## 2026-06-21 Live Deploy Remote Validation
 
 ### Changes

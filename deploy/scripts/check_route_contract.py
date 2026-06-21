@@ -2330,7 +2330,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "external_api" / "audio" / "minimax_audio.py",
-            'config = resolve_provider("minimax", "MiniMax-Hailuo-02")',
+            'config = resolve_provider("minimax", MINIMAX_DEFAULT_VIDEO_MODEL)',
         ),
         (
             root / "external_api" / "audio" / "minimax_audio.py",
@@ -2498,11 +2498,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "api_provider_registry.py",
-            '"model_name": "sora_video2-landscape-15s"',
+            '"model_name": SORA2_DEFAULT_VIDEO_MODEL',
         ),
         (
             root / "services" / "api_config_runtime_loader.py",
-            'SORA2_NEW_MODEL = "sora_video2-landscape-15s"',
+            "SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL",
         ),
         (
             root / "external_api" / "video" / "sora2.py",
@@ -2526,11 +2526,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "api_provider_registry.py",
-            '"model_name": "veo-3.1-landscape-fast-fl"',
+            '"model_name": VEO_DEFAULT_VIDEO_MODEL',
         ),
         (
             root / "services" / "api_config_runtime_loader.py",
-            'VEO_NEW_MODEL = "veo-3.1-landscape-fast-fl"',
+            "VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL",
         ),
         (
             root / "external_api" / "video" / "veo.py",

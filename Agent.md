@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-21 Video Provider Default Model Registry Move
+
+- MiniMax, Sora2, Veo, and Wan2.6 video default model names now live in `deploy/services/api_provider_registry.py`.
+- Video clients keep their historical `DEFAULT_*` constants only as compatibility aliases backed by registry constants.
+- MiniMax audio runtime resolution also uses the registry MiniMax default model as its provider preset anchor.
+- Legacy Sora2/Veo model upgrade constants in `deploy/services/api_config_runtime_loader.py` now reuse registry constants.
+- Added provider-contract coverage so these default video model literals cannot drift back into external API clients.
+
 ## 2026-06-21 Live Deploy Remote Validation
 
 - `deploy/scripts/live_deploy_mvc2.sh` now runs remote architecture contracts after `drama.service` is confirmed active.

@@ -60,6 +60,10 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "fast": "SEEDANCE_MODEL_FAST",
 }
 
+MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
+SORA2_DEFAULT_VIDEO_MODEL = "sora_video2-landscape-15s"
+VEO_DEFAULT_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
+
 DASHSCOPE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     "wan26": "wan2.6-i2v",
     "kling-standard": "kling/kling-v3-video-generation",
@@ -372,7 +376,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "MiniMax Hailuo",
         "provider": "minimax",
-        "model_name": "MiniMax-Hailuo-02",
+        "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
         "endpoint": "https://api.minimaxi.com/v1",
         "proxy_mode": "direct",
         "category": "video",
@@ -380,7 +384,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "Sora2",
         "provider": "sora2",
-        "model_name": "sora_video2-landscape-15s",
+        "model_name": SORA2_DEFAULT_VIDEO_MODEL,
         "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "video",
@@ -388,7 +392,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "Veo",
         "provider": "veo",
-        "model_name": "veo-3.1-landscape-fast-fl",
+        "model_name": VEO_DEFAULT_VIDEO_MODEL,
         "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "video",
@@ -396,7 +400,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "大能 Wan2.6 (DashScope)",
         "provider": "dashscope",
-        "model_name": "wan2.6-i2v",
+        "model_name": DASHSCOPE_DEFAULT_MODEL_MAP["wan26"],
         "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
         "proxy_mode": "direct",
         "category": "video",
