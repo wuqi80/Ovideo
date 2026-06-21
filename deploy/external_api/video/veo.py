@@ -7,6 +7,7 @@ import requests
 import time
 import logging
 from typing import Optional, Dict, Any, List
+from external_api.video.base import download_streaming_video
 from services.api_provider_registry import (
     VEO_DEFAULT_VIDEO_MODEL,
     normalize_veo_video_model,
@@ -155,17 +156,12 @@ class VeoClient:
         try:
             logger.info(f"📥 Veo 下载视频: {video_url}")
             self._refresh_runtime_config()
-            response = requests.get(video_url, stream=True, timeout=120, **self._request_kwargs)
-            response.raise_for_status()
-            
-            video_bytes = b''
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    video_bytes += chunk
-            
-            logger.info(f"✅ Veo 视频下载完成: {len(video_bytes)} bytes")
-            return video_bytes
-        
+            return download_streaming_video(
+                video_url,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Veo video",
+            )
         except Exception as e:
             logger.error(f"❌ Veo 下载视频失败: {e}")
             raise

@@ -7423,3 +7423,21 @@
 - Local `git diff --check` passed.
 - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 Video Client Shared Download Base
+
+### Changes
+
+- Added `external_api/video/base.py` with `download_streaming_video()` as the shared streaming download helper for synchronous external video clients.
+- Updated `external_api/video/seedance.py`, `sora2.py`, `veo.py`, and `wan2.py` to use the shared helper instead of duplicating `requests.get(..., stream=True)` and chunk-join loops.
+- Updated `scripts/live_deploy_mvc2.sh` to deploy the new video helper and its focused unit test.
+- Strengthened `scripts/check_route_contract.py` with `video_client_base_checks` so these clients cannot regress to duplicated streaming download code.
+- Added `tests/test_video_client_base.py` to pin header/timeout/proxy forwarding and chunk concatenation behavior.
+
+### Verification
+
+- Local `pytest tests/test_video_client_base.py -q` passed.
+- Local `py_compile` passed for the new helper, updated clients, and route contract script.
+- Local `scripts/check_route_contract.py` passed with `video_client_base_checks=29`.
+- Local `scripts/check_architecture_contracts.py` passed 10/10.
+- Local `git diff --check` passed.

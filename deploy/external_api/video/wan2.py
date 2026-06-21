@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
+from external_api.video.base import download_streaming_video
 from services.api_provider_endpoints import derive_dashscope_video_urls
 from services.api_provider_registry import DASHSCOPE_DEFAULT_MODEL_MAP
 from services.api_provider_runtime import resolve_dashscope_model_name, resolve_provider
@@ -117,14 +118,12 @@ class Wan26Client:
         try:
             self._refresh_runtime_config()
             logger.info("Wan2.6 download video: %s", video_url)
-            response = requests.get(video_url, stream=True, timeout=120, **self._requests_kwargs)
-            response.raise_for_status()
-            video_bytes = b""
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    video_bytes += chunk
-            logger.info("Wan2.6 video download complete: %s bytes", len(video_bytes))
-            return video_bytes
+            return download_streaming_video(
+                video_url,
+                request_kwargs=self._requests_kwargs,
+                logger=logger,
+                label="Wan2.6 video",
+            )
         except Exception as exc:
             logger.error("Wan2.6 video download failed: %s", exc)
             raise

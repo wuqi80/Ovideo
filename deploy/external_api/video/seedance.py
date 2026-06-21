@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from external_api.video.base import download_streaming_video
 from services.api_provider_registry import SEEDANCE_DEFAULT_MODEL_MAP, normalize_seedance_sub_model
 from services.api_provider_runtime import resolve_provider, resolve_seedance_model_name
 
@@ -128,15 +129,12 @@ class SeedanceClient:
         try:
             logger.info("Seedance download video: %s...", video_url[:80])
             self._refresh_runtime_config()
-            resp = requests.get(video_url, stream=True, timeout=120, **self._request_kwargs)
-            resp.raise_for_status()
-            chunks: List[bytes] = []
-            for chunk in resp.iter_content(chunk_size=8192):
-                if chunk:
-                    chunks.append(chunk)
-            buf = b"".join(chunks)
-            logger.info("Seedance video download complete: %s bytes", len(buf))
-            return buf
+            return download_streaming_video(
+                video_url,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Seedance video",
+            )
         except Exception as exc:
             logger.error("Seedance video download failed: %s", exc)
             raise

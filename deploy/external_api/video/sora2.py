@@ -9,6 +9,7 @@ import logging
 from typing import Optional, Dict, Any
 from PIL import Image
 import io
+from external_api.video.base import download_streaming_video
 from services.api_provider_registry import (
     SORA2_DEFAULT_VIDEO_MODEL,
     normalize_sora2_video_model,
@@ -199,17 +200,13 @@ class Sora2Client:
         
         try:
             logger.info(f"📥 Sora2 下载视频: {video_id}")
-            response = requests.get(url, headers=self.headers, stream=True, timeout=120, **self._request_kwargs)
-            response.raise_for_status()
-            
-            video_bytes = b''
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    video_bytes += chunk
-            
-            logger.info(f"✅ Sora2 视频下载完成: {len(video_bytes)} bytes")
-            return video_bytes
-        
+            return download_streaming_video(
+                url,
+                headers=self.headers,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Sora2 video",
+            )
         except Exception as e:
             logger.error(f"❌ Sora2 下载视频失败: {e}")
             raise

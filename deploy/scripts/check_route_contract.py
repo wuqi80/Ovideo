@@ -4502,9 +4502,11 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         '"scripts/live_deploy_mvc2.sh"',
         '"services"',
         '"utils"',
+        '"external_api/video/base.py"',
         "scripts/check_*.py",
         "tests/test_api_provider_runtime_model_env.py",
         "tests/test_storyboard_stale_script_fallback.py",
+        "tests/test_video_client_base.py",
         "new_html-src.tgz",
         "--exclude='new_html/node_modules'",
         "--exclude='new_html/.env'",
@@ -4551,6 +4553,53 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         if snippet in text:
             fail(f"Forbidden frontend deploy secret/dependency upload in {script_path.relative_to(root)}: {snippet}")
         checks += 1
+    return checks
+
+
+def check_video_client_base_contract(root: Path) -> int:
+    """Synchronous external video clients should share download plumbing."""
+    video_dir = root / "external_api" / "video"
+    base_path = video_dir / "base.py"
+    base_text = base_path.read_text(encoding="utf-8")
+    required_base_snippets = [
+        "def download_streaming_video(",
+        "response = requests.get(",
+        "stream=True",
+        "response.iter_content(chunk_size=chunk_size)",
+        "return data",
+    ]
+    client_files = [
+        video_dir / "seedance.py",
+        video_dir / "sora2.py",
+        video_dir / "veo.py",
+        video_dir / "wan2.py",
+    ]
+    required_client_snippets = [
+        "from external_api.video.base import download_streaming_video",
+        "return download_streaming_video(",
+    ]
+    forbidden_client_snippets = [
+        "for chunk in response.iter_content",
+        "for chunk in resp.iter_content",
+        "video_bytes = b",
+        "chunks: List[bytes] = []",
+    ]
+
+    checks = 0
+    for snippet in required_base_snippets:
+        if snippet not in base_text:
+            fail(f"Missing video client base helper snippet in {base_path.relative_to(root)}: {snippet}")
+        checks += 1
+    for path in client_files:
+        text = path.read_text(encoding="utf-8")
+        for snippet in required_client_snippets:
+            if snippet not in text:
+                fail(f"Video client must use shared base helper in {path.relative_to(root)}: {snippet}")
+            checks += 1
+        for snippet in forbidden_client_snippets:
+            if snippet in text:
+                fail(f"Video client has duplicated streaming download code in {path.relative_to(root)}: {snippet}")
+            checks += 1
     return checks
 
 
@@ -4730,6 +4779,7 @@ def main() -> int:
     frontend_dependency_checks = check_frontend_dependency_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
+    video_client_base_checks = check_video_client_base_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
     current_architecture_docs_checks = check_current_architecture_docs_contract(root)
     architecture_contract_runner_checks = check_architecture_contract_runner(root)
@@ -4801,6 +4851,7 @@ def main() -> int:
     print(f"  frontend_dependency_checks={frontend_dependency_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
+    print(f"  video_client_base_checks={video_client_base_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
     print(f"  current_architecture_docs_checks={current_architecture_docs_checks}")
     print(f"  architecture_contract_runner_checks={architecture_contract_runner_checks}")

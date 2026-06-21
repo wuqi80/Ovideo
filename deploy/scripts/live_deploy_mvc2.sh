@@ -36,6 +36,7 @@ FILES=(
   "schemas"
   "services"
   "utils"
+  "external_api/video/base.py"
   "external_api/video/dashscope.py"
   "external_api/video/minimax.py"
   "external_api/video/seedance.py"
@@ -54,6 +55,7 @@ FILES=(
   tests/test_storyboard_stale_script_fallback.py
   tests/test_task_read_service.py
   tests/test_user_dao_admin_delete.py
+  tests/test_video_client_base.py
 )
 
 for path in "${FILES[@]}"; do
