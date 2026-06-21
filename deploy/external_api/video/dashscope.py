@@ -114,6 +114,35 @@ class DashScopeVideoClient:
     def _headers_query(self) -> Dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}"}
 
+    async def _request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Dict[str, str],
+        json: Optional[Dict[str, Any]] = None,
+        task_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run a DashScope JSON request with shared timeout/proxy/error handling."""
+        request_kwargs: Dict[str, Any] = {
+            "headers": headers,
+            "proxy": self._aiohttp_proxy,
+        }
+        if json is not None:
+            request_kwargs["json"] = json
+
+        async with aiohttp.ClientSession(timeout=self.timeout) as session:
+            request = getattr(session, method.lower())
+            async with request(url, **request_kwargs) as resp:
+                data = await resp.json(content_type=None)
+                if resp.status >= 400:
+                    code = data.get("code") if isinstance(data, dict) else None
+                    msg = data.get("message", f"HTTP {resp.status}") if isinstance(data, dict) else f"HTTP {resp.status}"
+                    raise DashScopeVideoError(msg, code=code, task_id=task_id, http_status=resp.status)
+                if not isinstance(data, dict):
+                    raise DashScopeVideoError("Invalid response format", task_id=task_id, http_status=resp.status)
+                return data
+
     # ─── 通用 create / query / wait ─────────────────────────────────────
 
     async def create_task(
@@ -130,27 +159,12 @@ class DashScopeVideoClient:
         body = {"model": model, "input": input_payload, "parameters": parameters}
         logger.info(f"🎬 DashScope 创建任务: model={model}, params={parameters}")
 
-        async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            async with session.post(
-                self._create_url,
-                headers=self._headers_create,
-                json=body,
-                proxy=self._aiohttp_proxy,
-            ) as resp:
-                data = await resp.json(content_type=None)
-                if resp.status >= 400:
-                    code = data.get("code") if isinstance(data, dict) else None
-                    msg = data.get("message", f"HTTP {resp.status}") if isinstance(data, dict) else f"HTTP {resp.status}"
-                    raise DashScopeVideoError(msg, code=code, http_status=resp.status)
-                if not isinstance(data, dict):
-                    raise DashScopeVideoError("响应格式异常", http_status=resp.status)
-                task_id = data.get("output", {}).get("task_id")
-                if not task_id:
-                    raise DashScopeVideoError(
-                        f"创建任务未返回 task_id: {data}", code="NoTaskId", http_status=resp.status
-                    )
-                logger.info(f"✅ DashScope 任务创建: task_id={task_id}, status={data.get('output', {}).get('task_status')}")
-                return data
+        data = await self._request_json("post", self._create_url, headers=self._headers_create, json=body)
+        task_id = data.get("output", {}).get("task_id")
+        if not task_id:
+            raise DashScopeVideoError(f"创建任务未返回 task_id: {data}", code="NoTaskId")
+        logger.info(f"✅ DashScope 任务创建: task_id={task_id}, status={data.get('output', {}).get('task_status')}")
+        return data
 
     async def query_task(self, task_id: str) -> Dict[str, Any]:
         """单次查询任务状态。"""
@@ -158,18 +172,7 @@ class DashScopeVideoClient:
         if not self.api_key:
             raise DashScopeVideoError("DASHSCOPE_API_KEY 未配置", code="MissingApiKey")
 
-        async with aiohttp.ClientSession(timeout=self.timeout) as session:
-            async with session.get(
-                self._query_url(task_id),
-                headers=self._headers_query,
-                proxy=self._aiohttp_proxy,
-            ) as resp:
-                data = await resp.json(content_type=None)
-                if resp.status >= 400:
-                    code = data.get("code") if isinstance(data, dict) else None
-                    msg = data.get("message", f"HTTP {resp.status}") if isinstance(data, dict) else f"HTTP {resp.status}"
-                    raise DashScopeVideoError(msg, code=code, task_id=task_id, http_status=resp.status)
-                return data if isinstance(data, dict) else {}
+        return await self._request_json("get", self._query_url(task_id), headers=self._headers_query, task_id=task_id)
 
     async def wait_for_completion(
         self,

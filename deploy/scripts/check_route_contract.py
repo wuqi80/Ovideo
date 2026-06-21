@@ -2928,6 +2928,18 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     if minimax_audio_text.count("aiohttp.ClientSession(") > 4:
         fail("MiniMax audio client should keep aiohttp sessions centralized except helper, tts_sync retry, and file_upload")
     checks += 4
+    dashscope_video_text = (root / "external_api" / "video" / "dashscope.py").read_text(encoding="utf-8")
+    for snippet in (
+        "async def _request_json(",
+        'data = await self._request_json("post", self._create_url, headers=self._headers_create, json=body)',
+        'return await self._request_json("get", self._query_url(task_id), headers=self._headers_query, task_id=task_id)',
+    ):
+        if snippet not in dashscope_video_text:
+            fail(f"DashScope video client must route create/query through shared helper: {snippet}")
+        checks += 1
+    if dashscope_video_text.count("aiohttp.ClientSession(") != 1:
+        fail("DashScope video client should centralize aiohttp session creation in _request_json")
+    checks += 1
     return checks
 
 

@@ -7414,3 +7414,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local route contract passed with `video_client_base_checks=60`.
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=60`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 DashScope Video Runtime Request Consolidation
+
+- Added `_request_json()` in `deploy/external_api/video/dashscope.py` so DashScope task creation and query share aiohttp timeout, proxy, JSON parsing, and error handling.
+- Kept per-call runtime config refresh in `create_task()` and `query_task()`, preserving hot provider endpoint/key/model behavior.
+- Strengthened `deploy/scripts/check_route_contract.py` so DashScope create/query must continue routing through the shared async helper.
+- Reconfirmed `deploy/scripts/live_deploy_mvc2.sh` already syncs directory-level `dao`, `services`, `utils`, `routers`, and `schemas` entries and has no `pipeline/` entry.
+- Verification:
+  - Local `pytest deploy/tests/test_dashscope_video_payload_extension.py -q` passed with 12 tests.
+  - Local `py_compile`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local route contract passed with `api_provider_runtime_model_checks=164`.
