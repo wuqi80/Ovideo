@@ -6652,3 +6652,23 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6098`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Script Route Workspace Chunk Split
+
+### Changes
+
+- Converted `deploy/new_html/pages/ScriptPage.tsx` from a static `WorkspaceApp` import to a `React.lazy` route shell.
+- Added `ScriptWorkspaceFallback` so the workflow shell can render immediately while the legacy workspace chunk loads.
+- Strengthened `deploy/scripts/check_route_contract.py` so `ScriptPage` must lazy-load `WorkspaceApp` and cannot regress to a static import.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_workflow_chunk_checks=20`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `ScriptPage-jGEDm0NN.js` at `1.56 kB`, down from the prior script route chunk around `142.57 kB`; `WorkspaceApp-4C9Q9N6Y.js` is now an independent `142.14 kB` lazy chunk.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_workflow_chunk_checks=20`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

@@ -3736,15 +3736,19 @@ def check_frontend_workflow_chunk_contract(root: Path) -> int:
     new_html = root / "new_html"
     storyboard_page = new_html / "pages" / "StoryboardGenPage.tsx"
     video_page = new_html / "pages" / "VideoGenPage.tsx"
+    script_page = new_html / "pages" / "ScriptPage.tsx"
     workspace_app = new_html / "WorkspaceApp.tsx"
     storyboard_text = storyboard_page.read_text(encoding="utf-8")
     video_text = video_page.read_text(encoding="utf-8")
+    script_text = script_page.read_text(encoding="utf-8")
     workspace_text = workspace_app.read_text(encoding="utf-8")
 
     required_snippets = [
         (storyboard_text, "const GenerationPage = React.lazy(() => import('../components/GenerationPage')", "StoryboardGenPage lazy-loads GenerationPage"),
         (storyboard_text, '<React.Suspense fallback={<WorkflowChunkFallback label="加载分镜工作台..." />}>', "StoryboardGenPage wraps GenerationPage in Suspense"),
         (video_text, "const VideoPage = React.lazy(() => import('../components/VideoPage')", "VideoGenPage lazy-loads VideoPage"),
+        (script_text, "const WorkspaceApp = React.lazy(() => import('../WorkspaceApp'));", "ScriptPage lazy-loads WorkspaceApp"),
+        (script_text, "<React.Suspense fallback={<ScriptWorkspaceFallback />}>", "ScriptPage wraps WorkspaceApp in Suspense"),
         (workspace_text, "const LegacyMaterialPage = React.lazy(() => import('./components/MaterialPage')", "WorkspaceApp lazy-loads legacy MaterialPage"),
         (workspace_text, "const LegacyGenerationPage = React.lazy(() => import('./components/GenerationPage')", "WorkspaceApp lazy-loads legacy GenerationPage"),
         (workspace_text, "const LegacyVideoPage = React.lazy(() => import('./components/VideoPage')", "WorkspaceApp lazy-loads legacy VideoPage"),
@@ -3756,6 +3760,7 @@ def check_frontend_workflow_chunk_contract(root: Path) -> int:
     forbidden_snippets = [
         (storyboard_text, "import { GenerationPage } from '../components/GenerationPage';", "StoryboardGenPage must not statically import GenerationPage"),
         (video_text, "import { VideoPage } from '../components/VideoPage';", "VideoGenPage must not statically import VideoPage"),
+        (script_text, "import WorkspaceApp from '../WorkspaceApp';", "ScriptPage must not statically import WorkspaceApp"),
         (workspace_text, "import { MaterialPage } from './components/MaterialPage';", "WorkspaceApp must not statically import legacy MaterialPage"),
         (workspace_text, "import { GenerationPage } from './components/GenerationPage';", "WorkspaceApp must not statically import legacy GenerationPage"),
         (workspace_text, "import { VideoPage } from './components/VideoPage';", "WorkspaceApp must not statically import legacy VideoPage"),
