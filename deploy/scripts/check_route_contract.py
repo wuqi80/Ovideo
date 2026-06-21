@@ -3112,7 +3112,12 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_page, "clearProjectVideoTasks("),
         (video_page, "import('./video/SeedancePanelWithCandidates')"),
         (video_page, "import('./video/DashScopeCardWithCandidates')"),
+        (video_page, "import('./video/SeedanceDetailModal')"),
+        (video_page, "import('./video/StoryboardSyncModal')"),
         (video_page, "VideoProviderPanelFallback"),
+        (video_page, "VideoModalFallback"),
+        (video_page, "import type { SyncMode } from './video/StoryboardSyncModal';"),
+        (video_page, "{syncModalOpen && ("),
         (video_card, "Heavy provider panels live in separate lazy-loaded modules."),
         (seedance_panel_with_candidates, "from '../SeedanceMultimodalPanel'"),
         (seedance_panel_with_candidates, "useSeedanceCandidates"),
@@ -3228,6 +3233,15 @@ def check_frontend_http_client_contract(root: Path) -> int:
     ]:
         if snippet in video_card_text:
             fail(f"VideoCard core must not statically import heavy provider panels: {snippet}")
+        checks += 1
+
+    video_page_text = video_page.read_text(encoding="utf-8")
+    for snippet in [
+        "import { SeedanceDetailModal }",
+        "import { StoryboardSyncModal",
+    ]:
+        if snippet in video_page_text:
+            fail(f"VideoPage must lazy-load modal/provider chunks: {snippet}")
         checks += 1
 
     for path in migrated_services:

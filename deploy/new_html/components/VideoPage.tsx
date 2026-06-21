@@ -67,7 +67,6 @@ import {
     AudioBadgesRow,
 } from './video/VideoCard';
 import { MediaBadges } from './video/MediaBadges';
-import { SeedanceDetailModal } from './video/SeedanceDetailModal';
 // 2026-05-24 — DashScope 共享 API：合体(Kling) / 大乘(Vidu) / 炼虚(HappyHorse)
 // Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoModelService.ts，
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
@@ -76,7 +75,7 @@ import { createVideoSegment } from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
-import { StoryboardSyncModal, type SyncMode } from './video/StoryboardSyncModal';
+import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
@@ -108,9 +107,29 @@ const DashScopeCardWithCandidates = React.lazy(() =>
     }))
 );
 
+const SeedanceDetailModal = React.lazy(() =>
+    import('./video/SeedanceDetailModal').then(module => ({
+        default: module.SeedanceDetailModal,
+    }))
+);
+
+const StoryboardSyncModal = React.lazy(() =>
+    import('./video/StoryboardSyncModal').then(module => ({
+        default: module.StoryboardSyncModal,
+    }))
+);
+
 const VideoProviderPanelFallback: React.FC<{ label: string }> = ({ label }) => (
     <div className="min-h-[144px] rounded-md border border-n40 bg-n20 animate-pulse flex items-center justify-center text-xs text-n100">
         {label}
+    </div>
+);
+
+const VideoModalFallback: React.FC<{ label: string }> = ({ label }) => (
+    <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+        <div className="w-[480px] max-w-full rounded-md border border-n40 bg-n0 p-6 text-center text-sm text-n300 shadow-bottom">
+            {label}
+        </div>
     </div>
 );
 
@@ -2479,19 +2498,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             currentStoryboardItemId: storyboardItemId,
         });
         return (
-            <SeedanceDetailModal
-                open={true}
-                title={title}
-                value={value}
-                onChange={onChange}
-                candidates={candidates}
-                onClose={onClose}
-                onPreviewMedia={(url, kind) => {
-                    if (kind === 'audio') { showToast('音频在浏览器新标签播放'); window.open(url, '_blank'); return; }
-                    setLightboxUrl(url);
-                    setLightboxType(kind === 'video' ? 'video' : 'image');
-                }}
-            />
+            <React.Suspense fallback={<VideoModalFallback label="加载 Seedance 详情..." />}>
+                <SeedanceDetailModal
+                    open={true}
+                    title={title}
+                    value={value}
+                    onChange={onChange}
+                    candidates={candidates}
+                    onClose={onClose}
+                    onPreviewMedia={(url, kind) => {
+                        if (kind === 'audio') { showToast('音频在浏览器新标签播放'); window.open(url, '_blank'); return; }
+                        setLightboxUrl(url);
+                        setLightboxType(kind === 'video' ? 'video' : 'image');
+                    }}
+                />
+            </React.Suspense>
         );
     };
 
@@ -3961,46 +3982,50 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             {renderEditModal()}
 
             {/* Task 6：同步分镜弹窗 */}
-            <StoryboardSyncModal
-                open={syncModalOpen}
-                onClose={() => setSyncModalOpen(false)}
-                storyboardItems={storyboardItems}
-                session={{
-                    uploaded_images: uploadedImages,
-                    task_groups: taskGroups,
-                    image_prompts: imagePrompts,
-                    tasks_status: tasksStatus,
-                    seedance_params: seedanceParamsByUuid,
-                    storyboard_meta: storyboardMetaByItemId,
-                }}
-                onApply={async (mode: SyncMode) => {
-                    try {
-                        const r = await applySyncStrategy(
-                            mode,
-                            storyboardItems,
-                            {
-                                uploaded_images: uploadedImages,
-                                task_groups: taskGroups,
-                                image_prompts: imagePrompts,
-                                tasks_status: tasksStatus,
-                                seedance_params: seedanceParamsByUuid,
-                                storyboard_meta: storyboardMetaByItemId,
-                            },
-                            sessionScope,
-                        );
-                        if (r.shouldReimport && onRequestReimport) {
-                            await onRequestReimport();
-                        } else {
-                            // 重新拉取最新会话以反映 patch 后的状态
-                            await loadSession();
-                        }
-                    } catch (e) {
-                        console.error('[VideoPage] applySyncStrategy 失败:', e);
-                    } finally {
-                        setSyncModalOpen(false);
-                    }
-                }}
-            />
+            {syncModalOpen && (
+                <React.Suspense fallback={<VideoModalFallback label="加载同步面板..." />}>
+                    <StoryboardSyncModal
+                        open={syncModalOpen}
+                        onClose={() => setSyncModalOpen(false)}
+                        storyboardItems={storyboardItems}
+                        session={{
+                            uploaded_images: uploadedImages,
+                            task_groups: taskGroups,
+                            image_prompts: imagePrompts,
+                            tasks_status: tasksStatus,
+                            seedance_params: seedanceParamsByUuid,
+                            storyboard_meta: storyboardMetaByItemId,
+                        }}
+                        onApply={async (mode: SyncMode) => {
+                            try {
+                                const r = await applySyncStrategy(
+                                    mode,
+                                    storyboardItems,
+                                    {
+                                        uploaded_images: uploadedImages,
+                                        task_groups: taskGroups,
+                                        image_prompts: imagePrompts,
+                                        tasks_status: tasksStatus,
+                                        seedance_params: seedanceParamsByUuid,
+                                        storyboard_meta: storyboardMetaByItemId,
+                                    },
+                                    sessionScope,
+                                );
+                                if (r.shouldReimport && onRequestReimport) {
+                                    await onRequestReimport();
+                                } else {
+                                    // 重新拉取最新会话以反映 patch 后的状态
+                                    await loadSession();
+                                }
+                            } catch (e) {
+                                console.error('[VideoPage] applySyncStrategy 失败:', e);
+                            } finally {
+                                setSyncModalOpen(false);
+                            }
+                        }}
+                    />
+                </React.Suspense>
+            )}
 
             {/* Issue 7: list-view ⚙ Seedance detail modal */}
             {seedanceDetailUuid && (() => {

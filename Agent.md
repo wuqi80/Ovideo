@@ -6630,3 +6630,25 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6091`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Video Modal Chunk Split
+
+### Changes
+
+- Converted the `SeedanceDetailModal` and `StoryboardSyncModal` paths in `deploy/new_html/components/VideoPage.tsx` to `React.lazy` chunks.
+- Kept `SyncMode` as a type-only import so the storyboard sync modal module is not loaded before the user opens it.
+- Added a full-screen modal fallback for lazy video modals and guarded `StoryboardSyncModal` rendering behind `syncModalOpen`, preventing open=false modals from triggering lazy chunk loads.
+- Strengthened `deploy/scripts/check_route_contract.py` so VideoPage cannot regress to static modal imports.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7230`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `VideoPage-CG5hoBqM.js` at `96.59 kB`, down from the prior `VideoPage-pELF8rue.js` at `136.13 kB`.
+- Server build split lazy chunks: `SeedanceMultimodalPanel-DCi4iMPb.js` at `17.78 kB`, `SeedanceMentionPromptEditor-KAqryN0u.js` at `19.39 kB`, `SeedanceDetailModal-CIv0Cr22.js` at `1.95 kB`, and `StoryboardSyncModal-BtIw91QI.js` at `2.74 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6098`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
