@@ -7322,3 +7322,19 @@
 - Live deploy to `https://mecha.one/`: remote Vite build completed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
 - Live `/login` HTML contains `fetch('/api/login')` and `localStorage.setItem(TOKEN_KEY)`, with no `/static/js/auth.js`, `Auth.login`, Tailwind CDN, Google Fonts, or jsDelivr references.
+
+## 2026-06-22 Admin Cluster Node Metrics + Deploy Sync Contract
+
+### Changes
+
+- Removed the fake `Local-Node-01` fallback and random storage/GPU numbers from `new_html/components/AdminPage.tsx`.
+- The admin cluster node view now accepts both list and map responses from `/api/cluster/nodes`, shows backend messages for agent-only or empty states, and displays `未上报` when storage/GPU metrics are not provided.
+- Node cards now use responsive columns instead of forcing four columns on narrow admin layouts.
+- Strengthened `scripts/check_route_contract.py` so AdminPage cannot reintroduce fake/random cluster node metrics.
+- Strengthened the deploy script contract so `scripts/live_deploy_mvc2.sh` must continue syncing `dao`, `routers`, `schemas`, `services`, and `utils` as directories, while rejecting `pipeline/`, `agent_routes.py`, `workflows/`, and old one-file `services/*.py` sync entries.
+
+### Verification
+
+- Live deploy to `https://mecha.one/`: remote Vite build passed, `drama.service` stayed `active`, and server architecture contracts passed 10/10.
+- Server sync check matched current local code: `cluster_main.py` 985 lines, `admin_routes.py` 1502 lines, `dao/` 36 recursive Python files plus 28 legacy root `dao_*.py` files.
+- Online smoke test against `https://mecha.one`: 9/9 passed.

@@ -27,8 +27,59 @@ interface AdminPageProps {
 
 interface ClusterNodesResponse {
     success?: boolean;
-    nodes?: Record<string, any>;
+    nodes?: Record<string, any> | any[];
+    agent_only_mode?: boolean;
+    message?: string;
 }
+
+const toFiniteNumber = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+};
+
+const pickNumber = (row: any, keys: string[]): number | null => {
+    for (const key of keys) {
+        const value = toFiniteNumber(row?.[key]);
+        if (value !== null) return value;
+    }
+    return null;
+};
+
+const normalizeClusterNodeRows = (nodes: ClusterNodesResponse['nodes']): Array<[string, any]> => {
+    if (Array.isArray(nodes)) {
+        return nodes.map((row, index) => [String(row?.id ?? row?.node_id ?? `node-${index + 1}`), row || {}]);
+    }
+    if (nodes && typeof nodes === 'object') {
+        return Object.entries(nodes);
+    }
+    return [];
+};
+
+const normalizeClusterNodeStatus = (status: unknown): ServerNode['status'] => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'healthy' || normalized === 'online' || normalized === 'busy') return 'online';
+    if (normalized === 'maintenance') return 'maintenance';
+    return 'offline';
+};
+
+const mapClusterNode = ([nodeId, nodeData]: [string, any]): ServerNode => {
+    const storageUsed = pickNumber(nodeData, ['storage_used', 'storageUsed', 'storage_used_gb', 'disk_used_gb']);
+    const storageTotal = pickNumber(nodeData, ['storage_total', 'storageTotal', 'storage_total_gb', 'disk_total_gb']);
+    const gpuUsage = pickNumber(nodeData, ['gpu_usage', 'gpuUsage', 'gpu_load', 'gpuLoad']);
+    return {
+        id: String(nodeData?.id ?? nodeData?.node_id ?? nodeId),
+        name: String(nodeData?.name ?? nodeData?.id ?? nodeId),
+        status: normalizeClusterNodeStatus(nodeData?.status),
+        ip: String(nodeData?.host ?? nodeData?.ip ?? nodeData?.url ?? '未上报'),
+        storageUsed: storageUsed ?? 0,
+        storageTotal: storageTotal ?? 0,
+        gpuUsage: gpuUsage ?? -1,
+    };
+};
 
 // 可用模型列表（按类型分组）
 const MODELS = [
@@ -186,6 +237,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
     const [users, setUsers] = useState<UserAccount[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
     const [nodes, setNodes] = useState<ServerNode[]>([]);
+    const [clusterNodeMessage, setClusterNodeMessage] = useState('');
     const [systemStats, setSystemStats] = useState<any>(null);
     // 2026-05-26 组织管理 MVP — Slice 6
     const [statsGroupBy, setStatsGroupBy] = useState<'user' | 'org'>('user');
@@ -289,12 +341,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 const localUsers = generateLocalUsers();
                 const localLogs = generateLocalLogs(localUsers);
                 const localStats = generateLocalStats(localLogs);
-                const localNodes = generateLocalNodes();
                 
                 setUsers(localUsers);
                 setLogs(localLogs);
                 setSystemStats(localStats);
-                setNodes(localNodes);
+                setNodes([]);
+                setClusterNodeMessage('管理后台接口加载失败，集群节点状态暂不可用。');
             }
         } finally {
             setIsLoading(false);
@@ -310,26 +362,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 'Cluster Nodes',
             )) as ClusterNodesResponse;
             
-            if (data.success && data.nodes) {
-                const nodesList: ServerNode[] = Object.entries(data.nodes).map(([nodeId, nodeData]: [string, any]) => ({
-                    id: nodeId,
-                    name: nodeData.name || `Node-${nodeId.substring(0, 8)}`,
-                    status: nodeData.status === 'online' ? 'online' : 'offline',
-                    ip: nodeData.host || nodeData.ip || '未配置',
-                    storageUsed: Math.floor(Math.random() * 1000), // TODO: 从节点获取真实数据
-                    storageTotal: 2000,
-                    gpuUsage: nodeData.gpu_usage || Math.floor(Math.random() * 100)
-                }));
+            if (data.success) {
+                const nodesList = normalizeClusterNodeRows(data.nodes).map(mapClusterNode);
                 setNodes(nodesList);
+                setClusterNodeMessage(data.agent_only_mode
+                    ? (data.message || 'Agent-Only 模式：当前没有本地 ComfyUI 节点。')
+                    : (nodesList.length === 0 ? '当前没有已注册的集群节点。' : '')
+                );
                 console.log('✅ 加载了', nodesList.length, '个集群节点');
             } else {
-                // 如果后端没有节点数据，生成本地模拟数据
-                setNodes(generateLocalNodes());
+                setNodes([]);
+                setClusterNodeMessage(data.message || '集群节点状态暂不可用。');
             }
         } catch (error) {
             console.error('加载集群节点失败:', error);
-            // 降级：使用本地模拟数据
-            setNodes(generateLocalNodes());
+            setNodes([]);
+            setClusterNodeMessage('集群节点状态加载失败，请查看后端日志。');
         }
     };
 
@@ -428,21 +476,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
             activeUsers: 1,
             source: 'local'
         };
-    };
-
-    // 生成本地节点数据
-    const generateLocalNodes = (): ServerNode[] => {
-        return [
-            { 
-                id: 'local-1', 
-                name: 'Local-Node-01', 
-                status: 'online', 
-                ip: '127.0.0.1', 
-                storageUsed: 500, 
-                storageTotal: 2000, 
-                gpuUsage: 0 
-            }
-        ];
     };
 
     // --- 统计计算 ---
@@ -1417,8 +1450,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                     </button>
                   </div>
       
-                  <div className="grid grid-cols-4 gap-4">
-                    {nodes.map((node) => (
+                  {nodes.length === 0 ? (
+                    <div className="bg-n0 border border-n40 rounded-md p-6 text-sm text-n300 shadow-card">
+                      {clusterNodeMessage || '当前没有可展示的集群节点。'}
+                    </div>
+                  ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                    {nodes.map((node) => {
+                      const hasStorageMetric = node.storageTotal > 0;
+                      const storagePercent = hasStorageMetric
+                        ? Math.min(100, Math.max(0, (node.storageUsed / node.storageTotal) * 100))
+                        : 0;
+                      const hasGpuMetric = node.gpuUsage >= 0;
+                      const gpuPercent = hasGpuMetric ? Math.min(100, Math.max(0, node.gpuUsage)) : 0;
+                      return (
                       <div
                         key={node.id}
                         className="bg-n0 border border-n40 rounded-md p-5 shadow-card hover:shadow-atlas hover:border-primary transition-colors"
@@ -1467,21 +1512,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                 <Database className="w-3 h-3" /> Storage
                               </span>
                               <span className="text-n700 font-mono">
-                                {node.storageUsed} GB / {node.storageTotal} GB
+                                {hasStorageMetric ? `${node.storageUsed} GB / ${node.storageTotal} GB` : '未上报'}
                               </span>
                             </div>
                             <div className="h-2 bg-n0 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
-                                  node.storageUsed / node.storageTotal > 0.9
+                                  hasStorageMetric && storagePercent > 90
                                     ? "bg-danger"
-                                    : "bg-b400"
+                                    : hasStorageMetric
+                                    ? "bg-b400"
+                                    : "bg-n40"
                                 }`}
-                                style={{
-                                  width: `${
-                                    (node.storageUsed / node.storageTotal) * 100
-                                  }%`,
-                                }}
+                                style={{ width: `${storagePercent}%` }}
                               ></div>
                             </div>
                           </div>
@@ -1493,15 +1536,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                 <Zap className="w-3 h-3" /> GPU Load
                               </span>
                               <span className="text-n700 font-mono">
-                                {node.gpuUsage}%
+                                {hasGpuMetric ? `${node.gpuUsage}%` : '未上报'}
                               </span>
                             </div>
                             <div className="h-2 bg-n0 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full ${
-                                  node.gpuUsage > 90 ? "bg-danger" : "bg-primary"
+                                  hasGpuMetric && node.gpuUsage > 90
+                                    ? "bg-danger"
+                                    : hasGpuMetric
+                                    ? "bg-primary"
+                                    : "bg-n40"
                                 }`}
-                                style={{ width: `${node.gpuUsage}%` }}
+                                style={{ width: `${gpuPercent}%` }}
                               ></div>
                             </div>
                           </div>
@@ -1517,8 +1564,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
+                  )}
                 </div>
               )}
 

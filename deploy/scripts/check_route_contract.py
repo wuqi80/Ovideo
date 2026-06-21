@@ -3389,8 +3389,12 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (admin_hub_page, "apiJson<any>(url, { method: 'GET' }, 'Admin Hub KPI')"),
         (admin_page, "from '../services/adminCompatService'"),
         (admin_page, "import { apiJson } from '../services/httpClient'"),
+        (admin_page, "const normalizeClusterNodeRows = (nodes: ClusterNodesResponse['nodes'])"),
+        (admin_page, "const mapClusterNode = ([nodeId, nodeData]: [string, any]): ServerNode =>"),
         (admin_page, "const data = (await apiJson("),
         (admin_page, ")) as ClusterNodesResponse;"),
+        (admin_page, "data.agent_only_mode"),
+        (admin_page, "const hasStorageMetric = node.storageTotal > 0;"),
         (admin_settings_page, "import { apiJson } from '../services/httpClient'"),
         (admin_settings_page, "apiJson<ApiConfigsResponse>('/api/admin/api-configs')"),
         (new_html / "components" / "ShareResourceDialog.tsx", "from '../services/projectWorkflowService'"),
@@ -3644,6 +3648,17 @@ def check_frontend_http_client_contract(root: Path) -> int:
     ]:
         if snippet in video_page_text:
             fail(f"VideoPage must route video requests/media auth through videoService: {snippet}")
+        checks += 1
+
+    admin_page_text = admin_page.read_text(encoding="utf-8")
+    for snippet in [
+        "storageUsed: Math.floor(Math.random() * 1000)",
+        "gpuUsage: nodeData.gpu_usage || Math.floor(Math.random() * 100)",
+        "setNodes(generateLocalNodes())",
+        "name: 'Local-Node-01'",
+    ]:
+        if snippet in admin_page_text:
+            fail(f"AdminPage cluster nodes must not use fake local/random metrics: {snippet}")
         checks += 1
     return checks
 
@@ -4416,6 +4431,8 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         '"login.html"',
         '"admin"',
         '"docs"',
+        '"routers"',
+        '"schemas"',
         '"scripts/live_deploy_mvc2.sh"',
         '"services"',
         '"utils"',
@@ -4444,9 +4461,18 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     forbidden_snippets = [
         "new_html/node_modules\"",
         "new_html/.env\"",
+        "agent_routes.py",
+        "workflows/",
         "services/ai_proxy_service.py",
+        "services/admin_audit_service.py",
+        "services/audio_provider.py",
         "services/api_config_health_service.py",
         "services/api_provider_runtime.py",
+        "services/credit_service.py",
+        "services/file_service.py",
+        "services/image_webp_service.py",
+        "services/media_library_service.py",
+        "services/video_reverse_service.py",
         "utils/config_helpers.py",
         "pipeline/",
     ]
