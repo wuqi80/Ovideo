@@ -7307,3 +7307,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile`, targeted health monitor contract, targeted admin API config CRUD contract, full architecture contracts, and `git diff --check` passed.
   - Health monitor contract covers global prefix cache clearing and admin reload fallback behavior.
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed, remote architecture contracts passed 10/10, and online smoke passed 9/9.
+  - Follow-up deploy for global reload cache clearing passed remote Vite build, remote architecture contracts 10/10, and online smoke 9/9.
