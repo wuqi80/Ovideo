@@ -6771,3 +6771,24 @@
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=22`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Global Toast App Shell Split
+
+### Changes
+
+- Converted `new_html/components/GlobalToast.tsx` from a static `App.tsx` import to a `React.lazy` chunk.
+- Added `DeferredGlobalToastWithNav` so the toast host mounts after idle time and skips `/admin/*` routes.
+- Strengthened `scripts/check_route_contract.py` so `GlobalToast` cannot regress to an eager app-shell import.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=27`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `index-bLIzdp-w.js` at `212.30 kB`, down from the prior `index-B2nTUbrg.js` at `216.45 kB`.
+- Server build split `GlobalToast-DK-5BwzP.js` at `4.82 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=27`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

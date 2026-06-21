@@ -24,7 +24,6 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useSear
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskProvider } from './contexts/TaskContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
-import { GlobalToast } from './components/GlobalToast';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +63,7 @@ const AdminLoginPage = React.lazy(() => import('./admin/AdminLoginPage'));
 const AdminHubPage = React.lazy(() => import('./admin/AdminHubPage'));
 const AdminSettingsPage = React.lazy(() => import('./admin/AdminSettingsPage'));
 const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));
+const GlobalToast = React.lazy(() => import('./components/GlobalToast').then(m => ({ default: m.GlobalToast })));
 
 const RouteFallback: React.FC = () => (
     <div className="h-screen w-full bg-n20 flex items-center justify-center text-sm text-n300">
@@ -91,14 +91,35 @@ const AdminFeaturesPanel: React.FC = () => {
     return <AdminFeatureTabs embedTab={tab} />;
 };
 
-const GlobalToastWithNav: React.FC = () => {
+const DeferredGlobalToastWithNav: React.FC = () => {
     const navigate = useNavigate();
+    const [mounted, setMounted] = React.useState(false);
+
+    React.useEffect(() => {
+        try {
+            if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+                return;
+            }
+        } catch {}
+
+        const mount = () => setMounted(true);
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+            const id = (window as any).requestIdleCallback(mount, { timeout: 1200 });
+            return () => (window as any).cancelIdleCallback?.(id);
+        }
+        const id = window.setTimeout(mount, 250);
+        return () => window.clearTimeout(id);
+    }, []);
+
+    if (!mounted) return null;
     return (
+        <React.Suspense fallback={null}>
         <GlobalToast onNavigate={(view, projectId) => {
             if (projectId) {
                 navigate(`/projects/${projectId}/episodes`);
             }
         }} />
+        </React.Suspense>
     );
 };
 
@@ -128,7 +149,7 @@ const App: React.FC = () => {
         <BrowserRouter>
             <WorkspaceProvider>
             <TaskProvider>
-                <GlobalToastWithNav />
+                <DeferredGlobalToastWithNav />
                 <DeferredCrmHost />
                 <React.Suspense fallback={<RouteFallback />}>
                 <Routes>
