@@ -4565,8 +4565,13 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "function providerHealthKey",
         "function providerHealthFrom",
         "const runtimeByKey = useMemo",
+        "const runtimeForProviderModel = useCallback",
         "const runtimeForConfig = useCallback",
+        "return runtimeForProviderModel(provider, config.model_name || '');",
         "const runtime = runtimeForConfig(config);",
+        "const modelNameHint = primaryConfig?.model_name || meta.default_model_name || null;",
+        "const runtime = runtimeForProviderModel(provider, modelNameHint);",
+        "const modelName = modelNameHint || runtime?.runtime_model_name || null;",
         "runtime={runtime}",
         "health={providerHealthFrom(healthMap, provider, modelName)}",
         "checking={Boolean(checking[providerHealthKey(provider, modelName)])}",
@@ -4584,6 +4589,7 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
     ]
     forbidden_snippets = [
         "const status = healthStatusFrom(result, runtimeMap.get(provider))",
+        "const runtime = primaryConfig ? runtimeForConfig(primaryConfig) : runtimeMap.get(provider);",
     ]
     checks = 0
     for snippet in required_snippets:

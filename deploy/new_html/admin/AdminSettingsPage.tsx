@@ -1563,12 +1563,17 @@ const ApiConfigPanel: React.FC = () => {
         return out;
     }, [runtimeStatus]);
 
+    const runtimeForProviderModel = useCallback((providerRaw: string, modelName?: string | null): RuntimeStatus | undefined => {
+        const provider = normalizeProvider(providerRaw);
+        if (!provider) return undefined;
+        const model = String(modelName || '').trim();
+        return runtimeByKey.get(runtimeStatusKey(provider, model)) || runtimeMap.get(provider);
+    }, [runtimeByKey, runtimeMap]);
+
     const runtimeForConfig = useCallback((config: ApiConfig): RuntimeStatus | undefined => {
         const provider = normalizeProvider(config.provider);
-        if (!provider) return undefined;
-        const modelName = config.model_name || '';
-        return runtimeByKey.get(runtimeStatusKey(provider, modelName)) || runtimeMap.get(provider);
-    }, [runtimeByKey, runtimeMap]);
+        return runtimeForProviderModel(provider, config.model_name || '');
+    }, [runtimeForProviderModel]);
 
     const grouped = useMemo(() => {
         const out: Record<string, ApiConfig[]> = {};
@@ -1743,10 +1748,11 @@ const ApiConfigPanel: React.FC = () => {
         const targets = Array.from(configsByProvider.entries())
             .map(([provider, providerConfigs]) => {
                 const primaryConfig = bestConfigForProvider(providerConfigs, provider);
-                const runtime = runtimeMap.get(provider);
+                const modelNameHint = primaryConfig?.model_name || providerMetaMap.get(provider)?.default_model_name || null;
+                const runtime = runtimeForProviderModel(provider, modelNameHint);
                 return {
                     provider,
-                    model_name: primaryConfig?.model_name || runtime?.runtime_model_name || undefined,
+                    model_name: modelNameHint || runtime?.runtime_model_name || undefined,
                 };
             })
             .filter(target => target.provider);
@@ -1774,7 +1780,7 @@ const ApiConfigPanel: React.FC = () => {
         } finally {
             setSweeping(false);
         }
-    }, [configsByProvider, loadConfigs, runtimeMap]);
+    }, [configsByProvider, loadConfigs, providerMetaMap, runtimeForProviderModel]);
 
     const reloadRuntimeEnv = useCallback(async () => {
         setReloadingEnv(true);
@@ -2213,8 +2219,9 @@ const ApiConfigPanel: React.FC = () => {
                             const provider = normalizeProvider(meta.provider);
                             const providerConfigs = configsByProvider.get(provider) || [];
                             const primaryConfig = bestConfigForProvider(providerConfigs, provider);
-                            const runtime = primaryConfig ? runtimeForConfig(primaryConfig) : runtimeMap.get(provider);
-                            const modelName = primaryConfig?.model_name || runtime?.runtime_model_name || meta.default_model_name || null;
+                            const modelNameHint = primaryConfig?.model_name || meta.default_model_name || null;
+                            const runtime = runtimeForProviderModel(provider, modelNameHint);
+                            const modelName = modelNameHint || runtime?.runtime_model_name || null;
                             return (
                                 <ProviderQuickCard
                                     key={provider}
