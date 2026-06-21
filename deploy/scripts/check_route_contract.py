@@ -2938,8 +2938,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_media_service, "return apiJson<{\n    filename: string;\n    url: string;\n  }>('/api/video/crop'"),
         (video_media_service, "`/api/comfyui/reupload/video?filename=${encodeURIComponent(filename)}&file_type=${fileType}`"),
         (new_html / "services" / "imageLoaderService.ts", "import { apiBlob, apiJson, secureApiUrl } from './httpClient'"),
+        (new_html / "services" / "imageLoaderService.ts", "import { runWhenIdle } from '../utils/idleScheduler';"),
         (new_html / "services" / "imageLoaderService.ts", "apiJson<any>(\n        `/api/projects/${projectId}/images/${shotId}`"),
         (new_html / "services" / "imageLoaderService.ts", "apiBlob(securedUrl, { method: 'GET' }, '下载图片'"),
+        (new_html / "services" / "imageLoaderService.ts", "runWhenIdle(() => {"),
         (new_html / "services" / "geminiService.ts", "import { callGeminiProxyWithRetry } from './geminiProxyService';"),
         (new_html / "services" / "geminiService.ts", "from './geminiImageGenerationService';"),
         (gemini_image_generation_service, "import { generateGeminiImageViaProxy, GeminiImageOptions, GeneratedFileResult } from './geminiImageService';"),
@@ -3939,7 +3941,7 @@ def check_frontend_utility_vendor_chunk_contract(root: Path) -> int:
 
 
 def check_frontend_dependency_contract(root: Path) -> int:
-    """Keep unused Markdown renderer packages out of the production dependency set."""
+    """Keep frontend dependencies and browser scheduling helpers centralized."""
     new_html = root / "new_html"
     package_json_path = new_html / "package.json"
     package_lock_path = new_html / "package-lock.json"
@@ -3980,6 +3982,22 @@ def check_frontend_dependency_contract(root: Path) -> int:
             if import_re.search(line):
                 violations.append(f"{path.relative_to(root)}:{idx}: forbidden Markdown renderer import")
     checks += 1
+
+    idle_scheduler_path = new_html / "utils" / "idleScheduler.ts"
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "node_modules" in path.parts or "dist" in path.parts or "__tests__" in path.parts:
+            continue
+        if path == idle_scheduler_path:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for snippet in ("requestIdleCallback", "cancelIdleCallback"):
+            if snippet in text:
+                violations.append(
+                    f"{path.relative_to(root)} must use utils/idleScheduler.ts instead of direct {snippet}"
+                )
+            checks += 1
 
     if violations:
         fail("Frontend dependency contract failed:\n" + "\n".join(violations))

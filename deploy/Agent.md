@@ -6881,3 +6881,18 @@
 - Local `git diff --check` passed.
 - Local `py_compile` passed for `scripts/check_route_contract.py`.
 - Local `scripts/check_route_contract.py` passed with `storyboard_paged_reload_checks=33`, `frontend_app_shell_chunk_checks=36`, and `materials/audio lightweight checks=15/15`.
+
+## 2026-06-21 Image Preload Idle Scheduler Completion
+
+### Changes
+
+- Updated `new_html/services/imageLoaderService.ts` so image preloading also uses `runWhenIdle()` instead of touching `requestIdleCallback` directly.
+- Strengthened `scripts/check_route_contract.py` so production frontend code can only use `requestIdleCallback` / `cancelIdleCallback` inside `new_html/utils/idleScheduler.ts`.
+- Added explicit contract coverage that `imageLoaderService.ts` keeps both shared `httpClient` and shared `idleScheduler` integration.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile scripts/check_route_contract.py` passed.
+- Local `scripts/check_route_contract.py` passed with `storyboard_paged_reload_checks=33`, `frontend_http_client_checks=7304`, `frontend_dependency_checks=349`, and `frontend_app_shell_chunk_checks=36`.
+- Local `scripts/check_architecture_contracts.py` passed with `contracts=9`.

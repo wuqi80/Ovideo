@@ -6,6 +6,7 @@
  */
 
 import { apiBlob, apiJson, secureApiUrl } from './httpClient';
+import { runWhenIdle } from '../utils/idleScheduler';
 
 // 原图缓存：{ shotId: { imageId: fullImageUrl } }
 const imageCache: Map<string, Map<string, string>> = new Map();
@@ -116,21 +117,11 @@ export function preloadShotImages(
     projectId: string,
     shotId: string
 ): void {
-    // 使用 requestIdleCallback 在空闲时预加载
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-            loadShotImages(projectId, shotId).catch(err => {
-                console.warn(`预加载镜头 ${shotId} 失败:`, err);
-            });
+    runWhenIdle(() => {
+        loadShotImages(projectId, shotId).catch(err => {
+            console.warn(`预加载镜头 ${shotId} 失败:`, err);
         });
-    } else {
-        // 降级方案：使用 setTimeout
-        setTimeout(() => {
-            loadShotImages(projectId, shotId).catch(err => {
-                console.warn(`预加载镜头 ${shotId} 失败:`, err);
-            });
-        }, 100);
-    }
+    }, { fallbackDelayMs: 100 });
 }
 
 /**
