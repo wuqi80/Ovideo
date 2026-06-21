@@ -2389,7 +2389,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "DB 未保存 Key，已借用生效运行时 Key",
+            "运行时连通正常；DB 仍未保存 Key",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
@@ -2417,15 +2417,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "测试 DB 配置",
-        ),
-        (
-            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "刷新生效健康",
-        ),
-        (
-            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "window.location.assign(LEGACY_API_CONFIG_ROUTE);",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
@@ -2715,6 +2707,15 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         text = path.read_text(encoding="utf-8")
         if snippet not in text:
             fail(f"Missing API provider runtime model contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    admin_settings_text = (root / "new_html" / "admin" / "AdminSettingsPage.tsx").read_text(encoding="utf-8")
+    for forbidden in (
+        "LEGACY_API_CONFIG_ROUTE",
+        "打开旧版 API 编辑",
+        "window.location.assign(LEGACY_API_CONFIG_ROUTE);",
+    ):
+        if forbidden in admin_settings_text:
+            fail(f"Admin API settings page must not route API editing back to legacy console: {forbidden}")
         checks += 1
     cluster_text = (root / "cluster_main.py").read_text(encoding="utf-8")
     router_text = (root / "routers" / "ai_proxy.py").read_text(encoding="utf-8")

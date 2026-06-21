@@ -13,7 +13,6 @@ import {
     AlertCircle,
     CheckCircle2,
     Edit3,
-    ExternalLink,
     KeyRound,
     Loader2,
     Plus,
@@ -26,7 +25,6 @@ import { crmConfirm, crmMessage } from './crmUI';
 import { apiJson } from '../services/httpClient';
 
 const LEGACY_VER = '20260619c';
-const LEGACY_API_CONFIG_ROUTE = '/admin-legacy/?page=apiconfig';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
     'legacy-apiconfig': 'apiconfig',
     cluster: 'cluster',
@@ -1010,8 +1008,11 @@ const ApiConfigCard: React.FC<{
     ].filter(Boolean).join(' / ');
     const failoverActive = Boolean(runtime?.failover_active);
     const configTestNoKey = isNoKeyTest(configTest);
+    const configTestUsesRuntimeKey = Boolean(configTest?.ok && configTest.used_runtime_key);
     const configTestClass = configTest?.ok
-        ? 'border-g75 bg-g50 text-g400'
+        ? configTestUsesRuntimeKey
+            ? 'border-y200 bg-y50 text-y400'
+            : 'border-g75 bg-g50 text-g400'
         : configTestNoKey
             ? 'border-y200 bg-y50 text-y400'
         : 'border-r75 bg-r50 text-r400';
@@ -1019,7 +1020,7 @@ const ApiConfigCard: React.FC<{
         ? ''
         : configTest.ok
             ? configTest.used_runtime_key
-                ? '连通正常（使用运行时 Key）'
+                ? '运行时连通正常；此条 DB 记录仍未保存 Key'
                 : '此条记录连通正常'
             : configTestNoKey
                 ? '此条 DB 记录未保存 Key'
@@ -1069,7 +1070,7 @@ const ApiConfigCard: React.FC<{
                                 onClick={() => onTestConfig(config)}
                                 disabled={testingConfig || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="高级诊断：优先测试这条数据库记录保存的 Key；记录无 Key 时借用运行时 Key"
+                                title="高级诊断：优先测试这条数据库记录保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
                             >
                                 {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
                                 高级诊断
@@ -1268,8 +1269,11 @@ const ProviderQuickCard: React.FC<{
     const dbKeyText = dbKeyStateText(hasSavedKey, runtimeHasKey);
     const dbKeyClass = dbKeyStateClass(hasSavedKey, runtimeHasKey);
     const quickConfigTestNoKey = isNoKeyTest(configTest);
+    const quickConfigTestUsesRuntimeKey = Boolean(configTest?.ok && configTest.used_runtime_key);
     const quickConfigTestClass = configTest?.ok
-        ? 'border-g75 bg-g50 text-g400'
+        ? quickConfigTestUsesRuntimeKey
+            ? 'border-y200 bg-y50 text-y400'
+            : 'border-g75 bg-g50 text-g400'
         : quickConfigTestNoKey
             ? 'border-y200 bg-y50 text-y400'
         : 'border-r75 bg-r50 text-r400';
@@ -1277,7 +1281,7 @@ const ProviderQuickCard: React.FC<{
         ? ''
         : configTest.ok
             ? configTest.used_runtime_key
-                ? 'DB 未保存 Key，已借用生效运行时 Key'
+                ? '运行时连通正常；DB 仍未保存 Key'
                 : 'DB 配置可用'
             : quickConfigTestNoKey
                 ? 'DB 配置未保存 Key'
@@ -1373,10 +1377,10 @@ const ProviderQuickCard: React.FC<{
                             onClick={() => onTestConfig(primaryConfig)}
                             disabled={testingConfig || !primaryConfig.config_id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                            title="测试这条数据库配置保存的 Key 和 Endpoint"
+                            title="高级诊断：优先测试这条数据库配置保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
                         >
                             {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测试 DB 配置
+                            高级诊断
                         </button>
                     </>
                 ) : (
@@ -1649,7 +1653,11 @@ const ApiConfigPanel: React.FC = () => {
             const test = { ...(result.test || {}), latency_ms: latencyMs };
             setConfigTestMap(prev => ({ ...prev, [configId]: test }));
             if (test.ok) {
-                crmMessage.success(`${config.name || config.provider} 配置可用`);
+                if (test.used_runtime_key) {
+                    crmMessage.warning(`${config.name || config.provider} 运行时 Key 可用，但 DB 未保存 Key`);
+                } else {
+                    crmMessage.success(`${config.name || config.provider} 配置可用`);
+                }
             } else if (test.error === 'No API key configured') {
                 crmMessage.warning(`${config.name || config.provider} 缺少 API Key`);
             } else {
@@ -1990,10 +1998,6 @@ const ApiConfigPanel: React.FC = () => {
         }
     }, [loadConfigs]);
 
-    const openLegacyApiConfig = useCallback(() => {
-        window.location.assign(LEGACY_API_CONFIG_ROUTE);
-    }, []);
-
     const categoryOrder = ['text', 'image', 'video', 'audio', 'other'];
 
     return (
@@ -2087,14 +2091,6 @@ const ApiConfigPanel: React.FC = () => {
                         >
                             {migratingRuntimeKeys ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
                             迁移运行时 Key
-                        </button>
-                        <button
-                            type="button"
-                            onClick={openLegacyApiConfig}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
-                        >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            打开旧版 API 编辑
                         </button>
                     </div>
                 </header>

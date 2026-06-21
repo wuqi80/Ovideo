@@ -6896,3 +6896,19 @@
 - Local `python -m py_compile scripts/check_route_contract.py` passed.
 - Local `scripts/check_route_contract.py` passed with `storyboard_paged_reload_checks=33`, `frontend_http_client_checks=7304`, `frontend_dependency_checks=349`, and `frontend_app_shell_chunk_checks=36`.
 - Local `scripts/check_architecture_contracts.py` passed with `contracts=9`.
+
+## 2026-06-21 Admin API Settings Runtime/DB Status Split
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` so provider cards treat "生效健康" as the primary runtime status and "高级诊断" as the separate DB-record test.
+- When a DB record has no saved key but runtime/env key still works, the card and toast now show a yellow warning instead of a green DB success or red provider failure.
+- Removed the legacy API edit button that routed users back to `/admin-legacy/?page=apiconfig`; the new `/admin/settings?item=legacy-apiconfig` API management panel is now the self-contained edit path.
+- Strengthened `scripts/check_route_contract.py` to require the new runtime/DB wording and forbid routing API editing back to the legacy console.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile scripts/check_route_contract.py` passed.
+- Local `scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=124`, `frontend_http_client_checks=7304`, `frontend_dependency_checks=349`, and `frontend_app_shell_chunk_checks=36`.
+- Local `scripts/check_architecture_contracts.py` passed with `contracts=9`.
