@@ -7152,3 +7152,11 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local targeted pytest passed: `tests/test_api_provider_runtime_model_env.py` + `tests/test_dashscope_video_payload_extension.py`, 39 passed.
 - Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=151`.
 - Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=10`.
+
+### Deployment
+
+- Pushed commit `1d12d32` (`refactor(api-provider): centralize dashscope video model mapping`) to `origin/refactor/v2`.
+- Ran `deploy/scripts/live_deploy_mvc2.sh`; server restart finished with service status `active`.
+- Remote `scripts/check_architecture_contracts.py` passed with `contracts=10`.
+- Remote file check confirmed `DASHSCOPE_VIDU_REFERENCE_SUB_MODEL_MAP`, `resolve_dashscope_default_model_name`, and `dashscope_vidu_reference_sub_model` are present in deployed registry/runtime/client paths.
+- Online smoke test against `https://mecha.one` passed: 9/9.
