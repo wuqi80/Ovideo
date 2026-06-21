@@ -1,5 +1,35 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-21 Live Deploy Remote Validation
+
+### Changes
+
+- Updated `scripts/live_deploy_mvc2.sh` to run server-side architecture contracts after `drama.service` is confirmed active.
+- Changed the deployment file set to sync full `services`, `utils`, and `dao` directories so newly added service, helper, and DAO modules cannot be omitted from the server.
+- Contract failures now use the existing rollback path for `cluster_main.py` and frontend `dist`, so a bad deploy does not stop at a merely active process.
+- Added optional remote smoke execution controlled by `RUN_REMOTE_SMOKE`; the script reads `ADMIN_PASSWORD` from the remote environment and does not hardcode credentials.
+- Strengthened `scripts/check_route_contract.py` so future deploy-script edits keep the remote validation hooks.
+
+### Verification Plan
+
+- Local shell syntax check for `scripts/live_deploy_mvc2.sh`.
+- Local route/architecture contract suite.
+- Live deploy through `scripts/live_deploy_mvc2.sh`, followed by server-side architecture contracts and the existing online smoke test.
+
+### Verification
+
+- Local `git diff --check`: passed.
+- Local shell syntax check for `scripts/live_deploy_mvc2.sh`: passed.
+- Local `scripts/check_route_contract.py`: passed with `live_deploy_frontend_checks=33`.
+- Live deploy to `https://mecha.one/`: remote Vite build completed, `drama.service` stayed `active`, and the script printed `✅ 部署成功`.
+- Server-side architecture contracts: 10/10 passed during deployment.
+- Server file verification:
+  - `cluster_main.py`: 985 lines.
+  - `admin_routes.py`: 1502 lines.
+  - `dao/`: 36 Python files recursively.
+  - Local/remote SHA-256 matched for `cluster_main.py`, `admin_routes.py`, and `scripts/live_deploy_mvc2.sh`.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+
 ## 2026-06-21 Video Preload Guard
 
 ### Changes

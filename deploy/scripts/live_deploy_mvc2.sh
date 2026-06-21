@@ -7,8 +7,12 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)
 SERVICE="${SERVICE:-drama.service}"
 FRONTEND_TAR_REMOTE="/tmp/mecha-new_html-src.tgz"
+RUN_REMOTE_CONTRACTS="${RUN_REMOTE_CONTRACTS:-1}"
+RUN_REMOTE_SMOKE="${RUN_REMOTE_SMOKE:-0}"
+REQUIRE_REMOTE_SMOKE="${REQUIRE_REMOTE_SMOKE:-0}"
+SMOKE_BASE_URL="${SMOKE_BASE_URL:-https://mecha.one}"
 
-if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ ! -d "new_html" ]; then
+if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ ! -d "services" ] || [ ! -d "utils" ] || [ ! -d "new_html" ]; then
   echo "ERROR: run this script from the deploy/ directory"
   exit 1
 fi
@@ -23,18 +27,8 @@ FILES=(
   "docs"
   "routers"
   "schemas"
-  "services/ai_proxy_service.py"
-  "services/api_config_health_service.py"
-  "services/api_config_import_service.py"
-  "services/api_config_runtime_loader.py"
-  "services/api_config_service.py"
-  "services/api_provider_endpoints.py"
-  "services/api_provider_health_monitor.py"
-  "services/api_provider_registry.py"
-  "services/api_provider_runtime.py"
-  "services/auth_user_service.py"
-  "services/task_read_service.py"
-  "utils/config_helpers.py"
+  "services"
+  "utils"
   "external_api/video/dashscope.py"
   "external_api/video/minimax.py"
   "external_api/video/seedance.py"
@@ -82,6 +76,43 @@ rollback_remote() {
   " || true
 }
 
+run_remote_architecture_contracts() {
+  if [ "$RUN_REMOTE_CONTRACTS" != "1" ]; then
+    echo "Skipping remote architecture contracts (RUN_REMOTE_CONTRACTS=$RUN_REMOTE_CONTRACTS)"
+    return 0
+  fi
+
+  echo "Running remote architecture contracts..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+    cd '$REMOTE_DIR'
+    .venv/bin/python scripts/check_architecture_contracts.py
+  "
+}
+
+run_remote_smoke_test() {
+  if [ "$RUN_REMOTE_SMOKE" != "1" ]; then
+    echo "Skipping remote smoke test (RUN_REMOTE_SMOKE=$RUN_REMOTE_SMOKE)"
+    return 0
+  fi
+
+  echo "Running remote smoke test..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+    if [ -z \"\${ADMIN_PASSWORD:-}\" ]; then
+      if [ '$REQUIRE_REMOTE_SMOKE' = '1' ]; then
+        echo 'ADMIN_PASSWORD is not set on remote; smoke test is required'
+        exit 1
+      fi
+      echo 'Skipping remote smoke test: ADMIN_PASSWORD is not set on remote'
+      exit 0
+    fi
+    if [ ! -f /tmp/smoke_test.py ]; then
+      cp '$REMOTE_DIR'/scripts/smoke_test.py /tmp/smoke_test.py
+    fi
+    cd /home/Administrator
+    python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' \"\$ADMIN_PASSWORD\"
+  "
+}
+
 echo "Creating remote backups..."
 BACKUP_INFO=$(
   ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
@@ -113,7 +144,7 @@ done
 echo "Uploading MVC/API management files..."
 if ! scp -r "${SSH_OPTS[@]}" "$STAGING_DIR"/. "$REMOTE:$REMOTE_DIR/"; then
   rollback_remote
-  echo "DEPLOY FAILED: backend upload failed; rolled back"
+  echo "⚠️ 部署失败，已回滚: backend upload failed"
   exit 1
 fi
 
@@ -131,7 +162,7 @@ tar \
 echo "Uploading frontend source..."
 if ! scp "${SSH_OPTS[@]}" "$STAGING_DIR/new_html-src.tgz" "$REMOTE:$FRONTEND_TAR_REMOTE"; then
   rollback_remote
-  echo "DEPLOY FAILED: frontend upload failed; rolled back"
+  echo "⚠️ 部署失败，已回滚: frontend upload failed"
   exit 1
 fi
 
@@ -150,14 +181,14 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   npm run build || (npm ci && npm run build)
 "; then
   rollback_remote
-  echo "DEPLOY FAILED: frontend build failed; rolled back"
+  echo "⚠️ 部署失败，已回滚: frontend build failed"
   exit 1
 fi
 
 echo "Restarting $SERVICE..."
 if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "sudo systemctl restart '$SERVICE'"; then
   rollback_remote
-  echo "DEPLOY FAILED: service restart failed; rolled back"
+  echo "⚠️ 部署失败，已回滚: service restart failed"
   exit 1
 fi
 
@@ -168,8 +199,20 @@ echo "Service status: $ACTIVE"
 
 if [ "$ACTIVE" != "active" ]; then
   rollback_remote
-  echo "DEPLOY FAILED: service inactive; rolled back"
+  echo "⚠️ 部署失败，已回滚: service inactive"
   exit 1
 fi
 
-echo "DEPLOY OK"
+if ! run_remote_architecture_contracts; then
+  rollback_remote
+  echo "⚠️ 部署失败，已回滚: remote architecture contracts failed"
+  exit 1
+fi
+
+if ! run_remote_smoke_test; then
+  rollback_remote
+  echo "⚠️ 部署失败，已回滚: remote smoke test failed"
+  exit 1
+fi
+
+echo "✅ 部署成功"

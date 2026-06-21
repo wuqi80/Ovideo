@@ -4249,6 +4249,8 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         '"ARCHITECTURE.md"',
         '"docs"',
         '"scripts/live_deploy_mvc2.sh"',
+        '"services"',
+        '"utils"',
         "scripts/check_*.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "new_html-src.tgz",
@@ -4258,10 +4260,26 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "npm run build",
         "tar -xzf '$FRONTEND_TAR_REMOTE' -C '$REMOTE_DIR'",
         "rm -f '$REMOTE_DIR'/api_router.py",
+        "RUN_REMOTE_CONTRACTS",
+        "RUN_REMOTE_SMOKE",
+        "REQUIRE_REMOTE_SMOKE",
+        "SMOKE_BASE_URL",
+        "run_remote_architecture_contracts",
+        "run_remote_smoke_test",
+        "scripts/check_architecture_contracts.py",
+        "ADMIN_PASSWORD",
+        "/tmp/smoke_test.py",
+        "✅ 部署成功",
+        "⚠️ 部署失败，已回滚",
     ]
     forbidden_snippets = [
         "new_html/node_modules\"",
         "new_html/.env\"",
+        "services/ai_proxy_service.py",
+        "services/api_config_health_service.py",
+        "services/api_provider_runtime.py",
+        "utils/config_helpers.py",
+        "pipeline/",
     ]
     checks = 0
     for snippet in required_snippets:

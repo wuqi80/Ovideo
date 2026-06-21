@@ -1,5 +1,16 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-21 Live Deploy Remote Validation
+
+- `deploy/scripts/live_deploy_mvc2.sh` now runs remote architecture contracts after `drama.service` is confirmed active.
+- The same script now syncs the full `services` and `utils` directories, plus the full `dao` directory, so new service/DAO/helper files are not missed on server deploys.
+- Remote contract failure triggers the existing rollback path for `cluster_main.py` and frontend `dist`.
+- The script can also run remote smoke tests through `RUN_REMOTE_SMOKE=1`; it reads `ADMIN_PASSWORD` from the remote environment and skips with a clear message if that variable is absent.
+- No API keys, passwords, or secrets are hardcoded in the deployment script.
+- `deploy/scripts/check_route_contract.py` now guards these deploy-script validation hooks.
+- Deployed to `https://mecha.one/`; remote Vite build completed, `drama.service` stayed active, remote architecture contracts passed 10/10, and online smoke passed 9/9.
+- Verified local and remote SHA-256 match for `cluster_main.py`, `admin_routes.py`, and `scripts/live_deploy_mvc2.sh`; remote `dao/` contains 36 Python files.
+
 更新时间：2026-06-07  
 工作目录：`D:\Codex\Drama`  
 应用代码目录：`D:\Codex\Drama\deploy`
