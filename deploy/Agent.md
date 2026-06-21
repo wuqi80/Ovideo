@@ -6684,3 +6684,24 @@
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_workflow_chunk_checks=29`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 App Shell Video Task Chunk Split
+
+### Changes
+
+- Removed the static `videoTaskService` import from `new_html/contexts/TaskContext.tsx`.
+- Converted backend task cancellation to a dynamic `import('../services/videoTaskService')`, keeping the optimistic local cancel behavior unchanged while avoiding video task submission/model code in the app shell.
+- Strengthened `scripts/check_route_contract.py` so `TaskContext` must lazy-load `videoTaskService` and cannot regress to a static app-shell import.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, `frontend_http_client_checks=7230`, and `frontend_app_shell_chunk_checks=11`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted `index-DvjkqY_w.js` at `223.32 kB`, down from the prior `index-Dt9pk4qe.js` at `236.00 kB`.
+- Server build split `videoTaskService-D_YRmEfM.js` at `9.69 kB`, loaded only when the global task context needs backend cancellation.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, `frontend_http_client_checks=6098`, and `frontend_app_shell_chunk_checks=11`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

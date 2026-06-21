@@ -18,7 +18,6 @@ import {
     markAllNotificationsRead,
 } from '../services/taskNotificationService';
 import { mapNotificationsToTasks, type ServerNotificationRow } from '../services/notificationMapping';
-import { cancelTask as apiCancelTask } from '../services/videoTaskService';
 
 interface TaskContextValue {
     /** 兼容旧接口：仅活跃任务（pending/queued/running） */
@@ -265,9 +264,11 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // 乐观更新本地（状态置 cancelled → 通知面板立即隐藏），
         // 同时调用后端把任务落为 cancelled 并移出队列，避免刷新后又拉回。
         const result = taskRegistry.cancel(taskId);
-        apiCancelTask(taskId).catch((e) => {
-            console.warn('[TaskContext] 取消任务后端调用失败（本地已取消，刷新可能恢复）:', e);
-        });
+        import('../services/videoTaskService')
+            .then(({ cancelTask: apiCancelTask }) => apiCancelTask(taskId))
+            .catch((e) => {
+                console.warn('[TaskContext] 取消任务后端调用失败（本地已取消，刷新可能恢复）:', e);
+            });
         return result;
     }, []);
     const removeTask = useCallback((taskId: string) => {

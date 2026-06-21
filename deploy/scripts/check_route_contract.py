@@ -2982,7 +2982,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (enhance_page, "from '../services/videoTaskService'"),
         (new_html / "services" / "videoTaskPoller.ts", "from './videoTaskService'"),
         (new_html / "services" / "ttsTaskPoller.ts", "from './videoTaskService'"),
-        (new_html / "contexts" / "TaskContext.tsx", "from '../services/videoTaskService'"),
+        (new_html / "contexts" / "TaskContext.tsx", "import('../services/videoTaskService')"),
         (new_html / "components" / "video" / "VideoCard.tsx", "from '../../services/videoWorkspaceService'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse } from './httpClient';"),
         (api_service, "from './taskNotificationService';"),
@@ -3955,27 +3955,32 @@ def check_frontend_dependency_contract(root: Path) -> int:
 def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     """App shell should defer nonessential global UI hosts out of the entry chunk."""
     app_path = root / "new_html" / "App.tsx"
+    task_context_path = root / "new_html" / "contexts" / "TaskContext.tsx"
     app_text = app_path.read_text(encoding="utf-8")
+    task_context_text = task_context_path.read_text(encoding="utf-8")
     required_snippets = [
         "const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));",
         "const DeferredCrmHost: React.FC = () => {",
         "requestIdleCallback",
         "<DeferredCrmHost />",
+        "import('../services/videoTaskService')",
     ]
     forbidden_snippets = [
-        "import { CrmHost } from './admin/crmUI';",
-        'import { CrmHost } from "./admin/crmUI";',
-        "import * as crmUI from './admin/crmUI';",
-        'import * as crmUI from "./admin/crmUI";',
+        (app_text, "import { CrmHost } from './admin/crmUI';", app_path),
+        (app_text, 'import { CrmHost } from "./admin/crmUI";', app_path),
+        (app_text, "import * as crmUI from './admin/crmUI';", app_path),
+        (app_text, 'import * as crmUI from "./admin/crmUI";', app_path),
+        (task_context_text, "from '../services/videoTaskService';", task_context_path),
+        (task_context_text, 'from "../services/videoTaskService";', task_context_path),
     ]
     checks = 0
     for snippet in required_snippets:
-        if snippet not in app_text:
-            fail(f"Missing frontend app-shell chunk snippet in {app_path.relative_to(root)}: {snippet}")
+        if snippet not in app_text and snippet not in task_context_text:
+            fail(f"Missing frontend app-shell chunk snippet: {snippet}")
         checks += 1
-    for snippet in forbidden_snippets:
-        if snippet in app_text:
-            fail(f"Forbidden eager app-shell import in {app_path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Forbidden eager app-shell import in {path.relative_to(root)}: {snippet}")
         checks += 1
     return checks
 
