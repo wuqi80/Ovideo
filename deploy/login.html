@@ -445,12 +445,40 @@
         </section>
     </main>
 
-    <script src="/static/js/auth.js"></script>
     <script>
-        const defaultButtonContent = '<span>进入系统</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>';
+        const TOKEN_KEY = 'auth_token';
+        const USERNAME_KEY = 'username';
+        const defaultButtonContent = document.getElementById('loginBtn').innerHTML;
 
-        if (localStorage.getItem('auth_token')) {
+        if (localStorage.getItem(TOKEN_KEY)) {
             window.location.href = '/projects';
+        }
+
+        async function login(username, password) {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (error) {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                const message = payload && (payload.detail || payload.error);
+                throw new Error(message || '\u767b\u5f55\u5931\u8d25');
+            }
+
+            if (payload && payload.token) {
+                localStorage.setItem(TOKEN_KEY, payload.token);
+                localStorage.setItem(USERNAME_KEY, username);
+            }
+
+            return payload || {};
         }
 
         async function handleLogin(event) {
@@ -461,25 +489,25 @@
             const errorMsg = document.getElementById('errorMessage');
 
             if (!username || !password) {
-                errorMsg.textContent = '请输入用户名和密码';
+                errorMsg.textContent = '\u8bf7\u8f93\u5165\u7528\u6237\u540d\u548c\u5bc6\u7801';
                 errorMsg.classList.remove('hidden');
                 return;
             }
 
             errorMsg.classList.add('hidden');
             loginBtn.disabled = true;
-            loginBtn.innerHTML = '<span>登录中...</span><span class="loader" aria-hidden="true"></span>';
+            loginBtn.innerHTML = '<span>\u767b\u5f55\u4e2d...</span><span class="loader" aria-hidden="true"></span>';
 
             try {
-                const result = await Auth.login(username, password);
-                if (result.success) {
+                const result = await login(username, password);
+                if (result.success || result.token) {
                     window.location.href = '/projects';
                 } else {
-                    throw new Error(result.error || '登录失败');
+                    throw new Error(result.error || '\u767b\u5f55\u5931\u8d25');
                 }
             } catch (error) {
-                console.error('登录失败:', error);
-                errorMsg.textContent = error.message || '登录失败，请检查用户名和密码';
+                console.error('\u767b\u5f55\u5931\u8d25:', error);
+                errorMsg.textContent = error.message || '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7528\u6237\u540d\u548c\u5bc6\u7801';
                 errorMsg.classList.remove('hidden');
                 loginBtn.disabled = false;
                 loginBtn.innerHTML = defaultButtonContent;
