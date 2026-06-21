@@ -6241,9 +6241,57 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
 - Server Vitest subset passed `56/56`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Video Task Service Split
+
+### Changes
+
+- Extracted video generation task submission, task status/history/cancel/delete APIs, queued ComfyUI task wrappers, Seedance/DashScope task submitters, storyboard audio mixing, UUID helpers, and bounded concurrency helper from `deploy/new_html/services/videoService.ts` into `deploy/new_html/services/videoTaskService.ts`.
+- Reduced `deploy/new_html/services/videoService.ts` to a 66-line compatibility facade that re-exports the focused video services.
+- Updated `VideoPage`, `VideoGenPage`, `EnhancePage`, `videoTaskPoller`, `ttsTaskPoller`, `TaskContext`, `storyboardSync`, and `videoTaskInsert` to import task APIs/helpers directly from `videoTaskService.ts`.
+- Kept the existing compatibility import test in `videoMediaService.test.ts` so legacy `videoService` callers remain covered.
+- Strengthened `deploy/scripts/check_route_contract.py` to guard `videoTaskService.ts` ownership and direct task-service imports.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7145`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Local UTF-8 scan passed for `deploy/new_html/**/*.ts*`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build kept app shell `index-*.js` at `236.01 kB` and `VideoPage-*.js` at `154.53 kB`.
+- Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6013`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server Vitest subset passed `56/56`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
 - Server build split `apiService-*.js` into a separate 10.29 kB chunk and reduced the main `index-*.js` chunk from about 250.7 kB to 240.4 kB.
 - Server `npm run test:run -- --pool=forks __tests__/services/globalTaskManager.test.ts` passed `2/2`.
 - Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Video Task Service Split
+
+### Changes
+
+- Extracted video generation task submission, task status/history/cancel/delete APIs, queued ComfyUI task wrappers, Seedance/DashScope task submitters, storyboard audio mixing, UUID helpers, and bounded concurrency helper from `deploy/new_html/services/videoService.ts` into `deploy/new_html/services/videoTaskService.ts`.
+- Reduced `deploy/new_html/services/videoService.ts` to a 66-line compatibility facade that re-exports the focused video services.
+- Updated `VideoPage`, `VideoGenPage`, `EnhancePage`, `videoTaskPoller`, `ttsTaskPoller`, `TaskContext`, `storyboardSync`, and `videoTaskInsert` to import task APIs/helpers directly from `videoTaskService.ts`.
+- Kept the existing compatibility import test in `videoMediaService.test.ts` so legacy `videoService` callers remain covered.
+- Strengthened `deploy/scripts/check_route_contract.py` to guard `videoTaskService.ts` ownership and direct task-service imports.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7145`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Local UTF-8 scan passed for `deploy/new_html/**/*.ts*`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build kept app shell `index-*.js` at `236.01 kB` and `VideoPage-*.js` at `154.53 kB`.
+- Server `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6013`.
+- Server `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server Vitest subset passed `56/56`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
 
 ## 2026-06-21 Video Model Service Split

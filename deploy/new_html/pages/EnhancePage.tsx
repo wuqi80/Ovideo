@@ -7,10 +7,10 @@ import {
 import { useEpisode } from '../contexts/EpisodeContext';
 import type { VideoSegment, StoryboardItemDB } from '../types';
 // 2026-05-20 (Task System Overhaul M4)：把 EnhancePage 的「假进度」改成真后端 worker。
-// upscale 接到 videoService.submitUpscaleTaskQueued + videoTaskPoller，状态实时同步
+// upscale 接到 videoTaskService.submitUpscaleTaskQueued + videoTaskPoller，状态实时同步
 // 到 taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
 // dub / lipSync）后端目前没 worker，明确提示用户而非用假进度误导。
-import * as videoService from '../services/videoService';
+import { submitUpscaleTaskQueued } from '../services/videoTaskService';
 import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
@@ -374,7 +374,7 @@ export const EnhancePage: React.FC = () => {
     setProcessing(true);
     setProcessProgress(0);
     try {
-      const result = await videoService.submitUpscaleTaskQueued(filename, {
+      const result = await submitUpscaleTaskQueued(filename, {
         entity_type: 'video_segment',
         entity_id: targetClip.id,
         file_role: 'video',

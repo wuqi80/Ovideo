@@ -11,7 +11,7 @@
 // 这里集中复刻为内部 helper buildArtifacts，避免两处漂移。
 
 import type { SyncMode } from '../components/video/StoryboardSyncModal';
-import { generateUUID } from '../services/videoService';
+import { generateUUID } from '../services/videoTaskService';
 import type { SeedanceParams, ShotType, VideoModel } from '../services/videoModelService';
 import type { TaskGroup, UploadedImage } from '../services/videoTaskTypes';
 import {

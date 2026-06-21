@@ -2,9 +2,13 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
-import * as videoService from '../services/videoService';
 import type { SeedanceParams, ShotType, VideoModel } from '../services/videoModelService';
 import type { TaskGroup, UploadedImage } from '../services/videoTaskTypes';
+import {
+  generateUUID,
+  mixStoryboardAudio,
+  runWithConcurrency,
+} from '../services/videoTaskService';
 import {
   computeReactiveDurationFromMeta,
   loadWorkspaceSession,
@@ -200,7 +204,7 @@ export const VideoGenPage: React.FC = () => {
         const initialDuration = computeReactiveDurationFromMeta(meta[itemId]);
 
         // 默认模型 = Seedance2（飞升）
-        const groupUuid = videoService.generateUUID();
+        const groupUuid = generateUUID();
         const group: TaskGroup = {
           uuid: groupUuid,
           ids: [itemId],
@@ -287,9 +291,9 @@ export const VideoGenPage: React.FC = () => {
       );
       if (itemsToMix.length > 0) {
         setImportMsg({ kind: 'info', text: `正在后台混音 ${itemsToMix.length} 条音频...` });
-        await videoService.runWithConcurrency(itemsToMix, 3, async ([itemId, m]) => {
+        await runWithConcurrency(itemsToMix, 3, async ([itemId, m]) => {
           try {
-            const r = await videoService.mixStoryboardAudio({
+            const r = await mixStoryboardAudio({
               item_id: itemId,
               dialogue_url:  m.audioUrls?.dialogue,
               narration_url: m.audioUrls?.narration,

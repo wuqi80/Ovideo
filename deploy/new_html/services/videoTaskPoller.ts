@@ -24,7 +24,7 @@
 // 调用 taskRegistry.register/update/... 时必须用 backendTaskId。两者通过
 // `targetEntityId = uuid` 关联回业务侧。
 
-import * as videoService from './videoService';
+import * as videoTaskService from './videoTaskService';
 import { taskRegistry } from './taskRegistry';
 import type { SourcePage, TaskKind, GlobalTaskStatus } from '../types';
 
@@ -32,7 +32,7 @@ export type VideoPollStatus = 'queued' | 'running' | 'processing' | 'completed' 
 
 export interface VideoPollCompletePayload {
     /** 后端返回的最新状态对象（VideoPage 自己拼 URL / 写视频数组）。 */
-    status: videoService.VideoTask;
+    status: videoTaskService.VideoTask;
 }
 
 export interface VideoPollCallbacks {
@@ -57,7 +57,7 @@ interface PollerEntry {
 const entries = new Map<string, PollerEntry>();
 
 export interface StartVideoPollOptions {
-    /** 后端任务 ID（用于 videoService.getTaskStatus + taskRegistry 索引）。 */
+    /** 后端任务 ID（用于 videoTaskService.getTaskStatus + taskRegistry 索引）。 */
     taskId: string;
     /** 全局 TaskRegistry 中的展示标题。 */
     title: string;
@@ -83,7 +83,7 @@ function buildPollFn(uuid: string): () => Promise<void> {
         const entry = entries.get(uuid);
         if (!entry) return;
         try {
-            const status = await videoService.getTaskStatus(entry.backendTaskId);
+            const status = await videoTaskService.getTaskStatus(entry.backendTaskId);
             const cbs = entry.callbacks;
             if (status.status === 'completed') {
                 stopAndClear(uuid);

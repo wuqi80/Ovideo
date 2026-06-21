@@ -18,7 +18,7 @@ import {
     markAllNotificationsRead,
 } from '../services/taskNotificationService';
 import { mapNotificationsToTasks, type ServerNotificationRow } from '../services/notificationMapping';
-import { cancelTask as apiCancelTask } from '../services/videoService';
+import { cancelTask as apiCancelTask } from '../services/videoTaskService';
 
 interface TaskContextValue {
     /** 兼容旧接口：仅活跃任务（pending/queued/running） */

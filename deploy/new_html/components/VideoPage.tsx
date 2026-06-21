@@ -7,8 +7,43 @@ import {
     History, ArrowRight, Maximize2, Database, ImageOff, RotateCw, Settings,
     Combine, Split
 } from 'lucide-react';
-import * as videoService from '../services/videoService';
-import type { SeedanceParams } from '../services/videoModelService';
+import {
+    ALL_MODELS,
+    SELECTABLE_MODELS,
+    getModelDisplayName,
+    isDashScopeVideoModel,
+    makeDefaultDashScopeParams,
+    type DashScopeVideoModel,
+    type DashScopeVideoParams,
+    type SeedanceMediaInput,
+    type SeedanceParams,
+    type ShotType,
+    type VideoModel,
+} from '../services/videoModelService';
+import {
+    clearProjectVideoTasks,
+    cropVideo,
+    getProjectVideoTasks,
+    secureMediaUrl,
+    uploadAudio,
+    uploadImage,
+} from '../services/videoMediaService';
+import {
+    formatUploadTime,
+    generateUUID,
+    submitDashScopeVideoTask,
+    submitSeedanceTask,
+    submitTaskQueued,
+    submitUpscaleTaskQueued,
+    submitVoiceTaskQueued,
+} from '../services/videoTaskService';
+import type {
+    MergedCardSnapshot,
+    TaskGroup,
+    TaskStatus,
+    UploadedImage,
+    VideoTask,
+} from '../services/videoTaskTypes';
 import {
     computeReactiveDurationFromMeta,
     loadWorkspaceSession,
@@ -39,7 +74,6 @@ import { SeedanceDetailModal } from './video/SeedanceDetailModal';
 // Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoModelService.ts，
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
 // DashScopeVideoCard 不再直接 import — 走 DashScopeCardWithCandidates 包装器以注入 mention candidates。
-import { makeDefaultDashScopeParams, type DashScopeVideoParams } from '../services/videoModelService';
 import { createVideoSegment } from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
@@ -148,10 +182,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     onRequestReimport,
 }) => {
     // 状态管理
-    const [uploadedImages, setUploadedImages] = useState<videoService.UploadedImage[]>([]);
-    const [taskGroups, setTaskGroups] = useState<videoService.TaskGroup[]>([]);
+    const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+    const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
     const [imagePrompts, setImagePrompts] = useState<Record<string, string>>({});
-    const [tasksStatus, setTasksStatus] = useState<Record<string, videoService.TaskStatus>>({});
+    const [tasksStatus, setTasksStatus] = useState<Record<string, TaskStatus>>({});
     const [taskStartTimes, setTaskStartTimes] = useState<Record<string, number>>({});
     
     // UI状态
@@ -164,7 +198,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         defaultValue: 'card',
     });
     const [isLoading, setIsLoading] = useState(true);
-    const [globalModel, setGlobalModel] = usePersistedPageState<videoService.VideoModel>({
+    const [globalModel, setGlobalModel] = usePersistedPageState<VideoModel>({
         page: 'VideoPage:globalModel',
         episodeId: sessionScope ?? null,
         // 2026-06-15：默认从 'Wan2'（练气/ComfyUI，需 GPU agent，本部署跑不了）改为
@@ -217,7 +251,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 2026-05-24 — DashScope 图片选择器：调用方注入 callback，picker 选完后回调
     const [dashScopePicker, setDashScopePicker] = useState<{
         groupUuid: string;
-        callback: (m: videoService.SeedanceMediaInput) => void;
+        callback: (m: SeedanceMediaInput) => void;
     } | null>(null);
 
     // Task 6：分镜元信息（音轨 URL / 时长 / 已混音）按 itemId 索引
@@ -239,7 +273,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return img?.storyboardItemId ?? undefined;
     }, [taskGroups, uploadedImages]);
 
-    const getSeedanceParams = useCallback((uuid: string, model: videoService.VideoModel): SeedanceParams => {
+    const getSeedanceParams = useCallback((uuid: string, model: VideoModel): SeedanceParams => {
         const existing = seedanceParamsByUuid[uuid];
         if (existing) return existing;
 
@@ -256,7 +290,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 || group?.ids?.includes(img.id)
             )
         );
-        const seedMedia: videoService.SeedanceMediaInput[] = linkedImages.map(img => ({
+        const seedMedia: SeedanceMediaInput[] = linkedImages.map(img => ({
             kind: 'image',
             url: img.url,
             role: 'reference_image',
@@ -311,7 +345,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 双图也走不到 morph/startend 通道，并且卡内首/尾槽永远空。
     const getDashScopeParams = useCallback((
         uuid: string,
-        model: videoService.DashScopeVideoModel,
+        model: DashScopeVideoModel,
     ): DashScopeVideoParams => {
         const existing = dashScopeParamsByUuid[uuid];
         if (existing && existing.model === model) return existing;
@@ -338,7 +372,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const fileIdOf = (id: string): string | undefined =>
             id && !id.startsWith('sb_') ? id : undefined;
 
-        let seedMedia: videoService.SeedanceMediaInput[];
+        let seedMedia: SeedanceMediaInput[];
         if (model === 'HappyHorse') {
             // HH 始终 r2v，全部当参考图
             seedMedia = orderedImgs.map(img => ({
@@ -371,13 +405,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 2026-05-24 — picker 打开器：DashScope 卡片调用此函数请求选图
     const openDashScopePicker = useCallback((
         uuid: string,
-        callback: (m: videoService.SeedanceMediaInput) => void,
+        callback: (m: SeedanceMediaInput) => void,
     ) => {
         setDashScopePicker({ groupUuid: uuid, callback });
     }, []);
 
     // Task 6：单 group patch（用于响应式时长 hook 写回 duration / durationUserOverride）
-    const patchTaskGroup = useCallback((uuid: string, patch: Partial<videoService.TaskGroup>) => {
+    const patchTaskGroup = useCallback((uuid: string, patch: Partial<TaskGroup>) => {
         setTaskGroups(prev => prev.map(g => (g.uuid === uuid ? { ...g, ...patch } : g)));
     }, []);
 
@@ -531,8 +565,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         const raw0 = item ? byItem[item] : undefined;
                         if (!raw0) continue;
                         // 与 onComplete 一致：相对路径补成绝对 URL，再附 token
-                        const url = videoService.secureMediaUrl(raw0, { absolute: true });
-                        const cur: videoService.TaskStatus = next[g.uuid] || {};
+                        const url = secureMediaUrl(raw0, { absolute: true });
+                        const cur: TaskStatus = next[g.uuid] || {};
                         const curVideos = cur.videos || [];
                         if (curVideos.some((v: any) => bare(v) === bare(url))) continue; // 已有，跳过
                         next[g.uuid] = {
@@ -571,20 +605,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         
         try {
             console.log('🔄 页面激活，检查新导出的 video_tasks:', projectId);
-            const videoTasks = await videoService.getProjectVideoTasks(projectId);
+            const videoTasks = await getProjectVideoTasks(projectId);
             
             console.log('📋 检查结果:', { videoTasksCount: videoTasks.length });
             
             if (videoTasks.length > 0) {
                 console.log(`📦 发现 ${videoTasks.length} 个新导出的镜头，追加到现有数据`);
                 
-                const newImages: videoService.UploadedImage[] = [];
-                const newGroups: videoService.TaskGroup[] = [];
+                const newImages: UploadedImage[] = [];
+                const newGroups: TaskGroup[] = [];
                 const newPrompts: Record<string, string> = {};
                 
                 videoTasks.forEach((task: any, index: number) => {
                     const imgId = `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
-                    const imageUrl = videoService.secureMediaUrl(task.image_url || '');
+                    const imageUrl = secureMediaUrl(task.image_url || '');
                     
                     if (!imageUrl) {
                         console.warn(`⚠️ 镜头 ${task.storyboard_id} 没有图片，跳过`);
@@ -617,7 +651,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 // 清空项目的 video_tasks（避免重复加载）
                 try {
-                    await videoService.clearProjectVideoTasks(projectId);
+                    await clearProjectVideoTasks(projectId);
                     console.log('✅ 已清空项目的 video_tasks');
                 } catch (err) {
                     console.warn('清空 video_tasks 失败:', err);
@@ -633,10 +667,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         try {
             // 加载保存的会话数据
             const result = await loadWorkspaceSession(sessionScope);
-            let existingImages: videoService.UploadedImage[] = [];
-            let existingGroups: videoService.TaskGroup[] = [];
+            let existingImages: UploadedImage[] = [];
+            let existingGroups: TaskGroup[] = [];
             let existingPrompts: Record<string, string> = {};
-            let existingStatus: Record<string, videoService.TaskStatus> = {};
+            let existingStatus: Record<string, TaskStatus> = {};
             
             if (result.success && result.session) {
                 // 空数据保护：服务器返回空session时保留当前内存状态
@@ -655,7 +689,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 // ⭐ Task 6：占位卡（isPlaceholder=true 且 url='') 必须保留，用于空分镜流程。
                 const rawImages = session.uploaded_images || [];
                 const dropped: { id: string; reason: string; sample: string }[] = [];
-                existingImages = rawImages.reduce<videoService.UploadedImage[]>((acc, img) => {
+                existingImages = rawImages.reduce<UploadedImage[]>((acc, img) => {
                     if (!img.url) {
                         if (img.isPlaceholder) {
                             acc.push(img);
@@ -690,7 +724,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 // 给图片 URL 注入 token（保持与 videos/result 处理一致，否则 <img src> 401）
                 // ⭐ Task 6：占位卡 url 为空，此处直接跳过不报错。
                 existingImages = existingImages.map(img => (
-                    img.url ? { ...img, url: videoService.secureMediaUrl(img.url) } : img
+                    img.url ? { ...img, url: secureMediaUrl(img.url) } : img
                 ));
 
                 // ⭐ Task 6：恢复 seedance_params 与 storyboard_meta
@@ -736,20 +770,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 });
                 
                 // 处理任务状态
-                const statusWithToken: Record<string, videoService.TaskStatus> = {};
+                const statusWithToken: Record<string, TaskStatus> = {};
                 const pendingTaskIds: { uuid: string; taskId: string }[] = [];
                 
                 Object.entries(session.tasks_status || {}).forEach(([uuid, status]) => {
                     if (!validGroupUuids.has(uuid)) return;
                     
                     const videosRaw = (status.videos || []).map(url => {
-                        return typeof url === 'string' ? videoService.secureMediaUrl(url) : url;
+                        return typeof url === 'string' ? secureMediaUrl(url) : url;
                     });
                     // 去重：旧会话可能已存了重复视频（历史 bug 落盘的），恢复时清掉
                     const dd = dedupVideosWithTimes(videosRaw, status.videoGenerateTimes || []);
                     const videos = dd.videos;
                     let result = status.result || '';
-                    if (result) result = videoService.secureMediaUrl(result);
+                    if (result) result = secureMediaUrl(result);
                     statusWithToken[uuid] = { ...status, videos, videoGenerateTimes: dd.times, result };
                     
                     if (status.state === 'pending' && status.taskId) {
@@ -782,7 +816,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             if (projectId) {
                 try {
                     console.log('🔍 检查项目 video_tasks:', projectId);
-                    const videoTasks = await videoService.getProjectVideoTasks(projectId);
+                    const videoTasks = await getProjectVideoTasks(projectId);
 
                     // 🔍 调试日志
                     console.log('📋 API返回的 projectData:', {
@@ -796,14 +830,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         console.log(`📦 从项目发现 ${videoTasks.length} 个新导出的镜头，追加到现有数据`);
 
                         // 🆕 转换 video_tasks 并追加到现有数据
-                        const newImages: videoService.UploadedImage[] = [];
-                        const newGroups: videoService.TaskGroup[] = [];
+                        const newImages: UploadedImage[] = [];
+                        const newGroups: TaskGroup[] = [];
                         const newPrompts: Record<string, string> = {};
 
                         videoTasks.forEach((task: any, index: number) => {
                             // 🔧 修复：允许没有 image_url 的任务也导入，用户可以后续上传图片
                             const imgId = `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
-                            const imageUrl = videoService.secureMediaUrl(task.image_url || '');
+                            const imageUrl = secureMediaUrl(task.image_url || '');
 
                             // 🔧 如果没有图片URL，跳过这个任务（在画面分镜中没有选择图片）
                             if (!imageUrl) {
@@ -841,7 +875,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
 
                         // 🔧 清空项目的 video_tasks（避免重复加载）
                         try {
-                            await videoService.clearProjectVideoTasks(projectId);
+                            await clearProjectVideoTasks(projectId);
                             console.log('✅ 已清空项目的 video_tasks');
                         } catch (err) {
                             console.warn('清空 video_tasks 失败:', err);
@@ -877,7 +911,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     };
     
     const saveSession = useCallback(async () => {
-        const cleanedStatus: Record<string, videoService.TaskStatus> = {};
+        const cleanedStatus: Record<string, TaskStatus> = {};
         Object.entries(tasksStatus).forEach(([uuid, status]) => {
             // 保存所有状态的任务，运行中的任务标记为 pending 以便恢复后重新轮询
             const savedState = (status.state === 'running' || status.state === 'processing') 
@@ -955,7 +989,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         });
 
         for (const { id, tempUrl, file } of items) {
-            const newImage: videoService.UploadedImage = {
+            const newImage: UploadedImage = {
                 id,
                 url: tempUrl,
                 filename: file.name,
@@ -965,7 +999,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             setUploadedImages(prev => [...prev, newImage]);
             setImagePrompts(prev => ({ ...prev, [id]: '' }));
             setTaskGroups(prev => [...prev, {
-                uuid: videoService.generateUUID(),
+                uuid: generateUUID(),
                 ids: [id],
                 model: globalModel,
                 shotType: 'multi'
@@ -980,7 +1014,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 if (!item) break;
                 const { file, id, tempUrl } = item;
                 try {
-                    const result = await videoService.uploadImage(file, {
+                    const result = await uploadImage(file, {
                         onProgress: (p) => {
                             setUploadedImages(prev => prev.map(img =>
                                 img.id === id ? { ...img, uploadProgress: p.percent } : img
@@ -1052,7 +1086,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         ));
 
         try {
-            const result = await videoService.uploadImage(file, {
+            const result = await uploadImage(file, {
                 onProgress: (p) => setUploadedImages(prev => prev.map(img =>
                     img.id === imageId ? { ...img, uploadProgress: p.percent } : img
                 ))
@@ -1218,7 +1252,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         setImagePrompts(prev => ({ ...prev, [imgId]: value }));
     }, []);
     
-    const updateTaskModel = useCallback((uuid: string, model: videoService.VideoModel) => {
+    const updateTaskModel = useCallback((uuid: string, model: VideoModel) => {
         setTaskGroups(prev => prev.map(g => g.uuid === uuid ? { ...g, model } : g));
     }, []);
     
@@ -1230,8 +1264,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         
         if (groupA.ids.length !== 1 || groupB.ids.length !== 1) return;
         
-        const newGroup: videoService.TaskGroup = {
-            uuid: videoService.generateUUID(),
+        const newGroup: TaskGroup = {
+            uuid: generateUUID(),
             ids: [groupA.ids[0], groupB.ids[0]],
             model: groupA.model
         };
@@ -1254,8 +1288,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const group = taskGroups[index];
         if (group.ids.length !== 2) return;
         
-        const newA: videoService.TaskGroup = { uuid: videoService.generateUUID(), ids: [group.ids[0]], model: group.model };
-        const newB: videoService.TaskGroup = { uuid: videoService.generateUUID(), ids: [group.ids[1]], model: group.model };
+        const newA: TaskGroup = { uuid: generateUUID(), ids: [group.ids[0]], model: group.model };
+        const newB: TaskGroup = { uuid: generateUUID(), ids: [group.ids[1]], model: group.model };
         
         setTaskGroups(prev => {
             const next = [...prev];
@@ -1277,11 +1311,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 与 linkGroups（拼首尾帧）不同：这里是把两卡的提示词追加合并、媒体素材拼接（保留各自 role），
     // 结果写回上卡 uuid 的 params map；记录 mergedFrom 快照供 splitMergedCard 原位还原。
     const isSeedanceModel = useCallback(
-        (m: videoService.VideoModel) => m === 'Seedance2' || m === 'Seedance2Fast',
+        (m: VideoModel) => m === 'Seedance2' || m === 'Seedance2Fast',
         [],
     );
     const isMergeableModel = useCallback(
-        (m: videoService.VideoModel) => isSeedanceModel(m) || videoService.isDashScopeVideoModel(m),
+        (m: VideoModel) => isSeedanceModel(m) || isDashScopeVideoModel(m),
         [isSeedanceModel],
     );
     // 相邻 + 同模型 + 可合并模型，才允许把 index 与 index+1 合并
@@ -1300,12 +1334,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (A.model !== B.model) { showToast('只能合并相邻且模型相同的卡片'); return; }
         if (!isMergeableModel(A.model)) { showToast('仅 飞升/渡劫(Seedance) 与 合体/大乘/炼虚(Kling/Vidu/炼气) 卡片支持合并'); return; }
 
-        const isDS = videoService.isDashScopeVideoModel(A.model);
+        const isDS = isDashScopeVideoModel(A.model);
         // 取一卡的当前有效参数快照（用于拆分还原）
-        const snap = (g: videoService.TaskGroup): videoService.MergedCardSnapshot => {
-            const ds = videoService.isDashScopeVideoModel(g.model);
+        const snap = (g: TaskGroup): MergedCardSnapshot => {
+            const ds = isDashScopeVideoModel(g.model);
             const seed = ds ? undefined : getSeedanceParams(g.uuid, g.model);
-            const dash = ds ? getDashScopeParams(g.uuid, g.model as videoService.DashScopeVideoModel) : undefined;
+            const dash = ds ? getDashScopeParams(g.uuid, g.model as DashScopeVideoModel) : undefined;
             return {
                 uuid: g.uuid,
                 ids: [...g.ids],
@@ -1316,13 +1350,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             };
         };
         // 若本身已是合并卡，展开其 mergedFrom，从而支持多次合并后整体拆回原始子卡
-        const childrenOf = (g: videoService.TaskGroup): videoService.MergedCardSnapshot[] =>
+        const childrenOf = (g: TaskGroup): MergedCardSnapshot[] =>
             (g.mergedFrom && g.mergedFrom.length) ? g.mergedFrom : [snap(g)];
         const mergedFrom = [...childrenOf(A), ...childrenOf(B)];
 
         if (isDS) {
-            const pA = getDashScopeParams(A.uuid, A.model as videoService.DashScopeVideoModel);
-            const pB = getDashScopeParams(B.uuid, B.model as videoService.DashScopeVideoModel);
+            const pA = getDashScopeParams(A.uuid, A.model as DashScopeVideoModel);
+            const pB = getDashScopeParams(B.uuid, B.model as DashScopeVideoModel);
             const mergedPrompt = [pA.prompt, pB.prompt].filter(Boolean).join('\n');
             const mergedMedia = [...(pA.media_inputs || []), ...(pB.media_inputs || [])];
             setDashScopeParamsByUuid(prev => {
@@ -1358,7 +1392,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const g = taskGroups[index];
         if (!g || !g.mergedFrom || !g.mergedFrom.length) return;
         const children = g.mergedFrom;
-        const restored: videoService.TaskGroup[] = children.map(c => ({ uuid: c.uuid, ids: [...c.ids], model: c.model }));
+        const restored: TaskGroup[] = children.map(c => ({ uuid: c.uuid, ids: [...c.ids], model: c.model }));
 
         setSeedanceParamsByUuid(prev => {
             const next = { ...prev };
@@ -1470,7 +1504,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     };
     
     // 辅助函数：获取图片标识符（外部API使用file_id，ComfyUI使用filename）
-    const getImageIdentifier = (img: videoService.UploadedImage, isExternalAPI: boolean): string => {
+    const getImageIdentifier = (img: UploadedImage, isExternalAPI: boolean): string => {
         if (isExternalAPI) {
             // 外部API模型（大能、Sora2、Veo、MINI）：需要file_id
             // 优先使用storageUrl中的file_id
@@ -1493,7 +1527,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 取或建该任务组对应的 video_segment，返回真实 segment_id。
     // 视频完成后 worker 执行 UPDATE video_segments SET video_url WHERE segment_id=entity_id，
     // 美化页只读 video_segments.video_url —— 必须传真实 segment_id + episodeId，否则视频进不了美化。
-    const ensureVideoSegmentId = useCallback(async (group: videoService.TaskGroup): Promise<string | null> => {
+    const ensureVideoSegmentId = useCallback(async (group: TaskGroup): Promise<string | null> => {
         if (!episodeId) return null;
         if (segmentIdByGroupRef.current[group.uuid]) return segmentIdByGroupRef.current[group.uuid];
         const sbItemId = (group.ids && group.ids[0]) || '';   // = storyboard_items.item_id
@@ -1542,7 +1576,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 ? { ...rawParams, media_inputs: rawParams.media_inputs.filter(m => m.kind === 'image') }
                 : rawParams;
             setTasksStatus(prev => {
-                const oldStatus: videoService.TaskStatus = prev[uuid] || {};
+                const oldStatus: TaskStatus = prev[uuid] || {};
                 return {
                     ...prev,
                     [uuid]: {
@@ -1559,7 +1593,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             setTaskStartTimes(prev => ({ ...prev, [uuid]: Date.now() }));
             try {
                 console.log('Seedance 2.0 提交:', { uuid, sub_model: params.sub_model, media: params.media_inputs.length, prompt: params.prompt.substring(0, 40) });
-                const result = await videoService.submitSeedanceTask(params, {
+                const result = await submitSeedanceTask(params, {
                     entity_type: 'video_segment',
                     entity_id: entityId,
                     file_role: 'video',
@@ -1580,7 +1614,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
         // ==================== DashScope 共享 API (合体/大乘/炼虚) ====================
         // 2026-05-24 — Kling/Vidu/HappyHorse 走专用多模态面板（params.media_inputs）
-        if (videoService.isDashScopeVideoModel(group.model)) {
+        if (isDashScopeVideoModel(group.model)) {
             const params = getDashScopeParams(group.uuid, group.model);
             // 校验：Vidu 不允许无图；HappyHorse 至少 1 张
             const images = (params.media_inputs || []).filter(m => m.kind === 'image');
@@ -1593,7 +1627,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 return;
             }
             setTasksStatus(prev => {
-                const oldStatus: videoService.TaskStatus = prev[uuid] || {};
+                const oldStatus: TaskStatus = prev[uuid] || {};
                 return {
                     ...prev,
                     [uuid]: {
@@ -1610,7 +1644,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             setTaskStartTimes(prev => ({ ...prev, [uuid]: Date.now() }));
             try {
                 console.log('DashScope 视频任务提交:', { uuid, model: group.model, media: images.length, prompt: (params.prompt || '').substring(0, 40) });
-                const result = await videoService.submitDashScopeVideoTask(params, {
+                const result = await submitDashScopeVideoTask(params, {
                     entity_type: 'video_segment',
                     entity_id: entityId,
                     file_role: 'video',
@@ -1654,7 +1688,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         
         // 🆕 保留旧视频和时间戳，运行新任务
         setTasksStatus(prev => {
-            const oldStatus: videoService.TaskStatus = prev[uuid] || {};
+            const oldStatus: TaskStatus = prev[uuid] || {};
             return {
                 ...prev,
                 [uuid]: { 
@@ -1680,7 +1714,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             console.log('📤 提交任务:', { filename1, filename2, prompt: prompt.substring(0, 50), model: group.model });
             
             // 🔧 使用队列执行（ComfyUI模型会排队，外部API模型直接提交）
-            const result = await videoService.submitTaskQueued(
+            const result = await submitTaskQueued(
                 filename1,
                 filename2,
                 prompt,
@@ -1717,15 +1751,15 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 注意：onComplete / onFail / onProgress 三个回调 closure 必须读最新业务数据，
     // 但本组件主要用 setState（已支持函数式更新）和 ref 局部数据，所以闭包不会过期。
     const buildPollCallbacks = useCallback((uuid: string) => ({
-        onComplete: ({ status }: { status: videoService.VideoTask }) => {
+        onComplete: ({ status }: { status: VideoTask }) => {
             const videos = status.result?.videos?.map(v => {
-                return videoService.secureMediaUrl(v.url, { absolute: true });
+                return secureMediaUrl(v.url, { absolute: true });
             }) || [];
 
             const videoTimes = status.result?.videos?.map(v => v.generateTime || 0) || [];
 
             setTasksStatus(prev => {
-                const oldStatus: videoService.TaskStatus = prev[uuid] || {};
+                const oldStatus: TaskStatus = prev[uuid] || {};
                 const oldVideos = oldStatus.videos || [];
                 const oldTimes = oldStatus.videoGenerateTimes || [];
                 // 去重：oldVideos 里可能已有同一视频（DB兜底/会话恢复加过），盲目追加会出现两个一模一样
@@ -1914,7 +1948,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             
             try {
                 // 🔧 使用队列执行视频放大
-                await videoService.submitUpscaleTaskQueued(filename);
+                await submitUpscaleTaskQueued(filename);
                 setTasksStatus(prev => ({
                     ...prev,
                     [group.uuid]: { ...prev[group.uuid], isUpscaled: true }
@@ -1962,7 +1996,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         try {
             console.log('🔍 开始放大视频:', filename);
             // 🔧 使用队列执行视频放大
-            const result = await videoService.submitUpscaleTaskQueued(filename);
+            const result = await submitUpscaleTaskQueued(filename);
             console.log('✅ 放大任务提交成功:', result.task_id);
             
             setTasksStatus(prev => ({
@@ -2026,11 +2060,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         setIsSubmitting(true);
         try {
             // 先上传音频
-            const audioResult = await videoService.uploadAudio(voiceAudioFile, voiceStartTime, 5);
+            const audioResult = await uploadAudio(voiceAudioFile, voiceStartTime, 5);
             const audioFilename = audioResult.filename;
             
             // 🔧 使用队列执行配音任务
-            const result = await videoService.submitVoiceTaskQueued(
+            const result = await submitVoiceTaskQueued(
                 imageFilename,
                 videoFilename,
                 audioFilename,
@@ -2097,7 +2131,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const imageUrl = URL.createObjectURL(imageFile);
             
             // 上传图片
-            const uploadResult = await videoService.uploadImage(imageFile);
+            const uploadResult = await uploadImage(imageFile);
             
             setUploadedImages(prev => [...prev, {
                 id,
@@ -2110,7 +2144,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             
             setImagePrompts(prev => ({ ...prev, [id]: `抽帧时间: ${videoElement.currentTime.toFixed(2)}s` }));
             setTaskGroups(prev => [...prev, {
-                uuid: videoService.generateUUID(),
+                uuid: generateUUID(),
                 ids: [id],
                 model: globalModel,
                 shotType: 'multi'
@@ -2142,10 +2176,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         
         setIsSubmitting(true);
         try {
-            const result = await videoService.cropVideo(filename, cropStartTime, cropEndTime);
+            const result = await cropVideo(filename, cropStartTime, cropEndTime);
             
             // 将裁剪后的视频添加到视频列表
-            const croppedUrl = videoService.secureMediaUrl(
+            const croppedUrl = secureMediaUrl(
                 result.url || `/storage/videos/${result.filename}`,
                 { absolute: true },
             );
@@ -2256,7 +2290,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // ==================== 列表视图渲染 ====================
     
     // 右侧列表结果卡片
-    const renderListResultCard = (group: videoService.TaskGroup, index: number) => {
+    const renderListResultCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
         const isPair = group.ids.length === 2;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
@@ -2311,7 +2345,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {isPair ? 'Morph' : 'I2V'}
                     </span>
                     <span className="text-[10px] text-n100 text-center truncate">
-                        {videoService.getModelDisplayName(group.model)}
+                        {getModelDisplayName(group.model)}
                     </span>
                 </div>
                 
@@ -2383,7 +2417,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // Issue 7: compact Seedance row used inside renderListViewCard.
     // Single line of textarea + media badges + ⚙ detail button.
     const ListSeedanceRow: React.FC<{
-        group: videoService.TaskGroup;
+        group: TaskGroup;
         params: SeedanceParams;
         onChangeParams: (next: SeedanceParams) => void;
         onOpenDetail: () => void;
@@ -2446,7 +2480,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     };
 
     // 左侧列表卡片
-    const renderListViewCard = (group: videoService.TaskGroup, index: number) => {
+    const renderListViewCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
         const isPair = group.ids.length === 2;
         const img1 = uploadedImages.find(i => i.id === group.ids[0]);
@@ -2525,14 +2559,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     </span>
                     <select
                         value={group.model}
-                        onChange={(e) => updateTaskModel(group.uuid, e.target.value as videoService.VideoModel)}
+                        onChange={(e) => updateTaskModel(group.uuid, e.target.value as VideoModel)}
                         className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer"
                     >
-                        {(videoService.SELECTABLE_MODELS.includes(group.model)
-                            ? videoService.SELECTABLE_MODELS
-                            : [group.model, ...videoService.SELECTABLE_MODELS]
+                        {(SELECTABLE_MODELS.includes(group.model)
+                            ? SELECTABLE_MODELS
+                            : [group.model, ...SELECTABLE_MODELS]
                         ).map(m => (
-                            <option key={m} value={m}>{videoService.getModelDisplayName(m)}</option>
+                            <option key={m} value={m}>{getModelDisplayName(m)}</option>
                         ))}
                     </select>
                 </div>
@@ -2547,7 +2581,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             onOpenDetail={() => setSeedanceDetailUuid(group.uuid)}
                             isPlaceholder={!!img1.isPlaceholder}
                         />
-                    ) : videoService.isDashScopeVideoModel(group.model) ? (
+                    ) : isDashScopeVideoModel(group.model) ? (
                         // 2026-05-24 — DashScope list 简版：prompt 直绑 params；详情请去卡片视图
                         (() => {
                             const dsParams = getDashScopeParams(group.uuid, group.model);
@@ -2670,7 +2704,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     // ==================== 卡片视图渲染 ====================
     
-    const renderStoryboardCard = (group: videoService.TaskGroup, index: number) => {
+    const renderStoryboardCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
         const isPair = group.ids.length === 2;
         const img1 = uploadedImages.find(i => i.id === group.ids[0]);
@@ -2719,11 +2753,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {/* 模型选择 */}
                         <select
                             value={group.model}
-                            onChange={(e) => updateTaskModel(group.uuid, e.target.value as videoService.VideoModel)}
+                            onChange={(e) => updateTaskModel(group.uuid, e.target.value as VideoModel)}
                             className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer hover:bg-n0"
                         >
-                            {videoService.ALL_MODELS.map(m => (
-                                <option key={m} value={m}>{videoService.getModelDisplayName(m)}</option>
+                            {ALL_MODELS.map(m => (
+                                <option key={m} value={m}>{getModelDisplayName(m)}</option>
                             ))}
                         </select>
                         
@@ -2732,7 +2766,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <select
                                 value={group.shotType || 'multi'}
                                 onChange={(e) => setTaskGroups(prev => prev.map(g => 
-                                    g.uuid === group.uuid ? { ...g, shotType: e.target.value as videoService.ShotType } : g
+                                    g.uuid === group.uuid ? { ...g, shotType: e.target.value as ShotType } : g
                                 ))}
                                 className="bg-y50 border border-warning/50 text-[10px] text-warning rounded px-1 py-0.5 focus:outline-none focus:border-warning cursor-pointer hover:bg-y75"
                             >
@@ -2746,7 +2780,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {img1.uploadTime && (
                             <span className="text-[10px] text-n100 flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {videoService.formatUploadTime(img1.uploadTime)}
+                                {formatUploadTime(img1.uploadTime)}
                             </span>
                         )}
                         {isPair ? (
@@ -2881,7 +2915,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 setLightboxType(kind === 'video' ? 'video' : 'image');
                             }}
                         />
-                    ) : videoService.isDashScopeVideoModel(group.model) ? (
+                    ) : isDashScopeVideoModel(group.model) ? (
                         <DashScopeCardWithCandidates
                             params={getDashScopeParams(group.uuid, group.model)}
                             onChange={(next) => setDashScopeParams(group.uuid, next)}
@@ -2907,7 +2941,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         );
     };
     
-    const renderResultCard = (group: videoService.TaskGroup, index: number) => {
+    const renderResultCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
         const isPair = group.ids.length === 2;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
@@ -3099,7 +3133,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             #{index + 1} {isPair ? 'Morph' : 'I2V'}
                         </span>
                         <span className="text-[10px] px-1 rounded border border-n40 text-n300">
-                            {videoService.getModelDisplayName(group.model)}
+                            {getModelDisplayName(group.model)}
                         </span>
                         {renderStatusBadge()}
                     </div>
@@ -3797,7 +3831,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                             e.target.value = '';
                                             if (!file) return;
                                             try {
-                                                const r = await videoService.uploadImage(file);
+                                                const r = await uploadImage(file);
                                                 const url = r.url || (r as any).storage_url || '';
                                                 // 立即派发给卡片
                                                 dashScopePicker.callback({

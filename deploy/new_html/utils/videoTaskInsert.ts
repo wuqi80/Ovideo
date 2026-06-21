@@ -1,4 +1,4 @@
-import { generateUUID } from '../services/videoService';
+import { generateUUID } from '../services/videoTaskService';
 import type { UploadedImage, TaskGroup } from '../services/videoTaskTypes';
 import type { VideoModel } from '../services/videoModelService';
 

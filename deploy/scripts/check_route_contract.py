@@ -2805,6 +2805,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     episode_data_service = new_html / "services" / "episodeDataService.ts"
     audio_generation_service = new_html / "services" / "audioGenerationService.ts"
     video_model_service = new_html / "services" / "videoModelService.ts"
+    video_task_service = new_html / "services" / "videoTaskService.ts"
     video_task_types = new_html / "services" / "videoTaskTypes.ts"
     video_workspace_service = new_html / "services" / "videoWorkspaceService.ts"
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
@@ -2836,7 +2837,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
     admin_page = new_html / "components" / "AdminPage.tsx"
     admin_settings_page = new_html / "admin" / "AdminSettingsPage.tsx"
     migrated_services = [
-        new_html / "services" / "videoService.ts",
         new_html / "services" / "videoReverseService.ts",
         new_html / "services" / "imageLoaderService.ts",
         new_html / "services" / "geminiService.ts",
@@ -2848,6 +2848,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         task_notification_service,
         episode_data_service,
         audio_generation_service,
+        video_task_service,
         video_workspace_service,
         video_workflow_service,
         video_media_service,
@@ -2918,9 +2919,19 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "geminiService.ts", "postGenerationTask('/api/generate/comfyui-workflow'"),
         (new_html / "services" / "geminiService.ts", "apiJson<any>(\n            `/api/task/${taskId}`"),
         (new_html / "services" / "geminiService.ts", "await import('./comfyuiBridgeService')"),
+        (new_html / "services" / "videoService.ts", "from './videoTaskService';"),
         (new_html / "services" / "videoService.ts", "from './videoModelService';"),
         (new_html / "services" / "videoService.ts", "from './videoTaskTypes';"),
         (new_html / "services" / "videoService.ts", "from './videoWorkspaceService';"),
+        (video_task_service, "import { apiFetch, apiJson, buildAuthHeaders } from './httpClient';"),
+        (video_task_service, "import { enqueueComfyUITask } from './comfyuiTaskQueue';"),
+        (video_task_service, "export async function submitTask("),
+        (video_task_service, "export async function getTaskStatus("),
+        (video_task_service, "export async function submitTaskQueued("),
+        (video_task_service, "export async function submitSeedanceTask("),
+        (video_task_service, "export async function submitDashScopeVideoTask("),
+        (video_task_service, "export async function mixStoryboardAudio("),
+        (video_task_service, "export async function runWithConcurrency"),
         (video_model_service, "export type VideoModel ="),
         (video_model_service, "export interface SeedanceParams"),
         (video_model_service, "export function inferSeedanceTaskType("),
@@ -2943,7 +2954,14 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_workspace_service, "export function computeReactiveDurationFromMeta("),
         (video_workspace_service, "export async function patchWorkspaceSession("),
         (video_gen_page, "from '../services/videoWorkspaceService'"),
+        (video_gen_page, "from '../services/videoTaskService'"),
         (video_page, "from '../services/videoWorkspaceService'"),
+        (video_page, "from '../services/videoTaskService'"),
+        (video_page, "from '../services/videoMediaService'"),
+        (enhance_page, "from '../services/videoTaskService'"),
+        (new_html / "services" / "videoTaskPoller.ts", "from './videoTaskService'"),
+        (new_html / "services" / "ttsTaskPoller.ts", "from './videoTaskService'"),
+        (new_html / "contexts" / "TaskContext.tsx", "from '../services/videoTaskService'"),
         (new_html / "components" / "video" / "VideoCard.tsx", "from '../../services/videoWorkspaceService'"),
         (api_service, "export { getAuthToken, getHeaders, handleResponse } from './httpClient';"),
         (api_service, "from './taskNotificationService';"),
@@ -3068,9 +3086,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "__tests__" / "services" / "comfyuiBridgeService.test.ts", "downloads blob URLs through public blob helper without auth headers"),
         (new_html / "__tests__" / "services" / "projectWorkflowService.test.ts", "exports selected storyboard items to video"),
         (new_html / "__tests__" / "services" / "canvasService.test.ts", "creates, lists, updates, and deletes canvas boards"),
-        (video_page, "videoService.secureMediaUrl("),
-        (video_page, "videoService.getProjectVideoTasks("),
-        (video_page, "videoService.clearProjectVideoTasks("),
+        (video_page, "secureMediaUrl("),
+        (video_page, "getProjectVideoTasks("),
+        (video_page, "clearProjectVideoTasks("),
         (project_hub, "import { apiJson } from '../services/httpClient'"),
         (project_hub, "apiJson<any>(`/api/projects?"),
         (episode_hub, "import { apiJson } from '../services/httpClient'"),

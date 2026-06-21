@@ -9,9 +9,9 @@
  *   - 支持 AbortSignal —— Drawer 关闭 / 用户取消时立刻终止
  *   - status === 'completed' 时取 result 字段（audio_url, file_id, duration_ms）
  *   - status === 'failed' 抛 result.error 文本
- *   - 默认 getStatus 是 videoService.getTaskStatus；测试时可注入
+ *   - 默认 getStatus 是 videoTaskService.getTaskStatus；测试时可注入
  */
-import { getTaskStatus as defaultGetStatus } from './videoService';
+import { getTaskStatus as defaultGetStatus } from './videoTaskService';
 
 export interface TtsResult {
   audio_url: string;
