@@ -7354,3 +7354,18 @@
 - Local route contract, architecture contract, targeted auth pytest, and script py_compile passed.
 - Runtime matrix confirmed: no env rejects `admin123`; dev flag accepts it; strong `ADMIN_PASSWORD` works; short `ADMIN_PASSWORD` is disabled.
 - Live deploy to `https://mecha.one/` passed; `drama.service` stayed `active`, remote architecture contracts passed 10/10, online smoke passed 9/9, and `admin / admin123` returned 401.
+
+## 2026-06-22 CORS Allowlist Defaults
+
+### Changes
+
+- Unified CORS defaults in `cluster_config.py` and legacy `config.py` around an explicit allowlist: `https://mecha.one`, backend local dev, and Vite local dev origins.
+- Added `parse_cors_allow_origins()` so `CORS_ALLOW_ORIGINS` remains the single runtime override mechanism.
+- Updated `scripts/live_deploy_mvc2.sh` to sync `cluster_config.py` and `config.py`; otherwise server deployments could miss security/config changes.
+- Updated `docs/deployment.md` to remove the obsolete `ALLOW_ORIGINS = ["*"]` guidance.
+- Strengthened `scripts/check_route_contract.py` with a CORS allowlist contract that rejects wildcard CORS defaults and requires the official domain.
+
+### Verification
+
+- Local CORS parser check confirmed both config modules default to the same explicit origin list and contain no wildcard CORS default.
+- Local `git diff --check`, deploy script syntax check, route contract, and architecture contract passed.

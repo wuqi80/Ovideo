@@ -1459,6 +1459,41 @@ def check_password_minimum_contract(root: Path) -> int:
     return len(required_snippets)
 
 
+def check_cors_allowlist_contract(root: Path) -> int:
+    """CORS defaults must be explicit allowlists, not wildcard credentials."""
+    required_snippets = [
+        (root / "cluster_config.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
+        (root / "cluster_config.py", '"https://mecha.one,"'),
+        (root / "cluster_config.py", 'def parse_cors_allow_origins(value: str | None = None) -> list[str]:'),
+        (root / "cluster_config.py", 'os.getenv("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ALLOW_ORIGINS)'),
+        (root / "cluster_config.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
+        (root / "config.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
+        (root / "config.py", '"https://mecha.one,"'),
+        (root / "config.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
+        (root / "cluster_main.py", "allow_origins=SystemConfig.ALLOW_ORIGINS"),
+    ]
+    checks = 0
+    for path, snippet in required_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Missing CORS allowlist contract snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
+
+    forbidden_snippets = [
+        'ALLOW_ORIGINS = ["*"]',
+        "ALLOW_ORIGINS = ['*']",
+        'allow_origins=["*"]',
+        "allow_origins=['*']",
+    ]
+    for path in [root / "cluster_config.py", root / "config.py", root / "cluster_main.py"]:
+        text = path.read_text(encoding="utf-8")
+        for snippet in forbidden_snippets:
+            if snippet in text:
+                fail(f"Forbidden wildcard CORS snippet in {path.relative_to(root)}: {snippet}")
+            checks += 1
+    return checks
+
+
 def check_admin_compat_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     admin_compat_path = root / "routers" / "admin_compat.py"
@@ -4441,6 +4476,8 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     text = script_path.read_text(encoding="utf-8")
     required_snippets = [
         '"dao"',
+        '"cluster_config.py"',
+        '"config.py"',
         '"ARCHITECTURE.md"',
         '"Agent.md"',
         '"login.html"',
@@ -4671,6 +4708,7 @@ def main() -> int:
     auth_route_handlers = check_auth_routes_extracted(root)
     auth_legacy_route_handlers = check_auth_legacy_routes_extracted(root)
     password_minimum_checks = check_password_minimum_contract(root)
+    cors_allowlist_checks = check_cors_allowlist_contract(root)
     admin_compat_route_handlers = check_admin_compat_routes_extracted(root)
     project_route_handlers = check_project_routes_extracted(root)
     project_core_route_handlers = check_project_core_routes_extracted(root)
@@ -4741,6 +4779,7 @@ def main() -> int:
     print(f"  auth_route_handlers={auth_route_handlers}")
     print(f"  auth_legacy_route_handlers={auth_legacy_route_handlers}")
     print(f"  password_minimum_checks={password_minimum_checks}")
+    print(f"  cors_allowlist_checks={cors_allowlist_checks}")
     print(f"  admin_compat_route_handlers={admin_compat_route_handlers}")
     print(f"  project_route_handlers={project_route_handlers}")
     print(f"  project_core_route_handlers={project_core_route_handlers}")

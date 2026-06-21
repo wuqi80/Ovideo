@@ -5,6 +5,21 @@ ComfyUI API 配置文件
 import os
 from typing import Dict, List, Optional
 
+
+DEFAULT_CORS_ALLOW_ORIGINS = (
+    "https://mecha.one,"
+    "http://localhost:6006,"
+    "http://127.0.0.1:6006,"
+    "http://localhost:5173,"
+    "http://127.0.0.1:5173"
+)
+
+
+def parse_cors_allow_origins(value: Optional[str] = None) -> List[str]:
+    raw = value if value is not None else os.getenv("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ALLOW_ORIGINS)
+    return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+
+
 class ComfyUIConfig:
     """ComfyUI 连接配置"""
     # ComfyUI 服务器地址
@@ -46,8 +61,8 @@ class SystemConfig:
         "version": "1.0.0"
     }
     
-    # CORS 配置
-    ALLOW_ORIGINS = ["*"]  # 生产环境应该指定具体域名
+    # CORS 配置：默认包含正式域名和本地开发地址，可用 CORS_ALLOW_ORIGINS 覆盖。
+    ALLOW_ORIGINS = parse_cors_allow_origins()
     
     # 会话配置
     SESSION_TIMEOUT = 86400  # 24小时

@@ -10,6 +10,21 @@ import os
 from typing import List
 from dataclasses import dataclass
 
+
+DEFAULT_CORS_ALLOW_ORIGINS = (
+    "https://mecha.one,"
+    "http://localhost:6006,"
+    "http://127.0.0.1:6006,"
+    "http://localhost:5173,"
+    "http://127.0.0.1:5173"
+)
+
+
+def parse_cors_allow_origins(value: str | None = None) -> list[str]:
+    raw = value if value is not None else os.getenv("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ALLOW_ORIGINS)
+    return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
+
+
 @dataclass
 class ComfyUINode:
     """ComfyUI 节点配置"""
@@ -185,8 +200,8 @@ class SystemConfig:
         "version": "2.0.0"
     }
     # 安全：禁止 ["*"] + allow_credentials=True 的危险组合（任意站点带凭据跨域）。
-    # 改为 env 可配白名单；应用是同源服务，默认本地不影响主站，生产用 CORS_ALLOW_ORIGINS 配域名。
-    ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:6006,http://127.0.0.1:6006").split(",") if o.strip()]
+    # 改为 env 可配白名单；默认包含正式域名和本地开发地址。
+    ALLOW_ORIGINS = parse_cors_allow_origins()
     SESSION_TIMEOUT = 86400
     UPLOAD_DIR = "uploads"
     OUTPUT_DIR = "outputs"
