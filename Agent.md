@@ -6935,3 +6935,21 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Local `python -m py_compile deploy/scripts/check_route_contract.py` passed.
 - Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=127`, `frontend_http_client_checks=7304`, `frontend_dependency_checks=349`, and `admin_api_config_ui_checks=23`.
 - Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=9`.
+
+## 2026-06-21 SmartApiRouter Dead Code Removal
+
+### Changes
+
+- Deleted `deploy/api_router.py`, the unused `SmartApiRouter` skeleton that still suggested a separate API dispatch path outside `services.ai_proxy_service` and `services.api_provider_runtime`.
+- Removed the no-op Redis injection from `deploy/cluster_main.py`.
+- Updated `deploy/scripts/live_deploy_mvc2.sh` to remove stale `api_router.py` from the server during deployment.
+- Updated current architecture docs to list `routers/` as the route split owner instead of the removed file.
+- Strengthened `deploy/scripts/check_route_contract.py` so `api_router.py` stays deleted and `cluster_main.py` cannot inject it again.
+
+### Verification
+
+- Local `git diff --check` passed.
+- Local `python -m py_compile deploy/cluster_main.py deploy/scripts/check_route_contract.py` passed.
+- Local Git Bash `bash -n deploy/scripts/live_deploy_mvc2.sh` passed.
+- Local `deploy/scripts/check_route_contract.py` passed with `api_provider_runtime_model_checks=127`, `frontend_http_client_checks=7304`, and `live_deploy_frontend_checks=13`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed with `contracts=9`.

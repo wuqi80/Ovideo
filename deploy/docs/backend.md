@@ -27,7 +27,7 @@
 | `api_routes.py` | 2000 | RESTful CRUD — projects, episodes, storyboards, assets, audio gen, entity files, minimax, canvas, notifications, members |
 | `admin_routes.py` | 798 | Admin panel — user CRUD, workflow templates, API config management, system settings, dashboard |
 | `agent_routes.py` | 302 | ComfyUI agent protocol — register, heartbeat, poll tasks, report completion |
-| `api_router.py` | 90 | SmartApiRouter — aggregates all route modules, sets Redis client |
+| `routers/` | — | MVC route modules owned by domain |
 | `comfyui_main.py` | 1198 | Standalone ComfyUI server (single-node mode) — auth, generate, task polling, workflow CRUD |
 
 ### Worker System
@@ -153,7 +153,7 @@
 │  ├── api_routes.py (CRUD)                                   │
 │  ├── admin_routes.py (admin panel)                          │
 │  ├── agent_routes.py (worker protocol)                      │
-│  └── api_router.py (aggregation)                            │
+│  └── routers/ (domain route modules)                        │
 └─────┬────────────────────┬──────────────────────┬───────────┘
       │                    │                      │
       ▼                    ▼                      ▼

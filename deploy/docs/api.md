@@ -702,4 +702,3 @@ Requires admin role. All prefixed with `/api/admin/`.
 | `api_routes.py` | 2000 | CRUD: projects, episodes, storyboards, assets, audio, entity files |
 | `admin_routes.py` | 798 | Admin: users, workflows, API configs, settings |
 | `agent_routes.py` | 302 | ComfyUI agent: register, heartbeat, poll, complete |
-| `api_router.py` | 90 | Router aggregation |

@@ -28,9 +28,9 @@
 |-----------|------|------|
 | `cluster_main.py` | ~5700 | FastAPI 主入口，lifespan、Redis/Worker 初始化、图片/视频/音频生成端点 |
 | `api_routes.py` | ~2500 | 用户管理、项目 CRUD、版本管理、分镜/资产/视频片段 API |
-| `api_router.py` | — | 额外路由拆分模块 |
 | `agent_routes.py` | — | Agent 管理 API |
 | `admin_routes.py` | — | 管理后台 API |
+| `routers/` | — | MVC 增量拆分路由目录 |
 | `task_queue.py` | ~675 | Redis 分布式任务队列，支持优先级/取消/重试 |
 | `task_service.py` | — | 任务服务层 |
 | `worker.py` | — | ComfyUI Worker：取任务 → 上传图片 → 提交工作流 → WebSocket 监听 → 保存结果 |

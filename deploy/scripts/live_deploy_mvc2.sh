@@ -115,6 +115,8 @@ if ! scp -r "${SSH_OPTS[@]}" "$STAGING_DIR"/. "$REMOTE:$REMOTE_DIR/"; then
   exit 1
 fi
 
+ssh "${SSH_OPTS[@]}" "$REMOTE" "rm -f '$REMOTE_DIR'/api_router.py"
+
 echo "Packing frontend source..."
 tar \
   --exclude='new_html/node_modules' \

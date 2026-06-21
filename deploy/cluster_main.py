@@ -73,7 +73,6 @@ DB_AVAILABLE = True
 # 🆕 导入管理后台模块
 from agent_routes import router as agent_api_router
 from admin_routes import router as admin_api_router
-from api_router import set_redis_client as set_api_router_redis
 from services.api_config_runtime_loader import (
     load_api_configs_to_env as _load_api_configs_to_env_service,
     runtime_api_key_globals,
@@ -387,9 +386,6 @@ async def lifespan(app: FastAPI):
         raise
 
     set_provider_health_redis(redis_client)
-
-    # 🆕 注入 Redis 到智能 API 路由器
-    set_api_router_redis(redis_client)
 
     # ✅ 始终初始化 TaskService（Agent 模式下 agent 通过 Redis 队列拉取任务）
     import task_service

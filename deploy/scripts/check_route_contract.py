@@ -502,6 +502,15 @@ def check_admin_api_config_routes_extracted(root: Path) -> int:
 
 def check_cluster_main_has_no_direct_http_routes(root: Path) -> None:
     cluster_main_path = root / "cluster_main.py"
+    removed_api_router_path = root / "api_router.py"
+    if removed_api_router_path.exists():
+        fail("api_router.py SmartApiRouter dead code should stay deleted; use services.ai_proxy_service and provider runtime registry")
+
+    cluster_text = cluster_main_path.read_text(encoding="utf-8")
+    for forbidden in ("set_api_router_redis", "from api_router import"):
+        if forbidden in cluster_text:
+            fail(f"cluster_main.py must not inject the removed SmartApiRouter: {forbidden}")
+
     cluster_tree = parse_py_file(cluster_main_path)
     violations: list[str] = []
     legacy_reference_names = {"get_admin_users", "update_user_permissions"}
@@ -4095,6 +4104,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "dist.bak.",
         "npm run build",
         "tar -xzf '$FRONTEND_TAR_REMOTE' -C '$REMOTE_DIR'",
+        "rm -f '$REMOTE_DIR'/api_router.py",
     ]
     forbidden_snippets = [
         "new_html/node_modules\"",
