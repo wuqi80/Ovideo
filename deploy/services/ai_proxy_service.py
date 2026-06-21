@@ -15,7 +15,11 @@ from typing import Any, Callable, Dict, Iterator, List, Optional
 import requests
 
 from services.api_provider_health_monitor import list_cached_provider_health
-from services.api_provider_registry import get_gpt_image_tier, get_gpt_image_tiers
+from services.api_provider_registry import (
+    get_gpt_image_tier,
+    get_gpt_image_tiers,
+    normalize_gemini_image_model,
+)
 from services.api_provider_runtime import (
     provider_fallback_chain,
     resolve_provider,
@@ -45,12 +49,6 @@ class AIProxyConfigError(AIProxyError):
 
 class AIProxyUpstreamError(AIProxyError):
     pass
-
-
-GEMINI_IMAGE_MODEL_ALIASES = {
-    "gemini-3-pro-image-preview": "gemini-3.1-flash-image-preview",
-    "nanobanana": "gemini-3.1-flash-image-preview",
-}
 
 
 @dataclass(frozen=True)
@@ -415,13 +413,6 @@ async def generate_gemini_text(
         model=model,
     )
     return result.content
-
-
-def normalize_gemini_image_model(model: Optional[str]) -> Optional[str]:
-    requested = (model or "").strip()
-    if not requested:
-        return None
-    return GEMINI_IMAGE_MODEL_ALIASES.get(requested, requested)
 
 
 def build_gemini_image_payload(

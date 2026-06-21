@@ -829,6 +829,38 @@ def check_gpt_image_tier_wiring(registry) -> int:
     return len(providers)
 
 
+def check_gemini_image_alias_wiring(registry) -> int:
+    path = deploy_root() / "services" / "ai_proxy_service.py"
+    text = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(text, filename=str(path))
+    except Exception as exc:
+        fail(f"Unable to parse services/ai_proxy_service.py: {exc}")
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "GEMINI_IMAGE_MODEL_ALIASES":
+                    fail("GEMINI_IMAGE_MODEL_ALIASES must live in services/api_provider_registry.py, not services/ai_proxy_service.py")
+        if isinstance(node, ast.FunctionDef) and node.name == "normalize_gemini_image_model":
+            fail("normalize_gemini_image_model must live in services/api_provider_registry.py, not services/ai_proxy_service.py")
+
+    aliases = getattr(registry, "GEMINI_IMAGE_MODEL_ALIASES", None)
+    if not isinstance(aliases, dict) or not aliases:
+        fail("Registry GEMINI_IMAGE_MODEL_ALIASES mapping is missing")
+    expected_target = "gemini-3.1-flash-image-preview"
+    for alias in ("gemini-3-pro-image-preview", "nanobanana"):
+        if aliases.get(alias) != expected_target:
+            fail(f"Gemini image alias {alias!r} should resolve to {expected_target!r}, got {aliases.get(alias)!r}")
+    if registry.normalize_gemini_image_model(None) is not None:
+        fail("Gemini image alias helper should return None for empty model")
+    if registry.normalize_gemini_image_model("custom-model") != "custom-model":
+        fail("Gemini image alias helper should preserve unknown explicit models")
+    if "normalize_gemini_image_model," not in text and "normalize_gemini_image_model" not in text:
+        fail("ai_proxy_service.py must import/use registry normalize_gemini_image_model")
+    return len(aliases) + 3
+
+
 def check_env_key_helpers(registry) -> int:
     derived: set[str] = set()
     for env_key in registry.PROVIDER_ENV_MAP.values():
@@ -1042,6 +1074,7 @@ def main() -> int:
     runtime_endpoint_literal_checks = check_runtime_code_has_no_third_party_endpoint_literals()
     api_config_env_refresh_checks = check_api_config_write_env_refresh_contract()
     gpt_image_tier_provider_count = check_gpt_image_tier_wiring(registry)
+    gemini_image_alias_checks = check_gemini_image_alias_wiring(registry)
     derived_env_count = check_env_key_helpers(registry)
     provider_extra_env_checks = check_provider_extra_env_contract(registry, resolve_provider)
     provider_catalog_default_checks = check_provider_catalog_defaults(registry)
@@ -1072,6 +1105,7 @@ def main() -> int:
     print(f"  runtime_endpoint_literal_checks={runtime_endpoint_literal_checks}")
     print(f"  api_config_env_refresh_checks={api_config_env_refresh_checks}")
     print(f"  gpt_image_tier_providers={gpt_image_tier_provider_count}")
+    print(f"  gemini_image_alias_checks={gemini_image_alias_checks}")
     print(f"  derived_env_keys={derived_env_count}")
     print(f"  provider_extra_env_checks={provider_extra_env_checks}")
     print(f"  provider_catalog_default_checks={provider_catalog_default_checks}")

@@ -468,6 +468,12 @@ API_MODEL_PRESETS: List[dict] = [
 ]
 
 
+GEMINI_IMAGE_MODEL_ALIASES: Dict[str, str] = {
+    "gemini-3-pro-image-preview": "gemini-3.1-flash-image-preview",
+    "nanobanana": "gemini-3.1-flash-image-preview",
+}
+
+
 GPT_IMAGE_TIERS: Dict[str, dict] = {
     "vip": {
         "provider": "laozhang-gpt-image",
@@ -480,6 +486,13 @@ GPT_IMAGE_TIERS: Dict[str, dict] = {
         "key_hint": "SORA2_GPT_IMAGE_API_KEY (laozhang Sora2Official group)",
     },
 }
+
+
+def normalize_gemini_image_model(model: Optional[str]) -> Optional[str]:
+    requested = (model or "").strip()
+    if not requested:
+        return None
+    return GEMINI_IMAGE_MODEL_ALIASES.get(requested, requested)
 
 
 def normalize_provider(provider: str) -> str:
