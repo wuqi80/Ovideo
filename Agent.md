@@ -6822,3 +6822,21 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=30`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 External API Runtime Refresh Contract
+
+### Changes
+
+- Added an AST contract in `deploy/scripts/check_provider_contract.py` that verifies shared external API clients refresh provider runtime configuration before request methods use API keys/endpoints.
+- Covered MiniMax audio plus MiniMax, Seedance, DashScope, Wan2, Sora2, and Veo video clients.
+- The contract allows MiniMax audio's `_url()` helper as an indirect refresh path, and also verifies `_url()` itself calls `_refresh_runtime_config()`.
+
+### Deployment/Config Gap Covered
+
+- Backend admin API config changes are expected to hot-update keys/endpoints without a process restart.
+- This contract prevents future provider-client refactors from silently reusing stale API keys, stale endpoints, or old proxy settings after the admin platform refreshes runtime env/config.
+
+### Verification
+
+- Local `python -m py_compile deploy/scripts/check_provider_contract.py`: passed.
+- Local `deploy/scripts/check_provider_contract.py`: passed with `external_runtime_refresh_checks=31`.

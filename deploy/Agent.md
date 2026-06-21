@@ -6813,3 +6813,22 @@
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_app_shell_chunk_checks=30`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 External API Runtime Refresh Contract
+
+### Changes
+
+- Added `external_runtime_refresh_checks` to `scripts/check_provider_contract.py`.
+- The contract verifies shared external API clients refresh runtime provider config before request methods use API keys, endpoints, model names, or proxy settings.
+- Covered MiniMax audio plus MiniMax, Seedance, DashScope, Wan2, Sora2, and Veo video clients.
+- Allowed MiniMax audio's `_url()` helper as an indirect refresh path and verified `_url()` itself calls `_refresh_runtime_config()`.
+
+### Deployment/Config Gap Covered
+
+- Admin API config writes are designed to hot-update provider keys/endpoints without restarting `drama.service`.
+- This guardrail prevents future provider-client refactors from silently reusing stale API keys, stale endpoints, model overrides, or proxy config after runtime config reloads.
+
+### Verification
+
+- Local `py_compile` passed for `scripts/check_provider_contract.py`.
+- Local `scripts/check_provider_contract.py` passed with `external_runtime_refresh_checks=31`.

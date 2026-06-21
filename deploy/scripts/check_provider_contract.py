@@ -28,6 +28,58 @@ EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
     "external_api/video/wan2.py": {"dashscope"},
 }
 
+EXTERNAL_API_RUNTIME_REFRESH_METHODS: dict[str, dict[str, Any]] = {
+    "external_api/audio/minimax_audio.py": {
+        "class": "MinimaxAudioClient",
+        "methods": {
+            "voice_design",
+            "voice_clone",
+            "list_voices",
+            "delete_voice",
+            "tts_sync",
+            "tts_async",
+            "tts_query",
+            "tts_wait_and_download",
+            "music_generate",
+            "lyrics_generate",
+            "file_upload",
+            "file_retrieve",
+            "file_delete",
+        },
+        "refresh_via": {"_refresh_runtime_config", "_url"},
+    },
+    "external_api/video/minimax.py": {
+        "class": "MinimaxClient",
+        "methods": {"generate_video", "query_task", "download_video"},
+        "refresh_via": {"_refresh_runtime_config"},
+    },
+    "external_api/video/sora2.py": {
+        "class": "Sora2Client",
+        "methods": {"create_video_task", "query_task", "download_video"},
+        "refresh_via": {"_refresh_runtime_config"},
+    },
+    "external_api/video/veo.py": {
+        "class": "VeoClient",
+        "methods": {"create_video_task", "query_task", "get_video_content", "download_video"},
+        "refresh_via": {"_refresh_runtime_config"},
+    },
+    "external_api/video/seedance.py": {
+        "class": "SeedanceClient",
+        "methods": {"create_video_task", "query_task", "download_video"},
+        "refresh_via": {"_refresh_runtime_config"},
+    },
+    "external_api/video/dashscope.py": {
+        "class": "DashScopeVideoClient",
+        "methods": {"create_task", "query_task"},
+        "refresh_via": {"_refresh_runtime_config"},
+    },
+    "external_api/video/wan2.py": {
+        "class": "Wan26Client",
+        "methods": {"create_video_task", "query_task", "download_video"},
+        "refresh_via": {"_refresh_runtime_config"},
+    },
+}
+
 EXPECTED_GPT_IMAGE_TIER_PROVIDERS = {"laozhang-gpt-image", "laozhang-sora2"}
 
 
@@ -386,6 +438,35 @@ def function_by_name(tree: ast.AST, name: str) -> ast.FunctionDef | ast.AsyncFun
     return None
 
 
+def class_by_name(tree: ast.AST, name: str) -> ast.ClassDef | None:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == name:
+            return node
+    return None
+
+
+def class_method_by_name(
+    class_node: ast.ClassDef,
+    name: str,
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    for node in class_node.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    return None
+
+
+def method_calls_self_helper(node: ast.AST, helper_names: set[str]) -> bool:
+    for item in ast.walk(node):
+        if not isinstance(item, ast.Call):
+            continue
+        func = item.func
+        if not isinstance(func, ast.Attribute) or func.attr not in helper_names:
+            continue
+        if isinstance(func.value, ast.Name) and func.value.id == "self":
+            return True
+    return False
+
+
 def return_dict_keys(node: ast.AST) -> set[str]:
     keys: set[str] = set()
     for item in ast.walk(node):
@@ -505,6 +586,61 @@ def check_external_api_clients_have_no_endpoint_literals() -> int:
             + "\n".join(violations)
         )
     return scanned
+
+
+def check_external_api_clients_refresh_runtime_config() -> int:
+    """Shared external API clients must refresh runtime provider config per request."""
+    root = deploy_root()
+    violations: list[str] = []
+    checked = 0
+
+    for relative_path, spec in EXTERNAL_API_RUNTIME_REFRESH_METHODS.items():
+        path = root / relative_path
+        if not path.exists():
+            violations.append(f"{relative_path}: file is missing")
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except Exception as exc:
+            fail(f"Unable to parse {relative_path}: {exc}")
+
+        class_name = spec["class"]
+        class_node = class_by_name(tree, class_name)
+        if class_node is None:
+            violations.append(f"{relative_path}: missing class {class_name}")
+            continue
+
+        refresh_method = class_method_by_name(class_node, "_refresh_runtime_config")
+        if refresh_method is None:
+            violations.append(f"{relative_path}:{class_node.lineno} {class_name} is missing _refresh_runtime_config()")
+
+        refresh_via = set(spec["refresh_via"])
+        if "_url" in refresh_via:
+            url_method = class_method_by_name(class_node, "_url")
+            if url_method is None:
+                violations.append(f"{relative_path}:{class_node.lineno} {class_name} refresh_via includes _url but _url() is missing")
+            elif not method_calls_self_helper(url_method, {"_refresh_runtime_config"}):
+                violations.append(f"{relative_path}:{url_method.lineno} {class_name}._url() must refresh runtime config")
+
+        for method_name in sorted(spec["methods"]):
+            method = class_method_by_name(class_node, method_name)
+            if method is None:
+                violations.append(f"{relative_path}: missing {class_name}.{method_name}()")
+                continue
+            checked += 1
+            if not method_calls_self_helper(method, refresh_via):
+                helpers = ", ".join(sorted(refresh_via))
+                violations.append(
+                    f"{relative_path}:{method.lineno} {class_name}.{method_name}() "
+                    f"must call one of: {helpers}"
+                )
+
+    if violations:
+        fail(
+            "External API clients must refresh provider runtime config before shared requests:\n"
+            + "\n".join(violations)
+        )
+    return checked
 
 
 def check_provider_endpoint_helpers() -> int:
@@ -1067,6 +1203,7 @@ def main() -> int:
     reference_count = check_resolve_provider_references(registry)
     runtime_wired_file_count = check_expected_runtime_wiring(registry)
     external_endpoint_literal_checks = check_external_api_clients_have_no_endpoint_literals()
+    external_runtime_refresh_checks = check_external_api_clients_refresh_runtime_config()
     endpoint_helper_checks = check_provider_endpoint_helpers()
     cluster_main_env_cache_checks = check_cluster_main_has_no_api_key_env_cache(registry)
     cluster_main_resolver_checks = check_cluster_main_has_no_provider_resolver_calls()
@@ -1098,6 +1235,7 @@ def main() -> int:
     print(f"  resolve_provider_references={reference_count}")
     print(f"  runtime_wired_files={runtime_wired_file_count}")
     print(f"  external_endpoint_literal_checks={external_endpoint_literal_checks}")
+    print(f"  external_runtime_refresh_checks={external_runtime_refresh_checks}")
     print(f"  endpoint_helper_checks={endpoint_helper_checks}")
     print(f"  cluster_main_env_cache_checks={cluster_main_env_cache_checks}")
     print(f"  cluster_main_resolver_checks={cluster_main_resolver_checks}")
