@@ -7463,3 +7463,20 @@
 - Local `git diff --check` passed.
 - Live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=45`.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 Minimax Video Client Base Alignment
+
+### Changes
+
+- Updated `external_api/video/minimax.py` so Hailuo/MiniMax video task creation, task query, file retrieval, and final video download all use the shared `external_api.video.base` helpers.
+- Kept Minimax-specific payload, model resolution, file-retrieve URL, and worker-facing return shapes unchanged.
+- Updated `tests/test_api_provider_runtime_model_env.py` so Minimax runtime-model tests patch the shared request helper path instead of the old direct `requests.post` call.
+- Extended `scripts/check_route_contract.py` so `MinimaxClient` is included in `video_client_base_checks`.
+
+### Verification
+
+- Local `pytest tests/test_video_client_base.py tests/test_api_provider_runtime_model_env.py -q` passed with 29 tests.
+- Local `py_compile` passed for `external_api/video/minimax.py`, the runtime-model tests, and the route contract script.
+- Local `scripts/check_route_contract.py` passed with `video_client_base_checks=54`.
+- Local `scripts/check_architecture_contracts.py` passed 10/10.
+- Local `git diff --check` passed.

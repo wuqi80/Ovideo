@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from external_api.video import minimax as minimax_video
+from external_api.video import base as video_base
 from external_api.video import seedance as seedance_video
 from external_api.video import sora2 as sora2_video
 from external_api.video import veo as veo_video
@@ -335,11 +336,11 @@ def test_minimax_video_uses_runtime_model_when_worker_passes_legacy_default(monk
     monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "minimax-runtime-video-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _MinimaxTaskResponse()
 
-    monkeypatch.setattr(minimax_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = minimax_video.MinimaxClient()
     result = client.generate_video(
@@ -349,6 +350,7 @@ def test_minimax_video_uses_runtime_model_when_worker_passes_legacy_default(monk
     )
 
     assert result == {"task_id": "minimax-task-1"}
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://minimax-runtime.example.test/v1/video_generation"
     assert calls[0]["json"]["model"] == "minimax-runtime-video-model"
 
@@ -364,11 +366,11 @@ def test_minimax_video_explicit_non_default_model_overrides_runtime_model(monkey
     monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
     monkeypatch.setenv(model_env, "minimax-runtime-video-model")
 
-    def fake_post(url, **kwargs):
-        calls.append({"url": url, **kwargs})
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
         return _MinimaxTaskResponse()
 
-    monkeypatch.setattr(minimax_video.requests, "post", fake_post)
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = minimax_video.MinimaxClient()
     client.generate_video(
@@ -377,6 +379,7 @@ def test_minimax_video_explicit_non_default_model_overrides_runtime_model(monkey
         model="minimax-explicit-video-model",
     )
 
+    assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://minimax-runtime.example.test/v1/video_generation"
     assert calls[0]["json"]["model"] == "minimax-explicit-video-model"
 

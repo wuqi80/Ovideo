@@ -3,10 +3,10 @@ MiniMax API 客户端
 用于调用 MiniMax-Hailuo 视频生成 API
 """
 
-import requests
 import time
 import logging
 from typing import Optional, Dict, Any
+from external_api.video.base import download_streaming_video, request_json
 from services.api_provider_registry import (
     MINIMAX_DEFAULT_VIDEO_MODEL,
     minimax_runtime_model_override,
@@ -89,10 +89,15 @@ class MinimaxClient:
         
         try:
             logger.info(f"🎬 MiniMax 创建任务: {resolved_model}, {duration}s, {resolution}")
-            response = requests.post(url, json=payload, headers=self.headers, timeout=30, **self._request_kwargs)
-            response.raise_for_status()
-            
-            result = response.json()
+            result = request_json(
+                "POST",
+                url,
+                headers=self.headers,
+                json=payload,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="MiniMax create",
+            )
             logger.info(f"✅ MiniMax 任务创建成功: {result.get('task_id')}")
             return result
         
@@ -115,9 +120,15 @@ class MinimaxClient:
         params = {"task_id": task_id}
         
         try:
-            response = requests.get(url, params=params, headers=self.headers, timeout=30, **self._request_kwargs)
-            response.raise_for_status()
-            return response.json()
+            return request_json(
+                "GET",
+                url,
+                headers=self.headers,
+                params=params,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="MiniMax query",
+            )
         
         except Exception as e:
             logger.error(f"❌ MiniMax 查询任务失败: {e}")
@@ -138,10 +149,15 @@ class MinimaxClient:
         params = {"file_id": file_id}
         
         try:
-            response = requests.get(url, params=params, headers=self.headers, timeout=30, **self._request_kwargs)
-            response.raise_for_status()
-            
-            result = response.json()
+            result = request_json(
+                "GET",
+                url,
+                headers=self.headers,
+                params=params,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="MiniMax retrieve file",
+            )
             download_url = result.get('file', {}).get('download_url')
             
             if not download_url:
@@ -149,12 +165,13 @@ class MinimaxClient:
             
             # 下载视频文件
             logger.info(f"📥 MiniMax 下载视频: {download_url}")
-            video_response = requests.get(download_url, timeout=120, **self._request_kwargs)
-            video_response.raise_for_status()
+            return download_streaming_video(
+                download_url,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="MiniMax video",
+            )
             
-            logger.info(f"✅ MiniMax 视频下载完成: {len(video_response.content)} bytes")
-            return video_response.content
-        
         except Exception as e:
             logger.error(f"❌ MiniMax 下载视频失败: {e}")
             raise

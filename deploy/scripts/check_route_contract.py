@@ -4573,6 +4573,7 @@ def check_video_client_base_contract(root: Path) -> int:
         "return data",
     ]
     client_files = [
+        video_dir / "minimax.py",
         video_dir / "seedance.py",
         video_dir / "sora2.py",
         video_dir / "veo.py",
