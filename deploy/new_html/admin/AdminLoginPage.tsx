@@ -134,7 +134,7 @@ export const AdminLoginPage: React.FC = () => {
                     </div>
                     <h1 className="text-2xl font-bold tracking-tight text-n800">MECHA · ADMIN</h1>
                     <p className="text-xs text-n100 mt-1.5 tracking-wider uppercase"
-                       style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
+                      style={{ fontFamily: 'var(--font-mono)' }}>
                         Restricted · Authentication Required
                     </p>
                 </div>
@@ -151,7 +151,7 @@ export const AdminLoginPage: React.FC = () => {
                         {/* 账号 */}
                         <div>
                             <label className="block text-[10px] uppercase tracking-widest text-n100 mb-1.5"
-                                   style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
+                                  style={{ fontFamily: 'var(--font-mono)' }}>
                                 ACCOUNT
                             </label>
                             <div className="relative">
@@ -171,7 +171,7 @@ export const AdminLoginPage: React.FC = () => {
                         {/* 密码 */}
                         <div>
                             <label className="block text-[10px] uppercase tracking-widest text-n100 mb-1.5"
-                                   style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
+                                  style={{ fontFamily: 'var(--font-mono)' }}>
                                 PASSPHRASE
                             </label>
                             <div className="relative">
@@ -216,7 +216,7 @@ export const AdminLoginPage: React.FC = () => {
 
                     {/* 脚注 */}
                     <div className="mt-5 pt-4 border-t border-n40 flex items-center justify-between text-[10px] text-n100"
-                         style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
+                        style={{ fontFamily: 'var(--font-mono)' }}>
                         <span>SESSION · SANDBOXED</span>
                         <span>v 2026.05.26</span>
                     </div>

@@ -66,9 +66,9 @@ const TileBase: React.FC<{
 const KPICard: React.FC<{ label: string; value: number | string; accent: string }> = ({ label, value, accent }) => (
     <div className="bg-n0 border border-n40 rounded-lg p-4 shadow-card">
         <div className="text-[10px] uppercase tracking-widest text-n100 mb-1.5"
-             style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>{label}</div>
+             style={{ fontFamily: 'var(--font-mono)' }}>{label}</div>
         <div className={`text-3xl font-bold tabular-nums ${accent}`}
-             style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>{value}</div>
+             style={{ fontFamily: 'var(--font-mono)' }}>{value}</div>
     </div>
 );
 
@@ -109,7 +109,7 @@ export const AdminHubPage: React.FC = () => {
             {/* 标题 + 描述 */}
             <header className="mb-8">
                 <div className="flex items-center gap-2 mb-2 text-[11px] uppercase tracking-widest text-n100"
-                     style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
+                    style={{ fontFamily: 'var(--font-mono)' }}>
                     <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
                     Operational
                 </div>

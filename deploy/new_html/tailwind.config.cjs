@@ -109,8 +109,25 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Noto Sans SC', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'PingFang SC',
+          'Hiragino Sans GB',
+          'Microsoft YaHei',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+        mono: [
+          'ui-monospace',
+          'SFMono-Regular',
+          'Consolas',
+          'Liberation Mono',
+          'Menlo',
+          'monospace',
+        ],
       },
       colors: {
         ...atlasColors,

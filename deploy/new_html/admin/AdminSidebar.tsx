@@ -70,7 +70,7 @@ export const AdminSidebar: React.FC = () => {
         <div className="leading-tight min-w-0">
           <div className="text-sm font-bold tracking-tight text-n800">系统管理后台</div>
           <div className="text-[10px] uppercase tracking-widest text-n100"
-               style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>Admin Console</div>
+              style={{ fontFamily: 'var(--font-mono)' }}>Admin Console</div>
         </div>
       </div>
 

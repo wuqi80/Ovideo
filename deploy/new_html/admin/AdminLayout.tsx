@@ -86,16 +86,16 @@ export const AdminLayout: React.FC = () => {
                         <div className="hidden md:flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span>
                             <span className="text-n100 uppercase tracking-wider"
-                                  style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>ONLINE</span>
+                                  style={{ fontFamily: 'var(--font-mono)' }}>ONLINE</span>
                         </div>
                         <div className="hidden lg:block text-n200 tabular-nums"
-                             style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>
+                            style={{ fontFamily: 'var(--font-mono)' }}>
                             {now.toLocaleTimeString('zh-CN', { hour12: false })}
                         </div>
                         <div className="flex items-center gap-2 pl-3 border-l border-n40">
                             <div className="text-right leading-tight">
                                 <div className="text-[9px] uppercase tracking-widest text-n100"
-                                     style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>SIGNED IN</div>
+                                    style={{ fontFamily: 'var(--font-mono)' }}>SIGNED IN</div>
                                 <div className="text-xs font-semibold text-primary">{adminName}</div>
                             </div>
                             <button

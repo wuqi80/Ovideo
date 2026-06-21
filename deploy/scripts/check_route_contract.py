@@ -4220,6 +4220,8 @@ def check_frontend_dependency_contract(root: Path) -> int:
     lock_packages = lock_data.get("packages", {})
     root_lock_package = lock_packages.get("", {})
     index_html = (new_html / "index.html").read_text(encoding="utf-8")
+    login_html = (root / "login.html").read_text(encoding="utf-8")
+    legacy_admin_css = (root / "admin" / "style.css").read_text(encoding="utf-8")
     design_tokens_css = (new_html / "styles" / "design-tokens.css").read_text(encoding="utf-8")
     tailwind_config_path = new_html / "tailwind.config.cjs"
     postcss_config_path = new_html / "postcss.config.cjs"
@@ -4265,23 +4267,37 @@ def check_frontend_dependency_contract(root: Path) -> int:
         (design_tokens_css, "@tailwind utilities;", new_html / "styles" / "design-tokens.css"),
         (tailwind_config_path.read_text(encoding="utf-8") if tailwind_config_path.exists() else "", "content: [", tailwind_config_path),
         (tailwind_config_path.read_text(encoding="utf-8") if tailwind_config_path.exists() else "", "primary: {", tailwind_config_path),
+        (tailwind_config_path.read_text(encoding="utf-8") if tailwind_config_path.exists() else "", "'PingFang SC'", tailwind_config_path),
+        (tailwind_config_path.read_text(encoding="utf-8") if tailwind_config_path.exists() else "", "'ui-monospace'", tailwind_config_path),
         (postcss_config_path.read_text(encoding="utf-8") if postcss_config_path.exists() else "", "tailwindcss: {}", postcss_config_path),
         (postcss_config_path.read_text(encoding="utf-8") if postcss_config_path.exists() else "", "autoprefixer: {}", postcss_config_path),
+        (design_tokens_css, "--font-sans: -apple-system", new_html / "styles" / "design-tokens.css"),
+        (design_tokens_css, "--font-mono: ui-monospace", new_html / "styles" / "design-tokens.css"),
     ]
     for text, snippet, path in required_frontend_build_snippets:
         checks += 1
         if snippet not in text:
             violations.append(f"Missing local Tailwind build snippet in {path.relative_to(root)}: {snippet}")
 
-    for snippet in (
+    forbidden_runtime_dependency_snippets = (
         "cdn.tailwindcss.com",
         "tailwind.config",
         "type=\"importmap\"",
         "aistudiocdn.com",
+        "fonts.googleapis.com",
+        "fonts.gstatic.com",
+        "cdn.jsdelivr.net",
+        "unpkg.com",
+    )
+    for label, text in (
+        ("new_html/index.html", index_html),
+        ("login.html", login_html),
+        ("admin/style.css", legacy_admin_css),
     ):
-        checks += 1
-        if snippet in index_html:
-            violations.append(f"new_html/index.html must not depend on runtime CDN/importmap: {snippet}")
+        for snippet in forbidden_runtime_dependency_snippets:
+            checks += 1
+            if snippet in text:
+                violations.append(f"{label} must not depend on runtime CDN/importmap/webfont: {snippet}")
 
     import_re = re.compile(
         r"(?:from\s+|import\s*\(\s*|import\s+)['\"](react-markdown|remark-gfm)['\"]"
@@ -4391,6 +4407,9 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     required_snippets = [
         '"dao"',
         '"ARCHITECTURE.md"',
+        '"Agent.md"',
+        '"login.html"',
+        '"admin"',
         '"docs"',
         '"scripts/live_deploy_mvc2.sh"',
         '"services"',
