@@ -2916,7 +2916,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "imageLoaderService.ts", "apiJson<any>(\n        `/api/projects/${projectId}/images/${shotId}`"),
         (new_html / "services" / "imageLoaderService.ts", "apiBlob(securedUrl, { method: 'GET' }, '下载图片'"),
         (new_html / "services" / "geminiService.ts", "import { callGeminiProxyWithRetry } from './geminiProxyService';"),
-        (new_html / "services" / "geminiService.ts", "export * from './comfyuiGenerationService';"),
         (comfyui_generation_service, "import { apiJson } from './httpClient'"),
         (comfyui_generation_service, "const postGenerationTask = async ("),
         (comfyui_generation_service, "postGenerationTask('/api/generate/comfyui-workflow'"),
@@ -3222,6 +3221,17 @@ def check_frontend_http_client_contract(root: Path) -> int:
     for snippet in ["await import('./apiService')", 'await import("./apiService")']:
         if snippet in comfyui_generation_service_text:
             fail(f"comfyuiGenerationService must import comfyuiBridgeService instead of apiService: {snippet}")
+        checks += 1
+
+    gemini_service_text = (new_html / "services" / "geminiService.ts").read_text(encoding="utf-8")
+    for snippet in [
+        "from './comfyuiGenerationService'",
+        'from "./comfyuiGenerationService"',
+        "export * from './comfyuiGenerationService'",
+        'export * from "./comfyuiGenerationService"',
+    ]:
+        if snippet in gemini_service_text:
+            fail(f"geminiService must not re-export or import ComfyUI generation service: {snippet}")
         checks += 1
 
     direct_auth_token_allowed = {

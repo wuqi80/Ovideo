@@ -316,5 +316,3 @@ export const generateFinalIllustration = async (
         }
     });
 };
-
-export * from './comfyuiGenerationService';

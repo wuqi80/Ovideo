@@ -6537,3 +6537,23 @@
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6021`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Gemini/ComfyUI Chunk Decoupling
+
+### Changes
+
+- Removed the broad `export * from './comfyuiGenerationService'` compatibility export from `new_html/services/geminiService.ts`.
+- Kept current callers explicit: Gemini image/text helpers continue to import from `geminiService.ts`, while ComfyUI generation helpers import from `comfyuiGenerationService.ts`.
+- Strengthened `scripts/check_route_contract.py` to fail if `geminiService.ts` imports or re-exports `comfyuiGenerationService.ts` again.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7156`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build emitted a standalone `comfyuiGenerationService-*.js` chunk at `15.00 kB`, with app shell `index-*.js` at `236.02 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6024`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
