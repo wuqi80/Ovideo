@@ -7398,3 +7398,6 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Verification:
   - Local `pytest deploy/tests/test_minimax_audio_runtime.py deploy/tests/test_audio_provider.py -q` passed with 15 tests.
   - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_audio_provider_runtime.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - First live deploy attempt hit a transient SCP connection reset during backend upload; rollback ran and `drama.service` stayed `active`.
+  - Retry live deploy to `https://mecha.one/` passed; remote Vite build completed, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=160`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
