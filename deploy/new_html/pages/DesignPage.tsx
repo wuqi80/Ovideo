@@ -8,7 +8,8 @@ import {
 import { useEpisode } from '../contexts/EpisodeContext';
 import { createAsset, deleteAsset, updateAsset } from '../services/assetMutationService';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
-import { adjustImageAngle, waitForComfyUITask, processMaterialImage, generateHumanMultiAngleQueued } from '../services/comfyuiGenerationService';
+import { adjustImageAngle, processMaterialImage, generateHumanMultiAngleQueued } from '../services/comfyuiGenerationService';
+import { waitForComfyUITask } from '../services/comfyuiTaskWaitService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { callAI } from '../services/aiService';
 import { crmMessage } from '../admin/crmUI';

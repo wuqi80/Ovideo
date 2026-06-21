@@ -6538,6 +6538,28 @@
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
 
+## 2026-06-21 ComfyUI Task Wait Service Split
+
+### Changes
+
+- Extracted ComfyUI task status polling, wait helpers, queue status export, queue metadata conversion, and task registry synchronization from `new_html/services/comfyuiGenerationService.ts` into `new_html/services/comfyuiTaskWaitService.ts`.
+- Kept `new_html/services/comfyuiGenerationService.ts` focused on generation task submission, queued wrapper orchestration, and ComfyUI workflow calls.
+- Updated `GenerationPage`, `MaterialPage`, and `DesignPage` to import wait/status helpers directly from `comfyuiTaskWaitService.ts`.
+- Strengthened `scripts/check_route_contract.py` so task polling ownership stays in the wait service and page imports stay explicit.
+- During deployment, repaired the server frontend dependency state by rebuilding `new_html/node_modules` with `npm ci` after an interrupted build left dependency resolution inconsistent.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `scripts/check_route_contract.py`.
+- Local `scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7205`.
+- Local `scripts/check_architecture_contracts.py` passed `9/9`.
+- Server frontend build passed after dependency refresh; emitted `comfyuiGenerationService-KPusP5yP.js` at `14.48 kB` and app shell `index-C8C0dirM.js` at `236.02 kB`.
+- Server `drama.service` restarted successfully and reported `active`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6073`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.
+
 ## 2026-06-21 Gemini/ComfyUI Chunk Decoupling
 
 ### Changes

@@ -2811,6 +2811,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
     video_media_service = new_html / "services" / "videoMediaService.ts"
     comfyui_generation_service = new_html / "services" / "comfyuiGenerationService.ts"
+    comfyui_task_wait_service = new_html / "services" / "comfyuiTaskWaitService.ts"
     gemini_image_generation_service = new_html / "services" / "geminiImageGenerationService.ts"
     asset_mutation_service = new_html / "services" / "assetMutationService.ts"
     storyboard_mutation_service = new_html / "services" / "storyboardMutationService.ts"
@@ -2854,6 +2855,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         video_workflow_service,
         video_media_service,
         comfyui_generation_service,
+        comfyui_task_wait_service,
         asset_mutation_service,
         storyboard_mutation_service,
         script_timeline_service,
@@ -2923,10 +2925,18 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (gemini_image_generation_service, "export const generateMaterialImage = async"),
         (gemini_image_generation_service, "export const generateFinalIllustration = async"),
         (comfyui_generation_service, "import { apiJson } from './httpClient'"),
+        (comfyui_generation_service, "from './comfyuiTaskWaitService';"),
         (comfyui_generation_service, "const postGenerationTask = async ("),
         (comfyui_generation_service, "postGenerationTask('/api/generate/comfyui-workflow'"),
-        (comfyui_generation_service, "apiJson<any>(\n            `/api/task/${taskId}`"),
         (comfyui_generation_service, "await import('./comfyuiBridgeService')"),
+        (comfyui_task_wait_service, "import { apiJson } from './httpClient'"),
+        (comfyui_task_wait_service, "import { taskRegistry } from './taskRegistry';"),
+        (comfyui_task_wait_service, "export { getComfyUIQueueStatus };"),
+        (comfyui_task_wait_service, "export function toQueueMeta("),
+        (comfyui_task_wait_service, "export const checkComfyUITaskStatus = async"),
+        (comfyui_task_wait_service, "export const waitForComfyUITask = async"),
+        (comfyui_task_wait_service, "export const waitForComfyUITaskAllImages = async"),
+        (comfyui_task_wait_service, "apiJson<any>(\n            `/api/task/${taskId}`"),
         (new_html / "services" / "videoService.ts", "from './videoTaskService';"),
         (new_html / "services" / "videoService.ts", "from './videoModelService';"),
         (new_html / "services" / "videoService.ts", "from './videoTaskTypes';"),
@@ -3153,10 +3163,13 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (material_page, "apiBlob(downloadUrl, { method: 'GET' }, '下载生成的图片'"),
         (generation_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
         (generation_page, "from '../services/comfyuiGenerationService'"),
+        (generation_page, "from '../services/comfyuiTaskWaitService'"),
         (generation_page, "from '../services/geminiImageGenerationService'"),
         (material_page, "from '../services/comfyuiGenerationService'"),
+        (material_page, "from '../services/comfyuiTaskWaitService'"),
         (material_page, "from '../services/geminiImageGenerationService'"),
         (design_page, "from '../services/comfyuiGenerationService'"),
+        (design_page, "from '../services/comfyuiTaskWaitService'"),
         (design_page, "from '../services/geminiImageGenerationService'"),
         (generation_page, "function normalizeImageDownloadUrl("),
         (generation_page, "downloadImageBlob(imageUrl, '加载完整图片')"),
