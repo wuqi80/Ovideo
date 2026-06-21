@@ -18,6 +18,9 @@
 - Local targeted pytest: `tests/test_api_provider_runtime_model_env.py` and `tests/test_minimax_audio_runtime.py` passed `31/31`.
 - Local `scripts/check_route_contract.py`: passed.
 - Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Live deploy to `https://mecha.one/`: remote Vite build completed, `drama.service` stayed `active`, and the script printed `✅ 部署成功`.
+- Server-side architecture contracts: 10/10 passed during deployment.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
 
 ## 2026-06-21 Live Deploy Remote Validation
 

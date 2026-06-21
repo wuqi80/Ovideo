@@ -7,6 +7,7 @@
 - MiniMax audio runtime resolution also uses the registry MiniMax default model as its provider preset anchor.
 - Legacy Sora2/Veo model upgrade constants in `deploy/services/api_config_runtime_loader.py` now reuse registry constants.
 - Added provider-contract coverage so these default video model literals cannot drift back into external API clients.
+- Deployed to `https://mecha.one/`; remote Vite build completed, `drama.service` stayed active, remote architecture contracts passed 10/10, and online smoke passed 9/9.
 
 ## 2026-06-21 Live Deploy Remote Validation
 
