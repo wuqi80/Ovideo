@@ -1,20 +1,9 @@
 import { StoryboardData, RestructureResponse, StoryboardItem } from "../types";
 import { v4 as uuidv4 } from 'uuid';
-import { generateGeminiImageViaProxy, GeminiImageOptions, GeneratedFileResult } from './geminiImageService';
 import { callGeminiProxyWithRetry } from './geminiProxyService';
 
 const MODEL_TEXT = 'gemini-2.5-flash';
 const MODEL_LOGIC = 'gemini-2.5-flash'; 
-
-// 🎨 图像生成模型（Gemini图像模型）
-const MODEL_IMAGE_FLASH = 'gemini-2.5-flash-image';            // Nano Banana Standard - 仅 1K
-// 2026-05-21: nano3 → nano2 in-place 替换
-// 旧：gemini-3-pro-image-preview（nano3，慢，贵）
-// 新：gemini-3.1-flash-image-preview（nano2 Flash，快，支持 1K/2K/4K + 全部比例）
-// 前端继续用 'nanobanana' / MODEL_IMAGE_NANO2 这两个名字，后端别名映射仍兜底旧值。
-const MODEL_IMAGE_NANO2 = 'gemini-3.1-flash-image-preview';    // 化神 - 主力生图模型
-const MODEL_IMAGE_PRO = MODEL_IMAGE_NANO2;                     // @deprecated 旧名兼容，现指向 nano2
-const MODEL_IMAGE = MODEL_IMAGE_NANO2;                         // 默认使用 nano2
 
 const stripJsonFences = (value: string): string => {
     return (value || '')
@@ -46,14 +35,6 @@ const callGeminiJson = async <T>(
 ): Promise<T> => {
     const response = await callGeminiText(prompt, systemPrompt, model);
     return parseJsonFromGemini<T>(response);
-};
-
-/**
- * 图像生成（使用中转站API）
- * 注意：GeminiImageOptions类型已在geminiImageService.ts中定义
- */
-export const generateGeminiImageVariant = async (options: GeminiImageOptions): Promise<GeneratedFileResult[]> => {
-    return generateGeminiImageViaProxy(options);
 };
 
 // Helper for retrying 503 errors
@@ -259,60 +240,4 @@ export const restructureShot = async (
     });
 }
 
-// Generate an image for a material (Character/Scene)
-export const generateMaterialImage = async (name: string, type: 'character' | 'scene', context: string): Promise<string> => {
-    const prompt = `
-        Generate a high quality concept art style image for a ${type} named "${name}".
-        
-        Context/Description from script:
-        "${context}"
-        
-        Style: Anime/Manga style, high detail, character sheet or environment concept art.
-    `;
-    const results = await generateGeminiImageVariant({
-        model: MODEL_IMAGE_NANO2,
-        prompt,
-        aspectRatio: '1:1',
-        imageSize: '2K',
-    });
-    return results[0].url;
-};
-
-/**
- * 化神(nano2)生成最终插图。
- * 
- * 2026-05-21：从写死 model/aspectRatio/imageSize 改为接受可选参数，
- * 这样 GenerationPage 的"化神参数面板"可以把用户选择的比例 + 1K/2K/4K 透传下来。
- * 缺省仍保留历史默认（16:9 + 2K + nano2），向后兼容旧调用站。
- */
-export const generateFinalIllustration = async (
-    prompt: string,
-    referenceImages: string[],
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string },
-    imageOptions?: { aspectRatio?: string; imageSize?: '1K' | '2K' | '4K' }
-): Promise<string> => {
-    return callWithRetry(async () => {
-        try {
-            const results = await generateGeminiImageVariant({
-                model: MODEL_IMAGE_NANO2,
-                prompt: `${prompt}\n\nStyle: High quality Anime/Manga screenshot, detailed background, cinematic lighting.`,
-                references: referenceImages,
-                aspectRatio: imageOptions?.aspectRatio ?? '16:9',
-                imageSize: imageOptions?.imageSize ?? '2K',
-                entityType: entityOptions?.entityType,
-                entityId: entityOptions?.entityId,
-                fileRole: entityOptions?.fileRole,
-                episodeId: entityOptions?.episodeId,
-            });
-            
-            if (!results || results.length === 0) {
-                throw new Error("No image generated");
-            }
-            
-            return results[0].url;
-        } catch (error) {
-            console.error("Final Gen Error:", error);
-            throw new Error("Failed to generate final illustration.");
-        }
-    });
-};
+export { generateGeminiImageVariant, generateMaterialImage, generateFinalIllustration } from './geminiImageGenerationService';

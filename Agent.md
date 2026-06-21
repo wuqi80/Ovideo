@@ -6566,3 +6566,24 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6024`.
 - Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
 - Online smoke test against `https://mecha.one` passed `9/9`.
+
+## 2026-06-21 Gemini Image Generation Service Split
+
+### Changes
+
+- Extracted Gemini image generation helpers from `deploy/new_html/services/geminiService.ts` into `deploy/new_html/services/geminiImageGenerationService.ts`.
+- Updated `GenerationPage`, `MaterialPage`, and `DesignPage` to import Gemini image helpers directly from `geminiImageGenerationService.ts`.
+- Kept `geminiService.ts` as a smaller text/compatibility layer that re-exports the image helpers for legacy callers.
+- Strengthened `deploy/scripts/check_route_contract.py` so image-heavy pages cannot regress back to importing `geminiService.ts` for Gemini image generation.
+
+### Verification
+
+- Local `diff --check` passed.
+- Local `py_compile` passed for `deploy/scripts/check_route_contract.py`.
+- Local `deploy/scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=7179`.
+- Local `deploy/scripts/check_architecture_contracts.py` passed `9/9`.
+- Server `scripts/live_deploy_mvc2.sh` completed successfully: frontend built, `drama.service` restarted, service status `active`.
+- Server build no longer emitted a standalone `geminiService-*.js` chunk for the image-heavy pages; app shell `index-*.js` stayed at `236.02 kB`.
+- Server `.venv/bin/python scripts/check_route_contract.py` passed with `openapi_paths=231`, `openapi_operations=287`, and `frontend_http_client_checks=6047`.
+- Server `.venv/bin/python scripts/check_architecture_contracts.py` passed `9/9`.
+- Online smoke test against `https://mecha.one` passed `9/9`.

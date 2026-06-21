@@ -2811,6 +2811,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
     video_workflow_service = new_html / "services" / "videoWorkflowService.ts"
     video_media_service = new_html / "services" / "videoMediaService.ts"
     comfyui_generation_service = new_html / "services" / "comfyuiGenerationService.ts"
+    gemini_image_generation_service = new_html / "services" / "geminiImageGenerationService.ts"
     asset_mutation_service = new_html / "services" / "assetMutationService.ts"
     storyboard_mutation_service = new_html / "services" / "storyboardMutationService.ts"
     script_timeline_service = new_html / "services" / "scriptTimelineService.ts"
@@ -2916,6 +2917,11 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (new_html / "services" / "imageLoaderService.ts", "apiJson<any>(\n        `/api/projects/${projectId}/images/${shotId}`"),
         (new_html / "services" / "imageLoaderService.ts", "apiBlob(securedUrl, { method: 'GET' }, '下载图片'"),
         (new_html / "services" / "geminiService.ts", "import { callGeminiProxyWithRetry } from './geminiProxyService';"),
+        (new_html / "services" / "geminiService.ts", "from './geminiImageGenerationService';"),
+        (gemini_image_generation_service, "import { generateGeminiImageViaProxy, GeminiImageOptions, GeneratedFileResult } from './geminiImageService';"),
+        (gemini_image_generation_service, "export const generateGeminiImageVariant = async"),
+        (gemini_image_generation_service, "export const generateMaterialImage = async"),
+        (gemini_image_generation_service, "export const generateFinalIllustration = async"),
         (comfyui_generation_service, "import { apiJson } from './httpClient'"),
         (comfyui_generation_service, "const postGenerationTask = async ("),
         (comfyui_generation_service, "postGenerationTask('/api/generate/comfyui-workflow'"),
@@ -3147,8 +3153,11 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (material_page, "apiBlob(downloadUrl, { method: 'GET' }, '下载生成的图片'"),
         (generation_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
         (generation_page, "from '../services/comfyuiGenerationService'"),
+        (generation_page, "from '../services/geminiImageGenerationService'"),
         (material_page, "from '../services/comfyuiGenerationService'"),
+        (material_page, "from '../services/geminiImageGenerationService'"),
         (design_page, "from '../services/comfyuiGenerationService'"),
+        (design_page, "from '../services/geminiImageGenerationService'"),
         (generation_page, "function normalizeImageDownloadUrl("),
         (generation_page, "downloadImageBlob(imageUrl, '加载完整图片')"),
         (admin_feature_tabs, "import { apiJson } from '../services/httpClient'"),
@@ -3233,6 +3242,18 @@ def check_frontend_http_client_contract(root: Path) -> int:
         if snippet in gemini_service_text:
             fail(f"geminiService must not re-export or import ComfyUI generation service: {snippet}")
         checks += 1
+
+    for path in [generation_page, material_page, design_page]:
+        text = path.read_text(encoding="utf-8")
+        for snippet in [
+            "from '../services/geminiService'",
+            'from "../services/geminiService"',
+            "import('../services/geminiService')",
+            'import("../services/geminiService")',
+        ]:
+            if snippet in text:
+                fail(f"Image-heavy pages must import Gemini image helpers directly: {path.relative_to(root)} has {snippet}")
+            checks += 1
 
     direct_auth_token_allowed = {
         new_html / "admin" / "adminAuth.ts",
