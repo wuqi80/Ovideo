@@ -7987,3 +7987,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile` for route contract passed.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local frontend production build passed via bundled Node/Vite.
+
+## 2026-06-23 Frontend Provider Key Documentation Cleanup
+
+- Replaced stale AI Studio frontend key instructions in `deploy/new_html/.env.example`, `deploy/new_html/README.md`, and `deploy/new_html/GEMINI_API_CONFIG.md`.
+- Frontend docs now state that third-party provider keys must be configured server-side through `/admin/settings?item=apiconfig`, not through Vite env vars or browser localStorage.
+- Gemini docs now describe the backend provider ids (`gemini-text`, `gemini-image`, `gemini-tts`), runtime key names, and backend proxy call path without exposing browser-side key setup.
+- Strengthened `deploy/scripts/check_route_contract.py` so frontend docs cannot reintroduce `VITE_GEMINI_*_API_KEY`, browser Gemini key storage, or direct LaoZhang Gemini model endpoint instructions.
+- Verification:
+  - Local `py_compile` for route contract passed.
+  - Local `scripts/check_route_contract.py` passed.
+  - Local frontend production build passed via bundled Node/Vite.

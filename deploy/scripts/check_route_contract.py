@@ -3170,6 +3170,37 @@ def check_frontend_ai_proxy_contract(root: Path) -> int:
                 fail(f"Frontend AI provider service has duplicated request/auth logic in {path.relative_to(root)}: {snippet}")
             checks += 1
         checks += 1
+
+    frontend_docs = [
+        new_html / ".env.example",
+        new_html / "README.md",
+        new_html / "GEMINI_API_CONFIG.md",
+    ]
+    required_doc_snippets = [
+        (new_html / ".env.example", "Do not put third-party AI provider API keys in this file."),
+        (new_html / "README.md", "/admin/settings?item=apiconfig"),
+        (new_html / "GEMINI_API_CONFIG.md", "Frontend services call backend proxies:"),
+    ]
+    forbidden_doc_snippets = [
+        "VITE_GEMINI_TEXT_API_KEY",
+        "VITE_GEMINI_IMAGE_API_KEY",
+        "VITE_GEMINI_PROXY_API_KEY",
+        "localStorage.setItem('gemini_",
+        "localStorage.setItem(\"gemini_",
+        "Set the `GEMINI_API_KEY`",
+        "api.laozhang.ai/v1beta/models/",
+    ]
+    for path, snippet in required_doc_snippets:
+        text = path.read_text(encoding="utf-8")
+        if snippet not in text:
+            fail(f"Frontend API docs must direct provider keys to backend admin config in {path.relative_to(root)}: {snippet}")
+        checks += 1
+    for path in frontend_docs:
+        text = path.read_text(encoding="utf-8")
+        for snippet in forbidden_doc_snippets:
+            if snippet in text:
+                fail(f"Frontend API docs must not instruct browser/provider-key config in {path.relative_to(root)}: {snippet}")
+            checks += 1
     return checks
 
 

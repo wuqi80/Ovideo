@@ -1,20 +1,36 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# MECHA Frontend
 
-# Run and deploy your AI Studio app
+This directory contains the Vite/React frontend for MECHA. It is served by the
+FastAPI backend after `npm run build` writes assets to `deploy/dist`.
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/1jK3nmn1pyK_ek-CtGIrWqGtGjJGIaGdc
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
+## Local Development
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+
+   ```bash
+   npm install
+   ```
+
+2. Start the backend from `deploy/` so API routes and auth cookies are available.
+
+3. Start the frontend dev server:
+
+   ```bash
+   npm run dev
+   ```
+
+## API Keys
+
+Do not put DeepSeek, Gemini, GPT Image, MiniMax, Seedance, DashScope, or other
+provider keys in frontend `.env` files. Browser-facing `VITE_*` variables are
+public after bundling.
+
+Configure provider keys and endpoints in the backend admin page:
+
+```text
+/admin/settings?item=apiconfig
+```
+
+The frontend calls backend routes such as `/api/gemini/text`,
+`/api/gemini/image`, `/api/gpt-image/generate`, and `/api/video/*`; the backend
+resolves the active provider key, endpoint, model, proxy mode, and health status.
