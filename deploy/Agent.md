@@ -7630,3 +7630,22 @@
 - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=178`.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
 - Server sync check confirmed `_post_stream_request()` and the `DeepSeek stream` call label are present on `/home/Administrator/deploy/services/ai_proxy_service.py`.
+
+## 2026-06-22 Video Reverse Gemini Request Delegation
+
+### Changes
+
+- Added `generate_gemini_chat_result()` in `services/ai_proxy_service.py` for OpenAI-compatible Gemini chat payloads that need shared runtime endpoint/key/model, proxy kwargs, timeout, upstream logging, and JSON parse handling.
+- Updated `services/video_reverse_service.py` so frame analysis delegates Gemini vision/chat calls to `ai_proxy_service` instead of importing `requests` and posting directly.
+- Kept video reverse visual analysis on `allow_failover=False`, because image-bearing prompts should not silently fail over to text-only DeepSeek.
+- Updated provider/route contracts so video reverse must stay on delegated runtime wiring and cannot reintroduce direct `requests.post`.
+
+### Verification
+
+- Local `pytest tests/test_api_provider_runtime_model_env.py -q` passed with 30 tests.
+- Local `py_compile`, `scripts/check_provider_contract.py`, `scripts/check_route_contract.py`, `scripts/check_architecture_contracts.py`, `scripts/smoke_test.py`, and `git diff --check` passed.
+- Local route contract passed with `api_provider_runtime_model_checks=180`.
+- Local provider contract passed with `resolve_provider_references=24` and delegated video reverse runtime wiring.
+- Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=180`.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+- Server sync check confirmed `video_reverse_service.py` imports/calls `generate_gemini_chat_result()` and has no `requests.post` or `import requests`.

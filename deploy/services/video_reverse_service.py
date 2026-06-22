@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from services.api_provider_runtime import resolve_provider
+from services.ai_proxy_service import generate_gemini_chat_result
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +185,7 @@ async def analyze_segment_frames(
     给定一个分段的若干抽帧，调用视觉模型生成 description / camera / motion 文字。
     回退：API 不可用时返回结构化空字符串。
     """
-    gemini_config = resolve_provider("gemini-text")
-    if not gemini_config.api_key or not frame_paths:
+    if not frame_paths:
         return {'description': '', 'camera_description': '', 'motion_description': ''}
 
     try:
@@ -215,30 +214,13 @@ async def analyze_segment_frames(
             except Exception as e:
                 logger.warning(f"读取抽帧 {fp} 失败: {e}")
 
-        payload = {
-            'model': gemini_config.model_name or 'gemini-2.5-flash',
-            'messages': [{'role': 'user', 'content': content_parts}],
-            'temperature': 0.3,
-        }
-
-        # 用 requests 同步 + run_in_executor，避免引入额外依赖
-        import requests
-        def _do_post():
-            return requests.post(
-                gemini_config.url_for('chat/completions'),
-                headers={
-                    'Authorization': f'Bearer {gemini_config.api_key}',
-                    'Content-Type': 'application/json',
-                },
-                json=payload,
-                timeout=120,
-                **gemini_config.requests_kwargs(),
-            )
-        loop = asyncio.get_event_loop()
-        resp = await loop.run_in_executor(None, _do_post)
-        resp.raise_for_status()
-        result = resp.json()
-        content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+        result = await generate_gemini_chat_result(
+            messages=[{'role': 'user', 'content': content_parts}],
+            temperature=0.3,
+            allow_failover=False,
+            label="Video reverse Gemini vision",
+        )
+        content = result.content
 
         # 尝试解析 JSON（模型可能多输出```json fence）
         content_stripped = content.strip()

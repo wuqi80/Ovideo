@@ -541,6 +541,64 @@ async def generate_gemini_text_result(
     )
 
 
+async def generate_gemini_chat_result(
+    *,
+    messages: List[Dict[str, Any]],
+    temperature: float = 1.0,
+    model: Optional[str] = None,
+    allow_failover: bool = True,
+    label: str = "Gemini chat",
+) -> TextGenerationResult:
+    if allow_failover:
+        config, failover = await resolve_ai_proxy_provider(
+            "gemini-text",
+            model,
+        )
+    else:
+        config = resolve_provider("gemini-text", model)
+        failover = {
+            "active": False,
+            "requested_provider": "gemini-text",
+            "selected_provider": config.provider,
+            "reason": None,
+        }
+
+    if not config.api_key:
+        raise AIProxyConfigError("文本生成服务未配置，请联系管理员")
+    if not config.endpoint:
+        raise AIProxyConfigError("文本生成服务 endpoint 未配置，请联系管理员")
+
+    resolved_model = config.model_name or model or "gemini-2.5-flash"
+    result = await _post_json_request_async(
+        label=label,
+        url=config.url_for("chat/completions"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        payload={
+            "model": resolved_model,
+            "messages": messages,
+            "temperature": temperature,
+        },
+        timeout=120,
+        timeout_message="文本生成失败，请稍后重试",
+        timeout_status_code=500,
+        request_error_message="文本生成失败，请稍后重试",
+        parse_error_message="文本生成服务响应格式异常",
+        request_kwargs=config.requests_kwargs(),
+        upstream_detail=lambda upstream, _status_code: f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试",
+    )
+
+    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    return TextGenerationResult(
+        content=content,
+        provider=config.provider,
+        model_name=resolved_model,
+        failover=failover,
+    )
+
+
 async def generate_gemini_text(
     *,
     prompt: str,

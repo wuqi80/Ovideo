@@ -187,6 +187,9 @@ async def test_gemini_image_explicit_request_model_overrides_runtime_model(monke
 
 
 class _ChatResponse:
+    status_code = 200
+    text = ""
+
     def raise_for_status(self):
         return None
 
@@ -925,3 +928,6 @@ async def test_video_reverse_uses_runtime_gemini_text_model(monkeypatch, tmp_pat
     assert result["description"] == "shot frame"
     assert calls[0]["url"] == "https://text-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == "gemini-video-reverse-runtime-model"
+    assert calls[0]["json"]["temperature"] == 0.3
+    assert calls[0]["json"]["messages"][0]["content"][0]["type"] == "text"
+    assert calls[0]["json"]["messages"][0]["content"][1]["type"] == "image_url"

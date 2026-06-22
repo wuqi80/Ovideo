@@ -2368,7 +2368,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "video_reverse_service.py",
-            'gemini_config = resolve_provider("gemini-text")',
+            "generate_gemini_chat_result(",
+        ),
+        (
+            root / "services" / "video_reverse_service.py",
+            "allow_failover=False",
         ),
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
@@ -2961,6 +2965,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         checks += 1
     if ai_proxy_text.count("requests.post(") > 3:
         fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
+    checks += 1
+    video_reverse_text = (root / "services" / "video_reverse_service.py").read_text(encoding="utf-8")
+    if "requests.post(" in video_reverse_text or "import requests" in video_reverse_text:
+        fail("video_reverse_service must call Gemini through services.ai_proxy_service, not direct requests.post")
     checks += 1
     return checks
 

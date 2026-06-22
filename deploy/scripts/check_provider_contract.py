@@ -18,7 +18,6 @@ EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
         "doubao",
     },
     "services/audio_provider.py": {"gemini-tts"},
-    "services/video_reverse_service.py": {"gemini-text"},
     "external_api/audio/minimax_audio.py": {"minimax"},
     "external_api/video/minimax.py": {"minimax"},
     "external_api/video/sora2.py": {"sora2"},
@@ -26,6 +25,13 @@ EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
     "external_api/video/seedance.py": {"seedance"},
     "external_api/video/dashscope.py": {"dashscope"},
     "external_api/video/wan2.py": {"dashscope"},
+}
+
+EXPECTED_RUNTIME_DELEGATION: dict[str, tuple[str, ...]] = {
+    "services/video_reverse_service.py": (
+        "generate_gemini_chat_result(",
+        "allow_failover=False",
+    ),
 }
 
 EXTERNAL_API_RUNTIME_REFRESH_METHODS: dict[str, dict[str, Any]] = {
@@ -551,9 +557,15 @@ def check_expected_runtime_wiring(registry) -> int:
         missing_providers = sorted(expected_providers - found)
         if missing_providers:
             missing.append(f"{relative_path}: missing resolve_provider calls for {missing_providers}; found={sorted(found)}")
+    for relative_path, snippets in EXPECTED_RUNTIME_DELEGATION.items():
+        path = root / relative_path
+        text = path.read_text(encoding="utf-8")
+        missing_snippets = [snippet for snippet in snippets if snippet not in text]
+        if missing_snippets:
+            missing.append(f"{relative_path}: missing delegated runtime wiring snippets {missing_snippets}")
     if missing:
         fail("Provider runtime wiring contract failed:\n" + "\n".join(missing))
-    return len(EXPECTED_RUNTIME_WIRING)
+    return len(EXPECTED_RUNTIME_WIRING) + len(EXPECTED_RUNTIME_DELEGATION)
 
 
 def check_external_api_clients_have_no_endpoint_literals() -> int:
