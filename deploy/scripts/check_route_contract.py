@@ -740,8 +740,11 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
 def check_user_session_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     user_session_path = root / "routers" / "user_session.py"
+    service_path = root / "services" / "user_session_service.py"
     if not user_session_path.exists():
         fail("routers/user_session.py is missing")
+    if not service_path.exists():
+        fail("services/user_session_service.py is missing")
 
     route_paths = {
         "/api/logout",
@@ -781,6 +784,41 @@ def check_user_session_routes_extracted(root: Path) -> int:
 
     if route_count != 4:
         fail(f"routers/user_session.py should own 4 user session route registrations, found {route_count}")
+
+    user_session_text = user_session_path.read_text(encoding="utf-8")
+    cluster_main_text = cluster_main_path.read_text(encoding="utf-8")
+    service_text = service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (user_session_text, "from services.user_session_service import (", "router imports user session service"),
+        (user_session_text, "logout_user(", "router delegates logout"),
+        (user_session_text, "get_user_info_service(", "router delegates user info"),
+        (user_session_text, "list_user_organizations(", "router delegates organization list"),
+        (user_session_text, "leave_organization_service(", "router delegates organization leave"),
+        (user_session_text, "organization_dao: Any", "router accepts injected organization DAO"),
+        (user_session_text, "organization_member_dao: Any", "router accepts injected organization member DAO"),
+        (cluster_main_text, "from dao_organization import OrganizationDAO, OrganizationMemberDAO", "cluster imports organization DAOs"),
+        (cluster_main_text, "organization_dao=OrganizationDAO", "cluster injects OrganizationDAO"),
+        (cluster_main_text, "organization_member_dao=OrganizationMemberDAO", "cluster injects OrganizationMemberDAO"),
+        (service_text, "organization_member_dao.list_orgs_for_user(", "service lists user organizations"),
+        (service_text, "organization_dao.get(", "service checks organization existence"),
+        (service_text, "organization_member_dao.is_member(", "service checks organization membership"),
+        (service_text, "organization_member_dao.remove_member(", "service removes organization member"),
+        (service_text, "def _serialize_record(", "service serializes records"),
+    ]
+    missing = [label for text, snippet, label in required_snippets if snippet not in text]
+    if missing:
+        fail("User session service boundary is incomplete:\n" + "\n".join(missing))
+
+    forbidden_snippets = [
+        "from dao_organization import",
+        "OrganizationDAO.",
+        "OrganizationMemberDAO.",
+        "_serialize_record(",
+        "datetime.now()",
+    ]
+    violations = [snippet for snippet in forbidden_snippets if snippet in user_session_text]
+    if violations:
+        fail("routers/user_session.py must delegate DAO/time/serialization logic to service:\n" + "\n".join(violations))
     return route_count
 
 
@@ -4557,6 +4595,8 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "entity_file_service.py", "entity_file_dao.sync_legacy_url("),
         (root / "services" / "task_notification_service.py", "task_dao.get_active_tasks_for_user("),
         (root / "services" / "task_notification_service.py", "task_dao.get_terminal_tasks_for_notifications("),
+        (root / "services" / "user_session_service.py", "organization_member_dao.list_orgs_for_user("),
+        (root / "services" / "user_session_service.py", "organization_member_dao.remove_member("),
         (root / "services" / "episode_video_service.py", "episode_dao.get_project_id("),
         (root / "routers" / "episode_video.py", "start_episode_compose("),
         (root / "routers" / "video_capabilities.py", "get_video_capabilities("),

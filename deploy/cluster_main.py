@@ -66,6 +66,7 @@ from video_reverse_routes import router as video_reverse_router
 from dao_task import TaskDAO
 from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO, ProjectMemberDAO
 from dao_user import UserDAO
+from dao_organization import OrganizationDAO, OrganizationMemberDAO
 
 DB_AVAILABLE = True
 
@@ -865,6 +866,8 @@ app.include_router(
     create_user_session_router(
         require_auth_dependency=require_auth,
         online_users=_online_users,
+        organization_dao=OrganizationDAO,
+        organization_member_dao=OrganizationMemberDAO,
         logger=logger,
     )
 )

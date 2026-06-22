@@ -8177,3 +8177,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_task_notification_service.py -q` passed with 5 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 User Session Service Boundary
+
+- Moved current-user session and organization self-service business logic from `deploy/routers/user_session.py` into `deploy/services/user_session_service.py`.
+- The router still owns the 4 HTTP endpoints, but now delegates logout state cleanup, user-info timestamp formatting, organization list serialization, organization membership checks, owner-leave protection, and member removal to the service layer.
+- Injected `OrganizationDAO` and `OrganizationMemberDAO` through `deploy/cluster_main.py` so the router no longer imports organization persistence directly.
+- Added `deploy/tests/test_user_session_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so user session routes cannot regress to direct organization DAO calls, route-local serialization, or route-local time formatting.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_user_session_service.py -q` passed with 6 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
