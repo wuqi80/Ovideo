@@ -2462,6 +2462,26 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "docs_url?: string",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "console_url?: string",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "key_help?: string",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "const ProviderCredentialLinks",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "Key 获取入口",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "const ProviderQuickCard",
         ),
         (

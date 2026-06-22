@@ -13,6 +13,7 @@ import {
     AlertCircle,
     CheckCircle2,
     Edit3,
+    ExternalLink,
     KeyRound,
     Loader2,
     Plus,
@@ -55,6 +56,9 @@ interface ProviderMeta {
     vendor?: string;
     env_key?: string;
     notes?: string;
+    docs_url?: string;
+    console_url?: string;
+    key_help?: string;
     capabilities?: string[];
     extra_fields?: ProviderExtraField[];
     default_config_name?: string;
@@ -737,6 +741,43 @@ const HealthBadge: React.FC<{ status: HealthStatus }> = ({ status }) => {
     );
 };
 
+const ProviderCredentialLinks: React.FC<{ meta?: ProviderMeta; compact?: boolean; showHelp?: boolean }> = ({
+    meta,
+    compact = false,
+    showHelp = true,
+}) => {
+    if (!meta?.docs_url && !meta?.console_url && !meta?.key_help) return null;
+    return (
+        <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] ${compact ? 'mt-1' : 'mt-2'}`}>
+            {meta.console_url && (
+                <a
+                    href={meta.console_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
+                >
+                    <ExternalLink className="w-3 h-3" />
+                    控制台
+                </a>
+            )}
+            {meta.docs_url && (
+                <a
+                    href={meta.docs_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
+                >
+                    <ExternalLink className="w-3 h-3" />
+                    API 文档
+                </a>
+            )}
+            {showHelp && meta.key_help && (
+                <span className="text-n100 break-words">{meta.key_help}</span>
+            )}
+        </div>
+    );
+};
+
 const ProviderHealthMonitorStrip: React.FC<{ state: ProviderHealthMonitorState | null }> = ({ state }) => {
     if (!state) return null;
     const enabled = state.enabled !== false;
@@ -882,6 +923,13 @@ const ApiConfigEditorModal: React.FC<{
                             placeholder="https://api.example.com/v1"
                         />
                     </label>
+
+                    {selectedMeta && (
+                        <div className="rounded border border-n40 bg-n20 px-3 py-2">
+                            <div className="text-[11px] font-semibold text-n300 mb-1">Key 获取入口</div>
+                            <ProviderCredentialLinks meta={selectedMeta} compact />
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <label className="block min-w-0">
@@ -1299,6 +1347,7 @@ const ApiConfigCard: React.FC<{
                     {meta?.notes && (
                         <div className="mt-2 text-[11px] text-n100 leading-relaxed break-words">{meta.notes}</div>
                     )}
+                    <ProviderCredentialLinks meta={meta} />
                 </div>
             </div>
         </article>
@@ -1378,6 +1427,7 @@ const ProviderQuickCard: React.FC<{
                     <div className="mt-1 text-[11px] text-n100 break-words">
                         {meta.vendor || '-'} · {CATEGORY_LABELS[categoryFromProviderMeta(meta)] || '其他'}
                     </div>
+                    <ProviderCredentialLinks meta={meta} compact showHelp={false} />
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                     <span className="text-[10px] uppercase tracking-wider text-n100">生效状态</span>

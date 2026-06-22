@@ -205,6 +205,9 @@ def check_registry_shape(registry) -> None:
         health_check = meta.get("health_check") or {}
         if not health_check.get("method") or not health_check.get("path"):
             fail(f"{provider} missing health_check metadata")
+        for link_key in ("docs_url", "console_url", "key_help"):
+            if not meta.get(link_key):
+                fail(f"{provider} missing credential metadata: {link_key}")
         for fallback in meta.get("fallback") or []:
             fallback_provider = registry.normalize_provider(
                 fallback if isinstance(fallback, str) else str((fallback or {}).get("provider") or "")
@@ -1328,6 +1331,10 @@ def check_provider_extra_env_contract(registry, resolve_provider) -> int:
     catalog_fields = catalog.get("minimax", {}).get("extra_fields") or []
     if not catalog_fields or catalog_fields[0].get("env_key") != "MINIMAX_GROUP_ID":
         fail(f"Provider catalog did not expose MiniMax extra_fields metadata: {catalog_fields}")
+    for provider, item in catalog.items():
+        for link_key in ("docs_url", "console_url", "key_help"):
+            if not item.get(link_key):
+                fail(f"Provider catalog did not expose {provider} credential metadata: {link_key}")
 
     with isolated_env(registry):
         os.environ["MINIMAX_API_KEY"] = "minimax-test-key"

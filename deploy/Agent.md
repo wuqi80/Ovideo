@@ -8010,3 +8010,20 @@
 - `scripts/check_architecture_contracts.py` passed 10/10.
 - `new_html` Vite production build passed using the bundled Node runtime.
 - Local smoke test passed 9/9.
+
+## 2026-06-22 Provider Credential Links
+
+### Changes
+
+- Added `docs_url`, `console_url`, and `key_help` metadata to `services/api_provider_registry.py` for every managed provider.
+- Backend provider catalog now exposes credential acquisition links for DeepSeek, Google Gemini, Volcengine Ark/Seedance, Alibaba DashScope, MiniMax, and LaoZhang gateway providers.
+- Updated `new_html/admin/AdminSettingsPage.tsx` to render provider credential links in the API config quick cards, detail cards, and editor modal.
+- Updated provider and route contracts so credential metadata and the admin UI rendering path cannot silently regress.
+
+### Verification
+
+- `scripts/check_provider_contract.py` passed.
+- `scripts/check_route_contract.py` passed.
+- `scripts/check_architecture_contracts.py` passed 10/10.
+- `new_html` Vite production build passed.
+- Local smoke test passed 9/9.
