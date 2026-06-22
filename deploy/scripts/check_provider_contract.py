@@ -173,6 +173,10 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must apply provider default_proxy_mode through setdefault")
     if "_provider_meta.setdefault(\"supports_proxy\", DEFAULT_PROVIDER_SUPPORTS_PROXY)" not in registry_text:
         fail("api_provider_registry.py must apply provider supports_proxy through setdefault")
+    if "_provider_meta.setdefault(\"required_env\", [PROVIDER_ENV_MAP[_provider_id]])" not in registry_text:
+        fail("api_provider_registry.py must derive provider required_env from PROVIDER_ENV_MAP")
+    if "\"required_env\": [" in registry_text:
+        fail("Provider catalog entries must not repeat required_env; use PROVIDER_ENV_MAP")
     if "DEFAULT_PROVIDER_HEALTH_CHECK" not in registry_text:
         fail("api_provider_registry.py must define DEFAULT_PROVIDER_HEALTH_CHECK")
     if "PROVIDER_HEALTH_CHECK_OVERRIDES" not in registry_text:
@@ -261,6 +265,8 @@ def check_registry_shape(registry) -> None:
             fail(f"{provider} missing capabilities")
         if registry.PROVIDER_ENV_MAP[provider] not in (meta.get("required_env") or []):
             fail(f"{provider} required_env must include primary env key")
+        if meta.get("required_env") != [registry.PROVIDER_ENV_MAP[provider]]:
+            fail(f"{provider} required_env should be derived from PROVIDER_ENV_MAP")
         if provider in {"gemini-text", "gemini-image"} and meta.get("fallback_env"):
             fail(f"{provider} must not fallback to shared GEMINI_API_KEY env")
         health_check = meta.get("health_check") or {}

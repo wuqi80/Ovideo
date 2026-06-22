@@ -270,7 +270,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "DeepSeek",
         "vendor": "deepseek",
         "capabilities": ["text"],
-        "required_env": ["DEEPSEEK_API_KEY"],
         "fallback_env": [],
         "notes": "Text/chat provider used by script and reasoning flows.",
     },
@@ -278,7 +277,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Gemini Text",
         "vendor": "google",
         "capabilities": ["text"],
-        "required_env": ["GEMINI_TEXT_API_KEY"],
         "fallback_env": [],
         "fallback": [
             {
@@ -293,7 +291,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Gemini Image",
         "vendor": "google",
         "capabilities": ["image"],
-        "required_env": ["GEMINI_IMAGE_API_KEY"],
         "fallback_env": [],
         "notes": "Google Gemini image generation.",
     },
@@ -301,7 +298,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Gemini TTS",
         "vendor": "google",
         "capabilities": ["audio"],
-        "required_env": ["GEMINI_API_KEY"],
         "fallback_env": [],
         "notes": "Fallback TTS provider.",
     },
@@ -309,7 +305,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Volcengine Ark / Doubao",
         "vendor": "volcengine",
         "capabilities": ["image"],
-        "required_env": ["ARK_API_KEY"],
         "fallback_env": [],
         "notes": "Ark-compatible image generation provider.",
     },
@@ -317,7 +312,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Seedance 2.0",
         "vendor": "volcengine",
         "capabilities": ["video"],
-        "required_env": ["SEEDANCE_API_KEY"],
         "fallback_env": ["ARK_API_KEY"],
         "notes": "Volcengine Ark Seedance video generation.",
     },
@@ -325,7 +319,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "DashScope / Model Studio",
         "vendor": "alibaba",
         "capabilities": ["video"],
-        "required_env": ["DASHSCOPE_API_KEY"],
         "fallback_env": [],
         "notes": "Wan2.6, Kling, Vidu, and HappyHorse share this key.",
     },
@@ -333,7 +326,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "MiniMax / Hailuo",
         "vendor": "minimax",
         "capabilities": ["video", "audio"],
-        "required_env": ["MINIMAX_API_KEY"],
         "fallback_env": [],
         "notes": "Video generation plus TTS, voice design, and voice clone.",
     },
@@ -341,7 +333,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Sora2 Gateway",
         "vendor": "laozhang",
         "capabilities": ["video"],
-        "required_env": ["SORA2_API_KEY"],
         "fallback_env": [],
         "notes": "Laozhang Sora2-compatible video gateway.",
     },
@@ -349,7 +340,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Veo Gateway",
         "vendor": "laozhang",
         "capabilities": ["video"],
-        "required_env": ["VEO_API_KEY"],
         "fallback_env": ["SORA2_API_KEY"],
         "notes": "Laozhang Veo-compatible video gateway.",
     },
@@ -357,7 +347,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "GPT Image VIP Gateway",
         "vendor": "laozhang",
         "capabilities": ["image"],
-        "required_env": ["GPT_IMAGE_API_KEY"],
         "fallback_env": [],
         "notes": "Default/VIP GPT Image token group.",
     },
@@ -365,7 +354,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "GPT Image Official Gateway",
         "vendor": "laozhang",
         "capabilities": ["image"],
-        "required_env": ["SORA2_GPT_IMAGE_API_KEY"],
         "fallback_env": [],
         "notes": "Official GPT Image token group.",
     },
@@ -385,6 +373,7 @@ PROVIDER_HEALTH_CHECK_OVERRIDES: Dict[str, Dict[str, Any]] = {
 }
 
 for _provider_id, _provider_meta in PROVIDER_CATALOG.items():
+    _provider_meta.setdefault("required_env", [PROVIDER_ENV_MAP[_provider_id]])
     _provider_meta.setdefault("default_proxy_mode", DEFAULT_PROVIDER_PROXY_MODE)
     _provider_meta.setdefault("supports_proxy", DEFAULT_PROVIDER_SUPPORTS_PROXY)
     _health_check = deepcopy(DEFAULT_PROVIDER_HEALTH_CHECK)

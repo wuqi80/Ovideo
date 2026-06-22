@@ -7897,3 +7897,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Verification:
   - Local `py_compile` for provider registry and provider contract passed.
   - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_health.py`, and `scripts/check_admin_api_config_import.py` passed.
+
+## 2026-06-22 Provider Required Env Single Source
+
+- Removed repeated `required_env` lists from all 12 `PROVIDER_CATALOG` entries in `deploy/services/api_provider_registry.py`.
+- Provider metadata now derives `required_env` from `PROVIDER_ENV_MAP` during the same post-catalog initialization pass used for defaults.
+- External provider catalog responses remain unchanged: every provider still exposes its primary API-key env in `required_env`.
+- Strengthened `deploy/scripts/check_provider_contract.py` so provider catalog entries cannot repeat `required_env`, and initialized metadata must match `PROVIDER_ENV_MAP`.
+- Verification:
+  - Local `py_compile` for provider registry and provider contract passed.
+  - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
