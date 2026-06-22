@@ -2646,8 +2646,11 @@ def check_entity_file_routes_extracted(root: Path) -> int:
 def check_legacy_file_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     legacy_files_path = root / "routers" / "legacy_files.py"
+    service_path = root / "services" / "legacy_file_service.py"
     if not legacy_files_path.exists():
         fail("routers/legacy_files.py is missing")
+    if not service_path.exists():
+        fail("services/legacy_file_service.py is missing")
 
     route_pairs = {
         ("/api/files/upload", "post"),
@@ -2693,7 +2696,46 @@ def check_legacy_file_routes_extracted(root: Path) -> int:
 
     if route_count != 3:
         fail(f"routers/legacy_files.py should own 3 legacy file route registrations, found {route_count}")
-    return route_count
+
+    legacy_text = legacy_files_path.read_text(encoding="utf-8")
+    service_text = service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (legacy_text, "from services.legacy_file_service import (", "router imports legacy file service"),
+        (legacy_text, "upload_legacy_file(", "router delegates upload"),
+        (legacy_text, "get_legacy_download_info(", "router delegates download lookup"),
+        (legacy_text, "delete_legacy_file(", "router delegates delete"),
+        (legacy_text, "ranged_file_reader(", "router delegates range reader"),
+        (service_text, "version_dao.get_version(", "service validates version ownership"),
+        (service_text, "user_dao.get_user_by_id(", "service checks storage quota"),
+        (service_text, "file_optimization_service.calculate_file_hash(", "service calculates file hash"),
+        (service_text, "file_deduplication_service.check_duplicate(", "service checks duplicates"),
+        (service_text, "file_dao.create_file(", "service creates file records"),
+        (service_text, "activity_log_dao.log_activity(", "service logs upload/delete activity"),
+        (service_text, "file_dao.get_file(", "service resolves file records"),
+        (service_text, "file_dao.delete_file(", "service deletes file records"),
+        (service_text, "def _possible_download_paths(", "service resolves legacy fallback paths"),
+        (service_text, "def _parse_range(", "service parses range headers"),
+    ]
+    missing = [label for text, snippet, label in required_snippets if snippet not in text]
+    if missing:
+        fail("Legacy file service boundary is incomplete:\n" + "\n".join(missing))
+
+    forbidden_snippets = [
+        "UserDAO.",
+        "VersionDAO.",
+        "FileDAO.",
+        "ActivityLogDAO.",
+        "FileOptimizationService.",
+        "FileDeduplicationService.",
+        "aiofiles.open(",
+        "uuid.uuid4()",
+        "datetime.now()",
+        "Path(\"persistent_storage\")",
+    ]
+    violations = [snippet for snippet in forbidden_snippets if snippet in legacy_text]
+    if violations:
+        fail("routers/legacy_files.py must delegate DAO/storage orchestration to service:\n" + "\n".join(violations))
+    return route_count + len(required_snippets)
 
 
 def check_audio_routes_extracted(root: Path) -> int:
@@ -4649,6 +4691,10 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "task_read_service.py", "async def get_task_status_response("),
         (root / "services" / "task_read_service.py", "async def list_user_tasks_response("),
         (root / "services" / "task_read_service.py", "async def soft_delete_user_file_by_path_fragment("),
+        (root / "routers" / "legacy_files.py", "upload_legacy_file("),
+        (root / "services" / "legacy_file_service.py", "file_dao.create_file("),
+        (root / "services" / "legacy_file_service.py", "file_dao.delete_file("),
+        (root / "services" / "legacy_file_service.py", "file_deduplication_service.check_duplicate("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.list_shot_take_rows("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.create_final_cut_records("),

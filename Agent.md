@@ -8203,3 +8203,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_admin_compat_service.py tests/test_admin_stats_logs.py tests/test_user_dao_admin_delete.py -q` passed with 15 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Legacy File Service Boundary
+
+- Moved legacy version-scoped file upload/download/delete business logic from `deploy/routers/legacy_files.py` into `deploy/services/legacy_file_service.py`.
+- The router still owns the 3 legacy HTTP endpoints, but now delegates version ownership checks, storage quota checks, file type/storage path generation, hash and duplicate handling, file record creation, download path fallback, range parsing, delete authorization, and activity logging to the service layer.
+- Added `deploy/tests/test_legacy_file_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so legacy file routes cannot regress to direct DAO/storage/optimization/deduplication orchestration.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_legacy_file_service.py -q` passed with 6 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
