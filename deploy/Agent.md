@@ -8751,3 +8751,21 @@
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `4d2a571`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 Project Video Task Service Boundary
+
+### Changes
+
+- Moved `/api/projects/{project_id}/export-to-video` and `/api/projects/{project_id}/clear-video-tasks` workflow from `routers/projects.py` into `services/project_video_task_service.py`.
+- The router still owns route registration and HTTP error mapping, but now delegates owner validation, export version resolution/creation, project settings parsing, selected/first image resolution, base64 image persistence fallback, `video_tasks` construction, stage update, and project save to the service layer.
+- Added `tests/test_project_video_task_service.py` to cover selected-image export, base64 persistence with version creation, persistence failure fallback, clearing existing tasks, and missing/forbidden project errors.
+- Strengthened `scripts/check_route_contract.py` so export/clear routes cannot regress to route-local version creation, JSON parsing, selected-image selection, base64 persistence, `video_tasks` mutation, or `ProjectDAO.save_or_update_project()`.
+- Added the new project video task service test to `scripts/live_deploy_mvc2.sh` so server sync includes it.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_project_video_task_service.py tests/test_project_read_access.py -q` passed with 9 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Deployment and online smoke pending.

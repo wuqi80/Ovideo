@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from schemas.project import ExportToVideoRequest, ProjectData
 from services.project_image_service import (
     is_data_image,
-    persist_export_storyboard_base64_image,
     persist_project_embedded_base64_image,
 )
 from services.project_read_service import (
@@ -18,6 +17,12 @@ from services.project_read_service import (
     ProjectReadNotFound,
     get_project_response,
     get_shot_images_response,
+)
+from services.project_video_task_service import (
+    ProjectVideoTaskForbidden,
+    ProjectVideoTaskNotFound,
+    clear_project_video_tasks_response,
+    export_project_to_video_response,
 )
 from utils.json_helpers import parse_jsonb_field
 
@@ -463,144 +468,19 @@ def create_projects_router(
     ):
         """第三阶段 -> 第四阶段数据传递"""
         try:
-            # 从数据库读取项目
-            db_project = await ProjectDAO.get_project(project_id)
-
-            if not db_project:
-                raise HTTPException(status_code=404, detail="项目不存在")
-
-            if db_project.get('user_id') != username:
-                raise HTTPException(status_code=403, detail="无权访问此项目")
-
-            # 获取或创建导出版本
-            versions = await VersionDAO.get_project_versions(project_id)
-            if versions:
-                export_version = versions[0]  # 使用最新版本
-                version_id = export_version['version_id']
-                logger.info(f"📦 使用现有版本: {version_id}")
-            else:
-                # 创建新版本
-                export_version = await VersionDAO.create_version(
-                    project_id=project_id,
-                    user_id=username,
-                    version_name="导出版本",
-                    description="画面分镜导出到视频生成"
-                )
-                version_id = export_version['version_id']
-                logger.info(f"📦 创建新版本: {version_id}")
-
-            # 从settings JSONB字段中获取完整的项目数据
-            data = parse_jsonb_field(db_project.get('settings'))
-
-            # 提取选中分镜的生成结果
-            storyboard = data.get("storyboard", {})
-            items = storyboard.get("items", [])
-            generated_images_data = data.get("generated_images", {})  # 🔧 从正确的位置读取
-
-            logger.info(f"📦 导出数据检查: storyboard有 {len(items)} 个镜头, generated_images有 {len(generated_images_data)} 个条目")
-
-            video_tasks = []
-            for item in items:
-                if item.get("id") in request.selected_items:
-                    item_id = item.get("id")
-
-                    # 🔧 从 generated_images 对象中获取该镜头的图片数据
-                    shot_images_data = generated_images_data.get(item_id, {})
-                    generated_images = shot_images_data.get("images", [])
-                    selected_image_id = shot_images_data.get("selectedImageId")
-
-                    logger.info(f"📸 镜头 {item_id}: {len(generated_images)} 张图片, 选中ID: {selected_image_id}")
-
-                    # 找到选中的图片
-                    image_url = ""
-                    selected_img = None
-                    if selected_image_id and generated_images:
-                        selected_img = next((img for img in generated_images if img.get("id") == selected_image_id), None)
-                        if selected_img:
-                            # 🔧 优先使用 url，如果没有则使用 thumbnail
-                            image_url = selected_img.get("url") or selected_img.get("thumbnail") or ""
-                            if image_url:
-                                logger.info(f"✅ 找到选中图片: {image_url[:50]}...")
-                            else:
-                                logger.warning(f"⚠️ 选中的图片没有 url 或 thumbnail")
-
-                    # 如果没找到，使用第一张图片
-                    if not selected_img and generated_images:
-                        selected_img = generated_images[0]
-                        # 🔧 优先使用 url，如果没有则使用 thumbnail
-                        image_url = selected_img.get("url") or selected_img.get("thumbnail") or ""
-                        if image_url:
-                            logger.info(f"⚠️ 未找到选中图片，使用第一张: {image_url[:50]}...")
-                        else:
-                            logger.warning(f"⚠️ 第一张图片也没有 url 或 thumbnail")
-
-                    # 🔧 处理图片URL（如果有的话）
-                    if image_url and is_data_image(image_url):
-                        logger.info(f"🔄 检测到Base64图片，开始转换: {image_url[:50]}...")
-                        try:
-                            persisted = await persist_export_storyboard_base64_image(
-                                username=username,
-                                image_data=image_url,
-                                storyboard_item=item,
-                                version_id=version_id,
-                                file_dao=FileDAO,
-                                logger=logger,
-                            )
-                            # 使用数据库文件ID作为URL
-                            image_url = persisted.file_url
-                            logger.info(f"✅ Base64图片已保存到数据库, 文件ID: {persisted.file_id}")
-
-                        except Exception as e:
-                            logger.error(f"❌ Base64转换失败: {e}", exc_info=True)
-                            # 继续使用原始Base64（作为fallback）
-                            logger.warning(f"⚠️ 使用Base64作为fallback")
-                    elif image_url:
-                        logger.info(f"✅ 图片已是URL格式: {image_url[:100]}")
-                    else:
-                        logger.warning(f"⚠️ 镜头 {item_id} 没有图片")
-
-                    # 🔍 调试：打印镜头的详细信息
-                    logger.info(f"📝 镜头 {item_id} 详细信息:")
-                    logger.info(f"   - image_url: {image_url[:50] if image_url else '(无)'}...")
-                    logger.info(f"   - videoPrompt: {item.get('videoPrompt', '(无)')[:50] if item.get('videoPrompt') else '(无)'}...")
-                    logger.info(f"   - dialogue: {item.get('dialogue', '(无)')[:30] if item.get('dialogue') else '(无)'}...")
-                    logger.info(f"   - characters: {item.get('characters', [])}")
-                    logger.info(f"   - scene: {item.get('scene', '(无)')}")
-
-                    # 🔧 无论是否有图片都添加到video_tasks（至少导出提示词）
-                    video_tasks.append({
-                        "storyboard_id": item["id"],
-                    "image_url": image_url or "",  # 可能为空
-                        "video_prompt": item.get("videoPrompt", ""),
-                        "dialogue": item.get("dialogue", ""),
-                        "characters": item.get("characters", []),
-                        "scene": item.get("scene", "")
-                    })
-                    logger.info(f"✅ 已添加镜头 {item_id} 到导出列表")
-
-            # 更新项目数据
-            data["video_tasks"] = video_tasks
-            data["stage"] = 4
-            data["updated_at"] = datetime.now().isoformat()
-
-            # 保存到数据库
-            await ProjectDAO.save_or_update_project(
-                user_id=username,
-                project_id=project_id,
-                project_name=db_project.get('project_name', 'Untitled'),
-                project_data=data,
-                description=db_project.get('description', '')
+            return await export_project_to_video_response(
+                project_id,
+                selected_items=request.selected_items,
+                username=username,
+                project_dao=ProjectDAO,
+                version_dao=VersionDAO,
+                file_dao=FileDAO,
+                logger=logger,
             )
-
-            logger.info(f"✅ 导出 {len(video_tasks)} 个分镜到视频生成（已保存到数据库）")
-
-            return {
-                "success": True,
-                "exported_count": len(video_tasks),
-                "video_tasks": video_tasks
-            }
-        except HTTPException:
-            raise
+        except ProjectVideoTaskNotFound as exc:
+            raise HTTPException(status_code=404, detail="项目不存在") from exc
+        except ProjectVideoTaskForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问此项目") from exc
         except Exception as e:
             logger.error(f"导出失败: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -612,45 +492,16 @@ def create_projects_router(
     ):
         """清除项目中的video_tasks，避免重复导入"""
         try:
-            # 从数据库读取项目
-            db_project = await ProjectDAO.get_project(project_id)
-
-            if not db_project:
-                raise HTTPException(status_code=404, detail="项目不存在")
-
-            if db_project.get('user_id') != username:
-                raise HTTPException(status_code=403, detail="无权访问此项目")
-
-            # 从settings JSONB字段中获取完整的项目数据
-            data = parse_jsonb_field(db_project.get('settings'))
-
-            # 清除video_tasks
-            if 'video_tasks' in data:
-                cleared_count = len(data['video_tasks'])
-                data['video_tasks'] = []
-
-                # 保存到数据库
-                await ProjectDAO.save_or_update_project(
-                    user_id=username,
-                    project_id=project_id,
-                    project_name=db_project.get('project_name', 'Untitled'),
-                    project_data=data,
-                    description=db_project.get('description', '')
-                )
-
-                logger.info(f"✅ 已清除项目 {project_id} 的 {cleared_count} 个video_tasks（已保存到数据库）")
-
-                return {
-                    "success": True,
-                    "cleared_count": cleared_count
-                }
-
-            return {
-                "success": True,
-                "cleared_count": 0
-            }
-        except HTTPException:
-            raise
+            return await clear_project_video_tasks_response(
+                project_id,
+                username=username,
+                project_dao=ProjectDAO,
+                logger=logger,
+            )
+        except ProjectVideoTaskNotFound as exc:
+            raise HTTPException(status_code=404, detail="项目不存在") from exc
+        except ProjectVideoTaskForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问此项目") from exc
         except Exception as e:
             logger.error(f"清除video_tasks失败: {e}")
             raise HTTPException(status_code=500, detail=str(e))
