@@ -7839,3 +7839,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_provider_contract.py` and `scripts/check_admin_api_config_health.py` passed.
   - Local `scripts/check_architecture_contracts.py` passed 10/10.
   - Local smoke test passed 9/9.
+
+## 2026-06-22 Provider Default Endpoint Registry
+
+- Added `PROVIDER_DEFAULT_ENDPOINTS` to `deploy/services/api_provider_registry.py` as the single provider-level source for default upstream endpoints.
+- Removed repeated `endpoint` literals from raw `API_MODEL_PRESETS`; `get_api_model_presets()` now enriches presets with `get_provider_default_endpoint(provider)`.
+- External preset/catalog responses remain unchanged: all 17 enriched presets still include endpoint and endpoint-derived health-check URL.
+- Strengthened `deploy/scripts/check_provider_contract.py` so:
+  - every provider must have exactly one default endpoint;
+  - raw presets cannot carry endpoint values;
+  - enriched preset and catalog endpoints must match `PROVIDER_DEFAULT_ENDPOINTS`.
+- Verification:
+  - Local `py_compile` for provider registry and provider contract passed.
+  - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
+  - Local `scripts/check_architecture_contracts.py` passed 10/10.
+  - Local smoke test passed 9/9.

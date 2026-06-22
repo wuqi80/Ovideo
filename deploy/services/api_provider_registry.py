@@ -412,12 +412,27 @@ for _provider_id, _provider_meta in PROVIDER_CATALOG.items():
         _provider_meta.setdefault(_link_key, _link_value)
 
 
+PROVIDER_DEFAULT_ENDPOINTS: Dict[str, str] = {
+    "gemini-text": "https://api.laozhang.ai/v1",
+    "deepseek": "https://api.deepseek.com",
+    "gemini-image": "https://api.laozhang.ai/v1beta",
+    "doubao": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+    "minimax": "https://api.minimaxi.com/v1",
+    "sora2": "https://api.laozhang.ai/v1",
+    "veo": "https://api.laozhang.ai/v1",
+    "dashscope": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
+    "seedance": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+    "laozhang-gpt-image": "https://api.laozhang.ai/v1",
+    "laozhang-sora2": "https://api.laozhang.ai/v1",
+    "gemini-tts": "https://generativelanguage.googleapis.com/v1beta/openai/",
+}
+
+
 API_MODEL_PRESETS: List[dict] = [
     {
         "name": "Gemini 2.5 Flash (文本)",
         "provider": "gemini-text",
         "model_name": "gemini-2.5-flash",
-        "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "text",
     },
@@ -425,7 +440,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "DeepSeek Reasoner",
         "provider": "deepseek",
         "model_name": "deepseek-reasoner",
-        "endpoint": "https://api.deepseek.com",
         "proxy_mode": "direct",
         "category": "text",
     },
@@ -433,7 +447,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "Gemini 2.5 Flash (图像)",
         "provider": "gemini-image",
         "model_name": "gemini-2.5-flash-image",
-        "endpoint": "https://api.laozhang.ai/v1beta",
         "proxy_mode": "direct",
         "category": "image",
     },
@@ -441,7 +454,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "Gemini 3.1 Flash (图像)",
         "provider": "gemini-image",
         "model_name": "gemini-3.1-flash-image-preview",
-        "endpoint": "https://api.laozhang.ai/v1beta",
         "proxy_mode": "direct",
         "category": "image",
     },
@@ -449,7 +461,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "豆包 SeedDream",
         "provider": "doubao",
         "model_name": "doubao-seedream-4-0-250828",
-        "endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
         "proxy_mode": "direct",
         "category": "image",
     },
@@ -457,7 +468,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "MiniMax Hailuo",
         "provider": "minimax",
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
-        "endpoint": "https://api.minimaxi.com/v1",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -465,7 +475,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "Sora2",
         "provider": "sora2",
         "model_name": SORA2_DEFAULT_VIDEO_MODEL,
-        "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -473,7 +482,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "Veo",
         "provider": "veo",
         "model_name": VEO_DEFAULT_VIDEO_MODEL,
-        "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -481,7 +489,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "大能 Wan2.6 (DashScope)",
         "provider": "dashscope",
         "model_name": DASHSCOPE_DEFAULT_MODEL_MAP["wan26"],
-        "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -489,7 +496,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "阿里云百炼共享 API · 合体 (Kling)",
         "provider": "dashscope",
         "model_name": "kling/kling-v3-video-generation",
-        "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -497,7 +503,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "阿里云百炼共享 API · 大乘 (Vidu)",
         "provider": "dashscope",
         "model_name": "vidu/viduq3-turbo_reference2video",
-        "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -505,7 +510,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "阿里云百炼共享 API · 炼虚 (HappyHorse)",
         "provider": "dashscope",
         "model_name": "happyhorse-1.0-r2v",
-        "endpoint": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -513,7 +517,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "飞升 (Seedance 2.0)",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-260128",
-        "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -521,7 +524,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "渡劫 (Seedance 2.0 Fast)",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-fast-260128",
-        "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
         "proxy_mode": "direct",
         "category": "video",
     },
@@ -529,7 +531,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "laozhang GPT Image (VIP)",
         "provider": "laozhang-gpt-image",
         "model_name": "gpt-image-2-vip",
-        "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "image",
     },
@@ -537,7 +538,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "laozhang GPT Image (Official)",
         "provider": "laozhang-sora2",
         "model_name": "gpt-image-2",
-        "endpoint": "https://api.laozhang.ai/v1",
         "proxy_mode": "direct",
         "category": "image",
     },
@@ -545,7 +545,6 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "Gemini TTS (语音)",
         "provider": "gemini-tts",
         "model_name": GEMINI_TTS_DEFAULT_MODEL,
-        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "proxy_mode": "direct",
         "category": "audio",
     },
@@ -702,6 +701,10 @@ def get_model_env_key(env_key: str) -> str:
     return env_key.replace("_API_KEY", "_MODEL").replace("_KEY", "_MODEL")
 
 
+def get_provider_default_endpoint(provider: str) -> str:
+    return PROVIDER_DEFAULT_ENDPOINTS.get(normalize_provider(provider), "")
+
+
 def _default_health_check_url(endpoint: str, provider: str = "") -> str:
     urls = derive_models_health_urls(endpoint, provider)
     return urls[0] if urls else ""
@@ -712,6 +715,7 @@ def _enrich_preset(preset: dict) -> dict:
     provider = normalize_provider(out.get("provider", ""))
     env_key = get_provider_env_key(provider)
     meta = PROVIDER_CATALOG.get(provider, {})
+    out.setdefault("endpoint", get_provider_default_endpoint(provider))
     out.setdefault("supports_proxy", meta.get("supports_proxy", True))
     out.setdefault("health_check_url", _default_health_check_url(out.get("endpoint", ""), provider))
     out.setdefault("required_key", env_key)

@@ -159,6 +159,8 @@ def check_registry_shape(registry) -> None:
         fail("Provider health URLs must be derived from preset endpoints, not a duplicate PROVIDER_HEALTH_CHECK_URLS map")
     if "derive_models_health_urls" not in registry_text:
         fail("api_provider_registry.py must derive provider health URLs from services.api_provider_endpoints")
+    if "out.setdefault(\"endpoint\", get_provider_default_endpoint(provider))" not in registry_text:
+        fail("api_provider_registry.py must enrich preset endpoints from get_provider_default_endpoint()")
 
     provider_env_keys = set(registry.PROVIDER_ENV_MAP)
     catalog_keys = set(registry.PROVIDER_CATALOG)
@@ -168,6 +170,22 @@ def check_registry_shape(registry) -> None:
             f"env_only={sorted(provider_env_keys - catalog_keys)}, "
             f"catalog_only={sorted(catalog_keys - provider_env_keys)}"
         )
+
+    default_endpoint_keys = set(getattr(registry, "PROVIDER_DEFAULT_ENDPOINTS", {}))
+    if default_endpoint_keys != catalog_keys:
+        fail(
+            "Provider default endpoint map mismatch: "
+            f"endpoint_only={sorted(default_endpoint_keys - catalog_keys)}, "
+            f"catalog_only={sorted(catalog_keys - default_endpoint_keys)}"
+        )
+    for provider, endpoint in getattr(registry, "PROVIDER_DEFAULT_ENDPOINTS", {}).items():
+        if not endpoint:
+            fail(f"{provider} default endpoint is empty")
+        if registry.get_provider_default_endpoint(provider) != endpoint:
+            fail(f"get_provider_default_endpoint({provider!r}) did not return map value")
+    for preset in getattr(registry, "API_MODEL_PRESETS", []):
+        if "endpoint" in preset:
+            fail("Raw API_MODEL_PRESETS entries must not carry endpoint; use PROVIDER_DEFAULT_ENDPOINTS")
 
     env_values = list(registry.PROVIDER_ENV_MAP.values())
     if len(env_values) != len(set(env_values)):
@@ -248,6 +266,12 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
                 fail(f"Preset {preset.get('name')} references unknown provider {provider}")
             if not preset.get("endpoint"):
                 fail(f"Preset {preset.get('name')} missing endpoint")
+            expected_endpoint = registry.get_provider_default_endpoint(provider)
+            if preset.get("endpoint") != expected_endpoint:
+                fail(
+                    f"Preset {preset.get('name')} endpoint should come from PROVIDER_DEFAULT_ENDPOINTS: "
+                    f"{preset.get('endpoint')} != {expected_endpoint}"
+                )
             if not preset.get("category"):
                 fail(f"Preset {preset.get('name')} missing category")
             if not preset.get("required_key"):
@@ -291,6 +315,11 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
             fail(
                 f"Catalog health_check_url for {provider} should come from its default preset: "
                 f"{item.get('health_check_url')} != {first_preset.get('health_check_url')}"
+            )
+        if item.get("default_endpoint") != registry.get_provider_default_endpoint(provider):
+            fail(
+                f"Catalog default_endpoint for {provider} should come from PROVIDER_DEFAULT_ENDPOINTS: "
+                f"{item.get('default_endpoint')} != {registry.get_provider_default_endpoint(provider)}"
             )
 
     return len(presets), len(providers_with_presets)
