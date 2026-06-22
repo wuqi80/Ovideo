@@ -4699,6 +4699,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_audio_provider.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",
+        "tests/test_dao_api_config_category.py",
         "tests/test_episode_compose_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_video_client_base.py",

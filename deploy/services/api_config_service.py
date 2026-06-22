@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
 
-from dao_api_config import ApiConfigDAO
+from dao.admin.api_config import ApiConfigDAO
 from services.api_config_health_service import test_api_config_health
 from services.api_provider_health_monitor import (
     delete_cached_provider_health_many,

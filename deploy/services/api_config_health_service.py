@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import aiohttp
 
-from dao_system_settings import SystemSettingsDAO
+from dao.admin.system_settings import SystemSettingsDAO
 from services.api_provider_endpoints import dedupe_urls, derive_models_health_urls
 from services.api_provider_registry import (
     PROVIDER_CATALOG,

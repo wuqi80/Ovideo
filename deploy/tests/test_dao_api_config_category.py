@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import dao_api_config
+from dao.admin import api_config as api_config_module
 
 
 @pytest.fixture
@@ -11,12 +11,12 @@ def mock_db(monkeypatch):
     db = MagicMock()
     db.fetchrow = AsyncMock(return_value={"config_id": "apicfg_test1"})
     db.execute = AsyncMock(return_value="UPDATE 1")
-    monkeypatch.setattr(dao_api_config, "get_db_manager", lambda: db)
+    monkeypatch.setattr(api_config_module, "get_db_manager", lambda: db)
     return db
 
 
 async def test_create_passes_category_to_sql(mock_db):
-    await dao_api_config.ApiConfigDAO.create(
+    await api_config_module.ApiConfigDAO.create(
         name="飞升 Test",
         provider="seedance",
         endpoint="https://x",
@@ -33,7 +33,7 @@ async def test_create_passes_category_to_sql(mock_db):
 
 
 async def test_create_defaults_category_to_empty_string(mock_db):
-    await dao_api_config.ApiConfigDAO.create(
+    await api_config_module.ApiConfigDAO.create(
         name="未分类",
         provider="custom",
         endpoint="https://y",
@@ -48,6 +48,6 @@ async def test_update_by_id_accepts_category(mock_db):
     """update_by_id 应允许 category 在 allowed 字段集合里。"""
     db = mock_db
     db.fetchrow = AsyncMock(return_value={"config_id": "apicfg_test1", "category": "audio"})
-    await dao_api_config.ApiConfigDAO.update_by_id("apicfg_test1", {"category": "audio"})
+    await api_config_module.ApiConfigDAO.update_by_id("apicfg_test1", {"category": "audio"})
     # 至少应调一次 fetchrow 或 execute（不能默默吞掉）
     assert db.fetchrow.await_count + db.execute.await_count >= 1

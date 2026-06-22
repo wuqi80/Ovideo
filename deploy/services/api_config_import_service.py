@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from dao_api_config import ApiConfigDAO
+from dao.admin.api_config import ApiConfigDAO
 from services.api_provider_health_monitor import delete_cached_provider_health_many
 from services.api_provider_registry import get_api_model_presets
 from services.api_provider_runtime import resolve_provider

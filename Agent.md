@@ -7650,3 +7650,24 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `api_routes.py`, `services/audio_provider.py`, and `tests/test_audio_provider.py` reference `external_api.audio.minimax_audio`; only red-line `core/worker.py` still imports the legacy shim.
+
+## 2026-06-22 API Config Canonical DAO Imports
+
+- Updated API management services to depend on canonical DAO package modules:
+  - `deploy/services/api_config_service.py`
+  - `deploy/services/api_config_runtime_loader.py`
+  - `deploy/services/api_config_import_service.py`
+  - `deploy/services/api_config_health_service.py`
+- Kept top-level compatibility shims such as `deploy/dao_api_config.py` and `deploy/dao_system_settings.py` available for older callers, while the API management path now uses `dao.admin.*` directly.
+- Updated `deploy/tests/test_dao_api_config_category.py` to patch `dao.admin.api_config.get_db_manager`, matching the real implementation module and avoiding accidental real DB connections in mock-only tests.
+- Strengthened `deploy/scripts/check_provider_contract.py` with `api_config_dao_import_checks=20` so API config services cannot reintroduce `dao_api_config` or `dao_system_settings` shim imports.
+- Added `deploy/tests/test_dao_api_config_category.py` to `deploy/scripts/live_deploy_mvc2.sh` and the deployment contract so server-side checks receive the test file.
+- Verification:
+  - Local API config contracts passed: runtime loader, CRUD, import, health, and provider contract.
+  - Local `pytest deploy/tests/test_admin_import_presets_writes_category.py deploy/tests/test_minimax_audio_runtime.py deploy/tests/test_dao_api_config_category.py -q` passed with 15 tests.
+  - Local `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, `bash -n deploy/scripts/live_deploy_mvc2.sh`, and `git diff --check` passed.
+  - Local route contract reported `live_deploy_frontend_checks=66`.
+  - Live deploy to `https://mecha.one/` passed; frontend build was skipped because `new_html` source hash was unchanged and `drama.service` stayed `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed API config services import `dao.admin.api_config` / `dao.admin.system_settings`, and `tests/test_dao_api_config_category.py` is included in the live deploy file list.

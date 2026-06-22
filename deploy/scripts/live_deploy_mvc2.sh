@@ -55,6 +55,7 @@ FILES=(
   tests/test_auth_user_service.py
   tests/test_comfyui_file_service.py
   tests/test_content_file_dao.py
+  tests/test_dao_api_config_category.py
   tests/test_episode_compose_service.py
   tests/test_minimax_tts_sync.py
   tests/test_minimax_audio_runtime.py

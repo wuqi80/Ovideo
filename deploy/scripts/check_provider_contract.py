@@ -951,6 +951,37 @@ def check_api_config_write_env_refresh_contract() -> int:
     return len(service_write_functions) + 1 + len(route_write_calls) + 1
 
 
+def check_api_config_service_dao_import_contract() -> int:
+    """API management services should depend on canonical DAO package modules."""
+    root = deploy_root()
+    required_imports = {
+        "services/api_config_service.py": "from dao.admin.api_config import ApiConfigDAO",
+        "services/api_config_runtime_loader.py": "from dao.admin.api_config import ApiConfigDAO",
+        "services/api_config_import_service.py": "from dao.admin.api_config import ApiConfigDAO",
+        "services/api_config_health_service.py": "from dao.admin.system_settings import SystemSettingsDAO",
+    }
+    forbidden_imports = (
+        "from dao_api_config import ApiConfigDAO",
+        "import dao_api_config",
+        "from dao_system_settings import SystemSettingsDAO",
+        "import dao_system_settings",
+    )
+    checks = 0
+    violations: list[str] = []
+    for relative, required in required_imports.items():
+        text = (root / relative).read_text(encoding="utf-8")
+        if required not in text:
+            violations.append(f"{relative} must import canonical DAO: {required}")
+        checks += 1
+        for forbidden in forbidden_imports:
+            if forbidden in text:
+                violations.append(f"{relative} must not import compatibility DAO shim: {forbidden}")
+            checks += 1
+    if violations:
+        fail("API config service DAO import contract failed:\n" + "\n".join(violations))
+    return checks
+
+
 def check_gpt_image_tier_wiring(registry) -> int:
     path = deploy_root() / "services" / "ai_proxy_service.py"
     try:
@@ -1408,6 +1439,7 @@ def main() -> int:
     runtime_env_read_checks = check_runtime_code_has_no_managed_provider_env_reads(registry)
     runtime_endpoint_literal_checks = check_runtime_code_has_no_third_party_endpoint_literals()
     api_config_env_refresh_checks = check_api_config_write_env_refresh_contract()
+    api_config_dao_import_checks = check_api_config_service_dao_import_contract()
     gpt_image_tier_provider_count = check_gpt_image_tier_wiring(registry)
     gemini_image_alias_checks = check_gemini_image_alias_wiring(registry)
     video_default_model_checks = check_video_default_model_registry_wiring(registry)
@@ -1441,6 +1473,7 @@ def main() -> int:
     print(f"  runtime_env_read_checks={runtime_env_read_checks}")
     print(f"  runtime_endpoint_literal_checks={runtime_endpoint_literal_checks}")
     print(f"  api_config_env_refresh_checks={api_config_env_refresh_checks}")
+    print(f"  api_config_dao_import_checks={api_config_dao_import_checks}")
     print(f"  gpt_image_tier_providers={gpt_image_tier_provider_count}")
     print(f"  gemini_image_alias_checks={gemini_image_alias_checks}")
     print(f"  video_default_model_checks={video_default_model_checks}")

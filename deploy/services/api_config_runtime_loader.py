@@ -11,7 +11,7 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-from dao_api_config import ApiConfigDAO
+from dao.admin.api_config import ApiConfigDAO
 from services.api_provider_registry import (
     DASHSCOPE_SUB_MODEL_ENV_MAP,
     PROVIDER_EXTRA_ENV_MAP,
