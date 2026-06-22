@@ -5597,9 +5597,10 @@ def check_comfyui_file_service_contract(root: Path) -> int:
         "from services.comfyui_file_service import",
         "ComfyUIFileRequestError",
         "ComfyUIMediaUploadFailed",
+        "ComfyUIViewFetchFailed",
         "ComfyUIVideoReuploadNotFound",
         "create_comfyui_upload_record(",
-        "fetch_comfyui_view_response(",
+        "fetch_comfyui_view_with_fallback(",
         "reupload_comfyui_video_with_uuid(",
         "upload_audio_file_to_comfyui(",
         "upload_comfyui_file_response(",
@@ -5607,7 +5608,12 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     required_service_snippets = [
         "class ComfyUIFileRequestError(RuntimeError):",
         "class ComfyUIMediaUploadFailed(RuntimeError):",
+        "class ComfyUIViewFetchFailed(RuntimeError):",
         "class ComfyUIVideoReuploadNotFound(RuntimeError):",
+        "def _view_fallback_types(",
+        "def fetch_comfyui_view_with_fallback(",
+        "for fallback_type in _view_fallback_types(file_type):",
+        "fallback_params = {**base_params, \"type\": fallback_type}",
         "def _extract_uploaded_filename(",
         "async def _ensure_default_upload_version(",
         "async def create_comfyui_upload_record(",
@@ -5633,6 +5639,18 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     if "requests." in route_text or "import requests" in route_text:
         fail("routers/comfyui_files.py must not perform direct HTTP requests")
     checks += 1
+    proxy_start = route_text.index('@router.get("/api/proxy/comfyui/view")')
+    proxy_end = route_text.index('@router.post("/api/comfyui/upload")')
+    proxy_route_text = route_text[proxy_start:proxy_end]
+    for snippet in [
+        "fetch_comfyui_view_response(",
+        "fallback_attempts",
+        "response.status_code == 404",
+        "params[\"type\"]",
+    ]:
+        if snippet in proxy_route_text:
+            fail(f"routers/comfyui_files.py must delegate view fallback handling to service: {snippet}")
+        checks += 1
     for snippet in [
         "ProjectDAO.get_user_projects(",
         "ProjectDAO.save_or_update_project(",

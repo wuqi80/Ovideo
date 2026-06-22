@@ -69,6 +69,70 @@ def test_comfyui_request_error_wraps_requests_exception(monkeypatch):
     assert "comfyui_view failed" in str(exc.value)
 
 
+def test_fetch_comfyui_view_with_fallback_tries_compatible_locations():
+    calls = []
+
+    class MissingResponse:
+        ok = False
+        status_code = 404
+        text = "not found"
+
+    class HitResponse:
+        ok = True
+        status_code = 200
+        text = ""
+        headers = {"content-type": "video/mp4"}
+
+    def fake_fetch(url, **kwargs):
+        calls.append((url, kwargs))
+        return MissingResponse() if len(calls) == 1 else HitResponse()
+
+    response = comfyui_file_service.fetch_comfyui_view_with_fallback(
+        url="http://node/view",
+        filename="clip.mp4",
+        file_type="output",
+        subfolder="drafts",
+        logger=_Logger,
+        timeout=17,
+        stream=True,
+        fetch_view=fake_fetch,
+    )
+
+    assert response.status_code == 200
+    assert calls == [
+        (
+            "http://node/view",
+            {"params": {"filename": "clip.mp4", "type": "output", "subfolder": "drafts"}, "timeout": 17, "stream": True},
+        ),
+        (
+            "http://node/view",
+            {"params": {"filename": "clip.mp4", "type": "temp", "subfolder": "drafts"}, "timeout": 17, "stream": True},
+        ),
+    ]
+
+
+def test_fetch_comfyui_view_with_fallback_raises_with_status():
+    class MissingResponse:
+        ok = False
+        status_code = 404
+        text = "not found"
+
+    def fake_fetch(*_args, **_kwargs):
+        return MissingResponse()
+
+    with pytest.raises(comfyui_file_service.ComfyUIViewFetchFailed) as exc:
+        comfyui_file_service.fetch_comfyui_view_with_fallback(
+            url="http://node/view",
+            filename="missing.mp4",
+            file_type="unknown",
+            logger=_Logger,
+            fetch_view=fake_fetch,
+        )
+
+    assert exc.value.status_code == 404
+    assert "无法获取文件: not found" in str(exc.value)
+
+
 class _ProjectDAO:
     projects = []
     saved = []

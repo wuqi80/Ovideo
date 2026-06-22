@@ -16,6 +16,14 @@ class ComfyUIFileRequestError(RuntimeError):
     """Raised when a ComfyUI file transfer request cannot be completed."""
 
 
+class ComfyUIViewFetchFailed(RuntimeError):
+    """Raised when ComfyUI returns a non-success file view response."""
+
+    def __init__(self, message: str, *, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 class ComfyUIVideoReuploadNotFound(RuntimeError):
     """Raised when a source video cannot be found in storage or ComfyUI."""
 
@@ -100,6 +108,52 @@ def upload_comfyui_file_response(
     files = {"image": (filename, content, content_type)}
     data = {"overwrite": "true"}
     return _request("comfyui_upload", requests.post, upload_url, files=files, data=data, timeout=timeout)
+
+
+def _view_fallback_types(file_type: str) -> list[str]:
+    if file_type == "temp":
+        return ["output", "input"]
+    if file_type == "output":
+        return ["temp", "input"]
+    if file_type == "input":
+        return ["output", "temp"]
+    return []
+
+
+def fetch_comfyui_view_with_fallback(
+    *,
+    url: str,
+    filename: str,
+    file_type: str = "output",
+    subfolder: str = "",
+    logger: Any,
+    timeout: int = 60,
+    stream: bool = True,
+    fetch_view: Callable[..., requests.Response] = fetch_comfyui_view_response,
+) -> requests.Response:
+    """Fetch a ComfyUI /view response and try compatible storage types after a 404."""
+
+    base_params: Dict[str, str] = {"filename": filename}
+    if subfolder:
+        base_params["subfolder"] = subfolder
+
+    params = {**base_params, "type": file_type}
+    response = fetch_view(url, params=params, timeout=timeout, stream=stream)
+    if response.status_code == 404:
+        last_type = file_type
+        for fallback_type in _view_fallback_types(file_type):
+            logger.warning("文件在 %s 中未找到，尝试在 %s 中查找: %s", last_type, fallback_type, filename)
+            fallback_params = {**base_params, "type": fallback_type}
+            response = fetch_view(url, params=fallback_params, timeout=timeout, stream=stream)
+            if response.status_code == 200:
+                logger.info("✅ 在 %s 中找到文件: %s", fallback_type, filename)
+                break
+            last_type = fallback_type
+
+    if not response.ok:
+        logger.error("ComfyUI返回错误: %s - %s", response.status_code, response.text)
+        raise ComfyUIViewFetchFailed(f"无法获取文件: {response.text}", status_code=response.status_code)
+    return response
 
 
 def _extract_uploaded_filename(response: requests.Response, default_filename: str) -> str:

@@ -8278,3 +8278,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `3e74fbf`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 ComfyUI View Fallback Service Boundary
+
+- Moved `/api/proxy/comfyui/view` fallback-fetch behavior from `deploy/routers/comfyui_files.py` into `deploy/services/comfyui_file_service.py`.
+- The router still owns auth, target node selection, and `StreamingResponse` construction, but now delegates ComfyUI `/view` params, 404 fallback ordering, non-OK response handling, and status-bearing view errors to `fetch_comfyui_view_with_fallback()`.
+- Extended `deploy/tests/test_comfyui_file_service.py` to cover output→temp fallback and status-preserving fetch failures.
+- Strengthened `deploy/scripts/check_route_contract.py` so the proxy route cannot regress to route-local fallback lists, status-code 404 loops, or direct `fetch_comfyui_view_response()` calls.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_comfyui_file_service.py -q` passed with 13 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
+  - Commit, push, deploy, and online smoke pending.

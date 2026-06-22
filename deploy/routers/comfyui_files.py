@@ -18,8 +18,9 @@ from services.comfyui_file_service import (
     ComfyUIMediaUploadFailed,
     ComfyUIVideoReuploadFailed,
     ComfyUIVideoReuploadNotFound,
+    ComfyUIViewFetchFailed,
     create_comfyui_upload_record,
-    fetch_comfyui_view_response,
+    fetch_comfyui_view_with_fallback,
     reupload_comfyui_video_with_uuid,
     upload_audio_file_to_comfyui,
     upload_comfyui_file_response,
@@ -92,36 +93,16 @@ def create_comfyui_files_router(
                     target_server = "http://127.0.0.1:8188"
 
             url = f"{target_server}/view"
-            params = {
-                "filename": filename,
-                "type": type,
-            }
-            if subfolder:
-                params["subfolder"] = subfolder
-
-            logger.info("用户 %s 代理访问ComfyUI文件: %s params=%s", username, url, params)
-            response = fetch_comfyui_view_response(url, params=params, timeout=60, stream=True)
-
-            fallback_attempts = []
-            if response.status_code == 404:
-                if params["type"] == "temp":
-                    fallback_attempts = ["output", "input"]
-                elif params["type"] == "output":
-                    fallback_attempts = ["temp", "input"]
-                elif params["type"] == "input":
-                    fallback_attempts = ["output", "temp"]
-
-                for fallback_type in fallback_attempts:
-                    logger.warning("文件在 %s 中未找到，尝试在 %s 中查找: %s", params["type"], fallback_type, filename)
-                    params["type"] = fallback_type
-                    response = fetch_comfyui_view_response(url, params=params, timeout=60, stream=True)
-                    if response.status_code == 200:
-                        logger.info("✅ 在 %s 中找到文件: %s", fallback_type, filename)
-                        break
-
-            if not response.ok:
-                logger.error("ComfyUI返回错误: %s - %s", response.status_code, response.text)
-                raise HTTPException(status_code=response.status_code, detail=f"无法获取文件: {response.text}")
+            logger.info("用户 %s 代理访问ComfyUI文件: %s filename=%s type=%s subfolder=%s", username, url, filename, type, subfolder)
+            response = fetch_comfyui_view_with_fallback(
+                url=url,
+                filename=filename,
+                file_type=type,
+                subfolder=subfolder,
+                logger=logger,
+                timeout=60,
+                stream=True,
+            )
 
             content_type = response.headers.get("content-type", "application/octet-stream")
             logger.info(
@@ -143,6 +124,8 @@ def create_comfyui_files_router(
 
         except HTTPException:
             raise
+        except ComfyUIViewFetchFailed as e:
+            raise HTTPException(status_code=e.status_code, detail=str(e))
         except ComfyUIFileRequestError as e:
             logger.error("代理ComfyUI文件失败: %s", e)
             raise HTTPException(status_code=503, detail=f"无法连接到ComfyUI: {str(e)}")
