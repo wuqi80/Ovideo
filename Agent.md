@@ -7998,3 +7998,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile` for route contract passed.
   - Local `scripts/check_route_contract.py` passed.
   - Local frontend production build passed via bundled Node/Vite.
+
+## 2026-06-23 Deploy Frontend Build Hash Cleanup
+
+- Updated `deploy/scripts/live_deploy_mvc2.sh` so frontend Markdown docs are synced as ordinary deploy files instead of forcing a full `new_html` source tar/build.
+- Changed the frontend build hash marker to `.new_html_build_source.sha256` and excluded `new_html/*.md` from the build-source hash.
+- Added `new_html/.env.example`, `new_html/README.md`, and `new_html/GEMINI_API_CONFIG.md` to the deploy file list so docs still reach the server when needed.
+- Strengthened `deploy/scripts/check_route_contract.py` so the deploy script must keep doc sync, the build hash marker, and Markdown exclusion.
+- Verification:
+  - Local `bash -n scripts/live_deploy_mvc2.sh` passed.
+  - Local `py_compile` for route contract passed.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - A temporary `new_html/*.md` probe did not change the frontend build hash.

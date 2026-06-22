@@ -7,7 +7,7 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)
 SERVICE="${SERVICE:-drama.service}"
 FRONTEND_TAR_REMOTE="/tmp/mecha-new_html-src.tgz"
-FRONTEND_HASH_REMOTE="${FRONTEND_HASH_REMOTE:-$REMOTE_DIR/.new_html_source.sha256}"
+FRONTEND_HASH_REMOTE="${FRONTEND_HASH_REMOTE:-$REMOTE_DIR/.new_html_build_source.sha256}"
 FORCE_FRONTEND_BUILD="${FORCE_FRONTEND_BUILD:-0}"
 RUN_REMOTE_CONTRACTS="${RUN_REMOTE_CONTRACTS:-1}"
 RUN_REMOTE_SMOKE="${RUN_REMOTE_SMOKE:-0}"
@@ -64,6 +64,9 @@ FILES=(
   tests/test_task_read_service.py
   tests/test_user_dao_admin_delete.py
   tests/test_video_client_base.py
+  "new_html/.env.example"
+  "new_html/README.md"
+  "new_html/GEMINI_API_CONFIG.md"
 )
 
 for path in "${FILES[@]}"; do
@@ -99,6 +102,7 @@ frontend_source_hash() {
     ! -path 'new_html/node_modules/*' \
     ! -path 'new_html/.env' \
     ! -path 'new_html/.env.*' \
+    ! -path 'new_html/*.md' \
     ! -path 'new_html/coverage/*' \
     ! -path 'new_html/dist/*' \
     -print0 \
@@ -193,6 +197,7 @@ REMOTE_FRONTEND_HASH=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
       ! -path 'new_html/node_modules/*' \
       ! -path 'new_html/.env' \
       ! -path 'new_html/.env.*' \
+      ! -path 'new_html/*.md' \
       ! -path 'new_html/coverage/*' \
       ! -path 'new_html/dist/*' \
       -print0 \
