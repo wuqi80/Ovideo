@@ -64,6 +64,7 @@ FILES=(
   tests/test_episode_service.py
   tests/test_episode_video_service.py
   tests/test_entity_file_service.py
+  tests/test_file_route_service.py
   tests/test_legacy_file_service.py
   tests/test_minimax_tts_sync.py
   tests/test_minimax_audio_runtime.py

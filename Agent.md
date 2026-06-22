@@ -8215,3 +8215,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_legacy_file_service.py -q` passed with 6 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Generic File Route Service Boundary
+
+- Moved generic `/api/upload` and `/api/thumbnail` business logic from `deploy/routers/files.py` into `deploy/services/file_route_service.py`.
+- The router still owns the 2 HTTP endpoints and auth/HTTP response wrapping, but now delegates thumbnail source resolution, cache key generation, thumbnail rendering, cache cleanup, upload type detection, default project/version creation, file storage, DB file record creation, and DB-failure rollback to the service layer.
+- Added `deploy/tests/test_file_route_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so generic file routes cannot regress to direct `FileDAO`/`ProjectDAO`/`VersionDAO`, PIL, storage path, hashing, or upload persistence orchestration.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_file_route_service.py -q` passed with 6 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.

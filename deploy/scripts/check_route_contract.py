@@ -4695,6 +4695,9 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "legacy_file_service.py", "file_dao.create_file("),
         (root / "services" / "legacy_file_service.py", "file_dao.delete_file("),
         (root / "services" / "legacy_file_service.py", "file_deduplication_service.check_duplicate("),
+        (root / "routers" / "files.py", "upload_generic_file("),
+        (root / "services" / "file_route_service.py", "file_dao.create_file("),
+        (root / "services" / "file_route_service.py", "project_dao.get_user_projects("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.list_shot_take_rows("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.create_final_cut_records("),
@@ -4835,18 +4838,51 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         checks += 1
 
     files_router_text = (root / "routers" / "files.py").read_text(encoding="utf-8")
+    file_route_service_text = (root / "services" / "file_route_service.py").read_text(encoding="utf-8")
     cluster_main_text = (root / "cluster_main.py").read_text(encoding="utf-8")
     for snippet in [
         "get_db_manager",
         "if get_db_manager():",
         "get_db_manager=lambda",
+        "FileDAO.",
+        "ProjectDAO.",
+        "VersionDAO.",
+        "storage_path_safe(",
+        "Image.open(",
+        "hashlib.sha256(",
+        "uuid.uuid4()",
+        "datetime.now()",
+        "file_path.write_bytes(",
+        "Path(\"persistent_storage\")",
     ]:
         if snippet in files_router_text:
-            violations.append(f"routers/files.py must delegate DB availability to FileDAO: {snippet}")
+            violations.append(f"routers/files.py must delegate upload/thumbnail orchestration to file_route_service: {snippet}")
         checks += 1
     if re.search(r"create_files_router\([\s\S]{0,400}get_db_manager\s*=", cluster_main_text):
         violations.append("cluster_main.py still passes DB plumbing into create_files_router")
     checks += 1
+    required_file_route_snippets = [
+        (root / "routers" / "files.py", "from services.file_route_service import ("),
+        (root / "routers" / "files.py", "build_thumbnail_file("),
+        (root / "routers" / "files.py", "upload_generic_file("),
+        (root / "routers" / "files.py", "cleanup_thumbnail_cache_service("),
+        (root / "services" / "file_route_service.py", "def cleanup_thumbnail_cache("),
+        (root / "services" / "file_route_service.py", "def thumbnail_cache_path("),
+        (root / "services" / "file_route_service.py", "async def build_thumbnail_file("),
+        (root / "services" / "file_route_service.py", "async def upload_generic_file("),
+        (root / "services" / "file_route_service.py", "file_dao.get_file("),
+        (root / "services" / "file_route_service.py", "project_dao.get_user_projects("),
+        (root / "services" / "file_route_service.py", "version_dao.get_project_versions("),
+        (root / "services" / "file_route_service.py", "file_dao.create_file("),
+        (root / "services" / "file_route_service.py", "storage_path_safe("),
+        (root / "services" / "file_route_service.py", "Image.open("),
+        (root / "services" / "file_route_service.py", "file_path.write_bytes("),
+    ]
+    for path, snippet in required_file_route_snippets:
+        text = file_route_service_text if path.name == "file_route_service.py" else files_router_text
+        if snippet not in text:
+            violations.append(f"Missing file route service boundary snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
 
     project_admin_router_text = (root / "routers" / "project_admin.py").read_text(encoding="utf-8")
     for snippet in [

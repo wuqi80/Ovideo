@@ -1,0 +1,346 @@
+"""Business logic for generic upload and thumbnail routes."""
+from __future__ import annotations
+
+import hashlib
+import os
+import time
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+
+from utils.image_reference import storage_path_safe
+
+
+THUMBNAIL_CACHE_DIR = Path("temp") / "thumbnail_cache"
+DEFAULT_THUMBNAIL_CACHE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+DEFAULT_THUMBNAIL_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024
+DEFAULT_THUMBNAIL_TMP_MAX_AGE_SECONDS = 60 * 60
+
+
+class FileRouteServiceError(RuntimeError):
+    pass
+
+
+class ThumbnailAuthRequired(FileRouteServiceError):
+    pass
+
+
+class ThumbnailFileNotFound(FileRouteServiceError):
+    pass
+
+
+class UploadFileTooLarge(FileRouteServiceError):
+    pass
+
+
+class UnsupportedUploadFileType(FileRouteServiceError):
+    def __init__(self, content_type: str):
+        super().__init__(content_type)
+        self.content_type = content_type
+
+
+class UploadFileRecordError(FileRouteServiceError):
+    pass
+
+
+@dataclass(frozen=True)
+class ThumbnailFile:
+    path: Path
+    media_type: str
+    headers: Dict[str, str]
+
+
+def _thumbnail_cache_limit(env_name: str, default: int, *, logger: Any) -> int:
+    try:
+        return max(0, int(os.getenv(env_name, str(default))))
+    except (TypeError, ValueError):
+        logger.warning("Invalid %s value, using default %s", env_name, default)
+        return default
+
+
+def cleanup_thumbnail_cache(
+    *,
+    cache_dir: Optional[Path] = None,
+    max_age_seconds: Optional[int] = None,
+    max_bytes: Optional[int] = None,
+    tmp_max_age_seconds: int = DEFAULT_THUMBNAIL_TMP_MAX_AGE_SECONDS,
+    logger: Any,
+) -> Dict[str, int]:
+    cache_path = Path(cache_dir or THUMBNAIL_CACHE_DIR)
+    stats = {
+        "scanned": 0,
+        "removed": 0,
+        "bytes_before": 0,
+        "bytes_removed": 0,
+        "bytes_after": 0,
+    }
+    if not cache_path.exists():
+        return stats
+
+    max_age = (
+        _thumbnail_cache_limit("THUMBNAIL_CACHE_MAX_AGE_SECONDS", DEFAULT_THUMBNAIL_CACHE_MAX_AGE_SECONDS, logger=logger)
+        if max_age_seconds is None
+        else max(0, int(max_age_seconds))
+    )
+    byte_limit = (
+        _thumbnail_cache_limit("THUMBNAIL_CACHE_MAX_BYTES", DEFAULT_THUMBNAIL_CACHE_MAX_BYTES, logger=logger)
+        if max_bytes is None
+        else max(0, int(max_bytes))
+    )
+
+    now = time.time()
+    remaining: list[tuple[float, int, Path]] = []
+
+    for entry in cache_path.iterdir():
+        if not entry.is_file():
+            continue
+        if entry.suffix.lower() not in {".jpg", ".tmp"}:
+            continue
+
+        try:
+            stat = entry.stat()
+        except FileNotFoundError:
+            continue
+
+        stats["scanned"] += 1
+        stats["bytes_before"] += stat.st_size
+        age = now - stat.st_mtime
+        should_remove = False
+        if entry.suffix.lower() == ".tmp":
+            should_remove = age > tmp_max_age_seconds
+        else:
+            should_remove = max_age > 0 and age > max_age
+
+        if should_remove:
+            try:
+                entry.unlink(missing_ok=True)
+                stats["removed"] += 1
+                stats["bytes_removed"] += stat.st_size
+            except Exception as exc:
+                logger.warning("Failed to remove thumbnail cache file %s: %s", entry, exc)
+            continue
+
+        if entry.suffix.lower() == ".jpg":
+            remaining.append((stat.st_mtime, stat.st_size, entry))
+            stats["bytes_after"] += stat.st_size
+
+    if byte_limit > 0 and stats["bytes_after"] > byte_limit:
+        for _, size, entry in sorted(remaining, key=lambda item: item[0]):
+            if stats["bytes_after"] <= byte_limit:
+                break
+            try:
+                entry.unlink(missing_ok=True)
+                stats["removed"] += 1
+                stats["bytes_removed"] += size
+                stats["bytes_after"] -= size
+            except Exception as exc:
+                logger.warning("Failed to trim thumbnail cache file %s: %s", entry, exc)
+
+    return stats
+
+
+def thumbnail_headers() -> Dict[str, str]:
+    return {
+        "Cache-Control": "public, max-age=86400",
+        "Content-Disposition": "inline",
+    }
+
+
+def thumbnail_cache_path(
+    file_path: str,
+    width: int,
+    height: int,
+    *,
+    cache_dir: Path = THUMBNAIL_CACHE_DIR,
+) -> Path:
+    source = Path(file_path).resolve()
+    stat = source.stat()
+    material = f"{source}|{stat.st_mtime_ns}|{stat.st_size}|{width}x{height}"
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    return cache_dir / f"{digest}.jpg"
+
+
+async def resolve_thumbnail_source(url: str, *, file_dao: Any, logger: Any) -> Optional[str]:
+    if url.startswith("/uploads/"):
+        relative_path = url.replace("/uploads/", "")
+        return os.path.join("temp", "uploads", relative_path.split("?")[0])
+    if url.startswith("/storage/"):
+        return str(storage_path_safe(url.split("?")[0]))
+    if url.startswith("/api/files/"):
+        parts = url.split("/")
+        if len(parts) >= 4:
+            file_id = parts[3]
+            try:
+                file_record = await file_dao.get_file(file_id)
+                if file_record:
+                    return file_record.get("file_path")
+            except Exception as exc:
+                logger.warning("Failed to load thumbnail file record: %s", exc)
+    return None
+
+
+async def build_thumbnail_file(
+    *,
+    url: str,
+    width: int,
+    height: int,
+    file_dao: Any,
+    logger: Any,
+    cache_dir: Path = THUMBNAIL_CACHE_DIR,
+    uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
+) -> ThumbnailFile:
+    from PIL import Image
+
+    file_path = await resolve_thumbnail_source(url, file_dao=file_dao, logger=logger)
+    if not file_path or not os.path.exists(file_path):
+        logger.warning("Thumbnail source file does not exist: %s", file_path)
+        raise ThumbnailFileNotFound("file_not_found")
+
+    thumb_width = max(1, int(width))
+    thumb_height = max(1, int(height))
+    cache_path = thumbnail_cache_path(file_path, thumb_width, thumb_height, cache_dir=cache_dir)
+    if cache_path.exists():
+        return ThumbnailFile(path=cache_path, media_type="image/jpeg", headers=thumbnail_headers())
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_cache_path = cache_path.with_name(f"{cache_path.name}.{uuid_hex_provider()}.tmp")
+
+    with Image.open(file_path) as img:
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        img.thumbnail((thumb_width, thumb_height), Image.Resampling.LANCZOS)
+
+        try:
+            img.save(tmp_cache_path, format="JPEG", quality=75, optimize=True)
+            os.replace(tmp_cache_path, cache_path)
+        finally:
+            if tmp_cache_path.exists():
+                tmp_cache_path.unlink(missing_ok=True)
+
+    return ThumbnailFile(path=cache_path, media_type="image/jpeg", headers=thumbnail_headers())
+
+
+def detect_upload_file_type(filename: str, content_type: str) -> str:
+    if content_type.startswith("image/"):
+        return "image"
+    if content_type.startswith("video/"):
+        return "video"
+
+    ext = Path(filename or "").suffix.lower()
+    if ext in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"]:
+        return "image"
+    if ext in [".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv"]:
+        return "video"
+    raise UnsupportedUploadFileType(content_type)
+
+
+async def _ensure_upload_version(
+    *,
+    username: str,
+    version_id: Optional[str],
+    project_dao: Any,
+    version_dao: Any,
+    uuid_hex_provider: Callable[[], str],
+) -> str:
+    if version_id:
+        return version_id
+
+    projects = await project_dao.get_user_projects(username)
+    if not projects:
+        project_id = f"proj_{uuid_hex_provider()[:12]}"
+        await project_dao.save_or_update_project(
+            user_id=username,
+            project_id=project_id,
+            project_name="默认项目",
+            project_data={},
+            description="自动创建的默认项目",
+        )
+    else:
+        project_id = projects[0]["project_id"]
+
+    versions = await version_dao.get_project_versions(project_id)
+    if not versions:
+        version = await version_dao.create_version(
+            project_id=project_id,
+            user_id=username,
+            version_name="默认版本",
+            description="自动创建",
+        )
+        return version["version_id"]
+    return versions[0]["version_id"]
+
+
+async def upload_generic_file(
+    *,
+    filename: str,
+    content_type: str,
+    content: bytes,
+    version_id: Optional[str],
+    username: str,
+    max_upload_size: int,
+    file_dao: Any,
+    project_dao: Any,
+    version_dao: Any,
+    logger: Any,
+    storage_root: Path = Path("persistent_storage"),
+    now_provider: Callable[[], datetime] = datetime.now,
+    uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
+) -> Dict[str, Any]:
+    if len(content) > max_upload_size:
+        raise UploadFileTooLarge("file_too_large")
+
+    safe_filename = filename or "upload"
+    file_type = detect_upload_file_type(safe_filename, content_type)
+    file_id = f"file_{uuid_hex_provider()[:12]}"
+    ext = Path(safe_filename).suffix
+    year_month = now_provider().strftime("%Y%m")
+    storage_dir = storage_root / f"{file_type}s" / username / year_month
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    file_path = storage_dir / f"{file_id}{ext}"
+
+    file_path.write_bytes(content)
+
+    resolved_version_id = await _ensure_upload_version(
+        username=username,
+        version_id=version_id,
+        project_dao=project_dao,
+        version_dao=version_dao,
+        uuid_hex_provider=uuid_hex_provider,
+    )
+
+    try:
+        file_record = await file_dao.create_file(
+            version_id=resolved_version_id,
+            user_id=username,
+            file_type=file_type,
+            file_name=safe_filename,
+            file_path=str(file_path),
+            file_url=f"/api/files/{file_id}/download",
+            file_size_bytes=len(content),
+            mime_type=content_type or f"{file_type}/*",
+            metadata={"source": "upload_api"},
+            file_id=file_id,
+        )
+    except Exception as exc:
+        try:
+            file_path.unlink(missing_ok=True)
+            logger.info("Rolled back physical file after DB write failure: %s", file_path)
+        except Exception:
+            logger.error("Failed to roll back physical file: %s", file_path)
+        raise UploadFileRecordError(str(exc)) from exc
+
+    logger.info("User %s uploaded %s: %s, file_id=%s", username, file_type, safe_filename, file_id)
+    return {
+        "success": True,
+        "file_id": file_record["file_id"],
+        "filename": file_record["file_id"],
+        "original_filename": safe_filename,
+        "storage_url": file_record["file_url"],
+        "url": file_record["file_url"],
+        "path": str(file_path),
+        "file_type": file_type,
+        "size": len(content),
+    }
