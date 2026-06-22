@@ -5,6 +5,7 @@ import inspect
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
@@ -23,6 +24,14 @@ class ComfyUIVideoReuploadFailed(RuntimeError):
     """Raised when reuploading a source video to ComfyUI fails."""
 
 
+class ComfyUIMediaUploadFailed(RuntimeError):
+    """Raised when ComfyUI rejects an upload request."""
+
+    def __init__(self, message: str, *, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 @dataclass(frozen=True)
 class ComfyUIUploadRecord:
     """Database record metadata returned after persisting a ComfyUI upload."""
@@ -38,6 +47,27 @@ class ComfyUIUploadRecord:
 class ReuploadVideoSource:
     content: bytes
     source_info: str
+
+
+@dataclass(frozen=True)
+class ComfyUIAudioUploadResult:
+    filename: str
+    original_filename: str
+    size: int
+    server: str
+    start_time: float
+    duration: float
+
+    def as_response(self) -> Dict[str, Any]:
+        return {
+            "success": True,
+            "filename": self.filename,
+            "original_filename": self.original_filename,
+            "size": self.size,
+            "server": self.server,
+            "start_time": self.start_time,
+            "duration": self.duration,
+        }
 
 
 def _request(action: str, method, *args, **kwargs) -> requests.Response:
@@ -70,6 +100,24 @@ def upload_comfyui_file_response(
     files = {"image": (filename, content, content_type)}
     data = {"overwrite": "true"}
     return _request("comfyui_upload", requests.post, upload_url, files=files, data=data, timeout=timeout)
+
+
+def _extract_uploaded_filename(response: requests.Response, default_filename: str) -> str:
+    try:
+        response_json = response.json()
+    except Exception:
+        response_json = {}
+
+    if not isinstance(response_json, dict):
+        return default_filename
+    if response_json.get("name"):
+        return response_json["name"]
+    images = response_json.get("images")
+    if isinstance(images, list) and images:
+        first = images[0]
+        if isinstance(first, dict) and first.get("filename"):
+            return first["filename"]
+    return default_filename
 
 
 async def _ensure_default_upload_version(
@@ -171,6 +219,68 @@ async def create_comfyui_upload_record(
         file_url=resolved_file_url,
         download_url=download_url,
     )
+
+
+def upload_audio_file_to_comfyui(
+    *,
+    username: str,
+    original_filename: str,
+    content: bytes,
+    content_type: str,
+    start_time: float,
+    duration: float,
+    target_server: str,
+    logger: Any,
+    storage_root: Path = Path("persistent_storage"),
+    now_provider: Callable[[], datetime] = datetime.now,
+    uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
+    upload_file: Callable[..., requests.Response] = upload_comfyui_file_response,
+) -> Dict[str, Any]:
+    """Upload audio to ComfyUI and keep a best-effort local backup."""
+
+    safe_filename = original_filename or "audio.mp3"
+    unique_filename = f"{uuid_hex_provider()[:12]}_{safe_filename}"
+    upload_url = f"{target_server}/upload/image"
+    logger.info("[ComfyUploadAudio] 转发上传到 ComfyUI: %s", upload_url)
+
+    response = upload_file(
+        upload_url,
+        unique_filename,
+        content,
+        content_type or "audio/mpeg",
+        timeout=60,
+    )
+
+    if not response.ok:
+        logger.error("[ComfyUploadAudio] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
+        raise ComfyUIMediaUploadFailed(f"上传到 ComfyUI 失败: {response.status_code}", status_code=response.status_code)
+
+    comfyui_filename = _extract_uploaded_filename(response, unique_filename)
+    logger.info(
+        "✅ ComfyUI 音频上传成功: comfyui_filename=%s, 原始名=%s, server=%s",
+        comfyui_filename,
+        safe_filename,
+        target_server,
+    )
+
+    try:
+        year_month = now_provider().strftime("%Y%m")
+        backup_dir = storage_root / "audio" / username / year_month
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = backup_dir / comfyui_filename
+        backup_path.write_bytes(content)
+        logger.info("💾 音频本地备份: %s", backup_path)
+    except Exception as exc:
+        logger.warning("⚠️ 音频本地备份失败（不影响上传）: %s", exc)
+
+    return ComfyUIAudioUploadResult(
+        filename=comfyui_filename,
+        original_filename=safe_filename,
+        size=len(content),
+        server=target_server,
+        start_time=start_time,
+        duration=duration,
+    ).as_response()
 
 
 def _rooted_path(storage_root: Path, path: str) -> Path:

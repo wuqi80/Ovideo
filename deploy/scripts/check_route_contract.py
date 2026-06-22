@@ -5596,17 +5596,24 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     required_route_snippets = [
         "from services.comfyui_file_service import",
         "ComfyUIFileRequestError",
+        "ComfyUIMediaUploadFailed",
         "ComfyUIVideoReuploadNotFound",
         "create_comfyui_upload_record(",
         "fetch_comfyui_view_response(",
         "reupload_comfyui_video_with_uuid(",
+        "upload_audio_file_to_comfyui(",
         "upload_comfyui_file_response(",
     ]
     required_service_snippets = [
         "class ComfyUIFileRequestError(RuntimeError):",
+        "class ComfyUIMediaUploadFailed(RuntimeError):",
         "class ComfyUIVideoReuploadNotFound(RuntimeError):",
+        "def _extract_uploaded_filename(",
         "async def _ensure_default_upload_version(",
         "async def create_comfyui_upload_record(",
+        "def upload_audio_file_to_comfyui(",
+        "storage_root / \"audio\" / username",
+        "_extract_uploaded_filename(response, unique_filename)",
         "def resolve_reupload_video_source(",
         "def reupload_comfyui_video_with_uuid(",
         "for try_type in [file_type, \"temp\", \"output\", \"input\"]:",
@@ -5645,6 +5652,19 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     ]:
         if snippet in route_text:
             fail(f"routers/comfyui_files.py must delegate video reupload source handling to service: {snippet}")
+        checks += 1
+    audio_start = route_text.index('@router.post("/api/upload/audio")')
+    audio_end = route_text.index('@router.post("/api/comfyui/reupload/video")')
+    audio_route_text = route_text[audio_start:audio_end]
+    for snippet in [
+        "upload_comfyui_file_response(",
+        "response.json()",
+        "backup_path.write_bytes(",
+        "音频本地备份",
+        "ComfyUI 音频上传成功",
+    ]:
+        if snippet in audio_route_text:
+            fail(f"routers/comfyui_files.py must delegate audio upload workflow to service: {snippet}")
         checks += 1
     for snippet in required_service_snippets:
         if snippet not in service_text:

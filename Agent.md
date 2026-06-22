@@ -8265,3 +8265,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `c83992c`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh` sync/restart, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 ComfyUI Audio Upload Service Boundary
+
+- Moved `/api/upload/audio` ComfyUI upload workflow from `deploy/routers/comfyui_files.py` into `deploy/services/comfyui_file_service.py`.
+- The router still owns auth, request body reading, target video-node selection, and HTTP error mapping, but now delegates UUID upload filename generation, ComfyUI upload calls, response filename parsing, best-effort local audio backup, upload rejection handling, and response shaping to `upload_audio_file_to_comfyui()`.
+- Extended `deploy/tests/test_comfyui_file_service.py` to cover audio upload success, backup persistence, ComfyUI filename parsing, and rejected-upload errors.
+- Strengthened `deploy/scripts/check_route_contract.py` so the audio upload route cannot regress to route-local ComfyUI upload calls, response JSON parsing, or audio backup writes.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_comfyui_file_service.py -q` passed with 11 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
+  - Commit, push, deploy, and online smoke pending.

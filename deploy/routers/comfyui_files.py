@@ -15,11 +15,13 @@ from fastapi.security import HTTPAuthorizationCredentials
 from dao_content import FileDAO, ProjectDAO, VersionDAO
 from services.comfyui_file_service import (
     ComfyUIFileRequestError,
+    ComfyUIMediaUploadFailed,
     ComfyUIVideoReuploadFailed,
     ComfyUIVideoReuploadNotFound,
     create_comfyui_upload_record,
     fetch_comfyui_view_response,
     reupload_comfyui_video_with_uuid,
+    upload_audio_file_to_comfyui,
     upload_comfyui_file_response,
 )
 
@@ -411,13 +413,11 @@ def create_comfyui_files_router(
         """上传音频文件到 ComfyUI"""
         try:
             file_content = await audio.read()
-            unique_filename = f"{uuid.uuid4().hex[:12]}_{audio.filename}"
 
             logger.info(
-                "[ComfyUploadAudio] 用户=%s, 原文件=%s, 唯一名=%s, 大小=%s 字节, 剪裁=%ss-%ss",
+                "[ComfyUploadAudio] 用户=%s, 原文件=%s, 大小=%s 字节, 剪裁=%ss-%ss",
                 username,
                 audio.filename,
-                unique_filename,
                 len(file_content),
                 start_time,
                 start_time + duration,
@@ -431,57 +431,19 @@ def create_comfyui_files_router(
             else:
                 logger.info("[ComfyUploadAudio] 使用默认 ComfyUI: %s", target_server)
 
-            upload_url = f"{target_server}/upload/image"
-            logger.info("[ComfyUploadAudio] 转发上传到 ComfyUI: %s", upload_url)
-
-            response = upload_comfyui_file_response(
-                upload_url,
-                unique_filename,
-                file_content,
-                audio.content_type or "audio/mpeg",
-                timeout=60,
+            return upload_audio_file_to_comfyui(
+                username=username,
+                original_filename=audio.filename or "audio.mp3",
+                content=file_content,
+                content_type=audio.content_type or "audio/mpeg",
+                start_time=start_time,
+                duration=duration,
+                target_server=target_server,
+                logger=logger,
             )
 
-            if not response.ok:
-                logger.error("[ComfyUploadAudio] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
-                raise HTTPException(status_code=502, detail=f"上传到 ComfyUI 失败: {response.status_code}")
-
-            try:
-                response_json = response.json()
-            except Exception:
-                response_json = {}
-
-            comfyui_filename = unique_filename
-            if isinstance(response_json, dict) and "name" in response_json:
-                comfyui_filename = response_json["name"]
-
-            logger.info(
-                "✅ ComfyUI 音频上传成功: comfyui_filename=%s, 原始名=%s, server=%s",
-                comfyui_filename,
-                audio.filename,
-                target_server,
-            )
-
-            try:
-                year_month = datetime.now().strftime("%Y%m")
-                backup_dir = Path("persistent_storage/audio") / username / year_month
-                backup_dir.mkdir(parents=True, exist_ok=True)
-                backup_path = backup_dir / comfyui_filename
-                backup_path.write_bytes(file_content)
-                logger.info("💾 音频本地备份: %s", backup_path)
-            except Exception as e:
-                logger.warning("⚠️ 音频本地备份失败（不影响上传）: %s", e)
-
-            return {
-                "success": True,
-                "filename": comfyui_filename,
-                "original_filename": audio.filename,
-                "size": len(file_content),
-                "server": target_server,
-                "start_time": start_time,
-                "duration": duration,
-            }
-
+        except ComfyUIMediaUploadFailed as e:
+            raise HTTPException(status_code=502, detail=str(e))
         except ComfyUIFileRequestError as e:
             logger.error("❌ ComfyUI 音频上传请求失败: %s", e)
             raise HTTPException(status_code=503, detail=f"无法连接到 ComfyUI 服务器: {str(e)}")

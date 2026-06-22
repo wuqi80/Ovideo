@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 import requests
 
@@ -115,6 +117,7 @@ class _Logger:
     warnings = []
     infos = []
     debugs = []
+    errors = []
 
     @classmethod
     def warning(cls, *args, **kwargs):
@@ -128,6 +131,10 @@ class _Logger:
     def debug(cls, *args, **kwargs):
         cls.debugs.append((args, kwargs))
 
+    @classmethod
+    def error(cls, *args, **kwargs):
+        cls.errors.append((args, kwargs))
+
 
 def _reset_fakes():
     _ProjectDAO.projects = []
@@ -138,6 +145,7 @@ def _reset_fakes():
     _Logger.warnings = []
     _Logger.infos = []
     _Logger.debugs = []
+    _Logger.errors = []
 
 
 @pytest.mark.asyncio
@@ -206,11 +214,12 @@ async def test_create_comfyui_upload_record_uses_existing_version_and_download_u
 
 
 class _Response:
-    def __init__(self, *, ok=True, content=b"", status_code=200, payload=None):
+    def __init__(self, *, ok=True, content=b"", status_code=200, payload=None, text=""):
         self.ok = ok
         self.content = content
         self.status_code = status_code
         self._payload = payload or {}
+        self.text = text
 
     def json(self):
         return self._payload
@@ -324,3 +333,65 @@ def test_reupload_comfyui_video_with_uuid_raises_when_upload_fails(tmp_path):
             fetch_view=fake_fetch,
             upload_file=fake_upload,
         )
+
+
+def test_upload_audio_file_to_comfyui_uploads_and_keeps_backup(tmp_path):
+    upload_calls = []
+
+    def fake_upload(*args, **kwargs):
+        upload_calls.append((args, kwargs))
+        return _Response(payload={"name": "voice_from_node.mp3"})
+
+    result = comfyui_file_service.upload_audio_file_to_comfyui(
+        username="yuan",
+        original_filename="voice.mp3",
+        content=b"audio-bytes",
+        content_type="audio/mpeg",
+        start_time=1.5,
+        duration=3.0,
+        target_server="http://node:8188",
+        logger=_Logger,
+        storage_root=tmp_path,
+        now_provider=lambda: datetime(2026, 6, 23),
+        uuid_hex_provider=lambda: "abc123def456",
+        upload_file=fake_upload,
+    )
+
+    assert result == {
+        "success": True,
+        "filename": "voice_from_node.mp3",
+        "original_filename": "voice.mp3",
+        "size": len(b"audio-bytes"),
+        "server": "http://node:8188",
+        "start_time": 1.5,
+        "duration": 3.0,
+    }
+    assert upload_calls == [
+        (
+            ("http://node:8188/upload/image", "abc123def456_voice.mp3", b"audio-bytes", "audio/mpeg"),
+            {"timeout": 60},
+        )
+    ]
+    assert (tmp_path / "audio" / "yuan" / "202606" / "voice_from_node.mp3").read_bytes() == b"audio-bytes"
+
+
+def test_upload_audio_file_to_comfyui_raises_on_rejected_upload(tmp_path):
+    def fake_upload(*_args, **_kwargs):
+        return _Response(ok=False, status_code=502, text="bad gateway")
+
+    with pytest.raises(comfyui_file_service.ComfyUIMediaUploadFailed) as exc:
+        comfyui_file_service.upload_audio_file_to_comfyui(
+            username="yuan",
+            original_filename="voice.mp3",
+            content=b"audio-bytes",
+            content_type="audio/mpeg",
+            start_time=0,
+            duration=5,
+            target_server="http://node:8188",
+            logger=_Logger,
+            storage_root=tmp_path,
+            upload_file=fake_upload,
+        )
+
+    assert exc.value.status_code == 502
+    assert "上传到 ComfyUI 失败: 502" in str(exc.value)
