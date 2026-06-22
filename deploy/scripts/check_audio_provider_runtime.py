@@ -27,6 +27,12 @@ class FakeConfig:
     def aiohttp_proxy(self) -> str:
         return self.proxy
 
+    def url_for_operation(self, operation: str, **path_params) -> str:
+        from services.api_provider_registry import get_provider_api_path  # noqa: PLC0415
+
+        path = get_provider_api_path("minimax", operation, **path_params).strip("/")
+        return f"{self.endpoint.rstrip('/')}/{path}" if path else self.endpoint.rstrip("/")
+
 
 def main() -> int:
     root = deploy_root()

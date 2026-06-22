@@ -27,6 +27,7 @@ class MinimaxClient:
         self.api_key = api_key or ""
         self.base_url = ""
         self.model_name = DEFAULT_MINIMAX_VIDEO_MODEL
+        self._runtime_config = None
         self._request_kwargs: Dict[str, Any] = {}
         self._refresh_runtime_config()
         if not self.api_key:
@@ -35,6 +36,7 @@ class MinimaxClient:
     def _refresh_runtime_config(self, model: Optional[str] = None):
         model_override = minimax_runtime_model_override(model)
         config = resolve_provider("minimax", model_override)
+        self._runtime_config = config
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
         self.model_name = normalize_minimax_video_model(config.model_name or model_override)
@@ -43,6 +45,11 @@ class MinimaxClient:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}"
         }
+
+    def _url_for_operation(self, operation: str, **path_params: Any) -> str:
+        if not self._runtime_config:
+            self._refresh_runtime_config()
+        return self._runtime_config.url_for_operation(operation, **path_params)
     
     def generate_video(
         self,
@@ -71,7 +78,7 @@ class MinimaxClient:
         """
         self._refresh_runtime_config(model)
         resolved_model = self.model_name or DEFAULT_MINIMAX_VIDEO_MODEL
-        url = f"{self.base_url}/video_generation"
+        url = self._url_for_operation("video_generation")
         
         payload = {
             "model": resolved_model,
@@ -116,7 +123,7 @@ class MinimaxClient:
             任务状态信息
         """
         self._refresh_runtime_config()
-        url = f"{self.base_url}/query/video_generation"
+        url = self._url_for_operation("query_video_generation")
         params = {"task_id": task_id}
         
         try:
@@ -145,7 +152,7 @@ class MinimaxClient:
             视频文件内容（bytes）
         """
         self._refresh_runtime_config()
-        url = f"{self.base_url}/files/retrieve"
+        url = self._url_for_operation("files_retrieve")
         params = {"file_id": file_id}
         
         try:

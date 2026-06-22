@@ -27,6 +27,7 @@ class VeoClient:
         self.api_key = api_key or ""
         self.base_url = ""
         self.model_name = DEFAULT_VEO_VIDEO_MODEL
+        self._runtime_config = None
         self._request_kwargs: Dict[str, Any] = {}
         self._refresh_runtime_config()
         if not self.api_key:
@@ -35,6 +36,7 @@ class VeoClient:
     def _refresh_runtime_config(self, model: Optional[str] = None) -> None:
         model_override = veo_runtime_model_override(model)
         config = resolve_provider("veo", model_override)
+        self._runtime_config = config
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
         self.model_name = normalize_veo_video_model(config.model_name or model_override)
@@ -43,6 +45,11 @@ class VeoClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
+
+    def _url_for_operation(self, operation: str, **path_params: Any) -> str:
+        if not self._runtime_config:
+            self._refresh_runtime_config()
+        return self._runtime_config.url_for_operation(operation, **path_params)
     
     def create_video_task(
         self,
@@ -63,7 +70,7 @@ class VeoClient:
         """
         self._refresh_runtime_config(model)
         resolved_model = self.model_name or DEFAULT_VEO_VIDEO_MODEL
-        url = f"{self.base_url}/chat/completions"
+        url = self._url_for_operation("chat_completions")
         
         try:
             # 构建消息内容
@@ -114,7 +121,7 @@ class VeoClient:
             任务状态信息
         """
         self._refresh_runtime_config()
-        url = f"{self.base_url}/videos/{video_id}"
+        url = self._url_for_operation("video", video_id=video_id)
         
         try:
             return request_json(
@@ -141,7 +148,7 @@ class VeoClient:
             包含video_url的响应
         """
         self._refresh_runtime_config()
-        url = f"{self.base_url}/videos/{video_id}/content"
+        url = self._url_for_operation("video_content", video_id=video_id)
         
         try:
             return request_json(

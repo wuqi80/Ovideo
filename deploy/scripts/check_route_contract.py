@@ -2986,12 +2986,13 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         checks += 1
     for snippet in (
         "async def _request_form_json(",
-        'data = await self._request_json(\n            "post",\n            "/voice_clone"',
-        'data = await self._request_json(\n            "post",\n            "/t2a_v2"',
-        'return await self._request_json(\n            "get",\n            "/query/t2a_async_query_v2"',
-        'data = await self._request_json(\n            "post",\n            "/music_generation"',
-        'return await self._request_form_json(\n                "/files/upload"',
-        'return await self._request_json("get", "/files/retrieve", params=params)',
+        "url = self._runtime_config.url_for_operation(operation)",
+        'data = await self._request_json(\n            "post",\n            "voice_clone"',
+        'data = await self._request_json(\n            "post",\n            "tts_sync"',
+        'return await self._request_json(\n            "get",\n            "tts_query"',
+        'data = await self._request_json(\n            "post",\n            "music_generation"',
+        'return await self._request_form_json(\n                "files_upload"',
+        'return await self._request_json("get", "files_retrieve", params=params)',
         'content = await self._download_bytes(download_url, action="tts_download")',
     ):
         if snippet not in minimax_audio_text:

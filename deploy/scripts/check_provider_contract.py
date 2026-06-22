@@ -157,6 +157,44 @@ def check_registry_shape(registry) -> None:
     registry_text = (deploy_root() / "services" / "api_provider_registry.py").read_text(encoding="utf-8")
     runtime_text = (deploy_root() / "services" / "api_provider_runtime.py").read_text(encoding="utf-8")
     ai_proxy_text = (deploy_root() / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
+    external_operation_clients = {
+        "external_api/video/minimax.py": (
+            'self._url_for_operation("video_generation")',
+            'self._url_for_operation("query_video_generation")',
+            'self._url_for_operation("files_retrieve")',
+        ),
+        "external_api/video/sora2.py": (
+            'self._url_for_operation("videos")',
+            'self._url_for_operation("video", video_id=video_id)',
+            'self._url_for_operation("video_content", video_id=video_id)',
+        ),
+        "external_api/video/veo.py": (
+            'self._url_for_operation("chat_completions")',
+            'self._url_for_operation("video", video_id=video_id)',
+            'self._url_for_operation("video_content", video_id=video_id)',
+        ),
+        "external_api/video/seedance.py": (
+            'self._url_for_operation("task", task_id=task_id)',
+        ),
+        "external_api/audio/minimax_audio.py": (
+            "url = self._runtime_config.url_for_operation(operation)",
+            '"voice_clone"',
+            '"tts_sync"',
+            '"files_upload"',
+            '"files_retrieve"',
+        ),
+    }
+    external_direct_path_snippets = (
+        'f"{self.base_url}/video_generation"',
+        'f"{self.base_url}/query/video_generation"',
+        'f"{self.base_url}/files/retrieve"',
+        'f"{self.base_url}/videos"',
+        'f"{self.base_url}/videos/{video_id}"',
+        'f"{self.base_url}/videos/{video_id}/content"',
+        'f"{self.base_url}/chat/completions"',
+        'f"{self.base_url.rstrip(\'/\')}/{task_id}"',
+        'f"{self.base_url}{path}"',
+    )
     if "PROVIDER_HEALTH_CHECK_URLS" in registry_text:
         fail("Provider health URLs must be derived from preset endpoints, not a duplicate PROVIDER_HEALTH_CHECK_URLS map")
     if "PROVIDER_HEALTH_CHECKS" in registry_text:
@@ -179,6 +217,15 @@ def check_registry_shape(registry) -> None:
     ):
         if forbidden in ai_proxy_text:
             fail(f"ai_proxy_service.py must use url_for_operation(), not direct provider path {forbidden}")
+    for relative_path, required_snippets in external_operation_clients.items():
+        path = deploy_root() / relative_path
+        text = path.read_text(encoding="utf-8")
+        for snippet in required_snippets:
+            if snippet not in text:
+                fail(f"{relative_path} must resolve provider operation paths through registry: {snippet}")
+        for forbidden in external_direct_path_snippets:
+            if forbidden in text:
+                fail(f"{relative_path} must not build provider API paths directly: {forbidden}")
     if "out.setdefault(\"endpoint\", get_provider_default_endpoint(provider))" not in registry_text:
         fail("api_provider_registry.py must enrich preset endpoints from get_provider_default_endpoint()")
     if "out.setdefault(\"category\", get_provider_default_category(provider))" not in registry_text:

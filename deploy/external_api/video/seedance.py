@@ -24,6 +24,7 @@ class SeedanceClient:
         self._explicit_api_key = api_key
         self.api_key = api_key or ""
         self.base_url = ""
+        self._runtime_config = None
         self._request_kwargs: Dict[str, Any] = {}
         self.headers: Dict[str, str] = {}
         self._refresh_runtime_config()
@@ -32,6 +33,7 @@ class SeedanceClient:
 
     def _refresh_runtime_config(self, model_name: Optional[str] = None) -> None:
         config = resolve_provider("seedance", model_name)
+        self._runtime_config = config
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
         self._request_kwargs = config.requests_kwargs()
@@ -39,6 +41,11 @@ class SeedanceClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+
+    def _url_for_operation(self, operation: str, **path_params: Any) -> str:
+        if not self._runtime_config:
+            self._refresh_runtime_config()
+        return self._runtime_config.url_for_operation(operation, **path_params)
 
     def create_video_task(
         self,
@@ -105,7 +112,7 @@ class SeedanceClient:
     def query_task(self, task_id: str) -> Dict[str, Any]:
         """Poll a Seedance task status."""
         self._refresh_runtime_config()
-        url = f"{self.base_url.rstrip('/')}/{task_id}"
+        url = self._url_for_operation("task", task_id=task_id)
         try:
             return request_json(
                 "GET",

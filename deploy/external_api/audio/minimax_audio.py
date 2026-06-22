@@ -77,6 +77,7 @@ class MinimaxAudioClient:
         self.group_id = ""
         self.base_url = ""
         self.headers: Dict[str, str] = {}
+        self._runtime_config = None
         self._aiohttp_proxy: Optional[str] = None
         self._refresh_runtime_config()
         if not self.api_key:
@@ -84,6 +85,7 @@ class MinimaxAudioClient:
 
     def _refresh_runtime_config(self) -> None:
         config = resolve_provider("minimax", MINIMAX_DEFAULT_PROVIDER_MODEL)
+        self._runtime_config = config
         self.api_key = self._explicit_api_key or config.api_key or ""
         extra = getattr(config, "extra", {}) or {}
         self.group_id = self._explicit_group_id or extra.get("group_id") or ""
@@ -103,14 +105,19 @@ class MinimaxAudioClient:
             out.setdefault("GroupId", self.group_id)
         return out
 
-    def _url(self, path: str) -> str:
+    def _url(self, operation: str) -> str:
         self._refresh_runtime_config()
-        return f"{self.base_url}{path}"
+        if not self._runtime_config:
+            raise RuntimeError("MiniMax runtime config is not available")
+        url = self._runtime_config.url_for_operation(operation)
+        if not url or url.rstrip("/") == self.base_url.rstrip("/"):
+            raise RuntimeError(f"MiniMax API operation is not registered: {operation}")
+        return url
 
     async def _request_json(
         self,
         method: str,
-        path: str,
+        operation: str,
         *,
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
@@ -122,7 +129,7 @@ class MinimaxAudioClient:
         raise_http_text: bool = False,
     ) -> Dict[str, Any]:
         """Run a MiniMax JSON request through the resolved runtime config."""
-        url = self._url(path)
+        url = self._url(operation)
         request_kwargs: Dict[str, Any] = {
             "params": self._group_params(params),
             "headers": headers or self.headers,
@@ -131,7 +138,7 @@ class MinimaxAudioClient:
         if json is not None:
             request_kwargs["json"] = json
 
-        label = action or f"{method.upper()} {path}"
+        label = action or f"{method.upper()} {operation}"
         last_err: Optional[BaseException] = None
         for attempt in range(max(1, attempts)):
             try:
@@ -181,7 +188,7 @@ class MinimaxAudioClient:
 
     async def _request_form_json(
         self,
-        path: str,
+        operation: str,
         form: aiohttp.FormData,
         *,
         headers: Dict[str, str],
@@ -190,7 +197,7 @@ class MinimaxAudioClient:
         """Run a MiniMax multipart form request through the resolved runtime config."""
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                self._url(path),
+                self._url(operation),
                 params=self._group_params(),
                 data=form,
                 headers=headers,
@@ -230,7 +237,7 @@ class MinimaxAudioClient:
             payload["aigc_watermark"] = aigc_watermark
         data = await self._request_json(
             "post",
-            "/voice_design",
+            "voice_design",
             json=payload,
             action="voice_design",
         )
@@ -281,7 +288,7 @@ class MinimaxAudioClient:
             payload["model"] = model
         data = await self._request_json(
             "post",
-            "/voice_clone",
+            "voice_clone",
             json=payload,
             action="voice_clone",
         )
@@ -310,7 +317,7 @@ class MinimaxAudioClient:
         payload = {"voice_type": voice_type}
         return await self._request_json(
             "post",
-            "/get_voice",
+            "get_voice",
             json=payload,
             action="list_voices",
         )
@@ -333,7 +340,7 @@ class MinimaxAudioClient:
         payload = {"voice_type": voice_type, "voice_id": voice_id}
         return await self._request_json(
             "post",
-            "/delete_voice",
+            "delete_voice",
             json=payload,
             action="delete_voice",
         )
@@ -404,7 +411,7 @@ class MinimaxAudioClient:
         timeout = aiohttp.ClientTimeout(total=60, connect=10, sock_read=45)
         data = await self._request_json(
             "post",
-            "/t2a_v2",
+            "tts_sync",
             json=payload,
             action="tts_sync",
             timeout=timeout,
@@ -510,7 +517,7 @@ class MinimaxAudioClient:
         }
         return await self._request_json(
             "post",
-            "/t2a_async_v2",
+            "tts_async",
             json=payload,
             action="tts_async",
         )
@@ -522,7 +529,7 @@ class MinimaxAudioClient:
         params = {"task_id": task_id}
         return await self._request_json(
             "get",
-            "/query/t2a_async_query_v2",
+            "tts_query",
             params=params,
         )
 
@@ -628,7 +635,7 @@ class MinimaxAudioClient:
 
         data = await self._request_json(
             "post",
-            "/music_generation",
+            "music_generation",
             json=payload,
             action="music_generate",
         )
@@ -663,7 +670,7 @@ class MinimaxAudioClient:
         }
         return await self._request_json(
             "post",
-            "/lyrics_generation",
+            "lyrics_generation",
             json=payload,
             action="lyrics_generate",
         )
@@ -689,7 +696,7 @@ class MinimaxAudioClient:
                 filename=os.path.basename(file_path),
             )
             return await self._request_form_json(
-                "/files/upload",
+                "files_upload",
                 form,
                 headers=headers,
                 action="file_upload",
@@ -700,14 +707,14 @@ class MinimaxAudioClient:
     # ------------------------------------------------------------------
     async def file_retrieve(self, file_id: str) -> Dict[str, Any]:
         params = {"file_id": file_id}
-        return await self._request_json("get", "/files/retrieve", params=params)
+        return await self._request_json("get", "files_retrieve", params=params)
 
     # ------------------------------------------------------------------
     # 文件删除  DELETE /v1/files/delete
     # ------------------------------------------------------------------
     async def file_delete(self, file_id: str) -> Dict[str, Any]:
         payload = {"file_id": file_id}
-        return await self._request_json("delete", "/files/delete", json=payload)
+        return await self._request_json("delete", "files_delete", json=payload)
 
 
 # 全局单例

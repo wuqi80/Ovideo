@@ -388,6 +388,35 @@ PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
     "gemini-image": {
         "generate_content": "models/{model}:generateContent",
     },
+    "minimax": {
+        "video_generation": "video_generation",
+        "query_video_generation": "query/video_generation",
+        "files_retrieve": "files/retrieve",
+        "files_upload": "files/upload",
+        "files_delete": "files/delete",
+        "voice_design": "voice_design",
+        "voice_clone": "voice_clone",
+        "get_voice": "get_voice",
+        "delete_voice": "delete_voice",
+        "tts_sync": "t2a_v2",
+        "tts_async": "t2a_async_v2",
+        "tts_query": "query/t2a_async_query_v2",
+        "music_generation": "music_generation",
+        "lyrics_generation": "lyrics_generation",
+    },
+    "sora2": {
+        "videos": "videos",
+        "video": "videos/{video_id}",
+        "video_content": "videos/{video_id}/content",
+    },
+    "veo": {
+        "chat_completions": "chat/completions",
+        "video": "videos/{video_id}",
+        "video_content": "videos/{video_id}/content",
+    },
+    "seedance": {
+        "task": "{task_id}",
+    },
     "laozhang-gpt-image": {
         "image_edits": "images/edits",
         "image_generations": "images/generations",

@@ -7940,3 +7940,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile` for provider registry, runtime, AI proxy service, and provider contract passed.
   - Local `scripts/check_provider_contract.py` and `scripts/check_ai_proxy_failover.py` passed.
   - Local `pytest tests/test_api_provider_runtime_model_env.py -q` passed with 33 tests.
+
+## 2026-06-22 External Video/Audio Operation Paths
+
+- Extended `PROVIDER_API_PATHS` for MiniMax, Sora2, Veo, and Seedance runtime operations.
+- Updated MiniMax video, Sora2 video, Veo video, Seedance query, and MiniMax audio clients so provider API paths resolve through `ResolvedProviderConfig.url_for_operation()` instead of client-local `base_url + path` construction.
+- MiniMax audio keeps the shared `_request_json()` / `_request_form_json()` helpers; those helpers now accept operation ids such as `voice_clone`, `tts_sync`, and `files_upload`.
+- External request URLs remain unchanged, including MiniMax `/video_generation`, `/voice_clone`, `/t2a_v2`, Sora2 `/videos`, Veo `/chat/completions`, and Seedance task polling.
+- Strengthened `deploy/scripts/check_provider_contract.py` and `deploy/scripts/check_route_contract.py` so these clients cannot regress to direct provider path construction.
+- Verification:
+  - Local `py_compile` for changed registry, client, and contract files passed.
+  - Local `scripts/check_provider_contract.py`, `scripts/check_audio_provider_runtime.py`, and `scripts/check_route_contract.py` passed.
+  - Local `scripts/check_architecture_contracts.py` passed with 10/10 contracts.
+  - Local `pytest tests/test_minimax_audio_runtime.py tests/test_minimax_tts_sync.py tests/test_api_provider_runtime_model_env.py -q` passed with 44 tests.
