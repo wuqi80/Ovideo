@@ -1858,8 +1858,11 @@ def check_episode_routes_extracted(root: Path) -> int:
 def check_episode_video_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     episode_video_path = root / "routers" / "episode_video.py"
+    episode_video_service_path = root / "services" / "episode_video_service.py"
     if not episode_video_path.exists():
         fail("routers/episode_video.py is missing")
+    if not episode_video_service_path.exists():
+        fail("services/episode_video_service.py is missing")
 
     route_pairs = {
         ("/api/episodes/{episode_id}/video-segments", "get"),
@@ -1908,6 +1911,37 @@ def check_episode_video_routes_extracted(root: Path) -> int:
 
     if route_count != 7:
         fail(f"routers/episode_video.py should own 7 episode video route registrations, found {route_count}")
+
+    router_text = episode_video_path.read_text(encoding="utf-8")
+    service_text = episode_video_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.episode_video_service import (", episode_video_path),
+        (router_text, "return await list_video_segments(episode_id, video_segment_dao=VideoSegmentDAO)", episode_video_path),
+        (router_text, "return await get_video_takes(episode_id)", episode_video_path),
+        (router_text, "start_episode_compose(", episode_video_path),
+        (router_text, "create_video_segment_service(", episode_video_path),
+        (router_text, "update_video_segment_service(", episode_video_path),
+        (router_text, "delete_video_segment_service(", episode_video_path),
+        (service_text, "from services import episode_compose_service", episode_video_service_path),
+        (service_text, "video_segment_dao.get_by_episode(", episode_video_service_path),
+        (service_text, "episode_dao.get_project_id(", episode_video_service_path),
+        (service_text, "compose_service.start_compose(", episode_video_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "from services import episode_compose_service", episode_video_path),
+        (router_text, "episode_compose_service.", episode_video_path),
+        (router_text, "VideoSegmentDAO.get_by_episode(", episode_video_path),
+        (router_text, "VideoSegmentDAO.create(", episode_video_path),
+        (router_text, "VideoSegmentDAO.update(", episode_video_path),
+        (router_text, "VideoSegmentDAO.delete(", episode_video_path),
+        (router_text, "EpisodeDAO.get_project_id(", episode_video_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing episode video service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Episode video router must delegate DAO/compose logic to service: {path.relative_to(root)} {snippet}")
     return route_count
 
 
@@ -4055,7 +4089,8 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
-        (root / "routers" / "episode_video.py", "EpisodeDAO.get_project_id("),
+        (root / "services" / "episode_video_service.py", "episode_dao.get_project_id("),
+        (root / "routers" / "episode_video.py", "start_episode_compose("),
         (root / "routers" / "video_capabilities.py", "get_video_capabilities("),
         (root / "services" / "video_capability_service.py", "AgentDAO.get_online_agents("),
         (root / "routers" / "prompts.py", "get_prompt_template_service("),
@@ -4137,11 +4172,12 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         checks += 1
 
     episode_video_router_text = (root / "routers" / "episode_video.py").read_text(encoding="utf-8")
+    episode_video_service_text = (root / "services" / "episode_video_service.py").read_text(encoding="utf-8")
     for path, snippet in [
-        (root / "routers" / "episode_video.py", "from services import episode_compose_service"),
-        (root / "routers" / "episode_video.py", "episode_compose_service.get_takes("),
-        (root / "routers" / "episode_video.py", "episode_compose_service.start_compose("),
-        (root / "routers" / "episode_video.py", "episode_compose_service.get_status("),
+        (root / "services" / "episode_video_service.py", "from services import episode_compose_service"),
+        (root / "services" / "episode_video_service.py", "compose_service.get_takes("),
+        (root / "services" / "episode_video_service.py", "compose_service.start_compose("),
+        (root / "services" / "episode_video_service.py", "compose_service.get_status("),
         (root / "compose_service.py", "from services.episode_compose_service import *"),
     ]:
         if snippet not in path.read_text(encoding="utf-8"):
@@ -4158,6 +4194,9 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         checks += 1
     if re.search(r"(?<!episode_)compose_service\.", episode_video_router_text):
         violations.append("routers/episode_video.py must call services.episode_compose_service, not legacy compose_service")
+    checks += 1
+    if "episode_compose_service." in episode_video_service_text:
+        violations.append("services/episode_video_service.py must use injected compose_service calls")
     checks += 1
     compose_shim_text = (root / "compose_service.py").read_text(encoding="utf-8")
     for snippet in [
@@ -4838,6 +4877,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_comfyui_file_service.py",
         "tests/test_dao_api_config_category.py",
         "tests/test_episode_compose_service.py",
+        "tests/test_episode_video_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_prompt_service.py",
         "tests/test_video_client_base.py",

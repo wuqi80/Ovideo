@@ -8351,3 +8351,19 @@
 - Local `py_compile` for changed prompt route/service/contract/test files passed.
 - Local `pytest tests/test_prompt_service.py -q` passed with 5 tests.
 - Local `scripts/check_route_contract.py` passed.
+
+## 2026-06-23 Episode Video Service Boundary
+
+### Changes
+
+- Moved episode video segment and composition business logic from `routers/episode_video.py` into `services/episode_video_service.py`.
+- The router still owns the 7 HTTP endpoints, but now delegates segment list/create/update/delete, video takes, compose start, and compose status to the service layer.
+- Added `tests/test_episode_video_service.py` and included it in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so episode video routes cannot regress to direct `VideoSegmentDAO`, `EpisodeDAO`, or compose-service calls in the router.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_episode_video_service.py -q` passed with 6 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.

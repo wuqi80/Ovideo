@@ -1,0 +1,113 @@
+"""Episode video segment and composition business logic."""
+from __future__ import annotations
+
+from typing import Any, Dict, Iterable, Optional
+
+from services import episode_compose_service
+
+
+class EpisodeVideoServiceError(RuntimeError):
+    pass
+
+
+class EpisodeNotFound(EpisodeVideoServiceError):
+    pass
+
+
+class VideoSegmentCreateFailed(EpisodeVideoServiceError):
+    pass
+
+
+class VideoSegmentNotFound(EpisodeVideoServiceError):
+    pass
+
+
+def _rows_to_dicts(rows: Iterable[Any]) -> list[Dict[str, Any]]:
+    return [dict(row) for row in rows]
+
+
+async def list_video_segments(
+    episode_id: str,
+    *,
+    video_segment_dao: Any,
+) -> Dict[str, Any]:
+    segments = await video_segment_dao.get_by_episode(episode_id)
+    return {"success": True, "segments": _rows_to_dicts(segments)}
+
+
+async def get_video_takes(
+    episode_id: str,
+    *,
+    compose_service: Any = episode_compose_service,
+) -> Dict[str, Any]:
+    shots = await compose_service.get_takes(episode_id)
+    return {"success": True, "shots": shots}
+
+
+async def start_episode_compose(
+    episode_id: str,
+    user_id: str,
+    selections: Optional[Any],
+    *,
+    episode_dao: Any,
+    compose_service: Any = episode_compose_service,
+) -> Dict[str, Any]:
+    project_id = await episode_dao.get_project_id(episode_id)
+    if not project_id:
+        raise EpisodeNotFound("Episode not found")
+    job = compose_service.start_compose(episode_id, user_id, project_id, selections)
+    return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
+
+
+def get_episode_compose_status(
+    episode_id: str,
+    *,
+    compose_service: Any = episode_compose_service,
+) -> Dict[str, Any]:
+    return {"success": True, **compose_service.get_status(episode_id)}
+
+
+async def create_video_segment(
+    episode_id: str,
+    *,
+    sort_order: int,
+    storyboard_item_id: Optional[str],
+    generation_mode: str,
+    model: str,
+    input_params: Optional[dict],
+    video_segment_dao: Any,
+) -> Dict[str, Any]:
+    segment = await video_segment_dao.create(
+        episode_id=episode_id,
+        sort_order=sort_order,
+        storyboard_item_id=storyboard_item_id,
+        generation_mode=generation_mode,
+        model=model,
+        input_params=input_params,
+    )
+    if not segment:
+        raise VideoSegmentCreateFailed("Video segment create failed")
+    return {"success": True, "segment": dict(segment)}
+
+
+async def update_video_segment(
+    segment_id: str,
+    fields: Dict[str, Any],
+    *,
+    video_segment_dao: Any,
+) -> Dict[str, Any]:
+    segment = await video_segment_dao.update(segment_id, **fields)
+    if not segment:
+        raise VideoSegmentNotFound("Video segment not found")
+    return {"success": True, "segment": dict(segment)}
+
+
+async def delete_video_segment(
+    segment_id: str,
+    *,
+    video_segment_dao: Any,
+) -> Dict[str, Any]:
+    ok = await video_segment_dao.delete(segment_id)
+    if not ok:
+        raise VideoSegmentNotFound("Video segment not found")
+    return {"success": True}

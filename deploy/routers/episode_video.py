@@ -6,14 +6,25 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from services import episode_compose_service
+from services.episode_video_service import (
+    EpisodeNotFound,
+    VideoSegmentCreateFailed,
+    VideoSegmentNotFound,
+    create_video_segment as create_video_segment_service,
+    delete_video_segment as delete_video_segment_service,
+    get_episode_compose_status,
+    get_video_takes,
+    list_video_segments,
+    start_episode_compose,
+    update_video_segment as update_video_segment_service,
+)
 
 
 class VideoSegmentCreate(BaseModel):
     sort_order: int = 0
     storyboard_item_id: Optional[str] = None
-    generation_mode: str = 'i2v'
-    model: str = ''
+    generation_mode: str = "i2v"
+    model: str = ""
     input_params: Optional[dict] = None
 
 
@@ -42,59 +53,69 @@ def create_episode_video_router(
 
     @router.get("/api/episodes/{episode_id}/video-segments")
     async def get_video_segments(episode_id: str, user_id: str = Depends(get_current_user)):
-        segments = await VideoSegmentDAO.get_by_episode(episode_id)
-        return {"success": True, "segments": [dict(s) for s in segments]}
+        return await list_video_segments(episode_id, video_segment_dao=VideoSegmentDAO)
 
     @router.get("/api/episodes/{episode_id}/video-takes")
     async def video_takes_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
         """Return all generated video takes grouped by storyboard item for composition selection."""
-        shots = await episode_compose_service.get_takes(episode_id)
-        return {"success": True, "shots": shots}
+        return await get_video_takes(episode_id)
 
     @router.post("/api/episodes/{episode_id}/compose")
     async def compose_episode_endpoint(episode_id: str, request: Request, user_id: str = Depends(get_current_user)):
         """Start async episode composition; frontend polls `/compose/status`."""
-        project_id = await EpisodeDAO.get_project_id(episode_id)
-        if not project_id:
-            raise HTTPException(status_code=404, detail="集不存在")
         selections = None
         try:
             body = await request.json()
             selections = (body or {}).get("selections")
         except Exception:
             selections = None
-        job = episode_compose_service.start_compose(episode_id, user_id, project_id, selections)
-        return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
+
+        try:
+            return await start_episode_compose(
+                episode_id,
+                user_id,
+                selections,
+                episode_dao=EpisodeDAO,
+            )
+        except EpisodeNotFound as exc:
+            raise HTTPException(status_code=404, detail="剧集不存在") from exc
 
     @router.get("/api/episodes/{episode_id}/compose/status")
     async def compose_status_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
         """Return episode composition status."""
-        return {"success": True, **episode_compose_service.get_status(episode_id)}
+        return get_episode_compose_status(episode_id)
 
     @router.post("/api/episodes/{episode_id}/video-segments")
     async def create_video_segment(episode_id: str, data: VideoSegmentCreate, user_id: str = Depends(get_current_user)):
-        seg = await VideoSegmentDAO.create(
-            episode_id=episode_id, sort_order=data.sort_order,
-            storyboard_item_id=data.storyboard_item_id,
-            generation_mode=data.generation_mode,
-            model=data.model, input_params=data.input_params
-        )
-        if not seg:
-            raise HTTPException(status_code=500, detail="创建视频片段失败")
-        return {"success": True, "segment": dict(seg)}
+        try:
+            return await create_video_segment_service(
+                episode_id,
+                sort_order=data.sort_order,
+                storyboard_item_id=data.storyboard_item_id,
+                generation_mode=data.generation_mode,
+                model=data.model,
+                input_params=data.input_params,
+                video_segment_dao=VideoSegmentDAO,
+            )
+        except VideoSegmentCreateFailed as exc:
+            raise HTTPException(status_code=500, detail="创建视频片段失败") from exc
 
     @router.put("/api/video-segments/{segment_id}")
     async def update_video_segment(segment_id: str, data: VideoSegmentUpdate, user_id: str = Depends(get_current_user)):
-        seg = await VideoSegmentDAO.update(segment_id, **data.dict(exclude_none=True))
-        if not seg:
-            raise HTTPException(status_code=404, detail="视频片段不存在")
-        return {"success": True, "segment": dict(seg)}
+        try:
+            return await update_video_segment_service(
+                segment_id,
+                data.dict(exclude_none=True),
+                video_segment_dao=VideoSegmentDAO,
+            )
+        except VideoSegmentNotFound as exc:
+            raise HTTPException(status_code=404, detail="视频片段不存在") from exc
 
     @router.delete("/api/video-segments/{segment_id}")
     async def delete_video_segment(segment_id: str, user_id: str = Depends(get_current_user)):
-        ok = await VideoSegmentDAO.delete(segment_id)
-        if not ok:
-            raise HTTPException(404, "视频段不存在")
-        return {"success": True}
+        try:
+            return await delete_video_segment_service(segment_id, video_segment_dao=VideoSegmentDAO)
+        except VideoSegmentNotFound as exc:
+            raise HTTPException(status_code=404, detail="视频段不存在") from exc
 
     return router
