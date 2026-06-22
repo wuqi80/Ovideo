@@ -8010,3 +8010,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile` for route contract passed.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - A temporary `new_html/*.md` probe did not change the frontend build hash.
+
+## 2026-06-23 Frontend Direct Fetch Guardrail
+
+- Audited production frontend code for direct `fetch()` calls; only `deploy/new_html/services/httpClient.ts` still uses the browser primitive.
+- Strengthened `deploy/scripts/check_route_contract.py` so production `.ts/.tsx` files must route HTTP through `services/httpClient.ts`.
+- The guard excludes tests, Vite config, and the shared `httpClient` implementation itself.
+- Verification:
+  - Local `py_compile` for route contract passed.
+  - Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=12864`.
+  - Local `rg "\bfetch\(" new_html` confirmed only `services/httpClient.ts` has direct fetch calls outside excluded folders.

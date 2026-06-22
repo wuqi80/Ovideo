@@ -3308,6 +3308,26 @@ def check_frontend_http_client_contract(root: Path) -> int:
         admin_settings_page,
     ]
 
+    direct_fetch_violations: list[str] = []
+    for path in new_html.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if (
+            path == http_client
+            or "node_modules" in path.parts
+            or "__tests__" in path.parts
+            or path.name == "vite.config.ts"
+        ):
+            continue
+        if "fetch(" in path.read_text(encoding="utf-8"):
+            direct_fetch_violations.append(str(path.relative_to(root)))
+    if direct_fetch_violations:
+        fail(
+            "Frontend production code must route HTTP through services/httpClient.ts:\n"
+            + "\n".join(direct_fetch_violations)
+        )
+    checks = 1
+
     required_snippets = [
         (http_client, "import { pickTokenForCurrentRoute } from '../admin/adminAuth';"),
         (http_client, "export function buildAuthHeaders("),
@@ -3651,7 +3671,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
         "fetch(",
     ]
 
-    checks = 0
     for path, snippet in required_snippets:
         text = path.read_text(encoding="utf-8")
         if snippet not in text:
