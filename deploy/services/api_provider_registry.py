@@ -48,67 +48,46 @@ PROVIDER_EXTRA_FIELD_CATALOG: Dict[str, List[Dict[str, Any]]] = {
     ],
 }
 
-PROVIDER_CREDENTIAL_LINKS: Dict[str, Dict[str, str]] = {
+VENDOR_CREDENTIAL_LINKS: Dict[str, Dict[str, str]] = {
     "deepseek": {
         "docs_url": "https://api-docs.deepseek.com/api/deepseek-api",
         "console_url": "https://platform.deepseek.com/api_keys",
-        "key_help": "Create a DeepSeek platform API key and paste it as DEEPSEEK_API_KEY.",
     },
-    "gemini-text": {
+    "google": {
         "docs_url": "https://ai.google.dev/gemini-api/docs/api-key",
         "console_url": "https://aistudio.google.com/app/apikey",
-        "key_help": "Create a Google AI Studio API key and paste it as GEMINI_TEXT_API_KEY.",
     },
-    "gemini-image": {
-        "docs_url": "https://ai.google.dev/gemini-api/docs/api-key",
-        "console_url": "https://aistudio.google.com/app/apikey",
-        "key_help": "Create a Google AI Studio API key and paste it as GEMINI_IMAGE_API_KEY.",
-    },
-    "gemini-tts": {
-        "docs_url": "https://ai.google.dev/gemini-api/docs/api-key",
-        "console_url": "https://aistudio.google.com/app/apikey",
-        "key_help": "Create a Google AI Studio API key and paste it as GEMINI_API_KEY.",
-    },
-    "doubao": {
+    "volcengine": {
         "docs_url": "https://www.volcengine.com/docs/82379/1399008",
         "console_url": "https://console.volcengine.com/ark",
-        "key_help": "Create a Volcengine Ark API key and paste it as ARK_API_KEY.",
     },
-    "seedance": {
-        "docs_url": "https://www.volcengine.com/docs/82379/1399008",
-        "console_url": "https://console.volcengine.com/ark",
-        "key_help": "Create a Volcengine Ark API key and paste it as SEEDANCE_API_KEY; ARK_API_KEY remains a fallback.",
-    },
-    "dashscope": {
+    "alibaba": {
         "docs_url": "https://www.alibabacloud.com/help/en/model-studio/first-api-call-to-qwen",
         "console_url": "https://bailian.console.aliyun.com/",
-        "key_help": "Create an Alibaba Cloud Model Studio / DashScope API key and paste it as DASHSCOPE_API_KEY.",
     },
     "minimax": {
         "docs_url": "https://platform.minimax.io/docs/guides/quickstart-preparation",
         "console_url": "https://platform.minimax.io/",
-        "key_help": "Create a MiniMax API key and paste it as MINIMAX_API_KEY. Group ID is configured separately when needed.",
     },
-    "sora2": {
+    "laozhang": {
         "docs_url": "https://docs.laozhang.ai/en/getting-started",
         "console_url": "https://api.laozhang.ai/",
-        "key_help": "Create a LaoZhang API token and paste it as SORA2_API_KEY.",
     },
-    "veo": {
-        "docs_url": "https://docs.laozhang.ai/en/getting-started",
-        "console_url": "https://api.laozhang.ai/",
-        "key_help": "Create a LaoZhang API token and paste it as VEO_API_KEY; SORA2_API_KEY remains a fallback.",
-    },
-    "laozhang-gpt-image": {
-        "docs_url": "https://docs.laozhang.ai/en/getting-started",
-        "console_url": "https://api.laozhang.ai/",
-        "key_help": "Create a LaoZhang API token and paste it as GPT_IMAGE_API_KEY.",
-    },
-    "laozhang-sora2": {
-        "docs_url": "https://docs.laozhang.ai/en/getting-started",
-        "console_url": "https://api.laozhang.ai/",
-        "key_help": "Create a LaoZhang API token and paste it as SORA2_GPT_IMAGE_API_KEY.",
-    },
+}
+
+PROVIDER_KEY_HELP: Dict[str, str] = {
+    "deepseek": "Create a DeepSeek platform API key and paste it as DEEPSEEK_API_KEY.",
+    "gemini-text": "Create a Google AI Studio API key and paste it as GEMINI_TEXT_API_KEY.",
+    "gemini-image": "Create a Google AI Studio API key and paste it as GEMINI_IMAGE_API_KEY.",
+    "gemini-tts": "Create a Google AI Studio API key and paste it as GEMINI_API_KEY.",
+    "doubao": "Create a Volcengine Ark API key and paste it as ARK_API_KEY.",
+    "seedance": "Create a Volcengine Ark API key and paste it as SEEDANCE_API_KEY; ARK_API_KEY remains a fallback.",
+    "dashscope": "Create an Alibaba Cloud Model Studio / DashScope API key and paste it as DASHSCOPE_API_KEY.",
+    "minimax": "Create a MiniMax API key and paste it as MINIMAX_API_KEY. Group ID is configured separately when needed.",
+    "sora2": "Create a LaoZhang API token and paste it as SORA2_API_KEY.",
+    "veo": "Create a LaoZhang API token and paste it as VEO_API_KEY; SORA2_API_KEY remains a fallback.",
+    "laozhang-gpt-image": "Create a LaoZhang API token and paste it as GPT_IMAGE_API_KEY.",
+    "laozhang-sora2": "Create a LaoZhang API token and paste it as SORA2_GPT_IMAGE_API_KEY.",
 }
 
 
@@ -377,7 +356,10 @@ for _provider_id, _provider_meta in PROVIDER_CATALOG.items():
     _health_check = deepcopy(DEFAULT_PROVIDER_HEALTH_CHECK)
     _health_check.update(PROVIDER_HEALTH_CHECK_OVERRIDES.get(_provider_id, {}))
     _provider_meta.setdefault("health_check", _health_check)
-    for _link_key, _link_value in PROVIDER_CREDENTIAL_LINKS.get(_provider_id, {}).items():
+    _credential_links = deepcopy(VENDOR_CREDENTIAL_LINKS.get(_provider_meta.get("vendor", ""), {}))
+    if _provider_id in PROVIDER_KEY_HELP:
+        _credential_links["key_help"] = PROVIDER_KEY_HELP[_provider_id]
+    for _link_key, _link_value in _credential_links.items():
         _provider_meta.setdefault(_link_key, _link_value)
 
 

@@ -7918,3 +7918,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Verification:
   - Local `py_compile` for provider registry and provider contract passed.
   - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
+
+## 2026-06-22 Provider Credential Link Defaults
+
+- Replaced provider-level `PROVIDER_CREDENTIAL_LINKS` in `deploy/services/api_provider_registry.py` with `VENDOR_CREDENTIAL_LINKS` plus `PROVIDER_KEY_HELP`.
+- Docs and console URLs now derive from provider `vendor`, while provider-specific help text remains keyed by provider id.
+- External provider catalog responses remain unchanged: every provider still exposes `docs_url`, `console_url`, and `key_help` for the admin API configuration UI.
+- Strengthened `deploy/scripts/check_provider_contract.py` so docs/console links must come from vendor credential metadata and key help must come from provider-specific help text.
+- Verification:
+  - Local `py_compile` for provider registry and provider contract passed.
+  - Local `scripts/check_provider_contract.py` and `scripts/check_admin_api_config_import.py` passed.

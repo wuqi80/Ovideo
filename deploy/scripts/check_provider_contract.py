@@ -159,6 +159,8 @@ def check_registry_shape(registry) -> None:
         fail("Provider health URLs must be derived from preset endpoints, not a duplicate PROVIDER_HEALTH_CHECK_URLS map")
     if "PROVIDER_HEALTH_CHECKS" in registry_text:
         fail("Provider health checks must use default metadata plus PROVIDER_HEALTH_CHECK_OVERRIDES")
+    if "PROVIDER_CREDENTIAL_LINKS" in registry_text:
+        fail("Provider credential docs/console links must use VENDOR_CREDENTIAL_LINKS plus PROVIDER_KEY_HELP")
     if "derive_models_health_urls" not in registry_text:
         fail("api_provider_registry.py must derive provider health URLs from services.api_provider_endpoints")
     if "out.setdefault(\"endpoint\", get_provider_default_endpoint(provider))" not in registry_text:
@@ -185,6 +187,14 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must derive fallback_env from default plus provider overrides")
     if "\"fallback_env\": []" in registry_text or "\"fallback_env\": [\"" in registry_text:
         fail("Provider catalog entries must not repeat fallback_env; use PROVIDER_FALLBACK_ENV_OVERRIDES")
+    if "VENDOR_CREDENTIAL_LINKS" not in registry_text:
+        fail("api_provider_registry.py must define VENDOR_CREDENTIAL_LINKS")
+    if "PROVIDER_KEY_HELP" not in registry_text:
+        fail("api_provider_registry.py must define PROVIDER_KEY_HELP")
+    if "VENDOR_CREDENTIAL_LINKS.get(_provider_meta.get(\"vendor\", \"\"), {})" not in registry_text:
+        fail("api_provider_registry.py must derive docs/console links from provider vendor")
+    if "_credential_links[\"key_help\"] = PROVIDER_KEY_HELP[_provider_id]" not in registry_text:
+        fail("api_provider_registry.py must derive key_help from PROVIDER_KEY_HELP")
     if "DEFAULT_PROVIDER_HEALTH_CHECK" not in registry_text:
         fail("api_provider_registry.py must define DEFAULT_PROVIDER_HEALTH_CHECK")
     if "PROVIDER_HEALTH_CHECK_OVERRIDES" not in registry_text:
@@ -271,6 +281,16 @@ def check_registry_shape(registry) -> None:
             fail(f"{provider} missing label")
         if not meta.get("capabilities"):
             fail(f"{provider} missing capabilities")
+        vendor_links = registry.VENDOR_CREDENTIAL_LINKS.get(meta.get("vendor"), {})
+        if not vendor_links:
+            fail(f"{provider} vendor {meta.get('vendor')} missing credential links")
+        if provider not in registry.PROVIDER_KEY_HELP:
+            fail(f"{provider} missing provider key_help text")
+        for link_key in ("docs_url", "console_url"):
+            if meta.get(link_key) != vendor_links.get(link_key):
+                fail(f"{provider} {link_key} should be derived from vendor credential links")
+        if meta.get("key_help") != registry.PROVIDER_KEY_HELP[provider]:
+            fail(f"{provider} key_help should be derived from PROVIDER_KEY_HELP")
         if registry.PROVIDER_ENV_MAP[provider] not in (meta.get("required_env") or []):
             fail(f"{provider} required_env must include primary env key")
         if meta.get("required_env") != [registry.PROVIDER_ENV_MAP[provider]]:
