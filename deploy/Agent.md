@@ -8497,3 +8497,19 @@
 - Local `pytest tests/test_project_core_service.py -q` passed with 7 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Project Admin Service Boundary
+
+### Changes
+
+- Moved project settings, archive/unarchive, and membership management business logic from `routers/project_admin.py` into `services/project_admin_service.py`.
+- The router still owns the 7 project admin HTTP endpoints, but now delegates admin/readonly permission checks, metadata updates, project archive state changes, member listing/add/update/remove, target-user validation, and owner removal protection to the service layer.
+- Added `tests/test_project_admin_service.py` and included it in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so project admin routes cannot regress to direct `ProjectDAO`, `ProjectMemberDAO`, or `UserDAO` orchestration in the router.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_project_admin_service.py -q` passed with 7 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.

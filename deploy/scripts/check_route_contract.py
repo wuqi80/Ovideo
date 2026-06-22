@@ -1742,8 +1742,11 @@ def check_project_core_routes_extracted(root: Path) -> int:
 def check_project_admin_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     project_admin_path = root / "routers" / "project_admin.py"
+    project_admin_service_path = root / "services" / "project_admin_service.py"
     if not project_admin_path.exists():
         fail("routers/project_admin.py is missing")
+    if not project_admin_service_path.exists():
+        fail("services/project_admin_service.py is missing")
 
     route_pairs = {
         ("/api/projects/{project_id}", "put"),
@@ -1793,7 +1796,50 @@ def check_project_admin_routes_extracted(root: Path) -> int:
 
     if route_count != 7:
         fail(f"routers/project_admin.py should own 7 project admin route registrations, found {route_count}")
-    return route_count
+
+    router_text = project_admin_path.read_text(encoding="utf-8")
+    service_text = project_admin_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.project_admin_service import (", project_admin_path),
+        (router_text, "update_project_service(", project_admin_path),
+        (router_text, "archive_project_service(", project_admin_path),
+        (router_text, "unarchive_project_service(", project_admin_path),
+        (router_text, "list_members_service(", project_admin_path),
+        (router_text, "add_member_service(", project_admin_path),
+        (router_text, "update_member_service(", project_admin_path),
+        (router_text, "remove_member_service(", project_admin_path),
+        (service_text, "project_member_dao.check_permission(", project_admin_service_path),
+        (service_text, "project_dao.update_project_metadata(", project_admin_service_path),
+        (service_text, "project_dao.archive_project(", project_admin_service_path),
+        (service_text, "project_dao.unarchive_project(", project_admin_service_path),
+        (service_text, "project_member_dao.get_project_members(", project_admin_service_path),
+        (service_text, "user_dao.get_user_by_id(", project_admin_service_path),
+        (service_text, "project_member_dao.add_member(", project_admin_service_path),
+        (service_text, "project_member_dao.update_member_role(", project_admin_service_path),
+        (service_text, "project_member_dao.update_member_responsibility(", project_admin_service_path),
+        (service_text, "project_member_dao.get_member(", project_admin_service_path),
+        (service_text, "project_member_dao.remove_member(", project_admin_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "ProjectMemberDAO.check_permission(", project_admin_path),
+        (router_text, "ProjectDAO.update_project_metadata(", project_admin_path),
+        (router_text, "ProjectDAO.archive_project(", project_admin_path),
+        (router_text, "ProjectDAO.unarchive_project(", project_admin_path),
+        (router_text, "ProjectMemberDAO.get_project_members(", project_admin_path),
+        (router_text, "UserDAO.get_user_by_id(", project_admin_path),
+        (router_text, "ProjectMemberDAO.add_member(", project_admin_path),
+        (router_text, "ProjectMemberDAO.update_member_role(", project_admin_path),
+        (router_text, "ProjectMemberDAO.update_member_responsibility(", project_admin_path),
+        (router_text, "ProjectMemberDAO.get_member(", project_admin_path),
+        (router_text, "ProjectMemberDAO.remove_member(", project_admin_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing project admin service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Project admin router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
+    return route_count + len(required_snippets)
 
 
 def check_content_version_routes_extracted(root: Path) -> int:
@@ -4469,7 +4515,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.list_shot_take_rows("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.create_final_cut_records("),
-        (root / "routers" / "project_admin.py", "ProjectDAO.update_project_metadata("),
+        (root / "services" / "project_admin_service.py", "project_dao.update_project_metadata("),
         (root / "services" / "storyboard_service.py", "storyboard_dao.export_script_transaction("),
         (root / "routers" / "admin_compat.py", "UserDAO.delete_user_by_id("),
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_summary_stats("),
@@ -5251,6 +5297,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_entity_file_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_prompt_service.py",
+        "tests/test_project_admin_service.py",
         "tests/test_project_core_service.py",
         "tests/test_script_timeline_service.py",
         "tests/test_video_client_base.py",
