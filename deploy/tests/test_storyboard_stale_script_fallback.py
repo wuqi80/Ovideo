@@ -11,6 +11,10 @@ class _AssetDAO:
     pass
 
 
+class _EpisodeDAO:
+    pass
+
+
 def _build_app(storyboard_dao, episode_script_dao) -> FastAPI:
     app = FastAPI()
     app.include_router(
@@ -19,6 +23,7 @@ def _build_app(storyboard_dao, episode_script_dao) -> FastAPI:
             storyboard_dao=storyboard_dao,
             episode_script_dao=episode_script_dao,
             asset_dao=_AssetDAO,
+            episode_dao=_EpisodeDAO,
             logger=logging.getLogger("test_storyboard_stale_script_fallback"),
         )
     )

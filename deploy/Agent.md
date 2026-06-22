@@ -8463,3 +8463,20 @@
 - Local `pytest tests/test_episode_service.py -q` passed with 8 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Storyboard Service Boundary
+
+### Changes
+
+- Moved storyboard list/create/update/delete/delete-all/export/reorder/mix-audio/batch/extract-to-assets business logic from `routers/storyboard.py` into `services/storyboard_service.py`.
+- The router still owns the 10 storyboard HTTP endpoints, but now delegates stale script fallback, bounded field-set reads, bound asset normalization, script export transaction calls, audio mix orchestration, and asset extraction dedupe to the service layer.
+- Added `tests/test_storyboard_service.py` and kept `tests/test_storyboard_stale_script_fallback.py` green with the new service boundary.
+- Included `tests/test_storyboard_service.py` in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so storyboard routes cannot regress to direct `StoryboardDAO`, `EpisodeScriptDAO`, `AssetDAO`, or `EpisodeDAO` orchestration in the router while preserving the paged/lazy storyboard loading contracts.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_storyboard_service.py tests/test_storyboard_stale_script_fallback.py -q` passed with 14 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.

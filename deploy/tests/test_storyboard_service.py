@@ -1,0 +1,319 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import pytest
+
+from services import storyboard_service
+
+
+class FakeStoryboardDAO:
+    calls = []
+    created = None
+    updated = None
+    deleted = []
+    delete_scope = None
+    export_kwargs = None
+    reordered = None
+    batch_kwargs = None
+    update_returns_none = False
+    delete_returns_false = False
+    reorder_returns_false = False
+
+    @classmethod
+    async def get_by_episode(cls, episode_id, script_id=None, limit=None, offset=0, fields=None):
+        cls.calls.append((episode_id, script_id, limit, offset, fields))
+        if script_id:
+            return [{"item_id": "sb_stale", "bound_assets": "[bad-json"}]
+        return [{"item_id": "sb_current", "bound_assets": '[{"asset_id":"a1"}]'}]
+
+    @classmethod
+    async def count_by_episode(cls, episode_id, script_id=None):
+        return 1 if script_id else 9
+
+    @classmethod
+    async def create(cls, **kwargs):
+        cls.created = kwargs
+        return {"item_id": "sb_new", **kwargs}
+
+    @classmethod
+    async def update(cls, item_id, **kwargs):
+        cls.updated = {"item_id": item_id, **kwargs}
+        if cls.update_returns_none:
+            return None
+        return cls.updated
+
+    @classmethod
+    async def delete(cls, item_id):
+        cls.deleted.append(item_id)
+        return not cls.delete_returns_false
+
+    @classmethod
+    async def delete_by_episode(cls, episode_id, script_id=None):
+        cls.delete_scope = {"episode_id": episode_id, "script_id": script_id}
+        return 4
+
+    @classmethod
+    async def export_script_transaction(cls, **kwargs):
+        cls.export_kwargs = kwargs
+        return len(kwargs["storyboard_items"])
+
+    @classmethod
+    async def reorder(cls, episode_id, item_ids):
+        cls.reordered = {"episode_id": episode_id, "item_ids": item_ids}
+        return not cls.reorder_returns_false
+
+    @classmethod
+    async def batch_create(cls, episode_id, items, script_id=None):
+        cls.batch_kwargs = {"episode_id": episode_id, "items": items, "script_id": script_id}
+        return [{"item_id": "sb_batch", **item} for item in items]
+
+
+class FakeEpisodeScriptDAO:
+    list_raises = False
+
+    @staticmethod
+    async def get_by_id(script_id):
+        return None
+
+    @classmethod
+    async def list_by_episode(cls, episode_id):
+        if cls.list_raises:
+            raise RuntimeError("script lookup failed")
+        return [{"script_id": "script_a"}, {"script_id": "script_latest"}]
+
+
+class FakeAssetDAO:
+    created = []
+
+    @classmethod
+    async def get_by_project(cls, project_id, episode_id, script_id=None):
+        return [{"asset_type": "character", "name": "Alice"}]
+
+    @classmethod
+    async def create(cls, **kwargs):
+        cls.created.append(kwargs)
+        return {"asset_id": f"asset_{len(cls.created)}", **kwargs}
+
+
+class FakeEpisodeDAO:
+    missing = False
+
+    @classmethod
+    async def get_episode(cls, episode_id):
+        if cls.missing:
+            return None
+        return {"episode_id": episode_id, "project_id": "proj_1"}
+
+
+@dataclass
+class FakeMixResult:
+    success: bool = True
+    mixed_audio_url: str = "/mixed.wav"
+    cached: bool = False
+    duration_ms: int = 1234
+
+
+@dataclass
+class FakeMixInput:
+    dialogue_url: str | None = None
+    narration_url: str | None = None
+    sfx_url: str | None = None
+    dialogue_gain_db: float = 0
+    narration_gain_db: float = 0
+    sfx_gain_db: float = 0
+
+
+def setup_function():
+    FakeStoryboardDAO.calls = []
+    FakeStoryboardDAO.created = None
+    FakeStoryboardDAO.updated = None
+    FakeStoryboardDAO.deleted = []
+    FakeStoryboardDAO.delete_scope = None
+    FakeStoryboardDAO.export_kwargs = None
+    FakeStoryboardDAO.reordered = None
+    FakeStoryboardDAO.batch_kwargs = None
+    FakeStoryboardDAO.update_returns_none = False
+    FakeStoryboardDAO.delete_returns_false = False
+    FakeStoryboardDAO.reorder_returns_false = False
+    FakeEpisodeScriptDAO.list_raises = False
+    FakeAssetDAO.created = []
+    FakeEpisodeDAO.missing = False
+
+
+async def test_get_storyboard_items_falls_back_for_stale_script_and_normalizes_assets():
+    result = await storyboard_service.get_storyboard_items(
+        "ep_1",
+        script_id="script_deleted",
+        limit=10,
+        offset=0,
+        include_total=True,
+        fields="video",
+        storyboard_dao=FakeStoryboardDAO,
+        episode_script_dao=FakeEpisodeScriptDAO,
+    )
+
+    assert result["fallback_script_id"] == "script_deleted"
+    assert result["fallback_reason"] == "stale_script_storyboard"
+    assert result["fallback_scope"] == "episode"
+    assert result["total"] == 9
+    assert result["items"][0]["bound_assets"] == [{"asset_id": "a1"}]
+    assert FakeStoryboardDAO.calls == [
+        ("ep_1", "script_deleted", 10, 0, "video"),
+        ("ep_1", None, 10, 0, "video"),
+    ]
+
+
+async def test_get_storyboard_items_rejects_unknown_field_set():
+    with pytest.raises(storyboard_service.UnsupportedStoryboardFields):
+        await storyboard_service.get_storyboard_items(
+            "ep_1",
+            script_id=None,
+            limit=None,
+            offset=0,
+            include_total=False,
+            fields="full-fat",
+            storyboard_dao=FakeStoryboardDAO,
+            episode_script_dao=FakeEpisodeScriptDAO,
+        )
+
+
+async def test_create_storyboard_item_uses_latest_script_when_missing():
+    result = await storyboard_service.create_storyboard_item(
+        "ep_1",
+        sort_order=7,
+        scene_heading="scene",
+        dialogue="dialogue",
+        action_text="action",
+        camera_movement="pan",
+        image_prompt="image",
+        video_prompt="video",
+        script_id=None,
+        storyboard_dao=FakeStoryboardDAO,
+        episode_script_dao=FakeEpisodeScriptDAO,
+    )
+
+    assert result["item"]["item_id"] == "sb_new"
+    assert FakeStoryboardDAO.created["script_id"] == "script_latest"
+    assert FakeStoryboardDAO.created["sort_order"] == 7
+
+
+async def test_update_storyboard_item_preserves_zero_values():
+    result = await storyboard_service.update_storyboard_item(
+        "sb_1",
+        {"sort_order": 0, "audio_duration_ms": 0, "status": "ready"},
+        storyboard_dao=FakeStoryboardDAO,
+    )
+
+    assert result["success"] is True
+    assert FakeStoryboardDAO.updated == {
+        "item_id": "sb_1",
+        "sort_order": 0,
+        "audio_duration_ms": 0,
+        "status": "ready",
+    }
+
+
+async def test_update_storyboard_item_raises_when_missing():
+    FakeStoryboardDAO.update_returns_none = True
+
+    with pytest.raises(storyboard_service.StoryboardItemNotFound):
+        await storyboard_service.update_storyboard_item(
+            "missing",
+            {"status": "missing"},
+            storyboard_dao=FakeStoryboardDAO,
+        )
+
+
+async def test_export_script_delegates_transaction_and_counts_inputs():
+    result = await storyboard_service.export_script(
+        "ep_1",
+        project_id="proj_1",
+        original_content="original",
+        script_content="script",
+        storyboard_items=[{"sort_order": 0}, {"sort_order": 1}],
+        characters=[{"name": "Alice"}],
+        scenes=[{"name": "Room"}],
+        script_id="script_1",
+        user_id="user_1",
+        storyboard_dao=FakeStoryboardDAO,
+        episode_script_dao=FakeEpisodeScriptDAO,
+        asset_dao=FakeAssetDAO,
+    )
+
+    assert result == {
+        "success": True,
+        "storyboard_items_created": 2,
+        "characters_count": 1,
+        "scenes_count": 1,
+    }
+    assert FakeStoryboardDAO.export_kwargs["created_by"] == "user_1"
+
+
+async def test_reorder_storyboard_items_raises_when_dao_fails():
+    FakeStoryboardDAO.reorder_returns_false = True
+
+    with pytest.raises(storyboard_service.StoryboardReorderFailed):
+        await storyboard_service.reorder_storyboard_items(
+            "ep_1",
+            ["sb_2", "sb_1"],
+            storyboard_dao=FakeStoryboardDAO,
+        )
+
+
+async def test_mix_storyboard_audio_delegates_to_injected_mixer():
+    captured = {}
+
+    async def fake_mixer(item_id, mix_input, *, user_id):
+        captured["item_id"] = item_id
+        captured["mix_input"] = mix_input
+        captured["user_id"] = user_id
+        return FakeMixResult()
+
+    result = await storyboard_service.mix_storyboard_audio(
+        item_id="sb_1",
+        dialogue_url="/d.wav",
+        narration_url=None,
+        sfx_url=None,
+        dialogue_gain_db=1.5,
+        narration_gain_db=-3,
+        sfx_gain_db=-8,
+        user_id="user_1",
+        audio_mixer=fake_mixer,
+        mix_input_cls=FakeMixInput,
+    )
+
+    assert result["mixed_audio_url"] == "/mixed.wav"
+    assert captured["item_id"] == "sb_1"
+    assert captured["mix_input"].dialogue_gain_db == 1.5
+
+
+async def test_extract_to_assets_skips_existing_and_blank_names():
+    result = await storyboard_service.extract_to_assets(
+        "ep_1",
+        characters=[{"name": "Alice"}, {"name": " Bob ", "description": "hero"}, {"name": ""}],
+        scenes=[{"name": "Room", "description": "interior"}],
+        script_id="script_1",
+        user_id="user_1",
+        episode_dao=FakeEpisodeDAO,
+        asset_dao=FakeAssetDAO,
+    )
+
+    assert [asset["name"] for asset in result["assets"]] == ["Bob", "Room"]
+    assert FakeAssetDAO.created[0]["asset_type"] == "character"
+    assert FakeAssetDAO.created[1]["asset_type"] == "scene"
+
+
+async def test_extract_to_assets_raises_when_episode_missing():
+    FakeEpisodeDAO.missing = True
+
+    with pytest.raises(storyboard_service.EpisodeNotFound):
+        await storyboard_service.extract_to_assets(
+            "missing",
+            characters=[],
+            scenes=[],
+            script_id=None,
+            user_id="user_1",
+            episode_dao=FakeEpisodeDAO,
+            asset_dao=FakeAssetDAO,
+        )

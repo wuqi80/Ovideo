@@ -188,6 +188,7 @@ router.include_router(
         storyboard_dao=StoryboardDAO,
         episode_script_dao=EpisodeScriptDAO,
         asset_dao=AssetDAO,
+        episode_dao=EpisodeDAO,
         logger=logger,
     )
 )

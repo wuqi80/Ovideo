@@ -1022,6 +1022,7 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         root / "new_html" / "__tests__" / "contexts" / "EpisodeContext.test.tsx"
     ).read_text(encoding="utf-8")
     router_text = (root / "routers" / "storyboard.py").read_text(encoding="utf-8")
+    storyboard_service_text = (root / "services" / "storyboard_service.py").read_text(encoding="utf-8")
     router_test_text = (
         root / "tests" / "test_storyboard_stale_script_fallback.py"
     ).read_text(encoding="utf-8")
@@ -1093,9 +1094,9 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         (context_test_text, "clears stale script selection when storyboard falls back to episode scope", "storyboard stale script context unit test"),
         (context_test_text, "reloads script scoped slices on first script selection", "storyboard first script selection reload test"),
         (context_test_text, "reloads loaded script scoped slices after stale storyboard fallback clears selection", "storyboard fallback clears and reloads script-scoped slices test"),
-        (router_text, "EpisodeScriptDAO.get_by_id(script_id)", "storyboard backend stale script ownership check"),
-        (router_text, 'fallback_reason = "stale_script_storyboard"', "storyboard backend stale script fallback marker"),
-        (router_text, 'payload["fallback_scope"] = "episode"', "storyboard backend fallback scope marker"),
+        (storyboard_service_text, "episode_script_dao.get_by_id(script_id)", "storyboard backend stale script ownership check"),
+        (storyboard_service_text, 'fallback_reason = "stale_script_storyboard"', "storyboard backend stale script fallback marker"),
+        (storyboard_service_text, 'payload["fallback_scope"] = "episode"', "storyboard backend fallback scope marker"),
         (router_test_text, "test_storyboard_items_fallback_for_stale_script_id", "storyboard backend stale script fallback test"),
         (router_test_text, "test_storyboard_items_do_not_fallback_for_valid_empty_script", "storyboard backend valid empty script test"),
         (page_text, "import { runWhenIdle } from '../utils/idleScheduler';", "StoryboardGenPage uses shared idle scheduler"),
@@ -2093,8 +2094,11 @@ def check_video_capabilities_routes_extracted(root: Path) -> int:
 def check_storyboard_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     storyboard_path = root / "routers" / "storyboard.py"
+    storyboard_service_path = root / "services" / "storyboard_service.py"
     if not storyboard_path.exists():
         fail("routers/storyboard.py is missing")
+    if not storyboard_service_path.exists():
+        fail("services/storyboard_service.py is missing")
 
     route_pairs = {
         ("/api/episodes/{episode_id}/storyboard-items", "get"),
@@ -2147,7 +2151,59 @@ def check_storyboard_routes_extracted(root: Path) -> int:
 
     if route_count != 10:
         fail(f"routers/storyboard.py should own 10 storyboard route registrations, found {route_count}")
-    return route_count
+
+    router_text = storyboard_path.read_text(encoding="utf-8")
+    service_text = storyboard_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.storyboard_service import (", storyboard_path),
+        (router_text, "get_storyboard_items_service(", storyboard_path),
+        (router_text, "create_storyboard_item_service(", storyboard_path),
+        (router_text, "update_storyboard_item_service(", storyboard_path),
+        (router_text, "delete_storyboard_item_service(", storyboard_path),
+        (router_text, "delete_all_storyboard_items_service(", storyboard_path),
+        (router_text, "export_script_service(", storyboard_path),
+        (router_text, "reorder_storyboard_items_service(", storyboard_path),
+        (router_text, "mix_storyboard_audio_service(", storyboard_path),
+        (router_text, "batch_create_storyboard_items_service(", storyboard_path),
+        (router_text, "extract_to_assets_service(", storyboard_path),
+        (service_text, "storyboard_dao.get_by_episode(", storyboard_service_path),
+        (service_text, "storyboard_dao.count_by_episode(", storyboard_service_path),
+        (service_text, "episode_script_dao.get_by_id(script_id)", storyboard_service_path),
+        (service_text, "episode_script_dao.list_by_episode(", storyboard_service_path),
+        (service_text, "storyboard_dao.create(", storyboard_service_path),
+        (service_text, "storyboard_dao.update(", storyboard_service_path),
+        (service_text, "storyboard_dao.delete(", storyboard_service_path),
+        (service_text, "storyboard_dao.delete_by_episode(", storyboard_service_path),
+        (service_text, "storyboard_dao.export_script_transaction(", storyboard_service_path),
+        (service_text, "storyboard_dao.reorder(", storyboard_service_path),
+        (service_text, "storyboard_dao.batch_create(", storyboard_service_path),
+        (service_text, "episode_dao.get_episode(", storyboard_service_path),
+        (service_text, "asset_dao.get_by_project(", storyboard_service_path),
+        (service_text, "asset_dao.create(", storyboard_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "StoryboardDAO.get_by_episode(", storyboard_path),
+        (router_text, "StoryboardDAO.count_by_episode(", storyboard_path),
+        (router_text, "StoryboardDAO.create(", storyboard_path),
+        (router_text, "StoryboardDAO.update(", storyboard_path),
+        (router_text, "StoryboardDAO.delete(", storyboard_path),
+        (router_text, "StoryboardDAO.delete_by_episode(", storyboard_path),
+        (router_text, "StoryboardDAO.export_script_transaction(", storyboard_path),
+        (router_text, "StoryboardDAO.reorder(", storyboard_path),
+        (router_text, "StoryboardDAO.batch_create(", storyboard_path),
+        (router_text, "EpisodeScriptDAO.get_by_id(", storyboard_path),
+        (router_text, "EpisodeScriptDAO.list_by_episode(", storyboard_path),
+        (router_text, "AssetDAO.get_by_project(", storyboard_path),
+        (router_text, "AssetDAO.create(", storyboard_path),
+        (router_text, "EpisodeDAO.get_episode(", storyboard_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing storyboard service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Storyboard router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
+    return route_count + len(required_snippets)
 
 
 def check_asset_routes_extracted(root: Path) -> int:
@@ -4363,7 +4419,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.list_shot_take_rows("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.create_final_cut_records("),
         (root / "routers" / "project_admin.py", "ProjectDAO.update_project_metadata("),
-        (root / "routers" / "storyboard.py", "StoryboardDAO.export_script_transaction("),
+        (root / "services" / "storyboard_service.py", "storyboard_dao.export_script_transaction("),
         (root / "routers" / "admin_compat.py", "UserDAO.delete_user_by_id("),
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_summary_stats("),
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_generation_logs("),
@@ -5134,6 +5190,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_audio_provider.py",
         "tests/test_canvas_service.py",
         "tests/test_content_version_service.py",
+        "tests/test_storyboard_service.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",
         "tests/test_dao_api_config_category.py",
