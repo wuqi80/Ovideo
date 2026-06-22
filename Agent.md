@@ -7689,3 +7689,24 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server grep confirmed `admin_api_config_routes.py` now only references `reload_api_env_runtime`, while loader, registry, and provider-health cache internals live in `services/api_config_service.py` and contract scripts.
+
+## 2026-06-22 API Config Write Reload Ownership
+
+- Removed the private `_reload_api_env()` callback from `deploy/admin_api_config_routes.py`.
+- Made write services own their default runtime reload behavior:
+  - `deploy/services/api_config_service.py` now uses `_reload_api_env_after_write()` for create/update/delete/repair when no test callback is injected.
+  - `deploy/services/api_config_import_service.py` now uses `_reload_api_env_after_import()` for preset imports when no test callback is injected.
+- Kept callback injection available at the service layer for pure contract tests, but the HTTP route no longer passes `reload_api_env=` into write services.
+- Strengthened `deploy/scripts/check_provider_contract.py` so API config routes cannot reintroduce private reload callbacks or reload callback wiring.
+- Strengthened `deploy/scripts/check_admin_api_config_crud.py` with a dynamic default-service-reload check.
+- Updated `deploy/tests/test_admin_import_presets_writes_category.py` to patch the import-service reload helper instead of a route-private helper.
+- Verification:
+  - Local `py_compile` for API config route/service/import/contract files passed.
+  - Local API config CRUD/import/provider contracts passed; provider contract now reports `api_config_env_refresh_checks=20`.
+  - Local `pytest deploy/tests/test_admin_import_presets_writes_category.py deploy/tests/test_dao_api_config_category.py -q` passed with 8 tests.
+  - Local `deploy/scripts/check_architecture_contracts.py` passed 10/10.
+  - Local `deploy/scripts/smoke_test.py` passed 9/9.
+  - Live deploy to `https://mecha.one/` passed; frontend build was skipped because `new_html` source hash was unchanged and `drama.service` stayed `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server grep confirmed `admin_api_config_routes.py` only keeps the manual `admin_reload_api_env()` endpoint; write reload helpers live in `services/api_config_service.py` and `services/api_config_import_service.py`.

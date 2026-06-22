@@ -24,6 +24,15 @@ class ApiConfigImportOptions:
 ReloadCallback = Callable[[], Awaitable[bool]]
 
 
+async def _reload_api_env_after_import(reload_api_env: Optional[ReloadCallback] = None) -> bool:
+    if reload_api_env:
+        return bool(await reload_api_env())
+    from services.api_config_service import reload_api_env_runtime
+
+    result = await reload_api_env_runtime()
+    return bool(result.get("env_refreshed", result.get("success")))
+
+
 def _row_get(row: Any, key: str, default: Any = None) -> Any:
     getter = getattr(row, "get", None)
     if callable(getter):
@@ -242,8 +251,8 @@ async def import_preset_api_configs(
         imported += 1
 
     env_refreshed = None
-    if not options.dry_run and (imported or updated_existing) and reload_api_env:
-        env_refreshed = await reload_api_env()
+    if not options.dry_run and (imported or updated_existing):
+        env_refreshed = await _reload_api_env_after_import(reload_api_env)
 
     health_cache_invalidated: List[str] = []
     if not options.dry_run and touched_providers:

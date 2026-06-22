@@ -43,17 +43,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _reload_api_env() -> bool:
-    """Refresh DB-backed API config values into the runtime environment."""
-    try:
-        await reload_api_env_runtime()
-        logger.info("API env reload succeeded")
-        return True
-    except ApiConfigReloadFailed as e:
-        logger.error("_reload_api_env failed: %s", e, exc_info=True)
-        raise
-
-
 def _require_db() -> None:
     if not get_db_manager():
         raise HTTPException(
@@ -139,7 +128,6 @@ async def admin_create_api_config(body: ApiConfigCreateBody):
             request_template=body.request_template,
             headers=body.headers,
             category=body.category,
-            reload_api_env=_reload_api_env,
         )
     except ApiConfigCreateFailed:
         raise HTTPException(status_code=500, detail="Failed to create API config")
@@ -175,8 +163,7 @@ async def admin_import_preset_configs(body: Optional[ApiConfigImportPresetsBody]
             update_existing_empty_keys=body.update_existing_empty_keys,
             enable_copied_keys=body.enable_copied_keys,
             dry_run=body.dry_run,
-        ),
-        reload_api_env=_reload_api_env,
+        )
     )
 
 
@@ -232,7 +219,6 @@ async def admin_repair_api_config_conflicts(body: Optional[ApiConfigRepairConfli
     _require_db()
     body = body or ApiConfigRepairConflictsBody()
     return await repair_api_config_provider_conflicts(
-        reload_api_env=_reload_api_env,
         dry_run=body.dry_run,
     )
 
@@ -260,7 +246,7 @@ async def admin_update_api_config(config_id: str, body: ApiConfigUpdateBody):
     _require_db()
     data = body.model_dump(exclude_unset=True)
     try:
-        return await update_api_config(config_id, data, reload_api_env=_reload_api_env)
+        return await update_api_config(config_id, data)
     except ApiConfigNotFound:
         raise HTTPException(status_code=404, detail="Config not found")
 
@@ -269,6 +255,6 @@ async def admin_update_api_config(config_id: str, body: ApiConfigUpdateBody):
 async def admin_delete_api_config(config_id: str):
     _require_db()
     try:
-        return await delete_api_config(config_id, reload_api_env=_reload_api_env)
+        return await delete_api_config(config_id)
     except ApiConfigNotFound:
         raise HTTPException(status_code=404, detail="Config not found")

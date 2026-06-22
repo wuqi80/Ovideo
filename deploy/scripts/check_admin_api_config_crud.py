@@ -397,6 +397,25 @@ async def main() -> int:
         if ("minimax", "MiniMax-Hailuo-02") not in target_invalidations[-1]:
             fail(f"repair should invalidate repaired model health cache: {target_invalidations}")
 
+        default_reload_calls = 0
+
+        async def fake_default_load_api_env():
+            nonlocal default_reload_calls
+            default_reload_calls += 1
+            return {
+                "success": True,
+                "loaded": 1,
+                "loaded_providers": ["deepseek"],
+                "error": None,
+            }
+
+        service.load_api_configs_to_env = fake_default_load_api_env
+        default_reloaded = await service.update_api_config("solo", {"enabled": False})
+        if default_reloaded.get("env_refreshed") is not True:
+            fail(f"default service reload did not report env_refreshed=true: {default_reloaded}")
+        if default_reload_calls != 1:
+            fail(f"default service reload should call runtime loader once, got {default_reload_calls}")
+
         reload_cache_clears = 0
 
         async def fake_load_api_env_success():
@@ -454,6 +473,7 @@ async def main() -> int:
     print("  health_wrapper_no_key=1")
     print("  health_wrapper_runtime_key_fallback=1")
     print("  health_wrapper_endpoint_diagnostics=1")
+    print("  default_service_reload_checks=1")
     print("  reload_service_checks=2")
     return 0
 

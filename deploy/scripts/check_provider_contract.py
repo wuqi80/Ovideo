@@ -885,6 +885,9 @@ def check_api_config_write_env_refresh_contract() -> int:
             continue
         if "env_refreshed" not in return_dict_keys(func):
             violations.append(f"services/api_config_service.py:{func.lineno} {name}() response lacks env_refreshed")
+        source = ast.get_source_segment(service_path.read_text(encoding="utf-8"), func) or ""
+        if "_reload_api_env_after_write" not in source:
+            violations.append(f"services/api_config_service.py:{func.lineno} {name}() must own default API env reload")
 
     reload_service_func = function_by_name(service_tree, "reload_api_env_runtime")
     if not reload_service_func:
@@ -895,6 +898,8 @@ def check_api_config_write_env_refresh_contract() -> int:
         )
     if not function_by_name(service_tree, "clear_all_provider_health_cache"):
         violations.append("services/api_config_service.py missing clear_all_provider_health_cache()")
+    if not function_by_name(service_tree, "_reload_api_env_after_write"):
+        violations.append("services/api_config_service.py missing default write reload helper")
 
     import_func = function_by_name(import_tree, "import_preset_api_configs")
     if not import_func:
@@ -903,27 +908,14 @@ def check_api_config_write_env_refresh_contract() -> int:
         violations.append(
             f"services/api_config_import_service.py:{import_func.lineno} import response lacks env_refreshed"
         )
-
-    reload_func = function_by_name(route_tree, "_reload_api_env")
-    if not reload_func:
-        violations.append("admin_api_config_routes.py missing _reload_api_env()")
-    else:
-        returns_bool = any(
-            isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, bool)
-            for stmt in ast.walk(reload_func)
+    elif "_reload_api_env_after_import" not in (ast.get_source_segment(import_path.read_text(encoding="utf-8"), import_func) or ""):
+        violations.append(
+            f"services/api_config_import_service.py:{import_func.lineno} import must own default API env reload"
         )
-        if not returns_bool:
-            violations.append(f"admin_api_config_routes.py:{reload_func.lineno} _reload_api_env() must return bool")
-        reload_source = ast.get_source_segment(route_text, reload_func) or ""
-        reload_except_raises = any(
-            isinstance(node, ast.ExceptHandler)
-            and any(isinstance(child, ast.Raise) for child in ast.walk(node))
-            for node in ast.walk(reload_func)
-        )
-        if "return False" in reload_source or not reload_except_raises:
-            violations.append(
-                f"admin_api_config_routes.py:{reload_func.lineno} _reload_api_env() must log and raise failures"
-            )
+    if not function_by_name(import_tree, "_reload_api_env_after_import"):
+        violations.append("services/api_config_import_service.py missing default import reload helper")
+    if function_by_name(route_tree, "_reload_api_env"):
+        violations.append("admin_api_config_routes.py must not own private _reload_api_env(); write services reload by default")
 
     route_write_calls = {
         "admin_create_api_config": "create_api_config",
@@ -937,9 +929,9 @@ def check_api_config_write_env_refresh_contract() -> int:
         if not func:
             violations.append(f"admin_api_config_routes.py missing {route_name}()")
             continue
-        if not call_uses_keyword(func, service_call, "reload_api_env"):
+        if call_uses_keyword(func, service_call, "reload_api_env"):
             violations.append(
-                f"admin_api_config_routes.py:{func.lineno} {route_name}() must pass reload_api_env to {service_call}()"
+                f"admin_api_config_routes.py:{func.lineno} {route_name}() must let {service_call}() own API env reload"
             )
 
     manual_reload = function_by_name(route_tree, "admin_reload_api_env")
@@ -973,7 +965,7 @@ def check_api_config_write_env_refresh_contract() -> int:
 
     if violations:
         fail("API config write operations must expose hot-reload status:\n" + "\n".join(violations))
-    return len(service_write_functions) + 3 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details)
+    return len(service_write_functions) + 5 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details)
 
 
 def check_api_config_service_dao_import_contract() -> int:

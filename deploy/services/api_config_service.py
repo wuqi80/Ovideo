@@ -28,7 +28,7 @@ from services.api_provider_registry import (
 from services.api_provider_runtime import build_provider_runtime_status, resolve_provider
 
 
-ReloadCallback = Callable[[], Awaitable[bool]]
+ReloadCallback = Callable[[], Awaitable[Any]]
 logger = logging.getLogger(__name__)
 
 
@@ -297,6 +297,18 @@ async def reload_api_env_runtime(*, clear_health_cache: bool = False) -> Dict[st
     }
 
 
+def _env_refreshed_from_reload_result(result: Any) -> bool:
+    if isinstance(result, dict):
+        return bool(result.get("env_refreshed", result.get("success")))
+    return bool(result)
+
+
+async def _reload_api_env_after_write(reload_api_env: Optional[ReloadCallback] = None) -> bool:
+    if reload_api_env:
+        return _env_refreshed_from_reload_result(await reload_api_env())
+    return _env_refreshed_from_reload_result(await reload_api_env_runtime())
+
+
 async def list_api_configs() -> Dict[str, Any]:
     rows = await ApiConfigDAO.list_all()
     provider_health_targets = [
@@ -365,7 +377,7 @@ async def create_api_config(
     if not row:
         raise ApiConfigCreateFailed("Failed to create API config")
     disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(row)
-    env_refreshed = await reload_api_env() if reload_api_env else None
+    env_refreshed = await _reload_api_env_after_write(reload_api_env)
     await _invalidate_provider_health([row, *disabled_conflict_rows])
     return {
         "success": True,
@@ -392,7 +404,7 @@ async def update_api_config(
     if not updated:
         raise ApiConfigNotFound("Config not found")
     disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(updated)
-    env_refreshed = await reload_api_env() if reload_api_env else None
+    env_refreshed = await _reload_api_env_after_write(reload_api_env)
     await _invalidate_provider_health([before, updated, *disabled_conflict_rows])
     return {
         "success": True,
@@ -411,7 +423,7 @@ async def delete_api_config(
     ok = await ApiConfigDAO.delete(config_id)
     if not ok:
         raise ApiConfigNotFound("Config not found")
-    env_refreshed = await reload_api_env() if reload_api_env else None
+    env_refreshed = await _reload_api_env_after_write(reload_api_env)
     await _invalidate_provider_health([before])
     return {"success": True, "deleted": True, "env_refreshed": env_refreshed}
 
@@ -461,8 +473,8 @@ async def repair_api_config_provider_conflicts(
         )
 
     env_refreshed = None
-    if total_disabled and not dry_run and reload_api_env:
-        env_refreshed = await reload_api_env()
+    if total_disabled and not dry_run:
+        env_refreshed = await _reload_api_env_after_write(reload_api_env)
     if touched_items and not dry_run:
         await _invalidate_provider_health(touched_items)
 
