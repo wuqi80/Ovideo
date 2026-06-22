@@ -337,6 +337,81 @@ def upload_audio_file_to_comfyui(
     ).as_response()
 
 
+async def upload_video_file_to_comfyui(
+    *,
+    username: str,
+    original_filename: str,
+    content: bytes,
+    content_type: str,
+    target_server: str,
+    file_dao: Any,
+    project_dao: Any,
+    version_dao: Any,
+    logger: Any,
+    storage_root: Path = Path("persistent_storage"),
+    now_provider: Callable[[], datetime] = datetime.now,
+    uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
+    upload_file: Callable[..., requests.Response] = upload_comfyui_file_response,
+) -> Dict[str, Any]:
+    """Upload a video to ComfyUI, persist a local copy, and create a file record."""
+
+    safe_filename = original_filename or "video.mp4"
+    unique_filename = f"{uuid_hex_provider()[:12]}_{safe_filename}"
+    upload_url = f"{target_server}/upload/image"
+    logger.info("[ComfyUploadVideo] 转发上传到 ComfyUI: %s", upload_url)
+
+    response = upload_file(
+        upload_url,
+        unique_filename,
+        content,
+        content_type or "video/mp4",
+        timeout=60,
+    )
+
+    if not response.ok:
+        logger.error("[ComfyUploadVideo] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
+        raise ComfyUIMediaUploadFailed(f"上传到 ComfyUI 失败: {response.status_code}", status_code=response.status_code)
+
+    comfyui_filename = _extract_uploaded_filename(response, unique_filename)
+    logger.info("✅ ComfyUI 视频上传成功: comfyui_filename=%s, server=%s", comfyui_filename, target_server)
+
+    year_month = now_provider().strftime("%Y%m")
+    storage_dir = storage_root / "videos" / username / year_month
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    file_path = storage_dir / unique_filename
+    file_path.write_bytes(content)
+
+    record_result = await create_comfyui_upload_record(
+        username=username,
+        file_type="video",
+        file_name=safe_filename,
+        file_path=str(file_path),
+        file_size_bytes=len(content),
+        mime_type=content_type or "video/*",
+        metadata={"source": "upload", "physical_filename": unique_filename},
+        file_dao=file_dao,
+        project_dao=project_dao,
+        version_dao=version_dao,
+        logger=logger,
+        uuid_hex_provider=uuid_hex_provider,
+    )
+    file_record = record_result.file_record
+
+    logger.info("✅ 视频已保存到数据库: %s, 文件ID: %s", file_record["file_url"], file_record["file_id"])
+
+    return {
+        "success": True,
+        "filename": comfyui_filename,
+        "unique_filename": unique_filename,
+        "storage_url": file_record["file_url"],
+        "original_filename": safe_filename,
+        "size": len(content),
+        "file_id": file_record["file_id"],
+        "file_path": str(file_path),
+        "server": target_server,
+    }
+
+
 def _rooted_path(storage_root: Path, path: str) -> Path:
     candidate = Path(path)
     return candidate if candidate.is_absolute() else storage_root / candidate

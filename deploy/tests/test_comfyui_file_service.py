@@ -459,3 +459,82 @@ def test_upload_audio_file_to_comfyui_raises_on_rejected_upload(tmp_path):
 
     assert exc.value.status_code == 502
     assert "上传到 ComfyUI 失败: 502" in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_upload_video_file_to_comfyui_uploads_saves_and_creates_record(tmp_path):
+    _reset_fakes()
+    _ProjectDAO.projects = [{"project_id": "proj_existing"}]
+    _VersionDAO.versions = [{"version_id": "ver_existing"}]
+    upload_calls = []
+    uuid_values = iter(["vid123456789", "fil123456789"])
+
+    def fake_upload(*args, **kwargs):
+        upload_calls.append((args, kwargs))
+        return _Response(payload={"name": "clip_from_node.mp4"})
+
+    result = await comfyui_file_service.upload_video_file_to_comfyui(
+        username="yuan",
+        original_filename="clip.mp4",
+        content=b"video-bytes",
+        content_type="video/mp4",
+        target_server="http://node:8188",
+        file_dao=_FileDAO,
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        logger=_Logger,
+        storage_root=tmp_path,
+        now_provider=lambda: datetime(2026, 6, 23),
+        uuid_hex_provider=lambda: next(uuid_values),
+        upload_file=fake_upload,
+    )
+
+    expected_path = tmp_path / "videos" / "yuan" / "202606" / "vid123456789_clip.mp4"
+    assert result == {
+        "success": True,
+        "filename": "clip_from_node.mp4",
+        "unique_filename": "vid123456789_clip.mp4",
+        "storage_url": "/api/files/file_fil123456789/download",
+        "original_filename": "clip.mp4",
+        "size": len(b"video-bytes"),
+        "file_id": "file_fil123456789",
+        "file_path": str(expected_path),
+        "server": "http://node:8188",
+    }
+    assert expected_path.read_bytes() == b"video-bytes"
+    assert upload_calls == [
+        (
+            ("http://node:8188/upload/image", "vid123456789_clip.mp4", b"video-bytes", "video/mp4"),
+            {"timeout": 60},
+        )
+    ]
+    assert _FileDAO.created[0]["version_id"] == "ver_existing"
+    assert _FileDAO.created[0]["file_path"] == str(expected_path)
+    assert _FileDAO.created[0]["metadata"] == {"source": "upload", "physical_filename": "vid123456789_clip.mp4"}
+
+
+@pytest.mark.asyncio
+async def test_upload_video_file_to_comfyui_raises_on_rejected_upload(tmp_path):
+    _reset_fakes()
+
+    def fake_upload(*_args, **_kwargs):
+        return _Response(ok=False, status_code=502, text="bad gateway")
+
+    with pytest.raises(comfyui_file_service.ComfyUIMediaUploadFailed) as exc:
+        await comfyui_file_service.upload_video_file_to_comfyui(
+            username="yuan",
+            original_filename="clip.mp4",
+            content=b"video-bytes",
+            content_type="video/mp4",
+            target_server="http://node:8188",
+            file_dao=_FileDAO,
+            project_dao=_ProjectDAO,
+            version_dao=_VersionDAO,
+            logger=_Logger,
+            storage_root=tmp_path,
+            upload_file=fake_upload,
+        )
+
+    assert exc.value.status_code == 502
+    assert "上传到 ComfyUI 失败: 502" in str(exc.value)
+    assert _FileDAO.created == []

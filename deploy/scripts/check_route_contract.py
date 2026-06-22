@@ -5603,6 +5603,7 @@ def check_comfyui_file_service_contract(root: Path) -> int:
         "fetch_comfyui_view_with_fallback(",
         "reupload_comfyui_video_with_uuid(",
         "upload_audio_file_to_comfyui(",
+        "upload_video_file_to_comfyui(",
         "upload_comfyui_file_response(",
     ]
     required_service_snippets = [
@@ -5620,6 +5621,9 @@ def check_comfyui_file_service_contract(root: Path) -> int:
         "def upload_audio_file_to_comfyui(",
         "storage_root / \"audio\" / username",
         "_extract_uploaded_filename(response, unique_filename)",
+        "async def upload_video_file_to_comfyui(",
+        "storage_root / \"videos\" / username",
+        "await create_comfyui_upload_record(",
         "def resolve_reupload_video_source(",
         "def reupload_comfyui_video_with_uuid(",
         "for try_type in [file_type, \"temp\", \"output\", \"input\"]:",
@@ -5683,6 +5687,21 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     ]:
         if snippet in audio_route_text:
             fail(f"routers/comfyui_files.py must delegate audio upload workflow to service: {snippet}")
+        checks += 1
+    video_start = route_text.index('@router.post("/api/comfyui/upload/video")')
+    video_end = route_text.index('@router.post("/api/upload/audio")')
+    video_route_text = route_text[video_start:video_end]
+    for snippet in [
+        "upload_comfyui_file_response(",
+        "response.json()",
+        "Path(\"persistent_storage/videos\")",
+        "file_path.write_bytes(",
+        "create_comfyui_upload_record(",
+        "ComfyUI 视频上传成功",
+        "视频已保存到数据库",
+    ]:
+        if snippet in video_route_text:
+            fail(f"routers/comfyui_files.py must delegate video upload workflow to service: {snippet}")
         checks += 1
     for snippet in required_service_snippets:
         if snippet not in service_text:

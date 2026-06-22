@@ -24,6 +24,7 @@ from services.comfyui_file_service import (
     reupload_comfyui_video_with_uuid,
     upload_audio_file_to_comfyui,
     upload_comfyui_file_response,
+    upload_video_file_to_comfyui,
 )
 
 logger = logging.getLogger(__name__)
@@ -297,13 +298,11 @@ def create_comfyui_files_router(
         """上传视频到 ComfyUI + 数据库"""
         try:
             file_content = await video.read()
-            unique_filename = f"{uuid.uuid4().hex[:12]}_{video.filename}"
 
             logger.info(
-                "[ComfyUploadVideo] 用户=%s, 原文件=%s, 唯一名=%s, 大小=%s 字节",
+                "[ComfyUploadVideo] 用户=%s, 原文件=%s, 大小=%s 字节",
                 username,
                 video.filename,
-                unique_filename,
                 len(file_content),
             )
 
@@ -315,67 +314,20 @@ def create_comfyui_files_router(
             else:
                 logger.info("[ComfyUploadVideo] 使用默认 ComfyUI: %s", target_server)
 
-            upload_url = f"{target_server}/upload/image"
-            logger.info("[ComfyUploadVideo] 转发上传到 ComfyUI: %s", upload_url)
-
-            response = upload_comfyui_file_response(
-                upload_url,
-                unique_filename,
-                file_content,
-                video.content_type or "video/mp4",
-                timeout=60,
-            )
-
-            if not response.ok:
-                logger.error("[ComfyUploadVideo] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
-                raise HTTPException(status_code=502, detail=f"上传到 ComfyUI 失败: {response.status_code}")
-
-            try:
-                response_json = response.json()
-            except Exception:
-                response_json = {}
-
-            comfyui_filename = unique_filename
-            if isinstance(response_json, dict) and "name" in response_json:
-                comfyui_filename = response_json["name"]
-
-            logger.info("✅ ComfyUI 视频上传成功: comfyui_filename=%s, server=%s", comfyui_filename, target_server)
-
-            year_month = datetime.now().strftime("%Y%m")
-            storage_dir = Path("persistent_storage/videos") / username / year_month
-            storage_dir.mkdir(parents=True, exist_ok=True)
-            file_path = storage_dir / unique_filename
-            file_path.write_bytes(file_content)
-
-            record_result = await create_comfyui_upload_record(
+            return await upload_video_file_to_comfyui(
                 username=username,
-                file_type="video",
-                file_name=video.filename,
-                file_path=str(file_path),
-                file_size_bytes=len(file_content),
-                mime_type=video.content_type or "video/*",
-                metadata={"source": "upload", "physical_filename": unique_filename},
                 file_dao=FileDAO,
                 project_dao=ProjectDAO,
                 version_dao=VersionDAO,
+                original_filename=video.filename or "video.mp4",
+                content=file_content,
+                content_type=video.content_type or "video/mp4",
+                target_server=target_server,
                 logger=logger,
             )
-            file_record = record_result.file_record
 
-            logger.info("✅ 视频已保存到数据库: %s, 文件ID: %s", file_record["file_url"], file_record["file_id"])
-
-            return {
-                "success": True,
-                "filename": comfyui_filename,
-                "unique_filename": unique_filename,
-                "storage_url": file_record["file_url"],
-                "original_filename": video.filename,
-                "size": len(file_content),
-                "file_id": file_record["file_id"],
-                "file_path": str(file_path),
-                "server": target_server,
-            }
-
+        except ComfyUIMediaUploadFailed as e:
+            raise HTTPException(status_code=502, detail=str(e))
         except ComfyUIFileRequestError as e:
             logger.error("❌ ComfyUI 视频上传请求失败: %s", e)
             raise HTTPException(status_code=503, detail=f"无法连接到 ComfyUI 服务器: {str(e)}")
