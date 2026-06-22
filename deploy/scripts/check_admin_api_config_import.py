@@ -47,6 +47,7 @@ async def main() -> int:
     creates: list[dict[str, Any]] = []
     updates: list[tuple[str, dict[str, Any]]] = []
     invalidations: list[tuple[str, ...]] = []
+    target_invalidations: list[tuple[tuple[str, str | None], ...]] = []
     reload_calls = 0
 
     class FakeDAO:
@@ -82,16 +83,32 @@ async def main() -> int:
         reload_calls += 1
         return True
 
-    async def fake_invalidate(providers):
-        provider_tuple = tuple(sorted(set(providers)))
+    async def fake_invalidate_items(items):
+        providers: set[str] = set()
+        targets: list[tuple[str, str | None]] = []
+        seen_targets: set[tuple[str, str | None]] = set()
+        for item in items:
+            provider = str(item.get("provider") if isinstance(item, dict) else getattr(item, "provider", "") or "")
+            provider = provider.strip()
+            if not provider:
+                continue
+            providers.add(provider)
+            model_name = str(item.get("model_name") if isinstance(item, dict) else getattr(item, "model_name", "") or "")
+            model_name = model_name.strip() or None
+            target_key = (provider, model_name)
+            if target_key not in seen_targets:
+                targets.append(target_key)
+                seen_targets.add(target_key)
+        provider_tuple = tuple(sorted(providers))
         invalidations.append(provider_tuple)
+        target_invalidations.append(tuple(targets))
         return list(provider_tuple)
 
     try:
         original_dao = import_service.ApiConfigDAO
-        original_invalidate = import_service.delete_cached_provider_health_many
+        original_invalidate_items = import_service.invalidate_provider_health_for_items
         import_service.ApiConfigDAO = FakeDAO
-        import_service.delete_cached_provider_health_many = fake_invalidate
+        import_service.invalidate_provider_health_for_items = fake_invalidate_items
 
         plain = await import_service.import_preset_api_configs(reload_api_env=fake_reload)
         if plain["copy_runtime_env_keys"]:
@@ -107,6 +124,7 @@ async def main() -> int:
         creates.clear()
         updates.clear()
         invalidations.clear()
+        target_invalidations.clear()
         reload_calls = 0
         os.environ["DASHSCOPE_API_KEY"] = "dashscope-secret"
         os.environ["DASHSCOPE_ENDPOINT"] = "https://dashscope.example.test/api/v1/services/aigc/video-generation/video-synthesis"
@@ -161,6 +179,7 @@ async def main() -> int:
         creates.clear()
         updates.clear()
         invalidations.clear()
+        target_invalidations.clear()
         reload_calls = 0
         for key in keys:
             os.environ.pop(key, None)
@@ -182,12 +201,14 @@ async def main() -> int:
             fail(f"Existing empty-key import did not report env_refreshed=true: {copied_existing}")
         if not invalidations or "laozhang-gpt-image" not in invalidations[-1]:
             fail(f"Existing empty-key import did not invalidate updated provider: {invalidations}")
+        if ("laozhang-gpt-image", "gpt-image-2-vip") not in target_invalidations[-1]:
+            fail(f"Existing empty-key import did not invalidate updated model target: {target_invalidations}")
 
     finally:
         if "import_service" in locals() and "original_dao" in locals():
             import_service.ApiConfigDAO = original_dao
-        if "import_service" in locals() and "original_invalidate" in locals():
-            import_service.delete_cached_provider_health_many = original_invalidate
+        if "import_service" in locals() and "original_invalidate_items" in locals():
+            import_service.invalidate_provider_health_for_items = original_invalidate_items
         for key in keys:
             value = saved_env.get(key)
             if value is None:
@@ -205,6 +226,7 @@ async def main() -> int:
     print("  existing_empty_key_update=1")
     print("  http_default_copies_runtime_keys=1")
     print("  provider_health_invalidations=1")
+    print("  provider_model_health_invalidations=1")
     return 0
 
 

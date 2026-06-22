@@ -8,18 +8,18 @@ from decimal import Decimal
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
 
 from dao.admin.api_config import ApiConfigDAO
+from services.api_config_health_cache_service import (
+    clear_all_provider_health_cache,
+    invalidate_provider_health_for_items,
+)
 from services.api_config_health_service import test_api_config_health
 from services.api_config_runtime_loader import load_api_configs_to_env
 from services.api_provider_health_monitor import (
-    clear_all_cached_provider_health,
-    delete_cached_provider_health_many,
-    delete_cached_provider_health_targets,
     list_cached_provider_health,
     provider_health_cache_key,
     provider_health_monitor_state,
 )
 from services.api_provider_registry import (
-    PROVIDER_CATALOG,
     get_api_model_presets,
     get_api_provider_catalog,
     normalize_provider,
@@ -219,55 +219,6 @@ async def _disable_conflicting_provider_configs(row: Any) -> tuple[List[str], Li
     return disabled, disabled_rows
 
 
-def _provider_health_invalidation_targets(items: Iterable[Any]) -> tuple[List[str], List[Dict[str, Optional[str]]]]:
-    provider_ids: List[str] = []
-    targets: List[Dict[str, Optional[str]]] = []
-    seen_providers: set[str] = set()
-    seen_targets: set[tuple[str, Optional[str]]] = set()
-    for item in items:
-        if isinstance(item, str):
-            provider = normalize_provider(item)
-            model_name = None
-        else:
-            provider = normalize_provider(_row_provider(item))
-            model_name = _row_model_name(item) or None
-        if not provider:
-            continue
-        if provider not in seen_providers:
-            provider_ids.append(provider)
-            seen_providers.add(provider)
-        for target_model in (None, model_name):
-            target_key = (provider, target_model)
-            if target_key in seen_targets:
-                continue
-            seen_targets.add(target_key)
-            targets.append({"provider": provider, "model_name": target_model})
-    return provider_ids, targets
-
-
-async def _invalidate_provider_health(items: Iterable[Any]) -> None:
-    provider_ids, targets = _provider_health_invalidation_targets(items)
-    if not provider_ids:
-        return
-    try:
-        await delete_cached_provider_health_many(provider_ids)
-        await delete_cached_provider_health_targets(targets)
-    except Exception as exc:
-        logger.warning("Failed to invalidate provider health cache: %s", exc, exc_info=True)
-
-
-async def clear_all_provider_health_cache() -> List[str]:
-    """Clear all managed provider health cache entries with a registry fallback."""
-    try:
-        cleared = await clear_all_cached_provider_health()
-        if cleared:
-            return cleared
-        return await delete_cached_provider_health_many(PROVIDER_CATALOG)
-    except Exception as exc:
-        logger.warning("Provider health cache invalidation failed: %s", exc, exc_info=True)
-        return []
-
-
 async def reload_api_env_runtime(*, clear_health_cache: bool = False) -> Dict[str, Any]:
     """Reload DB-backed provider config into env and optionally clear health cache."""
     try:
@@ -378,7 +329,7 @@ async def create_api_config(
         raise ApiConfigCreateFailed("Failed to create API config")
     disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(row)
     env_refreshed = await _reload_api_env_after_write(reload_api_env)
-    await _invalidate_provider_health([row, *disabled_conflict_rows])
+    await invalidate_provider_health_for_items([row, *disabled_conflict_rows])
     return {
         "success": True,
         "api_config": mask_api_config_row(row),
@@ -405,7 +356,7 @@ async def update_api_config(
         raise ApiConfigNotFound("Config not found")
     disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(updated)
     env_refreshed = await _reload_api_env_after_write(reload_api_env)
-    await _invalidate_provider_health([before, updated, *disabled_conflict_rows])
+    await invalidate_provider_health_for_items([before, updated, *disabled_conflict_rows])
     return {
         "success": True,
         "api_config": mask_api_config_row(updated),
@@ -424,7 +375,7 @@ async def delete_api_config(
     if not ok:
         raise ApiConfigNotFound("Config not found")
     env_refreshed = await _reload_api_env_after_write(reload_api_env)
-    await _invalidate_provider_health([before])
+    await invalidate_provider_health_for_items([before])
     return {"success": True, "deleted": True, "env_refreshed": env_refreshed}
 
 
@@ -476,7 +427,7 @@ async def repair_api_config_provider_conflicts(
     if total_disabled and not dry_run:
         env_refreshed = await _reload_api_env_after_write(reload_api_env)
     if touched_items and not dry_run:
-        await _invalidate_provider_health(touched_items)
+        await invalidate_provider_health_for_items(touched_items)
 
     return {
         "success": True,

@@ -864,10 +864,15 @@ def check_api_config_write_env_refresh_contract() -> int:
     root = deploy_root()
     service_path = root / "services" / "api_config_service.py"
     import_path = root / "services" / "api_config_import_service.py"
+    cache_path = root / "services" / "api_config_health_cache_service.py"
     route_path = root / "admin_api_config_routes.py"
 
-    service_tree = ast.parse(service_path.read_text(encoding="utf-8"), filename=str(service_path))
-    import_tree = ast.parse(import_path.read_text(encoding="utf-8"), filename=str(import_path))
+    service_text = service_path.read_text(encoding="utf-8")
+    import_text = import_path.read_text(encoding="utf-8")
+    cache_text = cache_path.read_text(encoding="utf-8")
+    service_tree = ast.parse(service_text, filename=str(service_path))
+    import_tree = ast.parse(import_text, filename=str(import_path))
+    cache_tree = ast.parse(cache_text, filename=str(cache_path))
     route_text = route_path.read_text(encoding="utf-8")
     route_tree = ast.parse(route_text, filename=str(route_path))
 
@@ -885,9 +890,11 @@ def check_api_config_write_env_refresh_contract() -> int:
             continue
         if "env_refreshed" not in return_dict_keys(func):
             violations.append(f"services/api_config_service.py:{func.lineno} {name}() response lacks env_refreshed")
-        source = ast.get_source_segment(service_path.read_text(encoding="utf-8"), func) or ""
+        source = ast.get_source_segment(service_text, func) or ""
         if "_reload_api_env_after_write" not in source:
             violations.append(f"services/api_config_service.py:{func.lineno} {name}() must own default API env reload")
+        if "invalidate_provider_health_for_items" not in source:
+            violations.append(f"services/api_config_service.py:{func.lineno} {name}() must invalidate provider health via helper")
 
     reload_service_func = function_by_name(service_tree, "reload_api_env_runtime")
     if not reload_service_func:
@@ -896,8 +903,8 @@ def check_api_config_write_env_refresh_contract() -> int:
         violations.append(
             f"services/api_config_service.py:{reload_service_func.lineno} reload_api_env_runtime() response lacks env_refreshed"
         )
-    if not function_by_name(service_tree, "clear_all_provider_health_cache"):
-        violations.append("services/api_config_service.py missing clear_all_provider_health_cache()")
+    if "clear_all_provider_health_cache" not in service_text:
+        violations.append("services/api_config_service.py must call clear_all_provider_health_cache() from helper")
     if not function_by_name(service_tree, "_reload_api_env_after_write"):
         violations.append("services/api_config_service.py missing default write reload helper")
 
@@ -908,14 +915,35 @@ def check_api_config_write_env_refresh_contract() -> int:
         violations.append(
             f"services/api_config_import_service.py:{import_func.lineno} import response lacks env_refreshed"
         )
-    elif "_reload_api_env_after_import" not in (ast.get_source_segment(import_path.read_text(encoding="utf-8"), import_func) or ""):
+    elif "_reload_api_env_after_import" not in (ast.get_source_segment(import_text, import_func) or ""):
         violations.append(
             f"services/api_config_import_service.py:{import_func.lineno} import must own default API env reload"
+        )
+    elif "invalidate_provider_health_for_items" not in (ast.get_source_segment(import_text, import_func) or ""):
+        violations.append(
+            f"services/api_config_import_service.py:{import_func.lineno} import must invalidate provider health via helper"
         )
     if not function_by_name(import_tree, "_reload_api_env_after_import"):
         violations.append("services/api_config_import_service.py missing default import reload helper")
     if function_by_name(route_tree, "_reload_api_env"):
         violations.append("admin_api_config_routes.py must not own private _reload_api_env(); write services reload by default")
+    if not function_by_name(cache_tree, "invalidate_provider_health_for_items"):
+        violations.append("services/api_config_health_cache_service.py missing invalidate_provider_health_for_items()")
+    if not function_by_name(cache_tree, "clear_all_provider_health_cache"):
+        violations.append("services/api_config_health_cache_service.py missing clear_all_provider_health_cache()")
+
+    forbidden_health_cache_details = (
+        "delete_cached_provider_health_many",
+        "delete_cached_provider_health_targets",
+        "clear_all_cached_provider_health",
+    )
+    for relative, text in {
+        "services/api_config_service.py": service_text,
+        "services/api_config_import_service.py": import_text,
+    }.items():
+        for snippet in forbidden_health_cache_details:
+            if snippet in text:
+                violations.append(f"{relative} should use api_config_health_cache_service, not {snippet}")
 
     route_write_calls = {
         "admin_create_api_config": "create_api_config",
@@ -965,7 +993,9 @@ def check_api_config_write_env_refresh_contract() -> int:
 
     if violations:
         fail("API config write operations must expose hot-reload status:\n" + "\n".join(violations))
-    return len(service_write_functions) + 5 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details)
+    return len(service_write_functions) + 7 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details) + (
+        2 * len(forbidden_health_cache_details)
+    )
 
 
 def check_api_config_service_dao_import_contract() -> int:

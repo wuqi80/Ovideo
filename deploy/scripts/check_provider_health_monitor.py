@@ -54,6 +54,7 @@ async def main() -> int:
 
     import admin_api_config_routes  # noqa: PLC0415
     from services import api_config_service as config_service  # noqa: PLC0415
+    from services import api_config_health_cache_service as config_cache  # noqa: PLC0415
     from services import api_provider_health_monitor as monitor  # noqa: PLC0415
 
     fake_redis = FakeRedis()
@@ -186,8 +187,8 @@ async def main() -> int:
 
     clear_calls = 0
     fallback_calls = 0
-    original_clear_all = config_service.clear_all_cached_provider_health
-    original_delete_many = config_service.delete_cached_provider_health_many
+    original_clear_all = config_cache.clear_all_cached_provider_health
+    original_delete_many = config_cache.delete_cached_provider_health_many
 
     async def fake_clear_all():
         nonlocal clear_calls
@@ -199,28 +200,28 @@ async def main() -> int:
         fallback_calls += 1
         return ["fallback"]
 
-    config_service.clear_all_cached_provider_health = fake_clear_all
-    config_service.delete_cached_provider_health_many = fake_delete_many
+    config_cache.clear_all_cached_provider_health = fake_clear_all
+    config_cache.delete_cached_provider_health_many = fake_delete_many
     try:
-        service_clear = await config_service.clear_all_provider_health_cache()
+        service_clear = await config_cache.clear_all_provider_health_cache()
     finally:
-        config_service.clear_all_cached_provider_health = original_clear_all
-        config_service.delete_cached_provider_health_many = original_delete_many
+        config_cache.clear_all_cached_provider_health = original_clear_all
+        config_cache.delete_cached_provider_health_many = original_delete_many
     if service_clear != ["provider:health:custom-provider:admin-custom-model"] or clear_calls != 1 or fallback_calls:
-        fail(f"API config service global health clear did not prefer prefix clear: clear={service_clear} calls={clear_calls}/{fallback_calls}")
+        fail(f"API config health cache service global clear did not prefer prefix clear: clear={service_clear} calls={clear_calls}/{fallback_calls}")
 
     async def fake_empty_clear_all():
         return []
 
-    config_service.clear_all_cached_provider_health = fake_empty_clear_all
-    config_service.delete_cached_provider_health_many = fake_delete_many
+    config_cache.clear_all_cached_provider_health = fake_empty_clear_all
+    config_cache.delete_cached_provider_health_many = fake_delete_many
     try:
-        service_fallback = await config_service.clear_all_provider_health_cache()
+        service_fallback = await config_cache.clear_all_provider_health_cache()
     finally:
-        config_service.clear_all_cached_provider_health = original_clear_all
-        config_service.delete_cached_provider_health_many = original_delete_many
+        config_cache.clear_all_cached_provider_health = original_clear_all
+        config_cache.delete_cached_provider_health_many = original_delete_many
     if service_fallback != ["fallback"] or fallback_calls != 1:
-        fail(f"API config service global health clear did not fall back to provider catalog clear: {service_fallback}, calls={fallback_calls}")
+        fail(f"API config health cache service global clear did not fall back to provider catalog clear: {service_fallback}, calls={fallback_calls}")
     await monitor.delete_cached_provider_health("dashscope", redis_client=fake_redis)
     await monitor.delete_cached_provider_health("seedance", redis_client=fake_redis)
     if await monitor.get_cached_provider_health("dashscope", model_name="wan2.6-i2v", redis_client=fake_redis):

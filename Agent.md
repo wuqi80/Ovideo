@@ -7710,3 +7710,23 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server grep confirmed `admin_api_config_routes.py` only keeps the manual `admin_reload_api_env()` endpoint; write reload helpers live in `services/api_config_service.py` and `services/api_config_import_service.py`.
+
+## 2026-06-22 API Config Health Cache Service Boundary
+
+- Added `deploy/services/api_config_health_cache_service.py` as the single helper layer for provider-health cache invalidation caused by API config writes.
+- Moved provider/model cache target derivation and global provider-health cache clearing out of `deploy/services/api_config_service.py`.
+- Updated `deploy/services/api_config_import_service.py` to clear provider/model health cache targets through the shared helper instead of directly calling provider-health monitor delete functions.
+- Strengthened contracts:
+  - `deploy/scripts/check_provider_contract.py` now requires API config CRUD/import services to use `api_config_health_cache_service` and forbids direct bottom-level health-cache delete calls there.
+  - `deploy/scripts/check_admin_api_config_import.py` now verifies import invalidates model-specific provider health targets.
+  - `deploy/scripts/check_provider_health_monitor.py` now validates global cache clearing through the dedicated helper service.
+- Verification:
+  - Local `py_compile` for API config services and contracts passed.
+  - Local API config CRUD/import/provider/provider-health contracts passed; provider contract now reports `api_config_env_refresh_checks=28`.
+  - Local `pytest deploy/tests/test_admin_import_presets_writes_category.py deploy/tests/test_dao_api_config_category.py -q` passed with 8 tests.
+  - Local architecture contracts passed 10/10; `service_files=25`, `raw_sql_in_services=0`, and `service_mapper_purity_checks=693`.
+  - Local smoke test passed 9/9.
+  - Live deploy to `https://mecha.one/` passed; frontend build was skipped because `new_html` source hash was unchanged and `drama.service` stayed `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server grep confirmed bottom-level provider-health cache delete calls now live in `services/api_config_health_cache_service.py`, while CRUD/import services import only the helper.

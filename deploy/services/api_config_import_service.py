@@ -1,17 +1,13 @@
 """Import preset API configurations into the admin API config store."""
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from dao.admin.api_config import ApiConfigDAO
-from services.api_provider_health_monitor import delete_cached_provider_health_many
+from services.api_config_health_cache_service import invalidate_provider_health_for_items
 from services.api_provider_registry import get_api_model_presets
 from services.api_provider_runtime import resolve_provider
-
-logger = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True)
 class ApiConfigImportOptions:
@@ -96,7 +92,7 @@ async def import_preset_api_configs(
     updated_existing = 0
     enabled_existing = 0
     planned_actions: List[Dict[str, Any]] = []
-    touched_providers: set[str] = set()
+    touched_items: List[Dict[str, Any]] = []
 
     for preset in preset_models:
         key = (preset["provider"], preset["model_name"])
@@ -165,7 +161,12 @@ async def import_preset_api_configs(
                     )
                     if not options.dry_run:
                         await ApiConfigDAO.update(_row_get(existing_row, "config_id", ""), **update_fields)
-                    touched_providers.add(provider)
+                    touched_items.append(
+                        {
+                            "provider": provider,
+                            "model_name": preset["model_name"],
+                        }
+                    )
                     keyed_provider_sources[provider] = existing_row
                     env_keys_imported += 1
                     updated_existing += 1
@@ -233,7 +234,7 @@ async def import_preset_api_configs(
                 }
             )
         if not options.dry_run:
-            await ApiConfigDAO.create(
+            created_row = await ApiConfigDAO.create(
                 name=preset["name"],
                 provider=preset["provider"],
                 endpoint=endpoint,
@@ -244,7 +245,13 @@ async def import_preset_api_configs(
                 category=preset.get("category", ""),
                 request_template=runtime_request_template or None,
             )
-            touched_providers.add(provider)
+            touched_items.append(
+                created_row
+                or {
+                    "provider": provider,
+                    "model_name": preset["model_name"],
+                }
+            )
         if options.copy_runtime_env_keys and runtime_key:
             keyed_provider_sources[provider] = {"provider": provider}
             env_keys_imported += 1
@@ -255,11 +262,8 @@ async def import_preset_api_configs(
         env_refreshed = await _reload_api_env_after_import(reload_api_env)
 
     health_cache_invalidated: List[str] = []
-    if not options.dry_run and touched_providers:
-        try:
-            health_cache_invalidated = await delete_cached_provider_health_many(touched_providers)
-        except Exception as exc:
-            logger.warning("Failed to invalidate provider health cache after preset import: %s", exc, exc_info=True)
+    if not options.dry_run and touched_items:
+        health_cache_invalidated = await invalidate_provider_health_for_items(touched_items)
 
     return {
         "success": True,

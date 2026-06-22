@@ -119,11 +119,28 @@ async def main() -> int:
         reload_calls += 1
         return True
 
-    async def fake_invalidate(providers):
+    async def fake_invalidate_items(items):
+        providers: list[str] = []
+        targets: list[dict[str, str | None]] = []
+        seen_providers: set[str] = set()
+        seen_targets: set[tuple[str, str | None]] = set()
+        for item in items:
+            provider = str(item.get("provider") if isinstance(item, dict) else getattr(item, "provider", "") or "")
+            provider = provider.strip()
+            if not provider:
+                continue
+            if provider not in seen_providers:
+                providers.append(provider)
+                seen_providers.add(provider)
+            model_name = str(item.get("model_name") if isinstance(item, dict) else getattr(item, "model_name", "") or "")
+            model_name = model_name.strip() or None
+            for target_model in (None, model_name):
+                target_key = (provider, target_model)
+                if target_key in seen_targets:
+                    continue
+                seen_targets.add(target_key)
+                targets.append({"provider": provider, "model_name": target_model})
         invalidations.append(tuple(providers))
-        return sorted(set(providers))
-
-    async def fake_target_invalidate(targets):
         normalized = tuple(
             (
                 str(item.get("provider") or ""),
@@ -132,17 +149,15 @@ async def main() -> int:
             for item in targets
         )
         target_invalidations.append(normalized)
-        return [f"{provider}::{model or ''}" for provider, model in normalized]
+        return sorted(set(providers))
 
     original_dao = service.ApiConfigDAO
-    original_invalidate = service.delete_cached_provider_health_many
-    original_target_invalidate = service.delete_cached_provider_health_targets
+    original_invalidate_items = service.invalidate_provider_health_for_items
     original_test_health = service.test_api_config_health
     original_load_api_env = service.load_api_configs_to_env
-    original_clear_all_health = service.clear_all_cached_provider_health
+    original_clear_all_health = service.clear_all_provider_health_cache
     service.ApiConfigDAO = FakeDAO
-    service.delete_cached_provider_health_many = fake_invalidate
-    service.delete_cached_provider_health_targets = fake_target_invalidate
+    service.invalidate_provider_health_for_items = fake_invalidate_items
     try:
         presets = service.get_api_config_presets()
         if len(presets.get("presets") or []) != 17:
@@ -432,7 +447,7 @@ async def main() -> int:
             return ["provider:health:deepseek"]
 
         service.load_api_configs_to_env = fake_load_api_env_success
-        service.clear_all_cached_provider_health = fake_clear_all_health
+        service.clear_all_provider_health_cache = fake_clear_all_health
         reload_result = await service.reload_api_env_runtime(clear_health_cache=True)
         if reload_result.get("env_refreshed") is not True or reload_result.get("loaded") != 2:
             fail(f"reload_api_env_runtime success response changed: {reload_result}")
@@ -455,11 +470,10 @@ async def main() -> int:
 
     finally:
         service.ApiConfigDAO = original_dao
-        service.delete_cached_provider_health_many = original_invalidate
-        service.delete_cached_provider_health_targets = original_target_invalidate
+        service.invalidate_provider_health_for_items = original_invalidate_items
         service.test_api_config_health = original_test_health
         service.load_api_configs_to_env = original_load_api_env
-        service.clear_all_cached_provider_health = original_clear_all_health
+        service.clear_all_provider_health_cache = original_clear_all_health
 
     print("Admin API config CRUD contract OK")
     print("  list_masks_key=1")
