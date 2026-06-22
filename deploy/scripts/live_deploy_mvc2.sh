@@ -59,6 +59,7 @@ FILES=(
   tests/test_episode_compose_service.py
   tests/test_minimax_tts_sync.py
   tests/test_minimax_audio_runtime.py
+  tests/test_prompt_service.py
   tests/test_project_read_access.py
   tests/test_storyboard_stale_script_fallback.py
   tests/test_task_read_service.py

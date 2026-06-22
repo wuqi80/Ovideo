@@ -564,8 +564,11 @@ def check_cluster_main_has_no_direct_http_routes(root: Path) -> None:
 def check_prompt_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     prompt_routes_path = root / "routers" / "prompts.py"
+    prompt_service_path = root / "services" / "prompt_service.py"
     if not prompt_routes_path.exists():
         fail("routers/prompts.py is missing")
+    if not prompt_service_path.exists():
+        fail("services/prompt_service.py is missing")
 
     cluster_tree = parse_py_file(cluster_main_path)
     violations: list[str] = []
@@ -599,6 +602,32 @@ def check_prompt_routes_extracted(root: Path) -> int:
 
     if route_count != 3:
         fail(f"routers/prompts.py should own 3 prompt route handlers, found {route_count}")
+
+    router_text = prompt_routes_path.read_text(encoding="utf-8")
+    service_text = prompt_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.prompt_service import (", prompt_routes_path),
+        (router_text, "get_prompt_template_service(username, template_type)", prompt_routes_path),
+        (router_text, "save_prompt_template_service(username, template_type, request.content)", prompt_routes_path),
+        (router_text, "delete_prompt_template_service(username, template_type)", prompt_routes_path),
+        (service_text, "DEFAULT_PROMPTS", prompt_service_path),
+        (service_text, "from dao_content import PromptTemplateDAO", prompt_service_path),
+        (service_text, "prompt_template_dao.load_template", prompt_service_path),
+        (service_text, "prompt_template_dao.save_template", prompt_service_path),
+        (service_text, "prompt_template_dao.delete_template", prompt_service_path),
+        (service_text, "提示词模板已保存", prompt_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "from dao_content import PromptTemplateDAO", prompt_routes_path),
+        (router_text, "PromptTemplateDAO.", prompt_routes_path),
+        (router_text, "DEFAULT_PROMPTS = {", prompt_routes_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing prompt service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Prompt router must delegate DAO/default prompt logic to service: {path.relative_to(root)} {snippet}")
     return route_count
 
 
@@ -4029,6 +4058,8 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "episode_video.py", "EpisodeDAO.get_project_id("),
         (root / "routers" / "video_capabilities.py", "get_video_capabilities("),
         (root / "services" / "video_capability_service.py", "AgentDAO.get_online_agents("),
+        (root / "routers" / "prompts.py", "get_prompt_template_service("),
+        (root / "services" / "prompt_service.py", "prompt_template_dao.load_template("),
         (root / "routers" / "tasks.py", "get_task_status_response("),
         (root / "routers" / "tasks.py", "list_user_tasks_response("),
         (root / "routers" / "tasks.py", "soft_delete_user_file_by_path_fragment("),
@@ -4808,6 +4839,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_dao_api_config_category.py",
         "tests/test_episode_compose_service.py",
         "tests/test_minimax_tts_sync.py",
+        "tests/test_prompt_service.py",
         "tests/test_video_client_base.py",
         "tests/test_video_capability_service.py",
         '"new_html/.env.example"',

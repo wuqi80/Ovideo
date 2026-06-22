@@ -8031,3 +8031,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile` for changed route/service/contract/test files passed.
   - Local `pytest tests/test_video_capability_service.py -q` passed with 2 tests.
   - Local `scripts/check_route_contract.py` passed.
+
+## 2026-06-23 Prompt Service Boundary
+
+- Moved `/api/prompts/{template_type}` business logic from `deploy/routers/prompts.py` into `deploy/services/prompt_service.py`.
+- Replaced the mojibake bundled rewrite/storyboard prompts with readable Chinese defaults while preserving `{text}` and `{scriptText}` placeholders.
+- Added `deploy/tests/test_prompt_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so prompt routes cannot regress to direct `PromptTemplateDAO` calls or route-local default prompts.
+- Verification:
+  - Local `py_compile` for changed prompt route/service/contract/test files passed.
+  - Local `pytest tests/test_prompt_service.py -q` passed with 5 tests.
+  - Local `scripts/check_route_contract.py` passed.
