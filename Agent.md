@@ -7887,3 +7887,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Verification:
   - Local `py_compile` for provider registry and provider contract passed.
   - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
+
+## 2026-06-22 Provider Health Check Metadata Defaults
+
+- Replaced the generated `PROVIDER_HEALTH_CHECKS` table in `deploy/services/api_provider_registry.py` with `DEFAULT_PROVIDER_HEALTH_CHECK` plus `PROVIDER_HEALTH_CHECK_OVERRIDES`.
+- DashScope now only overrides the health-check path (`/compatible-mode/v1/models`); method and billable status inherit from the shared default.
+- Provider metadata still exposes identical health-check results: 11 providers use `/models`, DashScope uses `/compatible-mode/v1/models`, all use `GET` and `billable=False`.
+- Strengthened `deploy/scripts/check_provider_contract.py` so health-check metadata must be produced from the shared default plus explicit provider overrides.
+- Verification:
+  - Local `py_compile` for provider registry and provider contract passed.
+  - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_health.py`, and `scripts/check_admin_api_config_import.py` passed.

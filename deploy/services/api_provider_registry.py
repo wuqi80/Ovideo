@@ -372,24 +372,24 @@ PROVIDER_CATALOG: Dict[str, dict] = {
 }
 
 
-PROVIDER_HEALTH_CHECKS: Dict[str, dict] = {
-    provider: {
-        "method": "GET",
-        "path": "/models",
-        "billable": False,
-    }
-    for provider in PROVIDER_ENV_MAP
-}
-PROVIDER_HEALTH_CHECKS["dashscope"] = {
+DEFAULT_PROVIDER_HEALTH_CHECK: Dict[str, Any] = {
     "method": "GET",
-    "path": "/compatible-mode/v1/models",
+    "path": "/models",
     "billable": False,
+}
+
+PROVIDER_HEALTH_CHECK_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    "dashscope": {
+        "path": "/compatible-mode/v1/models",
+    },
 }
 
 for _provider_id, _provider_meta in PROVIDER_CATALOG.items():
     _provider_meta.setdefault("default_proxy_mode", DEFAULT_PROVIDER_PROXY_MODE)
     _provider_meta.setdefault("supports_proxy", DEFAULT_PROVIDER_SUPPORTS_PROXY)
-    _provider_meta.setdefault("health_check", PROVIDER_HEALTH_CHECKS.get(_provider_id, {}))
+    _health_check = deepcopy(DEFAULT_PROVIDER_HEALTH_CHECK)
+    _health_check.update(PROVIDER_HEALTH_CHECK_OVERRIDES.get(_provider_id, {}))
+    _provider_meta.setdefault("health_check", _health_check)
     for _link_key, _link_value in PROVIDER_CREDENTIAL_LINKS.get(_provider_id, {}).items():
         _provider_meta.setdefault(_link_key, _link_value)
 

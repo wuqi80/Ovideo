@@ -157,6 +157,8 @@ def check_registry_shape(registry) -> None:
     registry_text = (deploy_root() / "services" / "api_provider_registry.py").read_text(encoding="utf-8")
     if "PROVIDER_HEALTH_CHECK_URLS" in registry_text:
         fail("Provider health URLs must be derived from preset endpoints, not a duplicate PROVIDER_HEALTH_CHECK_URLS map")
+    if "PROVIDER_HEALTH_CHECKS" in registry_text:
+        fail("Provider health checks must use default metadata plus PROVIDER_HEALTH_CHECK_OVERRIDES")
     if "derive_models_health_urls" not in registry_text:
         fail("api_provider_registry.py must derive provider health URLs from services.api_provider_endpoints")
     if "out.setdefault(\"endpoint\", get_provider_default_endpoint(provider))" not in registry_text:
@@ -171,6 +173,12 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must apply provider default_proxy_mode through setdefault")
     if "_provider_meta.setdefault(\"supports_proxy\", DEFAULT_PROVIDER_SUPPORTS_PROXY)" not in registry_text:
         fail("api_provider_registry.py must apply provider supports_proxy through setdefault")
+    if "DEFAULT_PROVIDER_HEALTH_CHECK" not in registry_text:
+        fail("api_provider_registry.py must define DEFAULT_PROVIDER_HEALTH_CHECK")
+    if "PROVIDER_HEALTH_CHECK_OVERRIDES" not in registry_text:
+        fail("api_provider_registry.py must define provider health check overrides")
+    if "_health_check.update(PROVIDER_HEALTH_CHECK_OVERRIDES.get(_provider_id, {}))" not in registry_text:
+        fail("api_provider_registry.py must merge provider health check overrides into the default health check")
     if "\"default_proxy_mode\": \"direct\"" in registry_text:
         fail("Provider catalog entries must not repeat the default proxy mode literal")
     if "\"supports_proxy\": True" in registry_text:
@@ -258,6 +266,10 @@ def check_registry_shape(registry) -> None:
         health_check = meta.get("health_check") or {}
         if not health_check.get("method") or not health_check.get("path"):
             fail(f"{provider} missing health_check metadata")
+        expected_health_check = dict(registry.DEFAULT_PROVIDER_HEALTH_CHECK)
+        expected_health_check.update(registry.PROVIDER_HEALTH_CHECK_OVERRIDES.get(provider, {}))
+        if health_check != expected_health_check:
+            fail(f"{provider} health_check should come from default plus overrides: {health_check} != {expected_health_check}")
         for link_key in ("docs_url", "console_url", "key_help"):
             if not meta.get(link_key):
                 fail(f"{provider} missing credential metadata: {link_key}")
