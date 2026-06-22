@@ -7574,3 +7574,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - One manual remote `npm run build` completed successfully with `2080 modules transformed`; the marker was then written.
   - A real `live_deploy_mvc2.sh` run printed `Skipping frontend build: new_html source hash unchanged (...)`, restarted `drama.service`, and passed remote architecture contracts 10/10 with `live_deploy_frontend_checks=61`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 MiniMax Audio Request Helper Consolidation
+
+- Updated `deploy/external_api/audio/minimax_audio.py` so `tts_sync()` now reuses `_request_json()` with timeout, retry, proxy, group-id, and HTTP-body error handling instead of opening its own `aiohttp.ClientSession`.
+- Added `_request_form_json()` and moved `file_upload()` multipart transport through that helper, leaving MiniMax audio with exactly three session boundaries: JSON requests, binary downloads, and form uploads.
+- Strengthened `deploy/tests/test_minimax_tts_sync.py` to assert the shared helper still sends the expected `/t2a_v2` URL, payload, auth header, and 60 second timeout.
+- Updated `deploy/scripts/check_route_contract.py` so MiniMax audio is contract-protected against reintroducing direct sessions outside the three helpers, and added `tests/test_minimax_tts_sync.py` to `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Verification:
+  - Local `pytest deploy/tests/test_minimax_tts_sync.py deploy/tests/test_minimax_audio_runtime.py -q` passed with 11 tests.
+  - Local `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, `bash -n deploy/scripts/live_deploy_mvc2.sh`, and `git diff --check` passed.
+  - Live deploy to `https://mecha.one/` passed; `live_deploy_mvc2.sh` printed `Skipping frontend build`, restarted `drama.service`, and left it `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed `cluster_main.py=999` lines, `admin_routes.py=1502` lines, `dao/` has 36 Python files, `tests/test_minimax_tts_sync.py` is present, and `external_api/audio/minimax_audio.py` contains exactly 3 `aiohttp.ClientSession` helper sites.

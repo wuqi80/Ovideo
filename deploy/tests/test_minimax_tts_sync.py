@@ -49,7 +49,7 @@ async def test_tts_sync_happy_path_writes_hex_to_audio_dir(tmp_audio_dir):
     fake_session_ctx = _fake_session(fake_resp)
 
     client = minimax_audio.MinimaxAudioClient(api_key="fake")
-    with patch("aiohttp.ClientSession", return_value=fake_session_ctx):
+    with patch("aiohttp.ClientSession", return_value=fake_session_ctx) as session_factory:
         result = await client.tts_sync(
             text="测试文本", voice_id="presenter_male", model="speech-2.8-hd",
         )
@@ -67,6 +67,12 @@ async def test_tts_sync_happy_path_writes_hex_to_audio_dir(tmp_audio_dir):
     assert os.path.exists(filepath)
     with open(filepath, "rb") as f:
         assert f.read() == bytes.fromhex("49443304")
+    assert session_factory.call_args.kwargs["timeout"].total == 60
+    post_args, post_kwargs = fake_session_ctx.post.call_args
+    assert post_args[0].endswith("/t2a_v2")
+    assert post_kwargs["json"]["text"] == "测试文本"
+    assert post_kwargs["json"]["model"] == "speech-2.8-hd"
+    assert post_kwargs["headers"]["Authorization"] == "Bearer fake"
 
 
 async def test_tts_sync_raises_when_base_resp_status_nonzero(tmp_audio_dir):

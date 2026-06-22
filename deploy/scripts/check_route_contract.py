@@ -2920,18 +2920,21 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("Seedance client must not cache/read model env directly; use runtime resolver helpers")
     minimax_audio_text = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
     for snippet in (
+        "async def _request_form_json(",
         'data = await self._request_json(\n            "post",\n            "/voice_clone"',
+        'data = await self._request_json(\n            "post",\n            "/t2a_v2"',
         'return await self._request_json(\n            "get",\n            "/query/t2a_async_query_v2"',
         'data = await self._request_json(\n            "post",\n            "/music_generation"',
+        'return await self._request_form_json(\n                "/files/upload"',
         'return await self._request_json("get", "/files/retrieve", params=params)',
         'content = await self._download_bytes(download_url, action="tts_download")',
     ):
         if snippet not in minimax_audio_text:
             fail(f"MiniMax audio client must route runtime request through shared helper: {snippet}")
         checks += 1
-    if minimax_audio_text.count("aiohttp.ClientSession(") > 4:
-        fail("MiniMax audio client should keep aiohttp sessions centralized except helper, tts_sync retry, and file_upload")
-    checks += 4
+    if minimax_audio_text.count("aiohttp.ClientSession(") != 3:
+        fail("MiniMax audio client should centralize aiohttp sessions in JSON, download, and form helpers")
+    checks += 1
     dashscope_video_text = (root / "external_api" / "video" / "dashscope.py").read_text(encoding="utf-8")
     for snippet in (
         "async def _request_json(",
@@ -4611,6 +4614,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_api_provider_runtime_model_env.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",
+        "tests/test_minimax_tts_sync.py",
         "tests/test_video_client_base.py",
         "FRONTEND_HASH_REMOTE",
         "FORCE_FRONTEND_BUILD",

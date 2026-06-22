@@ -116,6 +116,10 @@ class MinimaxAudioClient:
         json: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         action: Optional[str] = None,
+        timeout: Optional[aiohttp.ClientTimeout] = None,
+        attempts: int = 1,
+        retry_delay: float = 0.0,
+        raise_http_text: bool = False,
     ) -> Dict[str, Any]:
         """Run a MiniMax JSON request through the resolved runtime config."""
         url = self._url(path)
@@ -127,13 +131,41 @@ class MinimaxAudioClient:
         if json is not None:
             request_kwargs["json"] = json
 
-        async with aiohttp.ClientSession() as session:
-            request = getattr(session, method.lower())
-            async with request(url, **request_kwargs) as resp:
-                data = await resp.json()
-                if action:
-                    _raise_for_minimax_response(action, resp.status, data)
-                return data
+        label = action or f"{method.upper()} {path}"
+        last_err: Optional[BaseException] = None
+        for attempt in range(max(1, attempts)):
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    request = getattr(session, method.lower())
+                    async with request(url, **request_kwargs) as resp:
+                        if raise_http_text and resp.status != 200:
+                            body = await resp.text()
+                            raise RuntimeError(
+                                f"{label} failed: http_status={resp.status} body={body[:300]}"
+                            )
+                        data = await resp.json()
+                        if action:
+                            _raise_for_minimax_response(action, resp.status, data)
+                        return data
+            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                last_err = e
+                logger.warning(
+                    "%s attempt %d failed: %s (%s)",
+                    label,
+                    attempt + 1,
+                    type(e).__name__,
+                    str(e)[:200],
+                )
+                if attempt + 1 < max(1, attempts):
+                    if retry_delay > 0:
+                        await asyncio.sleep(retry_delay)
+                    continue
+                raise RuntimeError(
+                    f"{label} failed: consecutive {max(1, attempts)} network errors "
+                    f"last_err={type(e).__name__}: {e}"
+                ) from e
+
+        raise RuntimeError(f"{label} failed: no response last_err={last_err}")
 
     async def _download_bytes(self, url: str, *, action: str) -> bytes:
         """Download binary audio with the current runtime proxy settings."""
@@ -146,6 +178,27 @@ class MinimaxAudioClient:
                         f"{action} failed: http_status={resp.status} body={body[:300]}"
                     )
                 return await resp.read()
+
+    async def _request_form_json(
+        self,
+        path: str,
+        form: aiohttp.FormData,
+        *,
+        headers: Dict[str, str],
+        action: str,
+    ) -> Dict[str, Any]:
+        """Run a MiniMax multipart form request through the resolved runtime config."""
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                self._url(path),
+                params=self._group_params(),
+                data=form,
+                headers=headers,
+                **self._aiohttp_kwargs(),
+            ) as resp:
+                data = await resp.json()
+                _raise_for_minimax_response(action, resp.status, data)
+                return data
 
     # ------------------------------------------------------------------
     # 声音设计  POST /v1/voice_design
@@ -349,42 +402,16 @@ class MinimaxAudioClient:
         # 用户体感"一直 loading"但 worker 端无任何日志（卡在 socket 上）。
         # 详见 recurring-pitfalls.md §R / §G。
         timeout = aiohttp.ClientTimeout(total=60, connect=10, sock_read=45)
-        last_err: Optional[BaseException] = None
-        data: Optional[Dict[str, Any]] = None
-        for attempt in range(2):
-            try:
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.post(
-                        self._url("/t2a_v2"),
-                        params=self._group_params(),
-                        json=payload,
-                        headers=self.headers,
-                        **self._aiohttp_kwargs(),
-                    ) as resp:
-                        if resp.status != 200:
-                            body = await resp.text()
-                            raise RuntimeError(
-                                f"tts_sync 失败: http_status={resp.status} body={body[:300]}"
-                            )
-                        data = await resp.json()
-                break
-            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
-                last_err = e
-                logger.warning(
-                    "tts_sync 第 %d 次尝试失败: %s (%s)",
-                    attempt + 1, type(e).__name__, str(e)[:200]
-                )
-                if attempt == 0:
-                    await asyncio.sleep(1.0)
-                    continue
-                raise RuntimeError(
-                    f"tts_sync 失败: 连续 2 次网络/超时 last_err={type(e).__name__}: {e}"
-                ) from e
-
-        if data is None:
-            raise RuntimeError(
-                f"tts_sync 失败: 未拿到响应 last_err={last_err}"
-            )
+        data = await self._request_json(
+            "post",
+            "/t2a_v2",
+            json=payload,
+            action="tts_sync",
+            timeout=timeout,
+            attempts=2,
+            retry_delay=1.0,
+            raise_http_text=True,
+        )
 
         base_resp = data.get("base_resp") or {}
         base_code = base_resp.get("status_code", 0)
@@ -661,17 +688,12 @@ class MinimaxAudioClient:
                 file_obj,
                 filename=os.path.basename(file_path),
             )
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self._url("/files/upload"),
-                    params=self._group_params(),
-                    data=form,
-                    headers=headers,
-                    **self._aiohttp_kwargs(),
-                ) as resp:
-                    data = await resp.json()
-                    _raise_for_minimax_response("file_upload", resp.status, data)
-                    return data
+            return await self._request_form_json(
+                "/files/upload",
+                form,
+                headers=headers,
+                action="file_upload",
+            )
 
     # ------------------------------------------------------------------
     # 文件查询  GET /v1/files/retrieve
