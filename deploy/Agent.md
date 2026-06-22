@@ -8713,4 +8713,5 @@
 - Local `pytest tests/test_comfyui_file_service.py -q` passed with 17 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
-- Online deployment verification pending.
+- Commit `3bcb7b0`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh` sync/restart, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+- Note: local deployment wrapper hit the 300s command timeout after the server restart; manual server checks confirmed synced files, active service, remote contracts, and online smoke success.
