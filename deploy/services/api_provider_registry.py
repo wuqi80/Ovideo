@@ -433,119 +433,102 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "Gemini 2.5 Flash (文本)",
         "provider": "gemini-text",
         "model_name": "gemini-2.5-flash",
-        "proxy_mode": "direct",
         "category": "text",
     },
     {
         "name": "DeepSeek Reasoner",
         "provider": "deepseek",
         "model_name": "deepseek-reasoner",
-        "proxy_mode": "direct",
         "category": "text",
     },
     {
         "name": "Gemini 2.5 Flash (图像)",
         "provider": "gemini-image",
         "model_name": "gemini-2.5-flash-image",
-        "proxy_mode": "direct",
         "category": "image",
     },
     {
         "name": "Gemini 3.1 Flash (图像)",
         "provider": "gemini-image",
         "model_name": "gemini-3.1-flash-image-preview",
-        "proxy_mode": "direct",
         "category": "image",
     },
     {
         "name": "豆包 SeedDream",
         "provider": "doubao",
         "model_name": "doubao-seedream-4-0-250828",
-        "proxy_mode": "direct",
         "category": "image",
     },
     {
         "name": "MiniMax Hailuo",
         "provider": "minimax",
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "Sora2",
         "provider": "sora2",
         "model_name": SORA2_DEFAULT_VIDEO_MODEL,
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "Veo",
         "provider": "veo",
         "model_name": VEO_DEFAULT_VIDEO_MODEL,
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "大能 Wan2.6 (DashScope)",
         "provider": "dashscope",
         "model_name": DASHSCOPE_DEFAULT_MODEL_MAP["wan26"],
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "阿里云百炼共享 API · 合体 (Kling)",
         "provider": "dashscope",
         "model_name": "kling/kling-v3-video-generation",
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "阿里云百炼共享 API · 大乘 (Vidu)",
         "provider": "dashscope",
         "model_name": "vidu/viduq3-turbo_reference2video",
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "阿里云百炼共享 API · 炼虚 (HappyHorse)",
         "provider": "dashscope",
         "model_name": "happyhorse-1.0-r2v",
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "飞升 (Seedance 2.0)",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-260128",
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "渡劫 (Seedance 2.0 Fast)",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-fast-260128",
-        "proxy_mode": "direct",
         "category": "video",
     },
     {
         "name": "laozhang GPT Image (VIP)",
         "provider": "laozhang-gpt-image",
         "model_name": "gpt-image-2-vip",
-        "proxy_mode": "direct",
         "category": "image",
     },
     {
         "name": "laozhang GPT Image (Official)",
         "provider": "laozhang-sora2",
         "model_name": "gpt-image-2",
-        "proxy_mode": "direct",
         "category": "image",
     },
     {
         "name": "Gemini TTS (语音)",
         "provider": "gemini-tts",
         "model_name": GEMINI_TTS_DEFAULT_MODEL,
-        "proxy_mode": "direct",
         "category": "audio",
     },
 ]
@@ -716,6 +699,7 @@ def _enrich_preset(preset: dict) -> dict:
     env_key = get_provider_env_key(provider)
     meta = PROVIDER_CATALOG.get(provider, {})
     out.setdefault("endpoint", get_provider_default_endpoint(provider))
+    out.setdefault("proxy_mode", meta.get("default_proxy_mode", "direct"))
     out.setdefault("supports_proxy", meta.get("supports_proxy", True))
     out.setdefault("health_check_url", _default_health_check_url(out.get("endpoint", ""), provider))
     out.setdefault("required_key", env_key)

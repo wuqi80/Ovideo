@@ -7854,3 +7854,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
   - Local `scripts/check_architecture_contracts.py` passed 10/10.
   - Local smoke test passed 9/9.
+
+## 2026-06-22 Provider Default Proxy Mode Registry
+
+- Removed repeated `proxy_mode` literals from raw `API_MODEL_PRESETS`.
+- `get_api_model_presets()` now enriches each preset from `PROVIDER_CATALOG[provider].default_proxy_mode`, defaulting to `direct`.
+- External preset/catalog responses remain unchanged: all 17 enriched presets still include `proxy_mode=direct`.
+- Strengthened `deploy/scripts/check_provider_contract.py` so raw presets cannot carry `proxy_mode`, and enriched presets must match the provider catalog default.
+- Verification:
+  - Local `py_compile` for provider registry and provider contract passed.
+  - Local `scripts/check_provider_contract.py` passed.
+  - Local `scripts/check_admin_api_config_import.py` passed.

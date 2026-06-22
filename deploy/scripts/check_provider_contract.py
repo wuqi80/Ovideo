@@ -161,6 +161,8 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must derive provider health URLs from services.api_provider_endpoints")
     if "out.setdefault(\"endpoint\", get_provider_default_endpoint(provider))" not in registry_text:
         fail("api_provider_registry.py must enrich preset endpoints from get_provider_default_endpoint()")
+    if "out.setdefault(\"proxy_mode\", meta.get(\"default_proxy_mode\", \"direct\"))" not in registry_text:
+        fail("api_provider_registry.py must enrich preset proxy_mode from provider default_proxy_mode")
 
     provider_env_keys = set(registry.PROVIDER_ENV_MAP)
     catalog_keys = set(registry.PROVIDER_CATALOG)
@@ -186,6 +188,8 @@ def check_registry_shape(registry) -> None:
     for preset in getattr(registry, "API_MODEL_PRESETS", []):
         if "endpoint" in preset:
             fail("Raw API_MODEL_PRESETS entries must not carry endpoint; use PROVIDER_DEFAULT_ENDPOINTS")
+        if "proxy_mode" in preset:
+            fail("Raw API_MODEL_PRESETS entries must not carry proxy_mode; use PROVIDER_CATALOG.default_proxy_mode")
 
     env_values = list(registry.PROVIDER_ENV_MAP.values())
     if len(env_values) != len(set(env_values)):
@@ -271,6 +275,12 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
                 fail(
                     f"Preset {preset.get('name')} endpoint should come from PROVIDER_DEFAULT_ENDPOINTS: "
                     f"{preset.get('endpoint')} != {expected_endpoint}"
+                )
+            expected_proxy_mode = registry.PROVIDER_CATALOG[provider].get("default_proxy_mode", "direct")
+            if preset.get("proxy_mode") != expected_proxy_mode:
+                fail(
+                    f"Preset {preset.get('name')} proxy_mode should come from provider default_proxy_mode: "
+                    f"{preset.get('proxy_mode')} != {expected_proxy_mode}"
                 )
             if not preset.get("category"):
                 fail(f"Preset {preset.get('name')} missing category")
