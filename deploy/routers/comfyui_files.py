@@ -9,12 +9,16 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import quote
 
-import requests
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from dao_content import FileDAO, ProjectDAO, VersionDAO
+from services.comfyui_file_service import (
+    ComfyUIFileRequestError,
+    fetch_comfyui_view_response,
+    upload_comfyui_file_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +95,7 @@ def create_comfyui_files_router(
                 params["subfolder"] = subfolder
 
             logger.info("用户 %s 代理访问ComfyUI文件: %s params=%s", username, url, params)
-            response = requests.get(url, params=params, timeout=60, stream=True)
+            response = fetch_comfyui_view_response(url, params=params, timeout=60, stream=True)
 
             fallback_attempts = []
             if response.status_code == 404:
@@ -105,7 +109,7 @@ def create_comfyui_files_router(
                 for fallback_type in fallback_attempts:
                     logger.warning("文件在 %s 中未找到，尝试在 %s 中查找: %s", params["type"], fallback_type, filename)
                     params["type"] = fallback_type
-                    response = requests.get(url, params=params, timeout=60, stream=True)
+                    response = fetch_comfyui_view_response(url, params=params, timeout=60, stream=True)
                     if response.status_code == 200:
                         logger.info("✅ 在 %s 中找到文件: %s", fallback_type, filename)
                         break
@@ -134,7 +138,7 @@ def create_comfyui_files_router(
 
         except HTTPException:
             raise
-        except requests.exceptions.RequestException as e:
+        except ComfyUIFileRequestError as e:
             logger.error("代理ComfyUI文件失败: %s", e)
             raise HTTPException(status_code=503, detail=f"无法连接到ComfyUI: {str(e)}")
         except Exception as e:
@@ -215,12 +219,13 @@ def create_comfyui_files_router(
                     upload_url = f"{target_server}/upload/image"
                     logger.info("[ComfyUpload] 转发上传到 ComfyUI: %s", upload_url)
 
-                    files = {
-                        "image": (unique_filename, file_content, image.content_type or "image/png"),
-                    }
-                    data = {"overwrite": "true"}
-
-                    response = requests.post(upload_url, files=files, data=data, timeout=30)
+                    response = upload_comfyui_file_response(
+                        upload_url,
+                        unique_filename,
+                        file_content,
+                        image.content_type or "image/png",
+                        timeout=30,
+                    )
 
                     if response.ok:
                         try:
@@ -354,12 +359,13 @@ def create_comfyui_files_router(
             upload_url = f"{target_server}/upload/image"
             logger.info("[ComfyUploadVideo] 转发上传到 ComfyUI: %s", upload_url)
 
-            files = {
-                "image": (unique_filename, file_content, video.content_type or "video/mp4"),
-            }
-            data = {"overwrite": "true"}
-
-            response = requests.post(upload_url, files=files, data=data, timeout=60)
+            response = upload_comfyui_file_response(
+                upload_url,
+                unique_filename,
+                file_content,
+                video.content_type or "video/mp4",
+                timeout=60,
+            )
 
             if not response.ok:
                 logger.error("[ComfyUploadVideo] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
@@ -434,7 +440,7 @@ def create_comfyui_files_router(
                 "server": target_server,
             }
 
-        except requests.exceptions.RequestException as e:
+        except ComfyUIFileRequestError as e:
             logger.error("❌ ComfyUI 视频上传请求失败: %s", e)
             raise HTTPException(status_code=503, detail=f"无法连接到 ComfyUI 服务器: {str(e)}")
         except HTTPException:
@@ -477,12 +483,13 @@ def create_comfyui_files_router(
             upload_url = f"{target_server}/upload/image"
             logger.info("[ComfyUploadAudio] 转发上传到 ComfyUI: %s", upload_url)
 
-            files = {
-                "image": (unique_filename, file_content, audio.content_type or "audio/mpeg"),
-            }
-            data = {"overwrite": "true"}
-
-            response = requests.post(upload_url, files=files, data=data, timeout=60)
+            response = upload_comfyui_file_response(
+                upload_url,
+                unique_filename,
+                file_content,
+                audio.content_type or "audio/mpeg",
+                timeout=60,
+            )
 
             if not response.ok:
                 logger.error("[ComfyUploadAudio] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
@@ -524,7 +531,7 @@ def create_comfyui_files_router(
                 "duration": duration,
             }
 
-        except requests.exceptions.RequestException as e:
+        except ComfyUIFileRequestError as e:
             logger.error("❌ ComfyUI 音频上传请求失败: %s", e)
             raise HTTPException(status_code=503, detail=f"无法连接到 ComfyUI 服务器: {str(e)}")
         except HTTPException:
@@ -586,7 +593,7 @@ def create_comfyui_files_router(
                 for try_type in [file_type, "temp", "output", "input"]:
                     download_url = f"{target_server}/view?filename={filename}&type={try_type}"
                     logger.info("尝试从ComfyUI下载: %s", download_url)
-                    response = requests.get(download_url, timeout=30)
+                    response = fetch_comfyui_view_response(download_url, timeout=30)
 
                     if response.ok:
                         file_content = response.content
@@ -610,13 +617,14 @@ def create_comfyui_files_router(
             file_ext = os.path.splitext(filename)[1]
             unique_filename = f"{uuid.uuid4().hex[:12]}_reuploaded{file_ext}"
 
-            files = {
-                "image": (unique_filename, file_content, "video/mp4"),
-            }
-            data = {"overwrite": "true"}
-
             upload_url = f"{target_server}/upload/image"
-            upload_response = requests.post(upload_url, files=files, data=data, timeout=60)
+            upload_response = upload_comfyui_file_response(
+                upload_url,
+                unique_filename,
+                file_content,
+                "video/mp4",
+                timeout=60,
+            )
 
             if not upload_response.ok:
                 raise HTTPException(status_code=500, detail="重新上传失败")

@@ -7529,3 +7529,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=65`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `routers/video.py` calls `get_comfyui_view_response()` and has no direct `requests` import/calls.
+
+## 2026-06-22 ComfyUI File Route Transport Delegation
+
+- Added `deploy/services/comfyui_file_service.py` as the shared transport boundary for ComfyUI `/view` proxying and `/upload/image` multipart uploads.
+- Updated `deploy/routers/comfyui_files.py` so preview proxy, image upload, video upload, audio upload, and video reupload delegate HTTP requests to the service layer instead of importing `requests` in the route layer.
+- Added `deploy/tests/test_comfyui_file_service.py` to cover GET options forwarding, multipart upload payload forwarding, and wrapped request exceptions.
+- Strengthened `deploy/scripts/check_route_contract.py` with `comfyui_file_service_checks=10`; `routers/comfyui_files.py` is now contract-protected from reintroducing direct HTTP requests.
+- Verification:
+  - Local `pytest deploy/tests/test_comfyui_file_service.py deploy/tests/test_video_client_base.py -q` passed with 7 tests.
+  - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local route contract passed with `comfyui_file_service_checks=10` and `service_mapper_purity_checks=627`.
+  - Live files synced to `https://mecha.one/`; `drama.service` was manually restarted after the frontend build step exceeded the local command timeout, then stayed `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`, with `comfyui_file_service_checks=10`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed `admin_routes.py=1502` lines, `cluster_main.py=999` lines, `dao/` has 72 recursive files, password fields use `min_length=8`, API env reload errors are logged, `env_refreshed` is returned, and `routers/comfyui_files.py` has no direct `requests` import/calls.

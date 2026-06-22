@@ -4660,6 +4660,42 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
     return checks
 
 
+def check_comfyui_file_service_contract(root: Path) -> int:
+    """ComfyUI file routes should delegate transport details to a service."""
+    route_path = root / "routers" / "comfyui_files.py"
+    route_text = route_path.read_text(encoding="utf-8")
+    service_path = root / "services" / "comfyui_file_service.py"
+    service_text = service_path.read_text(encoding="utf-8")
+
+    required_route_snippets = [
+        "from services.comfyui_file_service import",
+        "ComfyUIFileRequestError",
+        "fetch_comfyui_view_response(",
+        "upload_comfyui_file_response(",
+    ]
+    required_service_snippets = [
+        "class ComfyUIFileRequestError(RuntimeError):",
+        "def fetch_comfyui_view_response(",
+        "def upload_comfyui_file_response(",
+        "return _request(\"comfyui_view\", requests.get",
+        "return _request(\"comfyui_upload\", requests.post",
+    ]
+
+    checks = 0
+    for snippet in required_route_snippets:
+        if snippet not in route_text:
+            fail(f"ComfyUI file router must delegate transport to service: {snippet}")
+        checks += 1
+    if "requests." in route_text or "import requests" in route_text:
+        fail("routers/comfyui_files.py must not perform direct HTTP requests")
+    checks += 1
+    for snippet in required_service_snippets:
+        if snippet not in service_text:
+            fail(f"ComfyUI file service missing transport helper snippet: {snippet}")
+        checks += 1
+    return checks
+
+
 def check_video_client_base_contract(root: Path) -> int:
     """Synchronous external video clients should share download plumbing."""
     video_dir = root / "external_api" / "video"
@@ -4928,6 +4964,7 @@ def main() -> int:
     frontend_dependency_checks = check_frontend_dependency_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
     live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
+    comfyui_file_service_checks = check_comfyui_file_service_contract(root)
     video_client_base_checks = check_video_client_base_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
     current_architecture_docs_checks = check_current_architecture_docs_contract(root)
@@ -5001,6 +5038,7 @@ def main() -> int:
     print(f"  frontend_dependency_checks={frontend_dependency_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
     print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
+    print(f"  comfyui_file_service_checks={comfyui_file_service_checks}")
     print(f"  video_client_base_checks={video_client_base_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")
     print(f"  current_architecture_docs_checks={current_architecture_docs_checks}")
