@@ -2072,8 +2072,11 @@ def check_storyboard_routes_extracted(root: Path) -> int:
 def check_asset_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     assets_path = root / "routers" / "assets.py"
+    asset_service_path = root / "services" / "asset_service.py"
     if not assets_path.exists():
         fail("routers/assets.py is missing")
+    if not asset_service_path.exists():
+        fail("services/asset_service.py is missing")
 
     route_pairs = {
         ("/api/projects/{project_id}/assets", "get"),
@@ -2121,6 +2124,38 @@ def check_asset_routes_extracted(root: Path) -> int:
 
     if route_count != 5:
         fail(f"routers/assets.py should own 5 asset route registrations, found {route_count}")
+
+    router_text = assets_path.read_text(encoding="utf-8")
+    service_text = asset_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.asset_service import (", assets_path),
+        (router_text, "return await list_assets(", assets_path),
+        (router_text, "create_asset_service(", assets_path),
+        (router_text, "update_asset_service(", assets_path),
+        (router_text, "delete_asset_service(", assets_path),
+        (router_text, "share_asset_service(", assets_path),
+        (service_text, "asset_dao.get_by_project(", asset_service_path),
+        (service_text, "entity_file_dao.get_files_for_entities(", asset_service_path),
+        (service_text, "asset_dao.create(", asset_service_path),
+        (service_text, "asset_dao.copy_to(", asset_service_path),
+        (service_text, "entity_file_dao.copy_file(", asset_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "AssetDAO.get_by_project(", assets_path),
+        (router_text, "AssetDAO.create(", assets_path),
+        (router_text, "AssetDAO.update(", assets_path),
+        (router_text, "AssetDAO.delete(", assets_path),
+        (router_text, "AssetDAO.copy_to(", assets_path),
+        (router_text, "EntityFileDAO.get_files_for_entities(", assets_path),
+        (router_text, "EntityFileDAO.get_entity_files(", assets_path),
+        (router_text, "EntityFileDAO.copy_file(", assets_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing asset service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Asset router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
     return route_count
 
 
@@ -4872,6 +4907,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         '"external_api/video/base.py"',
         "scripts/check_*.py",
         "tests/test_api_provider_runtime_model_env.py",
+        "tests/test_asset_service.py",
         "tests/test_audio_provider.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",

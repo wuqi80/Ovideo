@@ -7,6 +7,16 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.asset_service import (
+    AssetCreateFailed,
+    AssetNotFound,
+    create_asset as create_asset_service,
+    delete_asset as delete_asset_service,
+    list_assets,
+    share_asset as share_asset_service,
+    update_asset as update_asset_service,
+)
+
 
 def create_assets_router(
     *,
@@ -50,78 +60,64 @@ def create_assets_router(
         script_id: Optional[str] = None,
         user_id: str = Depends(get_current_user),
     ):
-        assets = await AssetDAO.get_by_project(project_id, episode_id, asset_type, script_id=script_id)
-        assets_list = [dict(a) for a in assets]
-
-        asset_ids = [a["asset_id"] for a in assets_list]
-        if asset_ids:
-            files_map = await EntityFileDAO.get_files_for_entities("asset", asset_ids)
-            for asset in assets_list:
-                asset["entity_files"] = files_map.get(asset["asset_id"], [])
-        else:
-            for asset in assets_list:
-                asset["entity_files"] = []
-
-        return {"success": True, "assets": assets_list}
+        return await list_assets(
+            project_id,
+            episode_id=episode_id,
+            asset_type=asset_type,
+            script_id=script_id,
+            asset_dao=AssetDAO,
+            entity_file_dao=EntityFileDAO,
+        )
 
     @router.post("/api/assets")
     async def create_asset(data: AssetCreate, user_id: str = Depends(get_current_user)):
-        asset = await AssetDAO.create(
-            project_id=data.project_id,
-            asset_type=data.asset_type,
-            name=data.name,
-            created_by=user_id,
-            episode_id=data.episode_id,
-            description=data.description or "",
-            reference_images=data.reference_images,
-            script_id=data.script_id,
-        )
-        if not asset:
-            raise HTTPException(status_code=500, detail="创建资产失败")
-        return {"success": True, "asset": dict(asset)}
+        try:
+            return await create_asset_service(
+                project_id=data.project_id,
+                asset_type=data.asset_type,
+                name=data.name,
+                user_id=user_id,
+                episode_id=data.episode_id,
+                script_id=data.script_id,
+                description=data.description,
+                reference_images=data.reference_images,
+                asset_dao=AssetDAO,
+            )
+        except AssetCreateFailed as exc:
+            raise HTTPException(status_code=500, detail="创建资产失败") from exc
 
     @router.put("/api/assets/{asset_id}")
     async def update_asset(asset_id: str, data: AssetUpdate, user_id: str = Depends(get_current_user)):
-        asset = await AssetDAO.update(asset_id, **data.dict(exclude_none=True))
-        if not asset:
-            raise HTTPException(status_code=404, detail="资产不存在")
-        return {"success": True, "asset": dict(asset)}
+        try:
+            return await update_asset_service(
+                asset_id,
+                data.dict(exclude_none=True),
+                asset_dao=AssetDAO,
+            )
+        except AssetNotFound as exc:
+            raise HTTPException(status_code=404, detail="资产不存在") from exc
 
     @router.delete("/api/assets/{asset_id}")
     async def delete_asset(asset_id: str, user_id: str = Depends(get_current_user)):
-        ok = await AssetDAO.delete(asset_id)
-        if not ok:
-            raise HTTPException(status_code=404, detail="资产不存在")
-        return {"success": True}
+        try:
+            return await delete_asset_service(asset_id, asset_dao=AssetDAO)
+        except AssetNotFound as exc:
+            raise HTTPException(status_code=404, detail="资产不存在") from exc
 
     @router.post("/api/assets/{asset_id}/share")
     async def share_asset(asset_id: str, data: AssetShareRequest, user_id: str = Depends(get_current_user)):
         """Copy an asset to a target episode/script, including linked entity files."""
-        new_asset = await AssetDAO.copy_to(
-            asset_id=asset_id,
-            target_episode_id=data.target_episode_id,
-            target_script_id=data.target_script_id,
-            created_by=user_id,
-        )
-        if not new_asset:
-            raise HTTPException(status_code=404, detail="源资产不存在")
-
-        copied_files = []
         try:
-            source_files = await EntityFileDAO.get_entity_files("asset", asset_id)
-            items = source_files.get("items", [])
-            for ef in items:
-                copied = await EntityFileDAO.copy_file(
-                    ef["file_id"],
-                    "asset",
-                    new_asset["asset_id"],
-                    ef.get("file_role", "reference_image"),
-                )
-                if copied:
-                    copied_files.append(copied)
-        except Exception as exc:
-            logger.warning("复制资产关联文件失败: %s", exc)
-
-        return {"success": True, "asset": dict(new_asset), "copied_files": len(copied_files)}
+            return await share_asset_service(
+                asset_id,
+                target_episode_id=data.target_episode_id,
+                target_script_id=data.target_script_id,
+                user_id=user_id,
+                asset_dao=AssetDAO,
+                entity_file_dao=EntityFileDAO,
+                logger=logger,
+            )
+        except AssetNotFound as exc:
+            raise HTTPException(status_code=404, detail="源资产不存在") from exc
 
     return router
