@@ -16,6 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from dao_content import FileDAO, ProjectDAO, VersionDAO
 from services.comfyui_file_service import (
     ComfyUIFileRequestError,
+    create_comfyui_upload_record,
     fetch_comfyui_view_response,
     upload_comfyui_file_response,
 )
@@ -255,36 +256,8 @@ def create_comfyui_files_router(
             else:
                 logger.info("[ComfyUpload] 无可用ComfyUI节点，仅使用本地存储")
 
-            projects = await ProjectDAO.get_user_projects(username)
-            if not projects:
-                project_id = f"proj_{uuid.uuid4().hex[:12]}"
-                await ProjectDAO.save_or_update_project(
-                    user_id=username,
-                    project_id=project_id,
-                    project_name="默认项目",
-                    project_data={},
-                    description="自动创建",
-                )
-            else:
-                project_id = projects[0]["project_id"]
-
-            versions = await VersionDAO.get_project_versions(project_id)
-            if not versions:
-                version = await VersionDAO.create_version(
-                    project_id=project_id,
-                    user_id=username,
-                    version_name="默认版本",
-                )
-                version_id = version["version_id"]
-            else:
-                version_id = versions[0]["version_id"]
-
-            file_id = f"file_{uuid.uuid4().hex[:12]}"
-            storage_url = f"/api/files/{file_id}/download"
-
-            file_record = await FileDAO.create_file(
-                version_id=version_id,
-                user_id=username,
+            record_result = await create_comfyui_upload_record(
+                username=username,
                 file_type="image",
                 file_name=orig_filename,
                 file_path=local_file_path,
@@ -299,15 +272,14 @@ def create_comfyui_files_router(
                     "comfyui_node_id": node_id,
                     "uploaded_at": datetime.utcnow().isoformat(),
                 },
-                file_id=file_id,
+                file_dao=FileDAO,
+                project_dao=ProjectDAO,
+                version_dao=VersionDAO,
+                logger=logger,
+                redis_client=get_redis_client(),
+                redis_comfyui_filename=comfyui_filename,
             )
-
-            redis_client = get_redis_client()
-            if redis_client:
-                try:
-                    await redis_client.set(f"comfyui:file:{comfyui_filename}", file_id, ex=86400)
-                except Exception as e:
-                    logger.warning("[ComfyUpload] Redis缓存写入失败(非致命): %s", e)
+            file_record = record_result.file_record
 
             logger.info("✅ 图片记录已写入 SQL: file_id=%s, comfyui_filename=%s", file_record["file_id"], comfyui_filename)
 
@@ -316,7 +288,7 @@ def create_comfyui_files_router(
                 "filename": comfyui_filename,
                 "original_filename": orig_filename,
                 "size": len(file_content),
-                "storage_url": storage_url,
+                "storage_url": record_result.download_url,
                 "file_id": file_record["file_id"],
                 "file_path": local_file_path,
                 "comfyui_server": target_server,
@@ -382,49 +354,26 @@ def create_comfyui_files_router(
 
             logger.info("✅ ComfyUI 视频上传成功: comfyui_filename=%s, server=%s", comfyui_filename, target_server)
 
-            file_id = f"file_{uuid.uuid4().hex[:12]}"
             year_month = datetime.now().strftime("%Y%m")
             storage_dir = Path("persistent_storage/videos") / username / year_month
             storage_dir.mkdir(parents=True, exist_ok=True)
             file_path = storage_dir / unique_filename
             file_path.write_bytes(file_content)
 
-            projects = await ProjectDAO.get_user_projects(username)
-            if not projects:
-                project_id = f"proj_{uuid.uuid4().hex[:12]}"
-                await ProjectDAO.save_or_update_project(
-                    user_id=username,
-                    project_id=project_id,
-                    project_name="默认项目",
-                    project_data={},
-                    description="自动创建",
-                )
-            else:
-                project_id = projects[0]["project_id"]
-
-            versions = await VersionDAO.get_project_versions(project_id)
-            if not versions:
-                version = await VersionDAO.create_version(
-                    project_id=project_id,
-                    user_id=username,
-                    version_name="默认版本",
-                )
-                version_id = version["version_id"]
-            else:
-                version_id = versions[0]["version_id"]
-
-            file_record = await FileDAO.create_file(
-                version_id=version_id,
-                user_id=username,
+            record_result = await create_comfyui_upload_record(
+                username=username,
                 file_type="video",
                 file_name=video.filename,
                 file_path=str(file_path),
-                file_url=f"/api/files/{file_id}/download",
                 file_size_bytes=len(file_content),
                 mime_type=video.content_type or "video/*",
                 metadata={"source": "upload", "physical_filename": unique_filename},
-                file_id=file_id,
+                file_dao=FileDAO,
+                project_dao=ProjectDAO,
+                version_dao=VersionDAO,
+                logger=logger,
             )
+            file_record = record_result.file_record
 
             logger.info("✅ 视频已保存到数据库: %s, 文件ID: %s", file_record["file_url"], file_record["file_id"])
 

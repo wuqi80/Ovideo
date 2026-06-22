@@ -8612,3 +8612,20 @@
 - Local `pytest tests/test_video_crop_service.py tests/test_video_client_base.py -q` passed with 12 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 ComfyUI Upload Record Service Boundary
+
+### Changes
+
+- Moved ComfyUI image/video upload DB persistence from `routers/comfyui_files.py` into `services/comfyui_file_service.py`.
+- The router still owns HTTP upload handling, node selection, local file writes, and ComfyUI forwarding, but now delegates default project/version creation, `FileDAO.create_file`, download URL construction, and Redis filename mapping to `create_comfyui_upload_record()`.
+- Extended `tests/test_comfyui_file_service.py` to cover default project/version creation, existing-version reuse, DB file URL behavior, and Redis mapping preservation.
+- Strengthened `scripts/check_route_contract.py` so ComfyUI file routes cannot regress to direct upload persistence DAO calls.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_comfyui_file_service.py -q` passed with 5 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Commit, push, deploy, and online smoke pending.

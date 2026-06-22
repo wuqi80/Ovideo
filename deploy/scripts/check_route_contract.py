@@ -5596,11 +5596,15 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     required_route_snippets = [
         "from services.comfyui_file_service import",
         "ComfyUIFileRequestError",
+        "create_comfyui_upload_record(",
         "fetch_comfyui_view_response(",
         "upload_comfyui_file_response(",
     ]
     required_service_snippets = [
         "class ComfyUIFileRequestError(RuntimeError):",
+        "async def _ensure_default_upload_version(",
+        "async def create_comfyui_upload_record(",
+        "file_dao.create_file(",
         "def fetch_comfyui_view_response(",
         "def upload_comfyui_file_response(",
         "return _request(\"comfyui_view\", requests.get",
@@ -5615,6 +5619,16 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     if "requests." in route_text or "import requests" in route_text:
         fail("routers/comfyui_files.py must not perform direct HTTP requests")
     checks += 1
+    for snippet in [
+        "ProjectDAO.get_user_projects(",
+        "ProjectDAO.save_or_update_project(",
+        "VersionDAO.get_project_versions(",
+        "VersionDAO.create_version(",
+        "FileDAO.create_file(",
+    ]:
+        if snippet in route_text:
+            fail(f"routers/comfyui_files.py must delegate upload persistence to service: {snippet}")
+        checks += 1
     for snippet in required_service_snippets:
         if snippet not in service_text:
             fail(f"ComfyUI file service missing transport helper snippet: {snippet}")
