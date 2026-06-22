@@ -1754,10 +1754,13 @@ def check_project_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     projects_path = root / "routers" / "projects.py"
     project_image_service_path = root / "services" / "project_image_service.py"
+    project_read_service_path = root / "services" / "project_read_service.py"
     if not projects_path.exists():
         fail("routers/projects.py is missing")
     if not project_image_service_path.exists():
         fail("services/project_image_service.py is missing")
+    if not project_read_service_path.exists():
+        fail("services/project_read_service.py is missing")
 
     route_paths = {
         "/api/projects/save",
@@ -1801,20 +1804,29 @@ def check_project_routes_extracted(root: Path) -> int:
         fail(f"routers/projects.py should own 7 project route registrations, found {route_count}")
 
     router_text = projects_path.read_text(encoding="utf-8")
-    service_text = project_image_service_path.read_text(encoding="utf-8")
+    image_service_text = project_image_service_path.read_text(encoding="utf-8")
+    read_service_text = project_read_service_path.read_text(encoding="utf-8")
     required_snippets = [
         (router_text, "from services.project_image_service import (", projects_path),
+        (router_text, "from services.project_read_service import (", projects_path),
         (router_text, "is_data_image(base64_data)", projects_path),
         (router_text, "persist_project_embedded_base64_image(", projects_path),
         (router_text, "persist_export_storyboard_base64_image(", projects_path),
-        (service_text, "async def persist_project_embedded_base64_image(", project_image_service_path),
-        (service_text, "async def persist_export_storyboard_base64_image(", project_image_service_path),
-        (service_text, "storage_root / \"images\" / username", project_image_service_path),
-        (service_text, "WebPImageService.bytes_to_webp", project_image_service_path),
-        (service_text, "file_dao.create_file(", project_image_service_path),
-        (service_text, "async def _ensure_default_project_version(", project_image_service_path),
+        (router_text, "get_project_response(", projects_path),
+        (router_text, "get_shot_images_response(", projects_path),
+        (image_service_text, "async def persist_project_embedded_base64_image(", project_image_service_path),
+        (image_service_text, "async def persist_export_storyboard_base64_image(", project_image_service_path),
+        (image_service_text, "storage_root / \"images\" / username", project_image_service_path),
+        (image_service_text, "WebPImageService.bytes_to_webp", project_image_service_path),
+        (image_service_text, "file_dao.create_file(", project_image_service_path),
+        (image_service_text, "async def _ensure_default_project_version(", project_image_service_path),
+        (read_service_text, "async def get_project_response(", project_read_service_path),
+        (read_service_text, "async def get_shot_images_response(", project_read_service_path),
+        (read_service_text, "def build_thumbnail_generated_images(", project_read_service_path),
+        (read_service_text, "await project_dao.update_project_access(project_id)", project_read_service_path),
+        (read_service_text, "parse_jsonb_field(db_project.get(\"settings\"))", project_read_service_path),
     ]
-    forbidden_snippets = [
+    image_forbidden_snippets = [
         "import base64",
         "import time",
         "import uuid",
@@ -1831,10 +1843,32 @@ def check_project_routes_extracted(root: Path) -> int:
     for text, snippet, path in required_snippets:
         if snippet not in text:
             fail(f"Missing project image service boundary snippet in {path.relative_to(root)}: {snippet}")
-    for snippet in forbidden_snippets:
+    for snippet in image_forbidden_snippets:
         if snippet in router_text:
             fail(f"routers/projects.py must delegate project image persistence to service: {snippet}")
-    return route_count + len(required_snippets) + len(forbidden_snippets)
+
+    project_detail_start = router_text.index('@router.get("/api/projects/{project_id}")')
+    project_detail_end = router_text.index('@router.delete("/api/projects/{project_id}")')
+    project_detail_text = router_text[project_detail_start:project_detail_end]
+    shot_images_start = router_text.index('@router.get("/api/projects/{project_id}/images/{shot_id}")')
+    shot_images_end = router_text.index('@router.post("/api/projects/{project_id}/export-to-video")')
+    shot_images_text = router_text[shot_images_start:shot_images_end]
+    read_route_forbidden = [
+        "parse_jsonb_field(",
+        "thumbnail_data = {}",
+        "ProjectDAO.update_project_access(",
+        "can_read_project(",
+        "generated_images = data.get(",
+        "def fix_image_urls(",
+        "img['url'] = img['thumbnail']",
+    ]
+    for section, label in [(project_detail_text, "project detail"), (shot_images_text, "shot images")]:
+        for snippet in read_route_forbidden:
+            if snippet in section:
+                fail(f"routers/projects.py must delegate {label} read shaping to service: {snippet}")
+    if "async def can_read_project(" in router_text:
+        fail("routers/projects.py must delegate project read permission checks to project_read_service")
+    return route_count + len(required_snippets) + len(image_forbidden_snippets) + len(read_route_forbidden) * 2 + 1
 
 
 def check_project_core_routes_extracted(root: Path) -> int:

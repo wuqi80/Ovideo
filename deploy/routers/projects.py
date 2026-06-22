@@ -13,6 +13,12 @@ from services.project_image_service import (
     persist_export_storyboard_base64_image,
     persist_project_embedded_base64_image,
 )
+from services.project_read_service import (
+    ProjectReadForbidden,
+    ProjectReadNotFound,
+    get_project_response,
+    get_shot_images_response,
+)
 from utils.json_helpers import parse_jsonb_field
 
 
@@ -34,15 +40,6 @@ def create_projects_router(
     VersionDAO = version_dao
 
     # ==================== 项目数据管理 API（四阶段数据打通） ====================
-
-    async def can_read_project(db_project: dict, username: str) -> bool:
-        """Owner, project members, and platform admins may read project detail."""
-        project_id = db_project.get("project_id")
-        if db_project.get("user_id") == username:
-            return True
-        if project_id and await ProjectMemberDAO.check_permission(project_id, username, "readonly"):
-            return True
-        return await UserDAO.is_admin_user(username)
 
     async def convert_base64_images_in_project(project_data: dict, username: str) -> dict:
         """将项目中的所有Base64图片转换为数据库文件URL"""
@@ -391,83 +388,19 @@ def create_projects_router(
     ):
         """从数据库获取项目详情"""
         try:
-            logger.info(f"📂 读取项目: {project_id} (用户: {username}, 缩略图模式: {thumbnail_only})")
-
-            # 从数据库读取项目
-            db_project = await ProjectDAO.get_project(project_id)
-
-            if not db_project:
-                raise HTTPException(status_code=404, detail="项目不存在")
-
-            if not await can_read_project(db_project, username):
-                raise HTTPException(status_code=403, detail="无权访问此项目")
-
-            # 从settings JSONB字段中获取完整的项目数据
-            data = parse_jsonb_field(db_project.get('settings'))
-
-            # 🎯 如果只需要缩略图，精简图片数据
-            if thumbnail_only and data.get('generated_images'):
-                thumbnail_data = {}
-                for shot_id, img_data in data['generated_images'].items():
-                    if isinstance(img_data, dict) and 'images' in img_data:
-                        # 只保留缩略图信息，不包含完整图片URL
-                        thumbnail_images = []
-                        for img in img_data['images']:
-                            # 🔧 如果有缩略图但没有完整URL，标记为有完整图片（实际使用缩略图）
-                            has_url = bool(img.get('url')) or bool(img.get('thumbnail'))
-                            thumbnail_images.append({
-                                'id': img.get('id'),
-                                'thumbnail': img.get('thumbnail'),  # 只保留缩略图
-                                'timestamp': img.get('timestamp'),
-                                'hasFullImage': has_url  # 标记是否有原图
-                            })
-                        thumbnail_data[shot_id] = {
-                            'images': thumbnail_images,
-                            'selectedImageId': img_data.get('selectedImageId'),
-                            'count': len(thumbnail_images)
-                        }
-                    elif isinstance(img_data, list):
-                        # 兼容旧格式
-                        thumbnail_images = []
-                        for img in img_data:
-                            has_url = bool(img.get('url')) or bool(img.get('thumbnail'))
-                            thumbnail_images.append({
-                                'id': img.get('id'),
-                                'thumbnail': img.get('thumbnail'),
-                                'timestamp': img.get('timestamp'),
-                                'hasFullImage': has_url
-                            })
-                        thumbnail_data[shot_id] = thumbnail_images
-
-                data['generated_images'] = thumbnail_data
-                logger.info(f"✂️ 缩略图模式: 精简了 {len(thumbnail_data)} 个镜头的图片数据")
-
-            # 🔍 调试：打印读取的数据
-            logger.info(f"📦 项目数据keys: {list(data.keys())}")
-            logger.info(f"📦 项目stage: {data.get('stage')}")
-
-            video_tasks = data.get('video_tasks')
-            if video_tasks and isinstance(video_tasks, list) and len(video_tasks) > 0:
-                logger.info(f"📦 项目包含 {len(video_tasks)} 个视频任务")
-                for task in video_tasks[:3]:
-                    logger.info(f"   - 镜头: {task.get('storyboard_id')}, 图片: {task.get('image_url', '')[:50]}...")
-            else:
-                # 新项目没有视频任务是正常的
-                logger.debug(f"📝 项目暂无视频任务（新项目或第一阶段）")
-
-            if data.get('generated_images'):
-                img_count = len(data['generated_images'])
-                logger.info(f"🖼️ 项目包含 {img_count} 个镜头的生成图片")
-                for shot_id, img_data in list(data['generated_images'].items())[:3]:
-                    if isinstance(img_data, dict) and 'images' in img_data:
-                        logger.debug(f"   - 镜头 {shot_id}: {len(img_data['images'])} 张图片")
-
-            # 更新项目访问时间
-            await ProjectDAO.update_project_access(project_id)
-
-            return {"success": True, "project": data}
-        except HTTPException:
-            raise
+            return await get_project_response(
+                project_id,
+                username=username,
+                thumbnail_only=thumbnail_only,
+                project_dao=ProjectDAO,
+                project_member_dao=ProjectMemberDAO,
+                user_dao=UserDAO,
+                logger=logger,
+            )
+        except ProjectReadNotFound as exc:
+            raise HTTPException(status_code=404, detail="项目不存在") from exc
+        except ProjectReadForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问此项目") from exc
         except Exception as e:
             logger.error(f"获取项目失败: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
@@ -504,75 +437,19 @@ def create_projects_router(
     ):
         """获取指定镜头的完整图片数据（按需加载）"""
         try:
-            logger.info(f"🖼️ 按需加载镜头图片: 项目={project_id}, 镜头={shot_id}")
-
-            # 从数据库读取项目
-            db_project = await ProjectDAO.get_project(project_id)
-
-            if not db_project:
-                raise HTTPException(status_code=404, detail="项目不存在")
-
-            if not await can_read_project(db_project, username):
-                raise HTTPException(status_code=403, detail="无权访问此项目")
-
-            # 从settings JSONB字段中获取项目数据
-            data = parse_jsonb_field(db_project.get('settings'))
-
-            # 🔧 防御性编程：确保data不为None
-            if not data:
-                logger.warning(f"⚠️ 项目 {project_id} 的settings为空")
-                return {"success": True, "images": []}
-
-            # 提取指定镜头的图片数据
-            generated_images = data.get('generated_images')
-
-            # 🔧 防御性编程：确保generated_images不为None
-            if not generated_images or not isinstance(generated_images, dict):
-                logger.warning(f"⚠️ 项目 {project_id} 的generated_images为空或格式错误")
-                return {"success": True, "images": []}
-
-            shot_data = generated_images.get(shot_id)
-
-            if not shot_data:
-                return {"success": True, "images": []}
-
-            # 🔧 智能修复：如果只有缩略图没有完整URL，自动补全
-            def fix_image_urls(images_list):
-                """修复图片数据，确保每张图片都有url字段"""
-                fixed_images = []
-                for img in images_list:
-                    if isinstance(img, dict):
-                        # 如果有缩略图但没有完整图片URL，使用缩略图作为完整图片
-                        if 'thumbnail' in img and not img.get('url'):
-                            img['url'] = img['thumbnail']
-                            logger.debug(f"🔧 补全缺失的URL: {img.get('id', 'unknown')}")
-                        fixed_images.append(img)
-                    else:
-                        fixed_images.append(img)
-                return fixed_images
-
-            # 返回完整图片数据
-            if isinstance(shot_data, dict) and 'images' in shot_data:
-                fixed_images = fix_image_urls(shot_data['images'])
-                logger.info(f"✅ 返回镜头 {shot_id} 的 {len(fixed_images)} 张完整图片")
-                return {
-                    "success": True,
-                    "images": fixed_images,
-                    "selectedImageId": shot_data.get('selectedImageId')
-                }
-            elif isinstance(shot_data, list):
-                # 兼容旧格式
-                fixed_images = fix_image_urls(shot_data)
-                logger.info(f"✅ 返回镜头 {shot_id} 的 {len(fixed_images)} 张完整图片（旧格式）")
-                return {
-                    "success": True,
-                    "images": fixed_images
-                }
-
-            return {"success": True, "images": []}
-
-        except HTTPException:
-            raise
+            return await get_shot_images_response(
+                project_id,
+                shot_id,
+                username=username,
+                project_dao=ProjectDAO,
+                project_member_dao=ProjectMemberDAO,
+                user_dao=UserDAO,
+                logger=logger,
+            )
+        except ProjectReadNotFound as exc:
+            raise HTTPException(status_code=404, detail="项目不存在") from exc
+        except ProjectReadForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问此项目") from exc
         except Exception as e:
             logger.error(f"获取镜头图片失败: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))

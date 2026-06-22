@@ -8733,3 +8733,21 @@
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `59cd115`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 Project Read Service Boundary
+
+### Changes
+
+- Moved legacy project detail read shaping and per-shot image loading from `routers/projects.py` into `services/project_read_service.py`.
+- The router still owns route registration and HTTP error mapping, but now delegates project read permission checks, JSON settings parsing, thumbnail-only generated-image thinning, shot image URL backfill, and project access timestamp updates to the service layer.
+- Added `tests/test_project_read_service.py` to cover thumbnail-mode payload thinning, full-mode URL preservation, member/visitor access behavior, shot image URL backfill, and missing/empty image cases.
+- Strengthened `scripts/check_route_contract.py` so project detail and shot-image routes cannot regress to route-local JSON parsing, thumbnail shaping, URL backfill, permission helper definitions, or `ProjectDAO.update_project_access()` calls.
+- Added the new project read service test to `scripts/live_deploy_mvc2.sh` so server sync includes it.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_project_read_service.py tests/test_project_read_access.py -q` passed with 9 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Online deployment verification pending.
