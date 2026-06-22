@@ -4710,6 +4710,9 @@ def check_video_client_base_contract(root: Path) -> int:
         "response = requests.request(",
         "response.raise_for_status()",
         "return data",
+        "def request_multipart_json(",
+        "files=files",
+        "data=data",
         "def download_streaming_video(",
         "response = requests.get(",
         "stream=True",
@@ -4781,8 +4784,11 @@ def check_video_client_base_contract(root: Path) -> int:
     if 'label="Sora2 create"' not in sora2_text:
         fail("Sora2 text-to-video create path must use shared request_json helper")
     checks += 1
-    if sora2_text.count("requests.post(") != 1:
-        fail("Sora2 direct requests.post should remain only for multipart image upload")
+    if "request_multipart_json(" not in sora2_text:
+        fail("Sora2 image-to-video create path must use shared request_multipart_json helper")
+    checks += 1
+    if "requests." in sora2_text or "import requests" in sora2_text:
+        fail("Sora2 video client must route HTTP through external_api.video.base")
     checks += 1
     return checks
 

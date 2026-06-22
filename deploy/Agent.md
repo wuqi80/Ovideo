@@ -7704,3 +7704,22 @@
 - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`, with `comfyui_file_service_checks=10`.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
 - Server sync check confirmed `admin_routes.py=1502` lines, `cluster_main.py=999` lines, `dao/` has 72 recursive files, password fields use `min_length=8`, API env reload errors are logged, `env_refreshed` is returned, and `routers/comfyui_files.py` has no direct `requests` import/calls.
+
+## 2026-06-22 Sora2 Multipart Video Request Consolidation
+
+### Changes
+
+- Added `request_multipart_json()` to `external_api/video/base.py` so multipart video provider requests share the same endpoint, proxy kwargs, HTTP status logging, and JSON response handling as the existing JSON helper.
+- Updated `external_api/video/sora2.py` so image-to-video creation delegates multipart upload to `request_multipart_json()` instead of importing and calling `requests.post` directly.
+- Added focused tests for multipart helper forwarding and Sora2 image-to-video runtime wiring in `tests/test_video_client_base.py` and `tests/test_api_provider_runtime_model_env.py`.
+- Strengthened `scripts/check_route_contract.py` so Sora2 text-to-video must use `request_json()`, image-to-video must use `request_multipart_json()`, and Sora2 cannot reintroduce direct `requests` imports/calls.
+
+### Verification
+
+- Local `pytest tests/test_video_client_base.py tests/test_api_provider_runtime_model_env.py -q` passed with 38 tests.
+- Local `py_compile`, `scripts/check_provider_contract.py`, `scripts/check_route_contract.py`, `scripts/check_architecture_contracts.py`, `scripts/smoke_test.py`, and `git diff --check` passed.
+- Local route contract passed with `video_client_base_checks=69`.
+- Live files synced to `https://mecha.one/`; `drama.service` was manually restarted after `live_deploy_mvc2.sh` exceeded the local command timeout, then stayed `active`.
+- Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`, with `video_client_base_checks=69`.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+- Server sync check confirmed `external_api/video/sora2.py` has no direct `requests` import/calls and the route contract contains `request_multipart_json` checks.

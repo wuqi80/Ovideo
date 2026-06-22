@@ -3,13 +3,12 @@ Sora2 API 客户端
 用于调用老张 Sora2 异步视频生成 API
 """
 
-import requests
 import time
 import logging
 from typing import Optional, Dict, Any
 from PIL import Image
 import io
-from external_api.video.base import download_streaming_video, request_json
+from external_api.video.base import download_streaming_video, request_json, request_multipart_json
 from services.api_provider_registry import (
     SORA2_DEFAULT_VIDEO_MODEL,
     normalize_sora2_video_model,
@@ -140,7 +139,19 @@ class Sora2Client:
                         'size': size,
                         'seconds': seconds
                     }
-                    response = requests.post(url, headers=self.headers, files=files, data=data, timeout=30, **self._request_kwargs)
+                    result = request_multipart_json(
+                        "POST",
+                        url,
+                        headers=self.headers,
+                        files=files,
+                        data=data,
+                        timeout=30,
+                        request_kwargs=self._request_kwargs,
+                        logger=logger,
+                        label="Sora2 image create",
+                    )
+                    logger.info(f"✅ Sora2 任务创建成功: {result.get('id')}")
+                    return result
             else:
                 # 文生视频 - 使用JSON
                 logger.info(f"🎬 Sora2 创建文生视频任务: {seconds}s, {size}")
@@ -164,12 +175,7 @@ class Sora2Client:
                 )
                 logger.info(f"鉁?Sora2 浠诲姟鍒涘缓鎴愬姛: {result.get('id')}")
                 return result
-            
-            response.raise_for_status()
-            result = response.json()
-            logger.info(f"✅ Sora2 任务创建成功: {result.get('id')}")
-            return result
-        
+
         except Exception as e:
             logger.error(f"❌ Sora2 任务创建失败: {e}")
             raise

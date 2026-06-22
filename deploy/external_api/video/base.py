@@ -42,6 +42,43 @@ def request_json(
     return data
 
 
+def request_multipart_json(
+    method: str,
+    url: str,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    files: Optional[Mapping[str, Any]] = None,
+    data: Optional[Mapping[str, Any]] = None,
+    timeout: int = 30,
+    request_kwargs: Optional[Dict[str, Any]] = None,
+    logger: Optional[logging.Logger] = None,
+    label: str = "video api",
+) -> Any:
+    """Send a multipart request and return a JSON response with shared runtime kwargs."""
+    log = logger or logging.getLogger(__name__)
+    options = dict(request_kwargs or {})
+    response = requests.request(
+        method.upper(),
+        url,
+        headers=dict(headers or {}),
+        files=files,
+        data=data,
+        timeout=timeout,
+        **options,
+    )
+    if not getattr(response, "ok", True):
+        log.error(
+            "%s multipart request failed: HTTP %s body=%s",
+            label,
+            getattr(response, "status_code", "?"),
+            str(getattr(response, "text", ""))[:500],
+        )
+    response.raise_for_status()
+    result = response.json()
+    log.debug("%s multipart request complete: %s %s", label, method.upper(), url)
+    return result
+
+
 def download_streaming_video(
     url: str,
     *,

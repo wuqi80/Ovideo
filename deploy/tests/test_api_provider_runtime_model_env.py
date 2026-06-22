@@ -606,6 +606,38 @@ def test_sora2_video_legacy_model_env_maps_to_callable_default(monkeypatch):
     assert calls[0]["json"]["model"] == sora2_video.DEFAULT_SORA2_VIDEO_MODEL
 
 
+def test_sora2_image_video_uses_shared_multipart_helper(monkeypatch, tmp_path):
+    env_key = get_provider_env_key("sora2")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    image_path = tmp_path / "frame.png"
+    image_path.write_bytes(b"fake-png")
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-sora2-key")
+    monkeypatch.setenv(endpoint_env, "https://sora2-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "sora2-runtime-video-model")
+
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return _Sora2TaskResponse()
+
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
+
+    client = sora2_video.Sora2Client()
+    result = client.create_video_task(prompt="move gently", image_path=str(image_path))
+
+    assert result == {"id": "sora2-video-1"}
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"] == "https://sora2-runtime.example.test/v1/videos"
+    assert calls[0]["headers"]["Authorization"] == "Bearer test-sora2-key"
+    assert calls[0]["data"]["model"] == "sora2-runtime-video-model"
+    assert calls[0]["data"]["prompt"] == "move gently"
+    assert calls[0]["files"]["input_reference"][0] == "image.png"
+    assert calls[0]["files"]["input_reference"][2] == "image/png"
+
+
 def test_veo_video_uses_runtime_model_env_when_request_omits_model(monkeypatch):
     env_key = get_provider_env_key("veo")
     assert env_key

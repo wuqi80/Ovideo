@@ -58,6 +58,40 @@ def test_request_json_forwards_runtime_request_kwargs(monkeypatch):
     assert calls["kwargs"]["proxies"] == {"https": "http://proxy.local"}
 
 
+def test_request_multipart_json_forwards_runtime_request_kwargs(monkeypatch):
+    calls = {}
+    fake_response = FakeJsonResponse({"id": "video-1"})
+    image_handle = object()
+
+    def fake_request(method, url, **kwargs):
+        calls["method"] = method
+        calls["url"] = url
+        calls["kwargs"] = kwargs
+        return fake_response
+
+    monkeypatch.setattr(base.requests, "request", fake_request)
+
+    data = base.request_multipart_json(
+        "post",
+        "https://example.test/videos",
+        headers={"Authorization": "Bearer token"},
+        files={"input_reference": ("image.png", image_handle, "image/png")},
+        data={"model": "sora2", "prompt": "move"},
+        timeout=31,
+        request_kwargs={"proxies": {"https": "http://proxy.local"}},
+    )
+
+    assert data == {"id": "video-1"}
+    assert fake_response.raise_for_status_called
+    assert calls["method"] == "POST"
+    assert calls["url"] == "https://example.test/videos"
+    assert calls["kwargs"]["headers"] == {"Authorization": "Bearer token"}
+    assert calls["kwargs"]["files"] == {"input_reference": ("image.png", image_handle, "image/png")}
+    assert calls["kwargs"]["data"] == {"model": "sora2", "prompt": "move"}
+    assert calls["kwargs"]["timeout"] == 31
+    assert calls["kwargs"]["proxies"] == {"https": "http://proxy.local"}
+
+
 def test_download_streaming_video_forwards_runtime_request_kwargs(monkeypatch):
     calls = {}
     fake_response = FakeStreamResponse([b"aa", b"", b"bb"])
