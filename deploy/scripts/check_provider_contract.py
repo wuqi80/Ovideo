@@ -155,6 +155,8 @@ def isolated_env(registry):
 
 def check_registry_shape(registry) -> None:
     registry_text = (deploy_root() / "services" / "api_provider_registry.py").read_text(encoding="utf-8")
+    runtime_text = (deploy_root() / "services" / "api_provider_runtime.py").read_text(encoding="utf-8")
+    ai_proxy_text = (deploy_root() / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
     if "PROVIDER_HEALTH_CHECK_URLS" in registry_text:
         fail("Provider health URLs must be derived from preset endpoints, not a duplicate PROVIDER_HEALTH_CHECK_URLS map")
     if "PROVIDER_HEALTH_CHECKS" in registry_text:
@@ -163,6 +165,20 @@ def check_registry_shape(registry) -> None:
         fail("Provider credential docs/console links must use VENDOR_CREDENTIAL_LINKS plus PROVIDER_KEY_HELP")
     if "derive_models_health_urls" not in registry_text:
         fail("api_provider_registry.py must derive provider health URLs from services.api_provider_endpoints")
+    if "PROVIDER_API_PATHS" not in registry_text:
+        fail("api_provider_registry.py must define provider API operation paths")
+    if "def get_provider_api_path" not in registry_text:
+        fail("api_provider_registry.py must expose get_provider_api_path()")
+    if "def url_for_operation" not in runtime_text or "get_provider_api_path" not in runtime_text:
+        fail("api_provider_runtime.py must expose ResolvedProviderConfig.url_for_operation()")
+    for forbidden in (
+        'url_for("chat/completions"',
+        'url_for("images/edits"',
+        'url_for("images/generations"',
+        'url_for(f"models/{model}:generateContent"',
+    ):
+        if forbidden in ai_proxy_text:
+            fail(f"ai_proxy_service.py must use url_for_operation(), not direct provider path {forbidden}")
     if "out.setdefault(\"endpoint\", get_provider_default_endpoint(provider))" not in registry_text:
         fail("api_provider_registry.py must enrich preset endpoints from get_provider_default_endpoint()")
     if "out.setdefault(\"category\", get_provider_default_category(provider))" not in registry_text:
@@ -231,6 +247,14 @@ def check_registry_shape(registry) -> None:
             fail(f"{provider} default endpoint is empty")
         if registry.get_provider_default_endpoint(provider) != endpoint:
             fail(f"get_provider_default_endpoint({provider!r}) did not return map value")
+    for provider, operations in getattr(registry, "PROVIDER_API_PATHS", {}).items():
+        if provider not in registry.PROVIDER_CATALOG:
+            fail(f"Provider API path map references unknown provider {provider}")
+        for operation, path in operations.items():
+            if not operation:
+                fail(f"{provider} API path operation is empty")
+            if not isinstance(path, str):
+                fail(f"{provider}.{operation} API path must be a string")
     for preset in getattr(registry, "API_MODEL_PRESETS", []):
         provider = registry.normalize_provider(preset.get("provider", ""))
         if "endpoint" in preset:

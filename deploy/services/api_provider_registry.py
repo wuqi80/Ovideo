@@ -378,6 +378,26 @@ PROVIDER_DEFAULT_ENDPOINTS: Dict[str, str] = {
     "gemini-tts": "https://generativelanguage.googleapis.com/v1beta/openai/",
 }
 
+PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
+    "deepseek": {
+        "chat_completions": "chat/completions",
+    },
+    "gemini-text": {
+        "chat_completions": "chat/completions",
+    },
+    "gemini-image": {
+        "generate_content": "models/{model}:generateContent",
+    },
+    "laozhang-gpt-image": {
+        "image_edits": "images/edits",
+        "image_generations": "images/generations",
+    },
+    "laozhang-sora2": {
+        "image_edits": "images/edits",
+        "image_generations": "images/generations",
+    },
+}
+
 
 API_MODEL_PRESETS: List[dict] = [
     {
@@ -620,6 +640,13 @@ def get_model_env_key(env_key: str) -> str:
 
 def get_provider_default_endpoint(provider: str) -> str:
     return PROVIDER_DEFAULT_ENDPOINTS.get(normalize_provider(provider), "")
+
+
+def get_provider_api_path(provider: str, operation: str, **path_params: Any) -> str:
+    template = PROVIDER_API_PATHS.get(normalize_provider(provider), {}).get((operation or "").strip(), "")
+    if not template:
+        return ""
+    return template.format(**{key: str(value) for key, value in path_params.items()})
 
 
 def get_provider_default_category(provider: str) -> str:

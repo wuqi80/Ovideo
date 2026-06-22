@@ -22,6 +22,7 @@ from services.api_provider_registry import (
     get_dashscope_sub_model_env_key,
     get_endpoint_env_key,
     get_model_env_key,
+    get_provider_api_path,
     get_provider_extra_env_keys,
     get_provider_env_key,
     get_proxy_mode_env_key,
@@ -58,6 +59,9 @@ class ResolvedProviderConfig:
         if base.endswith(f"/{suffix}"):
             return base
         return f"{base}/{suffix}"
+
+    def url_for_operation(self, operation: str, **path_params: Any) -> str:
+        return self.url_for(get_provider_api_path(self.provider, operation, **path_params))
 
     def requests_kwargs(self) -> Dict[str, Any]:
         mode = (self.proxy_config.get("mode") or "direct").lower()

@@ -377,7 +377,7 @@ def _deepseek_chat_url(model: Optional[str]) -> tuple[str, Dict[str, Any], str]:
     if not config.endpoint:
         raise AIProxyConfigError("DeepSeek 服务 endpoint 未配置，请联系管理员", status_code=503)
     resolved_model = config.model_name or model or "deepseek-reasoner"
-    return config.url_for("chat/completions"), {
+    return config.url_for_operation("chat_completions"), {
         "headers": {
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
@@ -526,7 +526,7 @@ async def generate_gemini_text_result(
     if not config.endpoint:
         raise AIProxyConfigError("文本生成服务 endpoint 未配置，请联系管理员")
 
-    url = config.url_for("chat/completions")
+    url = config.url_for_operation("chat_completions")
     headers = {
         "Authorization": f"Bearer {config.api_key}",
         "Content-Type": "application/json",
@@ -591,7 +591,7 @@ async def generate_gemini_chat_result(
     resolved_model = config.model_name or model or "gemini-2.5-flash"
     result = await _post_json_request_async(
         label=label,
-        url=config.url_for("chat/completions"),
+        url=config.url_for_operation("chat_completions"),
         headers={
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
@@ -671,7 +671,7 @@ async def generate_gemini_images(
     if not config.endpoint:
         raise AIProxyConfigError("图像生成服务 endpoint 未配置，请联系管理员")
 
-    url = config.url_for(f"models/{model}:generateContent")
+    url = config.url_for_operation("generate_content", model=model)
     headers = {
         "Authorization": f"Bearer {config.api_key}",
         "Content-Type": "application/json",
@@ -801,7 +801,7 @@ async def generate_gpt_images(
             for ref in references
         ]
         headers = {"Authorization": f"Bearer {config.api_key}"}
-        url = config.url_for("images/edits")
+        url = config.url_for_operation("image_edits")
         logger.info(
             "GPT Image edit -> tier=%s model=%s refs=%s size=%s quality=%s",
             resolved_tier,
@@ -835,7 +835,7 @@ async def generate_gpt_images(
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
         }
-        url = config.url_for("images/generations")
+        url = config.url_for_operation("image_generations")
         logger.info(
             "GPT Image generate -> tier=%s model=%s size=%s quality=%s",
             resolved_tier,

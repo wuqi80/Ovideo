@@ -8197,3 +8197,19 @@
 
 - Local `py_compile` for provider registry and provider contract passed.
 - Local `scripts/check_provider_contract.py` and `scripts/check_admin_api_config_import.py` passed.
+
+## 2026-06-22 Provider API Operation Paths
+
+### Changes
+
+- Added `PROVIDER_API_PATHS` and `get_provider_api_path()` to `services/api_provider_registry.py`.
+- Added `ResolvedProviderConfig.url_for_operation()` to `services/api_provider_runtime.py`.
+- Updated `services/ai_proxy_service.py` so DeepSeek/Gemini text, Gemini image, and GPT Image calls resolve provider operation URLs through registry metadata instead of hardcoding path strings in business functions.
+- External request URLs remain unchanged, including OpenAI-compatible `chat/completions`, Gemini `models/{model}:generateContent`, and GPT Image `images/generations` / `images/edits`.
+- Strengthened `scripts/check_provider_contract.py` so AI proxy code must use `url_for_operation()` for registered provider paths.
+
+### Verification
+
+- Local `py_compile` for provider registry, runtime, AI proxy service, and provider contract passed.
+- Local `scripts/check_provider_contract.py` and `scripts/check_ai_proxy_failover.py` passed.
+- Local `pytest tests/test_api_provider_runtime_model_env.py -q` passed with 33 tests.
