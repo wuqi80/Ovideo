@@ -275,6 +275,104 @@ async def create_comfyui_upload_record(
     )
 
 
+async def upload_image_file_to_comfyui(
+    *,
+    username: str,
+    original_filename: str,
+    content: bytes,
+    content_type: str,
+    target_server: Optional[str],
+    comfyui_node_id: Optional[str],
+    file_dao: Any,
+    project_dao: Any,
+    version_dao: Any,
+    logger: Any,
+    redis_client: Optional[Any] = None,
+    storage_root: Path = Path("persistent_storage"),
+    now_provider: Callable[[], datetime] = datetime.now,
+    utc_now_provider: Callable[[], datetime] = datetime.utcnow,
+    uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
+    upload_file: Callable[..., requests.Response] = upload_comfyui_file_response,
+) -> Dict[str, Any]:
+    """Persist an uploaded image locally, optionally forward it to ComfyUI, and create a file record."""
+
+    safe_filename = original_filename or "upload.png"
+    logical_id = uuid_hex_provider()[:12]
+    unique_filename = f"{logical_id}_{safe_filename}"
+    year_month = now_provider().strftime("%Y%m")
+    local_dir = storage_root / "image" / username / year_month
+    local_dir.mkdir(parents=True, exist_ok=True)
+    local_path = local_dir / unique_filename
+    local_path.write_bytes(content)
+    local_file_path = str(local_path)
+    local_storage_url = f"/storage/image/{username}/{year_month}/{unique_filename}"
+    comfyui_filename = unique_filename
+    logger.info("💾 图片本地存储(primary): %s", local_path)
+
+    if target_server:
+        try:
+            upload_url = f"{target_server}/upload/image"
+            logger.info("[ComfyUpload] 转发上传到 ComfyUI: %s", upload_url)
+
+            response = upload_file(
+                upload_url,
+                unique_filename,
+                content,
+                content_type or "image/png",
+                timeout=30,
+            )
+
+            if response.ok:
+                comfyui_filename = _extract_uploaded_filename(response, unique_filename)
+                logger.info("✅ ComfyUI 图片上传成功: comfyui_filename=%s, server=%s", comfyui_filename, target_server)
+            else:
+                logger.warning("[ComfyUpload] 上传到 ComfyUI 失败(非致命): %s %s", response.status_code, response.text)
+        except Exception as exc:
+            logger.warning("[ComfyUpload] ComfyUI上传异常(非致命): %s", exc)
+    else:
+        logger.info("[ComfyUpload] 无可用ComfyUI节点，仅使用本地存储")
+
+    record_result = await create_comfyui_upload_record(
+        username=username,
+        file_type="image",
+        file_name=safe_filename,
+        file_path=local_file_path,
+        file_url=local_storage_url,
+        file_size_bytes=len(content),
+        mime_type=content_type or "image/*",
+        metadata={
+            "source": "comfyui_upload",
+            "logical_id": logical_id,
+            "comfyui_filename": comfyui_filename,
+            "comfyui_server": target_server,
+            "comfyui_node_id": comfyui_node_id,
+            "uploaded_at": utc_now_provider().isoformat(),
+        },
+        file_dao=file_dao,
+        project_dao=project_dao,
+        version_dao=version_dao,
+        logger=logger,
+        redis_client=redis_client,
+        redis_comfyui_filename=comfyui_filename,
+        uuid_hex_provider=uuid_hex_provider,
+    )
+    file_record = record_result.file_record
+
+    logger.info("✅ 图片记录已写入 SQL: file_id=%s, comfyui_filename=%s", file_record["file_id"], comfyui_filename)
+
+    return {
+        "success": True,
+        "filename": comfyui_filename,
+        "original_filename": safe_filename,
+        "size": len(content),
+        "storage_url": record_result.download_url,
+        "file_id": file_record["file_id"],
+        "file_path": local_file_path,
+        "comfyui_server": target_server,
+        "comfyui_node_id": comfyui_node_id,
+    }
+
+
 def upload_audio_file_to_comfyui(
     *,
     username: str,

@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import datetime
-from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import quote
 
@@ -19,11 +16,10 @@ from services.comfyui_file_service import (
     ComfyUIVideoReuploadFailed,
     ComfyUIVideoReuploadNotFound,
     ComfyUIViewFetchFailed,
-    create_comfyui_upload_record,
     fetch_comfyui_view_with_fallback,
     reupload_comfyui_video_with_uuid,
     upload_audio_file_to_comfyui,
-    upload_comfyui_file_response,
+    upload_image_file_to_comfyui,
     upload_video_file_to_comfyui,
 )
 
@@ -151,28 +147,13 @@ def create_comfyui_files_router(
             if not file_content:
                 raise HTTPException(status_code=400, detail="上传的是空文件")
 
-            orig_filename = image.filename or "upload.png"
-            logical_id = uuid.uuid4().hex[:12]
-            unique_filename = f"{logical_id}_{orig_filename}"
-
             logger.info(
-                "[ComfyUpload] 用户=%s, 原文件=%s, 逻辑名=%s, 大小=%s 字节, 节点类型=%s",
+                "[ComfyUpload] 用户=%s, 原文件=%s, 大小=%s 字节, 节点类型=%s",
                 username,
-                orig_filename,
-                unique_filename,
+                image.filename,
                 len(file_content),
                 node_type,
             )
-
-            year_month = datetime.now().strftime("%Y%m")
-            local_dir = Path("persistent_storage/image") / username / year_month
-            local_dir.mkdir(parents=True, exist_ok=True)
-            local_path = local_dir / unique_filename
-            local_path.write_bytes(file_content)
-            local_file_path = str(local_path)
-            local_storage_url = f"/storage/image/{username}/{year_month}/{unique_filename}"
-            comfyui_filename = unique_filename
-            logger.info("💾 图片本地存储(primary): %s", local_path)
 
             target_server = None
             node_id = None
@@ -203,85 +184,19 @@ def create_comfyui_files_router(
                     target_server = "http://127.0.0.1:8188"
                     logger.info("[ComfyUpload] 使用默认 ComfyUI: %s", target_server)
 
-            if target_server:
-                try:
-                    upload_url = f"{target_server}/upload/image"
-                    logger.info("[ComfyUpload] 转发上传到 ComfyUI: %s", upload_url)
-
-                    response = upload_comfyui_file_response(
-                        upload_url,
-                        unique_filename,
-                        file_content,
-                        image.content_type or "image/png",
-                        timeout=30,
-                    )
-
-                    if response.ok:
-                        try:
-                            response_json = response.json()
-                        except Exception:
-                            response_json = {}
-
-                        if isinstance(response_json, dict):
-                            if "name" in response_json:
-                                comfyui_filename = response_json["name"]
-                            elif "images" in response_json and response_json["images"]:
-                                comfyui_filename = response_json["images"][0].get("filename", comfyui_filename)
-
-                        logger.info(
-                            "✅ ComfyUI 图片上传成功: comfyui_filename=%s, server=%s",
-                            comfyui_filename,
-                            target_server,
-                        )
-                    else:
-                        logger.warning(
-                            "[ComfyUpload] 上传到 ComfyUI 失败(非致命): %s %s",
-                            response.status_code,
-                            response.text,
-                        )
-                except Exception as e:
-                    logger.warning("[ComfyUpload] ComfyUI上传异常(非致命): %s", e)
-            else:
-                logger.info("[ComfyUpload] 无可用ComfyUI节点，仅使用本地存储")
-
-            record_result = await create_comfyui_upload_record(
+            return await upload_image_file_to_comfyui(
                 username=username,
-                file_type="image",
-                file_name=orig_filename,
-                file_path=local_file_path,
-                file_url=local_storage_url,
-                file_size_bytes=len(file_content),
-                mime_type=image.content_type or "image/*",
-                metadata={
-                    "source": "comfyui_upload",
-                    "logical_id": logical_id,
-                    "comfyui_filename": comfyui_filename,
-                    "comfyui_server": target_server,
-                    "comfyui_node_id": node_id,
-                    "uploaded_at": datetime.utcnow().isoformat(),
-                },
                 file_dao=FileDAO,
                 project_dao=ProjectDAO,
                 version_dao=VersionDAO,
+                original_filename=image.filename or "upload.png",
+                content=file_content,
+                content_type=image.content_type or "image/png",
+                target_server=target_server,
+                comfyui_node_id=node_id,
                 logger=logger,
                 redis_client=get_redis_client(),
-                redis_comfyui_filename=comfyui_filename,
             )
-            file_record = record_result.file_record
-
-            logger.info("✅ 图片记录已写入 SQL: file_id=%s, comfyui_filename=%s", file_record["file_id"], comfyui_filename)
-
-            return {
-                "success": True,
-                "filename": comfyui_filename,
-                "original_filename": orig_filename,
-                "size": len(file_content),
-                "storage_url": record_result.download_url,
-                "file_id": file_record["file_id"],
-                "file_path": local_file_path,
-                "comfyui_server": target_server,
-                "comfyui_node_id": node_id,
-            }
 
         except HTTPException:
             raise

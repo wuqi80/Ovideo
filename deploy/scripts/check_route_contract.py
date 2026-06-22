@@ -5599,12 +5599,11 @@ def check_comfyui_file_service_contract(root: Path) -> int:
         "ComfyUIMediaUploadFailed",
         "ComfyUIViewFetchFailed",
         "ComfyUIVideoReuploadNotFound",
-        "create_comfyui_upload_record(",
         "fetch_comfyui_view_with_fallback(",
         "reupload_comfyui_video_with_uuid(",
         "upload_audio_file_to_comfyui(",
+        "upload_image_file_to_comfyui(",
         "upload_video_file_to_comfyui(",
-        "upload_comfyui_file_response(",
     ]
     required_service_snippets = [
         "class ComfyUIFileRequestError(RuntimeError):",
@@ -5618,6 +5617,10 @@ def check_comfyui_file_service_contract(root: Path) -> int:
         "def _extract_uploaded_filename(",
         "async def _ensure_default_upload_version(",
         "async def create_comfyui_upload_record(",
+        "async def upload_image_file_to_comfyui(",
+        "storage_root / \"image\" / username",
+        "redis_comfyui_filename=comfyui_filename",
+        "\"uploaded_at\": utc_now_provider().isoformat()",
         "def upload_audio_file_to_comfyui(",
         "storage_root / \"audio\" / username",
         "_extract_uploaded_filename(response, unique_filename)",
@@ -5687,6 +5690,21 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     ]:
         if snippet in audio_route_text:
             fail(f"routers/comfyui_files.py must delegate audio upload workflow to service: {snippet}")
+        checks += 1
+    image_start = route_text.index('@router.post("/api/comfyui/upload")')
+    image_end = route_text.index('@router.post("/api/comfyui/upload/video")')
+    image_route_text = route_text[image_start:image_end]
+    for snippet in [
+        "upload_comfyui_file_response(",
+        "response.json()",
+        "persistent_storage/image",
+        "local_path.write_bytes(",
+        "create_comfyui_upload_record(",
+        "uuid.uuid4().hex",
+        "datetime.utcnow()",
+    ]:
+        if snippet in image_route_text:
+            fail(f"routers/comfyui_files.py must delegate image upload workflow to service: {snippet}")
         checks += 1
     video_start = route_text.index('@router.post("/api/comfyui/upload/video")')
     video_end = route_text.index('@router.post("/api/upload/audio")')

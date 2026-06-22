@@ -212,6 +212,18 @@ def _reset_fakes():
     _Logger.errors = []
 
 
+class _Response:
+    def __init__(self, *, ok=True, content=b"", status_code=200, payload=None, text=""):
+        self.ok = ok
+        self.content = content
+        self.status_code = status_code
+        self._payload = payload or {}
+        self.text = text
+
+    def json(self):
+        return self._payload
+
+
 @pytest.mark.asyncio
 async def test_create_comfyui_upload_record_creates_default_version_and_redis_mapping():
     _reset_fakes()
@@ -277,16 +289,102 @@ async def test_create_comfyui_upload_record_uses_existing_version_and_download_u
     assert _FileDAO.created[0]["file_type"] == "video"
 
 
-class _Response:
-    def __init__(self, *, ok=True, content=b"", status_code=200, payload=None, text=""):
-        self.ok = ok
-        self.content = content
-        self.status_code = status_code
-        self._payload = payload or {}
-        self.text = text
+@pytest.mark.asyncio
+async def test_upload_image_file_to_comfyui_uploads_saves_record_and_redis(tmp_path):
+    _reset_fakes()
+    _ProjectDAO.projects = [{"project_id": "proj_existing"}]
+    _VersionDAO.versions = [{"version_id": "ver_existing"}]
+    redis = _Redis()
+    upload_calls = []
+    uuid_values = iter(["img123456789", "fil123456789"])
 
-    def json(self):
-        return self._payload
+    def fake_upload(*args, **kwargs):
+        upload_calls.append((args, kwargs))
+        return _Response(payload={"images": [{"filename": "image_from_node.png"}]})
+
+    result = await comfyui_file_service.upload_image_file_to_comfyui(
+        username="yuan",
+        original_filename="shot.png",
+        content=b"image-bytes",
+        content_type="image/png",
+        target_server="http://node:8188",
+        comfyui_node_id="node-1",
+        file_dao=_FileDAO,
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        logger=_Logger,
+        redis_client=redis,
+        storage_root=tmp_path,
+        now_provider=lambda: datetime(2026, 6, 23),
+        utc_now_provider=lambda: datetime(2026, 6, 23, 1, 2, 3),
+        uuid_hex_provider=lambda: next(uuid_values),
+        upload_file=fake_upload,
+    )
+
+    expected_path = tmp_path / "image" / "yuan" / "202606" / "img123456789_shot.png"
+    assert result == {
+        "success": True,
+        "filename": "image_from_node.png",
+        "original_filename": "shot.png",
+        "size": len(b"image-bytes"),
+        "storage_url": "/api/files/file_fil123456789/download",
+        "file_id": "file_fil123456789",
+        "file_path": str(expected_path),
+        "comfyui_server": "http://node:8188",
+        "comfyui_node_id": "node-1",
+    }
+    assert expected_path.read_bytes() == b"image-bytes"
+    assert upload_calls == [
+        (
+            ("http://node:8188/upload/image", "img123456789_shot.png", b"image-bytes", "image/png"),
+            {"timeout": 30},
+        )
+    ]
+    assert _FileDAO.created[0]["file_url"] == "/storage/image/yuan/202606/img123456789_shot.png"
+    assert _FileDAO.created[0]["metadata"] == {
+        "source": "comfyui_upload",
+        "logical_id": "img123456789",
+        "comfyui_filename": "image_from_node.png",
+        "comfyui_server": "http://node:8188",
+        "comfyui_node_id": "node-1",
+        "uploaded_at": "2026-06-23T01:02:03",
+    }
+    assert redis.calls == [(("comfyui:file:image_from_node.png", "file_fil123456789"), {"ex": 86400})]
+
+
+@pytest.mark.asyncio
+async def test_upload_image_file_to_comfyui_keeps_local_record_when_comfyui_upload_fails(tmp_path):
+    _reset_fakes()
+    _ProjectDAO.projects = [{"project_id": "proj_existing"}]
+    _VersionDAO.versions = [{"version_id": "ver_existing"}]
+    uuid_values = iter(["img123456789", "fil123456789"])
+
+    def fake_upload(*_args, **_kwargs):
+        return _Response(ok=False, status_code=502, text="bad gateway")
+
+    result = await comfyui_file_service.upload_image_file_to_comfyui(
+        username="yuan",
+        original_filename="shot.png",
+        content=b"image-bytes",
+        content_type="image/png",
+        target_server="http://node:8188",
+        comfyui_node_id=None,
+        file_dao=_FileDAO,
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        logger=_Logger,
+        storage_root=tmp_path,
+        now_provider=lambda: datetime(2026, 6, 23),
+        utc_now_provider=lambda: datetime(2026, 6, 23, 1, 2, 3),
+        uuid_hex_provider=lambda: next(uuid_values),
+        upload_file=fake_upload,
+    )
+
+    assert result["success"] is True
+    assert result["filename"] == "img123456789_shot.png"
+    assert result["file_id"] == "file_fil123456789"
+    assert _FileDAO.created[0]["metadata"]["comfyui_filename"] == "img123456789_shot.png"
+    assert _Logger.warnings
 
 
 def test_reupload_comfyui_video_with_uuid_reads_persistent_storage(tmp_path):

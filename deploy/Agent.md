@@ -8697,3 +8697,20 @@
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `3874959`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 ComfyUI Image Upload Service Boundary
+
+### Changes
+
+- Moved `/api/comfyui/upload` image upload persistence, optional ComfyUI forwarding, DB file record creation, Redis filename mapping, and response shaping from `routers/comfyui_files.py` into `services/comfyui_file_service.py`.
+- The router still owns auth, empty-file validation, target ComfyUI node selection, and HTTP error mapping, but now delegates UUID filename generation, local image storage, ComfyUI upload calls, response filename parsing, `create_comfyui_upload_record()`, Redis mapping, and response shaping to `upload_image_file_to_comfyui()`.
+- Extended `tests/test_comfyui_file_service.py` to cover image upload success, local save, DB record creation, Redis mapping, and nonfatal ComfyUI forwarding failures.
+- Strengthened `scripts/check_route_contract.py` so the image upload route cannot regress to route-local ComfyUI upload calls, response JSON parsing, local image writes, UUID generation, timestamp generation, or DB record creation.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_comfyui_file_service.py -q` passed with 17 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Online deployment verification pending.
