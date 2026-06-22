@@ -51,6 +51,7 @@ FILES=(
   scripts/check_*.py
   tests/test_api_provider_runtime_model_env.py
   tests/test_admin_stats_logs.py
+  tests/test_audio_provider.py
   tests/test_auth_user_service.py
   tests/test_comfyui_file_service.py
   tests/test_content_file_dao.py

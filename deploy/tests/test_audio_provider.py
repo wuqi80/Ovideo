@@ -105,7 +105,7 @@ async def test_gemini_tts_uses_runtime_model(monkeypatch, tmp_path):
 
 async def test_minimax_generate_music_via_music_generate():
     from audio_provider import MinimaxAudioProvider
-    with patch('minimax_audio.get_minimax_audio_client') as get_client:
+    with patch('external_api.audio.minimax_audio.get_minimax_audio_client') as get_client:
         client = get_client.return_value
         client.music_generate = AsyncMock(return_value={
             "audio_url": "/storage/audio/music_test.mp3", "duration_ms": 30000,
@@ -119,7 +119,7 @@ async def test_minimax_generate_music_via_music_generate():
 
 async def test_minimax_generate_sfx_via_music_generate():
     from audio_provider import MinimaxAudioProvider
-    with patch('minimax_audio.get_minimax_audio_client') as get_client:
+    with patch('external_api.audio.minimax_audio.get_minimax_audio_client') as get_client:
         client = get_client.return_value
         client.music_generate = AsyncMock(return_value={
             "audio_url": "/storage/audio/music_sfx.mp3", "duration_ms": 1200,

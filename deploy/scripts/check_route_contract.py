@@ -2929,6 +2929,35 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     if "os.getenv" in seedance_text or "import os" in seedance_text:
         fail("Seedance client must not cache/read model env directly; use runtime resolver helpers")
     minimax_audio_text = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
+    api_routes_text = (root / "api_routes.py").read_text(encoding="utf-8")
+    audio_provider_text = (root / "services" / "audio_provider.py").read_text(encoding="utf-8")
+    for path, text, required in (
+        (
+            root / "api_routes.py",
+            api_routes_text,
+            "from external_api.audio.minimax_audio import get_minimax_audio_client",
+        ),
+        (
+            root / "services" / "audio_provider.py",
+            audio_provider_text,
+            "from external_api.audio.minimax_audio import get_minimax_audio_client",
+        ),
+        (
+            root / "tests" / "test_audio_provider.py",
+            (root / "tests" / "test_audio_provider.py").read_text(encoding="utf-8"),
+            "external_api.audio.minimax_audio.get_minimax_audio_client",
+        ),
+    ):
+        if required not in text:
+            fail(f"MiniMax audio runtime import should use external_api implementation in {path.relative_to(root)}")
+        checks += 1
+    for path, text in (
+        (root / "api_routes.py", api_routes_text),
+        (root / "services" / "audio_provider.py", audio_provider_text),
+    ):
+        if "from minimax_audio import get_minimax_audio_client" in text:
+            fail(f"{path.relative_to(root)} must not import the legacy minimax_audio shim")
+        checks += 1
     for snippet in (
         "async def _request_form_json(",
         'data = await self._request_json(\n            "post",\n            "/voice_clone"',
@@ -4667,6 +4696,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         '"external_api/video/base.py"',
         "scripts/check_*.py",
         "tests/test_api_provider_runtime_model_env.py",
+        "tests/test_audio_provider.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",
         "tests/test_episode_compose_service.py",

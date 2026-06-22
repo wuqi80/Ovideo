@@ -22,10 +22,10 @@ from dao_character_voice import CharacterVoiceDAO
 from audio_provider import get_audio_provider, AUDIO_UPLOAD_DIR
 
 try:
-    from minimax_audio import get_minimax_audio_client
+    from external_api.audio.minimax_audio import get_minimax_audio_client
 except ImportError:
     get_minimax_audio_client = None
-    logging.getLogger(__name__).warning("minimax_audio 模块不可用，MiniMax 音频端点将返回 501")
+    logging.getLogger(__name__).warning("external_api.audio.minimax_audio 模块不可用，MiniMax 音频端点将返回 501")
 from file_optimization import FileOptimizationService, FileDeduplicationService
 
 # 2026-05-25：MiniMax TTS 短文本试听 fast-path 需要在模块顶部 import

@@ -7819,3 +7819,23 @@
 - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
 - Server sync check confirmed `dao/user/user.py` contains `admin_get_user_detail()`, `admin_routes.py` calls it, and the old user-detail SQL snippets are absent from `admin_routes.py`.
+
+## 2026-06-22 MiniMax Audio Import Boundary
+
+### Changes
+
+- Updated non-red-zone callers to import MiniMax audio runtime from `external_api/audio/minimax_audio.py` directly instead of the root `minimax_audio.py` compatibility shim.
+- Kept the legacy shim available for `core/worker.py` and older imports; `core/worker.py` remains untouched because it is in the red-line list.
+- Updated `tests/test_audio_provider.py` patch paths to target `external_api.audio.minimax_audio.get_minimax_audio_client`.
+- Added route-contract checks so `api_routes.py` and `services/audio_provider.py` cannot reintroduce `from minimax_audio import get_minimax_audio_client`.
+- Added `tests/test_audio_provider.py` to `scripts/live_deploy_mvc2.sh` so remote architecture contracts receive the test file they inspect.
+
+### Verification
+
+- Local `pytest tests/test_audio_provider.py tests/test_minimax_audio_runtime.py tests/test_minimax_tts_sync.py -q` passed with 19 tests.
+- Local `scripts/check_audio_provider_runtime.py`, `scripts/check_route_contract.py`, `scripts/check_provider_contract.py`, `scripts/check_architecture_contracts.py`, `scripts/smoke_test.py`, `bash -n scripts/live_deploy_mvc2.sh`, and `git diff --check` passed.
+- Local route contract reported `api_provider_runtime_model_checks=188` and `live_deploy_frontend_checks=65`.
+- Live deploy to `https://mecha.one/` passed; `live_deploy_mvc2.sh` skipped the unchanged frontend build, restarted `drama.service`, and left it `active`.
+- Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+- Server sync check confirmed `api_routes.py`, `services/audio_provider.py`, and `tests/test_audio_provider.py` reference `external_api.audio.minimax_audio`; only red-line `core/worker.py` still imports the legacy shim.

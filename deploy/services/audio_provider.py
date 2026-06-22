@@ -194,7 +194,7 @@ class MinimaxAudioProvider(AudioProvider):
 
     @staticmethod
     def _client():
-        from minimax_audio import get_minimax_audio_client
+        from external_api.audio.minimax_audio import get_minimax_audio_client
         return get_minimax_audio_client()
 
     async def generate_speech(
