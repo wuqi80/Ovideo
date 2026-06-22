@@ -3876,6 +3876,9 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "content" / "content.py", "get_file skipped because database manager is unavailable"),
         (root / "dao" / "content" / "content.py", "async def update_project_metadata("),
         (root / "dao" / "creative" / "episode.py", "async def get_project_id("),
+        (root / "dao" / "creative" / "episode_compose.py", "class EpisodeComposeDAO:"),
+        (root / "dao" / "creative" / "episode_compose.py", "async def list_shot_take_rows("),
+        (root / "dao" / "creative" / "episode_compose.py", "async def create_final_cut_records("),
         (root / "dao" / "creative" / "asset.py", "async def create_missing_episode_assets_transactional("),
         (root / "dao" / "creative" / "storyboard.py", "async def export_script_transaction("),
         (root / "dao" / "creative" / "storyboard.py", "async def delete_by_episode_transactional("),
@@ -3897,6 +3900,8 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "task_read_service.py", "async def list_user_tasks_response("),
         (root / "services" / "task_read_service.py", "async def soft_delete_user_file_by_path_fragment("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
+        (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.list_shot_take_rows("),
+        (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.create_final_cut_records("),
         (root / "routers" / "project_admin.py", "ProjectDAO.update_project_metadata("),
         (root / "routers" / "storyboard.py", "StoryboardDAO.export_script_transaction("),
         (root / "routers" / "admin_compat.py", "UserDAO.delete_user_by_id("),
@@ -3954,13 +3959,40 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         checks += 1
 
     episode_video_router_text = (root / "routers" / "episode_video.py").read_text(encoding="utf-8")
+    for path, snippet in [
+        (root / "routers" / "episode_video.py", "from services import episode_compose_service"),
+        (root / "routers" / "episode_video.py", "episode_compose_service.get_takes("),
+        (root / "routers" / "episode_video.py", "episode_compose_service.start_compose("),
+        (root / "routers" / "episode_video.py", "episode_compose_service.get_status("),
+        (root / "compose_service.py", "from services.episode_compose_service import *"),
+    ]:
+        if snippet not in path.read_text(encoding="utf-8"):
+            violations.append(f"Missing episode compose boundary snippet in {path.relative_to(root)}: {snippet}")
+        checks += 1
     for snippet in [
         "SELECT project_id FROM episodes",
         "get_db_manager_func",
         "db.fetchrow(",
+        "import compose_service",
     ]:
         if snippet in episode_video_router_text:
             violations.append(f"routers/episode_video.py must delegate episode project lookup to EpisodeDAO: {snippet}")
+        checks += 1
+    if re.search(r"(?<!episode_)compose_service\.", episode_video_router_text):
+        violations.append("routers/episode_video.py must call services.episode_compose_service, not legacy compose_service")
+    checks += 1
+    compose_shim_text = (root / "compose_service.py").read_text(encoding="utf-8")
+    for snippet in [
+        "get_db_manager",
+        "SELECT ",
+        "INSERT ",
+        "UPDATE ",
+        "DELETE ",
+        "db.fetch",
+        "db.execute",
+    ]:
+        if snippet in compose_shim_text:
+            violations.append(f"compose_service.py must stay a compatibility shim with no DB logic: {snippet}")
         checks += 1
 
     tasks_router_text = (root / "routers" / "tasks.py").read_text(encoding="utf-8")
@@ -4609,6 +4641,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         '"cluster_config_generated.py"',
         '"config.py"',
         '"auto_deploy_cluster.py"',
+        '"compose_service.py"',
         '"ARCHITECTURE.md"',
         '"Agent.md"',
         '"login.html"',
@@ -4624,6 +4657,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_api_provider_runtime_model_env.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",
+        "tests/test_episode_compose_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_video_client_base.py",
         "FRONTEND_HASH_REMOTE",

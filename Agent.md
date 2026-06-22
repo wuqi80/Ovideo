@@ -7600,3 +7600,22 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `cluster_main.py=998` lines, `admin_routes.py=1502` lines, and `grep requests ~/deploy/cluster_main.py` returned no matches.
+
+## 2026-06-22 Episode Compose Service DAO Boundary
+
+- Split final episode composition out of the legacy root `deploy/compose_service.py` into `deploy/services/episode_compose_service.py`.
+- Added `deploy/dao/creative/episode_compose.py` so video-take listing and final-cut `files` + `media_library_items` writes now live behind `EpisodeComposeDAO`.
+- Kept `deploy/compose_service.py` as a 2-line compatibility shim for older imports while `routers/episode_video.py` now explicitly calls `services.episode_compose_service`.
+- The final-cut file and media-library inserts now run inside one DAO-owned transaction.
+- Added `deploy/tests/test_episode_compose_service.py` for take grouping, duplicate segment dedupe, selected-take handling, and latest-take fallback.
+- Strengthened `deploy/scripts/check_route_contract.py` so episode compose routes cannot reintroduce legacy `compose_service` calls and the root shim cannot regain DB logic.
+- Added `compose_service.py` and the new compose test to `deploy/scripts/live_deploy_mvc2.sh`.
+- Verification:
+  - Local `py_compile` for compose DAO/service/router/contract files passed.
+  - Local `pytest deploy/tests/test_episode_compose_service.py deploy/tests/test_video_client_base.py -q` passed with 7 tests.
+  - Local `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, `bash -n deploy/scripts/live_deploy_mvc2.sh`, and `git diff --check` passed.
+  - Local architecture contract reported `service_files=24`, `raw_sql_in_services=0`, and `service_mapper_purity_checks=668`.
+  - Live deploy to `https://mecha.one/` passed; `live_deploy_mvc2.sh` printed `Skipping frontend build`, restarted `drama.service`, and left it `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed `compose_service.py=2` lines, `services/episode_compose_service.py=328` lines, `dao/creative/episode_compose.py=95` lines, and `tests/test_episode_compose_service.py` is present.

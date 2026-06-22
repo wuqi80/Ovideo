@@ -6,6 +6,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from services import episode_compose_service
+
 
 class VideoSegmentCreate(BaseModel):
     sort_order: int = 0
@@ -46,9 +48,7 @@ def create_episode_video_router(
     @router.get("/api/episodes/{episode_id}/video-takes")
     async def video_takes_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
         """Return all generated video takes grouped by storyboard item for composition selection."""
-        import compose_service
-
-        shots = await compose_service.get_takes(episode_id)
+        shots = await episode_compose_service.get_takes(episode_id)
         return {"success": True, "shots": shots}
 
     @router.post("/api/episodes/{episode_id}/compose")
@@ -63,17 +63,13 @@ def create_episode_video_router(
             selections = (body or {}).get("selections")
         except Exception:
             selections = None
-        import compose_service
-
-        job = compose_service.start_compose(episode_id, user_id, project_id, selections)
+        job = episode_compose_service.start_compose(episode_id, user_id, project_id, selections)
         return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
 
     @router.get("/api/episodes/{episode_id}/compose/status")
     async def compose_status_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
         """Return episode composition status."""
-        import compose_service
-
-        return {"success": True, **compose_service.get_status(episode_id)}
+        return {"success": True, **episode_compose_service.get_status(episode_id)}
 
     @router.post("/api/episodes/{episode_id}/video-segments")
     async def create_video_segment(episode_id: str, data: VideoSegmentCreate, user_id: str = Depends(get_current_user)):
