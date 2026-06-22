@@ -1747,8 +1747,11 @@ def check_project_admin_routes_extracted(root: Path) -> int:
 def check_content_version_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     content_versions_path = root / "routers" / "content_versions.py"
+    content_version_service_path = root / "services" / "content_version_service.py"
     if not content_versions_path.exists():
         fail("routers/content_versions.py is missing")
+    if not content_version_service_path.exists():
+        fail("services/content_version_service.py is missing")
 
     route_pairs = {
         ("/api/versions", "post"),
@@ -1796,7 +1799,45 @@ def check_content_version_routes_extracted(root: Path) -> int:
 
     if route_count != 6:
         fail(f"routers/content_versions.py should own 6 version/text route registrations, found {route_count}")
-    return route_count
+
+    router_text = content_versions_path.read_text(encoding="utf-8")
+    service_text = content_version_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.content_version_service import (", content_versions_path),
+        (router_text, "create_version_service(", content_versions_path),
+        (router_text, "get_version_detail_service(", content_versions_path),
+        (router_text, "restore_version_service(", content_versions_path),
+        (router_text, "delete_version_service(", content_versions_path),
+        (router_text, "create_text_service(", content_versions_path),
+        (router_text, "get_text_service(", content_versions_path),
+        (service_text, "project_dao.get_project(", content_version_service_path),
+        (service_text, "version_dao.get_current_version(", content_version_service_path),
+        (service_text, "version_dao.create_version(", content_version_service_path),
+        (service_text, "activity_log_dao.log_activity(", content_version_service_path),
+        (service_text, "file_dao.get_version_files(", content_version_service_path),
+        (service_text, "text_content_dao.get_version_texts(", content_version_service_path),
+        (service_text, "text_content_dao.create_text_content(", content_version_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "ProjectDAO.get_project(", content_versions_path),
+        (router_text, "VersionDAO.get_current_version(", content_versions_path),
+        (router_text, "VersionDAO.create_version(", content_versions_path),
+        (router_text, "VersionDAO.get_version(", content_versions_path),
+        (router_text, "VersionDAO.set_current_version(", content_versions_path),
+        (router_text, "VersionDAO.delete_version(", content_versions_path),
+        (router_text, "FileDAO.get_version_files(", content_versions_path),
+        (router_text, "TextContentDAO.get_version_texts(", content_versions_path),
+        (router_text, "TextContentDAO.create_text_content(", content_versions_path),
+        (router_text, "TextContentDAO.get_text_content(", content_versions_path),
+        (router_text, "ActivityLogDAO.log_activity(", content_versions_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing content version service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Content version router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
+    return route_count + len(required_snippets)
 
 
 def check_episode_routes_extracted(root: Path) -> int:
@@ -5052,6 +5093,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_asset_service.py",
         "tests/test_audio_provider.py",
         "tests/test_canvas_service.py",
+        "tests/test_content_version_service.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",
         "tests/test_dao_api_config_category.py",

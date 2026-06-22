@@ -8102,3 +8102,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_entity_file_service.py -q` passed with 9 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Content Version Service Boundary
+
+- Moved version and text-content business logic from `deploy/routers/content_versions.py` into `deploy/services/content_version_service.py`.
+- The router still owns the 6 version/text HTTP endpoints, but now delegates project ownership checks, parent-version resolution, version restore/delete, text creation/read, and activity logging to the service layer.
+- Added `deploy/tests/test_content_version_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so content version routes cannot regress to direct DAO or activity-log orchestration in the router.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_content_version_service.py -q` passed with 8 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.

@@ -6,6 +6,19 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.content_version_service import (
+    ContentVersionCurrentDeleteForbidden,
+    ContentVersionForbidden,
+    ContentVersionNotFound,
+    TextContentNotFound,
+    create_text as create_text_service,
+    create_version as create_version_service,
+    delete_version as delete_version_service,
+    get_text as get_text_service,
+    get_version_detail as get_version_detail_service,
+    restore_version as restore_version_service,
+)
+
 
 class VersionCreate(BaseModel):
     project_id: str
@@ -40,192 +53,122 @@ def create_content_versions_router(
     @router.post("/api/versions")
     async def create_version(
         version_data: VersionCreate,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
-        """鍒涘缓鏂扮増鏈?"""
+        """Create a new version for a project."""
         try:
-            project = await ProjectDAO.get_project(version_data.project_id)
-            if not project or project['user_id'] != user_id:
-                raise HTTPException(status_code=403, detail="鏃犳潈鎿嶄綔")
-
-            current_version = await VersionDAO.get_current_version(version_data.project_id)
-            parent_version_id = current_version['version_id'] if current_version else None
-
-            version = await VersionDAO.create_version(
+            return await create_version_service(
                 project_id=version_data.project_id,
                 user_id=user_id,
                 version_name=version_data.version_name,
                 description=version_data.description,
-                parent_version_id=parent_version_id
+                project_dao=ProjectDAO,
+                version_dao=VersionDAO,
+                activity_log_dao=ActivityLogDAO,
             )
-
-            await ActivityLogDAO.log_activity(
-                user_id=user_id,
-                action='create_version',
-                resource_type='version',
-                resource_id=version['version_id']
-            )
-
-            return {
-                "success": True,
-                "version": version
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        except ContentVersionForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问项目") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @router.get("/api/versions/{version_id}")
     async def get_version_detail(
         version_id: str,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
-        """鑾峰彇鐗堟湰璇︽儏"""
+        """Get version detail, including files and text contents."""
         try:
-            version = await VersionDAO.get_version(version_id)
-            if not version:
-                raise HTTPException(status_code=404, detail="鐗堟湰涓嶅瓨鍦?")
-
-            if version['user_id'] != user_id:
-                raise HTTPException(status_code=403, detail="鏃犳潈璁块棶")
-
-            files = await FileDAO.get_version_files(version_id)
-            texts = await TextContentDAO.get_version_texts(version_id)
-
-            return {
-                "success": True,
-                "version": version,
-                "files": files,
-                "texts": texts
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            return await get_version_detail_service(
+                version_id=version_id,
+                user_id=user_id,
+                version_dao=VersionDAO,
+                file_dao=FileDAO,
+                text_content_dao=TextContentDAO,
+            )
+        except ContentVersionNotFound as exc:
+            raise HTTPException(status_code=404, detail="版本不存在") from exc
+        except ContentVersionForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @router.post("/api/versions/{version_id}/restore")
     async def restore_version(
         version_id: str,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
-        """鎭㈠鍒版寚瀹氱増鏈?"""
+        """Restore a version as current."""
         try:
-            version = await VersionDAO.get_version(version_id)
-            if not version or version['user_id'] != user_id:
-                raise HTTPException(status_code=403, detail="鏃犳潈鎿嶄綔")
-
-            await VersionDAO.set_current_version(version_id)
-
-            await ActivityLogDAO.log_activity(
+            return await restore_version_service(
+                version_id=version_id,
                 user_id=user_id,
-                action='restore_version',
-                resource_type='version',
-                resource_id=version_id
+                version_dao=VersionDAO,
+                activity_log_dao=ActivityLogDAO,
             )
-
-            return {
-                "success": True,
-                "message": "鐗堟湰宸叉仮澶?"
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        except ContentVersionForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问项目") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @router.delete("/api/versions/{version_id}")
     async def delete_version(
         version_id: str,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
-        """鍒犻櫎鐗堟湰"""
+        """Delete a non-current version."""
         try:
-            version = await VersionDAO.get_version(version_id)
-            if not version or version['user_id'] != user_id:
-                raise HTTPException(status_code=403, detail="鏃犳潈鎿嶄綔")
-
-            if version['is_current']:
-                raise HTTPException(status_code=400, detail="鏃犳硶鍒犻櫎褰撳墠鐗堟湰")
-
-            await VersionDAO.delete_version(version_id)
-
-            await ActivityLogDAO.log_activity(
+            return await delete_version_service(
+                version_id=version_id,
                 user_id=user_id,
-                action='delete_version',
-                resource_type='version',
-                resource_id=version_id
+                version_dao=VersionDAO,
+                activity_log_dao=ActivityLogDAO,
             )
-
-            return {
-                "success": True,
-                "message": "鐗堟湰宸插垹闄?"
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        except ContentVersionForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问项目") from exc
+        except ContentVersionCurrentDeleteForbidden as exc:
+            raise HTTPException(status_code=400, detail="无法删除当前版本") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @router.post("/api/texts")
     async def create_text(
         text_data: TextContentCreate,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
-        """鍒涘缓鏂囨湰鍐呭"""
+        """Create text content in a version."""
         try:
-            version = await VersionDAO.get_version(text_data.version_id)
-            if not version or version['user_id'] != user_id:
-                raise HTTPException(status_code=403, detail="鏃犳潈鎿嶄綔")
-
-            text = await TextContentDAO.create_text_content(
+            return await create_text_service(
                 version_id=text_data.version_id,
-                user_id=user_id,
                 content_type=text_data.content_type,
+                title=text_data.title,
                 content=text_data.content,
-                title=text_data.title
-            )
-
-            await ActivityLogDAO.log_activity(
                 user_id=user_id,
-                action='create_text',
-                resource_type='text',
-                resource_id=text['content_id']
+                version_dao=VersionDAO,
+                text_content_dao=TextContentDAO,
+                activity_log_dao=ActivityLogDAO,
             )
-
-            return {
-                "success": True,
-                "text": text
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        except ContentVersionForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问项目") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @router.get("/api/texts/{content_id}")
     async def get_text(
         content_id: str,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
-        """鑾峰彇鏂囨湰鍐呭"""
+        """Get text content detail."""
         try:
-            text = await TextContentDAO.get_text_content(content_id)
-            if not text:
-                raise HTTPException(status_code=404, detail="鏂囨湰涓嶅瓨鍦?")
-
-            if text['user_id'] != user_id:
-                raise HTTPException(status_code=403, detail="鏃犳潈璁块棶")
-
-            return {
-                "success": True,
-                "text": text
-            }
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            return await get_text_service(
+                content_id=content_id,
+                user_id=user_id,
+                text_content_dao=TextContentDAO,
+            )
+        except TextContentNotFound as exc:
+            raise HTTPException(status_code=404, detail="文本不存在") from exc
+        except ContentVersionForbidden as exc:
+            raise HTTPException(status_code=403, detail="无权访问") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return router
