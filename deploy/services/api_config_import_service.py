@@ -8,6 +8,8 @@ from dao.admin.api_config import ApiConfigDAO
 from services.api_config_health_cache_service import invalidate_provider_health_for_items
 from services.api_provider_registry import get_api_model_presets
 from services.api_provider_runtime import resolve_provider
+from utils.config_helpers import _config_get
+
 
 @dataclass(frozen=True)
 class ApiConfigImportOptions:
@@ -29,17 +31,6 @@ async def _reload_api_env_after_import(reload_api_env: Optional[ReloadCallback] 
     return bool(result.get("env_refreshed", result.get("success")))
 
 
-def _row_get(row: Any, key: str, default: Any = None) -> Any:
-    getter = getattr(row, "get", None)
-    if callable(getter):
-        return getter(key, default)
-    try:
-        return row[key]
-    except (KeyError, IndexError, TypeError):
-        pass
-    return getattr(row, key, default)
-
-
 def _json_object(value: Any) -> Dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
@@ -54,7 +45,7 @@ def _runtime_request_template(provider: str, resolved: Any) -> Dict[str, Any]:
 
 
 def _merge_request_template(row: Any, extra: Dict[str, Any]) -> Dict[str, Any]:
-    merged = _json_object(_row_get(row, "request_template", {}))
+    merged = _json_object(_config_get(row, "request_template", {}))
     merged.update(extra)
     return merged
 
@@ -74,13 +65,13 @@ async def import_preset_api_configs(
     preset_models = presets or get_api_model_presets()
     existing = await ApiConfigDAO.list_all()
     existing_by_key = {
-        (_row_get(r, "provider", ""), _row_get(r, "model_name", "")): r
+        (_config_get(r, "provider", ""), _config_get(r, "model_name", "")): r
         for r in existing
     }
     keyed_provider_sources: Dict[str, Any] = {}
     for row in existing:
-        provider = _row_get(row, "provider", "")
-        if provider and _row_get(row, "api_key_encrypted", "") and provider not in keyed_provider_sources:
+        provider = _config_get(row, "provider", "")
+        if provider and _config_get(row, "api_key_encrypted", "") and provider not in keyed_provider_sources:
             keyed_provider_sources[provider] = row
 
     imported = 0
@@ -116,7 +107,7 @@ async def import_preset_api_configs(
         )
 
         if existing_row:
-            has_db_key = bool(_row_get(existing_row, "api_key_encrypted", ""))
+            has_db_key = bool(_config_get(existing_row, "api_key_encrypted", ""))
             if options.copy_runtime_env_keys:
                 if has_db_key:
                     env_keys_existing += 1
@@ -125,8 +116,8 @@ async def import_preset_api_configs(
                             "action": "skip_existing_key",
                             "provider": provider,
                             "model_name": preset["model_name"],
-                            "config_id": _row_get(existing_row, "config_id", ""),
-                            "name": _row_get(existing_row, "name", ""),
+                            "config_id": _config_get(existing_row, "config_id", ""),
+                            "name": _config_get(existing_row, "name", ""),
                         }
                     )
                 elif should_copy_runtime_key and options.update_existing_empty_keys:
@@ -144,15 +135,15 @@ async def import_preset_api_configs(
                         )
                     if options.enable_copied_keys:
                         update_fields["enabled"] = True
-                        if _row_get(existing_row, "enabled", True) is False:
+                        if _config_get(existing_row, "enabled", True) is False:
                             enabled_existing += 1
                     planned_actions.append(
                         {
                             "action": "update_existing_empty_key",
                             "provider": provider,
                             "model_name": preset["model_name"],
-                            "config_id": _row_get(existing_row, "config_id", ""),
-                            "name": _row_get(existing_row, "name", ""),
+                            "config_id": _config_get(existing_row, "config_id", ""),
+                            "name": _config_get(existing_row, "name", ""),
                             "endpoint": endpoint,
                             "will_enable": bool(update_fields.get("enabled")),
                             "will_copy_key": True,
@@ -160,7 +151,7 @@ async def import_preset_api_configs(
                         }
                     )
                     if not options.dry_run:
-                        await ApiConfigDAO.update(_row_get(existing_row, "config_id", ""), **update_fields)
+                        await ApiConfigDAO.update(_config_get(existing_row, "config_id", ""), **update_fields)
                     touched_items.append(
                         {
                             "provider": provider,
@@ -177,8 +168,8 @@ async def import_preset_api_configs(
                             "action": "skip_provider_key_already_claimed",
                             "provider": provider,
                             "model_name": preset["model_name"],
-                            "config_id": _row_get(existing_row, "config_id", ""),
-                            "name": _row_get(existing_row, "name", ""),
+                            "config_id": _config_get(existing_row, "config_id", ""),
+                            "name": _config_get(existing_row, "name", ""),
                         }
                     )
                 else:
@@ -188,8 +179,8 @@ async def import_preset_api_configs(
                             "action": "skip_missing_runtime_key",
                             "provider": provider,
                             "model_name": preset["model_name"],
-                            "config_id": _row_get(existing_row, "config_id", ""),
-                            "name": _row_get(existing_row, "name", ""),
+                            "config_id": _config_get(existing_row, "config_id", ""),
+                            "name": _config_get(existing_row, "name", ""),
                         }
                     )
             skipped += 1

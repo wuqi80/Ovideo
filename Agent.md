@@ -7730,3 +7730,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server grep confirmed bottom-level provider-health cache delete calls now live in `services/api_config_health_cache_service.py`, while CRUD/import services import only the helper.
+
+## 2026-06-22 API Config Import Row Helper Cleanup
+
+- Updated `deploy/services/api_config_import_service.py` to use the shared `utils.config_helpers._config_get()` helper instead of maintaining a local `_row_get()` copy.
+- Strengthened `deploy/scripts/check_provider_contract.py` so `api_config_import_service.py` must import the shared helper and cannot reintroduce local `_row_get()`.
+- Verification:
+  - Local `py_compile` for `services/api_config_import_service.py` and `scripts/check_provider_contract.py` passed.
+  - Local `scripts/check_admin_api_config_import.py` and `scripts/check_provider_contract.py` passed; provider contract now reports `api_config_env_refresh_checks=30`.
+  - Local `pytest deploy/tests/test_admin_import_presets_writes_category.py deploy/tests/test_dao_api_config_category.py -q` passed with 8 tests.
+  - Local architecture contracts passed 10/10.
+  - Local smoke test passed 9/9.
+  - Live deploy to `https://mecha.one/` passed; frontend build was skipped because `new_html` source hash was unchanged and `drama.service` stayed `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server grep confirmed `services/api_config_import_service.py` imports `_config_get` and has no local `_row_get()` definition.

@@ -925,6 +925,10 @@ def check_api_config_write_env_refresh_contract() -> int:
         )
     if not function_by_name(import_tree, "_reload_api_env_after_import"):
         violations.append("services/api_config_import_service.py missing default import reload helper")
+    if function_by_name(import_tree, "_row_get"):
+        violations.append("services/api_config_import_service.py must use utils.config_helpers._config_get, not local _row_get()")
+    if "from utils.config_helpers import _config_get" not in import_text:
+        violations.append("services/api_config_import_service.py must import shared _config_get helper")
     if function_by_name(route_tree, "_reload_api_env"):
         violations.append("admin_api_config_routes.py must not own private _reload_api_env(); write services reload by default")
     if not function_by_name(cache_tree, "invalidate_provider_health_for_items"):
@@ -993,7 +997,7 @@ def check_api_config_write_env_refresh_contract() -> int:
 
     if violations:
         fail("API config write operations must expose hot-reload status:\n" + "\n".join(violations))
-    return len(service_write_functions) + 7 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details) + (
+    return len(service_write_functions) + 9 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details) + (
         2 * len(forbidden_health_cache_details)
     )
 
