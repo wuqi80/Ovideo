@@ -163,8 +163,22 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must enrich preset endpoints from get_provider_default_endpoint()")
     if "out.setdefault(\"category\", get_provider_default_category(provider))" not in registry_text:
         fail("api_provider_registry.py must enrich preset category from provider capabilities")
-    if "out.setdefault(\"proxy_mode\", meta.get(\"default_proxy_mode\", \"direct\"))" not in registry_text:
+    if "DEFAULT_PROVIDER_PROXY_MODE = \"direct\"" not in registry_text:
+        fail("api_provider_registry.py must define DEFAULT_PROVIDER_PROXY_MODE")
+    if "DEFAULT_PROVIDER_SUPPORTS_PROXY = True" not in registry_text:
+        fail("api_provider_registry.py must define DEFAULT_PROVIDER_SUPPORTS_PROXY")
+    if "_provider_meta.setdefault(\"default_proxy_mode\", DEFAULT_PROVIDER_PROXY_MODE)" not in registry_text:
+        fail("api_provider_registry.py must apply provider default_proxy_mode through setdefault")
+    if "_provider_meta.setdefault(\"supports_proxy\", DEFAULT_PROVIDER_SUPPORTS_PROXY)" not in registry_text:
+        fail("api_provider_registry.py must apply provider supports_proxy through setdefault")
+    if "\"default_proxy_mode\": \"direct\"" in registry_text:
+        fail("Provider catalog entries must not repeat the default proxy mode literal")
+    if "\"supports_proxy\": True" in registry_text:
+        fail("Provider catalog entries must not repeat the default supports_proxy literal")
+    if "out.setdefault(\"proxy_mode\", meta.get(\"default_proxy_mode\", DEFAULT_PROVIDER_PROXY_MODE))" not in registry_text:
         fail("api_provider_registry.py must enrich preset proxy_mode from provider default_proxy_mode")
+    if "out.setdefault(\"supports_proxy\", meta.get(\"supports_proxy\", DEFAULT_PROVIDER_SUPPORTS_PROXY))" not in registry_text:
+        fail("api_provider_registry.py must enrich preset supports_proxy from provider supports_proxy")
 
     provider_env_keys = set(registry.PROVIDER_ENV_MAP)
     catalog_keys = set(registry.PROVIDER_CATALOG)
@@ -294,11 +308,23 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
                     f"Preset {preset.get('name')} endpoint should come from PROVIDER_DEFAULT_ENDPOINTS: "
                     f"{preset.get('endpoint')} != {expected_endpoint}"
                 )
-            expected_proxy_mode = registry.PROVIDER_CATALOG[provider].get("default_proxy_mode", "direct")
+            expected_proxy_mode = registry.PROVIDER_CATALOG[provider].get(
+                "default_proxy_mode",
+                registry.DEFAULT_PROVIDER_PROXY_MODE,
+            )
             if preset.get("proxy_mode") != expected_proxy_mode:
                 fail(
                     f"Preset {preset.get('name')} proxy_mode should come from provider default_proxy_mode: "
                     f"{preset.get('proxy_mode')} != {expected_proxy_mode}"
+                )
+            expected_supports_proxy = registry.PROVIDER_CATALOG[provider].get(
+                "supports_proxy",
+                registry.DEFAULT_PROVIDER_SUPPORTS_PROXY,
+            )
+            if preset.get("supports_proxy") != expected_supports_proxy:
+                fail(
+                    f"Preset {preset.get('name')} supports_proxy should come from provider supports_proxy: "
+                    f"{preset.get('supports_proxy')} != {expected_supports_proxy}"
                 )
             expected_category = raw_presets.get(key, {}).get("category") or registry.get_provider_default_category(provider)
             if preset.get("category") != expected_category:

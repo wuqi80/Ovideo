@@ -8125,3 +8125,18 @@
 
 - Local `py_compile` for provider registry and provider contract passed.
 - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
+
+## 2026-06-22 Provider Proxy Metadata Defaults
+
+### Changes
+
+- Added `DEFAULT_PROVIDER_PROXY_MODE` and `DEFAULT_PROVIDER_SUPPORTS_PROXY` to `services/api_provider_registry.py`.
+- Removed repeated provider-level `default_proxy_mode=direct` and `supports_proxy=True` literals from all 12 `PROVIDER_CATALOG` entries.
+- Provider metadata now applies those values through a single post-catalog `setdefault()` pass, so future providers only need explicit overrides when they differ from the default.
+- External provider catalog and preset responses remain unchanged: 12 catalog entries still report `default_proxy_mode=direct` and `supports_proxy=True`; 17 enriched presets still report `proxy_mode=direct` and `supports_proxy=True`.
+- Strengthened `scripts/check_provider_contract.py` so default proxy/supports metadata must be centralized and enriched presets must match provider metadata.
+
+### Verification
+
+- Local `py_compile` for provider registry and provider contract passed.
+- Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.

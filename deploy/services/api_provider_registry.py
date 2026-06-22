@@ -261,6 +261,10 @@ def dashscope_sub_model_for_model(model_name: Optional[str]) -> Optional[str]:
     return None
 
 
+DEFAULT_PROVIDER_PROXY_MODE = "direct"
+DEFAULT_PROVIDER_SUPPORTS_PROXY = True
+
+
 PROVIDER_CATALOG: Dict[str, dict] = {
     "deepseek": {
         "label": "DeepSeek",
@@ -268,8 +272,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["text"],
         "required_env": ["DEEPSEEK_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Text/chat provider used by script and reasoning flows.",
     },
     "gemini-text": {
@@ -285,8 +287,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
                 "when": ["missing_key", "health_error"],
             }
         ],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Google Gemini text generation.",
     },
     "gemini-image": {
@@ -295,8 +295,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["image"],
         "required_env": ["GEMINI_IMAGE_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Google Gemini image generation.",
     },
     "gemini-tts": {
@@ -305,8 +303,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["audio"],
         "required_env": ["GEMINI_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Fallback TTS provider.",
     },
     "doubao": {
@@ -315,8 +311,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["image"],
         "required_env": ["ARK_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Ark-compatible image generation provider.",
     },
     "seedance": {
@@ -325,8 +319,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["video"],
         "required_env": ["SEEDANCE_API_KEY"],
         "fallback_env": ["ARK_API_KEY"],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Volcengine Ark Seedance video generation.",
     },
     "dashscope": {
@@ -335,8 +327,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["video"],
         "required_env": ["DASHSCOPE_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Wan2.6, Kling, Vidu, and HappyHorse share this key.",
     },
     "minimax": {
@@ -345,8 +335,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["video", "audio"],
         "required_env": ["MINIMAX_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Video generation plus TTS, voice design, and voice clone.",
     },
     "sora2": {
@@ -355,8 +343,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["video"],
         "required_env": ["SORA2_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Laozhang Sora2-compatible video gateway.",
     },
     "veo": {
@@ -365,8 +351,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["video"],
         "required_env": ["VEO_API_KEY"],
         "fallback_env": ["SORA2_API_KEY"],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Laozhang Veo-compatible video gateway.",
     },
     "laozhang-gpt-image": {
@@ -375,8 +359,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["image"],
         "required_env": ["GPT_IMAGE_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Default/VIP GPT Image token group.",
     },
     "laozhang-sora2": {
@@ -385,8 +367,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["image"],
         "required_env": ["SORA2_GPT_IMAGE_API_KEY"],
         "fallback_env": [],
-        "default_proxy_mode": "direct",
-        "supports_proxy": True,
         "notes": "Official GPT Image token group.",
     },
 }
@@ -407,6 +387,8 @@ PROVIDER_HEALTH_CHECKS["dashscope"] = {
 }
 
 for _provider_id, _provider_meta in PROVIDER_CATALOG.items():
+    _provider_meta.setdefault("default_proxy_mode", DEFAULT_PROVIDER_PROXY_MODE)
+    _provider_meta.setdefault("supports_proxy", DEFAULT_PROVIDER_SUPPORTS_PROXY)
     _provider_meta.setdefault("health_check", PROVIDER_HEALTH_CHECKS.get(_provider_id, {}))
     for _link_key, _link_value in PROVIDER_CREDENTIAL_LINKS.get(_provider_id, {}).items():
         _provider_meta.setdefault(_link_key, _link_value)
@@ -688,8 +670,8 @@ def _enrich_preset(preset: dict) -> dict:
     meta = PROVIDER_CATALOG.get(provider, {})
     out.setdefault("endpoint", get_provider_default_endpoint(provider))
     out.setdefault("category", get_provider_default_category(provider))
-    out.setdefault("proxy_mode", meta.get("default_proxy_mode", "direct"))
-    out.setdefault("supports_proxy", meta.get("supports_proxy", True))
+    out.setdefault("proxy_mode", meta.get("default_proxy_mode", DEFAULT_PROVIDER_PROXY_MODE))
+    out.setdefault("supports_proxy", meta.get("supports_proxy", DEFAULT_PROVIDER_SUPPORTS_PROXY))
     out.setdefault("health_check_url", _default_health_check_url(out.get("endpoint", ""), provider))
     out.setdefault("required_key", env_key)
     return out
@@ -772,7 +754,8 @@ def get_api_provider_catalog() -> List[dict]:
                 "default_endpoint": default_preset.get("endpoint"),
                 "default_model_name": default_preset.get("model_name"),
                 "default_category": default_preset.get("category"),
-                "default_proxy_mode": default_preset.get("proxy_mode") or item.get("default_proxy_mode", "direct"),
+                "default_proxy_mode": default_preset.get("proxy_mode")
+                or item.get("default_proxy_mode", DEFAULT_PROVIDER_PROXY_MODE),
                 "preset_count": counts.get(provider, 0),
                 "preset_categories": sorted(categories.get(provider, set())),
             }
