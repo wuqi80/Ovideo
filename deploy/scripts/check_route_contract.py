@@ -1843,8 +1843,11 @@ def check_content_version_routes_extracted(root: Path) -> int:
 def check_episode_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     episodes_path = root / "routers" / "episodes.py"
+    episode_service_path = root / "services" / "episode_service.py"
     if not episodes_path.exists():
         fail("routers/episodes.py is missing")
+    if not episode_service_path.exists():
+        fail("services/episode_service.py is missing")
 
     route_pairs = {
         ("/api/projects/{project_id}/episodes", "get"),
@@ -1893,7 +1896,44 @@ def check_episode_routes_extracted(root: Path) -> int:
 
     if route_count != 7:
         fail(f"routers/episodes.py should own 7 episode route registrations, found {route_count}")
-    return route_count
+
+    router_text = episodes_path.read_text(encoding="utf-8")
+    service_text = episode_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.episode_service import (", episodes_path),
+        (router_text, "list_episodes_service(project_id, episode_dao=EpisodeDAO)", episodes_path),
+        (router_text, "create_episode_service(", episodes_path),
+        (router_text, "get_episode_service(", episodes_path),
+        (router_text, "update_episode_service(", episodes_path),
+        (router_text, "delete_episode_service(", episodes_path),
+        (router_text, "duplicate_episode_service(", episodes_path),
+        (router_text, "reorder_episodes_service(", episodes_path),
+        (service_text, "episode_dao.get_episodes(", episode_service_path),
+        (service_text, "episode_dao.get_next_episode_number(", episode_service_path),
+        (service_text, "episode_dao.create_episode(", episode_service_path),
+        (service_text, "episode_dao.get_episode(", episode_service_path),
+        (service_text, "episode_script_dao.list_by_episode(", episode_service_path),
+        (service_text, "episode_script_dao.create(", episode_service_path),
+        (service_text, "episode_dao.reorder_episodes(", episode_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "EpisodeDAO.get_episodes(", episodes_path),
+        (router_text, "EpisodeDAO.get_next_episode_number(", episodes_path),
+        (router_text, "EpisodeDAO.create_episode(", episodes_path),
+        (router_text, "EpisodeDAO.get_episode(", episodes_path),
+        (router_text, "EpisodeDAO.update_episode(", episodes_path),
+        (router_text, "EpisodeDAO.delete_episode(", episodes_path),
+        (router_text, "EpisodeDAO.reorder_episodes(", episodes_path),
+        (router_text, "EpisodeScriptDAO.list_by_episode(", episodes_path),
+        (router_text, "EpisodeScriptDAO.create(", episodes_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing episode service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Episode router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
+    return route_count + len(required_snippets)
 
 
 def check_episode_video_routes_extracted(root: Path) -> int:
@@ -5098,6 +5138,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_comfyui_file_service.py",
         "tests/test_dao_api_config_category.py",
         "tests/test_episode_compose_service.py",
+        "tests/test_episode_service.py",
         "tests/test_episode_video_service.py",
         "tests/test_entity_file_service.py",
         "tests/test_minimax_tts_sync.py",

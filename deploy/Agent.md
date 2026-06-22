@@ -8447,3 +8447,19 @@
 - Local `pytest tests/test_content_version_service.py -q` passed with 8 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Episode Service Boundary
+
+### Changes
+
+- Moved episode list/create/read/update/delete/duplicate/reorder business logic from `routers/episodes.py` into `services/episode_service.py`.
+- The router still owns the 7 episode HTTP endpoints, but now delegates episode numbering, default names, duplication metadata parsing, script copy orchestration, and reorder updates to the service layer.
+- Added `tests/test_episode_service.py` and included it in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so episode routes cannot regress to direct `EpisodeDAO` or `EpisodeScriptDAO` orchestration in the router.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_episode_service.py -q` passed with 8 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
