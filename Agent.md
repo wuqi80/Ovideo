@@ -8227,3 +8227,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_file_route_service.py -q` passed with 6 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Video Crop Service Boundary
+
+- Moved `/api/video/crop` source resolution, FFmpeg execution, cropped-file storage, default project/version resolution, and DB file record creation from `deploy/routers/video.py` into `deploy/services/video_crop_service.py`.
+- The router still owns the single crop HTTP endpoint and HTTP error mapping, but now delegates DB/local/ComfyUI source lookup, persistent-storage fallback paths, ComfyUI node selection, temp-file cleanup, FFmpeg command execution, output validation, and cropped file persistence to the service layer.
+- Added `deploy/tests/test_video_crop_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so video crop routes cannot regress to direct ComfyUI fetches, FFmpeg/subprocess/tempfile orchestration, DAO method calls, or route-local storage writes.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_video_crop_service.py tests/test_video_client_base.py -q` passed with 12 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.

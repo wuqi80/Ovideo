@@ -4698,6 +4698,10 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "files.py", "upload_generic_file("),
         (root / "services" / "file_route_service.py", "file_dao.create_file("),
         (root / "services" / "file_route_service.py", "project_dao.get_user_projects("),
+        (root / "routers" / "video.py", "crop_video_file("),
+        (root / "services" / "video_crop_service.py", "file_dao.create_file("),
+        (root / "services" / "video_crop_service.py", "project_dao.get_user_projects("),
+        (root / "services" / "video_crop_service.py", "fetch_comfyui_file_bytes("),
         (root / "services" / "credit_service.py", "CreditLedgerDAO.freeze_credits("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.list_shot_take_rows("),
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.create_final_cut_records("),
@@ -5627,6 +5631,8 @@ def check_video_client_base_contract(root: Path) -> int:
     video_route_text = video_route_path.read_text(encoding="utf-8")
     video_source_service_path = root / "services" / "video_source_service.py"
     video_source_service_text = video_source_service_path.read_text(encoding="utf-8")
+    video_crop_service_path = root / "services" / "video_crop_service.py"
+    video_crop_service_text = video_crop_service_path.read_text(encoding="utf-8")
     required_base_snippets = [
         "def request_json(",
         "response = requests.request(",
@@ -5696,12 +5702,43 @@ def check_video_client_base_contract(root: Path) -> int:
         if snippet not in video_source_service_text:
             fail(f"Video source service missing shared ComfyUI fetch helper snippet: {snippet}")
         checks += 1
-    if "get_comfyui_view_response(" not in video_route_text:
-        fail("routers/video.py must delegate ComfyUI fetches to services.video_source_service")
-    checks += 1
-    if "requests." in video_route_text or "import requests" in video_route_text:
-        fail("routers/video.py must not perform direct HTTP requests")
-    checks += 1
+    required_crop_snippets = [
+        (video_route_text, "from services.video_crop_service import (", "router imports video crop service"),
+        (video_route_text, "crop_video_file(", "router delegates crop workflow"),
+        (video_crop_service_text, "fetch_comfyui_file_bytes(", "service delegates ComfyUI source fetches"),
+        (video_crop_service_text, "subprocess.run", "service owns FFmpeg runner default"),
+        (video_crop_service_text, "tempfile.NamedTemporaryFile(", "service owns temp input files"),
+        (video_crop_service_text, "file_dao.create_file(", "service creates cropped file records"),
+        (video_crop_service_text, "project_dao.get_user_projects(", "service resolves project"),
+        (video_crop_service_text, "version_dao.get_project_versions(", "service resolves version"),
+        (video_crop_service_text, "storage_path.write_bytes(", "service persists cropped output"),
+        (video_crop_service_text, "async def resolve_video_source(", "service resolves video source"),
+        (video_crop_service_text, "async def crop_video_file(", "service exposes crop workflow"),
+    ]
+    for text, snippet, label in required_crop_snippets:
+        if snippet not in text:
+            fail(f"Video crop service boundary is incomplete ({label}): {snippet}")
+        checks += 1
+
+    forbidden_route_snippets = [
+        "get_comfyui_view_response(",
+        "fetch_comfyui_file_bytes(",
+        "requests.",
+        "import requests",
+        "subprocess.",
+        "tempfile.",
+        "shutil.",
+        "FileDAO.",
+        "ProjectDAO.",
+        "VersionDAO.",
+        "storage_path.write_bytes(",
+        "NamedTemporaryFile(",
+        "ffmpeg",
+    ]
+    for snippet in forbidden_route_snippets:
+        if snippet in video_route_text:
+            fail(f"routers/video.py must delegate source/FFmpeg/storage orchestration to video_crop_service: {snippet}")
+        checks += 1
     sora2_text = (video_dir / "sora2.py").read_text(encoding="utf-8")
     if 'label="Sora2 create"' not in sora2_text:
         fail("Sora2 text-to-video create path must use shared request_json helper")
