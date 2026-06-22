@@ -7515,3 +7515,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=183`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `routers/ai_proxy.py` calls `generated_image_content()` and has no direct `requests` import/calls.
+
+## 2026-06-22 Video Crop ComfyUI Fetch Delegation
+
+- Added `deploy/services/video_source_service.py` as the shared service boundary for fetching video bytes from ComfyUI `/view` endpoints.
+- Updated `deploy/routers/video.py` so the crop route delegates ComfyUI fetches to `get_comfyui_view_response()` instead of importing `requests` directly in the route layer.
+- Added focused tests in `deploy/tests/test_video_client_base.py` for ComfyUI view response forwarding and output/temp/input fallback byte selection.
+- Strengthened route contracts so `routers/video.py` cannot reintroduce direct HTTP requests and the video source helper remains deployed.
+- Verification:
+  - Local `pytest deploy/tests/test_video_client_base.py -q` passed with 4 tests.
+  - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local route contract passed with `video_client_base_checks=65` and `service_mapper_purity_checks=607`.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `video_client_base_checks=65`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed `routers/video.py` calls `get_comfyui_view_response()` and has no direct `requests` import/calls.

@@ -1,4 +1,5 @@
 from external_api.video import base
+from services import video_source_service
 
 
 class FakeJsonResponse:
@@ -83,3 +84,54 @@ def test_download_streaming_video_forwards_runtime_request_kwargs(monkeypatch):
     assert calls["kwargs"]["stream"] is True
     assert calls["kwargs"]["timeout"] == 99
     assert calls["kwargs"]["proxies"] == {"https": "http://proxy.local"}
+
+
+def test_get_comfyui_view_response_forwards_timeout(monkeypatch):
+    calls = {}
+    fake_response = object()
+
+    def fake_get(url, **kwargs):
+        calls["url"] = url
+        calls["kwargs"] = kwargs
+        return fake_response
+
+    monkeypatch.setattr(video_source_service.requests, "get", fake_get)
+
+    response = video_source_service.get_comfyui_view_response(
+        "http://127.0.0.1:8188/view?filename=clip.mp4&type=output",
+        timeout=23,
+    )
+
+    assert response is fake_response
+    assert calls["url"] == "http://127.0.0.1:8188/view?filename=clip.mp4&type=output"
+    assert calls["kwargs"]["timeout"] == 23
+
+
+def test_fetch_comfyui_file_bytes_tries_locations(monkeypatch):
+    calls = []
+
+    class EmptyResponse:
+        ok = True
+        content = b""
+        url = "http://node/view?filename=clip.mp4&type=output"
+
+    class HitResponse:
+        ok = True
+        content = b"video-bytes"
+        url = "http://node/view?filename=clip.mp4&type=temp"
+
+    def fake_get(url, **kwargs):
+        calls.append({"url": url, "kwargs": kwargs})
+        return EmptyResponse() if len(calls) == 1 else HitResponse()
+
+    monkeypatch.setattr(video_source_service.requests, "get", fake_get)
+
+    result = video_source_service.fetch_comfyui_file_bytes("http://node/", "clip.mp4")
+
+    assert result is not None
+    assert result.content == b"video-bytes"
+    assert result.file_type == "temp"
+    assert result.source_info == "ComfyUI: http://node/view?filename=clip.mp4&type=temp"
+    assert calls[0]["url"] == "http://node/view"
+    assert calls[0]["kwargs"]["params"] == {"filename": "clip.mp4", "type": "output"}
+    assert calls[1]["kwargs"]["params"] == {"filename": "clip.mp4", "type": "temp"}

@@ -11,12 +11,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-import requests
 from fastapi import APIRouter, Depends, HTTPException
 
 from cluster_config import SystemConfig
 from dao_content import FileDAO, ProjectDAO, VersionDAO
 from schemas.video import CropVideoRequest
+from services.video_source_service import get_comfyui_view_response
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ def create_video_router(
                         for file_type in ["output", "temp", "input"]:
                             download_url = f"{target_server}/view?filename={comfyui_filename}&type={file_type}"
                             try:
-                                response = requests.get(download_url, timeout=30)
+                                response = get_comfyui_view_response(download_url, timeout=30)
                                 if response.ok and len(response.content) > 0:
                                     file_content = response.content
                                     source_info = f"ComfyUI (from DB): {download_url}"
@@ -163,7 +163,7 @@ def create_video_router(
                 for file_type in ["output", "temp", "input"]:
                     download_url = f"{target_server}/view?filename={comfyui_filename}&type={file_type}"
                     try:
-                        response = requests.get(download_url, timeout=30)
+                        response = get_comfyui_view_response(download_url, timeout=30)
                         if response.ok and len(response.content) > 0:
                             file_content = response.content
                             source_info = f"ComfyUI: {download_url}"

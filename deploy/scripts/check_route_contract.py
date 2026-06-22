@@ -4665,6 +4665,10 @@ def check_video_client_base_contract(root: Path) -> int:
     video_dir = root / "external_api" / "video"
     base_path = video_dir / "base.py"
     base_text = base_path.read_text(encoding="utf-8")
+    video_route_path = root / "routers" / "video.py"
+    video_route_text = video_route_path.read_text(encoding="utf-8")
+    video_source_service_path = root / "services" / "video_source_service.py"
+    video_source_service_text = video_source_service_path.read_text(encoding="utf-8")
     required_base_snippets = [
         "def request_json(",
         "response = requests.request(",
@@ -4723,6 +4727,20 @@ def check_video_client_base_contract(root: Path) -> int:
         if "requests." in text or "import requests" in text:
             fail(f"JSON-only video client must route HTTP through external_api.video.base: {path.relative_to(root)}")
         checks += 1
+    for snippet in (
+        "def get_comfyui_view_response(",
+        "def fetch_comfyui_file_bytes(",
+        "response = requests.get(",
+    ):
+        if snippet not in video_source_service_text:
+            fail(f"Video source service missing shared ComfyUI fetch helper snippet: {snippet}")
+        checks += 1
+    if "get_comfyui_view_response(" not in video_route_text:
+        fail("routers/video.py must delegate ComfyUI fetches to services.video_source_service")
+    checks += 1
+    if "requests." in video_route_text or "import requests" in video_route_text:
+        fail("routers/video.py must not perform direct HTTP requests")
+    checks += 1
     sora2_text = (video_dir / "sora2.py").read_text(encoding="utf-8")
     if 'label="Sora2 create"' not in sora2_text:
         fail("Sora2 text-to-video create path must use shared request_json helper")
