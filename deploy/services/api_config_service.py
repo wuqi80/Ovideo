@@ -5,15 +5,19 @@ import asyncio
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from dao.admin.api_config import ApiConfigDAO
 from services.api_config_health_cache_service import (
-    clear_all_provider_health_cache,
     invalidate_provider_health_for_items,
 )
 from services.api_config_health_service import test_api_config_health
-from services.api_config_runtime_loader import load_api_configs_to_env
+from services.api_config_reload_service import (
+    ApiConfigReloadFailed,
+    ReloadCallback,
+    reload_api_env_after_config_change,
+    reload_api_env_runtime,
+)
 from services.api_provider_health_monitor import (
     list_cached_provider_health,
     provider_health_cache_key,
@@ -29,7 +33,6 @@ from services.api_provider_runtime import build_provider_runtime_status, resolve
 from utils.config_helpers import _config_get
 
 
-ReloadCallback = Callable[[], Awaitable[Any]]
 logger = logging.getLogger(__name__)
 
 
@@ -42,10 +45,6 @@ class ApiConfigNotFound(ApiConfigServiceError):
 
 
 class ApiConfigCreateFailed(ApiConfigServiceError):
-    pass
-
-
-class ApiConfigReloadFailed(ApiConfigServiceError):
     pass
 
 
@@ -190,47 +189,6 @@ async def _disable_conflicting_provider_configs(row: Any) -> tuple[List[str], Li
     return disabled, disabled_rows
 
 
-async def reload_api_env_runtime(*, clear_health_cache: bool = False) -> Dict[str, Any]:
-    """Reload DB-backed provider config into env and optionally clear health cache."""
-    try:
-        result = await load_api_configs_to_env()
-    except Exception as exc:
-        if clear_health_cache:
-            await clear_all_provider_health_cache()
-        raise ApiConfigReloadFailed("API env reload failed") from exc
-
-    refreshed = bool(result.get("success"))
-    health_cache_invalidated: List[str] = []
-    if not refreshed:
-        if clear_health_cache:
-            health_cache_invalidated = await clear_all_provider_health_cache()
-        raise ApiConfigReloadFailed(str(result.get("error") or "API env reload failed"))
-
-    if clear_health_cache:
-        health_cache_invalidated = await clear_all_provider_health_cache()
-
-    return {
-        "success": refreshed,
-        "env_refreshed": refreshed,
-        "loaded": result.get("loaded", 0),
-        "loaded_providers": result.get("loaded_providers", []),
-        "health_cache_invalidated": health_cache_invalidated,
-        "error": result.get("error"),
-    }
-
-
-def _env_refreshed_from_reload_result(result: Any) -> bool:
-    if isinstance(result, dict):
-        return bool(result.get("env_refreshed", result.get("success")))
-    return bool(result)
-
-
-async def _reload_api_env_after_write(reload_api_env: Optional[ReloadCallback] = None) -> bool:
-    if reload_api_env:
-        return _env_refreshed_from_reload_result(await reload_api_env())
-    return _env_refreshed_from_reload_result(await reload_api_env_runtime())
-
-
 async def list_api_configs() -> Dict[str, Any]:
     rows = await ApiConfigDAO.list_all()
     provider_health_targets = [
@@ -299,7 +257,7 @@ async def create_api_config(
     if not row:
         raise ApiConfigCreateFailed("Failed to create API config")
     disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(row)
-    env_refreshed = await _reload_api_env_after_write(reload_api_env)
+    env_refreshed = await reload_api_env_after_config_change(reload_api_env)
     await invalidate_provider_health_for_items([row, *disabled_conflict_rows])
     return {
         "success": True,
@@ -326,7 +284,7 @@ async def update_api_config(
     if not updated:
         raise ApiConfigNotFound("Config not found")
     disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(updated)
-    env_refreshed = await _reload_api_env_after_write(reload_api_env)
+    env_refreshed = await reload_api_env_after_config_change(reload_api_env)
     await invalidate_provider_health_for_items([before, updated, *disabled_conflict_rows])
     return {
         "success": True,
@@ -345,7 +303,7 @@ async def delete_api_config(
     ok = await ApiConfigDAO.delete(config_id)
     if not ok:
         raise ApiConfigNotFound("Config not found")
-    env_refreshed = await _reload_api_env_after_write(reload_api_env)
+    env_refreshed = await reload_api_env_after_config_change(reload_api_env)
     await invalidate_provider_health_for_items([before])
     return {"success": True, "deleted": True, "env_refreshed": env_refreshed}
 
@@ -396,7 +354,7 @@ async def repair_api_config_provider_conflicts(
 
     env_refreshed = None
     if total_disabled and not dry_run:
-        env_refreshed = await _reload_api_env_after_write(reload_api_env)
+        env_refreshed = await reload_api_env_after_config_change(reload_api_env)
     if touched_items and not dry_run:
         await invalidate_provider_health_for_items(touched_items)
 

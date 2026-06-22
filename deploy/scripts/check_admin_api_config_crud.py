@@ -24,6 +24,7 @@ async def main() -> int:
     os.chdir(root)
     sys.path.insert(0, str(root))
 
+    from services import api_config_reload_service as reload_service  # noqa: PLC0415
     from services import api_config_service as service  # noqa: PLC0415
 
     rows: list[dict[str, Any]] = [
@@ -154,8 +155,8 @@ async def main() -> int:
     original_dao = service.ApiConfigDAO
     original_invalidate_items = service.invalidate_provider_health_for_items
     original_test_health = service.test_api_config_health
-    original_load_api_env = service.load_api_configs_to_env
-    original_clear_all_health = service.clear_all_provider_health_cache
+    original_load_api_env = reload_service.load_api_configs_to_env
+    original_clear_all_health = reload_service.clear_all_provider_health_cache
     service.ApiConfigDAO = FakeDAO
     service.invalidate_provider_health_for_items = fake_invalidate_items
     try:
@@ -424,7 +425,7 @@ async def main() -> int:
                 "error": None,
             }
 
-        service.load_api_configs_to_env = fake_default_load_api_env
+        reload_service.load_api_configs_to_env = fake_default_load_api_env
         default_reloaded = await service.update_api_config("solo", {"enabled": False})
         if default_reloaded.get("env_refreshed") is not True:
             fail(f"default service reload did not report env_refreshed=true: {default_reloaded}")
@@ -446,9 +447,9 @@ async def main() -> int:
             reload_cache_clears += 1
             return ["provider:health:deepseek"]
 
-        service.load_api_configs_to_env = fake_load_api_env_success
-        service.clear_all_provider_health_cache = fake_clear_all_health
-        reload_result = await service.reload_api_env_runtime(clear_health_cache=True)
+        reload_service.load_api_configs_to_env = fake_load_api_env_success
+        reload_service.clear_all_provider_health_cache = fake_clear_all_health
+        reload_result = await reload_service.reload_api_env_runtime(clear_health_cache=True)
         if reload_result.get("env_refreshed") is not True or reload_result.get("loaded") != 2:
             fail(f"reload_api_env_runtime success response changed: {reload_result}")
         if reload_result.get("health_cache_invalidated") != ["provider:health:deepseek"]:
@@ -459,11 +460,11 @@ async def main() -> int:
         async def fake_load_api_env_failure():
             return {"success": False, "error": "reload exploded"}
 
-        service.load_api_configs_to_env = fake_load_api_env_failure
+        reload_service.load_api_configs_to_env = fake_load_api_env_failure
         try:
-            await service.reload_api_env_runtime(clear_health_cache=True)
+            await reload_service.reload_api_env_runtime(clear_health_cache=True)
             fail("reload_api_env_runtime should raise ApiConfigReloadFailed on unsuccessful loader result")
-        except service.ApiConfigReloadFailed:
+        except reload_service.ApiConfigReloadFailed:
             pass
         if reload_cache_clears != 2:
             fail(f"reload_api_env_runtime should clear health cache once on failure, got {reload_cache_clears}")
@@ -472,8 +473,8 @@ async def main() -> int:
         service.ApiConfigDAO = original_dao
         service.invalidate_provider_health_for_items = original_invalidate_items
         service.test_api_config_health = original_test_health
-        service.load_api_configs_to_env = original_load_api_env
-        service.clear_all_provider_health_cache = original_clear_all_health
+        reload_service.load_api_configs_to_env = original_load_api_env
+        reload_service.clear_all_provider_health_cache = original_clear_all_health
 
     print("Admin API config CRUD contract OK")
     print("  list_masks_key=1")

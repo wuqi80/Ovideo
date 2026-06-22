@@ -12,7 +12,7 @@ async def test_import_presets_passes_category_for_video_preset():
     # 跑过 _require_db 校验（mock 数据库存在）
     fake_db = object()
     with patch.object(admin_api_config_routes, "get_db_manager", lambda: fake_db), \
-         patch.object(api_config_import_service, "_reload_api_env_after_import", AsyncMock(return_value=True)), \
+         patch.object(api_config_import_service, "reload_api_env_after_config_change", AsyncMock(return_value=True)), \
          patch.object(api_config_import_service.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
          patch.object(api_config_import_service.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
 
@@ -37,7 +37,7 @@ async def test_import_presets_passes_category_for_audio_preset():
 
     fake_db = object()
     with patch.object(admin_api_config_routes, "get_db_manager", lambda: fake_db), \
-         patch.object(api_config_import_service, "_reload_api_env_after_import", AsyncMock(return_value=True)), \
+         patch.object(api_config_import_service, "reload_api_env_after_config_change", AsyncMock(return_value=True)), \
          patch.object(api_config_import_service.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
          patch.object(api_config_import_service.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
         await admin_api_config_routes.admin_import_preset_configs()

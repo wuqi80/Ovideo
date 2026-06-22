@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from dao.admin.api_config import ApiConfigDAO
 from services.api_config_health_cache_service import invalidate_provider_health_for_items
+from services.api_config_reload_service import ReloadCallback, reload_api_env_after_config_change
 from services.api_provider_registry import get_api_model_presets
 from services.api_provider_runtime import resolve_provider
 from utils.config_helpers import _config_get
@@ -17,18 +18,6 @@ class ApiConfigImportOptions:
     update_existing_empty_keys: bool = True
     enable_copied_keys: bool = True
     dry_run: bool = False
-
-
-ReloadCallback = Callable[[], Awaitable[bool]]
-
-
-async def _reload_api_env_after_import(reload_api_env: Optional[ReloadCallback] = None) -> bool:
-    if reload_api_env:
-        return bool(await reload_api_env())
-    from services.api_config_service import reload_api_env_runtime
-
-    result = await reload_api_env_runtime()
-    return bool(result.get("env_refreshed", result.get("success")))
 
 
 def _json_object(value: Any) -> Dict[str, Any]:
@@ -250,7 +239,7 @@ async def import_preset_api_configs(
 
     env_refreshed = None
     if not options.dry_run and (imported or updated_existing):
-        env_refreshed = await _reload_api_env_after_import(reload_api_env)
+        env_refreshed = await reload_api_env_after_config_change(reload_api_env)
 
     health_cache_invalidated: List[str] = []
     if not options.dry_run and touched_items:

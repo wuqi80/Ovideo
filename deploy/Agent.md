@@ -7973,3 +7973,24 @@
 - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
 - Server grep confirmed `api_config_service.py` imports `_config_get` and all `_row_*` helpers use it.
+
+## 2026-06-22 API Config Reload Service Boundary
+
+### Changes
+
+- Added `services/api_config_reload_service.py` as the single service boundary for API config runtime reload orchestration.
+- Moved `reload_api_env_runtime()`, `reload_api_env_after_config_change()`, `ReloadCallback`, and `ApiConfigReloadFailed` out of `services/api_config_service.py`.
+- Updated API config CRUD, preset import, and admin manual reload routes to depend on the reload service instead of cross-importing CRUD service internals.
+- Removed the lazy `from services.api_config_service import reload_api_env_runtime` import from `services/api_config_import_service.py`.
+- Strengthened `scripts/check_provider_contract.py` so:
+  - runtime loader access belongs to `api_config_reload_service.py`;
+  - import service must not import CRUD service;
+  - admin manual reload imports runtime reload from `api_config_reload_service.py`.
+
+### Verification
+
+- Local `py_compile` for admin API config route, reload service, CRUD service, import service, and contracts passed.
+- Local API config CRUD/import/provider contracts passed; provider contract now reports `api_config_env_refresh_checks=39`.
+- Local `pytest tests/test_admin_import_presets_writes_category.py tests/test_dao_api_config_category.py -q` passed with 8 tests.
+- Local architecture contracts passed 10/10; `service_files=26`, `raw_sql_in_services=0`, and `service_mapper_purity_checks=713`.
+- Local smoke test passed 9/9.
