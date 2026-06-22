@@ -7976,3 +7976,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile` for changed Python files passed.
   - Local `scripts/check_provider_contract.py` and `scripts/check_route_contract.py` passed.
   - Local frontend production build passed via bundled Node/Vite.
+
+## 2026-06-23 Admin API Health Status Clarity
+
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so DB config tests no longer mark the main provider card red when a runtime key is available; the primary status now reflects the effective runtime config.
+- Renamed ambiguous card actions from generic connection testing to `测试 DB 配置` and `测试生效配置`.
+- Renamed card status labels to `生效配置状态` and result blocks to `DB 配置测试` so DB-row validation and real generation runtime health are visibly separate.
+- Strengthened `deploy/scripts/check_route_contract.py` so the UI cannot regress to the ambiguous `测试连通性` wording or let DB no-key/error override runtime status when an effective key exists.
+- Verification:
+  - Local `py_compile` for route contract passed.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local frontend production build passed via bundled Node/Vite.

@@ -2556,7 +2556,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "测试连通性",
+            "测试 DB 配置",
+        ),
+        (
+            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
+            "测试生效配置",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
@@ -4926,6 +4930,7 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "function healthStatusFromResult",
         "function healthStatusFromConfigTest",
         "function mergedHealthStatus",
+        "if (hasEffectiveKey) return runtimeStatus;",
         "const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);",
         "const status = healthStatusFromResult(result)",
         "function runtimeStatusKey",
@@ -4963,10 +4968,16 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "onCheck(provider, model || null)",
         "body: JSON.stringify({ targets })",
         "putProviderHealth(next, item)",
+        "测试 DB 配置",
+        "测试生效配置",
+        "生效配置状态",
+        "DB 配置测试：",
+        "只测试这条数据库记录保存的 Key、Endpoint 和模型；结果不会覆盖生效配置健康状态",
     ]
     forbidden_snippets = [
         "const status = healthStatusFrom(result, runtimeMap.get(provider))",
         "const runtime = primaryConfig ? runtimeForConfig(primaryConfig) : runtimeMap.get(provider);",
+        "测试连通性",
     ]
     checks = 0
     for snippet in required_snippets:

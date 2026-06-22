@@ -460,6 +460,7 @@ function mergedHealthStatus(
     const configStatus = healthStatusFromConfigTest(configTest);
     if (!configStatus) return runtimeStatus;
     if (configStatus === 'ok') return 'ok';
+    if (hasEffectiveKey) return runtimeStatus;
     if (runtimeStatus === 'unknown') return configStatus;
     if (runtimeStatus === 'no_key' && configStatus === 'error') return 'error';
     return runtimeStatus;
@@ -1212,20 +1213,20 @@ const ApiConfigCard: React.FC<{
                                 onClick={() => onTestConfig(config)}
                                 disabled={testingConfig || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试这条数据库配置保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
+                                title="只测试这条数据库记录保存的 Key、Endpoint 和模型；结果不会覆盖生效配置健康状态"
                             >
                                 {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                                测试连通性
+                                测试 DB 配置
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="刷新实际生成调用会使用的生效 Key 和 Endpoint"
+                                title="测试实际生成调用会使用的生效 Key、Endpoint 和模型"
                             >
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                刷新生效健康
+                                测试生效配置
                             </button>
                             <button
                                 type="button"
@@ -1326,7 +1327,7 @@ const ApiConfigCard: React.FC<{
 
                         <div className="min-w-0 rounded bg-n20 border border-n40 px-3 py-2">
                             <div className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] text-n100">生效状态</span>
+                                <span className="text-[11px] text-n100">生效配置状态</span>
                                 <HealthBadge status={status} />
                                 <span className="text-[11px] text-n100 font-mono">{health?.health?.status_code || '-'}</span>
                             </div>
@@ -1351,7 +1352,7 @@ const ApiConfigCard: React.FC<{
 
                     {configTest && (
                         <div className={`mt-2 rounded border px-3 py-2 text-[11px] break-words ${configTestClass}`}>
-                            <span className="font-semibold">配置测试：</span>
+                            <span className="font-semibold">DB 配置测试：</span>
                             <span>{configTestLabel}</span>
                             {configTestKeySource && (
                                 <span className="ml-1">；Key 来源：{configTestKeySource}</span>
@@ -1468,7 +1469,7 @@ const ProviderQuickCard: React.FC<{
                     <ProviderCredentialLinks meta={meta} compact showHelp={false} />
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className="text-[10px] uppercase tracking-wider text-n100">生效状态</span>
+                    <span className="text-[10px] uppercase tracking-wider text-n100">生效配置状态</span>
                     <HealthBadge status={status} />
                 </div>
             </div>
@@ -1533,10 +1534,10 @@ const ProviderQuickCard: React.FC<{
                             onClick={() => onTestConfig(primaryConfig)}
                             disabled={testingConfig || !primaryConfig.config_id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                            title="测试这条数据库配置保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
+                            title="只测试这条数据库记录保存的 Key、Endpoint 和模型；结果不会覆盖生效配置健康状态"
                         >
                             {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测试连通性
+                            测试 DB 配置
                         </button>
                     </>
                 ) : (
@@ -1555,10 +1556,10 @@ const ProviderQuickCard: React.FC<{
                     onClick={() => onCheck(provider, model || null)}
                     disabled={checking || !provider}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                    title="测试实际生成调用会使用的生效 Key 和 Endpoint"
+                    title="测试实际生成调用会使用的生效 Key、Endpoint 和模型"
                 >
                     {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    刷新生效健康
+                    测试生效配置
                 </button>
             </div>
 
