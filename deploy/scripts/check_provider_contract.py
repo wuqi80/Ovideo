@@ -154,6 +154,12 @@ def isolated_env(registry):
 
 
 def check_registry_shape(registry) -> None:
+    registry_text = (deploy_root() / "services" / "api_provider_registry.py").read_text(encoding="utf-8")
+    if "PROVIDER_HEALTH_CHECK_URLS" in registry_text:
+        fail("Provider health URLs must be derived from preset endpoints, not a duplicate PROVIDER_HEALTH_CHECK_URLS map")
+    if "derive_models_health_urls" not in registry_text:
+        fail("api_provider_registry.py must derive provider health URLs from services.api_provider_endpoints")
+
     provider_env_keys = set(registry.PROVIDER_ENV_MAP)
     catalog_keys = set(registry.PROVIDER_CATALOG)
     if provider_env_keys != catalog_keys:
@@ -248,6 +254,14 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
                 fail(f"Preset {preset.get('name')} missing required_key")
             if not preset.get("health_check_url"):
                 fail(f"Preset {preset.get('name')} missing health_check_url")
+            derived_health_urls = registry.derive_models_health_urls(preset.get("endpoint", ""), provider)
+            if not derived_health_urls:
+                fail(f"Preset {preset.get('name')} cannot derive health_check_url from endpoint")
+            if preset.get("health_check_url") != derived_health_urls[0]:
+                fail(
+                    f"Preset {preset.get('name')} health_check_url should be derived from endpoint: "
+                    f"{preset.get('health_check_url')} != {derived_health_urls[0]}"
+                )
 
             resolved = resolve_provider(provider, model)
             if resolved.provider != provider:
@@ -264,6 +278,20 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
     missing_presets = sorted(set(registry.PROVIDER_CATALOG) - providers_with_presets)
     if missing_presets:
         fail(f"Providers without presets: {missing_presets}")
+
+    catalog_by_provider = {item.get("provider"): item for item in registry.get_api_provider_catalog()}
+    for provider in providers_with_presets:
+        item = catalog_by_provider.get(provider) or {}
+        first_preset = next(
+            preset
+            for preset in presets
+            if registry.normalize_provider(preset.get("provider", "")) == provider
+        )
+        if item.get("health_check_url") != first_preset.get("health_check_url"):
+            fail(
+                f"Catalog health_check_url for {provider} should come from its default preset: "
+                f"{item.get('health_check_url')} != {first_preset.get('health_check_url')}"
+            )
 
     return len(presets), len(providers_with_presets)
 

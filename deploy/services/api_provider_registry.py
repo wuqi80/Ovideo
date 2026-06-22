@@ -9,6 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
+from services.api_provider_endpoints import derive_models_health_urls
 from utils.config_helpers import _config_get
 
 
@@ -391,22 +392,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
 }
 
 
-PROVIDER_HEALTH_CHECK_URLS: Dict[str, str] = {
-    "deepseek": "https://api.deepseek.com/models",
-    "gemini-text": "https://api.laozhang.ai/v1/models",
-    "gemini-image": "https://api.laozhang.ai/v1beta/models",
-    "gemini-tts": "https://generativelanguage.googleapis.com/v1beta/openai/models",
-    "doubao": "https://ark.cn-beijing.volces.com/api/v3/models",
-    "seedance": "https://ark.cn-beijing.volces.com/api/v3/models",
-    "dashscope": "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
-    "minimax": "https://api.minimaxi.com/v1/models",
-    "sora2": "https://api.laozhang.ai/v1/models",
-    "veo": "https://api.laozhang.ai/v1/models",
-    "laozhang-gpt-image": "https://api.laozhang.ai/v1/models",
-    "laozhang-sora2": "https://api.laozhang.ai/v1/models",
-}
-
-
 PROVIDER_HEALTH_CHECKS: Dict[str, dict] = {
     provider: {
         "method": "GET",
@@ -717,13 +702,9 @@ def get_model_env_key(env_key: str) -> str:
     return env_key.replace("_API_KEY", "_MODEL").replace("_KEY", "_MODEL")
 
 
-def _default_health_check_url(endpoint: str) -> str:
-    base = (endpoint or "").strip().rstrip("/")
-    if not base:
-        return ""
-    if base.endswith("/models"):
-        return base
-    return f"{base}/models"
+def _default_health_check_url(endpoint: str, provider: str = "") -> str:
+    urls = derive_models_health_urls(endpoint, provider)
+    return urls[0] if urls else ""
 
 
 def _enrich_preset(preset: dict) -> dict:
@@ -732,7 +713,7 @@ def _enrich_preset(preset: dict) -> dict:
     env_key = get_provider_env_key(provider)
     meta = PROVIDER_CATALOG.get(provider, {})
     out.setdefault("supports_proxy", meta.get("supports_proxy", True))
-    out.setdefault("health_check_url", PROVIDER_HEALTH_CHECK_URLS.get(provider) or _default_health_check_url(out.get("endpoint", "")))
+    out.setdefault("health_check_url", _default_health_check_url(out.get("endpoint", ""), provider))
     out.setdefault("required_key", env_key)
     return out
 
@@ -807,7 +788,8 @@ def get_api_provider_catalog() -> List[dict]:
                 if provider in PROVIDER_ENV_MAP
                 else None,
                 "extra_fields": get_provider_extra_fields(provider),
-                "health_check_url": PROVIDER_HEALTH_CHECK_URLS.get(provider),
+                "health_check_url": default_preset.get("health_check_url")
+                or _default_health_check_url(default_preset.get("endpoint", ""), provider),
                 "fallback": item.get("fallback", []),
                 "default_config_name": default_preset.get("name"),
                 "default_endpoint": default_preset.get("endpoint"),

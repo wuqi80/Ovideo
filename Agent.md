@@ -7827,3 +7827,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest deploy/tests/test_admin_import_presets_writes_category.py -q` passed with 7 tests.
   - Local `scripts/check_architecture_contracts.py` passed 10/10.
   - Local smoke test passed 9/9.
+
+## 2026-06-22 Provider Health URL Derivation
+
+- Removed the duplicate `PROVIDER_HEALTH_CHECK_URLS` table from `deploy/services/api_provider_registry.py`.
+- API provider preset and catalog health-check URLs are now derived from each preset endpoint through `services.api_provider_endpoints.derive_models_health_urls()`.
+- DashScope still derives the special compatible-mode `/models` URL from the video synthesis endpoint, so health checks keep the old behavior without maintaining a second URL source.
+- Strengthened `deploy/scripts/check_provider_contract.py` so health URLs must be endpoint-derived and `PROVIDER_HEALTH_CHECK_URLS` cannot be reintroduced.
+- Verification:
+  - Local `py_compile` for provider registry and provider contract passed.
+  - Local `scripts/check_provider_contract.py` and `scripts/check_admin_api_config_health.py` passed.
+  - Local `scripts/check_architecture_contracts.py` passed 10/10.
+  - Local smoke test passed 9/9.
