@@ -207,6 +207,10 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must define provider API operation paths")
     if "def get_provider_api_path" not in registry_text:
         fail("api_provider_registry.py must expose get_provider_api_path()")
+    if "def get_provider_operation_paths" not in registry_text:
+        fail("api_provider_registry.py must expose get_provider_operation_paths() for admin catalog metadata")
+    if '"operation_paths": get_provider_operation_paths(provider)' not in registry_text:
+        fail("api_provider_registry.py must expose operation_paths in provider catalog responses")
     if "def url_for_operation" not in runtime_text or "get_provider_api_path" not in runtime_text:
         fail("api_provider_runtime.py must expose ResolvedProviderConfig.url_for_operation()")
     for forbidden in (
@@ -302,6 +306,12 @@ def check_registry_shape(registry) -> None:
                 fail(f"{provider} API path operation is empty")
             if not isinstance(path, str):
                 fail(f"{provider}.{operation} API path must be a string")
+        copied = registry.get_provider_operation_paths(provider)
+        if copied != operations:
+            fail(f"get_provider_operation_paths({provider!r}) should return provider operation map")
+        copied["__mutation_check__"] = "x"
+        if "__mutation_check__" in registry.PROVIDER_API_PATHS.get(provider, {}):
+            fail("get_provider_operation_paths() must return a copy, not the registry dict")
     for preset in getattr(registry, "API_MODEL_PRESETS", []):
         provider = registry.normalize_provider(preset.get("provider", ""))
         if "endpoint" in preset:
@@ -503,6 +513,12 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
             fail(
                 f"Catalog default_endpoint for {provider} should come from PROVIDER_DEFAULT_ENDPOINTS: "
                 f"{item.get('default_endpoint')} != {registry.get_provider_default_endpoint(provider)}"
+            )
+        expected_paths = registry.get_provider_operation_paths(provider)
+        if item.get("operation_paths") != expected_paths:
+            fail(
+                f"Catalog operation_paths for {provider} should come from PROVIDER_API_PATHS: "
+                f"{item.get('operation_paths')} != {expected_paths}"
             )
 
     return len(presets), len(providers_with_presets)

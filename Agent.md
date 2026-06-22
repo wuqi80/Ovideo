@@ -7953,3 +7953,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_provider_contract.py`, `scripts/check_audio_provider_runtime.py`, and `scripts/check_route_contract.py` passed.
   - Local `scripts/check_architecture_contracts.py` passed with 10/10 contracts.
   - Local `pytest tests/test_minimax_audio_runtime.py tests/test_minimax_tts_sync.py tests/test_api_provider_runtime_model_env.py -q` passed with 44 tests.
+
+## 2026-06-22 Admin Provider Operation Path Visibility
+
+- Added `get_provider_operation_paths()` to `deploy/services/api_provider_registry.py`.
+- Provider catalog and provider status now expose `operation_paths` derived from `PROVIDER_API_PATHS`.
+- Updated `deploy/new_html/admin/AdminSettingsPage.tsx` so API provider/config cards show the registered operation paths used by runtime calls.
+- Strengthened provider and route contracts so the admin API config UI and catalog must keep exposing these paths.
+- Verification:
+  - Local `py_compile` for changed Python files passed.
+  - Local `scripts/check_provider_contract.py` and `scripts/check_route_contract.py` passed.
+  - Local frontend production build passed via bundled Node/Vite.

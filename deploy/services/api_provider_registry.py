@@ -678,6 +678,10 @@ def get_provider_api_path(provider: str, operation: str, **path_params: Any) -> 
     return template.format(**{key: str(value) for key, value in path_params.items()})
 
 
+def get_provider_operation_paths(provider: str) -> Dict[str, str]:
+    return deepcopy(PROVIDER_API_PATHS.get(normalize_provider(provider), {}))
+
+
 def get_provider_default_category(provider: str) -> str:
     capabilities = PROVIDER_CATALOG.get(normalize_provider(provider), {}).get("capabilities") or []
     return str(capabilities[0]) if capabilities else ""
@@ -772,6 +776,7 @@ def get_api_provider_catalog() -> List[dict]:
                 if provider in PROVIDER_ENV_MAP
                 else None,
                 "extra_fields": get_provider_extra_fields(provider),
+                "operation_paths": get_provider_operation_paths(provider),
                 "health_check_url": default_preset.get("health_check_url")
                 or _default_health_check_url(default_preset.get("endpoint", ""), provider),
                 "fallback": item.get("fallback", []),
@@ -880,6 +885,7 @@ def summarize_api_provider_configs(configs: List[Any]) -> List[dict]:
                 "required_env": meta.get("required_env", []),
                 "fallback_env": meta.get("fallback_env", []),
                 "capabilities": meta.get("capabilities", []),
+                "operation_paths": meta.get("operation_paths", {}),
                 "status": status,
                 "ready": bool(ready_rows),
                 "issues": issues,

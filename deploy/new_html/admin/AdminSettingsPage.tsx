@@ -68,6 +68,7 @@ interface ProviderMeta {
     default_proxy_mode?: string;
     preset_count?: number;
     preset_categories?: string[];
+    operation_paths?: Record<string, string>;
 }
 
 interface ProviderExtraField {
@@ -778,6 +779,31 @@ const ProviderCredentialLinks: React.FC<{ meta?: ProviderMeta; compact?: boolean
     );
 };
 
+const ProviderOperationPaths: React.FC<{ meta?: ProviderMeta; compact?: boolean }> = ({ meta, compact = false }) => {
+    const entries = Object.entries(meta?.operation_paths || {})
+        .filter(([operation, path]) => operation && path)
+        .sort(([left], [right]) => left.localeCompare(right));
+    if (!entries.length) return null;
+
+    const visible = compact ? entries.slice(0, 3) : entries;
+    return (
+        <div className={`rounded border border-n40 bg-n20 px-3 py-2 text-[11px] text-n100 ${compact ? 'mt-2' : 'mt-3'}`}>
+            <div className="mb-1 font-semibold uppercase tracking-wider text-n100">API Paths</div>
+            <div className="grid gap-1">
+                {visible.map(([operation, path]) => (
+                    <div key={operation} className="grid gap-1 sm:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]">
+                        <span className="font-mono text-n700 break-all">{operation}</span>
+                        <span className="font-mono text-n300 break-all">{path}</span>
+                    </div>
+                ))}
+            </div>
+            {compact && entries.length > visible.length && (
+                <div className="mt-1 font-mono text-n100">+{entries.length - visible.length} more</div>
+            )}
+        </div>
+    );
+};
+
 const ProviderHealthMonitorStrip: React.FC<{ state: ProviderHealthMonitorState | null }> = ({ state }) => {
     if (!state) return null;
     const enabled = state.enabled !== false;
@@ -1347,6 +1373,7 @@ const ApiConfigCard: React.FC<{
                     {meta?.notes && (
                         <div className="mt-2 text-[11px] text-n100 leading-relaxed break-words">{meta.notes}</div>
                     )}
+                    <ProviderOperationPaths meta={meta} />
                     <ProviderCredentialLinks meta={meta} />
                 </div>
             </div>
@@ -1475,6 +1502,8 @@ const ProviderQuickCard: React.FC<{
                     </div>
                 ) : null}
             </div>
+
+            <ProviderOperationPaths meta={meta} compact />
 
             <div className="mt-3 flex flex-wrap gap-2">
                 {primaryConfig ? (
