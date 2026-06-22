@@ -1885,8 +1885,11 @@ def check_episode_video_routes_extracted(root: Path) -> int:
 def check_video_capabilities_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     video_capabilities_path = root / "routers" / "video_capabilities.py"
+    video_capability_service_path = root / "services" / "video_capability_service.py"
     if not video_capabilities_path.exists():
         fail("routers/video_capabilities.py is missing")
+    if not video_capability_service_path.exists():
+        fail("services/video_capability_service.py is missing")
 
     api_tree = parse_py_file(api_routes_path)
     violations: list[str] = []
@@ -1920,6 +1923,26 @@ def check_video_capabilities_routes_extracted(root: Path) -> int:
 
     if route_count != 1:
         fail(f"routers/video_capabilities.py should own 1 video capability route registration, found {route_count}")
+
+    router_text = video_capabilities_path.read_text(encoding="utf-8")
+    service_text = video_capability_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.video_capability_service import get_video_capabilities", video_capabilities_path),
+        (router_text, "return await get_video_capabilities()", video_capabilities_path),
+        (service_text, 'resolve_seedance_model_name("standard")', video_capability_service_path),
+        (service_text, "AgentDAO.get_online_agents()", video_capability_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "from dao_agent import AgentDAO", video_capabilities_path),
+        (router_text, "AgentDAO.get_online_agents()", video_capabilities_path),
+        (router_text, "resolve_seedance_model_name", video_capabilities_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing video capability service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Video capability router must delegate business checks to service: {path.relative_to(root)} {snippet}")
     return route_count
 
 
@@ -2755,7 +2778,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "resolve_seedance_model_name(normalized_sub_model)",
         ),
         (
-            root / "routers" / "video_capabilities.py",
+            root / "services" / "video_capability_service.py",
             "resolve_seedance_model_name(\"standard\")",
         ),
         (
@@ -4004,6 +4027,8 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
         (root / "routers" / "episode_video.py", "EpisodeDAO.get_project_id("),
+        (root / "routers" / "video_capabilities.py", "get_video_capabilities("),
+        (root / "services" / "video_capability_service.py", "AgentDAO.get_online_agents("),
         (root / "routers" / "tasks.py", "get_task_status_response("),
         (root / "routers" / "tasks.py", "list_user_tasks_response("),
         (root / "routers" / "tasks.py", "soft_delete_user_file_by_path_fragment("),
@@ -4784,6 +4809,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_episode_compose_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_video_client_base.py",
+        "tests/test_video_capability_service.py",
         '"new_html/.env.example"',
         '"new_html/README.md"',
         '"new_html/GEMINI_API_CONFIG.md"',

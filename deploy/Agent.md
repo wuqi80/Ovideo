@@ -8321,3 +8321,18 @@
 - Local `py_compile` for route contract passed.
 - Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=12864`.
 - Local `rg "\bfetch\(" new_html` confirmed only `services/httpClient.ts` has direct fetch calls outside excluded folders.
+
+## 2026-06-23 Video Capability Service Boundary
+
+### Changes
+
+- Moved `/api/video/capabilities` business checks from `routers/video_capabilities.py` into `services/video_capability_service.py`.
+- The router now only owns the HTTP route and delegates Seedance runtime model and ComfyUI agent availability checks to the service layer.
+- Added `tests/test_video_capability_service.py` and included it in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so this route cannot regress to direct `AgentDAO` or Seedance runtime calls in the router.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_video_capability_service.py -q` passed with 2 tests.
+- Local `scripts/check_route_contract.py` passed.

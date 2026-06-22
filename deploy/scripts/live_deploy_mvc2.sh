@@ -64,6 +64,7 @@ FILES=(
   tests/test_task_read_service.py
   tests/test_user_dao_admin_delete.py
   tests/test_video_client_base.py
+  tests/test_video_capability_service.py
   "new_html/.env.example"
   "new_html/README.md"
   "new_html/GEMINI_API_CONFIG.md"

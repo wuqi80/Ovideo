@@ -8020,3 +8020,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `py_compile` for route contract passed.
   - Local `scripts/check_route_contract.py` passed with `frontend_http_client_checks=12864`.
   - Local `rg "\bfetch\(" new_html` confirmed only `services/httpClient.ts` has direct fetch calls outside excluded folders.
+
+## 2026-06-23 Video Capability Service Boundary
+
+- Moved `/api/video/capabilities` business checks from `deploy/routers/video_capabilities.py` into `deploy/services/video_capability_service.py`.
+- The router now only owns the HTTP route and delegates Seedance runtime model and ComfyUI agent availability checks to the service layer.
+- Added `deploy/tests/test_video_capability_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so this route cannot regress to direct `AgentDAO` or Seedance runtime calls in the router.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_video_capability_service.py -q` passed with 2 tests.
+  - Local `scripts/check_route_contract.py` passed.
