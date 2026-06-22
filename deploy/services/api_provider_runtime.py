@@ -14,6 +14,7 @@ from services.api_provider_registry import (
     DASHSCOPE_DEFAULT_MODEL_MAP,
     PROVIDER_CATALOG,
     SEEDANCE_DEFAULT_MODEL_MAP,
+    build_provider_operation_url_templates,
     dashscope_model_matches_sub_model,
     dashscope_sub_model_for_model,
     get_api_model_preset,
@@ -62,6 +63,9 @@ class ResolvedProviderConfig:
 
     def url_for_operation(self, operation: str, **path_params: Any) -> str:
         return self.url_for(get_provider_api_path(self.provider, operation, **path_params))
+
+    def operation_url_templates(self) -> Dict[str, str]:
+        return build_provider_operation_url_templates(self.provider, self.endpoint)
 
     def requests_kwargs(self) -> Dict[str, Any]:
         mode = (self.proxy_config.get("mode") or "direct").lower()
@@ -569,6 +573,7 @@ def build_provider_runtime_status(
                 "endpoint": resolved.endpoint,
                 "endpoint_env": resolved.endpoint_env,
                 "endpoint_source": resolved.source.get("endpoint") or "missing",
+                "operation_urls": resolved.operation_url_templates(),
                 "runtime_model_name": resolved.model_name,
                 "model_env": resolved.model_env,
                 "model_source": resolved.source.get("model") or "missing",

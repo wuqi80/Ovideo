@@ -8245,3 +8245,19 @@
 - Local `py_compile` for changed Python files passed.
 - Local `scripts/check_provider_contract.py` and `scripts/check_route_contract.py` passed.
 - Local frontend production build passed via bundled Node/Vite.
+
+## 2026-06-22 Admin Provider Operation URL Templates
+
+### Changes
+
+- Added `build_provider_operation_url_templates()` to `services/api_provider_registry.py`.
+- Provider catalog now exposes `default_operation_url_templates` from each provider default endpoint plus registered operation paths.
+- Runtime status now exposes `operation_urls` from the resolved endpoint, so admin can see the actual URL templates that will be used after DB/env overrides.
+- Updated `new_html/admin/AdminSettingsPage.tsx` so API provider cards prefer runtime-resolved operation URLs and fall back to default templates/path metadata.
+- Strengthened provider and route contracts so catalog/runtime/UI metadata cannot regress to path-only visibility.
+
+### Verification
+
+- Local `py_compile` for changed Python files passed.
+- Local `scripts/check_provider_contract.py` and `scripts/check_route_contract.py` passed.
+- Local frontend production build passed via bundled Node/Vite.

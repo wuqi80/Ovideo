@@ -682,6 +682,22 @@ def get_provider_operation_paths(provider: str) -> Dict[str, str]:
     return deepcopy(PROVIDER_API_PATHS.get(normalize_provider(provider), {}))
 
 
+def build_provider_operation_url_templates(provider: str, endpoint: str) -> Dict[str, str]:
+    base = (endpoint or "").strip().rstrip("/")
+    if not base:
+        return {}
+    urls: Dict[str, str] = {}
+    for operation, path in get_provider_operation_paths(provider).items():
+        suffix = (path or "").strip("/")
+        if not suffix:
+            urls[operation] = base
+        elif base.endswith(f"/{suffix}"):
+            urls[operation] = base
+        else:
+            urls[operation] = f"{base}/{suffix}"
+    return urls
+
+
 def get_provider_default_category(provider: str) -> str:
     capabilities = PROVIDER_CATALOG.get(normalize_provider(provider), {}).get("capabilities") or []
     return str(capabilities[0]) if capabilities else ""
@@ -777,6 +793,10 @@ def get_api_provider_catalog() -> List[dict]:
                 else None,
                 "extra_fields": get_provider_extra_fields(provider),
                 "operation_paths": get_provider_operation_paths(provider),
+                "default_operation_url_templates": build_provider_operation_url_templates(
+                    provider,
+                    default_preset.get("endpoint") or "",
+                ),
                 "health_check_url": default_preset.get("health_check_url")
                 or _default_health_check_url(default_preset.get("endpoint", ""), provider),
                 "fallback": item.get("fallback", []),

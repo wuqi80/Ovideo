@@ -69,6 +69,7 @@ interface ProviderMeta {
     preset_count?: number;
     preset_categories?: string[];
     operation_paths?: Record<string, string>;
+    default_operation_url_templates?: Record<string, string>;
 }
 
 interface ProviderExtraField {
@@ -95,6 +96,7 @@ interface RuntimeStatus {
     status?: string;
     has_key?: boolean;
     endpoint?: string;
+    operation_urls?: Record<string, string>;
     endpoint_env?: string;
     endpoint_source?: string;
     runtime_model_name?: string;
@@ -779,9 +781,15 @@ const ProviderCredentialLinks: React.FC<{ meta?: ProviderMeta; compact?: boolean
     );
 };
 
-const ProviderOperationPaths: React.FC<{ meta?: ProviderMeta; compact?: boolean }> = ({ meta, compact = false }) => {
-    const entries = Object.entries(meta?.operation_paths || {})
-        .filter(([operation, path]) => operation && path)
+const ProviderOperationPaths: React.FC<{ meta?: ProviderMeta; runtime?: RuntimeStatus; compact?: boolean }> = ({
+    meta,
+    runtime,
+    compact = false,
+}) => {
+    const operationUrls = runtime?.operation_urls || meta?.default_operation_url_templates || {};
+    const entries = Object.entries(meta?.operation_paths || operationUrls)
+        .map(([operation, path]) => [operation, String(path || ''), String(operationUrls[operation] || '')] as const)
+        .filter(([operation, path, url]) => operation && (path || url))
         .sort(([left], [right]) => left.localeCompare(right));
     if (!entries.length) return null;
 
@@ -790,10 +798,13 @@ const ProviderOperationPaths: React.FC<{ meta?: ProviderMeta; compact?: boolean 
         <div className={`rounded border border-n40 bg-n20 px-3 py-2 text-[11px] text-n100 ${compact ? 'mt-2' : 'mt-3'}`}>
             <div className="mb-1 font-semibold uppercase tracking-wider text-n100">API Paths</div>
             <div className="grid gap-1">
-                {visible.map(([operation, path]) => (
+                {visible.map(([operation, path, url]) => (
                     <div key={operation} className="grid gap-1 sm:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]">
                         <span className="font-mono text-n700 break-all">{operation}</span>
-                        <span className="font-mono text-n300 break-all">{path}</span>
+                        <span className="font-mono text-n300 break-all">{url || path}</span>
+                        {url && path && url !== path && (
+                            <span className="font-mono text-n100 break-all sm:col-start-2">{path}</span>
+                        )}
                     </div>
                 ))}
             </div>
@@ -1373,7 +1384,7 @@ const ApiConfigCard: React.FC<{
                     {meta?.notes && (
                         <div className="mt-2 text-[11px] text-n100 leading-relaxed break-words">{meta.notes}</div>
                     )}
-                    <ProviderOperationPaths meta={meta} />
+                    <ProviderOperationPaths meta={meta} runtime={runtime} />
                     <ProviderCredentialLinks meta={meta} />
                 </div>
             </div>
@@ -1503,7 +1514,7 @@ const ProviderQuickCard: React.FC<{
                 ) : null}
             </div>
 
-            <ProviderOperationPaths meta={meta} compact />
+            <ProviderOperationPaths meta={meta} runtime={runtime} compact />
 
             <div className="mt-3 flex flex-wrap gap-2">
                 {primaryConfig ? (

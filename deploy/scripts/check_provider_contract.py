@@ -209,10 +209,16 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must expose get_provider_api_path()")
     if "def get_provider_operation_paths" not in registry_text:
         fail("api_provider_registry.py must expose get_provider_operation_paths() for admin catalog metadata")
+    if "def build_provider_operation_url_templates" not in registry_text:
+        fail("api_provider_registry.py must expose build_provider_operation_url_templates() for admin URL previews")
     if '"operation_paths": get_provider_operation_paths(provider)' not in registry_text:
         fail("api_provider_registry.py must expose operation_paths in provider catalog responses")
+    if '"default_operation_url_templates": build_provider_operation_url_templates(' not in registry_text:
+        fail("api_provider_registry.py must expose default_operation_url_templates in provider catalog responses")
     if "def url_for_operation" not in runtime_text or "get_provider_api_path" not in runtime_text:
         fail("api_provider_runtime.py must expose ResolvedProviderConfig.url_for_operation()")
+    if "def operation_url_templates" not in runtime_text or '"operation_urls": resolved.operation_url_templates()' not in runtime_text:
+        fail("api_provider_runtime.py must expose resolved operation URL templates in runtime status")
     for forbidden in (
         'url_for("chat/completions"',
         'url_for("images/edits"',
@@ -312,6 +318,12 @@ def check_registry_shape(registry) -> None:
         copied["__mutation_check__"] = "x"
         if "__mutation_check__" in registry.PROVIDER_API_PATHS.get(provider, {}):
             fail("get_provider_operation_paths() must return a copy, not the registry dict")
+        default_endpoint = registry.get_provider_default_endpoint(provider)
+        url_templates = registry.build_provider_operation_url_templates(provider, default_endpoint)
+        for operation, path in operations.items():
+            expected_url = f"{default_endpoint.rstrip('/')}/{path.strip('/')}" if path else default_endpoint.rstrip("/")
+            if url_templates.get(operation) != expected_url:
+                fail(f"{provider}.{operation} default operation URL mismatch: {url_templates.get(operation)} != {expected_url}")
     for preset in getattr(registry, "API_MODEL_PRESETS", []):
         provider = registry.normalize_provider(preset.get("provider", ""))
         if "endpoint" in preset:
@@ -519,6 +531,15 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
             fail(
                 f"Catalog operation_paths for {provider} should come from PROVIDER_API_PATHS: "
                 f"{item.get('operation_paths')} != {expected_paths}"
+            )
+        expected_urls = registry.build_provider_operation_url_templates(
+            provider,
+            registry.get_provider_default_endpoint(provider),
+        )
+        if item.get("default_operation_url_templates") != expected_urls:
+            fail(
+                f"Catalog default_operation_url_templates for {provider} should be derived from default endpoint: "
+                f"{item.get('default_operation_url_templates')} != {expected_urls}"
             )
 
     return len(presets), len(providers_with_presets)
@@ -1739,6 +1760,8 @@ def check_runtime_status(
         fail(f"Runtime api_key_source mismatch: {row.get('api_key_source')} != {env_key}")
     if row.get("endpoint_source") != endpoint_env:
         fail(f"Runtime endpoint_source mismatch: {row.get('endpoint_source')} != {endpoint_env}")
+    if row.get("operation_urls", {}).get("chat_completions") != "https://runtime.example.test/v1/chat/completions":
+        fail(f"Runtime operation_urls did not derive from resolved endpoint: {row.get('operation_urls')}")
     if row.get("runtime_model_name") != row.get("model_name"):
         fail(f"Runtime status should resolve the row model_name explicitly: {row}")
     if row.get("model_source") != "request":
