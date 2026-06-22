@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -16,8 +15,11 @@ from fastapi.security import HTTPAuthorizationCredentials
 from dao_content import FileDAO, ProjectDAO, VersionDAO
 from services.comfyui_file_service import (
     ComfyUIFileRequestError,
+    ComfyUIVideoReuploadFailed,
+    ComfyUIVideoReuploadNotFound,
     create_comfyui_upload_record,
     fetch_comfyui_view_response,
+    reupload_comfyui_video_with_uuid,
     upload_comfyui_file_response,
 )
 
@@ -501,96 +503,19 @@ def create_comfyui_files_router(
             target_server, _node_id = select_video_comfyui_server(comfyui_server)
             logger.info("用户 %s 请求重新上传视频: %s (从%s目录)", username, filename, file_type)
 
-            file_content = None
-            storage_path = None
-
-            if filename.startswith("video/") or filename.startswith("admin/"):
-                video_path_suffix = filename.replace("video/", "")
-                possible_paths = [
-                    os.path.join("temp", "uploads", "video", video_path_suffix),
-                    os.path.join("persistent_storage", "video", video_path_suffix),
-                    os.path.join("persistent_storage", "videos", video_path_suffix),
-                ]
-
-                for path in possible_paths:
-                    if os.path.exists(path):
-                        storage_path = path
-                        logger.info("✅ 找到视频文件: %s", storage_path)
-                        break
-                    logger.debug("❌ 路径不存在: %s", path)
-
-            elif filename.startswith("uploads/video/") or filename.startswith("temp/uploads/video/"):
-                path_part = filename.replace("uploads/video/", "").replace("temp/uploads/video/", "")
-                storage_path = os.path.join("persistent_storage", "videos", path_part.replace("\\", "/"))
-                logger.info("将uploads路径映射到: %s", storage_path)
-
-            elif "persistent_storage" in filename:
-                storage_path = filename.replace("\\", "/")
-
-            elif "/" in filename:
-                storage_path = os.path.join("persistent_storage", "videos", filename.replace("\\", "/"))
-
-            if storage_path and os.path.exists(storage_path):
-                logger.info("✅ 从持久化存储读取: %s", storage_path)
-                with open(storage_path, "rb") as f:
-                    file_content = f.read()
-                logger.info("✅ 读取成功，大小: %s 字节", len(file_content))
-            elif storage_path:
-                logger.warning("❌ 存储路径不存在: %s", storage_path)
-
-            if file_content is None:
-                for try_type in [file_type, "temp", "output", "input"]:
-                    download_url = f"{target_server}/view?filename={filename}&type={try_type}"
-                    logger.info("尝试从ComfyUI下载: %s", download_url)
-                    response = fetch_comfyui_view_response(download_url, timeout=30)
-
-                    if response.ok:
-                        file_content = response.content
-                        logger.info(
-                            "✅ 从ComfyUI下载视频成功 (type=%s): %s, 大小: %s 字节",
-                            try_type,
-                            filename,
-                            len(file_content),
-                        )
-                        break
-                    logger.warning("从ComfyUI %s 目录下载失败: %s", try_type, response.status_code)
-
-                if file_content is None:
-                    error_msg = (
-                        f"无法找到视频文件: {filename}。已尝试持久化存储和ComfyUI的 "
-                        f"{file_type}/temp/output/input 目录。该文件可能已被清理。请重新生成视频。"
-                    )
-                    logger.error(error_msg)
-                    raise HTTPException(status_code=404, detail=error_msg)
-
-            file_ext = os.path.splitext(filename)[1]
-            unique_filename = f"{uuid.uuid4().hex[:12]}_reuploaded{file_ext}"
-
-            upload_url = f"{target_server}/upload/image"
-            upload_response = upload_comfyui_file_response(
-                upload_url,
-                unique_filename,
-                file_content,
-                "video/mp4",
-                timeout=60,
+            return reupload_comfyui_video_with_uuid(
+                filename=filename,
+                file_type=file_type,
+                target_server=target_server,
+                logger=logger,
             )
 
-            if not upload_response.ok:
-                raise HTTPException(status_code=500, detail="重新上传失败")
-
-            result = upload_response.json()
-            uploaded_filename = result.get("name", unique_filename)
-
-            logger.info("✅ 视频重新上传成功: %s -> %s", filename, uploaded_filename)
-
-            return {
-                "success": True,
-                "original_filename": filename,
-                "new_filename": uploaded_filename,
-                "size": len(file_content),
-                "server": target_server,
-            }
-
+        except ComfyUIVideoReuploadNotFound as e:
+            logger.error("%s", e)
+            raise HTTPException(status_code=404, detail=str(e))
+        except ComfyUIVideoReuploadFailed as e:
+            logger.error("❌ 视频重新上传失败: %s", e)
+            raise HTTPException(status_code=500, detail=str(e))
         except HTTPException:
             raise
         except Exception as e:

@@ -8252,3 +8252,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `be7aef9`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 ComfyUI Video Reupload Service Boundary
+
+- Moved `/api/comfyui/reupload/video` source resolution and reupload workflow from `deploy/routers/comfyui_files.py` into `deploy/services/comfyui_file_service.py`.
+- The router still owns auth, target ComfyUI node selection, and HTTP error mapping, but now delegates persistent-storage path resolution, ComfyUI fallback downloads, UUID reupload filename generation, upload failure handling, and response shaping to `reupload_comfyui_video_with_uuid()`.
+- Extended `deploy/tests/test_comfyui_file_service.py` to cover storage-hit reupload, ComfyUI fallback reupload, missing source errors, and upload failure errors.
+- Strengthened `deploy/scripts/check_route_contract.py` so the reupload route cannot regress to route-local storage path parsing, ComfyUI fallback loops, or `_reuploaded` filename generation.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_comfyui_file_service.py -q` passed with 9 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
+  - Commit, push, deploy, and online smoke pending.

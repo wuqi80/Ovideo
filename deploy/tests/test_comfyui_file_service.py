@@ -113,10 +113,20 @@ class _Redis:
 
 class _Logger:
     warnings = []
+    infos = []
+    debugs = []
 
     @classmethod
     def warning(cls, *args, **kwargs):
         cls.warnings.append((args, kwargs))
+
+    @classmethod
+    def info(cls, *args, **kwargs):
+        cls.infos.append((args, kwargs))
+
+    @classmethod
+    def debug(cls, *args, **kwargs):
+        cls.debugs.append((args, kwargs))
 
 
 def _reset_fakes():
@@ -126,6 +136,8 @@ def _reset_fakes():
     _VersionDAO.created = []
     _FileDAO.created = []
     _Logger.warnings = []
+    _Logger.infos = []
+    _Logger.debugs = []
 
 
 @pytest.mark.asyncio
@@ -191,3 +203,124 @@ async def test_create_comfyui_upload_record_uses_existing_version_and_download_u
     assert _VersionDAO.created == []
     assert _FileDAO.created[0]["version_id"] == "ver_existing"
     assert _FileDAO.created[0]["file_type"] == "video"
+
+
+class _Response:
+    def __init__(self, *, ok=True, content=b"", status_code=200, payload=None):
+        self.ok = ok
+        self.content = content
+        self.status_code = status_code
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
+
+
+def test_reupload_comfyui_video_with_uuid_reads_persistent_storage(tmp_path):
+    source_path = tmp_path / "persistent_storage" / "videos" / "scene" / "clip.mp4"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_bytes(b"local-video")
+    upload_calls = []
+
+    def fake_fetch(*_args, **_kwargs):
+        raise AssertionError("storage hit should not fetch ComfyUI")
+
+    def fake_upload(*args, **kwargs):
+        upload_calls.append((args, kwargs))
+        return _Response(payload={"name": "uploaded.mp4"})
+
+    result = comfyui_file_service.reupload_comfyui_video_with_uuid(
+        filename="scene/clip.mp4",
+        file_type="output",
+        target_server="http://node:8188",
+        logger=_Logger,
+        storage_root=tmp_path,
+        uuid_hex_provider=lambda: "abcdef123456",
+        fetch_view=fake_fetch,
+        upload_file=fake_upload,
+    )
+
+    assert result == {
+        "success": True,
+        "original_filename": "scene/clip.mp4",
+        "new_filename": "uploaded.mp4",
+        "size": len(b"local-video"),
+        "server": "http://node:8188",
+    }
+    assert upload_calls == [
+        (
+            ("http://node:8188/upload/image", "abcdef123456_reuploaded.mp4", b"local-video", "video/mp4"),
+            {"timeout": 60},
+        )
+    ]
+
+
+def test_reupload_comfyui_video_with_uuid_fetches_from_comfyui_then_uploads(tmp_path):
+    fetch_calls = []
+    upload_calls = []
+
+    def fake_fetch(url, **kwargs):
+        fetch_calls.append((url, kwargs))
+        if len(fetch_calls) == 1:
+            return _Response(ok=False, status_code=404)
+        return _Response(ok=True, content=b"remote-video")
+
+    def fake_upload(*args, **kwargs):
+        upload_calls.append((args, kwargs))
+        return _Response(payload={})
+
+    result = comfyui_file_service.reupload_comfyui_video_with_uuid(
+        filename="clip.mp4",
+        file_type="output",
+        target_server="http://node:8188",
+        logger=_Logger,
+        storage_root=tmp_path,
+        uuid_hex_provider=lambda: "fedcba654321",
+        fetch_view=fake_fetch,
+        upload_file=fake_upload,
+    )
+
+    assert result["new_filename"] == "fedcba654321_reuploaded.mp4"
+    assert result["size"] == len(b"remote-video")
+    assert fetch_calls == [
+        ("http://node:8188/view?filename=clip.mp4&type=output", {"timeout": 30}),
+        ("http://node:8188/view?filename=clip.mp4&type=temp", {"timeout": 30}),
+    ]
+    assert upload_calls[0][0][2] == b"remote-video"
+
+
+def test_reupload_comfyui_video_with_uuid_raises_when_source_missing(tmp_path):
+    def fake_fetch(*_args, **_kwargs):
+        return _Response(ok=False, status_code=404)
+
+    with pytest.raises(comfyui_file_service.ComfyUIVideoReuploadNotFound) as exc:
+        comfyui_file_service.reupload_comfyui_video_with_uuid(
+            filename="clip.mp4",
+            file_type="output",
+            target_server="http://node:8188",
+            logger=_Logger,
+            storage_root=tmp_path,
+            fetch_view=fake_fetch,
+        )
+
+    assert "无法找到视频文件: clip.mp4" in str(exc.value)
+
+
+def test_reupload_comfyui_video_with_uuid_raises_when_upload_fails(tmp_path):
+    def fake_fetch(*_args, **_kwargs):
+        return _Response(ok=True, content=b"remote-video")
+
+    def fake_upload(*_args, **_kwargs):
+        return _Response(ok=False, status_code=500)
+
+    with pytest.raises(comfyui_file_service.ComfyUIVideoReuploadFailed):
+        comfyui_file_service.reupload_comfyui_video_with_uuid(
+            filename="clip.mp4",
+            file_type="output",
+            target_server="http://node:8188",
+            logger=_Logger,
+            storage_root=tmp_path,
+            uuid_hex_provider=lambda: "fedcba654321",
+            fetch_view=fake_fetch,
+            upload_file=fake_upload,
+        )

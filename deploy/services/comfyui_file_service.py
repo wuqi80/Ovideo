@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import inspect
+import os
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
 import requests
@@ -11,6 +13,14 @@ import requests
 
 class ComfyUIFileRequestError(RuntimeError):
     """Raised when a ComfyUI file transfer request cannot be completed."""
+
+
+class ComfyUIVideoReuploadNotFound(RuntimeError):
+    """Raised when a source video cannot be found in storage or ComfyUI."""
+
+
+class ComfyUIVideoReuploadFailed(RuntimeError):
+    """Raised when reuploading a source video to ComfyUI fails."""
 
 
 @dataclass(frozen=True)
@@ -22,6 +32,12 @@ class ComfyUIUploadRecord:
     version_id: str
     file_url: str
     download_url: str
+
+
+@dataclass(frozen=True)
+class ReuploadVideoSource:
+    content: bytes
+    source_info: str
 
 
 def _request(action: str, method, *args, **kwargs) -> requests.Response:
@@ -155,3 +171,113 @@ async def create_comfyui_upload_record(
         file_url=resolved_file_url,
         download_url=download_url,
     )
+
+
+def _rooted_path(storage_root: Path, path: str) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else storage_root / candidate
+
+
+def _reupload_storage_candidates(filename: str, *, storage_root: Path = Path(".")) -> list[Path]:
+    normalized = filename.replace("\\", "/")
+    if normalized.startswith("video/") or normalized.startswith("admin/"):
+        video_path_suffix = normalized.replace("video/", "", 1)
+        return [
+            _rooted_path(storage_root, os.path.join("temp", "uploads", "video", video_path_suffix)),
+            _rooted_path(storage_root, os.path.join("persistent_storage", "video", video_path_suffix)),
+            _rooted_path(storage_root, os.path.join("persistent_storage", "videos", video_path_suffix)),
+        ]
+    if normalized.startswith("uploads/video/") or normalized.startswith("temp/uploads/video/"):
+        path_part = normalized.replace("uploads/video/", "", 1).replace("temp/uploads/video/", "", 1)
+        return [_rooted_path(storage_root, os.path.join("persistent_storage", "videos", path_part))]
+    if "persistent_storage" in normalized:
+        return [_rooted_path(storage_root, normalized)]
+    if "/" in normalized:
+        return [_rooted_path(storage_root, os.path.join("persistent_storage", "videos", normalized))]
+    return []
+
+
+def resolve_reupload_video_source(
+    *,
+    filename: str,
+    file_type: str,
+    target_server: str,
+    logger: Any,
+    storage_root: Path = Path("."),
+    fetch_view: Callable[..., requests.Response] = fetch_comfyui_view_response,
+) -> ReuploadVideoSource:
+    """Resolve reupload source bytes from persistent storage or ComfyUI."""
+
+    for storage_path in _reupload_storage_candidates(filename, storage_root=storage_root):
+        if storage_path.exists():
+            logger.info("✅ 从持久化存储读取: %s", storage_path)
+            return ReuploadVideoSource(
+                content=storage_path.read_bytes(),
+                source_info=f"persistent_storage:{storage_path}",
+            )
+        logger.debug("❌ 路径不存在: %s", storage_path)
+
+    for try_type in [file_type, "temp", "output", "input"]:
+        download_url = f"{target_server}/view?filename={filename}&type={try_type}"
+        logger.info("尝试从ComfyUI下载: %s", download_url)
+        response = fetch_view(download_url, timeout=30)
+
+        if response.ok:
+            content = response.content
+            logger.info("✅ 从ComfyUI下载视频成功 (type=%s): %s, 大小: %s 字节", try_type, filename, len(content))
+            return ReuploadVideoSource(content=content, source_info=f"comfyui:{try_type}:{download_url}")
+        logger.warning("从ComfyUI %s 目录下载失败: %s", try_type, response.status_code)
+
+    raise ComfyUIVideoReuploadNotFound(
+        f"无法找到视频文件: {filename}。已尝试持久化存储和ComfyUI的 "
+        f"{file_type}/temp/output/input 目录。该文件可能已被清理。请重新生成视频。"
+    )
+
+
+def reupload_comfyui_video_with_uuid(
+    *,
+    filename: str,
+    file_type: str,
+    target_server: str,
+    logger: Any,
+    storage_root: Path = Path("."),
+    uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
+    fetch_view: Callable[..., requests.Response] = fetch_comfyui_view_response,
+    upload_file: Callable[..., requests.Response] = upload_comfyui_file_response,
+) -> Dict[str, Any]:
+    """Download a video source and reupload it to ComfyUI with a fresh UUID filename."""
+
+    source = resolve_reupload_video_source(
+        filename=filename,
+        file_type=file_type,
+        target_server=target_server,
+        logger=logger,
+        storage_root=storage_root,
+        fetch_view=fetch_view,
+    )
+
+    file_ext = os.path.splitext(filename)[1]
+    unique_filename = f"{uuid_hex_provider()[:12]}_reuploaded{file_ext}"
+    upload_url = f"{target_server}/upload/image"
+    upload_response = upload_file(
+        upload_url,
+        unique_filename,
+        source.content,
+        "video/mp4",
+        timeout=60,
+    )
+
+    if not upload_response.ok:
+        raise ComfyUIVideoReuploadFailed("重新上传失败")
+
+    result = upload_response.json()
+    uploaded_filename = result.get("name", unique_filename) if isinstance(result, dict) else unique_filename
+    logger.info("✅ 视频重新上传成功: %s -> %s", filename, uploaded_filename)
+
+    return {
+        "success": True,
+        "original_filename": filename,
+        "new_filename": uploaded_filename,
+        "size": len(source.content),
+        "server": target_server,
+    }

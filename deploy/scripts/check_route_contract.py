@@ -5596,14 +5596,21 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     required_route_snippets = [
         "from services.comfyui_file_service import",
         "ComfyUIFileRequestError",
+        "ComfyUIVideoReuploadNotFound",
         "create_comfyui_upload_record(",
         "fetch_comfyui_view_response(",
+        "reupload_comfyui_video_with_uuid(",
         "upload_comfyui_file_response(",
     ]
     required_service_snippets = [
         "class ComfyUIFileRequestError(RuntimeError):",
+        "class ComfyUIVideoReuploadNotFound(RuntimeError):",
         "async def _ensure_default_upload_version(",
         "async def create_comfyui_upload_record(",
+        "def resolve_reupload_video_source(",
+        "def reupload_comfyui_video_with_uuid(",
+        "for try_type in [file_type, \"temp\", \"output\", \"input\"]:",
+        "upload_file(",
         "file_dao.create_file(",
         "def fetch_comfyui_view_response(",
         "def upload_comfyui_file_response(",
@@ -5628,6 +5635,16 @@ def check_comfyui_file_service_contract(root: Path) -> int:
     ]:
         if snippet in route_text:
             fail(f"routers/comfyui_files.py must delegate upload persistence to service: {snippet}")
+        checks += 1
+    for snippet in [
+        "for try_type in [file_type, \"temp\", \"output\", \"input\"]:",
+        "with open(storage_path, \"rb\")",
+        "fetch_comfyui_view_response(download_url",
+        "_reuploaded",
+        "os.path.join(\"persistent_storage\"",
+    ]:
+        if snippet in route_text:
+            fail(f"routers/comfyui_files.py must delegate video reupload source handling to service: {snippet}")
         checks += 1
     for snippet in required_service_snippets:
         if snippet not in service_text:
