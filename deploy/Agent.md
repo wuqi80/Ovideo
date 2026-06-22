@@ -8399,3 +8399,19 @@
 - Local `pytest tests/test_script_timeline_service.py -q` passed with 9 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Canvas Service Boundary
+
+### Changes
+
+- Moved canvas board, node, and connection business logic from `routers/canvas.py` into `services/canvas_service.py`.
+- The router still owns the 10 canvas HTTP endpoints, but now delegates project permission checks and canvas DAO orchestration to the service layer.
+- Added `tests/test_canvas_service.py` and included it in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so canvas routes cannot regress to direct permission checks or canvas DAO orchestration in the router.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_canvas_service.py -q` passed with 9 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.

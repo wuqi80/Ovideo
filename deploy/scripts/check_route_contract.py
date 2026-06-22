@@ -2448,8 +2448,11 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
 def check_canvas_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     canvas_path = root / "routers" / "canvas.py"
+    canvas_service_path = root / "services" / "canvas_service.py"
     if not canvas_path.exists():
         fail("routers/canvas.py is missing")
+    if not canvas_service_path.exists():
+        fail("services/canvas_service.py is missing")
 
     api_tree = parse_py_file(api_routes_path)
     violations: list[str] = []
@@ -2483,6 +2486,51 @@ def check_canvas_routes_extracted(root: Path) -> int:
 
     if route_count != 10:
         fail(f"routers/canvas.py should own 10 canvas route registrations, found {route_count}")
+
+    router_text = canvas_path.read_text(encoding="utf-8")
+    service_text = canvas_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.canvas_service import (", canvas_path),
+        (router_text, "create_canvas_board_service(", canvas_path),
+        (router_text, "list_canvas_boards(", canvas_path),
+        (router_text, "get_canvas_board_detail_service(", canvas_path),
+        (router_text, "update_canvas_board_service(", canvas_path),
+        (router_text, "delete_canvas_board_service(", canvas_path),
+        (router_text, "create_canvas_node_service(", canvas_path),
+        (router_text, "update_canvas_node_service(", canvas_path),
+        (router_text, "delete_canvas_node_service(", canvas_path),
+        (router_text, "create_canvas_connection_service(", canvas_path),
+        (router_text, "delete_canvas_connection_service(", canvas_path),
+        (service_text, "project_member_dao.check_permission(", canvas_service_path),
+        (service_text, "canvas_board_dao.create_board(", canvas_service_path),
+        (service_text, "canvas_board_dao.get_project_boards(", canvas_service_path),
+        (service_text, "canvas_board_dao.get_board(", canvas_service_path),
+        (service_text, "canvas_node_dao.get_board_nodes(", canvas_service_path),
+        (service_text, "canvas_connection_dao.get_board_connections(", canvas_service_path),
+        (service_text, "canvas_node_dao.create_node(", canvas_service_path),
+        (service_text, "canvas_connection_dao.create_connection(", canvas_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "ProjectMemberDAO.check_permission(", canvas_path),
+        (router_text, "CanvasBoardDAO.create_board(", canvas_path),
+        (router_text, "CanvasBoardDAO.get_project_boards(", canvas_path),
+        (router_text, "CanvasBoardDAO.get_board(", canvas_path),
+        (router_text, "CanvasBoardDAO.update_board(", canvas_path),
+        (router_text, "CanvasBoardDAO.delete_board(", canvas_path),
+        (router_text, "CanvasNodeDAO.get_board_nodes(", canvas_path),
+        (router_text, "CanvasNodeDAO.create_node(", canvas_path),
+        (router_text, "CanvasNodeDAO.update_node(", canvas_path),
+        (router_text, "CanvasNodeDAO.delete_node(", canvas_path),
+        (router_text, "CanvasConnectionDAO.get_board_connections(", canvas_path),
+        (router_text, "CanvasConnectionDAO.create_connection(", canvas_path),
+        (router_text, "CanvasConnectionDAO.delete_connection(", canvas_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing canvas service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Canvas router must delegate permission and DAO orchestration to service: {path.relative_to(root)} {snippet}")
     return route_count
 
 
@@ -4958,6 +5006,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_api_provider_runtime_model_env.py",
         "tests/test_asset_service.py",
         "tests/test_audio_provider.py",
+        "tests/test_canvas_service.py",
         "tests/test_storyboard_stale_script_fallback.py",
         "tests/test_comfyui_file_service.py",
         "tests/test_dao_api_config_category.py",

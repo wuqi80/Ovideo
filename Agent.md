@@ -8078,3 +8078,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_script_timeline_service.py -q` passed with 9 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Canvas Service Boundary
+
+- Moved canvas board, node, and connection business logic from `deploy/routers/canvas.py` into `deploy/services/canvas_service.py`.
+- The router still owns the 10 canvas HTTP endpoints, but now delegates project permission checks and canvas DAO orchestration to the service layer.
+- Added `deploy/tests/test_canvas_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so canvas routes cannot regress to direct permission checks or canvas DAO orchestration in the router.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_canvas_service.py -q` passed with 9 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.

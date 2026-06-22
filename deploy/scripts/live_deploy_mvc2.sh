@@ -54,6 +54,7 @@ FILES=(
   tests/test_asset_service.py
   tests/test_audio_provider.py
   tests/test_auth_user_service.py
+  tests/test_canvas_service.py
   tests/test_comfyui_file_service.py
   tests/test_content_file_dao.py
   tests/test_dao_api_config_category.py

@@ -6,6 +6,21 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.canvas_service import (
+    CanvasBoardNotFound,
+    CanvasPermissionDenied,
+    create_canvas_board as create_canvas_board_service,
+    create_canvas_connection as create_canvas_connection_service,
+    create_canvas_node as create_canvas_node_service,
+    delete_canvas_board as delete_canvas_board_service,
+    delete_canvas_connection as delete_canvas_connection_service,
+    delete_canvas_node as delete_canvas_node_service,
+    get_canvas_board_detail as get_canvas_board_detail_service,
+    list_canvas_boards,
+    update_canvas_board as update_canvas_board_service,
+    update_canvas_node as update_canvas_node_service,
+)
+
 
 def create_canvas_router(
     *,
@@ -55,13 +70,16 @@ def create_canvas_router(
     ):
         """创建画布面板"""
         try:
-            has_perm = await ProjectMemberDAO.check_permission(data.project_id, user_id, 'member')
-            if not has_perm:
-                raise HTTPException(status_code=403, detail="无权操作")
-            board = await CanvasBoardDAO.create_board(data.project_id, user_id, data.name, data.description)
-            return {"success": True, "board": board}
-        except HTTPException:
-            raise
+            return await create_canvas_board_service(
+                project_id=data.project_id,
+                user_id=user_id,
+                name=data.name,
+                description=data.description,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+            )
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="无权操作") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -72,13 +90,14 @@ def create_canvas_router(
     ):
         """获取项目的画布列表"""
         try:
-            has_access = await ProjectMemberDAO.check_permission(project_id, user_id, 'readonly')
-            if not has_access:
-                raise HTTPException(status_code=403, detail="无权访问")
-            boards = await CanvasBoardDAO.get_project_boards(project_id)
-            return {"success": True, "boards": boards}
-        except HTTPException:
-            raise
+            return await list_canvas_boards(
+                project_id=project_id,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+            )
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="无权访问") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -89,25 +108,18 @@ def create_canvas_router(
     ):
         """获取画布详情（含节点和连接）"""
         try:
-            board = await CanvasBoardDAO.get_board(board_id)
-            if not board:
-                raise HTTPException(status_code=404, detail="画布不存在")
-        
-            has_access = await ProjectMemberDAO.check_permission(board['project_id'], user_id, 'readonly')
-            if not has_access:
-                raise HTTPException(status_code=403, detail="无权访问")
-        
-            nodes = await CanvasNodeDAO.get_board_nodes(board_id)
-            connections = await CanvasConnectionDAO.get_board_connections(board_id)
-        
-            return {
-                "success": True,
-                "board": board,
-                "nodes": nodes,
-                "connections": connections
-            }
-        except HTTPException:
-            raise
+            return await get_canvas_board_detail_service(
+                board_id=board_id,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+                canvas_node_dao=CanvasNodeDAO,
+                canvas_connection_dao=CanvasConnectionDAO,
+            )
+        except CanvasBoardNotFound as exc:
+            raise HTTPException(status_code=404, detail="画布不存在") from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="无权访问") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -119,16 +131,17 @@ def create_canvas_router(
     ):
         """更新画布信息"""
         try:
-            board = await CanvasBoardDAO.get_board(board_id)
-            if not board:
-                raise HTTPException(status_code=404, detail="画布不存在")
-            has_perm = await ProjectMemberDAO.check_permission(board['project_id'], user_id, 'member')
-            if not has_perm:
-                raise HTTPException(status_code=403, detail="无权操作")
-            await CanvasBoardDAO.update_board(board_id, **data)
-            return {"success": True}
-        except HTTPException:
-            raise
+            return await update_canvas_board_service(
+                board_id=board_id,
+                user_id=user_id,
+                fields=data,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+            )
+        except CanvasBoardNotFound as exc:
+            raise HTTPException(status_code=404, detail="画布不存在") from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="无权操作") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -139,16 +152,16 @@ def create_canvas_router(
     ):
         """删除画布"""
         try:
-            board = await CanvasBoardDAO.get_board(board_id)
-            if not board:
-                raise HTTPException(status_code=404, detail="画布不存在")
-            has_perm = await ProjectMemberDAO.check_permission(board['project_id'], user_id, 'admin')
-            if not has_perm:
-                raise HTTPException(status_code=403, detail="需要管理员权限")
-            await CanvasBoardDAO.delete_board(board_id)
-            return {"success": True}
-        except HTTPException:
-            raise
+            return await delete_canvas_board_service(
+                board_id=board_id,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+            )
+        except CanvasBoardNotFound as exc:
+            raise HTTPException(status_code=404, detail="画布不存在") from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="需要管理员权限") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -159,19 +172,23 @@ def create_canvas_router(
     ):
         """创建画布节点"""
         try:
-            board = await CanvasBoardDAO.get_board(data.board_id)
-            if not board:
-                raise HTTPException(status_code=404, detail="画布不存在")
-            has_perm = await ProjectMemberDAO.check_permission(board['project_id'], user_id, 'member')
-            if not has_perm:
-                raise HTTPException(status_code=403, detail="无权操作")
-            node = await CanvasNodeDAO.create_node(
-                data.board_id, data.node_type, data.x, data.y,
-                data.width, data.height, data.data
+            return await create_canvas_node_service(
+                board_id=data.board_id,
+                node_type=data.node_type,
+                x=data.x,
+                y=data.y,
+                width=data.width,
+                height=data.height,
+                data=data.data,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+                canvas_node_dao=CanvasNodeDAO,
             )
-            return {"success": True, "node": node}
-        except HTTPException:
-            raise
+        except CanvasBoardNotFound as exc:
+            raise HTTPException(status_code=404, detail="画布不存在") from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="无权操作") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -183,8 +200,11 @@ def create_canvas_router(
     ):
         """更新画布节点"""
         try:
-            await CanvasNodeDAO.update_node(node_id, **data)
-            return {"success": True}
+            return await update_canvas_node_service(
+                node_id=node_id,
+                fields=data,
+                canvas_node_dao=CanvasNodeDAO,
+            )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -195,8 +215,7 @@ def create_canvas_router(
     ):
         """删除画布节点"""
         try:
-            await CanvasNodeDAO.delete_node(node_id)
-            return {"success": True}
+            return await delete_canvas_node_service(node_id=node_id, canvas_node_dao=CanvasNodeDAO)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -207,11 +226,15 @@ def create_canvas_router(
     ):
         """创建画布连接"""
         try:
-            conn = await CanvasConnectionDAO.create_connection(
-                data.board_id, data.source_node_id, data.target_node_id,
-                data.source_port, data.target_port, data.label
+            return await create_canvas_connection_service(
+                board_id=data.board_id,
+                source_node_id=data.source_node_id,
+                target_node_id=data.target_node_id,
+                source_port=data.source_port,
+                target_port=data.target_port,
+                label=data.label,
+                canvas_connection_dao=CanvasConnectionDAO,
             )
-            return {"success": True, "connection": conn}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -222,8 +245,10 @@ def create_canvas_router(
     ):
         """删除画布连接"""
         try:
-            await CanvasConnectionDAO.delete_connection(connection_id)
-            return {"success": True}
+            return await delete_canvas_connection_service(
+                connection_id=connection_id,
+                canvas_connection_dao=CanvasConnectionDAO,
+            )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
