@@ -161,6 +161,8 @@ def check_registry_shape(registry) -> None:
         fail("api_provider_registry.py must derive provider health URLs from services.api_provider_endpoints")
     if "out.setdefault(\"endpoint\", get_provider_default_endpoint(provider))" not in registry_text:
         fail("api_provider_registry.py must enrich preset endpoints from get_provider_default_endpoint()")
+    if "out.setdefault(\"category\", get_provider_default_category(provider))" not in registry_text:
+        fail("api_provider_registry.py must enrich preset category from provider capabilities")
     if "out.setdefault(\"proxy_mode\", meta.get(\"default_proxy_mode\", \"direct\"))" not in registry_text:
         fail("api_provider_registry.py must enrich preset proxy_mode from provider default_proxy_mode")
 
@@ -186,10 +188,19 @@ def check_registry_shape(registry) -> None:
         if registry.get_provider_default_endpoint(provider) != endpoint:
             fail(f"get_provider_default_endpoint({provider!r}) did not return map value")
     for preset in getattr(registry, "API_MODEL_PRESETS", []):
+        provider = registry.normalize_provider(preset.get("provider", ""))
         if "endpoint" in preset:
             fail("Raw API_MODEL_PRESETS entries must not carry endpoint; use PROVIDER_DEFAULT_ENDPOINTS")
         if "proxy_mode" in preset:
             fail("Raw API_MODEL_PRESETS entries must not carry proxy_mode; use PROVIDER_CATALOG.default_proxy_mode")
+        raw_category = str(preset.get("category") or "").strip()
+        if raw_category:
+            default_category = registry.get_provider_default_category(provider)
+            if raw_category == default_category:
+                fail("Raw API_MODEL_PRESETS entries must not repeat provider default category")
+            capabilities = set(registry.PROVIDER_CATALOG.get(provider, {}).get("capabilities") or [])
+            if raw_category not in capabilities:
+                fail(f"Raw preset category override {raw_category!r} is not in {provider} capabilities")
 
     env_values = list(registry.PROVIDER_ENV_MAP.values())
     if len(env_values) != len(set(env_values)):
@@ -253,6 +264,13 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
     if not presets:
         fail("No API model presets configured")
 
+    raw_presets = {
+        (
+            registry.normalize_provider(preset.get("provider", "")),
+            str(preset.get("model_name") or ""),
+        ): preset
+        for preset in getattr(registry, "API_MODEL_PRESETS", [])
+    }
     seen: set[tuple[str, str]] = set()
     providers_with_presets: set[str] = set()
 
@@ -281,6 +299,12 @@ def check_presets(registry, resolve_provider) -> tuple[int, int]:
                 fail(
                     f"Preset {preset.get('name')} proxy_mode should come from provider default_proxy_mode: "
                     f"{preset.get('proxy_mode')} != {expected_proxy_mode}"
+                )
+            expected_category = raw_presets.get(key, {}).get("category") or registry.get_provider_default_category(provider)
+            if preset.get("category") != expected_category:
+                fail(
+                    f"Preset {preset.get('name')} category should come from provider capabilities: "
+                    f"{preset.get('category')} != {expected_category}"
                 )
             if not preset.get("category"):
                 fail(f"Preset {preset.get('name')} missing category")

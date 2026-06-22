@@ -8110,3 +8110,18 @@
 - Local `py_compile` for provider registry and provider contract passed.
 - Local `scripts/check_provider_contract.py` passed.
 - Local `scripts/check_admin_api_config_import.py` passed.
+
+## 2026-06-22 Provider Default Category Registry
+
+### Changes
+
+- Added `get_provider_default_category()` to `services/api_provider_registry.py`.
+- Removed repeated default `category` literals from raw `API_MODEL_PRESETS`; `get_api_model_presets()` now enriches each preset from `PROVIDER_CATALOG[provider].capabilities[0]`.
+- Model-specific category overrides remain possible when a future preset genuinely differs from the provider default capability.
+- External preset/catalog responses remain unchanged: all 17 enriched presets still include category values (`video=9`, `image=5`, `text=2`, `audio=1`).
+- Strengthened `scripts/check_provider_contract.py` so raw presets cannot repeat provider default categories, and enriched presets must match the provider capability default or an explicit valid override.
+
+### Verification
+
+- Local `py_compile` for provider registry and provider contract passed.
+- Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.

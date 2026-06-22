@@ -433,103 +433,86 @@ API_MODEL_PRESETS: List[dict] = [
         "name": "Gemini 2.5 Flash (文本)",
         "provider": "gemini-text",
         "model_name": "gemini-2.5-flash",
-        "category": "text",
     },
     {
         "name": "DeepSeek Reasoner",
         "provider": "deepseek",
         "model_name": "deepseek-reasoner",
-        "category": "text",
     },
     {
         "name": "Gemini 2.5 Flash (图像)",
         "provider": "gemini-image",
         "model_name": "gemini-2.5-flash-image",
-        "category": "image",
     },
     {
         "name": "Gemini 3.1 Flash (图像)",
         "provider": "gemini-image",
         "model_name": "gemini-3.1-flash-image-preview",
-        "category": "image",
     },
     {
         "name": "豆包 SeedDream",
         "provider": "doubao",
         "model_name": "doubao-seedream-4-0-250828",
-        "category": "image",
     },
     {
         "name": "MiniMax Hailuo",
         "provider": "minimax",
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
-        "category": "video",
     },
     {
         "name": "Sora2",
         "provider": "sora2",
         "model_name": SORA2_DEFAULT_VIDEO_MODEL,
-        "category": "video",
     },
     {
         "name": "Veo",
         "provider": "veo",
         "model_name": VEO_DEFAULT_VIDEO_MODEL,
-        "category": "video",
     },
     {
         "name": "大能 Wan2.6 (DashScope)",
         "provider": "dashscope",
         "model_name": DASHSCOPE_DEFAULT_MODEL_MAP["wan26"],
-        "category": "video",
     },
     {
         "name": "阿里云百炼共享 API · 合体 (Kling)",
         "provider": "dashscope",
         "model_name": "kling/kling-v3-video-generation",
-        "category": "video",
     },
     {
         "name": "阿里云百炼共享 API · 大乘 (Vidu)",
         "provider": "dashscope",
         "model_name": "vidu/viduq3-turbo_reference2video",
-        "category": "video",
     },
     {
         "name": "阿里云百炼共享 API · 炼虚 (HappyHorse)",
         "provider": "dashscope",
         "model_name": "happyhorse-1.0-r2v",
-        "category": "video",
     },
     {
         "name": "飞升 (Seedance 2.0)",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-260128",
-        "category": "video",
     },
     {
         "name": "渡劫 (Seedance 2.0 Fast)",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-fast-260128",
-        "category": "video",
     },
     {
         "name": "laozhang GPT Image (VIP)",
         "provider": "laozhang-gpt-image",
         "model_name": "gpt-image-2-vip",
-        "category": "image",
     },
     {
         "name": "laozhang GPT Image (Official)",
         "provider": "laozhang-sora2",
         "model_name": "gpt-image-2",
-        "category": "image",
     },
     {
         "name": "Gemini TTS (语音)",
         "provider": "gemini-tts",
         "model_name": GEMINI_TTS_DEFAULT_MODEL,
-        "category": "audio",
     },
 ]
 
@@ -688,6 +671,11 @@ def get_provider_default_endpoint(provider: str) -> str:
     return PROVIDER_DEFAULT_ENDPOINTS.get(normalize_provider(provider), "")
 
 
+def get_provider_default_category(provider: str) -> str:
+    capabilities = PROVIDER_CATALOG.get(normalize_provider(provider), {}).get("capabilities") or []
+    return str(capabilities[0]) if capabilities else ""
+
+
 def _default_health_check_url(endpoint: str, provider: str = "") -> str:
     urls = derive_models_health_urls(endpoint, provider)
     return urls[0] if urls else ""
@@ -699,6 +687,7 @@ def _enrich_preset(preset: dict) -> dict:
     env_key = get_provider_env_key(provider)
     meta = PROVIDER_CATALOG.get(provider, {})
     out.setdefault("endpoint", get_provider_default_endpoint(provider))
+    out.setdefault("category", get_provider_default_category(provider))
     out.setdefault("proxy_mode", meta.get("default_proxy_mode", "direct"))
     out.setdefault("supports_proxy", meta.get("supports_proxy", True))
     out.setdefault("health_check_url", _default_health_check_url(out.get("endpoint", ""), provider))
