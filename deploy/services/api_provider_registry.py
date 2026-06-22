@@ -263,6 +263,12 @@ def dashscope_sub_model_for_model(model_name: Optional[str]) -> Optional[str]:
 
 DEFAULT_PROVIDER_PROXY_MODE = "direct"
 DEFAULT_PROVIDER_SUPPORTS_PROXY = True
+DEFAULT_PROVIDER_FALLBACK_ENV: List[str] = []
+
+PROVIDER_FALLBACK_ENV_OVERRIDES: Dict[str, List[str]] = {
+    "seedance": ["ARK_API_KEY"],
+    "veo": ["SORA2_API_KEY"],
+}
 
 
 PROVIDER_CATALOG: Dict[str, dict] = {
@@ -270,14 +276,12 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "DeepSeek",
         "vendor": "deepseek",
         "capabilities": ["text"],
-        "fallback_env": [],
         "notes": "Text/chat provider used by script and reasoning flows.",
     },
     "gemini-text": {
         "label": "Gemini Text",
         "vendor": "google",
         "capabilities": ["text"],
-        "fallback_env": [],
         "fallback": [
             {
                 "provider": "deepseek",
@@ -291,70 +295,60 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Gemini Image",
         "vendor": "google",
         "capabilities": ["image"],
-        "fallback_env": [],
         "notes": "Google Gemini image generation.",
     },
     "gemini-tts": {
         "label": "Gemini TTS",
         "vendor": "google",
         "capabilities": ["audio"],
-        "fallback_env": [],
         "notes": "Fallback TTS provider.",
     },
     "doubao": {
         "label": "Volcengine Ark / Doubao",
         "vendor": "volcengine",
         "capabilities": ["image"],
-        "fallback_env": [],
         "notes": "Ark-compatible image generation provider.",
     },
     "seedance": {
         "label": "Seedance 2.0",
         "vendor": "volcengine",
         "capabilities": ["video"],
-        "fallback_env": ["ARK_API_KEY"],
         "notes": "Volcengine Ark Seedance video generation.",
     },
     "dashscope": {
         "label": "DashScope / Model Studio",
         "vendor": "alibaba",
         "capabilities": ["video"],
-        "fallback_env": [],
         "notes": "Wan2.6, Kling, Vidu, and HappyHorse share this key.",
     },
     "minimax": {
         "label": "MiniMax / Hailuo",
         "vendor": "minimax",
         "capabilities": ["video", "audio"],
-        "fallback_env": [],
         "notes": "Video generation plus TTS, voice design, and voice clone.",
     },
     "sora2": {
         "label": "Sora2 Gateway",
         "vendor": "laozhang",
         "capabilities": ["video"],
-        "fallback_env": [],
         "notes": "Laozhang Sora2-compatible video gateway.",
     },
     "veo": {
         "label": "Veo Gateway",
         "vendor": "laozhang",
         "capabilities": ["video"],
-        "fallback_env": ["SORA2_API_KEY"],
         "notes": "Laozhang Veo-compatible video gateway.",
     },
     "laozhang-gpt-image": {
         "label": "GPT Image VIP Gateway",
         "vendor": "laozhang",
         "capabilities": ["image"],
-        "fallback_env": [],
         "notes": "Default/VIP GPT Image token group.",
     },
     "laozhang-sora2": {
         "label": "GPT Image Official Gateway",
         "vendor": "laozhang",
         "capabilities": ["image"],
-        "fallback_env": [],
         "notes": "Official GPT Image token group.",
     },
 }
@@ -374,6 +368,10 @@ PROVIDER_HEALTH_CHECK_OVERRIDES: Dict[str, Dict[str, Any]] = {
 
 for _provider_id, _provider_meta in PROVIDER_CATALOG.items():
     _provider_meta.setdefault("required_env", [PROVIDER_ENV_MAP[_provider_id]])
+    _provider_meta.setdefault(
+        "fallback_env",
+        list(PROVIDER_FALLBACK_ENV_OVERRIDES.get(_provider_id, DEFAULT_PROVIDER_FALLBACK_ENV)),
+    )
     _provider_meta.setdefault("default_proxy_mode", DEFAULT_PROVIDER_PROXY_MODE)
     _provider_meta.setdefault("supports_proxy", DEFAULT_PROVIDER_SUPPORTS_PROXY)
     _health_check = deepcopy(DEFAULT_PROVIDER_HEALTH_CHECK)

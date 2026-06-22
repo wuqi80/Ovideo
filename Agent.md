@@ -7907,3 +7907,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Verification:
   - Local `py_compile` for provider registry and provider contract passed.
   - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
+
+## 2026-06-22 Provider Fallback Env Overrides
+
+- Added `DEFAULT_PROVIDER_FALLBACK_ENV` and `PROVIDER_FALLBACK_ENV_OVERRIDES` to `deploy/services/api_provider_registry.py`.
+- Removed repeated `fallback_env` lists from all 12 `PROVIDER_CATALOG` entries.
+- Provider metadata now derives fallback API-key borrowing from a default empty list plus explicit overrides (`seedance -> ARK_API_KEY`, `veo -> SORA2_API_KEY`).
+- External provider catalog responses remain unchanged: 10 providers still have no fallback env, Seedance can borrow `ARK_API_KEY`, and Veo can borrow `SORA2_API_KEY`.
+- Strengthened `deploy/scripts/check_provider_contract.py` so catalog entries cannot repeat `fallback_env`, and initialized metadata must match the override map.
+- Verification:
+  - Local `py_compile` for provider registry and provider contract passed.
+  - Local `scripts/check_provider_contract.py`, `scripts/check_admin_api_config_import.py`, and `scripts/check_admin_api_config_health.py` passed.
