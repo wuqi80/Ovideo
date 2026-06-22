@@ -4,6 +4,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 
+class _FakeRequest:
+    headers = {}
+    client = None
+
+
 async def test_import_presets_passes_category_for_video_preset():
     """飞升 (Seedance 2.0) preset 字典里 category=video；import 时必须传进 DAO。"""
     import admin_api_config_routes
@@ -12,11 +17,12 @@ async def test_import_presets_passes_category_for_video_preset():
     # 跑过 _require_db 校验（mock 数据库存在）
     fake_db = object()
     with patch.object(admin_api_config_routes, "get_db_manager", lambda: fake_db), \
+         patch.object(admin_api_config_routes, "_record_api_config_audit", AsyncMock()), \
          patch.object(api_config_import_service, "reload_api_env_after_config_change", AsyncMock(return_value=True)), \
          patch.object(api_config_import_service.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
          patch.object(api_config_import_service.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
 
-        result = await admin_api_config_routes.admin_import_preset_configs()
+        result = await admin_api_config_routes.admin_import_preset_configs(_FakeRequest())
 
     assert result["success"] is True
     # 至少有一次 create 调用传了 category='video'
@@ -37,10 +43,11 @@ async def test_import_presets_passes_category_for_audio_preset():
 
     fake_db = object()
     with patch.object(admin_api_config_routes, "get_db_manager", lambda: fake_db), \
+         patch.object(admin_api_config_routes, "_record_api_config_audit", AsyncMock()), \
          patch.object(api_config_import_service, "reload_api_env_after_config_change", AsyncMock(return_value=True)), \
          patch.object(api_config_import_service.ApiConfigDAO, "list_all", AsyncMock(return_value=[])), \
          patch.object(api_config_import_service.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
-        await admin_api_config_routes.admin_import_preset_configs()
+        await admin_api_config_routes.admin_import_preset_configs(_FakeRequest())
 
     audio_calls = [c for c in mock_create.await_args_list if c.kwargs.get("category") == "audio"]
     assert len(audio_calls) >= 1, (
@@ -80,3 +87,53 @@ async def test_create_api_config_body_accepts_template_and_headers():
     )
     assert body.request_template == {"group_id": "g"}
     assert body.headers == {"X-Test": "yes"}
+
+
+def test_api_config_audit_update_details_redacts_sensitive_values():
+    import admin_api_config_routes
+
+    details = admin_api_config_routes._audit_update_details(
+        {
+            "api_key": "sk-real-secret",
+            "custom_proxy": "http://user:pass@example.test:7890",
+            "headers": {"Authorization": "Bearer header-secret"},
+            "request_template": {"group_id": "group-1", "secret": "template-secret"},
+            "endpoint": "https://provider.example.test/v1",
+            "enabled": False,
+        }
+    )
+    rendered = repr(details)
+
+    assert details["changes"]["api_key_changed"] is True
+    assert details["changes"]["custom_proxy_changed"] is True
+    assert details["changes"]["headers"] == {"changed": True, "fields": ["Authorization"]}
+    assert details["changes"]["request_template"] == {
+        "changed": True,
+        "fields": ["group_id", "secret"],
+    }
+    assert details["changes"]["enabled"] is False
+    assert "sk-real-secret" not in rendered
+    assert "user:pass" not in rendered
+    assert "header-secret" not in rendered
+    assert "template-secret" not in rendered
+
+
+def test_api_config_audit_result_summary_masks_key_storage():
+    import admin_api_config_routes
+
+    summary = admin_api_config_routes._audit_result_summary(
+        {
+            "success": True,
+            "env_refreshed": True,
+            "api_config": {
+                "config_id": "apicfg_1",
+                "provider": "deepseek",
+                "model_name": "deepseek-chat",
+                "endpoint": "https://provider.example.test",
+                "api_key_encrypted": "***",
+            },
+        }
+    )
+
+    assert summary["api_config"]["has_key"] is True
+    assert "api_key_encrypted" not in summary["api_config"]

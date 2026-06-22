@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from db_manager import get_db_manager
@@ -48,6 +48,120 @@ def _require_db() -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         )
+
+
+def _audit_config_snapshot(config: Any) -> Dict[str, Any]:
+    if not isinstance(config, dict):
+        return {}
+    snapshot: Dict[str, Any] = {}
+    for key in (
+        "config_id",
+        "name",
+        "provider",
+        "model_name",
+        "endpoint",
+        "proxy_mode",
+        "enabled",
+        "category",
+    ):
+        if key in config:
+            snapshot[key] = config.get(key)
+    if "api_key_encrypted" in config:
+        snapshot["has_key"] = bool(config.get("api_key_encrypted"))
+    return snapshot
+
+
+def _audit_update_details(fields: Dict[str, Any]) -> Dict[str, Any]:
+    changes: Dict[str, Any] = {}
+    for key, value in fields.items():
+        if key == "api_key":
+            changes["api_key_changed"] = bool(value)
+        elif key == "custom_proxy":
+            changes["custom_proxy_changed"] = bool(value)
+        elif key in {"headers", "request_template"}:
+            changes[key] = {
+                "changed": True,
+                "fields": sorted(value.keys()) if isinstance(value, dict) else [],
+            }
+        else:
+            changes[key] = value
+    return {
+        "updated_fields": sorted(fields.keys()),
+        "changes": changes,
+    }
+
+
+def _audit_result_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    summary_keys = (
+        "success",
+        "env_refreshed",
+        "loaded",
+        "loaded_providers",
+        "health_cache_invalidated",
+        "disabled_conflicting_config_ids",
+        "deleted",
+        "dry_run",
+        "imported",
+        "skipped",
+        "total",
+        "copy_runtime_env_keys",
+        "env_keys_imported",
+        "env_keys_missing",
+        "env_keys_existing",
+        "env_keys_skipped_provider_claimed",
+        "updated_existing",
+        "enabled_existing",
+        "total_conflicts",
+        "total_disabled",
+        "would_disable",
+    )
+    summary = {key: result.get(key) for key in summary_keys if key in result}
+    if "api_config" in result:
+        summary["api_config"] = _audit_config_snapshot(result.get("api_config"))
+    if "conflicts" in result and isinstance(result.get("conflicts"), list):
+        summary["conflicts"] = [
+            {
+                "provider": item.get("provider"),
+                "kept_config_id": item.get("kept_config_id"),
+                "disabled_config_ids": item.get("disabled_config_ids", []),
+                "dry_run": item.get("dry_run"),
+            }
+            for item in result["conflicts"]
+            if isinstance(item, dict)
+        ]
+    if "planned_actions" in result and isinstance(result.get("planned_actions"), list):
+        actions = [item for item in result["planned_actions"] if isinstance(item, dict)]
+        summary["planned_action_count"] = len(actions)
+        summary["planned_action_types"] = sorted(
+            {str(item.get("action") or "") for item in actions if item.get("action")}
+        )
+    return summary
+
+
+async def _record_api_config_audit(
+    request: Request,
+    *,
+    action: str,
+    target_id: Optional[str] = None,
+    before: Optional[Dict[str, Any]] = None,
+    after: Optional[Dict[str, Any]] = None,
+    notes: str = "",
+) -> None:
+    try:
+        import admin_audit_service
+
+        await admin_audit_service.record(
+            request,
+            admin_user_id=admin_audit_service.caller_admin_id(request),
+            action=action,
+            target_type="api_config",
+            target_id=target_id,
+            before=before,
+            after=after,
+            notes=notes,
+        )
+    except Exception as e:
+        logger.warning("API config audit record failed (action=%s): %s", action, e)
 
 
 class ApiConfigCreateBody(BaseModel):
@@ -113,10 +227,10 @@ async def admin_list_api_configs():
 
 
 @router.post("/api-configs", status_code=status.HTTP_201_CREATED)
-async def admin_create_api_config(body: ApiConfigCreateBody):
+async def admin_create_api_config(body: ApiConfigCreateBody, request: Request):
     _require_db()
     try:
-        return await create_api_config(
+        result = await create_api_config(
             name=body.name,
             provider=body.provider,
             endpoint=body.endpoint,
@@ -128,12 +242,20 @@ async def admin_create_api_config(body: ApiConfigCreateBody):
             headers=body.headers,
             category=body.category,
         )
+        target_id = (result.get("api_config") or {}).get("config_id")
+        await _record_api_config_audit(
+            request,
+            action="api_config_create",
+            target_id=target_id,
+            after=_audit_result_summary(result),
+        )
+        return result
     except ApiConfigCreateFailed:
         raise HTTPException(status_code=500, detail="Failed to create API config")
 
 
 @router.post("/api-configs/reload-env")
-async def admin_reload_api_env():
+async def admin_reload_api_env(request: Request):
     """Manually reload DB-backed API configs into runtime env without restart."""
     _require_db()
     try:
@@ -142,7 +264,7 @@ async def admin_reload_api_env():
         logger.error("Manual API env reload failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="API env reload failed") from e
 
-    return {
+    response = {
         "success": bool(result.get("success")),
         "env_refreshed": bool(result.get("env_refreshed")),
         "loaded": result.get("loaded", 0),
@@ -150,13 +272,20 @@ async def admin_reload_api_env():
         "health_cache_invalidated": result.get("health_cache_invalidated", []),
         "error": result.get("error"),
     }
+    await _record_api_config_audit(
+        request,
+        action="api_config_reload_env",
+        target_id="runtime",
+        after=_audit_result_summary(response),
+    )
+    return response
 
 
 @router.post("/api-configs/import-presets")
-async def admin_import_preset_configs(body: Optional[ApiConfigImportPresetsBody] = None):
+async def admin_import_preset_configs(request: Request, body: Optional[ApiConfigImportPresetsBody] = None):
     _require_db()
     body = body or ApiConfigImportPresetsBody()
-    return await import_preset_api_configs(
+    result = await import_preset_api_configs(
         ApiConfigImportOptions(
             copy_runtime_env_keys=body.copy_runtime_env_keys,
             update_existing_empty_keys=body.update_existing_empty_keys,
@@ -164,6 +293,13 @@ async def admin_import_preset_configs(body: Optional[ApiConfigImportPresetsBody]
             dry_run=body.dry_run,
         )
     )
+    await _record_api_config_audit(
+        request,
+        action="api_config_import_presets",
+        target_id="presets",
+        after=_audit_result_summary(result),
+    )
+    return result
 
 
 @router.get("/api-configs/presets")
@@ -214,12 +350,19 @@ async def admin_sweep_provider_health(body: Optional[ApiConfigHealthSweepBody] =
 
 
 @router.post("/api-configs/repair-conflicts")
-async def admin_repair_api_config_conflicts(body: Optional[ApiConfigRepairConflictsBody] = None):
+async def admin_repair_api_config_conflicts(request: Request, body: Optional[ApiConfigRepairConflictsBody] = None):
     _require_db()
     body = body or ApiConfigRepairConflictsBody()
-    return await repair_api_config_provider_conflicts(
+    result = await repair_api_config_provider_conflicts(
         dry_run=body.dry_run,
     )
+    await _record_api_config_audit(
+        request,
+        action="api_config_repair_conflicts",
+        target_id="provider_conflicts",
+        after=_audit_result_summary(result),
+    )
+    return result
 
 
 @router.post("/api-configs/{config_id}/test")
@@ -241,19 +384,36 @@ async def admin_check_provider_health(provider_id: str, model_name: Optional[str
 
 
 @router.put("/api-configs/{config_id}")
-async def admin_update_api_config(config_id: str, body: ApiConfigUpdateBody):
+async def admin_update_api_config(config_id: str, body: ApiConfigUpdateBody, request: Request):
     _require_db()
     data = body.model_dump(exclude_unset=True)
     try:
-        return await update_api_config(config_id, data)
+        result = await update_api_config(config_id, data)
+        await _record_api_config_audit(
+            request,
+            action="api_config_update",
+            target_id=config_id,
+            after={
+                "requested_update": _audit_update_details(data),
+                "result": _audit_result_summary(result),
+            },
+        )
+        return result
     except ApiConfigNotFound:
         raise HTTPException(status_code=404, detail="Config not found")
 
 
 @router.delete("/api-configs/{config_id}")
-async def admin_delete_api_config(config_id: str):
+async def admin_delete_api_config(config_id: str, request: Request):
     _require_db()
     try:
-        return await delete_api_config(config_id)
+        result = await delete_api_config(config_id)
+        await _record_api_config_audit(
+            request,
+            action="api_config_delete",
+            target_id=config_id,
+            after=_audit_result_summary(result),
+        )
+        return result
     except ApiConfigNotFound:
         raise HTTPException(status_code=404, detail="Config not found")

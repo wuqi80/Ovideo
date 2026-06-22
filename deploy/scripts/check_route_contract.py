@@ -492,6 +492,16 @@ def check_admin_api_config_routes_extracted(root: Path) -> int:
         "targets=body.targets",
         "async def admin_check_provider_health(provider_id: str, model_name: Optional[str] = None)",
         "check_provider_health(provider_id, model_name=model_name)",
+        "async def _record_api_config_audit(",
+        "api_key_changed",
+        "custom_proxy_changed",
+        "planned_action_types",
+        'action="api_config_create"',
+        'action="api_config_update"',
+        'action="api_config_delete"',
+        'action="api_config_import_presets"',
+        'action="api_config_reload_env"',
+        'action="api_config_repair_conflicts"',
     ]
     for snippet in required_snippets:
         if snippet not in api_text:

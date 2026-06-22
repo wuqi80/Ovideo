@@ -991,12 +991,12 @@ def check_api_config_write_env_refresh_contract() -> int:
     manual_reload = function_by_name(route_tree, "admin_reload_api_env")
     if not manual_reload:
         violations.append("admin_api_config_routes.py missing admin_reload_api_env()")
-    elif "env_refreshed" not in return_dict_keys(manual_reload):
-        violations.append(
-            f"admin_api_config_routes.py:{manual_reload.lineno} manual reload response lacks env_refreshed"
-        )
     else:
         manual_source = ast.get_source_segment(route_text, manual_reload) or ""
+        if "env_refreshed" not in return_dict_keys(manual_reload) and '"env_refreshed"' not in manual_source:
+            violations.append(
+                f"admin_api_config_routes.py:{manual_reload.lineno} manual reload response lacks env_refreshed"
+            )
         if "reload_api_env_runtime(clear_health_cache=True)" not in manual_source:
             violations.append(
                 f"admin_api_config_routes.py:{manual_reload.lineno} manual reload must delegate runtime reload to service"

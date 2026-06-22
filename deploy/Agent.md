@@ -8042,3 +8042,21 @@
 - Local `scripts/check_provider_contract.py` passed; provider contract now reports `video_default_model_checks=74`.
 - Local `scripts/check_architecture_contracts.py` passed 10/10.
 - Local smoke test passed 9/9.
+
+## 2026-06-22 API Config Audit Logging
+
+### Changes
+
+- Added best-effort audit logging to `admin_api_config_routes.py` for API config create, update, delete, preset import, runtime env reload, and conflict repair.
+- Added audit summaries that record provider/model/endpoint metadata and reload status while redacting API keys, custom proxy values, header contents, and request-template values.
+- Updated `scripts/check_route_contract.py` so API config audit hooks and sensitive-field redaction markers cannot silently regress.
+- Updated `scripts/check_provider_contract.py` so manual reload responses may be validated through a constructed response object, not only a direct return dict.
+- Added tests covering import route compatibility and audit redaction behavior.
+
+### Verification
+
+- Local `py_compile` for API config routes, route/provider contracts, and updated tests passed.
+- Local `scripts/check_admin_api_config_crud.py`, `scripts/check_admin_api_config_import.py`, `scripts/check_provider_contract.py`, and `scripts/check_route_contract.py` passed.
+- Local `pytest tests/test_admin_import_presets_writes_category.py -q` passed with 7 tests.
+- Local `scripts/check_architecture_contracts.py` passed 10/10.
+- Local smoke test passed 9/9.
