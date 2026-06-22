@@ -9,7 +9,9 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
 
 from dao.admin.api_config import ApiConfigDAO
 from services.api_config_health_service import test_api_config_health
+from services.api_config_runtime_loader import load_api_configs_to_env
 from services.api_provider_health_monitor import (
+    clear_all_cached_provider_health,
     delete_cached_provider_health_many,
     delete_cached_provider_health_targets,
     list_cached_provider_health,
@@ -17,6 +19,7 @@ from services.api_provider_health_monitor import (
     provider_health_monitor_state,
 )
 from services.api_provider_registry import (
+    PROVIDER_CATALOG,
     get_api_model_presets,
     get_api_provider_catalog,
     normalize_provider,
@@ -38,6 +41,10 @@ class ApiConfigNotFound(ApiConfigServiceError):
 
 
 class ApiConfigCreateFailed(ApiConfigServiceError):
+    pass
+
+
+class ApiConfigReloadFailed(ApiConfigServiceError):
     pass
 
 
@@ -247,6 +254,47 @@ async def _invalidate_provider_health(items: Iterable[Any]) -> None:
         await delete_cached_provider_health_targets(targets)
     except Exception as exc:
         logger.warning("Failed to invalidate provider health cache: %s", exc, exc_info=True)
+
+
+async def clear_all_provider_health_cache() -> List[str]:
+    """Clear all managed provider health cache entries with a registry fallback."""
+    try:
+        cleared = await clear_all_cached_provider_health()
+        if cleared:
+            return cleared
+        return await delete_cached_provider_health_many(PROVIDER_CATALOG)
+    except Exception as exc:
+        logger.warning("Provider health cache invalidation failed: %s", exc, exc_info=True)
+        return []
+
+
+async def reload_api_env_runtime(*, clear_health_cache: bool = False) -> Dict[str, Any]:
+    """Reload DB-backed provider config into env and optionally clear health cache."""
+    try:
+        result = await load_api_configs_to_env()
+    except Exception as exc:
+        if clear_health_cache:
+            await clear_all_provider_health_cache()
+        raise ApiConfigReloadFailed("API env reload failed") from exc
+
+    refreshed = bool(result.get("success"))
+    health_cache_invalidated: List[str] = []
+    if not refreshed:
+        if clear_health_cache:
+            health_cache_invalidated = await clear_all_provider_health_cache()
+        raise ApiConfigReloadFailed(str(result.get("error") or "API env reload failed"))
+
+    if clear_health_cache:
+        health_cache_invalidated = await clear_all_provider_health_cache()
+
+    return {
+        "success": refreshed,
+        "env_refreshed": refreshed,
+        "loaded": result.get("loaded", 0),
+        "loaded_providers": result.get("loaded_providers", []),
+        "health_cache_invalidated": health_cache_invalidated,
+        "error": result.get("error"),
+    }
 
 
 async def list_api_configs() -> Dict[str, Any]:

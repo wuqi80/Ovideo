@@ -7671,3 +7671,21 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed API config services import `dao.admin.api_config` / `dao.admin.system_settings`, and `tests/test_dao_api_config_category.py` is included in the live deploy file list.
+
+## 2026-06-22 API Config Reload Service Boundary
+
+- Moved API config runtime reload orchestration and optional global provider-health cache clearing into `deploy/services/api_config_service.py`:
+  - `reload_api_env_runtime()`
+  - `clear_all_provider_health_cache()`
+  - `ApiConfigReloadFailed`
+- Kept `deploy/admin_api_config_routes.py` as the HTTP boundary: write endpoints and the manual reload endpoint now delegate to the service, preserve `env_refreshed` response fields, and map reload failures to HTTP 500 instead of silently reporting success.
+- Strengthened `deploy/scripts/check_provider_contract.py` so `admin_api_config_routes.py` cannot reintroduce direct `load_api_configs_to_env`, provider registry, or provider-health cache implementation details.
+- Strengthened `deploy/scripts/check_admin_api_config_crud.py` with dynamic success/failure checks for `reload_api_env_runtime(clear_health_cache=True)`.
+- Updated `deploy/scripts/check_provider_health_monitor.py` to verify global provider-health clearing through the service helper instead of a route-private helper.
+- Verification:
+  - Local `py_compile` for API config route/service/contract files passed using `deploy/.venv`.
+  - Local API config CRUD, provider health monitor, provider contract, architecture contracts, and smoke test passed; smoke reported 9/9.
+  - Live deploy to `https://mecha.one/` synced the service-boundary changes, restarted `drama.service`, and left it `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server grep confirmed `admin_api_config_routes.py` now only references `reload_api_env_runtime`, while loader, registry, and provider-health cache internals live in `services/api_config_service.py` and contract scripts.

@@ -15,30 +15,28 @@ from pydantic import BaseModel, ConfigDict, Field
 from db_manager import get_db_manager
 from services.api_config_health_service import ProviderHealthNotFound, check_provider_health
 from services.api_config_import_service import ApiConfigImportOptions, import_preset_api_configs
-from services.api_config_runtime_loader import load_api_configs_to_env
 from services.api_config_service import (
     ApiConfigCreateFailed,
     ApiConfigNotFound,
+    ApiConfigReloadFailed,
     create_api_config,
     delete_api_config,
     get_api_config_presets,
     list_api_configs,
     repair_api_config_provider_conflicts,
+    reload_api_env_runtime,
     test_all_saved_api_config_health,
     test_saved_api_config_health,
     update_api_config,
 )
 from services.api_provider_health_monitor import (
     cache_provider_health_result,
-    clear_all_cached_provider_health,
-    delete_cached_provider_health_many,
     list_cached_provider_health,
     provider_health_monitor_settings,
     provider_health_monitor_state,
     run_provider_health_sweep,
     summarize_provider_health_results,
 )
-from services.api_provider_registry import PROVIDER_CATALOG
 
 logger = logging.getLogger(__name__)
 
@@ -48,25 +46,12 @@ router = APIRouter()
 async def _reload_api_env() -> bool:
     """Refresh DB-backed API config values into the runtime environment."""
     try:
-        result = await load_api_configs_to_env()
-        if not result.get("success"):
-            raise RuntimeError(str(result.get("error") or result))
+        await reload_api_env_runtime()
         logger.info("API env reload succeeded")
         return True
-    except Exception as e:
+    except ApiConfigReloadFailed as e:
         logger.error("_reload_api_env failed: %s", e, exc_info=True)
         raise
-
-
-async def _clear_all_provider_health_cache() -> List[str]:
-    try:
-        cleared = await clear_all_cached_provider_health()
-        if cleared:
-            return cleared
-        return await delete_cached_provider_health_many(PROVIDER_CATALOG)
-    except Exception as e:
-        logger.warning("Provider health cache invalidation failed: %s", e, exc_info=True)
-        return []
 
 
 def _require_db() -> None:
@@ -165,27 +150,17 @@ async def admin_reload_api_env():
     """Manually reload DB-backed API configs into runtime env without restart."""
     _require_db()
     try:
-        result = await load_api_configs_to_env()
-    except Exception as e:
+        result = await reload_api_env_runtime(clear_health_cache=True)
+    except ApiConfigReloadFailed as e:
         logger.error("Manual API env reload failed: %s", e, exc_info=True)
-        await _clear_all_provider_health_cache()
         raise HTTPException(status_code=500, detail="API env reload failed") from e
 
-    refreshed = bool(result.get("success"))
-    if not refreshed:
-        logger.error("Manual API env reload returned unsuccessful result: %s", result)
-        await _clear_all_provider_health_cache()
-        raise HTTPException(
-            status_code=500,
-            detail=str(result.get("error") or "API env reload failed"),
-        )
-    health_cache_invalidated = await _clear_all_provider_health_cache()
     return {
-        "success": refreshed,
-        "env_refreshed": refreshed,
+        "success": bool(result.get("success")),
+        "env_refreshed": bool(result.get("env_refreshed")),
         "loaded": result.get("loaded", 0),
         "loaded_providers": result.get("loaded_providers", []),
-        "health_cache_invalidated": health_cache_invalidated,
+        "health_cache_invalidated": result.get("health_cache_invalidated", []),
         "error": result.get("error"),
     }
 

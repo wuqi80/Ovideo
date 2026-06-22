@@ -138,6 +138,8 @@ async def main() -> int:
     original_invalidate = service.delete_cached_provider_health_many
     original_target_invalidate = service.delete_cached_provider_health_targets
     original_test_health = service.test_api_config_health
+    original_load_api_env = service.load_api_configs_to_env
+    original_clear_all_health = service.clear_all_cached_provider_health
     service.ApiConfigDAO = FakeDAO
     service.delete_cached_provider_health_many = fake_invalidate
     service.delete_cached_provider_health_targets = fake_target_invalidate
@@ -395,11 +397,50 @@ async def main() -> int:
         if ("minimax", "MiniMax-Hailuo-02") not in target_invalidations[-1]:
             fail(f"repair should invalidate repaired model health cache: {target_invalidations}")
 
+        reload_cache_clears = 0
+
+        async def fake_load_api_env_success():
+            return {
+                "success": True,
+                "loaded": 2,
+                "loaded_providers": ["deepseek", "minimax"],
+                "error": None,
+            }
+
+        async def fake_clear_all_health():
+            nonlocal reload_cache_clears
+            reload_cache_clears += 1
+            return ["provider:health:deepseek"]
+
+        service.load_api_configs_to_env = fake_load_api_env_success
+        service.clear_all_cached_provider_health = fake_clear_all_health
+        reload_result = await service.reload_api_env_runtime(clear_health_cache=True)
+        if reload_result.get("env_refreshed") is not True or reload_result.get("loaded") != 2:
+            fail(f"reload_api_env_runtime success response changed: {reload_result}")
+        if reload_result.get("health_cache_invalidated") != ["provider:health:deepseek"]:
+            fail(f"reload_api_env_runtime did not clear health cache: {reload_result}")
+        if reload_cache_clears != 1:
+            fail(f"reload_api_env_runtime should clear health cache once on success, got {reload_cache_clears}")
+
+        async def fake_load_api_env_failure():
+            return {"success": False, "error": "reload exploded"}
+
+        service.load_api_configs_to_env = fake_load_api_env_failure
+        try:
+            await service.reload_api_env_runtime(clear_health_cache=True)
+            fail("reload_api_env_runtime should raise ApiConfigReloadFailed on unsuccessful loader result")
+        except service.ApiConfigReloadFailed:
+            pass
+        if reload_cache_clears != 2:
+            fail(f"reload_api_env_runtime should clear health cache once on failure, got {reload_cache_clears}")
+
     finally:
         service.ApiConfigDAO = original_dao
         service.delete_cached_provider_health_many = original_invalidate
         service.delete_cached_provider_health_targets = original_target_invalidate
         service.test_api_config_health = original_test_health
+        service.load_api_configs_to_env = original_load_api_env
+        service.clear_all_cached_provider_health = original_clear_all_health
 
     print("Admin API config CRUD contract OK")
     print("  list_masks_key=1")
@@ -413,6 +454,7 @@ async def main() -> int:
     print("  health_wrapper_no_key=1")
     print("  health_wrapper_runtime_key_fallback=1")
     print("  health_wrapper_endpoint_diagnostics=1")
+    print("  reload_service_checks=2")
     return 0
 
 

@@ -886,6 +886,16 @@ def check_api_config_write_env_refresh_contract() -> int:
         if "env_refreshed" not in return_dict_keys(func):
             violations.append(f"services/api_config_service.py:{func.lineno} {name}() response lacks env_refreshed")
 
+    reload_service_func = function_by_name(service_tree, "reload_api_env_runtime")
+    if not reload_service_func:
+        violations.append("services/api_config_service.py missing reload_api_env_runtime()")
+    elif "env_refreshed" not in return_dict_keys(reload_service_func):
+        violations.append(
+            f"services/api_config_service.py:{reload_service_func.lineno} reload_api_env_runtime() response lacks env_refreshed"
+        )
+    if not function_by_name(service_tree, "clear_all_provider_health_cache"):
+        violations.append("services/api_config_service.py missing clear_all_provider_health_cache()")
+
     import_func = function_by_name(import_tree, "import_preset_api_configs")
     if not import_func:
         violations.append("services/api_config_import_service.py missing import_preset_api_configs()")
@@ -941,14 +951,29 @@ def check_api_config_write_env_refresh_contract() -> int:
         )
     else:
         manual_source = ast.get_source_segment(route_text, manual_reload) or ""
+        if "reload_api_env_runtime(clear_health_cache=True)" not in manual_source:
+            violations.append(
+                f"admin_api_config_routes.py:{manual_reload.lineno} manual reload must delegate runtime reload to service"
+            )
         if "raise HTTPException(status_code=500" not in manual_source:
             violations.append(
                 f"admin_api_config_routes.py:{manual_reload.lineno} manual reload must return HTTP 500 on reload failure"
             )
 
+    route_forbidden_runtime_details = (
+        "load_api_configs_to_env",
+        "clear_all_cached_provider_health",
+        "delete_cached_provider_health_many",
+        "PROVIDER_CATALOG",
+        "_clear_all_provider_health_cache",
+    )
+    for snippet in route_forbidden_runtime_details:
+        if snippet in route_text:
+            violations.append(f"admin_api_config_routes.py should not own API env reload/cache internals: {snippet}")
+
     if violations:
         fail("API config write operations must expose hot-reload status:\n" + "\n".join(violations))
-    return len(service_write_functions) + 1 + len(route_write_calls) + 1
+    return len(service_write_functions) + 3 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details)
 
 
 def check_api_config_service_dao_import_contract() -> int:
