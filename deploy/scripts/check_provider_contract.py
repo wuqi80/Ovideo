@@ -1270,6 +1270,27 @@ def check_video_default_model_registry_wiring(registry) -> int:
         fail("resolve_dashscope_default_model_name must use registry dashscope_sub_model_for_model")
     checks += 2
 
+    audio_provider = (root / "services" / "audio_provider.py").read_text(encoding="utf-8")
+    if not hasattr(registry, "GEMINI_TTS_DEFAULT_MODEL"):
+        fail("Registry missing GEMINI_TTS_DEFAULT_MODEL")
+    if "GEMINI_TTS_DEFAULT_MODEL" not in audio_provider:
+        fail("services/audio_provider.py must source Gemini TTS default model from registry")
+    if "DEFAULT_GEMINI_TTS_MODEL" in audio_provider:
+        fail("services/audio_provider.py must not define a local Gemini TTS default model")
+    if registry.GEMINI_TTS_DEFAULT_MODEL in audio_provider:
+        fail(
+            "services/audio_provider.py must not hardcode "
+            f"Gemini TTS default model literal {registry.GEMINI_TTS_DEFAULT_MODEL!r}"
+        )
+    if "GEMINI_TTS_DEFAULT_MODEL" not in runtime_loader:
+        fail("api_config_runtime_loader.py must use registry GEMINI_TTS_DEFAULT_MODEL")
+    if registry.GEMINI_TTS_DEFAULT_MODEL in runtime_loader:
+        fail(
+            "api_config_runtime_loader.py must not hardcode "
+            f"Gemini TTS default model literal {registry.GEMINI_TTS_DEFAULT_MODEL!r}"
+        )
+    checks += 6
+
     audio_client = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
     if not hasattr(registry, "MINIMAX_DEFAULT_PROVIDER_MODEL"):
         fail("Registry missing MINIMAX_DEFAULT_PROVIDER_MODEL")

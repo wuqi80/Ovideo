@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from dao.admin.api_config import ApiConfigDAO
 from services.api_provider_registry import (
     DASHSCOPE_SUB_MODEL_ENV_MAP,
+    GEMINI_TTS_DEFAULT_MODEL,
     PROVIDER_EXTRA_ENV_MAP,
     PROVIDER_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
@@ -55,7 +56,7 @@ GEMINI_IMAGE_LEGACY_MODELS = {
 }
 GEMINI_IMAGE_NEW_MODEL = "gemini-3.1-flash-image-preview"
 GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash"}
-GEMINI_TTS_NEW_MODEL = "gemini-2.5-flash-preview-tts"
+GEMINI_TTS_NEW_MODEL = GEMINI_TTS_DEFAULT_MODEL
 SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL
 VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL
 

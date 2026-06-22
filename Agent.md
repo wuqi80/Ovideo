@@ -7802,3 +7802,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_architecture_contracts.py` passed 10/10.
   - Local `new_html` Vite production build passed.
   - Local smoke test passed 9/9.
+
+## 2026-06-22 Gemini TTS Default Model Registry Cleanup
+
+- Added `GEMINI_TTS_DEFAULT_MODEL` to `deploy/services/api_provider_registry.py`.
+- Updated the Gemini TTS preset, API config legacy-model upgrade target, and `GeminiAudioProvider` fallback model to read the same registry constant.
+- Updated `deploy/scripts/check_provider_contract.py` so `audio_provider.py` and `api_config_runtime_loader.py` cannot reintroduce local Gemini TTS default-model literals.
+- Verification:
+  - Local `py_compile` for provider registry, runtime loader, audio provider, and provider contract passed.
+  - Local `scripts/check_provider_contract.py` passed; provider contract now reports `video_default_model_checks=74`.
+  - Local `scripts/check_architecture_contracts.py` passed 10/10.
+  - Local smoke test passed 9/9.

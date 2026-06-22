@@ -126,6 +126,7 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
 MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
 MINIMAX_DEFAULT_PROVIDER_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL
 MINIMAX_LEGACY_VIDEO_MODELS = frozenset()
+GEMINI_TTS_DEFAULT_MODEL = "gemini-2.5-flash-preview-tts"
 SORA2_DEFAULT_VIDEO_MODEL = "sora_video2-landscape-15s"
 SORA2_LEGACY_VIDEO_MODELS = frozenset({"sora-2"})
 VEO_DEFAULT_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
@@ -558,7 +559,7 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "Gemini TTS (语音)",
         "provider": "gemini-tts",
-        "model_name": "gemini-2.5-flash-preview-tts",
+        "model_name": GEMINI_TTS_DEFAULT_MODEL,
         "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "proxy_mode": "direct",
         "category": "audio",

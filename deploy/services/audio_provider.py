@@ -8,13 +8,13 @@ import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+from services.api_provider_registry import GEMINI_TTS_DEFAULT_MODEL
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
 
 AUDIO_UPLOAD_DIR = os.getenv("AUDIO_UPLOAD_DIR", "persistent_storage/audio")
 DEFAULT_GEMINI_API_VERSION = "v1beta"
-DEFAULT_GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
 
 
 def _derive_gemini_sdk_endpoint(endpoint: str) -> tuple[str, str]:
@@ -82,7 +82,7 @@ class GeminiAudioProvider(AudioProvider):
     def __init__(self):
         self.api_key = ""
         self.endpoint = ""
-        self.model_name = DEFAULT_GEMINI_TTS_MODEL
+        self.model_name = GEMINI_TTS_DEFAULT_MODEL
         self._genai_http_options: Optional[dict] = None
         self._refresh_runtime_config()
 
@@ -90,13 +90,13 @@ class GeminiAudioProvider(AudioProvider):
         config = resolve_provider("gemini-tts")
         self.api_key = config.api_key
         self.endpoint = config.endpoint
-        self.model_name = config.model_name or DEFAULT_GEMINI_TTS_MODEL
+        self.model_name = config.model_name or GEMINI_TTS_DEFAULT_MODEL
         self._genai_http_options = _build_gemini_http_options(config)
 
     async def _call_gemini(self, prompt: str, audio_type: str = 'speech') -> Dict[str, Any]:
         """调用 Gemini TTS 朗读文本（仅配音/语音）。
 
-        2026-06-10：本方法写死用 TTS 模型 gemini-2.5-flash-preview-tts，
+        2026-06-10：本方法默认使用注册表里的 Gemini TTS 模型，
         只能"朗读文本"，不能生成音效或音乐。因此只有 generate_speech 调用它；
         音效/音乐请走 MiniMax（见 MinimaxAudioProvider）。
         """
@@ -116,7 +116,7 @@ class GeminiAudioProvider(AudioProvider):
 
             response = await client.aio.models.generate_content(
                 # 2026-06-10：原 gemini-2.0-flash 不支持 AUDIO 输出（实测 400），
-                # 改为官方 TTS 模型 gemini-2.5-flash-preview-tts。
+                # 改为运行时解析出的官方 TTS 模型。
                 model=self.model_name,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
