@@ -510,6 +510,16 @@ def check_cluster_main_has_no_direct_http_routes(root: Path) -> None:
     for forbidden in ("set_api_router_redis", "from api_router import"):
         if forbidden in cluster_text:
             fail(f"cluster_main.py must not inject the removed SmartApiRouter: {forbidden}")
+    for forbidden in (
+        "import requests",
+        "from requests import",
+        "requests.",
+        "aiohttp.ClientSession",
+        "import httpx",
+        "httpx.",
+    ):
+        if forbidden in cluster_text:
+            fail(f"cluster_main.py should only compose services/routers and must not perform direct HTTP transport: {forbidden}")
 
     cluster_tree = parse_py_file(cluster_main_path)
     violations: list[str] = []

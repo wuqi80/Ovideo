@@ -7588,3 +7588,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `cluster_main.py=999` lines, `admin_routes.py=1502` lines, `dao/` has 36 Python files, `tests/test_minimax_tts_sync.py` is present, and `external_api/audio/minimax_audio.py` contains exactly 3 `aiohttp.ClientSession` helper sites.
+
+## 2026-06-22 Cluster Main Direct HTTP Guard
+
+- Removed the unused `requests` import from `deploy/cluster_main.py`, keeping the startup/composition entrypoint free of direct outbound HTTP transport.
+- Strengthened `deploy/scripts/check_route_contract.py` so `cluster_main.py` now fails the route contract if `requests`, `aiohttp.ClientSession`, or `httpx` transport code is reintroduced.
+- Verification:
+  - Local `py_compile` for `cluster_main.py` and `scripts/check_route_contract.py` passed.
+  - Local `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Live deploy to `https://mecha.one/` passed; `live_deploy_mvc2.sh` printed `Skipping frontend build`, restarted `drama.service`, and left it `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed `cluster_main.py=998` lines, `admin_routes.py=1502` lines, and `grep requests ~/deploy/cluster_main.py` returned no matches.

@@ -13,7 +13,6 @@ import signal
 import uuid
 import time
 import random
-import requests
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
