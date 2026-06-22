@@ -8139,3 +8139,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_storyboard_service.py tests/test_storyboard_stale_script_fallback.py -q` passed with 14 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Project Core Service Boundary
+
+- Moved DAO-backed project create/list/detail business logic from `deploy/routers/project_core.py` into `deploy/services/project_core_service.py`.
+- The router still owns the 3 core project HTTP endpoints, but now delegates initial version creation, owner membership creation, activity logging, organization-scoped list authorization, project access checks, last-access update, and detail aggregation to the service layer.
+- Removed the route-local dynamic `dao_organization` import by injecting `OrganizationMemberDAO` through `deploy/api_routes.py`.
+- Added `deploy/tests/test_project_core_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so project core routes cannot regress to direct `ProjectDAO`, `VersionDAO`, `ProjectMemberDAO`, `UserDAO`, `ActivityLogDAO`, or `OrganizationMemberDAO` orchestration in the router.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_project_core_service.py -q` passed with 7 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.

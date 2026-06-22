@@ -8,6 +8,15 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.project_core_service import (
+    OrganizationForbidden,
+    ProjectForbidden,
+    ProjectNotFound,
+    create_project as create_project_service,
+    get_project_detail as get_project_detail_service,
+    list_user_projects as list_user_projects_service,
+)
+
 
 class ProjectCreate(BaseModel):
     project_name: str
@@ -23,6 +32,7 @@ def create_project_core_router(
     project_member_dao: Any,
     user_dao: Any,
     activity_log_dao: Any,
+    organization_member_dao: Any,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
@@ -31,110 +41,68 @@ def create_project_core_router(
     ProjectMemberDAO = project_member_dao
     UserDAO = user_dao
     ActivityLogDAO = activity_log_dao
+    OrganizationMemberDAO = organization_member_dao
 
     @router.post("/api/projects")
     async def create_project(
         project_data: ProjectCreate,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
         """Create a new DAO-backed project."""
         try:
-            project = await ProjectDAO.create_project(
+            return await create_project_service(
                 user_id=user_id,
                 project_name=project_data.project_name,
                 description=project_data.description,
-                visibility=project_data.visibility or 'private',
+                visibility=project_data.visibility,
+                project_dao=ProjectDAO,
+                version_dao=VersionDAO,
+                project_member_dao=ProjectMemberDAO,
+                activity_log_dao=ActivityLogDAO,
             )
-
-            version = await VersionDAO.create_version(
-                project_id=project['project_id'],
-                user_id=user_id,
-                version_name="初始版本",
-                description="项目创建时的初始版本"
-            )
-
-            await ProjectMemberDAO.add_member(
-                project_id=project['project_id'],
-                user_id=user_id,
-                role='owner'
-            )
-
-            await ActivityLogDAO.log_activity(
-                user_id=user_id,
-                action='create_project',
-                resource_type='project',
-                resource_id=project['project_id']
-            )
-
-            return {
-                "success": True,
-                "project": project,
-                "initial_version": version
-            }
-
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @router.get("/api/projects")
     async def get_user_projects(
         include_archived: bool = False,
         org_id: Optional[str] = None,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
         """List all projects available to the current user."""
         try:
-            if org_id:
-                from dao_organization import OrganizationMemberDAO
-                if not await OrganizationMemberDAO.is_member(org_id, user_id):
-                    raise HTTPException(status_code=403, detail="不是该组织成员")
-                projects = await ProjectMemberDAO.get_org_accessible_projects(
-                    user_id, org_id, include_archived,
-                )
-            else:
-                projects = await ProjectMemberDAO.get_user_accessible_projects(user_id, include_archived)
-            return {
-                "success": True,
-                "projects": projects
-            }
-        except HTTPException:
-            raise
+            return await list_user_projects_service(
+                user_id=user_id,
+                include_archived=include_archived,
+                org_id=org_id,
+                project_member_dao=ProjectMemberDAO,
+                organization_member_dao=OrganizationMemberDAO,
+            )
+        except OrganizationForbidden as e:
+            raise HTTPException(status_code=403, detail="不是该组织成员") from e
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @router.get("/api/projects/{project_id}")
     async def get_project_detail(
         project_id: str,
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
     ):
         """Return a DAO-backed project detail payload."""
         try:
-            project = await ProjectDAO.get_project(project_id)
-            if not project:
-                raise HTTPException(status_code=404, detail="项目不存在")
-
-            has_access = (
-                project.get('user_id') == user_id
-                or await ProjectMemberDAO.check_permission(project_id, user_id, 'readonly')
-                or await UserDAO.is_admin_user(user_id)
+            return await get_project_detail_service(
+                project_id,
+                user_id=user_id,
+                project_dao=ProjectDAO,
+                version_dao=VersionDAO,
+                project_member_dao=ProjectMemberDAO,
+                user_dao=UserDAO,
             )
-            if not has_access:
-                raise HTTPException(status_code=403, detail="无权访问")
-
-            await ProjectDAO.update_project_access(project_id)
-
-            versions = await VersionDAO.get_project_versions(project_id)
-            members = await ProjectMemberDAO.get_project_members(project_id)
-
-            return {
-                "success": True,
-                "project": project,
-                "versions": versions,
-                "members": members
-            }
-
-        except HTTPException:
-            raise
+        except ProjectNotFound as e:
+            raise HTTPException(status_code=404, detail="项目不存在") from e
+        except ProjectForbidden as e:
+            raise HTTPException(status_code=403, detail="无权访问") from e
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     return router

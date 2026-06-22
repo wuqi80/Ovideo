@@ -19,6 +19,7 @@ from dao_entity_file import EntityFileDAO
 from dao_timeline import TimelineDAO
 from dao_audio_track import AudioTrackDAO
 from dao_character_voice import CharacterVoiceDAO
+from dao_organization import OrganizationMemberDAO
 from audio_provider import get_audio_provider, AUDIO_UPLOAD_DIR
 
 try:
@@ -242,5 +243,6 @@ router.include_router(
         project_member_dao=ProjectMemberDAO,
         user_dao=UserDAO,
         activity_log_dao=ActivityLogDAO,
+        organization_member_dao=OrganizationMemberDAO,
     )
 )

@@ -1666,8 +1666,11 @@ def check_project_routes_extracted(root: Path) -> int:
 
 def check_project_core_routes_extracted(root: Path) -> int:
     project_core_path = root / "routers" / "project_core.py"
+    project_core_service_path = root / "services" / "project_core_service.py"
     if not project_core_path.exists():
         fail("routers/project_core.py is missing")
+    if not project_core_service_path.exists():
+        fail("services/project_core_service.py is missing")
 
     project_core_tree = parse_py_file(project_core_path)
     route_count = 0
@@ -1685,7 +1688,55 @@ def check_project_core_routes_extracted(root: Path) -> int:
 
     if route_count != 3:
         fail(f"routers/project_core.py should own 3 DAO project route registrations, found {route_count}")
-    return route_count
+
+    router_text = project_core_path.read_text(encoding="utf-8")
+    service_text = project_core_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.project_core_service import (", project_core_path),
+        (router_text, "create_project_service(", project_core_path),
+        (router_text, "list_user_projects_service(", project_core_path),
+        (router_text, "get_project_detail_service(", project_core_path),
+        (router_text, "organization_member_dao: Any", project_core_path),
+        (service_text, "project_dao.create_project(", project_core_service_path),
+        (service_text, "version_dao.create_version(", project_core_service_path),
+        (service_text, "project_member_dao.add_member(", project_core_service_path),
+        (service_text, "activity_log_dao.log_activity(", project_core_service_path),
+        (service_text, "organization_member_dao.is_member(", project_core_service_path),
+        (service_text, "project_member_dao.get_org_accessible_projects(", project_core_service_path),
+        (service_text, "project_member_dao.get_user_accessible_projects(", project_core_service_path),
+        (service_text, "project_dao.get_project(", project_core_service_path),
+        (service_text, "project_member_dao.check_permission(", project_core_service_path),
+        (service_text, "user_dao.is_admin_user(", project_core_service_path),
+        (service_text, "project_dao.update_project_access(", project_core_service_path),
+        (service_text, "version_dao.get_project_versions(", project_core_service_path),
+        (service_text, "project_member_dao.get_project_members(", project_core_service_path),
+        (root / "api_routes.py", "from dao_organization import OrganizationMemberDAO", root / "api_routes.py"),
+        (root / "api_routes.py", "organization_member_dao=OrganizationMemberDAO", root / "api_routes.py"),
+    ]
+    forbidden_snippets = [
+        (router_text, "ProjectDAO.create_project(", project_core_path),
+        (router_text, "VersionDAO.create_version(", project_core_path),
+        (router_text, "ProjectMemberDAO.add_member(", project_core_path),
+        (router_text, "ActivityLogDAO.log_activity(", project_core_path),
+        (router_text, "OrganizationMemberDAO.is_member(", project_core_path),
+        (router_text, "ProjectMemberDAO.get_org_accessible_projects(", project_core_path),
+        (router_text, "ProjectMemberDAO.get_user_accessible_projects(", project_core_path),
+        (router_text, "ProjectDAO.get_project(", project_core_path),
+        (router_text, "ProjectMemberDAO.check_permission(", project_core_path),
+        (router_text, "UserDAO.is_admin_user(", project_core_path),
+        (router_text, "ProjectDAO.update_project_access(", project_core_path),
+        (router_text, "VersionDAO.get_project_versions(", project_core_path),
+        (router_text, "ProjectMemberDAO.get_project_members(", project_core_path),
+        (router_text, "from dao_organization import", project_core_path),
+    ]
+    for text_or_path, snippet, path in required_snippets:
+        text = text_or_path.read_text(encoding="utf-8") if isinstance(text_or_path, Path) else text_or_path
+        if snippet not in text:
+            fail(f"Missing project core service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Project core router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
+    return route_count + len(required_snippets)
 
 
 def check_project_admin_routes_extracted(root: Path) -> int:
@@ -5200,6 +5251,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_entity_file_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_prompt_service.py",
+        "tests/test_project_core_service.py",
         "tests/test_script_timeline_service.py",
         "tests/test_video_client_base.py",
         "tests/test_video_capability_service.py",
