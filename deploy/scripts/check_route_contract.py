@@ -2526,10 +2526,6 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "高级诊断",
-        ),
-        (
-            root / "new_html" / "admin" / "AdminSettingsPage.tsx",
             "测试连通性",
         ),
         (
@@ -4897,6 +4893,9 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
     text = page_path.read_text(encoding="utf-8")
     required_snippets = [
         "function healthStatusFromResult",
+        "function healthStatusFromConfigTest",
+        "function mergedHealthStatus",
+        "const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);",
         "const status = healthStatusFromResult(result)",
         "function runtimeStatusKey",
         "function providerHealthKey",

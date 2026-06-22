@@ -434,6 +434,30 @@ function healthStatusFromResult(result?: ProviderHealth): HealthStatus {
     return 'unknown';
 }
 
+function healthStatusFromConfigTest(test?: ApiConfigTest): HealthStatus | undefined {
+    if (!test) return undefined;
+    if (test.ok) return 'ok';
+    if (isNoKeyTest(test)) return 'no_key';
+    return 'error';
+}
+
+function mergedHealthStatus(
+    health: ProviderHealth | undefined,
+    runtime: RuntimeStatus | undefined,
+    hasEffectiveKey: boolean,
+    configTest?: ApiConfigTest,
+): HealthStatus {
+    const runtimeStatus = healthStatusFrom(health, runtime, hasEffectiveKey);
+    if (runtimeStatus === 'ok') return 'ok';
+
+    const configStatus = healthStatusFromConfigTest(configTest);
+    if (!configStatus) return runtimeStatus;
+    if (configStatus === 'ok') return 'ok';
+    if (runtimeStatus === 'unknown') return configStatus;
+    if (runtimeStatus === 'no_key' && configStatus === 'error') return 'error';
+    return runtimeStatus;
+}
+
 function groupCategory(config: ApiConfig): string {
     const category = String(config.category || '').toLowerCase();
     if (CATEGORY_LABELS[category]) return category;
@@ -1021,7 +1045,7 @@ const ApiConfigCard: React.FC<{
     const provider = normalizeProvider(config.provider);
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.api_key_encrypted);
     const configHasKey = Boolean(config.api_key_encrypted);
-    const status = healthStatusFrom(health, runtime, runtimeHasKey);
+    const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
     const view = statusView(status);
     const healthError = health?.health?.error || runtime?.health_error || '';
     const healthLatency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
@@ -1103,20 +1127,20 @@ const ApiConfigCard: React.FC<{
                                 onClick={() => onTestConfig(config)}
                                 disabled={testingConfig || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="高级诊断：优先测试这条数据库记录保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
+                                title="测试这条数据库配置保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
                             >
                                 {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                                高级诊断
+                                测试连通性
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试实际生成调用会使用的生效 Key 和 Endpoint"
+                                title="刷新实际生成调用会使用的生效 Key 和 Endpoint"
                             >
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                测试连通性
+                                刷新生效健康
                             </button>
                             <button
                                 type="button"
@@ -1298,7 +1322,7 @@ const ProviderQuickCard: React.FC<{
     const primaryConfig = bestConfigForProvider(configs, provider);
     const hasSavedKey = configs.some(config => Boolean(config.api_key_encrypted));
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : hasSavedKey;
-    const status = healthStatusFrom(health, runtime, runtimeHasKey);
+    const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
     const view = statusView(status);
     const latency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const checkedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
@@ -1419,10 +1443,10 @@ const ProviderQuickCard: React.FC<{
                             onClick={() => onTestConfig(primaryConfig)}
                             disabled={testingConfig || !primaryConfig.config_id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                            title="高级诊断：优先测试这条数据库配置保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
+                            title="测试这条数据库配置保存的 Key；记录无 Key 时会借用运行时 Key 并显示来源"
                         >
                             {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            高级诊断
+                            测试连通性
                         </button>
                     </>
                 ) : (

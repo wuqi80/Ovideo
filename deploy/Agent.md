@@ -7994,3 +7994,19 @@
 - Local `pytest tests/test_admin_import_presets_writes_category.py tests/test_dao_api_config_category.py -q` passed with 8 tests.
 - Local architecture contracts passed 10/10; `service_files=26`, `raw_sql_in_services=0`, and `service_mapper_purity_checks=713`.
 - Local smoke test passed 9/9.
+
+## 2026-06-22 Admin API Config Status UX
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` so saved-config test results from `POST /api/admin/api-configs/{id}/test` participate in the provider card's primary status.
+- This prevents a provider from staying red/no-key after the DB config test proves runtime key fallback is usable.
+- Renamed the old "advanced diagnostic" action to "test connectivity"; runtime provider checks remain available as "refresh effective health".
+- Updated `scripts/check_route_contract.py` to enforce the merged API config health status path.
+
+### Verification
+
+- `scripts/check_route_contract.py` passed.
+- `scripts/check_architecture_contracts.py` passed 10/10.
+- `new_html` Vite production build passed using the bundled Node runtime.
+- Local smoke test passed 9/9.
