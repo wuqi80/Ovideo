@@ -883,8 +883,11 @@ def check_task_routes_extracted(root: Path) -> int:
 def check_task_notification_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     task_notifications_path = root / "routers" / "task_notifications.py"
+    task_notification_service_path = root / "services" / "task_notification_service.py"
     if not task_notifications_path.exists():
         fail("routers/task_notifications.py is missing")
+    if not task_notification_service_path.exists():
+        fail("services/task_notification_service.py is missing")
 
     route_paths = {
         "/api/tasks/recent",
@@ -929,7 +932,61 @@ def check_task_notification_routes_extracted(root: Path) -> int:
 
     if route_count != 9:
         fail(f"routers/task_notifications.py should own 9 task/notification route registrations, found {route_count}")
-    return route_count
+
+    router_text = task_notifications_path.read_text(encoding="utf-8")
+    service_text = task_notification_service_path.read_text(encoding="utf-8")
+    api_text = api_routes_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.task_notification_service import (", task_notifications_path),
+        (router_text, "get_recent_tasks_service(", task_notifications_path),
+        (router_text, "get_task_files_service(", task_notifications_path),
+        (router_text, "get_active_tasks_service(", task_notifications_path),
+        (router_text, "get_task_notifications_service(", task_notifications_path),
+        (router_text, "get_unread_notification_count_service(", task_notifications_path),
+        (router_text, "get_notifications_service(", task_notifications_path),
+        (router_text, "mark_notification_read_service(", task_notifications_path),
+        (router_text, "mark_all_notifications_read_service(", task_notifications_path),
+        (router_text, "dismiss_notification_service(", task_notifications_path),
+        (router_text, "notification_dao: Any", task_notifications_path),
+        (api_text, "from dao_notification import NotificationDAO", api_routes_path),
+        (api_text, "notification_dao=NotificationDAO", api_routes_path),
+        (service_text, "task_dao.get_recent_completed_tasks(", task_notification_service_path),
+        (service_text, "task_dao.get_task(", task_notification_service_path),
+        (service_text, "task_dao.get_task_files(", task_notification_service_path),
+        (service_text, "task_dao.get_active_tasks_for_user(", task_notification_service_path),
+        (service_text, "task_dao.get_terminal_tasks_for_notifications(", task_notification_service_path),
+        (service_text, "notification_dao.get_unread_count(", task_notification_service_path),
+        (service_text, "notification_dao.get_unread(", task_notification_service_path),
+        (service_text, "notification_dao.get_history(", task_notification_service_path),
+        (service_text, "notification_dao.mark_read(", task_notification_service_path),
+        (service_text, "notification_dao.mark_all_read(", task_notification_service_path),
+        (service_text, "notification_dao.dismiss(", task_notification_service_path),
+        (service_text, "def _normalize_task_data(", task_notification_service_path),
+        (service_text, "datetime.fromtimestamp(since / 1000, tz=timezone.utc).replace(tzinfo=None)", task_notification_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "from dao_notification import", task_notifications_path),
+        (router_text, "TaskDAO.get_recent_completed_tasks(", task_notifications_path),
+        (router_text, "TaskDAO.get_task(", task_notifications_path),
+        (router_text, "TaskDAO.get_task_files(", task_notifications_path),
+        (router_text, "TaskDAO.get_active_tasks_for_user(", task_notifications_path),
+        (router_text, "TaskDAO.get_terminal_tasks_for_notifications(", task_notifications_path),
+        (router_text, "NotificationDAO.get_unread_count(", task_notifications_path),
+        (router_text, "NotificationDAO.get_unread(", task_notifications_path),
+        (router_text, "NotificationDAO.get_history(", task_notifications_path),
+        (router_text, "NotificationDAO.mark_read(", task_notifications_path),
+        (router_text, "NotificationDAO.mark_all_read(", task_notifications_path),
+        (router_text, "NotificationDAO.dismiss(", task_notifications_path),
+        (router_text, "json.loads(", task_notifications_path),
+        (router_text, "datetime.fromtimestamp(", task_notifications_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing task notification service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Task notification router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
+    return route_count + len(required_snippets)
 
 
 def check_task_stale_cleanup_notification_contract(root: Path) -> int:
@@ -4498,8 +4555,8 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "entity_files.py", "select_entity_file_service("),
         (root / "services" / "entity_file_service.py", "entity_file_dao.count_user_files("),
         (root / "services" / "entity_file_service.py", "entity_file_dao.sync_legacy_url("),
-        (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
-        (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
+        (root / "services" / "task_notification_service.py", "task_dao.get_active_tasks_for_user("),
+        (root / "services" / "task_notification_service.py", "task_dao.get_terminal_tasks_for_notifications("),
         (root / "services" / "episode_video_service.py", "episode_dao.get_project_id("),
         (root / "routers" / "episode_video.py", "start_episode_compose("),
         (root / "routers" / "video_capabilities.py", "get_video_capabilities("),
@@ -5300,6 +5357,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_project_admin_service.py",
         "tests/test_project_core_service.py",
         "tests/test_script_timeline_service.py",
+        "tests/test_task_notification_service.py",
         "tests/test_video_client_base.py",
         "tests/test_video_capability_service.py",
         '"new_html/.env.example"',

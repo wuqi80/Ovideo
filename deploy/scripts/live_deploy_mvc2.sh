@@ -73,6 +73,7 @@ FILES=(
   tests/test_storyboard_service.py
   tests/test_storyboard_stale_script_fallback.py
   tests/test_task_read_service.py
+  tests/test_task_notification_service.py
   tests/test_user_dao_admin_delete.py
   tests/test_video_client_base.py
   tests/test_video_capability_service.py

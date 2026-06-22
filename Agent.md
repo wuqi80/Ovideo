@@ -8164,3 +8164,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_project_admin_service.py -q` passed with 7 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Task Notification Service Boundary
+
+- Moved task recovery, terminal task notification formatting, task-file access checks, and persisted notification CRUD from `deploy/routers/task_notifications.py` into `deploy/services/task_notification_service.py`.
+- The router still owns the 9 task/notification HTTP endpoints, but now delegates task ownership checks, active/recent task reads, terminal task `task_data` normalization, unread-count/history reads, mark-read/read-all, and dismiss operations to the service layer.
+- Injected `NotificationDAO` through `deploy/api_routes.py` so the router no longer imports notification persistence directly.
+- Added `deploy/tests/test_task_notification_service.py` and included it in `deploy/scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `deploy/scripts/check_route_contract.py` so task notification routes cannot regress to direct `TaskDAO`/`NotificationDAO` orchestration or route-local `task_data` parsing.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_task_notification_service.py -q` passed with 5 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.

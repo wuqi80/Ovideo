@@ -9,6 +9,7 @@ import logging
 from dao_user import UserDAO
 from dao_content import ProjectDAO, VersionDAO, FileDAO, TextContentDAO, ProjectMemberDAO
 from dao_task import TaskDAO, ActivityLogDAO
+from dao_notification import NotificationDAO
 from dao_canvas import CanvasBoardDAO, CanvasNodeDAO, CanvasConnectionDAO
 from dao_asset import AssetDAO
 from dao_storyboard import StoryboardDAO
@@ -136,6 +137,7 @@ router.include_router(
     create_task_notifications_router(
         get_current_user_dependency=get_current_user,
         task_dao=TaskDAO,
+        notification_dao=NotificationDAO,
     )
 )
 
