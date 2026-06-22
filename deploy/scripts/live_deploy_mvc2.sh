@@ -60,6 +60,7 @@ FILES=(
   tests/test_dao_api_config_category.py
   tests/test_episode_compose_service.py
   tests/test_episode_video_service.py
+  tests/test_entity_file_service.py
   tests/test_minimax_tts_sync.py
   tests/test_minimax_audio_runtime.py
   tests/test_prompt_service.py

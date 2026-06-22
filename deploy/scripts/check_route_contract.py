@@ -2162,8 +2162,11 @@ def check_asset_routes_extracted(root: Path) -> int:
 def check_entity_file_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     entity_files_path = root / "routers" / "entity_files.py"
+    entity_file_service_path = root / "services" / "entity_file_service.py"
     if not entity_files_path.exists():
         fail("routers/entity_files.py is missing")
+    if not entity_file_service_path.exists():
+        fail("services/entity_file_service.py is missing")
     api_text = api_routes_path.read_text(encoding="utf-8")
     entity_files_text = entity_files_path.read_text(encoding="utf-8")
 
@@ -2228,7 +2231,47 @@ def check_entity_file_routes_extracted(root: Path) -> int:
     if purity_violations:
         fail("Entity file router purity contract failed:\n" + "\n".join(purity_violations))
 
-    return route_count + 4
+    service_text = entity_file_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (entity_files_text, "from services.entity_file_service import (", entity_files_path),
+        (entity_files_text, "return await list_user_files(", entity_files_path),
+        (entity_files_text, "return await list_entity_files(", entity_files_path),
+        (entity_files_text, "link_entity_file_service(", entity_files_path),
+        (entity_files_text, "select_entity_file_service(", entity_files_path),
+        (entity_files_text, "upload_entity_file_service(", entity_files_path),
+        (entity_files_text, "soft_delete_entity_file(", entity_files_path),
+        (entity_files_text, "hard_delete_entity_file_service(", entity_files_path),
+        (entity_files_text, "hard_delete_entity_files_batch_service(", entity_files_path),
+        (entity_files_text, "run_entity_file_migration_service(", entity_files_path),
+        (service_text, "file_dao.get_user_files(", entity_file_service_path),
+        (service_text, "entity_file_dao.count_user_files(", entity_file_service_path),
+        (service_text, "entity_file_dao.get_entity_files(", entity_file_service_path),
+        (service_text, "entity_file_dao.link_file(", entity_file_service_path),
+        (service_text, "entity_file_dao.select_file(", entity_file_service_path),
+        (service_text, "entity_file_dao.sync_legacy_url(", entity_file_service_path),
+        (service_text, "entity_file_dao.hard_delete_batch(", entity_file_service_path),
+    ]
+    forbidden_snippets = [
+        (entity_files_text, "FileDAO.get_user_files(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.count_user_files(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.get_entity_files(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.link_file(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.select_file(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.sync_legacy_url(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.soft_delete(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.hard_delete(", entity_files_path),
+        (entity_files_text, "EntityFileDAO.hard_delete_batch(", entity_files_path),
+        (entity_files_text, "import media_library_service", entity_files_path),
+        (entity_files_text, "from migrate_existing_files import", entity_files_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing entity file service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Entity file router must delegate DAO/media/migration orchestration to service: {path.relative_to(root)} {snippet}")
+
+    return route_count + 4 + len(required_snippets)
 
 
 def check_legacy_file_routes_extracted(root: Path) -> int:
@@ -4217,8 +4260,10 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "admin" / "admin_stats.py", "async def get_generation_logs("),
         (root / "dao" / "admin" / "admin_stats.py", "async def get_stats_breakdown("),
         (root / "services" / "file_service.py", "EntityFileDAO.sync_legacy_url("),
-        (root / "routers" / "entity_files.py", "EntityFileDAO.count_user_files("),
-        (root / "routers" / "entity_files.py", "EntityFileDAO.sync_legacy_url("),
+        (root / "routers" / "entity_files.py", "list_user_files("),
+        (root / "routers" / "entity_files.py", "select_entity_file_service("),
+        (root / "services" / "entity_file_service.py", "entity_file_dao.count_user_files("),
+        (root / "services" / "entity_file_service.py", "entity_file_dao.sync_legacy_url("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_active_tasks_for_user("),
         (root / "routers" / "task_notifications.py", "TaskDAO.get_terminal_tasks_for_notifications("),
         (root / "services" / "episode_video_service.py", "episode_dao.get_project_id("),
@@ -5012,6 +5057,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_dao_api_config_category.py",
         "tests/test_episode_compose_service.py",
         "tests/test_episode_video_service.py",
+        "tests/test_entity_file_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_prompt_service.py",
         "tests/test_script_timeline_service.py",

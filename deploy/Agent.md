@@ -8415,3 +8415,19 @@
 - Local `pytest tests/test_canvas_service.py -q` passed with 9 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Entity File Service Boundary
+
+### Changes
+
+- Moved user file listing, entity file linking/selection, upload media sync, deletion, batch deletion, and migration orchestration from `routers/entity_files.py` into `services/entity_file_service.py`.
+- The router still owns the 9 entity-file HTTP endpoints, but now delegates `FileDAO`, `EntityFileDAO`, media-library sync, and migration orchestration to the service layer.
+- Added `tests/test_entity_file_service.py` and included it in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so entity-file routes cannot regress to direct DAO/media/migration orchestration in the router.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_entity_file_service.py -q` passed with 9 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.

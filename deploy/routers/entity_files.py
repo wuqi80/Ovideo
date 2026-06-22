@@ -1,13 +1,26 @@
 # -*- coding: utf-8 -*-
 """Unified entity file routes for storyboard items, assets, and video segments."""
 
-import json
 import logging
-from pathlib import Path
 from typing import Any, Callable, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+
+from services.entity_file_service import (
+    EntityFileBatchTooLarge,
+    EntityFileMigrationFailed,
+    EntityFileNotFound,
+    hard_delete_entity_file as hard_delete_entity_file_service,
+    hard_delete_entity_files_batch as hard_delete_entity_files_batch_service,
+    link_entity_file as link_entity_file_service,
+    list_entity_files,
+    list_user_files,
+    run_entity_file_migration as run_entity_file_migration_service,
+    select_entity_file as select_entity_file_service,
+    soft_delete_entity_file,
+    upload_entity_file as upload_entity_file_service,
+)
 
 
 def create_entity_files_router(
@@ -48,20 +61,14 @@ def create_entity_files_router(
         offset: int = 0,
         user_id: str = Depends(get_current_user),
     ):
-        if limit > 500:
-            limit = 500
-        rows = await FileDAO.get_user_files(user_id, file_type, limit, offset)
-        items = []
-        for r in rows:
-            item = dict(r)
-            if isinstance(item.get("metadata"), str):
-                try:
-                    item["metadata"] = json.loads(item["metadata"])
-                except Exception:
-                    item["metadata"] = {}
-            items.append(item)
-        total = await EntityFileDAO.count_user_files(user_id, file_type)
-        return {"success": True, "items": items, "total": total}
+        return await list_user_files(
+            user_id=user_id,
+            file_type=file_type,
+            limit=limit,
+            offset=offset,
+            file_dao=FileDAO,
+            entity_file_dao=EntityFileDAO,
+        )
 
     @router.get("/api/entity-files")
     async def get_entity_files(
@@ -72,32 +79,31 @@ def create_entity_files_router(
         offset: int = 0,
         user_id: str = Depends(get_current_user),
     ):
-        if limit > 200:
-            limit = 200
-        result = await EntityFileDAO.get_entity_files(
-            entity_type,
-            entity_id,
-            file_role,
-            limit,
-            offset,
+        return await list_entity_files(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            file_role=file_role,
+            limit=limit,
+            offset=offset,
+            entity_file_dao=EntityFileDAO,
         )
-        return {"success": True, **result}
 
     @router.post("/api/entity-files/link")
     async def link_entity_file(
         req: EntityFileLinkRequest,
         user_id: str = Depends(get_current_user),
     ):
-        row = await EntityFileDAO.link_file(
-            req.file_id,
-            req.entity_type,
-            req.entity_id,
-            req.file_role,
-            req.is_selected,
-        )
-        if not row:
-            raise HTTPException(404, "文件不存在或已删除")
-        return {"success": True, "file": row}
+        try:
+            return await link_entity_file_service(
+                file_id=req.file_id,
+                entity_type=req.entity_type,
+                entity_id=req.entity_id,
+                file_role=req.file_role,
+                is_selected=req.is_selected,
+                entity_file_dao=EntityFileDAO,
+            )
+        except EntityFileNotFound as exc:
+            raise HTTPException(404, "文件不存在或已删除") from exc
 
     @router.put("/api/entity-files/{file_id}/select")
     async def select_entity_file(
@@ -105,20 +111,17 @@ def create_entity_files_router(
         req: EntityFileSelectRequest,
         user_id: str = Depends(get_current_user),
     ):
-        row = await EntityFileDAO.select_file(
-            file_id,
-            req.entity_type,
-            req.entity_id,
-            req.file_role,
-        )
-        if not row:
-            raise HTTPException(404, "文件不存在或不属于指定实体")
-
         try:
-            await EntityFileDAO.sync_legacy_url(req.entity_type, req.entity_id, req.file_role, row["file_url"])
-        except Exception as exc:
-            logger.warning("同步旧URL字段失败: %s", exc)
-        return {"success": True, "file": row}
+            return await select_entity_file_service(
+                file_id=file_id,
+                entity_type=req.entity_type,
+                entity_id=req.entity_id,
+                file_role=req.file_role,
+                entity_file_dao=EntityFileDAO,
+                logger=logger,
+            )
+        except EntityFileNotFound as exc:
+            raise HTTPException(404, "文件不存在或不属于指定实体") from exc
 
     @router.post("/api/entity-files/upload")
     async def upload_entity_file(
@@ -130,86 +133,58 @@ def create_entity_files_router(
         user_id: str = Depends(get_current_user),
     ):
         content = await file.read()
-        ext = Path(file.filename).suffix if file.filename else ".bin"
-        file_type = (
-            "image" if file.content_type and file.content_type.startswith("image")
-            else "audio" if file.content_type and file.content_type.startswith("audio")
-            else "video" if file.content_type and file.content_type.startswith("video")
-            else "other"
-        )
-
-        saved = await save_generated_file_to_db(
+        return await upload_entity_file_service(
             content=content,
-            file_type=file_type,
-            user_id=user_id,
-            source="upload",
+            filename=file.filename,
+            content_type=file.content_type,
             entity_type=entity_type,
             entity_id=entity_id,
             file_role=file_role,
-            original_ext=ext,
             episode_id=episode_id,
+            user_id=user_id,
+            save_generated_file_to_db=save_generated_file_to_db,
+            logger=logger,
         )
-        try:
-            if file_type in ("image", "video", "audio"):
-                import media_library_service
-
-                await media_library_service.create_from_file(
-                    file_record=saved,
-                    source="upload",
-                    episode_id=episode_id,
-                    source_entity_type=entity_type,
-                    source_entity_id=entity_id,
-                    title=(file.filename or "")[:80] or None,
-                )
-        except Exception as exc:
-            logger.warning("media_library 同步失败 (entity-files upload): %s", exc)
-        return {"success": True, "file_id": saved["file_id"], "file_url": saved["file_url"]}
 
     @router.delete("/api/entity-files/{file_id}")
     async def delete_entity_file(
         file_id: str,
         user_id: str = Depends(get_current_user),
     ):
-        ok = await EntityFileDAO.soft_delete(file_id)
-        if not ok:
-            raise HTTPException(404, "文件不存在或已删除")
-        return {"success": True}
+        try:
+            return await soft_delete_entity_file(file_id=file_id, entity_file_dao=EntityFileDAO)
+        except EntityFileNotFound as exc:
+            raise HTTPException(404, "文件不存在或已删除") from exc
 
     @router.delete("/api/entity-files/{file_id}/hard")
     async def hard_delete_entity_file(
         file_id: str,
         user_id: str = Depends(get_current_user),
     ):
-        result = await EntityFileDAO.hard_delete(file_id)
-        if not result:
-            raise HTTPException(404, "文件不存在")
-        return {"success": True, "freed_bytes": result["freed_bytes"]}
+        try:
+            return await hard_delete_entity_file_service(file_id=file_id, entity_file_dao=EntityFileDAO)
+        except EntityFileNotFound as exc:
+            raise HTTPException(404, "文件不存在") from exc
 
     @router.post("/api/entity-files/hard-delete-batch")
     async def hard_delete_entity_files_batch(
         request: HardDeleteBatchRequest,
         user_id: str = Depends(get_current_user),
     ):
-        if len(request.file_ids) > 200:
-            raise HTTPException(400, "单次最多删除 200 个文件")
-        result = await EntityFileDAO.hard_delete_batch(request.file_ids)
-        return {"success": True, **result}
+        try:
+            return await hard_delete_entity_files_batch_service(
+                file_ids=request.file_ids,
+                entity_file_dao=EntityFileDAO,
+            )
+        except EntityFileBatchTooLarge as exc:
+            raise HTTPException(400, "单次最多删除 200 个文件") from exc
 
     @router.post("/api/entity-files/migrate")
     async def run_entity_file_migration(user_id: str = Depends(get_current_user)):
         try:
-            from migrate_existing_files import (
-                migrate_assets,
-                migrate_storyboard_items,
-                migrate_video_segments,
-                recover_orphan_files,
-            )
-
-            await migrate_storyboard_items()
-            await migrate_assets()
-            await migrate_video_segments()
-            recovered = await recover_orphan_files()
-            return {"success": True, "recovered": recovered}
+            return await run_entity_file_migration_service()
+        except EntityFileMigrationFailed as exc:
+            raise HTTPException(500, f"迁移失败: {str(exc)}") from exc
         except Exception as exc:
             raise HTTPException(500, f"迁移失败: {str(exc)}")
 
