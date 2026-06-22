@@ -63,6 +63,7 @@ from api_routes import router as api_router
 from media_library_routes import router as media_library_router
 from credit_routes import router as credit_router
 from video_reverse_routes import router as video_reverse_router
+from dao.admin.admin_stats import AdminStatsDAO
 from dao_task import TaskDAO
 from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO, ProjectMemberDAO
 from dao_user import UserDAO
@@ -73,6 +74,7 @@ DB_AVAILABLE = True
 # 🆕 导入管理后台模块
 from agent_routes import router as agent_api_router
 from admin_routes import router as admin_api_router
+from services import admin_audit_service
 from services.api_config_runtime_loader import (
     load_api_configs_to_env as _load_api_configs_to_env_service,
     runtime_api_key_globals,
@@ -941,6 +943,9 @@ app.include_router(
         online_users=_online_users,
         default_users=DEFAULT_USERS,
         super_admin=SUPER_ADMIN,
+        admin_stats_dao=AdminStatsDAO,
+        user_dao=UserDAO,
+        audit_record=admin_audit_service.record,
         logger=logger,
     )
 )

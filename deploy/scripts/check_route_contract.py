@@ -1564,7 +1564,7 @@ def check_password_minimum_contract(root: Path) -> int:
         (root / "admin_routes.py", "new_password: str = Field(..., min_length=8)"),
         (root / "admin_routes.py", "len(body.new_password) < 8"),
         (root / "routers" / "auth_legacy.py", "len(user_data.password) < 8"),
-        (root / "routers" / "admin_compat.py", "len(str(password)) < 8"),
+        (root / "services" / "admin_compat_service.py", "len(str(password)) < 8"),
         (root / "cluster_main.py", "def _load_builtin_users() -> dict[str, str]:"),
         (root / "cluster_main.py", 'os.getenv("ADMIN_PASSWORD")'),
         (root / "cluster_main.py", 'if _env_bool("ALLOW_DEV_ADMIN_PASSWORD", False):'),
@@ -1585,6 +1585,7 @@ def check_password_minimum_contract(root: Path) -> int:
         root / "admin_routes.py",
         root / "routers" / "auth_legacy.py",
         root / "routers" / "admin_compat.py",
+        root / "services" / "admin_compat_service.py",
         root / "schemas" / "auth.py",
         root / "cluster_main.py",
     ]:
@@ -1654,10 +1655,14 @@ def check_cors_allowlist_contract(root: Path) -> int:
 def check_admin_compat_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     admin_compat_path = root / "routers" / "admin_compat.py"
+    service_path = root / "services" / "admin_compat_service.py"
     if not admin_compat_path.exists():
         fail("routers/admin_compat.py is missing")
+    if not service_path.exists():
+        fail("services/admin_compat_service.py is missing")
     cluster_text = cluster_main_path.read_text(encoding="utf-8")
     admin_compat_text = admin_compat_path.read_text(encoding="utf-8")
+    service_text = service_path.read_text(encoding="utf-8")
 
     route_paths = {
         "/api/admin/stats",
@@ -1699,7 +1704,16 @@ def check_admin_compat_routes_extracted(root: Path) -> int:
         fail(f"routers/admin_compat.py should own 4 admin compatibility route registrations, found {route_count}")
 
     purity_violations = []
-    for snippet in ["get_db_manager", "db_manager"]:
+    for snippet in [
+        "get_db_manager",
+        "db_manager",
+        "from dao.admin.admin_stats import",
+        "from dao_user import",
+        "AdminStatsDAO.",
+        "UserDAO.",
+        "DEFAULT_USERS[",
+        "admin_audit_service.record(",
+    ]:
         if snippet in admin_compat_text:
             purity_violations.append(f"routers/admin_compat.py still depends on DB plumbing: {snippet}")
     if re.search(r"create_admin_compat_router\([\s\S]{0,400}get_db_manager\s*=", cluster_text):
@@ -1707,7 +1721,33 @@ def check_admin_compat_routes_extracted(root: Path) -> int:
     if purity_violations:
         fail("Admin compatibility router purity contract failed:\n" + "\n".join(purity_violations))
 
-    return route_count + 3
+    required_snippets = [
+        (admin_compat_text, "from services.admin_compat_service import (", "router imports admin compat service"),
+        (admin_compat_text, "get_admin_stats_response(", "router delegates stats"),
+        (admin_compat_text, "get_admin_logs_response(", "router delegates logs"),
+        (admin_compat_text, "create_admin_user_response(", "router delegates user create"),
+        (admin_compat_text, "delete_admin_user_response(", "router delegates user delete"),
+        (admin_compat_text, "admin_stats_dao: Any", "router accepts admin stats DAO"),
+        (admin_compat_text, "user_dao: Any", "router accepts user DAO"),
+        (admin_compat_text, "audit_record: Callable[..., Any] | None", "router accepts audit recorder"),
+        (cluster_text, "from dao.admin.admin_stats import AdminStatsDAO", "cluster imports admin stats DAO"),
+        (cluster_text, "from services import admin_audit_service", "cluster imports admin audit service"),
+        (cluster_text, "admin_stats_dao=AdminStatsDAO", "cluster injects admin stats DAO"),
+        (cluster_text, "user_dao=UserDAO", "cluster injects user DAO"),
+        (cluster_text, "audit_record=admin_audit_service.record", "cluster injects audit recorder"),
+        (service_text, "admin_stats_dao.get_summary_stats(", "service reads summary stats"),
+        (service_text, "admin_stats_dao.get_generation_logs(", "service reads generation logs"),
+        (service_text, "admin_stats_dao.get_stats_breakdown(", "service reads stats breakdown"),
+        (service_text, "user_dao.create_user(", "service creates users"),
+        (service_text, "user_dao.delete_user_by_id(", "service deletes users"),
+        (service_text, "default_users[new_username] = password", "service updates legacy user map"),
+        (service_text, "await audit_record(", "service records audit"),
+    ]
+    missing = [label for text, snippet, label in required_snippets if snippet not in text]
+    if missing:
+        fail("Admin compatibility service boundary is incomplete:\n" + "\n".join(missing))
+
+    return route_count + 3 + len(required_snippets)
 
 
 def check_project_routes_extracted(root: Path) -> int:
@@ -4614,10 +4654,10 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "episode_compose_service.py", "EpisodeComposeDAO.create_final_cut_records("),
         (root / "services" / "project_admin_service.py", "project_dao.update_project_metadata("),
         (root / "services" / "storyboard_service.py", "storyboard_dao.export_script_transaction("),
-        (root / "routers" / "admin_compat.py", "UserDAO.delete_user_by_id("),
-        (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_summary_stats("),
-        (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_generation_logs("),
-        (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_stats_breakdown("),
+        (root / "services" / "admin_compat_service.py", "user_dao.delete_user_by_id("),
+        (root / "services" / "admin_compat_service.py", "admin_stats_dao.get_summary_stats("),
+        (root / "services" / "admin_compat_service.py", "admin_stats_dao.get_generation_logs("),
+        (root / "services" / "admin_compat_service.py", "admin_stats_dao.get_stats_breakdown("),
         (root / "admin_routes.py", "UserDAO.admin_get_user_detail("),
     ]
     for path, snippet in required_snippets:

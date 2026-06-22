@@ -8547,3 +8547,20 @@
 - Local `pytest tests/test_user_session_service.py -q` passed with 6 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
+
+## 2026-06-23 Admin Compatibility Service Boundary
+
+### Changes
+
+- Moved legacy admin compatibility stats/logs/user-create/user-delete business logic from `routers/admin_compat.py` into `services/admin_compat_service.py`.
+- The router still owns the 4 compatibility HTTP endpoints, but now delegates admin permission checks, `group_by` validation, stats/log DAO reads, password length validation, legacy in-memory user map updates, DB user sync, audit recording, and delete guards to the service layer.
+- Injected `AdminStatsDAO`, `UserDAO`, and `admin_audit_service.record` through `cluster_main.py` so the router no longer imports admin reporting or user persistence directly.
+- Added `tests/test_admin_compat_service.py` and included it in `scripts/live_deploy_mvc2.sh` sync coverage.
+- Strengthened `scripts/check_route_contract.py` so admin compatibility routes cannot regress to direct `AdminStatsDAO`/`UserDAO` calls, route-local password checks, route-local legacy user map mutation, or route-local audit recording.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_admin_compat_service.py tests/test_admin_stats_logs.py tests/test_user_dao_admin_delete.py -q` passed with 15 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
