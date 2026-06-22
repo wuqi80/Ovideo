@@ -7559,3 +7559,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`, with `video_client_base_checks=69`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `external_api/video/sora2.py` has no direct `requests` import/calls and the route contract contains `request_multipart_json` checks.
+
+## 2026-06-22 Deployment Frontend Build Skip
+
+- Updated `deploy/scripts/live_deploy_mvc2.sh` so backend/API-only deploys no longer rebuild the Vite frontend when `new_html` source is unchanged.
+- Added `frontend_source_hash()` with normalized `sha256sum` output so Windows Git Bash and Linux produce the same `new_html` source fingerprint.
+- Added remote marker support via `/home/Administrator/deploy/.new_html_source.sha256`; when the marker or remote source hash matches and `dist/` exists, the script prints `Skipping frontend build` and goes straight to service restart and contracts.
+- Added `FORCE_FRONTEND_BUILD=1` for explicit frontend rebuilds, and kept the existing tar/upload/build path for real frontend changes.
+- Added `tests/test_comfyui_file_service.py` to the deploy file list so the latest service-boundary tests are synced with the rest of the test set.
+- Strengthened `deploy/scripts/check_route_contract.py` with deployment-script checks for hash skip, force rebuild, hash normalization, and the additional synced test.
+- Verification:
+  - Local `bash -n deploy/scripts/live_deploy_mvc2.sh`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local and remote normalized `new_html` hashes matched: `9db167248502ecc442d58544715c73d61de887e58fe83deb65191ac4130d9623`.
+  - One manual remote `npm run build` completed successfully with `2080 modules transformed`; the marker was then written.
+  - A real `live_deploy_mvc2.sh` run printed `Skipping frontend build: new_html source hash unchanged (...)`, restarted `drama.service`, and passed remote architecture contracts 10/10 with `live_deploy_frontend_checks=61`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.

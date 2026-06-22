@@ -7,6 +7,8 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)
 SERVICE="${SERVICE:-drama.service}"
 FRONTEND_TAR_REMOTE="/tmp/mecha-new_html-src.tgz"
+FRONTEND_HASH_REMOTE="${FRONTEND_HASH_REMOTE:-$REMOTE_DIR/.new_html_source.sha256}"
+FORCE_FRONTEND_BUILD="${FORCE_FRONTEND_BUILD:-0}"
 RUN_REMOTE_CONTRACTS="${RUN_REMOTE_CONTRACTS:-1}"
 RUN_REMOTE_SMOKE="${RUN_REMOTE_SMOKE:-0}"
 REQUIRE_REMOTE_SMOKE="${REQUIRE_REMOTE_SMOKE:-0}"
@@ -49,6 +51,7 @@ FILES=(
   tests/test_api_provider_runtime_model_env.py
   tests/test_admin_stats_logs.py
   tests/test_auth_user_service.py
+  tests/test_comfyui_file_service.py
   tests/test_content_file_dao.py
   tests/test_minimax_audio_runtime.py
   tests/test_project_read_access.py
@@ -84,6 +87,21 @@ rollback_remote() {
     fi
     sudo systemctl restart '$SERVICE'
   " || true
+}
+
+frontend_source_hash() {
+  find new_html -type f \
+    ! -path 'new_html/node_modules/*' \
+    ! -path 'new_html/.env' \
+    ! -path 'new_html/.env.*' \
+    ! -path 'new_html/coverage/*' \
+    ! -path 'new_html/dist/*' \
+    -print0 \
+    | LC_ALL=C sort -z \
+    | xargs -0 sha256sum \
+    | sed -E 's/^([0-9a-f]+)[[:space:]]+\*?(.+)$/\1  \2/' \
+    | sha256sum \
+    | awk '{print $1}'
 }
 
 run_remote_architecture_contracts() {
@@ -160,6 +178,43 @@ fi
 
 ssh "${SSH_OPTS[@]}" "$REMOTE" "rm -f '$REMOTE_DIR'/api_router.py"
 
+FRONTEND_SOURCE_HASH=$(frontend_source_hash)
+REMOTE_FRONTEND_HASH=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+  if [ -f '$FRONTEND_HASH_REMOTE' ]; then
+    cat '$FRONTEND_HASH_REMOTE'
+  elif [ -d '$REMOTE_DIR'/new_html ]; then
+    cd '$REMOTE_DIR'
+    find new_html -type f \
+      ! -path 'new_html/node_modules/*' \
+      ! -path 'new_html/.env' \
+      ! -path 'new_html/.env.*' \
+      ! -path 'new_html/coverage/*' \
+      ! -path 'new_html/dist/*' \
+      -print0 \
+      | LC_ALL=C sort -z \
+      | xargs -0 sha256sum \
+      | sed -E 's/^([0-9a-f]+)[[:space:]]+\*?(.+)$/\1  \2/' \
+      | sha256sum \
+      | awk '{print \$1}'
+  fi
+")
+REMOTE_DIST_PRESENT=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "if [ -d '$REMOTE_DIR'/dist ]; then echo 1; else echo 0; fi")
+BUILD_FRONTEND=0
+if [ "$FORCE_FRONTEND_BUILD" = "1" ]; then
+  BUILD_FRONTEND=1
+  echo "Frontend build forced (FORCE_FRONTEND_BUILD=1)"
+elif [ "$REMOTE_DIST_PRESENT" != "1" ]; then
+  BUILD_FRONTEND=1
+  echo "Frontend dist missing on remote; build required"
+elif [ "$FRONTEND_SOURCE_HASH" != "$REMOTE_FRONTEND_HASH" ]; then
+  BUILD_FRONTEND=1
+  echo "Frontend source changed: local=$FRONTEND_SOURCE_HASH remote=${REMOTE_FRONTEND_HASH:-missing}"
+else
+  echo "Skipping frontend build: new_html source hash unchanged ($FRONTEND_SOURCE_HASH)"
+  ssh "${SSH_OPTS[@]}" "$REMOTE" "printf '%s\n' '$FRONTEND_SOURCE_HASH' > '$FRONTEND_HASH_REMOTE'"
+fi
+
+if [ "$BUILD_FRONTEND" = "1" ]; then
 echo "Packing frontend source..."
 tar \
   --exclude='new_html/node_modules' \
@@ -189,10 +244,12 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   rm -f '$FRONTEND_TAR_REMOTE'
   cd '$REMOTE_DIR'/new_html
   npm run build || (npm ci && npm run build)
+  printf '%s\n' '$FRONTEND_SOURCE_HASH' > '$FRONTEND_HASH_REMOTE'
 "; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: frontend build failed"
   exit 1
+fi
 fi
 
 echo "Restarting $SERVICE..."
