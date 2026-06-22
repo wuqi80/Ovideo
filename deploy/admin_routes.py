@@ -873,26 +873,10 @@ async def admin_create_user(body: AdminUserCreateBody, request: Request):
 @router.get("/users/{user_id}", dependencies=[Depends(require_admin)])
 async def admin_get_user(user_id: str):
     _require_db()
-    user = await UserDAO.get_user_by_id(user_id)
+    user = await UserDAO.admin_get_user_detail(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    # 取流式更详细的视图
-    db = get_db_manager()
-    try:
-        row = await db.fetchrow(
-            """
-            SELECT user_id, username, email, avatar_url, role, status,
-                   disabled_reason, disabled_at, disabled_by, plan_tier,
-                   storage_quota_gb, used_storage_bytes, created_at, last_login_at,
-                   is_active, permissions
-            FROM users WHERE user_id = $1
-            """,
-            user_id,
-        )
-        if row:
-            user = dict(row)
-    except Exception:
-        pass
+    # Keep the detail response shape aligned with the admin user list.
     # 2026-05-26：与 admin_list_users 保持同一形状
     return {"success": True, "user": _normalize_admin_user(user)}
 

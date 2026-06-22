@@ -3882,6 +3882,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "dao" / "creative" / "asset.py", "async def create_missing_episode_assets_transactional("),
         (root / "dao" / "creative" / "storyboard.py", "async def export_script_transaction("),
         (root / "dao" / "creative" / "storyboard.py", "async def delete_by_episode_transactional("),
+        (root / "dao" / "user" / "user.py", "async def admin_get_user_detail("),
         (root / "dao" / "user" / "user.py", "async def delete_user_by_id("),
         (root / "dao" / "admin" / "admin_stats.py", "class AdminStatsDAO:"),
         (root / "dao" / "admin" / "admin_stats.py", "async def get_summary_stats("),
@@ -3908,6 +3909,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_summary_stats("),
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_generation_logs("),
         (root / "routers" / "admin_compat.py", "AdminStatsDAO.get_stats_breakdown("),
+        (root / "admin_routes.py", "UserDAO.admin_get_user_detail("),
     ]
     for path, snippet in required_snippets:
         if snippet not in path.read_text(encoding="utf-8"):
@@ -3956,6 +3958,16 @@ def check_service_mapper_purity_contract(root: Path) -> int:
     ]:
         if snippet in admin_compat_router_text:
             violations.append(f"routers/admin_compat.py must delegate admin reporting/deletion SQL to DAO methods: {snippet}")
+        checks += 1
+
+    admin_routes_text = (root / "admin_routes.py").read_text(encoding="utf-8")
+    for snippet in [
+        "db.fetchrow(",
+        "SELECT user_id, username, email, avatar_url, role, status",
+        "FROM users WHERE user_id = $1",
+    ]:
+        if snippet in admin_routes_text:
+            violations.append(f"admin_routes.py must delegate admin user detail SQL to UserDAO: {snippet}")
         checks += 1
 
     episode_video_router_text = (root / "routers" / "episode_video.py").read_text(encoding="utf-8")

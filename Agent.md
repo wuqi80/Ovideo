@@ -7619,3 +7619,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `compose_service.py=2` lines, `services/episode_compose_service.py=328` lines, `dao/creative/episode_compose.py=95` lines, and `tests/test_episode_compose_service.py` is present.
+
+## 2026-06-22 Admin User Detail DAO Boundary
+
+- Moved the admin user detail lookup SQL out of `deploy/admin_routes.py` into `deploy/dao/user/user.py` as `UserDAO.admin_get_user_detail()`.
+- Preserved the previous tolerant behavior: if the full admin-column query fails because a deployment schema is missing optional columns, the DAO falls back to the base `get_user_by_id()` result instead of breaking the admin page.
+- Strengthened `deploy/tests/test_user_dao_admin_delete.py` with coverage for full admin-field lookup, base-user fallback, and DB-unavailable behavior.
+- Strengthened `deploy/scripts/check_route_contract.py` so `admin_routes.py` must call `UserDAO.admin_get_user_detail()` and cannot reintroduce the user-detail `fetchrow` SQL block.
+- Verification:
+  - Local `pytest deploy/tests/test_user_dao_admin_delete.py deploy/tests/test_admin_stats_logs.py -q` passed with 7 tests.
+  - Local `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local architecture contract reported `service_files=24`, `raw_sql_in_services=0`, and `service_mapper_purity_checks=673`.
+  - Live deploy to `https://mecha.one/` synced the DAO and admin route changes; `drama.service` stayed `active`.
+  - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed `dao/user/user.py` contains `admin_get_user_detail()`, `admin_routes.py` calls it, and the old user-detail SQL snippets are absent from `admin_routes.py`.

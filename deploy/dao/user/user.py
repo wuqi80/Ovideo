@@ -69,6 +69,33 @@ class UserDAO:
         return await db.fetchrow(query, user_id)
 
     @staticmethod
+    async def admin_get_user_detail(user_id: str) -> Optional[Dict[str, Any]]:
+        """Return the admin detail shape for a user, falling back to base fields."""
+        base_user = await UserDAO.get_user_by_id(user_id)
+        if not base_user:
+            return None
+
+        db = get_db_manager()
+        if not db:
+            return base_user
+        try:
+            row = await db.fetchrow(
+                """
+                SELECT user_id, username, email, avatar_url, role, status,
+                       disabled_reason, disabled_at, disabled_by, plan_tier,
+                       storage_quota_gb, used_storage_bytes, created_at,
+                       last_login_at, is_active, permissions
+                FROM users
+                WHERE user_id = $1
+                """,
+                user_id,
+            )
+            return dict(row) if row else base_user
+        except Exception as exc:
+            logger.warning("admin_get_user_detail fell back to base user for %s: %s", user_id, exc)
+            return base_user
+
+    @staticmethod
     async def delete_user_by_id(user_id: str) -> Optional[str]:
         """Hard-delete a user row by user_id for the legacy admin endpoint."""
         db = get_db_manager()
