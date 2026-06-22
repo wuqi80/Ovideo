@@ -1753,8 +1753,11 @@ def check_admin_compat_routes_extracted(root: Path) -> int:
 def check_project_routes_extracted(root: Path) -> int:
     cluster_main_path = root / "cluster_main.py"
     projects_path = root / "routers" / "projects.py"
+    project_image_service_path = root / "services" / "project_image_service.py"
     if not projects_path.exists():
         fail("routers/projects.py is missing")
+    if not project_image_service_path.exists():
+        fail("services/project_image_service.py is missing")
 
     route_paths = {
         "/api/projects/save",
@@ -1796,7 +1799,42 @@ def check_project_routes_extracted(root: Path) -> int:
 
     if route_count != 7:
         fail(f"routers/projects.py should own 7 project route registrations, found {route_count}")
-    return route_count
+
+    router_text = projects_path.read_text(encoding="utf-8")
+    service_text = project_image_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.project_image_service import (", projects_path),
+        (router_text, "is_data_image(base64_data)", projects_path),
+        (router_text, "persist_project_embedded_base64_image(", projects_path),
+        (router_text, "persist_export_storyboard_base64_image(", projects_path),
+        (service_text, "async def persist_project_embedded_base64_image(", project_image_service_path),
+        (service_text, "async def persist_export_storyboard_base64_image(", project_image_service_path),
+        (service_text, "storage_root / \"images\" / username", project_image_service_path),
+        (service_text, "WebPImageService.bytes_to_webp", project_image_service_path),
+        (service_text, "file_dao.create_file(", project_image_service_path),
+        (service_text, "async def _ensure_default_project_version(", project_image_service_path),
+    ]
+    forbidden_snippets = [
+        "import base64",
+        "import time",
+        "import uuid",
+        "from pathlib import Path",
+        "base64.b64decode",
+        "Path(\"persistent_storage/images\")",
+        "storage_dir.mkdir(",
+        "write_bytes(image_bytes)",
+        "WebPImageService",
+        "FileDAO.create_file(",
+        "uuid.uuid4().hex",
+        "time.time()",
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing project image service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for snippet in forbidden_snippets:
+        if snippet in router_text:
+            fail(f"routers/projects.py must delegate project image persistence to service: {snippet}")
+    return route_count + len(required_snippets) + len(forbidden_snippets)
 
 
 def check_project_core_routes_extracted(root: Path) -> int:

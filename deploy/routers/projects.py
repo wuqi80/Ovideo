@@ -1,17 +1,18 @@
 """Legacy project compatibility routes."""
 from __future__ import annotations
 
-import base64
 import logging
-import time
-import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from schemas.project import ExportToVideoRequest, ProjectData
+from services.project_image_service import (
+    is_data_image,
+    persist_export_storyboard_base64_image,
+    persist_project_embedded_base64_image,
+)
 from utils.json_helpers import parse_jsonb_field
 
 
@@ -61,77 +62,22 @@ def create_projects_router(
                 return base64_data
 
             # 🔧 只转换Base64数据
-            if not base64_data.startswith('data:image'):
+            if not is_data_image(base64_data):
                 return base64_data
 
             try:
                 # 提取Base64数据
-                base64_str = base64_data.split(',')[1] if ',' in base64_data else base64_data
-                image_bytes = base64.b64decode(base64_str)
-
-                # 生成文件路径
-                file_id = f"file_{uuid.uuid4().hex[:12]}"
-                year_month = datetime.now().strftime('%Y%m')
-                clean_context = context.replace('/', '_').replace('\\', '_').replace(':', '_')[:30]
-
-                # 保存物理文件
-                storage_dir = Path("persistent_storage/images") / username / year_month
-                storage_dir.mkdir(parents=True, exist_ok=True)
-                filename = f"{file_id}_{clean_context}.webp"
-                file_path = storage_dir / filename
-
-                # 转为WebP格式保存
-                from image_webp_service import WebPImageService
-                webp_bytes = WebPImageService.bytes_to_webp(image_bytes, quality=100)
-                if webp_bytes:
-                    file_path.write_bytes(webp_bytes)
-                    file_size = len(webp_bytes)
-                else:
-                    # 降级：直接保存原始数据
-                    file_path.write_bytes(image_bytes)
-                    file_size = len(image_bytes)
-
-                # 获取或创建默认版本
-                projects = await ProjectDAO.get_user_projects(username)
-                if not projects:
-                    project_id = f"proj_{uuid.uuid4().hex[:12]}"
-                    await ProjectDAO.save_or_update_project(
-                        user_id=username,
-                        project_id=project_id,
-                        project_name="默认项目",
-                        project_data={},
-                        description="自动创建"
-                    )
-                else:
-                    project_id = projects[0]['project_id']
-
-                versions = await VersionDAO.get_project_versions(project_id)
-                if not versions:
-                    version = await VersionDAO.create_version(
-                        project_id=project_id,
-                        user_id=username,
-                        version_name="默认版本"
-                    )
-                    version_id = version['version_id']
-                else:
-                    version_id = versions[0]['version_id']
-
-                # 创建数据库记录
-                file_record = await FileDAO.create_file(
-                    version_id=version_id,
-                    user_id=username,
-                    file_type='image',
-                    file_name=f"{context}.webp",
-                    file_path=str(file_path),
-                    file_url=f"/api/files/{file_id}/download",
-                    file_size_bytes=file_size,
-                    mime_type='image/webp',
-                    metadata={'source': 'base64_convert', 'context': context},
-                    file_id=file_id  # 🔧 传入预先生成的 file_id
+                persisted = await persist_project_embedded_base64_image(
+                    username=username,
+                    image_data=base64_data,
+                    context=context,
+                    file_dao=FileDAO,
+                    project_dao=ProjectDAO,
+                    version_dao=VersionDAO,
+                    logger=logger,
                 )
-
-                url = file_record['file_url']
-                logger.info(f"✅ Base64图片已转换为数据库URL: {context} -> {url}")
+                url = persisted.file_url
+                logger.info("Base64 project image persisted: %s -> %s", context, url)
                 return url
 
             except Exception as e:
@@ -712,52 +658,20 @@ def create_projects_router(
                             logger.warning(f"⚠️ 第一张图片也没有 url 或 thumbnail")
 
                     # 🔧 处理图片URL（如果有的话）
-                    if image_url and image_url.startswith('data:image'):
+                    if image_url and is_data_image(image_url):
                         logger.info(f"🔄 检测到Base64图片，开始转换: {image_url[:50]}...")
                         try:
-                            # 提取Base64数据
-                            base64_data = image_url.split(',')[1] if ',' in image_url else image_url
-                            image_bytes = base64.b64decode(base64_data)
-                            logger.info(f"📊 Base64解码成功，大小: {len(image_bytes)} bytes")
-
-                            # 生成文件名和路径
-                            file_ext = '.png'
-                            timestamp = int(time.time())
-                            filename = f"exported_{item['id']}_{timestamp}{file_ext}"
-                            year_month = datetime.now().strftime('%Y%m')
-
-                            # 生成 file_id
-                            file_id = f"file_{uuid.uuid4().hex[:12]}"
-
-                            # ✅ 保存到持久化存储（供FileDAO使用）
-                            storage_dir = Path("persistent_storage/images") / username / year_month
-                            storage_dir.mkdir(parents=True, exist_ok=True)
-                            final_file = storage_dir / filename
-                            final_file.write_bytes(image_bytes)
-
-                            file_size = len(image_bytes)
-
-                            # ✅ 创建数据库文件记录
-                            file_record = await FileDAO.create_file(
+                            persisted = await persist_export_storyboard_base64_image(
+                                username=username,
+                                image_data=image_url,
+                                storyboard_item=item,
                                 version_id=version_id,
-                                user_id=username,
-                                file_type='image',
-                                file_name=f"{item.get('scene', 'shot')}_{item['id']}.png",
-                                file_path=str(final_file),
-                                file_url=f"/api/files/{file_id}/download",  # 🔧 使用正确的 file_id
-                                file_size_bytes=file_size,
-                                mime_type='image/png',
-                                metadata={
-                                    'source': 'export_to_video',
-                                    'storyboard_id': item['id'],
-                                    'scene': item.get('scene', ''),
-                                    'shot_number': item.get('shotNumber', '')
-                                },
-                                file_id=file_id  # 🔧 传入 file_id
+                                file_dao=FileDAO,
+                                logger=logger,
                             )
                             # 使用数据库文件ID作为URL
-                            image_url = f"/api/files/{file_record['file_id']}/download"
-                            logger.info(f"✅ Base64图片已保存到数据库, 文件ID: {file_record['file_id']}")
+                            image_url = persisted.file_url
+                            logger.info(f"✅ Base64图片已保存到数据库, 文件ID: {persisted.file_id}")
 
                         except Exception as e:
                             logger.error(f"❌ Base64转换失败: {e}", exc_info=True)

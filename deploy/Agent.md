@@ -8715,3 +8715,21 @@
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `3bcb7b0`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh` sync/restart, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
 - Note: local deployment wrapper hit the 300s command timeout after the server restart; manual server checks confirmed synced files, active service, remote contracts, and online smoke success.
+
+## 2026-06-23 Project Image Persistence Service Boundary
+
+### Changes
+
+- Moved project-embedded base64 image persistence and export-to-video storyboard image persistence from `routers/projects.py` into `services/project_image_service.py`.
+- The legacy project router still owns project JSON traversal, selected storyboard-image choice, access checks, and project stage updates, but now delegates base64 decoding, local image storage, WebP conversion, default project/version fallback, `FileDAO.create_file()`, and image file URL shaping to the service layer.
+- Added `tests/test_project_image_service.py` to cover embedded project image persistence, default project/version creation, existing-version reuse with raw fallback, and export storyboard image persistence.
+- Strengthened `scripts/check_route_contract.py` so `routers/projects.py` cannot regress to route-local base64 decoding, UUID/timestamp generation, `persistent_storage/images` writes, WebP conversion, or direct `FileDAO.create_file()` calls.
+- Added the new project image service test to `scripts/live_deploy_mvc2.sh` so server sync includes it.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_project_image_service.py tests/test_project_read_access.py -q` passed with 7 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Online deployment verification pending.
