@@ -2951,13 +2951,16 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "async def _post_form_request_async(",
         'label="GPT Image edit",',
         'label="GPT Image generate",',
+        "def _post_stream_request(",
+        "def _ensure_stream_response_ok(",
+        'label="DeepSeek stream",',
         'label="Doubao image",',
     ):
         if snippet not in ai_proxy_text:
-            fail(f"AI proxy JSON providers must route through shared helper: {snippet}")
+            fail(f"AI proxy providers must route through shared helpers: {snippet}")
         checks += 1
     if ai_proxy_text.count("requests.post(") > 3:
-        fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and streaming")
+        fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
     checks += 1
     return checks
 

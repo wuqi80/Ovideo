@@ -193,6 +193,51 @@ async def _post_form_request_async(**kwargs: Any) -> Dict[str, Any]:
     return await asyncio.to_thread(_post_form_request, **kwargs)
 
 
+def _post_stream_request(
+    *,
+    label: str,
+    url: str,
+    payload: Dict[str, Any],
+    timeout: Any,
+    timeout_message: str,
+    request_error_detail: Callable[[Exception], str],
+    request_kwargs: Optional[Dict[str, Any]] = None,
+    timeout_status_code: int = 504,
+) -> Any:
+    """POST a streaming provider request and normalize connection errors."""
+    try:
+        return requests.post(
+            url,
+            json=payload,
+            stream=True,
+            timeout=timeout,
+            **(request_kwargs or {}),
+        )
+    except requests.Timeout as e:
+        logger.error("%s stream request timeout: %s", label, e, exc_info=True)
+        raise AIProxyUpstreamError(timeout_message, status_code=timeout_status_code) from e
+    except requests.RequestException as e:
+        logger.error("%s stream request failed: %s", label, e, exc_info=True)
+        raise AIProxyUpstreamError(request_error_detail(e)) from e
+
+
+def _ensure_stream_response_ok(
+    *,
+    label: str,
+    response: Any,
+    upstream_detail: Optional[Callable[[str, int], str]] = None,
+) -> None:
+    if response.status_code < 400:
+        return
+    upstream = (response.text or "")[:500]
+    logger.error("%s stream upstream failed: status=%s body=%s", label, response.status_code, upstream)
+    detail_factory = upstream_detail or _default_upstream_detail(label)
+    raise AIProxyUpstreamError(
+        detail_factory(upstream, response.status_code),
+        upstream=upstream,
+    )
+
+
 def _unique_provider_ids(items: List[Optional[str]]) -> List[str]:
     seen: set[str] = set()
     out: List[str] = []
@@ -381,32 +426,27 @@ def stream_deepseek_chat(
         return
 
     try:
-        response = requests.post(
-            url,
-            json=payload,
-            stream=True,
+        response = _post_stream_request(
+            label="DeepSeek stream",
+            url=url,
+            payload=payload,
             timeout=(20, 600),
-            **request_kwargs,
+            timeout_message="DeepSeek API 调用超时，请稍后重试",
+            request_error_detail=lambda e: f"DeepSeek API 调用失败: {str(e)[:200]}",
+            request_kwargs=request_kwargs,
         )
-    except requests.Timeout as e:
-        logger.error("DeepSeek stream request timeout: %s", e, exc_info=True)
-        yield _sse_event({"type": "error", "message": "DeepSeek API 调用超时，请稍后重试"})
-        yield "data: [DONE]\n\n"
-        return
-    except requests.RequestException as e:
-        logger.error("DeepSeek stream request failed: %s", e, exc_info=True)
-        yield _sse_event({"type": "error", "message": f"DeepSeek API 调用失败: {str(e)[:200]}"})
+    except AIProxyUpstreamError as e:
+        yield _sse_event({"type": "error", "message": e.detail})
         yield "data: [DONE]\n\n"
         return
 
     full_content: List[str] = []
     try:
-        if response.status_code >= 400:
-            upstream = (response.text or "")[:500]
-            logger.error("DeepSeek stream upstream failed: status=%s body=%s", response.status_code, upstream)
-            yield _sse_event({"type": "error", "message": f"DeepSeek API 调用失败: {upstream[:200] or response.status_code}"})
-            yield "data: [DONE]\n\n"
-            return
+        _ensure_stream_response_ok(
+            label="DeepSeek",
+            response=response,
+            upstream_detail=lambda upstream, status_code: f"DeepSeek API 调用失败: {upstream[:200] or status_code}",
+        )
 
         for raw_line in response.iter_lines(decode_unicode=True):
             if not raw_line:
@@ -435,6 +475,8 @@ def stream_deepseek_chat(
             if content_piece:
                 full_content.append(content_piece)
                 yield _sse_event({"type": "content", "content": content_piece})
+    except AIProxyUpstreamError as e:
+        yield _sse_event({"type": "error", "message": e.detail})
     except Exception as e:
         logger.error("DeepSeek stream read failed: %s", e, exc_info=True)
         yield _sse_event({"type": "error", "message": f"DeepSeek 流式读取失败: {str(e)[:200]}"})

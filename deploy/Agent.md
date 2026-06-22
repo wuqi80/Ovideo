@@ -7612,3 +7612,21 @@
 - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=175`.
 - Server sync check: `cluster_main.py=999` lines, `admin_routes.py=1502` lines, and `dao/` contains 72 recursive files; top-level `ls dao | wc -l` is 8 because DAO files are grouped under subdirectories.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
+
+## 2026-06-22 DeepSeek Stream Request Consolidation
+
+### Changes
+
+- Added `_post_stream_request()` and `_ensure_stream_response_ok()` in `services/ai_proxy_service.py` so DeepSeek streaming calls share request timeout, proxy kwargs, upstream logging, and connection-error handling with the rest of the AI proxy layer.
+- Kept `stream_deepseek_chat()` focused on SSE parsing, reasoning/content event emission, response closing, and completion callbacks.
+- Added `test_deepseek_stream_uses_shared_runtime_request` to prove streaming still resolves endpoint/key/model through provider runtime env and sends `stream=True`.
+- Strengthened `scripts/check_route_contract.py` so AI proxy provider calls must keep JSON, form, and stream helpers.
+
+### Verification
+
+- Local `pytest tests/test_api_provider_runtime_model_env.py -q` passed with 30 tests.
+- Local `py_compile`, `scripts/check_provider_contract.py`, `scripts/check_route_contract.py`, `scripts/check_architecture_contracts.py`, and `scripts/smoke_test.py` passed.
+- Local route contract passed with `api_provider_runtime_model_checks=178`.
+- Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=178`.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+- Server sync check confirmed `_post_stream_request()` and the `DeepSeek stream` call label are present on `/home/Administrator/deploy/services/ai_proxy_service.py`.

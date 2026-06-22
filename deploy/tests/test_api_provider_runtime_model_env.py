@@ -210,6 +210,26 @@ class _DeepseekResponse:
         return {"choices": [{"message": {"content": "deepseek ok"}}]}
 
 
+class _DeepseekStreamResponse:
+    status_code = 200
+    text = ""
+
+    def __init__(self):
+        self.closed = False
+
+    def iter_lines(self, decode_unicode=True):
+        return iter(
+            [
+                'data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}',
+                'data: {"choices":[{"delta":{"content":"stream ok"}}]}',
+                "data: [DONE]",
+            ]
+        )
+
+    def close(self):
+        self.closed = True
+
+
 class _DoubaoResponse:
     status_code = 200
     text = ""
@@ -845,6 +865,39 @@ def test_deepseek_generate_text_explicit_model_overrides_runtime_model(monkeypat
     assert result == "deepseek ok"
     assert calls[0]["url"] == "https://deepseek-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == "deepseek-chat"
+
+
+def test_deepseek_stream_uses_shared_runtime_request(monkeypatch):
+    env_key = get_provider_env_key("deepseek")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+    completed = []
+    response = _DeepseekStreamResponse()
+
+    monkeypatch.setenv(env_key, "test-deepseek-key")
+    monkeypatch.setenv(endpoint_env, "https://deepseek-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "deepseek-stream-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return response
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    events = list(ai_proxy_service.stream_deepseek_chat(prompt="hello", on_complete=completed.append))
+
+    assert calls[0]["url"] == "https://deepseek-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "deepseek-stream-runtime-model"
+    assert calls[0]["json"]["stream"] is True
+    assert calls[0]["stream"] is True
+    assert calls[0]["headers"]["Authorization"] == "Bearer test-deepseek-key"
+    assert any('"type": "reasoning"' in event for event in events)
+    assert any('"content": "stream ok"' in event for event in events)
+    assert events[-1] == "data: [DONE]\n\n"
+    assert completed == ["stream ok"]
+    assert response.closed is True
 
 
 @pytest.mark.asyncio
