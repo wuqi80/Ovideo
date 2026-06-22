@@ -2958,6 +2958,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "def _post_stream_request(",
         "def _ensure_stream_response_ok(",
         'label="DeepSeek stream",',
+        "def generated_image_content(",
         'label="Doubao image",',
     ):
         if snippet not in ai_proxy_text:
@@ -2969,6 +2970,12 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     video_reverse_text = (root / "services" / "video_reverse_service.py").read_text(encoding="utf-8")
     if "requests.post(" in video_reverse_text or "import requests" in video_reverse_text:
         fail("video_reverse_service must call Gemini through services.ai_proxy_service, not direct requests.post")
+    checks += 1
+    if "generated_image_content(" not in router_text:
+        fail("AI proxy router must delegate generated image URL/data decoding to services.ai_proxy_service")
+    checks += 1
+    if "requests." in router_text or "import requests" in router_text:
+        fail("AI proxy router must not perform direct HTTP requests")
     checks += 1
     return checks
 

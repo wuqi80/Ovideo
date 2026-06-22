@@ -12,7 +12,6 @@ import logging
 import time
 from typing import Callable, List, Optional
 
-import requests as download_requests
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -31,6 +30,7 @@ from services.ai_proxy_service import (
     generate_gemini_images as proxy_generate_gemini_images,
     generate_gpt_images as proxy_generate_gpt_images,
     generate_gemini_text_result,
+    generated_image_content,
     stream_deepseek_chat,
 )
 from utils.image_reference import storage_path_safe, to_doubao_image_input
@@ -372,12 +372,9 @@ def create_ai_proxy_router(
             for img in images:
                 try:
                     if img.startswith("data:"):
-                        b64_data = img.split(",", 1)[1] if "," in img else img
-                        content = base64.b64decode(b64_data)
+                        content = generated_image_content(img)
                     else:
-                        r2 = download_requests.get(img, timeout=60)
-                        r2.raise_for_status()
-                        content = r2.content
+                        content = generated_image_content(img, timeout=60)
                     saved = await save_generated_file_to_db(
                         content=content,
                         file_type="image",

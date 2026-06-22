@@ -7501,3 +7501,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=180`.
   - Online smoke test against `https://mecha.one`: 9/9 passed.
   - Server sync check confirmed `video_reverse_service.py` imports/calls `generate_gemini_chat_result()` and has no `requests.post` or `import requests`.
+
+## 2026-06-22 GPT Image Result Download Delegation
+
+- Added `generated_image_content()` in `deploy/services/ai_proxy_service.py` so generated image data URLs and provider-hosted image URLs are decoded/downloaded through the AI proxy service layer.
+- Remote generated-image URLs now pass `assert_public_http_url()` before download, keeping SSRF protection with the provider result save path.
+- Updated `deploy/routers/ai_proxy.py` so GPT Image result saving delegates image bytes extraction to `ai_proxy_service` instead of importing `requests` in the route layer.
+- Strengthened route contracts so `routers/ai_proxy.py` cannot reintroduce direct HTTP requests and must keep using `generated_image_content()`.
+- Verification:
+  - Local `pytest deploy/tests/test_api_provider_runtime_model_env.py -q` passed with 32 tests.
+  - Local `py_compile`, `deploy/scripts/check_provider_contract.py`, `deploy/scripts/check_route_contract.py`, `deploy/scripts/check_architecture_contracts.py`, `deploy/scripts/smoke_test.py`, and `git diff --check` passed.
+  - Local route contract passed with `api_provider_runtime_model_checks=183`.
+  - Live deploy to `https://mecha.one/` passed; remote Vite build completed with `2080 modules transformed`, `drama.service` stayed `active`, and remote architecture contracts passed 10/10 with `api_provider_runtime_model_checks=183`.
+  - Online smoke test against `https://mecha.one`: 9/9 passed.
+  - Server sync check confirmed `routers/ai_proxy.py` calls `generated_image_content()` and has no direct `requests` import/calls.
