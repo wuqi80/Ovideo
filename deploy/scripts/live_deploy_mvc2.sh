@@ -63,6 +63,7 @@ FILES=(
   tests/test_minimax_audio_runtime.py
   tests/test_prompt_service.py
   tests/test_project_read_access.py
+  tests/test_script_timeline_service.py
   tests/test_storyboard_stale_script_fallback.py
   tests/test_task_read_service.py
   tests/test_user_dao_admin_delete.py

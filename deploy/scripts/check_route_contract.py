@@ -2349,8 +2349,11 @@ def check_audio_routes_extracted(root: Path) -> int:
 def check_script_timeline_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     script_timeline_path = root / "routers" / "script_timeline.py"
+    script_timeline_service_path = root / "services" / "script_timeline_service.py"
     if not script_timeline_path.exists():
         fail("routers/script_timeline.py is missing")
+    if not script_timeline_service_path.exists():
+        fail("services/script_timeline_service.py is missing")
 
     route_paths = {
         "/api/episodes/{episode_id}/script-segments",
@@ -2393,6 +2396,52 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
 
     if route_count != 12:
         fail(f"routers/script_timeline.py should own 12 script/timeline route registrations, found {route_count}")
+
+    router_text = script_timeline_path.read_text(encoding="utf-8")
+    service_text = script_timeline_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (router_text, "from services.script_timeline_service import (", script_timeline_path),
+        (router_text, "list_script_segments_service(", script_timeline_path),
+        (router_text, "batch_save_script_segments_service(", script_timeline_path),
+        (router_text, "delete_script_segments_service(", script_timeline_path),
+        (router_text, "get_primary_script(", script_timeline_path),
+        (router_text, "update_primary_script(", script_timeline_path),
+        (router_text, "create_script_file(", script_timeline_path),
+        (router_text, "update_script_file(", script_timeline_path),
+        (router_text, "delete_script_file(", script_timeline_path),
+        (router_text, "list_timeline_tracks(", script_timeline_path),
+        (router_text, "create_timeline_track_service(", script_timeline_path),
+        (router_text, "update_timeline_track_service(", script_timeline_path),
+        (service_text, "episode_script_segment_dao.list_by_script(", script_timeline_service_path),
+        (service_text, "episode_script_segment_dao.batch_replace(", script_timeline_service_path),
+        (service_text, "episode_script_dao.save_or_update(", script_timeline_service_path),
+        (service_text, "episode_script_dao.get_next_sort_order(", script_timeline_service_path),
+        (service_text, "timeline_dao.get_by_episode(", script_timeline_service_path),
+        (service_text, "timeline_dao.create(", script_timeline_service_path),
+        (service_text, "timeline_dao.update(", script_timeline_service_path),
+    ]
+    forbidden_snippets = [
+        (router_text, "EpisodeScriptSegmentDAO.list_by_script(", script_timeline_path),
+        (router_text, "EpisodeScriptSegmentDAO.list_by_episode(", script_timeline_path),
+        (router_text, "EpisodeScriptSegmentDAO.batch_replace(", script_timeline_path),
+        (router_text, "EpisodeScriptSegmentDAO.delete_by_script(", script_timeline_path),
+        (router_text, "EpisodeScriptDAO.get_by_episode(", script_timeline_path),
+        (router_text, "EpisodeScriptDAO.save_or_update(", script_timeline_path),
+        (router_text, "EpisodeScriptDAO.list_by_episode(", script_timeline_path),
+        (router_text, "EpisodeScriptDAO.get_next_sort_order(", script_timeline_path),
+        (router_text, "EpisodeScriptDAO.create(", script_timeline_path),
+        (router_text, "EpisodeScriptDAO.update(", script_timeline_path),
+        (router_text, "EpisodeScriptDAO.delete_by_id(", script_timeline_path),
+        (router_text, "TimelineDAO.get_by_episode(", script_timeline_path),
+        (router_text, "TimelineDAO.create(", script_timeline_path),
+        (router_text, "TimelineDAO.update(", script_timeline_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing script/timeline service boundary snippet in {path.relative_to(root)}: {snippet}")
+    for text, snippet, path in forbidden_snippets:
+        if snippet in text:
+            fail(f"Script/timeline router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
     return route_count
 
 
@@ -4916,6 +4965,7 @@ def check_live_deploy_frontend_contract(root: Path) -> int:
         "tests/test_episode_video_service.py",
         "tests/test_minimax_tts_sync.py",
         "tests/test_prompt_service.py",
+        "tests/test_script_timeline_service.py",
         "tests/test_video_client_base.py",
         "tests/test_video_capability_service.py",
         '"new_html/.env.example"',
