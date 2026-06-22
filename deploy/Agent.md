@@ -7954,3 +7954,22 @@
 - Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
 - Online smoke test against `https://mecha.one`: 9/9 passed.
 - Server grep confirmed `services/api_config_import_service.py` imports `_config_get` and has no local `_row_get()` definition.
+
+## 2026-06-22 API Config Service Row Helper Cleanup
+
+### Changes
+
+- Updated `services/api_config_service.py` row access helpers (`_row_provider`, `_row_model_name`, `_row_config_id`, `_row_enabled`, `_row_has_key`) to use the shared `utils.config_helpers._config_get()` helper.
+- Strengthened `scripts/check_provider_contract.py` so those API config row helpers must use `_config_get`.
+
+### Verification
+
+- Local `py_compile` for `services/api_config_service.py` and `scripts/check_provider_contract.py` passed.
+- Local `scripts/check_admin_api_config_crud.py` and `scripts/check_provider_contract.py` passed; provider contract now reports `api_config_env_refresh_checks=36`.
+- Local `pytest tests/test_admin_import_presets_writes_category.py tests/test_dao_api_config_category.py -q` passed with 8 tests.
+- Local architecture contracts passed 10/10.
+- Local smoke test passed 9/9.
+- Live deploy to `https://mecha.one/` passed; frontend build was skipped because `new_html` source hash was unchanged and `drama.service` stayed `active`.
+- Remote architecture contracts passed 10/10 using `/home/Administrator/deploy/.venv/bin/python`.
+- Online smoke test against `https://mecha.one`: 9/9 passed.
+- Server grep confirmed `api_config_service.py` imports `_config_get` and all `_row_*` helpers use it.

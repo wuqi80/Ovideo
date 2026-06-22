@@ -907,6 +907,16 @@ def check_api_config_write_env_refresh_contract() -> int:
         violations.append("services/api_config_service.py must call clear_all_provider_health_cache() from helper")
     if not function_by_name(service_tree, "_reload_api_env_after_write"):
         violations.append("services/api_config_service.py missing default write reload helper")
+    if "from utils.config_helpers import _config_get" not in service_text:
+        violations.append("services/api_config_service.py must import shared _config_get helper")
+    for helper_name in ("_row_provider", "_row_model_name", "_row_config_id", "_row_enabled", "_row_has_key"):
+        helper = function_by_name(service_tree, helper_name)
+        if not helper:
+            violations.append(f"services/api_config_service.py missing {helper_name}()")
+            continue
+        helper_source = ast.get_source_segment(service_text, helper) or ""
+        if "_config_get" not in helper_source:
+            violations.append(f"services/api_config_service.py:{helper.lineno} {helper_name}() must use shared _config_get")
 
     import_func = function_by_name(import_tree, "import_preset_api_configs")
     if not import_func:
@@ -997,7 +1007,7 @@ def check_api_config_write_env_refresh_contract() -> int:
 
     if violations:
         fail("API config write operations must expose hot-reload status:\n" + "\n".join(violations))
-    return len(service_write_functions) + 9 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details) + (
+    return len(service_write_functions) + 15 + len(route_write_calls) + 1 + len(route_forbidden_runtime_details) + (
         2 * len(forbidden_health_cache_details)
     )
 

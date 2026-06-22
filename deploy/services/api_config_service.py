@@ -26,6 +26,7 @@ from services.api_provider_registry import (
     summarize_api_provider_configs,
 )
 from services.api_provider_runtime import build_provider_runtime_status, resolve_provider
+from utils.config_helpers import _config_get
 
 
 ReloadCallback = Callable[[], Awaitable[Any]]
@@ -76,61 +77,31 @@ def mask_api_config_row(row: Any) -> Dict[str, Any]:
 def _row_provider(row: Any) -> str:
     if not row:
         return ""
-    getter = getattr(row, "get", None)
-    if callable(getter):
-        return str(getter("provider", "") or "").strip()
-    try:
-        return str(row["provider"] or "").strip()
-    except (KeyError, IndexError, TypeError):
-        return str(getattr(row, "provider", "") or "").strip()
+    return str(_config_get(row, "provider", "") or "").strip()
 
 
 def _row_model_name(row: Any) -> str:
     if not row:
         return ""
-    getter = getattr(row, "get", None)
-    if callable(getter):
-        return str(getter("model_name", "") or "").strip()
-    try:
-        return str(row["model_name"] or "").strip()
-    except (KeyError, IndexError, TypeError):
-        return str(getattr(row, "model_name", "") or "").strip()
+    return str(_config_get(row, "model_name", "") or "").strip()
 
 
 def _row_config_id(row: Any) -> str:
     if not row:
         return ""
-    getter = getattr(row, "get", None)
-    if callable(getter):
-        return str(getter("config_id", "") or "").strip()
-    try:
-        return str(row["config_id"] or "").strip()
-    except (KeyError, IndexError, TypeError):
-        return str(getattr(row, "config_id", "") or "").strip()
+    return str(_config_get(row, "config_id", "") or "").strip()
 
 
 def _row_enabled(row: Any) -> bool:
     if not row:
         return False
-    getter = getattr(row, "get", None)
-    if callable(getter):
-        return getter("enabled", True) is not False
-    try:
-        return row["enabled"] is not False
-    except (KeyError, IndexError, TypeError):
-        return getattr(row, "enabled", True) is not False
+    return _config_get(row, "enabled", True) is not False
 
 
 def _row_has_key(row: Any) -> bool:
     if not row:
         return False
-    getter = getattr(row, "get", None)
-    if callable(getter):
-        return bool(getter("api_key_encrypted", ""))
-    try:
-        return bool(row["api_key_encrypted"])
-    except (KeyError, IndexError, TypeError):
-        return bool(getattr(row, "api_key_encrypted", ""))
+    return bool(_config_get(row, "api_key_encrypted", ""))
 
 
 def _endpoint_key(value: Any) -> str:
