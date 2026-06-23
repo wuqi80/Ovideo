@@ -8360,3 +8360,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `4b3a08e`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 Project Save Service Boundary
+
+- Moved `/api/projects/save` workflow from `deploy/routers/projects.py` into `deploy/services/project_save_service.py`.
+- The router still owns route registration, auth dependency, and HTTP error mapping, but now delegates timestamp/user stamping, existing project data loading, `video_tasks` and `generated_images` preservation, generated-image URL recovery, nested Base64 image persistence, and `ProjectDAO.save_or_update_project()` to the service layer.
+- Rewrote `deploy/routers/projects.py` as a thin ASCII route module, removing the legacy route-local Base64 conversion helper and preserving the existing 7 project route registrations.
+- Added `deploy/tests/test_project_save_service.py` to cover existing collection preservation, generated-image URL recovery, nested Base64 conversion across project payload sections, and persistence failure fallback.
+- Strengthened `deploy/scripts/check_route_contract.py` so `/api/projects/save` cannot regress to route-local JSON parsing, timestamping, old-data recovery, Base64 persistence, or direct project DAO save calls.
+- Added the new project save service test to `deploy/scripts/live_deploy_mvc2.sh` so server sync includes it.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_project_save_service.py tests/test_project_image_service.py tests/test_project_read_access.py -q` passed with 10 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
+  - Deployment and online smoke pending.

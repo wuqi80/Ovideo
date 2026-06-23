@@ -71,6 +71,7 @@ FILES=(
   tests/test_prompt_service.py
   tests/test_project_read_access.py
   tests/test_project_image_service.py
+  tests/test_project_save_service.py
   tests/test_project_read_service.py
   tests/test_project_video_task_service.py
   tests/test_project_admin_service.py

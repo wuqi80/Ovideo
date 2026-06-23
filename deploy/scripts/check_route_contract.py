@@ -1755,6 +1755,7 @@ def check_project_routes_extracted(root: Path) -> int:
     projects_path = root / "routers" / "projects.py"
     project_image_service_path = root / "services" / "project_image_service.py"
     project_read_service_path = root / "services" / "project_read_service.py"
+    project_save_service_path = root / "services" / "project_save_service.py"
     project_video_task_service_path = root / "services" / "project_video_task_service.py"
     if not projects_path.exists():
         fail("routers/projects.py is missing")
@@ -1762,6 +1763,8 @@ def check_project_routes_extracted(root: Path) -> int:
         fail("services/project_image_service.py is missing")
     if not project_read_service_path.exists():
         fail("services/project_read_service.py is missing")
+    if not project_save_service_path.exists():
+        fail("services/project_save_service.py is missing")
     if not project_video_task_service_path.exists():
         fail("services/project_video_task_service.py is missing")
 
@@ -1809,13 +1812,13 @@ def check_project_routes_extracted(root: Path) -> int:
     router_text = projects_path.read_text(encoding="utf-8")
     image_service_text = project_image_service_path.read_text(encoding="utf-8")
     read_service_text = project_read_service_path.read_text(encoding="utf-8")
+    save_service_text = project_save_service_path.read_text(encoding="utf-8")
     video_task_service_text = project_video_task_service_path.read_text(encoding="utf-8")
     required_snippets = [
-        (router_text, "from services.project_image_service import (", projects_path),
         (router_text, "from services.project_read_service import (", projects_path),
+        (router_text, "from services.project_save_service import save_project_response", projects_path),
         (router_text, "from services.project_video_task_service import (", projects_path),
-        (router_text, "is_data_image(base64_data)", projects_path),
-        (router_text, "persist_project_embedded_base64_image(", projects_path),
+        (router_text, "save_project_response(", projects_path),
         (router_text, "get_project_response(", projects_path),
         (router_text, "get_shot_images_response(", projects_path),
         (router_text, "export_project_to_video_response(", projects_path),
@@ -1831,6 +1834,12 @@ def check_project_routes_extracted(root: Path) -> int:
         (read_service_text, "def build_thumbnail_generated_images(", project_read_service_path),
         (read_service_text, "await project_dao.update_project_access(project_id)", project_read_service_path),
         (read_service_text, "parse_jsonb_field(db_project.get(\"settings\"))", project_read_service_path),
+        (save_service_text, "async def save_project_response(", project_save_service_path),
+        (save_service_text, "async def convert_base64_images_in_project_data(", project_save_service_path),
+        (save_service_text, "persist_project_embedded_base64_image", project_save_service_path),
+        (save_service_text, "parse_jsonb_field(db_project[\"settings\"])", project_save_service_path),
+        (save_service_text, "def _recover_generated_image_urls(", project_save_service_path),
+        (save_service_text, "await project_dao.save_or_update_project(", project_save_service_path),
         (video_task_service_text, "async def export_project_to_video_response(", project_video_task_service_path),
         (video_task_service_text, "async def clear_project_video_tasks_response(", project_video_task_service_path),
         (video_task_service_text, "async def _ensure_export_version(", project_video_task_service_path),
@@ -1882,6 +1891,25 @@ def check_project_routes_extracted(root: Path) -> int:
     if "async def can_read_project(" in router_text:
         fail("routers/projects.py must delegate project read permission checks to project_read_service")
 
+    save_start = router_text.index('@router.post("/api/projects/save")')
+    list_start = router_text.index('@router.get("/api/projects/list")')
+    save_text = router_text[save_start:list_start]
+    save_route_forbidden = [
+        "datetime.now()",
+        "project.model_dump(",
+        "ProjectDAO.get_project(",
+        "parse_jsonb_field(",
+        "existing_data =",
+        "generated_images",
+        "video_tasks",
+        "persist_project_embedded_base64_image(",
+        "ProjectDAO.save_or_update_project(",
+        "convert_base64_images_in_project(",
+    ]
+    for snippet in save_route_forbidden:
+        if snippet in save_text:
+            fail(f"routers/projects.py must delegate project save workflow to service: {snippet}")
+
     export_start = router_text.index('@router.post("/api/projects/{project_id}/export-to-video")')
     clear_start = router_text.index('@router.post("/api/projects/{project_id}/clear-video-tasks")')
     export_text = router_text[export_start:clear_start]
@@ -1914,6 +1942,7 @@ def check_project_routes_extracted(root: Path) -> int:
         + len(required_snippets)
         + len(image_forbidden_snippets)
         + len(read_route_forbidden) * 2
+        + len(save_route_forbidden)
         + len(export_forbidden)
         + len(clear_forbidden)
         + 1
