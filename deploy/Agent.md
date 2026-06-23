@@ -1,5 +1,26 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy GPT Image Provider Service Boundary
+
+### Changes
+
+- Added `services/ai_proxy_gpt_image_service.py` for GPT Image tier resolution, key/endpoint validation, multipart edit calls, generation calls, and result shaping.
+- Added `services/ai_proxy_openai_image_service.py` for shared OpenAI-compatible image response parsing used by GPT Image and Doubao.
+- Moved `resolve_gpt_image_tier_config()`, `normalize_gpt_image_tier()`, GPT Image payload builders, `_post_gpt_image_edit_request()`, `_post_gpt_image_generation_request()`, and `generate_gpt_images()` out of `services/ai_proxy_service.py`.
+- Kept the same public GPT Image and OpenAI-compatible parser entrypoints re-exported from `services/ai_proxy_service.py` for existing routers and tests.
+- Updated route/provider contracts so GPT Image dynamic tier provider resolution and OpenAI image parsing ownership cannot drift back into the provider aggregation file.
+
+### Verification
+
+- Local `py_compile` for GPT Image service, OpenAI image parser service, provider service, and route/provider contracts: passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_provider_contract.py`: passed, including `runtime_wired_files=14`.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=423` and `service_mapper_purity_checks=1519`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
+
 ## 2026-06-23 AI Proxy Gemini Image Provider Service Boundary
 
 ### Changes

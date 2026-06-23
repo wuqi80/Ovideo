@@ -1,5 +1,15 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 AI Proxy GPT Image Provider Service Boundary
+
+- Added `deploy/services/ai_proxy_gpt_image_service.py` for GPT Image tier resolution, key/endpoint validation, multipart edit calls, generation calls, and result shaping.
+- Added `deploy/services/ai_proxy_openai_image_service.py` for shared OpenAI-compatible image response parsing used by GPT Image and Doubao.
+- Moved `resolve_gpt_image_tier_config()`, `normalize_gpt_image_tier()`, GPT Image payload builders, `_post_gpt_image_edit_request()`, `_post_gpt_image_generation_request()`, and `generate_gpt_images()` out of `deploy/services/ai_proxy_service.py`.
+- Kept the same public GPT Image and OpenAI-compatible parser entrypoints re-exported from `deploy/services/ai_proxy_service.py` for existing routers and tests.
+- Updated route/provider contracts so GPT Image dynamic tier provider resolution and OpenAI image parsing ownership cannot drift back into the provider aggregation file.
+- Local verification passed: `py_compile`, targeted image content/reference/provider runtime pytest `47/47`, provider contract, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
+
 ## 2026-06-23 AI Proxy Gemini Image Provider Service Boundary
 
 - Added `deploy/services/ai_proxy_gemini_image_service.py` for Gemini image payload construction, runtime provider resolution, HTTP generation calls, and inline image response parsing.
