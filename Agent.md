@@ -1,5 +1,14 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 AI Proxy DeepSeek Provider Boundary
+
+- Added `deploy/services/ai_proxy_deepseek_service.py` for DeepSeek configuration resolution, non-streaming text generation, SSE payload building, and streaming response parsing.
+- Moved `DEEPSEEK_SYSTEM_PROMPT`, `ensure_deepseek_configured()`, `build_deepseek_payload()`, `generate_deepseek_text()`, and `stream_deepseek_chat()` out of `deploy/services/ai_proxy_service.py`.
+- Kept the same public DeepSeek entrypoints available from `deploy/services/ai_proxy_service.py` for existing routers and tests.
+- Updated provider/runtime contracts so DeepSeek `resolve_provider("deepseek")` ownership lives in the new service and cannot drift back into the provider aggregation file.
+- Local verification passed: `py_compile`, provider runtime pytest `39/39`, targeted image content/reference/provider runtime pytest `47/47`, route contract, provider contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Status: deploy verification pending.
+
 ## 2026-06-23 AI Proxy Chat Completion Boundary
 
 - Added `deploy/services/ai_proxy_chat_service.py` for OpenAI-compatible chat payload construction, provider failover resolution, and text completion result shaping.

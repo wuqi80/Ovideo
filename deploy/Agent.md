@@ -1,5 +1,26 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy DeepSeek Provider Boundary
+
+### Changes
+
+- Added `services/ai_proxy_deepseek_service.py` for DeepSeek configuration resolution, non-streaming text generation, SSE payload building, and streaming response parsing.
+- Moved `DEEPSEEK_SYSTEM_PROMPT`, `ensure_deepseek_configured()`, `build_deepseek_payload()`, `generate_deepseek_text()`, and `stream_deepseek_chat()` out of `services/ai_proxy_service.py`.
+- Kept the same public DeepSeek entrypoints available from `services/ai_proxy_service.py` for existing routers and tests.
+- Updated provider/runtime contracts so DeepSeek `resolve_provider("deepseek")` ownership lives in the new service and cannot drift back into the provider aggregation file.
+
+### Verification
+
+- Local `py_compile` for DeepSeek service, provider service, route/provider contracts, and provider-runtime test files: passed.
+- Local provider runtime pytest: `39/39` passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=366` and `service_mapper_purity_checks=1439`.
+- Local `scripts/check_provider_contract.py`: passed, including `runtime_wired_files=11`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Status: deploy verification pending.
+
 ## 2026-06-23 AI Proxy Chat Completion Boundary
 
 ### Changes

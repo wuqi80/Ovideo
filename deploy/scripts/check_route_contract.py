@@ -3387,7 +3387,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             'config = resolve_provider("gemini-image", explicit_model)',
         ),
         (
-            root / "services" / "ai_proxy_service.py",
+            root / "services" / "ai_proxy_deepseek_service.py",
             "def _deepseek_chat_url(model: Optional[str])",
         ),
         (
@@ -4037,6 +4037,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
     ai_proxy_image_content_path = root / "services" / "ai_proxy_image_content_service.py"
     ai_proxy_chat_path = root / "services" / "ai_proxy_chat_service.py"
+    ai_proxy_deepseek_path = root / "services" / "ai_proxy_deepseek_service.py"
     ai_proxy_http_client_path = root / "services" / "ai_proxy_http_client.py"
     ai_proxy_types_path = root / "services" / "ai_proxy_types.py"
     ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
@@ -4047,6 +4048,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy generated image content loading must live in services/ai_proxy_image_content_service.py")
     if not ai_proxy_chat_path.exists():
         fail("AI proxy chat completion helpers must live in services/ai_proxy_chat_service.py")
+    if not ai_proxy_deepseek_path.exists():
+        fail("AI proxy DeepSeek helpers must live in services/ai_proxy_deepseek_service.py")
     if not ai_proxy_http_client_path.exists():
         fail("AI proxy HTTP client must live in services/ai_proxy_http_client.py")
     if not ai_proxy_types_path.exists():
@@ -4058,6 +4061,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
     ai_proxy_image_content_text = ai_proxy_image_content_path.read_text(encoding="utf-8")
     ai_proxy_chat_text = ai_proxy_chat_path.read_text(encoding="utf-8")
+    ai_proxy_deepseek_text = ai_proxy_deepseek_path.read_text(encoding="utf-8")
     ai_proxy_http_client_text = ai_proxy_http_client_path.read_text(encoding="utf-8")
     ai_proxy_types_text = ai_proxy_types_path.read_text(encoding="utf-8")
     ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
@@ -4105,29 +4109,48 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             fail(f"AI proxy chat service must own OpenAI-compatible chat helper: {snippet}")
         checks += 1
     for snippet in (
+        "DEEPSEEK_SYSTEM_PROMPT =",
+        "def _resolve_deepseek_config(",
+        "def ensure_deepseek_configured(",
+        "def build_deepseek_payload(",
+        "def _deepseek_chat_url(",
+        "def generate_deepseek_text(",
+        "def stream_deepseek_chat(",
+        "_post_chat_completion_result_sync(",
+        "_post_stream_request(",
+        "_ensure_stream_response_ok(",
+        "json.loads(data)",
+        'label="DeepSeek",',
+        'label="DeepSeek stream",',
+    ):
+        if snippet not in ai_proxy_deepseek_text:
+            fail(f"AI proxy DeepSeek service must own text/stream helper: {snippet}")
+        checks += 1
+    for snippet in (
         "from services.ai_proxy_chat_service import (",
         "_post_chat_completion_result,",
-        "_post_chat_completion_result_sync,",
         "build_chat_payload,",
         "provider_health_scope_for_failover,",
         "resolve_ai_proxy_provider,",
+        "from services.ai_proxy_deepseek_service import (",
+        "DEEPSEEK_SYSTEM_PROMPT,",
+        "build_deepseek_payload,",
+        "ensure_deepseek_configured,",
+        "generate_deepseek_text,",
+        "stream_deepseek_chat,",
         "from services.ai_proxy_http_client import (",
         "_post_json_request_async,",
         "_post_form_request_async,",
-        "_post_stream_request,",
-        "_ensure_stream_response_ok,",
         "def parse_gemini_image_response(",
         "async def _post_gemini_image_generation(",
         "async def _post_gpt_image_edit_request(",
         "async def _post_gpt_image_generation_request(",
         "def parse_doubao_image_response(",
         "async def _post_doubao_image_generation(",
-        'label="DeepSeek",',
         'label="Gemini text",',
         'label="Gemini image",',
         'label="GPT Image edit",',
         'label="GPT Image generate",',
-        'label="DeepSeek stream",',
         'label="Doubao image",',
     ):
         if snippet not in ai_proxy_text:
@@ -4153,6 +4176,14 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "async def _post_chat_completion_result(",
         "resolve_provider_with_failover(",
         "list_cached_provider_health(",
+        "DEEPSEEK_SYSTEM_PROMPT =",
+        "def _resolve_deepseek_config(",
+        "def ensure_deepseek_configured(",
+        "def build_deepseek_payload(",
+        "def _deepseek_chat_url(",
+        "def generate_deepseek_text(",
+        "def stream_deepseek_chat(",
+        "json.loads(data)",
         "class AIProxyError(",
         "class AIProxyConfigError(",
         "class AIProxyUpstreamError(",
@@ -4190,7 +4221,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "async def generate_gemini_text(",
             1,
         )[0]
-        deepseek_text_source = ai_proxy_text.split("def generate_deepseek_text(", 1)[1].split(
+        deepseek_text_source = ai_proxy_deepseek_text.split("def generate_deepseek_text(", 1)[1].split(
             "def stream_deepseek_chat(",
             1,
         )[0]
