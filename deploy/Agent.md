@@ -8824,3 +8824,21 @@
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `b94fd32`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 MiniMax File Service Boundary
+
+### Changes
+
+- Moved `/api/minimax/files/upload`, `/api/minimax/files/{file_id}` GET, and `/api/minimax/files/{file_id}` DELETE workflows from `routers/audio.py` into `services/audio_minimax_file_service.py`.
+- The router still owns route registration and HTTP error mapping, but now delegates upload filename sanitization, audio extension/size validation, temp file creation, MiniMax `file_upload()` calls, best-effort temp cleanup, and retrieve/delete response shaping to the service layer.
+- Added `tests/test_audio_minimax_file_service.py` to cover sanitized temp upload paths, cleanup, nested/top-level MiniMax file IDs, extension and size validation, provider failure cleanup, and retrieve/delete wrappers.
+- Strengthened `scripts/check_route_contract.py` so MiniMax file routes cannot regress to route-local temp path assembly, file reads/writes, `uuid`, `os.remove`, or direct MiniMax file API calls.
+- Added the new MiniMax file service test to `scripts/live_deploy_mvc2.sh` so server sync includes it.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_audio_minimax_file_service.py tests/test_audio_generation_service.py tests/test_minimax_audio_runtime.py -q` passed with 19 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Deployment and online smoke pending.

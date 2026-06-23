@@ -2,9 +2,6 @@
 """Audio track, generated audio, MiniMax, and character voice routes."""
 
 import logging
-import os
-import uuid
-from pathlib import Path
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -16,6 +13,13 @@ from services.audio_generation_service import (
     AudioGenerationValidationError,
     attach_local_generated_audio_file,
     generate_minimax_tts_sync_response,
+)
+from services.audio_minimax_file_service import (
+    MiniMaxFileProviderError,
+    MiniMaxFileValidationError,
+    delete_minimax_file_response,
+    retrieve_minimax_file_response,
+    upload_minimax_file_response,
 )
 
 
@@ -473,44 +477,24 @@ def create_audio_router(
         purpose: str = Form("voice_clone"),
         user_id: str = Depends(get_current_user),
     ):
-        tmp_path: Optional[Path] = None
         try:
-            original_filename = Path(file.filename or "audio").name
-            ext = Path(original_filename).suffix.lower()
-            if ext not in {".mp3", ".m4a", ".wav"}:
-                raise HTTPException(status_code=400, detail="声音克隆仅支持 mp3、m4a、wav 格式")
-
-            content = await file.read()
-            if len(content) > 20 * 1024 * 1024:
-                raise HTTPException(status_code=413, detail="声音克隆音频不能超过 20MB")
-
-            tmp_dir = Path(AUDIO_UPLOAD_DIR)
-            tmp_dir.mkdir(parents=True, exist_ok=True)
-            tmp_path = tmp_dir / f"upload_{uuid.uuid4().hex[:8]}_{original_filename}"
-            with open(tmp_path, "wb") as f:
-                f.write(content)
-            client = _require_minimax_client()
-            result = await client.file_upload(str(tmp_path), purpose=purpose)
-            return {"success": True, "file_id": result.get("file", {}).get("file_id", result.get("file_id", ""))}
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"MiniMax file upload 失败: {e}")
-            raise HTTPException(status_code=502, detail=str(e))
-        finally:
-            if tmp_path is not None:
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+            return await upload_minimax_file_response(
+                upload_file=file,
+                purpose=purpose,
+                audio_upload_dir=AUDIO_UPLOAD_DIR,
+                client=_require_minimax_client(),
+                logger=logger,
+            )
+        except MiniMaxFileValidationError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        except MiniMaxFileProviderError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
     @router.get("/api/minimax/files/{file_id}")
     async def minimax_file_retrieve(file_id: str, user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.file_retrieve(file_id)
-            return {"success": True, **result}
+            return await retrieve_minimax_file_response(file_id=file_id, client=_require_minimax_client())
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -518,12 +502,9 @@ def create_audio_router(
     @router.delete("/api/minimax/files/{file_id}")
     async def minimax_file_delete(file_id: str, user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.file_delete(file_id)
-            return {"success": True, **result}
+            return await delete_minimax_file_response(file_id=file_id, client=_require_minimax_client())
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-
 
     # ============================================
     # 剧本 API
