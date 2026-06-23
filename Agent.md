@@ -8389,4 +8389,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `pytest tests/test_audio_generation_service.py tests/test_audio_provider.py tests/test_minimax_audio_runtime.py -q` passed with 18 tests.
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
-  - Deployment and online smoke pending.
+  - Commit `7bacc11`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
