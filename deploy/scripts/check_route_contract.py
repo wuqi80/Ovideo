@@ -2954,16 +2954,22 @@ def check_audio_routes_extracted(root: Path) -> int:
     audio_text = audio_path.read_text(encoding="utf-8")
     audio_generation_service_text = audio_generation_service_path.read_text(encoding="utf-8")
     required_snippets = [
-        (audio_text, "from services.audio_generation_service import attach_local_generated_audio_file", audio_path),
+        (audio_text, "from services.audio_generation_service import (", audio_path),
+        (audio_text, "attach_local_generated_audio_file,", audio_path),
         (audio_text, "attach_local_generated_audio_file(", audio_path),
         (audio_text, "media_source='generated_audio_gemini_speech'", audio_path),
         (audio_text, "media_source='generated_audio_minimax_sfx'", audio_path),
         (audio_text, "media_source='generated_audio_minimax_music'", audio_path),
+        (audio_text, "generate_minimax_tts_sync_response(", audio_path),
+        (audio_text, "except AudioGenerationValidationError as exc:", audio_path),
         (audio_generation_service_text, "async def attach_local_generated_audio_file(", audio_generation_service_path),
+        (audio_generation_service_text, "async def generate_minimax_tts_sync_response(", audio_generation_service_path),
         (audio_generation_service_text, "os.path.basename(str(audio_url))", audio_generation_service_path),
         (audio_generation_service_text, "Path(audio_upload_dir) / audio_filename", audio_generation_service_path),
         (audio_generation_service_text, "await save_generated_file_to_db(", audio_generation_service_path),
         (audio_generation_service_text, "await media_library_creator(", audio_generation_service_path),
+        (audio_generation_service_text, "result = await client.tts_sync(", audio_generation_service_path),
+        (audio_generation_service_text, "await character_voice_dao.update_sample_audio_url(", audio_generation_service_path),
     ]
     for text, snippet, path in required_snippets:
         if snippet not in text:
@@ -2975,6 +2981,9 @@ def check_audio_routes_extracted(root: Path) -> int:
     minimax_music_start = audio_text.index('@router.post("/api/minimax/music")')
     minimax_lyrics_start = audio_text.index('@router.post("/api/minimax/lyrics")')
     minimax_music_text = audio_text[minimax_music_start:minimax_lyrics_start]
+    tts_sync_start = audio_text.index('@router.post("/api/minimax/tts/sync")')
+    tts_query_start = audio_text.index('@router.get("/api/minimax/tts/{task_id}")')
+    tts_sync_text = audio_text[tts_sync_start:tts_query_start]
     forbidden_generated_audio_snippets = [
         "Path(AUDIO_UPLOAD_DIR)",
         "os.path.basename(audio_url)",
@@ -2991,7 +3000,20 @@ def check_audio_routes_extracted(root: Path) -> int:
             if snippet in section:
                 fail(f"routers/audio.py must delegate {label} file/media persistence to service: {snippet}")
 
-    return route_count + len(required_snippets) + len(forbidden_generated_audio_snippets) * 2
+    tts_sync_forbidden_snippets = [
+        "client.tts_sync(",
+        "audio_bytes =",
+        "save_generated_file_to_db(",
+        "import media_library_service",
+        "create_from_file(",
+        "update_sample_audio_url(",
+        "result.get('trace_id')",
+    ]
+    for snippet in tts_sync_forbidden_snippets:
+        if snippet in tts_sync_text:
+            fail(f"routers/audio.py must delegate minimax tts sync workflow to service: {snippet}")
+
+    return route_count + len(required_snippets) + len(forbidden_generated_audio_snippets) * 2 + len(tts_sync_forbidden_snippets)
 
 
 def check_script_timeline_routes_extracted(root: Path) -> int:

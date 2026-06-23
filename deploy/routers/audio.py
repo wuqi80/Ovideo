@@ -10,7 +10,13 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from services.audio_generation_service import attach_local_generated_audio_file
+from services.audio_generation_service import (
+    AudioGenerationMissingAudioError,
+    AudioGenerationProviderError,
+    AudioGenerationValidationError,
+    attach_local_generated_audio_file,
+    generate_minimax_tts_sync_response,
+)
 
 
 def create_audio_router(
@@ -387,121 +393,19 @@ def create_audio_router(
         data: MinimaxTTSRequest,
         user_id: str = Depends(get_current_user),
     ):
-        """同步 MiniMax TTS — 短文本试听 fast-path（绕开 worker / 队列 / 轮询）。
-
-        2026-05-25 引入：原 POST /api/minimax/tts 走 worker 异步,对短文本试听
-        场景过重——前端要走「入队 → 轮询 GET /api/task → worker 拉队列 → 调 sync
-        → 入库 → 完成 → 前端再 fetch audio_url」5 个环节,任何一环卡死用户都是
-        几十秒到分钟级 loading。
-
-        本 endpoint 在 handler 内 await client.tts_sync(...)（典型 1-15s,远低于
-        autodl 反代 5min idle timeout）,同步入库并直接返回 audio_url + file_id。
-
-        适用场景（必须满足）：
-          - text ≤ 1000 字符（MiniMax sync 接口上限 10000,但我们留 buffer 给反代）
-          - 单次调用即可,不需要 worker 级 retry / 并发限流
-
-        不适用（去走 POST /api/minimax/tts 走 worker）：
-          - 批量生成（一集 200 条对白）
-          - text > 1000 字符
-          - 需要 worker 的失败重试
-
-        详见 recurring-pitfalls.md §R + §R 子陷阱 4「sync/async 双轨」。
-        """
-        if not data.text or not data.text.strip():
-            raise HTTPException(status_code=400, detail="text 不能为空")
-        if len(data.text) > 1000:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    f"text 过长 ({len(data.text)} > 1000),"
-                    "请改用 POST /api/minimax/tts（走 worker 异步路径,支持长文本）"
-                ),
-            )
-
-        client = _require_minimax_client()
-
-        kwargs = {
-            'text': data.text,
-            'voice_id': data.voice_id,
-            'model': data.model,
-            'speed': data.speed,
-            'pitch': data.pitch,
-        }
-        if data.emotion:
-            kwargs['emotion'] = data.emotion
-
         try:
-            result = await client.tts_sync(**kwargs) or {}
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(
-                f"MiniMax TTS sync handler 调用失败: text_len={len(data.text)} err={e}",
-                exc_info=True,
+            return await generate_minimax_tts_sync_response(
+                data,
+                user_id=user_id,
+                client=_require_minimax_client(),
+                character_voice_dao=CharacterVoiceDAO,
+                logger=logger,
+                save_generated_file_to_db=save_generated_file_to_db,
             )
-            raise HTTPException(status_code=502, detail=f"MiniMax TTS 调用失败: {e}")
-
-        audio_bytes = result.get('audio_bytes')
-        if not audio_bytes:
-            raise HTTPException(
-                status_code=502,
-                detail=f"MiniMax 未返回音频字节, trace_id={result.get('trace_id')}",
-            )
-
-        saved = await save_generated_file_to_db(
-            content=audio_bytes,
-            file_type='audio',
-            user_id=user_id,
-            source='minimax',
-            entity_type=data.entity_type,
-            entity_id=data.entity_id,
-            file_role=data.file_role or 'dialogue_audio',
-            original_ext='.mp3',
-            episode_id=data.episode_id,
-        )
-        file_id = saved['file_id']
-        file_url = saved['file_url']
-
-        # 2026-05-26 Slice 1 收尾：同步进通用素材库
-        try:
-            import media_library_service
-            await media_library_service.create_from_file(
-                file_record=saved, source='generated_audio_minimax',
-                episode_id=data.episode_id,
-                source_entity_type=data.entity_type,
-                source_entity_id=data.entity_id,
-                title=(getattr(data, 'text', '') or '')[:80] or None,
-            )
-        except Exception as _e:
-            logger.warning(f"media_library 同步失败 (minimax sync TTS): {_e}")
-
-        if data.bind_to_character_voice_id:
-            try:
-                await CharacterVoiceDAO.update_sample_audio_url(
-                    data.bind_to_character_voice_id, file_url,
-                )
-            except Exception as e:
-                logger.warning(
-                    f"sync TTS 回写 sample_audio_url 失败（不致命）: "
-                    f"voice_id={data.bind_to_character_voice_id} err={e}"
-                )
-
-        logger.info(
-            f"✅ MiniMax TTS sync 完成: voice_id={data.voice_id} "
-            f"text_len={len(data.text)} duration_ms={result.get('duration_ms')} "
-            f"trace_id={result.get('trace_id')} file_id={file_id}"
-        )
-
-        return {
-            "success": True,
-            "audio_url": file_url,
-            "file_id": file_id,
-            "file_url": file_url,
-            "duration_ms": result.get('duration_ms'),
-            "minimax_trace_id": result.get('trace_id'),
-        }
-
+        except AudioGenerationValidationError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        except (AudioGenerationProviderError, AudioGenerationMissingAudioError) as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     @router.get("/api/minimax/tts/{task_id}")
     async def minimax_tts_query(task_id: str, user_id: str = Depends(get_current_user)):
