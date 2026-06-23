@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 GPT Image Provider Boundary
+
+- Refactored `deploy/services/ai_proxy_service.py` so `generate_gpt_images()` delegates edit and generation provider requests to `_post_gpt_image_edit_request()` and `_post_gpt_image_generation_request()`.
+- Added `_ensure_gpt_image_config()` and `_gpt_image_upstream_detail()` so GPT Image key/endpoint validation and upstream error shaping are centralized.
+- Strengthened `deploy/tests/test_api_provider_runtime_model_env.py` with OpenAI image response parser coverage for `b64_json`, URL images, and empty image responses.
+- Strengthened `deploy/scripts/check_route_contract.py` so `generate_gpt_images()` cannot reintroduce direct HTTP, endpoint, or multipart handling.
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 Gemini Image Provider Boundary
 
 - Refactored `deploy/services/ai_proxy_service.py` so `generate_gemini_images()` delegates provider HTTP handling to `_post_gemini_image_generation()`.

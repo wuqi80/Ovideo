@@ -4053,6 +4053,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "async def _post_chat_completion_result(",
         "def parse_gemini_image_response(",
         "async def _post_gemini_image_generation(",
+        "async def _post_gpt_image_edit_request(",
+        "async def _post_gpt_image_generation_request(",
         'label="DeepSeek",',
         'label="Gemini text",',
         'label="Gemini image",',
@@ -4093,6 +4095,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "def resolve_gpt_image_tier_config(",
             1,
         )[0]
+        gpt_image_source = ai_proxy_text.split("async def generate_gpt_images(", 1)[1].split(
+            "def build_doubao_image_payload(",
+            1,
+        )[0]
     except IndexError:
         fail("Could not locate text/chat generation functions in services/ai_proxy_service.py")
     for name, source in (
@@ -4120,6 +4126,23 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     if "inlineData" in gemini_image_source:
         fail("generate_gemini_images must not parse Gemini inlineData directly")
     checks += 1
+    for snippet in (
+        "_post_gpt_image_edit_request(",
+        "_post_gpt_image_generation_request(",
+        "parse_openai_image_response(result)",
+    ):
+        if snippet not in gpt_image_source:
+            fail(f"generate_gpt_images must delegate GPT Image provider handling: {snippet}")
+        checks += 1
+    for forbidden in (
+        "_post_form_request_async(",
+        "_post_json_request_async(",
+        "config.url_for_operation(",
+        "io.BytesIO(",
+    ):
+        if forbidden in gpt_image_source:
+            fail(f"generate_gpt_images must not perform GPT Image HTTP/multipart handling directly: {forbidden}")
+        checks += 1
     if ai_proxy_text.count("requests.post(") > 3:
         fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
     checks += 1

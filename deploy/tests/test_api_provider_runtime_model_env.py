@@ -301,6 +301,29 @@ class _OpenAIImageResponse:
         return {"data": [{"b64_json": "Z3B0LWltYWdl"}]}
 
 
+def test_parse_openai_image_response_extracts_base64_and_urls():
+    images = ai_proxy_service.parse_openai_image_response(
+        {
+            "data": [
+                {"b64_json": "YmFzZTY0LWltYWdl"},
+                {"url": "https://cdn.example.test/image.png"},
+                {"ignored": True},
+            ]
+        }
+    )
+
+    assert images == [
+        "data:image/png;base64,YmFzZTY0LWltYWdl",
+        "https://cdn.example.test/image.png",
+    ]
+
+
+def test_parse_openai_image_response_returns_empty_list_without_images():
+    assert ai_proxy_service.parse_openai_image_response(
+        {"data": [{"ignored": True}]}
+    ) == []
+
+
 class _GeneratedImageDownloadResponse:
     status_code = 200
     text = ""

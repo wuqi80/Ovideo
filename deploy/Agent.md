@@ -1,5 +1,18 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 GPT Image Provider Boundary
+
+### Changes
+
+- Refactored `services/ai_proxy_service.py` so `generate_gpt_images()` delegates edit and generation provider requests to `_post_gpt_image_edit_request()` and `_post_gpt_image_generation_request()`.
+- Added `_ensure_gpt_image_config()` and `_gpt_image_upstream_detail()` so GPT Image key/endpoint validation and upstream error shaping are centralized.
+- Strengthened `tests/test_api_provider_runtime_model_env.py` with OpenAI image response parser coverage for `b64_json`, URL images, and empty image responses.
+- Strengthened `scripts/check_route_contract.py` so `generate_gpt_images()` cannot reintroduce direct HTTP, endpoint, or multipart handling.
+
+### Verification
+
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 Gemini Image Provider Boundary
 
 ### Changes

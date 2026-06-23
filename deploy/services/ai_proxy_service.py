@@ -824,6 +824,103 @@ def parse_openai_image_response(result: Dict[str, Any]) -> List[str]:
     return images
 
 
+def _ensure_gpt_image_config(config: Any, key_hint: str) -> None:
+    if not config.api_key:
+        raise AIProxyConfigError(f"图像生成服务未配置 {key_hint}，请管理员在后台填入 API Key")
+    if not config.endpoint:
+        raise AIProxyConfigError(f"图像生成服务 endpoint 未配置 {key_hint}，请管理员在后台填入 endpoint")
+
+
+def _gpt_image_upstream_detail(_upstream: str, status_code: int) -> str:
+    return f"上游图像生成失败 ({status_code})，请检查 API Key 或稍后重试"
+
+
+async def _post_gpt_image_edit_request(
+    *,
+    config: Any,
+    model: str,
+    prompt: str,
+    references: List[GptImageReferenceInput],
+    n: int,
+    size: Optional[str],
+    quality: Optional[str],
+    resolved_tier: str,
+) -> Dict[str, Any]:
+    data = build_gpt_image_edit_data(
+        model=model,
+        prompt=prompt,
+        n=n,
+        size=size,
+        quality=quality,
+    )
+    files = [
+        ("image[]", (ref.filename, io.BytesIO(ref.content), ref.mime_type))
+        for ref in references
+    ]
+    logger.info(
+        "GPT Image edit -> tier=%s model=%s refs=%s size=%s quality=%s",
+        resolved_tier,
+        model,
+        len(references),
+        data["size"],
+        data["quality"],
+    )
+    return await _post_form_request_async(
+        label="GPT Image edit",
+        url=config.url_for_operation("image_edits"),
+        headers={"Authorization": f"Bearer {config.api_key}"},
+        data=data,
+        files=files,
+        timeout=240,
+        timeout_message="图像生成超时，请稍后重试",
+        request_error_message="图像生成失败，请稍后重试",
+        parse_error_message="GPT Image 响应格式异常",
+        request_kwargs=config.requests_kwargs(),
+        upstream_detail=_gpt_image_upstream_detail,
+    )
+
+
+async def _post_gpt_image_generation_request(
+    *,
+    config: Any,
+    model: str,
+    prompt: str,
+    n: int,
+    size: Optional[str],
+    quality: Optional[str],
+    resolved_tier: str,
+) -> Dict[str, Any]:
+    payload = build_gpt_image_generation_payload(
+        model=model,
+        prompt=prompt,
+        n=n,
+        size=size,
+        quality=quality,
+    )
+    logger.info(
+        "GPT Image generate -> tier=%s model=%s size=%s quality=%s",
+        resolved_tier,
+        model,
+        payload["size"],
+        payload["quality"],
+    )
+    return await _post_json_request_async(
+        label="GPT Image generate",
+        url=config.url_for_operation("image_generations"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        payload=payload,
+        timeout=240,
+        timeout_message="图像生成超时，请稍后重试",
+        request_error_message="图像生成失败，请稍后重试",
+        parse_error_message="GPT Image 响应格式异常",
+        request_kwargs=config.requests_kwargs(),
+        upstream_detail=_gpt_image_upstream_detail,
+    )
+
+
 async def generate_gpt_images(
     *,
     tier: Optional[str],
@@ -839,78 +936,27 @@ async def generate_gpt_images(
     key_hint = tier_config["key_hint"]
 
     config = resolve_provider(provider, model)
-    if not config.api_key:
-        raise AIProxyConfigError(f"图像生成服务未配置 {key_hint}，请管理员在后台填入 API Key")
-    if not config.endpoint:
-        raise AIProxyConfigError(f"图像生成服务 endpoint 未配置 {key_hint}，请管理员在后台填入 endpoint")
-
-    upstream_detail = lambda _upstream, status_code: f"上游图像生成失败 ({status_code})，请检查 API Key 或稍后重试"
+    _ensure_gpt_image_config(config, key_hint)
     if references:
-        data = build_gpt_image_edit_data(
+        result = await _post_gpt_image_edit_request(
+            config=config,
             model=model,
             prompt=prompt,
+            references=references,
             n=n,
             size=size,
             quality=quality,
-        )
-        files = [
-            ("image[]", (ref.filename, io.BytesIO(ref.content), ref.mime_type))
-            for ref in references
-        ]
-        headers = {"Authorization": f"Bearer {config.api_key}"}
-        url = config.url_for_operation("image_edits")
-        logger.info(
-            "GPT Image edit -> tier=%s model=%s refs=%s size=%s quality=%s",
-            resolved_tier,
-            model,
-            len(references),
-            data["size"],
-            data["quality"],
-        )
-        result = await _post_form_request_async(
-            label="GPT Image edit",
-            url=url,
-            headers=headers,
-            data=data,
-            files=files,
-            timeout=240,
-            timeout_message="图像生成超时，请稍后重试",
-            request_error_message="图像生成失败，请稍后重试",
-            parse_error_message="GPT Image 响应格式异常",
-            request_kwargs=config.requests_kwargs(),
-            upstream_detail=upstream_detail,
+            resolved_tier=resolved_tier,
         )
     else:
-        payload = build_gpt_image_generation_payload(
+        result = await _post_gpt_image_generation_request(
+            config=config,
             model=model,
             prompt=prompt,
             n=n,
             size=size,
             quality=quality,
-        )
-        headers = {
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        }
-        url = config.url_for_operation("image_generations")
-        logger.info(
-            "GPT Image generate -> tier=%s model=%s size=%s quality=%s",
-            resolved_tier,
-            model,
-            payload["size"],
-            payload["quality"],
-        )
-        result = await _post_json_request_async(
-            label="GPT Image generate",
-            url=url,
-            headers=headers,
-            payload=payload,
-            timeout=240,
-            timeout_message="图像生成超时，请稍后重试",
-            request_error_message="图像生成失败，请稍后重试",
-            parse_error_message="GPT Image 响应格式异常",
-            request_kwargs=config.requests_kwargs(),
-            upstream_detail=upstream_detail,
+            resolved_tier=resolved_tier,
         )
 
     images = parse_openai_image_response(result)
