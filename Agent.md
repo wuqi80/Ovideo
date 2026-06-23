@@ -6,7 +6,8 @@
 - Added `parse_gemini_image_response()` to centralize Gemini inline image extraction from `candidates[].content.parts[].inlineData`.
 - Strengthened `deploy/tests/test_api_provider_runtime_model_env.py` with parser coverage for inline images and empty image responses.
 - Strengthened `deploy/scripts/check_route_contract.py` so `generate_gemini_images()` cannot reintroduce direct `_post_json_request_async()` calls or inlineData parsing.
-- Status: local implementation in progress; deploy verification pending.
+- Local verification passed: `py_compile`, targeted provider runtime pytest `37/37`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 DeepSeek Shared Chat Completion Helper
 
