@@ -19,7 +19,7 @@
 - Local `scripts/check_architecture_contracts.py`: passed `10/10`.
 - Local `git diff --check`: passed.
 - Local smoke test: `9/9` passed.
-- Status: deploy verification pending.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy Chat Completion Boundary
 
