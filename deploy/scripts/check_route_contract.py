@@ -2893,12 +2893,15 @@ def check_audio_routes_extracted(root: Path) -> int:
     audio_path = root / "routers" / "audio.py"
     audio_generation_service_path = root / "services" / "audio_generation_service.py"
     audio_minimax_file_service_path = root / "services" / "audio_minimax_file_service.py"
+    audio_minimax_voice_service_path = root / "services" / "audio_minimax_voice_service.py"
     if not audio_path.exists():
         fail("routers/audio.py is missing")
     if not audio_generation_service_path.exists():
         fail("services/audio_generation_service.py is missing")
     if not audio_minimax_file_service_path.exists():
         fail("services/audio_minimax_file_service.py is missing")
+    if not audio_minimax_voice_service_path.exists():
+        fail("services/audio_minimax_voice_service.py is missing")
 
     route_paths = {
         "/api/episodes/{episode_id}/audio-tracks",
@@ -2957,10 +2960,12 @@ def check_audio_routes_extracted(root: Path) -> int:
     audio_text = audio_path.read_text(encoding="utf-8")
     audio_generation_service_text = audio_generation_service_path.read_text(encoding="utf-8")
     audio_minimax_file_service_text = audio_minimax_file_service_path.read_text(encoding="utf-8")
+    audio_minimax_voice_service_text = audio_minimax_voice_service_path.read_text(encoding="utf-8")
     required_snippets = [
         (audio_text, "from services.audio_generation_service import (", audio_path),
         (audio_text, "attach_local_generated_audio_file,", audio_path),
         (audio_text, "from services.audio_minimax_file_service import (", audio_path),
+        (audio_text, "from services.audio_minimax_voice_service import (", audio_path),
         (audio_text, "attach_local_generated_audio_file(", audio_path),
         (audio_text, "media_source='generated_audio_gemini_speech'", audio_path),
         (audio_text, "media_source='generated_audio_minimax_sfx'", audio_path),
@@ -2970,6 +2975,11 @@ def check_audio_routes_extracted(root: Path) -> int:
         (audio_text, "upload_minimax_file_response(", audio_path),
         (audio_text, "retrieve_minimax_file_response(", audio_path),
         (audio_text, "delete_minimax_file_response(", audio_path),
+        (audio_text, "design_minimax_voice_response(", audio_path),
+        (audio_text, "clone_minimax_voice_response(", audio_path),
+        (audio_text, "list_minimax_voices_response(", audio_path),
+        (audio_text, "get_minimax_voice_response(", audio_path),
+        (audio_text, "delete_minimax_voice_response(", audio_path),
         (audio_generation_service_text, "async def attach_local_generated_audio_file(", audio_generation_service_path),
         (audio_generation_service_text, "async def generate_minimax_tts_sync_response(", audio_generation_service_path),
         (audio_generation_service_text, "os.path.basename(str(audio_url))", audio_generation_service_path),
@@ -2986,6 +2996,13 @@ def check_audio_routes_extracted(root: Path) -> int:
         (audio_minimax_file_service_text, "result = await client.file_upload(str(tmp_path), purpose=purpose)", audio_minimax_file_service_path),
         (audio_minimax_file_service_text, "async def retrieve_minimax_file_response(", audio_minimax_file_service_path),
         (audio_minimax_file_service_text, "async def delete_minimax_file_response(", audio_minimax_file_service_path),
+        (audio_minimax_voice_service_text, "async def design_minimax_voice_response(", audio_minimax_voice_service_path),
+        (audio_minimax_voice_service_text, "result = await client.voice_design(", audio_minimax_voice_service_path),
+        (audio_minimax_voice_service_text, "async def clone_minimax_voice_response(", audio_minimax_voice_service_path),
+        (audio_minimax_voice_service_text, "result = await client.voice_clone(", audio_minimax_voice_service_path),
+        (audio_minimax_voice_service_text, "async def list_minimax_voices_response(", audio_minimax_voice_service_path),
+        (audio_minimax_voice_service_text, "async def get_minimax_voice_response(", audio_minimax_voice_service_path),
+        (audio_minimax_voice_service_text, "async def delete_minimax_voice_response(", audio_minimax_voice_service_path),
     ]
     for text, snippet, path in required_snippets:
         if snippet not in text:
@@ -3048,12 +3065,27 @@ def check_audio_routes_extracted(root: Path) -> int:
         if snippet in minimax_file_text:
             fail(f"routers/audio.py must delegate minimax file workflow to service: {snippet}")
 
+    voice_start = audio_text.index('@router.post("/api/minimax/voice-design")')
+    tts_start = audio_text.index('@router.post("/api/minimax/tts")')
+    minimax_voice_text = audio_text[voice_start:tts_start]
+    minimax_voice_forbidden_snippets = [
+        "client.voice_design(",
+        "client.voice_clone(",
+        "client.list_voices(",
+        "client.get_voice(",
+        "client.delete_voice(",
+    ]
+    for snippet in minimax_voice_forbidden_snippets:
+        if snippet in minimax_voice_text:
+            fail(f"routers/audio.py must delegate minimax voice workflow to service: {snippet}")
+
     return (
         route_count
         + len(required_snippets)
         + len(forbidden_generated_audio_snippets) * 2
         + len(tts_sync_forbidden_snippets)
         + len(minimax_file_forbidden_snippets)
+        + len(minimax_voice_forbidden_snippets)
     )
 
 

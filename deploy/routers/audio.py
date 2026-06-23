@@ -21,6 +21,13 @@ from services.audio_minimax_file_service import (
     retrieve_minimax_file_response,
     upload_minimax_file_response,
 )
+from services.audio_minimax_voice_service import (
+    clone_minimax_voice_response,
+    delete_minimax_voice_response,
+    design_minimax_voice_response,
+    get_minimax_voice_response,
+    list_minimax_voices_response,
+)
 
 
 def create_audio_router(
@@ -260,13 +267,12 @@ def create_audio_router(
     @router.post("/api/minimax/voice-design")
     async def minimax_voice_design(data: MinimaxVoiceDesignRequest, user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.voice_design(
+            return await design_minimax_voice_response(
+                client=_require_minimax_client(),
                 prompt=data.prompt,
                 preview_text=data.preview_text,
                 voice_id=data.voice_id,
             )
-            return {"success": True, **result}
         except HTTPException:
             raise
         except Exception as e:
@@ -277,15 +283,14 @@ def create_audio_router(
     @router.post("/api/minimax/voice-clone")
     async def minimax_voice_clone(data: MinimaxVoiceCloneRequest, user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.voice_clone(
+            return await clone_minimax_voice_response(
+                client=_require_minimax_client(),
                 file_id=data.file_id,
                 voice_id=data.voice_id,
                 demo_text=data.demo_text,
                 model=data.model,
                 voice_id_prefix=data.voice_id_prefix,
             )
-            return {"success": True, **result}
         except HTTPException:
             raise
         except Exception as e:
@@ -296,9 +301,7 @@ def create_audio_router(
     @router.get("/api/minimax/voices")
     async def minimax_list_voices(voice_type: str = "all", user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.list_voices(voice_type)
-            return {"success": True, **result}
+            return await list_minimax_voices_response(client=_require_minimax_client(), voice_type=voice_type)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -306,9 +309,7 @@ def create_audio_router(
     @router.get("/api/minimax/voices/{voice_id}")
     async def minimax_get_voice(voice_id: str, user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.get_voice(voice_id)
-            return {"success": True, **result}
+            return await get_minimax_voice_response(client=_require_minimax_client(), voice_id=voice_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -320,9 +321,11 @@ def create_audio_router(
         user_id: str = Depends(get_current_user),
     ):
         try:
-            client = _require_minimax_client()
-            result = await client.delete_voice(voice_id, voice_type=voice_type)
-            return {"success": True, **result}
+            return await delete_minimax_voice_response(
+                client=_require_minimax_client(),
+                voice_id=voice_id,
+                voice_type=voice_type,
+            )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

@@ -8843,3 +8843,21 @@
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `a5f5999`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh` sync/restart, manual remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
 - Note: the local deployment wrapper timed out while waiting for output, but manual server checks confirmed synced files, active service, remote contracts, and online smoke success.
+
+## 2026-06-23 MiniMax Voice Service Boundary
+
+### Changes
+
+- Moved `/api/minimax/voice-design`, `/api/minimax/voice-clone`, `/api/minimax/voices`, `/api/minimax/voices/{voice_id}` GET, and `/api/minimax/voices/{voice_id}` DELETE workflows from `routers/audio.py` into `services/audio_minimax_voice_service.py`.
+- The router still owns route registration and HTTP error mapping, but now delegates MiniMax voice design, clone, list, get, and delete provider calls plus response shaping to the service layer.
+- Added `tests/test_audio_minimax_voice_service.py` to cover payload forwarding and success response wrapping for voice design, clone, list, get, and delete.
+- Strengthened `scripts/check_route_contract.py` so MiniMax voice routes cannot regress to direct route-local `client.voice_design()`, `client.voice_clone()`, `client.list_voices()`, `client.get_voice()`, or `client.delete_voice()` calls.
+- Added the new MiniMax voice service test to `scripts/live_deploy_mvc2.sh` so server sync includes it.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_audio_minimax_voice_service.py tests/test_audio_minimax_file_service.py tests/test_audio_generation_service.py tests/test_minimax_audio_runtime.py -q` passed with 22 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Deployment and online smoke pending.
