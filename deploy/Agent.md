@@ -1,5 +1,25 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Router Provider Imports
+
+### Changes
+
+- Updated `routers/ai_proxy.py` to import DeepSeek, Gemini text, Gemini image, GPT Image, and Doubao provider calls directly from their dedicated provider service modules.
+- Stopped routing provider calls in the AI proxy router through the `services/ai_proxy_service.py` compatibility aggregation layer.
+- Kept `services/ai_proxy_service.py` available as a compatibility re-export layer for existing tests and remaining legacy callers.
+- Strengthened `scripts/check_route_contract.py` so AI proxy routes must import provider calls from dedicated services and cannot reintroduce `from services.ai_proxy_service import (...)`.
+
+### Verification
+
+- Local `py_compile` for AI proxy router and route contract: passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_provider_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=452`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, online smoke passed `9/9`, and the server router shows direct provider imports.
+
 ## 2026-06-23 AI Proxy Doubao Image Provider Service Boundary
 
 ### Changes
