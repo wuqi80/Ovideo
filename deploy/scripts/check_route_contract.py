@@ -2891,8 +2891,11 @@ def check_legacy_file_routes_extracted(root: Path) -> int:
 def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
+    audio_generation_service_path = root / "services" / "audio_generation_service.py"
     if not audio_path.exists():
         fail("routers/audio.py is missing")
+    if not audio_generation_service_path.exists():
+        fail("services/audio_generation_service.py is missing")
 
     route_paths = {
         "/api/episodes/{episode_id}/audio-tracks",
@@ -2947,7 +2950,48 @@ def check_audio_routes_extracted(root: Path) -> int:
 
     if route_count != 23:
         fail(f"routers/audio.py should own 23 audio route registrations, found {route_count}")
-    return route_count
+
+    audio_text = audio_path.read_text(encoding="utf-8")
+    audio_generation_service_text = audio_generation_service_path.read_text(encoding="utf-8")
+    required_snippets = [
+        (audio_text, "from services.audio_generation_service import attach_local_generated_audio_file", audio_path),
+        (audio_text, "attach_local_generated_audio_file(", audio_path),
+        (audio_text, "media_source='generated_audio_gemini_speech'", audio_path),
+        (audio_text, "media_source='generated_audio_minimax_sfx'", audio_path),
+        (audio_text, "media_source='generated_audio_minimax_music'", audio_path),
+        (audio_generation_service_text, "async def attach_local_generated_audio_file(", audio_generation_service_path),
+        (audio_generation_service_text, "os.path.basename(str(audio_url))", audio_generation_service_path),
+        (audio_generation_service_text, "Path(audio_upload_dir) / audio_filename", audio_generation_service_path),
+        (audio_generation_service_text, "await save_generated_file_to_db(", audio_generation_service_path),
+        (audio_generation_service_text, "await media_library_creator(", audio_generation_service_path),
+    ]
+    for text, snippet, path in required_snippets:
+        if snippet not in text:
+            fail(f"Missing audio generation service boundary snippet in {path.relative_to(root)}: {snippet}")
+
+    generate_start = audio_text.index('@router.post("/api/audio/generate-speech")')
+    minimax_section_start = audio_text.index("    # ============================================", generate_start)
+    generated_audio_text = audio_text[generate_start:minimax_section_start]
+    minimax_music_start = audio_text.index('@router.post("/api/minimax/music")')
+    minimax_lyrics_start = audio_text.index('@router.post("/api/minimax/lyrics")')
+    minimax_music_text = audio_text[minimax_music_start:minimax_lyrics_start]
+    forbidden_generated_audio_snippets = [
+        "Path(AUDIO_UPLOAD_DIR)",
+        "os.path.basename(audio_url)",
+        "audio_file_path.read_bytes()",
+        "import media_library_service",
+        "create_from_file(",
+        "file_record=saved",
+    ]
+    for section, label in [
+        (generated_audio_text, "audio generate speech/sfx/music"),
+        (minimax_music_text, "minimax music"),
+    ]:
+        for snippet in forbidden_generated_audio_snippets:
+            if snippet in section:
+                fail(f"routers/audio.py must delegate {label} file/media persistence to service: {snippet}")
+
+    return route_count + len(required_snippets) + len(forbidden_generated_audio_snippets) * 2
 
 
 def check_script_timeline_routes_extracted(root: Path) -> int:

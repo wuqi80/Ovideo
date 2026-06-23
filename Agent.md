@@ -8375,3 +8375,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `fb2296f`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 Audio Generation Persistence Service Boundary
+
+- Moved generated-audio file registration and media-library sync tail work from `deploy/routers/audio.py` into `deploy/services/audio_generation_service.py`.
+- The affected routes still own provider selection and HTTP error mapping, but now delegate local `audio_url` basename resolution, generated audio file reads, `save_generated_file_to_db()` calls, `file_id`/`file_url` response enrichment, and best-effort media-library indexing to `attach_local_generated_audio_file()`.
+- Updated `/api/audio/generate-speech`, `/api/audio/generate-sfx`, `/api/audio/generate-music`, and `/api/minimax/music` to use the shared service. `/api/minimax/tts/sync` remains route-local for now because it also performs character voice sample URL write-back.
+- Added `deploy/tests/test_audio_generation_service.py` to cover local file save/media sync, basename-only URL handling, missing local files, save failure fallback, and media-library failure fallback.
+- Strengthened `deploy/scripts/check_route_contract.py` so these generated-audio routes cannot regress to route-local `AUDIO_UPLOAD_DIR` path assembly, local byte reads, or direct `media_library_service.create_from_file()` calls.
+- Added the new audio generation service test to `deploy/scripts/live_deploy_mvc2.sh` so server sync includes it.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_audio_generation_service.py tests/test_audio_provider.py tests/test_minimax_audio_runtime.py -q` passed with 18 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
+  - Deployment and online smoke pending.

@@ -10,6 +10,8 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from services.audio_generation_service import attach_local_generated_audio_file
+
 
 def create_audio_router(
     *,
@@ -110,151 +112,95 @@ def create_audio_router(
         try:
             provider = get_audio_provider('gemini')
             result = await provider.generate_speech(data.text, persona=data.persona, emotion=data.emotion)
-            try:
-                audio_url = result.get('audio_url', '')
-                if audio_url:
-                    audio_file_path = Path(AUDIO_UPLOAD_DIR) / os.path.basename(audio_url)
-                    if audio_file_path.exists():
-                        saved = await save_generated_file_to_db(
-                            content=audio_file_path.read_bytes(),
-                            file_type='audio',
-                            user_id=user_id,
-                            source='gemini',
-                            entity_type=data.entity_type,
-                            entity_id=data.entity_id,
-                            file_role=data.file_role or 'dialogue_audio',
-                            original_ext=audio_file_path.suffix,
-                            episode_id=data.episode_id,
-                        )
-                        result['file_id'] = saved['file_id']
-                        result['file_url'] = saved['file_url']
-                        # 2026-05-26 Slice 1 收尾：同步进通用素材库
-                        try:
-                            import media_library_service
-                            await media_library_service.create_from_file(
-                                file_record=saved, source='generated_audio_gemini_speech',
-                                episode_id=data.episode_id,
-                                source_entity_type=data.entity_type,
-                                source_entity_id=data.entity_id,
-                                title=(getattr(data, 'text', '') or '')[:80] or None,
-                            )
-                        except Exception as _e:
-                            logger.warning(f"media_library 同步失败 (gemini speech): {_e}")
-            except Exception as e:
-                logger.warning(f"保存音频到 files 表失败: {e}")
+            result = await attach_local_generated_audio_file(
+                result,
+                audio_upload_dir=AUDIO_UPLOAD_DIR,
+                user_id=user_id,
+                source='gemini',
+                entity_type=data.entity_type,
+                entity_id=data.entity_id,
+                file_role=data.file_role or 'dialogue_audio',
+                episode_id=data.episode_id,
+                media_source='generated_audio_gemini_speech',
+                title=(getattr(data, 'text', '') or '')[:80] or None,
+                logger=logger,
+                save_generated_file_to_db=save_generated_file_to_db,
+            )
             return {"success": True, **result}
         except HTTPException:
             raise
         except RuntimeError as e:
             msg = str(e)
-            if 'GEMINI_API_KEY' in msg or '未配置' in msg:
+            if 'GEMINI_API_KEY' in msg or '\u672a\u914d\u7f6e' in msg:
                 raise HTTPException(status_code=503, detail=msg)
-            logger.error(f"generate_speech 失败: {e}", exc_info=True)
+            logger.error("generate_speech failed: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=msg)
         except Exception as e:
             msg = str(e)
             if 'Missing key inputs' in msg or 'api_key' in msg:
                 raise HTTPException(
                     status_code=503,
-                    detail="GEMINI_API_KEY 未配置：请在管理员后台 → API 配置 中添加 provider=gemini-tts 的密钥；保存后会实时刷新，如仍未生效请点击“刷新运行时”。"
+                    detail=(
+                        "GEMINI_API_KEY \u672a\u914d\u7f6e: \u8bf7\u5728\u7ba1\u7406\u5458\u540e\u53f0 -> API \u914d\u7f6e "
+                        "\u4e2d\u6dfb\u52a0 provider=gemini-tts \u7684\u5bc6\u94a5; \u4fdd\u5b58\u540e\u4f1a\u5b9e\u65f6\u5237\u65b0."
+                    ),
                 )
-            logger.error(f"generate_speech 失败: {e}", exc_info=True)
+            logger.error("generate_speech failed: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=msg)
-
 
     @router.post("/api/audio/generate-sfx")
     async def gen_sfx(data: SFXGenRequest, user_id: str = Depends(get_current_user)):
-        # 2026-06-10：原走 Gemini provider，但 Gemini generate_content 只有 TTS 模型
-        # （朗读文本），生成不了音效。改走 MiniMax（库内唯一可用的音频生成后端）。
         try:
-            _require_minimax_client()  # 缺模块/缺 key 时抛 501/503
+            _require_minimax_client()
             provider = get_audio_provider('minimax')
             result = await provider.generate_sfx(data.description)
-            try:
-                audio_url = result.get('audio_url', '')
-                if audio_url:
-                    audio_file_path = Path(AUDIO_UPLOAD_DIR) / os.path.basename(audio_url)
-                    if audio_file_path.exists():
-                        saved = await save_generated_file_to_db(
-                            content=audio_file_path.read_bytes(),
-                            file_type='audio',
-                            user_id=user_id,
-                            source='minimax',
-                            entity_type=data.entity_type,
-                            entity_id=data.entity_id,
-                            file_role=data.file_role or 'sfx_audio',
-                            original_ext=audio_file_path.suffix,
-                            episode_id=data.episode_id,
-                        )
-                        result['file_id'] = saved['file_id']
-                        result['file_url'] = saved['file_url']
-                        try:
-                            import media_library_service
-                            await media_library_service.create_from_file(
-                                file_record=saved, source='generated_audio_minimax_sfx',
-                                episode_id=data.episode_id,
-                                source_entity_type=data.entity_type,
-                                source_entity_id=data.entity_id,
-                                title=(getattr(data, 'description', '') or '')[:80] or None,
-                            )
-                        except Exception as _e:
-                            logger.warning(f"media_library 同步失败 (minimax sfx): {_e}")
-            except Exception as e:
-                logger.warning(f"保存音频到 files 表失败: {e}")
+            result = await attach_local_generated_audio_file(
+                result,
+                audio_upload_dir=AUDIO_UPLOAD_DIR,
+                user_id=user_id,
+                source='minimax',
+                entity_type=data.entity_type,
+                entity_id=data.entity_id,
+                file_role=data.file_role or 'sfx_audio',
+                episode_id=data.episode_id,
+                media_source='generated_audio_minimax_sfx',
+                title=(getattr(data, 'description', '') or '')[:80] or None,
+                logger=logger,
+                save_generated_file_to_db=save_generated_file_to_db,
+            )
             return {"success": True, **result}
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"generate_sfx 失败: {e}", exc_info=True)
+            logger.error("generate_sfx failed: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
-
 
     @router.post("/api/audio/generate-music")
     async def gen_music(data: MusicGenRequest, user_id: str = Depends(get_current_user)):
-        # 2026-06-10：原走 Gemini provider，但 Gemini generate_content 只有 TTS 模型，
-        # 生成不了音乐。改走 MiniMax music_generate（与 /api/minimax/music 同一后端）。
         try:
-            _require_minimax_client()  # 缺模块/缺 key 时抛 501/503
+            _require_minimax_client()
             provider = get_audio_provider('minimax')
             result = await provider.generate_music(data.description, duration_ms=data.duration_ms)
-            try:
-                audio_url = result.get('audio_url', '')
-                if audio_url:
-                    audio_file_path = Path(AUDIO_UPLOAD_DIR) / os.path.basename(audio_url)
-                    if audio_file_path.exists():
-                        saved = await save_generated_file_to_db(
-                            content=audio_file_path.read_bytes(),
-                            file_type='audio',
-                            user_id=user_id,
-                            source='minimax',
-                            entity_type=data.entity_type,
-                            entity_id=data.entity_id,
-                            file_role=data.file_role or 'background_music',
-                            original_ext=audio_file_path.suffix,
-                            episode_id=data.episode_id,
-                        )
-                        result['file_id'] = saved['file_id']
-                        result['file_url'] = saved['file_url']
-                        try:
-                            import media_library_service
-                            await media_library_service.create_from_file(
-                                file_record=saved, source='generated_audio_minimax_music',
-                                episode_id=data.episode_id,
-                                source_entity_type=data.entity_type,
-                                source_entity_id=data.entity_id,
-                                title=(getattr(data, 'description', '') or '')[:80] or None,
-                            )
-                        except Exception as _e:
-                            logger.warning(f"media_library 同步失败 (minimax music): {_e}")
-            except Exception as e:
-                logger.warning(f"保存音频到 files 表失败: {e}")
+            result = await attach_local_generated_audio_file(
+                result,
+                audio_upload_dir=AUDIO_UPLOAD_DIR,
+                user_id=user_id,
+                source='minimax',
+                entity_type=data.entity_type,
+                entity_id=data.entity_id,
+                file_role=data.file_role or 'background_music',
+                episode_id=data.episode_id,
+                media_source='generated_audio_minimax_music',
+                title=(getattr(data, 'description', '') or '')[:80] or None,
+                logger=logger,
+                save_generated_file_to_db=save_generated_file_to_db,
+            )
             return {"success": True, **result}
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"generate_music 失败: {e}", exc_info=True)
+            logger.error("generate_music failed: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
-
 
     # ============================================
     # MiniMax 音频 API
@@ -582,43 +528,29 @@ def create_audio_router(
                 refer_voice=data.refer_voice,
                 refer_instrumental=data.refer_instrumental,
             )
-            resp = {"success": True, "audio_url": result.get("audio_url", ""), "duration_ms": result.get("duration_ms", 0)}
-            try:
-                audio_url = result.get('audio_url', '')
-                if audio_url:
-                    audio_file_path = Path(AUDIO_UPLOAD_DIR) / os.path.basename(audio_url)
-                    if audio_file_path.exists():
-                        saved = await save_generated_file_to_db(
-                            content=audio_file_path.read_bytes(),
-                            file_type='audio',
-                            user_id=user_id,
-                            source='minimax',
-                            entity_type=data.entity_type,
-                            entity_id=data.entity_id,
-                            file_role=data.file_role or 'background_music',
-                            original_ext=audio_file_path.suffix,
-                            episode_id=data.episode_id,
-                        )
-                        resp['file_id'] = saved['file_id']
-                        resp['file_url'] = saved['file_url']
-                        try:
-                            import media_library_service
-                            await media_library_service.create_from_file(
-                                file_record=saved, source='generated_audio_minimax_music',
-                                episode_id=data.episode_id,
-                                source_entity_type=data.entity_type,
-                                source_entity_id=data.entity_id,
-                                title=(getattr(data, 'lyrics', '') or '')[:80] or None,
-                            )
-                        except Exception as _e:
-                            logger.warning(f"media_library 同步失败 (minimax music): {_e}")
-            except Exception as e:
-                logger.warning(f"保存音频到 files 表失败: {e}")
+            resp = {
+                "success": True,
+                "audio_url": result.get("audio_url", ""),
+                "duration_ms": result.get("duration_ms", 0),
+            }
+            resp = await attach_local_generated_audio_file(
+                resp,
+                audio_upload_dir=AUDIO_UPLOAD_DIR,
+                user_id=user_id,
+                source='minimax',
+                entity_type=data.entity_type,
+                entity_id=data.entity_id,
+                file_role=data.file_role or 'background_music',
+                episode_id=data.episode_id,
+                media_source='generated_audio_minimax_music',
+                title=(getattr(data, 'lyrics', '') or '')[:80] or None,
+                logger=logger,
+                save_generated_file_to_db=save_generated_file_to_db,
+            )
             return resp
         except Exception as e:
-            logger.error(f"MiniMax music 失败: {e}")
+            logger.error("MiniMax music failed: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
-
 
     @router.post("/api/minimax/lyrics")
     async def minimax_lyrics(data: MinimaxLyricsRequest, user_id: str = Depends(get_current_user)):
