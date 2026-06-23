@@ -7,7 +7,7 @@
 - Updated AI proxy provider tests and the failover contract to patch the HTTP client boundary instead of `ai_proxy_service.requests`.
 - Strengthened `deploy/scripts/check_route_contract.py` so provider logic cannot reintroduce direct `requests.post` or local request helper definitions.
 - Local verification passed: `py_compile`, targeted image content/reference/provider runtime pytest `47/47`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
-- Status: deploy verification pending.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy Shared Types Boundary
 

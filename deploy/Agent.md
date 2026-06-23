@@ -16,7 +16,7 @@
 - Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=324` and `service_mapper_purity_checks=1399`.
 - Local `scripts/check_architecture_contracts.py`: passed `10/10`.
 - Local smoke test: `9/9` passed.
-- Status: deploy verification pending.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy Shared Types Boundary
 
