@@ -6,7 +6,7 @@
 - The shared helper now owns runtime resolution, DB key decryption, runtime key fallback, endpoint source diagnostics, and test annotation.
 - Strengthened `deploy/scripts/check_admin_api_config_crud.py` so future changes cannot re-duplicate key/runtime/endpoint test shaping in separate entrypoints.
 - Local verification passed: `py_compile`, `check_admin_api_config_crud.py`, architecture contracts, `git diff --check`, and local smoke `9/9`.
-- Deployment and online smoke pending.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 Admin API Runtime Endpoint Display
 
