@@ -11,7 +11,13 @@
 
 ### Verification
 
-- Status: local implementation in progress; deploy verification pending.
+- Local `py_compile` for `services/ai_proxy_service.py`, `tests/test_api_provider_runtime_model_env.py`, and `scripts/check_route_contract.py`: passed.
+- Local targeted provider runtime pytest: `35/35` passed.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=250`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 API Config Health Test Helper
 

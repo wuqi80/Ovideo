@@ -6,7 +6,8 @@
 - The helper centralizes OpenAI-compatible chat completion URL resolution, runtime key/endpoint usage, request error handling, response parsing, and `TextGenerationResult` shaping.
 - Added runtime-provider tests in `deploy/tests/test_api_provider_runtime_model_env.py` for both Gemini text and chat paths, covering runtime endpoint/model selection and payload shape.
 - Strengthened `deploy/scripts/check_route_contract.py` so these entrypoints cannot reintroduce duplicated `_post_json_request_async()` handling.
-- Status: local implementation in progress; deploy verification pending.
+- Local verification passed: `py_compile`, targeted provider runtime pytest `35/35`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 API Config Health Test Helper
 
