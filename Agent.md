@@ -8432,3 +8432,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `5e24b02`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 MiniMax Content Service Boundary
+
+- Moved `/api/minimax/tts/{task_id}`, `/api/minimax/music`, and `/api/minimax/lyrics` workflows from `deploy/routers/audio.py` into `deploy/services/audio_minimax_content_service.py`.
+- The router still owns route registration and HTTP error mapping, but now delegates MiniMax TTS query, music generation with generated-file/media-library tail work, and lyrics extraction to the service layer.
+- Added `deploy/tests/test_audio_minimax_content_service.py` to cover TTS query wrapping, music generation persistence, media-library metadata, and lyrics extraction.
+- Strengthened `deploy/scripts/check_route_contract.py` so these MiniMax content routes cannot regress to route-local `client.tts_query()`, `client.music_generate()`, `client.lyrics_generate()`, or local generated-file attachment calls.
+- Added the new MiniMax content service test to `deploy/scripts/live_deploy_mvc2.sh` so server sync includes it.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_audio_minimax_content_service.py tests/test_audio_minimax_voice_service.py tests/test_audio_minimax_file_service.py tests/test_audio_generation_service.py tests/test_minimax_audio_runtime.py -q` passed with 25 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
+  - Deployment and online smoke pending.

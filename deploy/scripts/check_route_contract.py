@@ -2892,12 +2892,15 @@ def check_audio_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     audio_path = root / "routers" / "audio.py"
     audio_generation_service_path = root / "services" / "audio_generation_service.py"
+    audio_minimax_content_service_path = root / "services" / "audio_minimax_content_service.py"
     audio_minimax_file_service_path = root / "services" / "audio_minimax_file_service.py"
     audio_minimax_voice_service_path = root / "services" / "audio_minimax_voice_service.py"
     if not audio_path.exists():
         fail("routers/audio.py is missing")
     if not audio_generation_service_path.exists():
         fail("services/audio_generation_service.py is missing")
+    if not audio_minimax_content_service_path.exists():
+        fail("services/audio_minimax_content_service.py is missing")
     if not audio_minimax_file_service_path.exists():
         fail("services/audio_minimax_file_service.py is missing")
     if not audio_minimax_voice_service_path.exists():
@@ -2959,11 +2962,13 @@ def check_audio_routes_extracted(root: Path) -> int:
 
     audio_text = audio_path.read_text(encoding="utf-8")
     audio_generation_service_text = audio_generation_service_path.read_text(encoding="utf-8")
+    audio_minimax_content_service_text = audio_minimax_content_service_path.read_text(encoding="utf-8")
     audio_minimax_file_service_text = audio_minimax_file_service_path.read_text(encoding="utf-8")
     audio_minimax_voice_service_text = audio_minimax_voice_service_path.read_text(encoding="utf-8")
     required_snippets = [
         (audio_text, "from services.audio_generation_service import (", audio_path),
         (audio_text, "attach_local_generated_audio_file,", audio_path),
+        (audio_text, "from services.audio_minimax_content_service import (", audio_path),
         (audio_text, "from services.audio_minimax_file_service import (", audio_path),
         (audio_text, "from services.audio_minimax_voice_service import (", audio_path),
         (audio_text, "attach_local_generated_audio_file(", audio_path),
@@ -2980,6 +2985,9 @@ def check_audio_routes_extracted(root: Path) -> int:
         (audio_text, "list_minimax_voices_response(", audio_path),
         (audio_text, "get_minimax_voice_response(", audio_path),
         (audio_text, "delete_minimax_voice_response(", audio_path),
+        (audio_text, "query_minimax_tts_response(", audio_path),
+        (audio_text, "generate_minimax_music_response(", audio_path),
+        (audio_text, "generate_minimax_lyrics_response(", audio_path),
         (audio_generation_service_text, "async def attach_local_generated_audio_file(", audio_generation_service_path),
         (audio_generation_service_text, "async def generate_minimax_tts_sync_response(", audio_generation_service_path),
         (audio_generation_service_text, "os.path.basename(str(audio_url))", audio_generation_service_path),
@@ -2988,6 +2996,14 @@ def check_audio_routes_extracted(root: Path) -> int:
         (audio_generation_service_text, "await media_library_creator(", audio_generation_service_path),
         (audio_generation_service_text, "result = await client.tts_sync(", audio_generation_service_path),
         (audio_generation_service_text, "await character_voice_dao.update_sample_audio_url(", audio_generation_service_path),
+        (audio_minimax_content_service_text, "async def query_minimax_tts_response(", audio_minimax_content_service_path),
+        (audio_minimax_content_service_text, "result = await client.tts_query(", audio_minimax_content_service_path),
+        (audio_minimax_content_service_text, "async def generate_minimax_music_response(", audio_minimax_content_service_path),
+        (audio_minimax_content_service_text, "result = await client.music_generate(", audio_minimax_content_service_path),
+        (audio_minimax_content_service_text, "await attach_local_generated_audio_file(", audio_minimax_content_service_path),
+        (audio_minimax_content_service_text, "media_source=\"generated_audio_minimax_music\"", audio_minimax_content_service_path),
+        (audio_minimax_content_service_text, "async def generate_minimax_lyrics_response(", audio_minimax_content_service_path),
+        (audio_minimax_content_service_text, "result = await client.lyrics_generate(", audio_minimax_content_service_path),
         (audio_minimax_file_service_text, "async def upload_minimax_file_response(", audio_minimax_file_service_path),
         (audio_minimax_file_service_text, "Path(filename or \"audio\").name", audio_minimax_file_service_path),
         (audio_minimax_file_service_text, "if ext not in {\".mp3\", \".m4a\", \".wav\"}", audio_minimax_file_service_path),
@@ -3017,6 +3033,7 @@ def check_audio_routes_extracted(root: Path) -> int:
     tts_sync_start = audio_text.index('@router.post("/api/minimax/tts/sync")')
     tts_query_start = audio_text.index('@router.get("/api/minimax/tts/{task_id}")')
     tts_sync_text = audio_text[tts_sync_start:tts_query_start]
+    tts_query_text = audio_text[tts_query_start:minimax_music_start]
     forbidden_generated_audio_snippets = [
         "Path(AUDIO_UPLOAD_DIR)",
         "os.path.basename(audio_url)",
@@ -3047,6 +3064,17 @@ def check_audio_routes_extracted(root: Path) -> int:
             fail(f"routers/audio.py must delegate minimax tts sync workflow to service: {snippet}")
 
     minimax_file_start = audio_text.index('@router.post("/api/minimax/files/upload")')
+    minimax_lyrics_text = audio_text[minimax_lyrics_start:minimax_file_start]
+    minimax_content_forbidden_sections = [
+        (tts_query_text, "minimax tts query", "client.tts_query("),
+        (minimax_music_text, "minimax music", "client.music_generate("),
+        (minimax_music_text, "minimax music", "attach_local_generated_audio_file("),
+        (minimax_lyrics_text, "minimax lyrics", "client.lyrics_generate("),
+    ]
+    for section, label, snippet in minimax_content_forbidden_sections:
+        if snippet in section:
+            fail(f"routers/audio.py must delegate {label} workflow to service: {snippet}")
+
     character_voice_start = audio_text.index("    # ============================================", minimax_file_start)
     minimax_file_text = audio_text[minimax_file_start:character_voice_start]
     minimax_file_forbidden_snippets = [
@@ -3084,6 +3112,7 @@ def check_audio_routes_extracted(root: Path) -> int:
         + len(required_snippets)
         + len(forbidden_generated_audio_snippets) * 2
         + len(tts_sync_forbidden_snippets)
+        + len(minimax_content_forbidden_sections)
         + len(minimax_file_forbidden_snippets)
         + len(minimax_voice_forbidden_snippets)
     )

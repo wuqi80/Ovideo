@@ -55,6 +55,7 @@ FILES=(
   tests/test_asset_service.py
   tests/test_audio_provider.py
   tests/test_audio_generation_service.py
+  tests/test_audio_minimax_content_service.py
   tests/test_audio_minimax_file_service.py
   tests/test_audio_minimax_voice_service.py
   tests/test_auth_user_service.py

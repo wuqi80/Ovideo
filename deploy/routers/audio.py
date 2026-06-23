@@ -14,6 +14,11 @@ from services.audio_generation_service import (
     attach_local_generated_audio_file,
     generate_minimax_tts_sync_response,
 )
+from services.audio_minimax_content_service import (
+    generate_minimax_lyrics_response,
+    generate_minimax_music_response,
+    query_minimax_tts_response,
+)
 from services.audio_minimax_file_service import (
     MiniMaxFileProviderError,
     MiniMaxFileValidationError,
@@ -423,9 +428,7 @@ def create_audio_router(
         判断 MiniMax 端是否在 5min 保留窗口内仍有该 task）。
         """
         try:
-            client = _require_minimax_client()
-            result = await client.tts_query(task_id)
-            return {"success": True, **result}
+            return await query_minimax_tts_response(client=_require_minimax_client(), task_id=task_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -433,32 +436,14 @@ def create_audio_router(
     @router.post("/api/minimax/music")
     async def minimax_music(data: MinimaxMusicRequest, user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.music_generate(
-                lyrics=data.lyrics,
-                refer_voice=data.refer_voice,
-                refer_instrumental=data.refer_instrumental,
-            )
-            resp = {
-                "success": True,
-                "audio_url": result.get("audio_url", ""),
-                "duration_ms": result.get("duration_ms", 0),
-            }
-            resp = await attach_local_generated_audio_file(
-                resp,
-                audio_upload_dir=AUDIO_UPLOAD_DIR,
+            return await generate_minimax_music_response(
+                data,
                 user_id=user_id,
-                source='minimax',
-                entity_type=data.entity_type,
-                entity_id=data.entity_id,
-                file_role=data.file_role or 'background_music',
-                episode_id=data.episode_id,
-                media_source='generated_audio_minimax_music',
-                title=(getattr(data, 'lyrics', '') or '')[:80] or None,
+                client=_require_minimax_client(),
+                audio_upload_dir=AUDIO_UPLOAD_DIR,
                 logger=logger,
                 save_generated_file_to_db=save_generated_file_to_db,
             )
-            return resp
         except Exception as e:
             logger.error("MiniMax music failed: %s", e)
             raise HTTPException(status_code=500, detail=str(e))
@@ -466,9 +451,11 @@ def create_audio_router(
     @router.post("/api/minimax/lyrics")
     async def minimax_lyrics(data: MinimaxLyricsRequest, user_id: str = Depends(get_current_user)):
         try:
-            client = _require_minimax_client()
-            result = await client.lyrics_generate(text=data.text, language=data.language)
-            return {"success": True, "lyrics": result.get("data", {}).get("lyrics", "")}
+            return await generate_minimax_lyrics_response(
+                client=_require_minimax_client(),
+                text=data.text,
+                language=data.language,
+            )
         except Exception as e:
             logger.error(f"MiniMax lyrics 失败: {e}")
             raise HTTPException(status_code=500, detail=str(e))
