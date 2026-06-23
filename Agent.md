@@ -7,7 +7,8 @@
 - Removed generated image content decoding/downloading, `base64`, and public URL guard imports from `deploy/services/ai_proxy_service.py`.
 - Added `deploy/tests/test_ai_proxy_image_content_service.py` for data URL decoding and public URL download behavior.
 - Strengthened `deploy/scripts/check_route_contract.py` so provider service cannot reintroduce generated image content loading.
-- Status: local implementation in progress; deploy verification pending.
+- Local verification passed: `py_compile`, targeted image content/persistence/provider runtime pytest `44/44`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 Doubao Image Provider Boundary
 
