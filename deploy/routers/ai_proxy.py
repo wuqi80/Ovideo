@@ -1,7 +1,8 @@
 """AI proxy routes.
 
-The external provider calls live in services.ai_proxy_service. This router keeps
-the HTTP route layer focused on auth, request shaping, and response format.
+Provider calls live in dedicated service modules. This router keeps the HTTP
+route layer focused on auth, request shaping, task persistence, and response
+format.
 """
 from __future__ import annotations
 
@@ -19,13 +20,21 @@ from schemas.generation import (
     GeminiTextRequest,
     GptImageRequest,
 )
-from services.ai_proxy_service import (
+from services.ai_proxy_deepseek_service import (
     ensure_deepseek_configured,
-    generate_doubao_images as proxy_generate_doubao_images,
-    generate_gemini_images as proxy_generate_gemini_images,
-    generate_gpt_images as proxy_generate_gpt_images,
-    generate_gemini_text_result,
     stream_deepseek_chat,
+)
+from services.ai_proxy_doubao_image_service import (
+    generate_doubao_images as proxy_generate_doubao_images,
+)
+from services.ai_proxy_gemini_image_service import (
+    generate_gemini_images as proxy_generate_gemini_images,
+)
+from services.ai_proxy_gemini_text_service import (
+    generate_gemini_text_result,
+)
+from services.ai_proxy_gpt_image_service import (
+    generate_gpt_images as proxy_generate_gpt_images,
 )
 from services.ai_proxy_types import AIProxyError
 from services.ai_proxy_image_persistence_service import persist_generated_ai_images

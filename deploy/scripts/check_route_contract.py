@@ -514,7 +514,7 @@ def check_cluster_main_has_no_direct_http_routes(root: Path) -> None:
     cluster_main_path = root / "cluster_main.py"
     removed_api_router_path = root / "api_router.py"
     if removed_api_router_path.exists():
-        fail("api_router.py SmartApiRouter dead code should stay deleted; use services.ai_proxy_service and provider runtime registry")
+        fail("api_router.py SmartApiRouter dead code should stay deleted; use dedicated provider services and provider runtime registry")
 
     cluster_text = cluster_main_path.read_text(encoding="utf-8")
     for forbidden in ("set_api_router_redis", "from api_router import"):
@@ -3970,7 +3970,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     if "DOUBAO_MODEL =" in cluster_text:
         fail("cluster_main.py must not cache the Doubao image model at import time")
     if "doubao_model_provider" in router_text or "doubao_model_provider" in cluster_text:
-        fail("Doubao route must resolve runtime model through services.ai_proxy_service, not injected model providers")
+        fail("Doubao route must resolve runtime model through the Doubao image provider service, not injected model providers")
     seedance_text = (root / "external_api" / "video" / "seedance.py").read_text(encoding="utf-8")
     if "os.getenv" in seedance_text or "import os" in seedance_text:
         fail("Seedance client must not cache/read model env directly; use runtime resolver helpers")
@@ -4431,6 +4431,29 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     if "requests.post(" in video_reverse_text or "import requests" in video_reverse_text:
         fail("video_reverse_service must call Gemini through services.ai_proxy_service, not direct requests.post")
     checks += 1
+    for snippet in (
+        "from services.ai_proxy_deepseek_service import (",
+        "ensure_deepseek_configured,",
+        "stream_deepseek_chat,",
+        "from services.ai_proxy_doubao_image_service import (",
+        "generate_doubao_images as proxy_generate_doubao_images,",
+        "from services.ai_proxy_gemini_image_service import (",
+        "generate_gemini_images as proxy_generate_gemini_images,",
+        "from services.ai_proxy_gemini_text_service import (",
+        "generate_gemini_text_result,",
+        "from services.ai_proxy_gpt_image_service import (",
+        "generate_gpt_images as proxy_generate_gpt_images,",
+    ):
+        if snippet not in router_text:
+            fail(f"AI proxy router must import provider calls from dedicated services: {snippet}")
+        checks += 1
+    for forbidden in (
+        "from services.ai_proxy_service import (",
+        "import services.ai_proxy_service",
+    ):
+        if forbidden in router_text:
+            fail(f"AI proxy router must not import provider calls through the compatibility aggregation service: {forbidden}")
+        checks += 1
     for snippet in (
         "from services.ai_proxy_image_persistence_service import persist_generated_ai_images",
         "persist_generated_ai_images(",
