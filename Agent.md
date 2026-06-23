@@ -6,7 +6,8 @@
 - Moved `AIProxyError`, `AIProxyConfigError`, `AIProxyUpstreamError`, `GptImageReferenceInput`, and `TextGenerationResult` out of `deploy/services/ai_proxy_service.py`.
 - Updated `cluster_main.py`, AI proxy/generation routers, image content service, reference service, and provider tests to import shared types from `services.ai_proxy_types`.
 - Strengthened `deploy/scripts/check_route_contract.py` so non-provider code cannot import shared AI proxy types from the provider service.
-- Status: local implementation in progress; deploy verification pending.
+- Local verification passed: `py_compile`, targeted image content/reference/provider runtime pytest `47/47`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy Generated Image Content Boundary
 

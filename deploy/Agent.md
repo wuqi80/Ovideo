@@ -11,7 +11,13 @@
 
 ### Verification
 
-- Status: local implementation in progress; deploy verification pending.
+- Local `py_compile` for shared type, provider, router, image content, reference, and provider-runtime test files: passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=307` and `service_mapper_purity_checks=1379`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy Generated Image Content Boundary
 
