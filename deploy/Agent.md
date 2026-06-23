@@ -1,5 +1,25 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Gemini Image Provider Service Boundary
+
+### Changes
+
+- Added `services/ai_proxy_gemini_image_service.py` for Gemini image payload construction, runtime provider resolution, HTTP generation calls, and inline image response parsing.
+- Moved `build_gemini_image_payload()`, `parse_gemini_image_response()`, `_post_gemini_image_generation()`, and `generate_gemini_images()` out of `services/ai_proxy_service.py`.
+- Kept the same public Gemini image entrypoints re-exported from `services/ai_proxy_service.py` for existing routers and tests.
+- Updated route/provider contracts so `resolve_provider("gemini-image")` ownership lives in the new service and cannot drift back into the provider aggregation file.
+
+### Verification
+
+- Local `py_compile` for Gemini image service, provider service, route/provider contracts, and provider-runtime test files: passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_provider_contract.py`: passed, including `runtime_wired_files=13`.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=392` and `service_mapper_purity_checks=1479`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
+
 ## 2026-06-23 AI Proxy Gemini Text Provider Boundary
 
 ### Changes
