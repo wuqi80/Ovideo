@@ -1,5 +1,14 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 AI Proxy Doubao Image Provider Service Boundary
+
+- Added `deploy/services/ai_proxy_doubao_image_service.py` for Doubao image payload construction, runtime provider resolution, HTTP generation calls, and response parsing.
+- Moved `build_doubao_image_payload()`, `parse_doubao_image_response()`, `_post_doubao_image_generation()`, and `generate_doubao_images()` out of `deploy/services/ai_proxy_service.py`.
+- Kept the same public Doubao image entrypoints re-exported from `deploy/services/ai_proxy_service.py` for existing routers and tests.
+- Updated route/provider contracts so `resolve_provider("doubao")` ownership lives in the new service and cannot drift back into the provider aggregation file.
+- Local verification passed: `py_compile`, targeted image content/reference/provider runtime pytest `47/47`, provider contract, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
+
 ## 2026-06-23 AI Proxy GPT Image Provider Service Boundary
 
 - Added `deploy/services/ai_proxy_gpt_image_service.py` for GPT Image tier resolution, key/endpoint validation, multipart edit calls, generation calls, and result shaping.
