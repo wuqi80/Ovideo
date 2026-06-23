@@ -330,6 +330,67 @@ def build_chat_payload(
     }
 
 
+def _post_chat_completion_result_sync(
+    *,
+    config: Any,
+    failover: Dict[str, Any],
+    messages: List[Dict[str, Any]],
+    temperature: float,
+    requested_model: Optional[str],
+    default_model: str,
+    label: str,
+    timeout: Any = 120,
+    timeout_message: str = "Text generation timed out, please try again later",
+    timeout_status_code: int = 500,
+    request_error_message: str = "Text generation failed, please try again later",
+    parse_error_message: str = "Text generation service returned an invalid response",
+    upstream_detail: Optional[Callable[[str, int], str]] = None,
+    empty_content_message: Optional[str] = None,
+    extra_payload: Optional[Dict[str, Any]] = None,
+) -> TextGenerationResult:
+    """Call a synchronous OpenAI-compatible chat completion provider."""
+    if not config.api_key:
+        raise AIProxyConfigError("文本生成服务未配置，请联系管理员")
+    if not config.endpoint:
+        raise AIProxyConfigError("文本生成服务 endpoint 未配置，请联系管理员")
+
+    resolved_model = config.model_name or requested_model or default_model
+    payload = {
+        "model": resolved_model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if extra_payload:
+        payload.update(extra_payload)
+
+    result = _post_json_request(
+        label=label,
+        url=config.url_for_operation("chat_completions"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        payload=payload,
+        timeout=timeout,
+        timeout_message=timeout_message,
+        timeout_status_code=timeout_status_code,
+        request_error_message=request_error_message,
+        parse_error_message=parse_error_message,
+        request_kwargs=config.requests_kwargs(),
+        upstream_detail=upstream_detail,
+    )
+
+    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    if empty_content_message and not content:
+        raise AIProxyUpstreamError(empty_content_message)
+    return TextGenerationResult(
+        content=content,
+        provider=config.provider,
+        model_name=resolved_model,
+        failover=failover,
+    )
+
+
 async def _post_chat_completion_result(
     *,
     config: Any,
@@ -340,44 +401,26 @@ async def _post_chat_completion_result(
     default_model: str,
     label: str,
 ) -> TextGenerationResult:
-    """Call an OpenAI-compatible chat completion provider and normalize output."""
-    if not config.api_key:
-        raise AIProxyConfigError("文本生成服务未配置，请联系管理员")
-    if not config.endpoint:
-        raise AIProxyConfigError("文本生成服务 endpoint 未配置，请联系管理员")
-
-    resolved_model = config.model_name or requested_model or default_model
-    result = await _post_json_request_async(
+    """Async wrapper for OpenAI-compatible chat completion providers."""
+    return await asyncio.to_thread(
+        _post_chat_completion_result_sync,
+        config=config,
+        failover=failover,
+        messages=messages,
+        temperature=temperature,
+        requested_model=requested_model,
+        default_model=default_model,
         label=label,
-        url=config.url_for_operation("chat_completions"),
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        payload={
-            "model": resolved_model,
-            "messages": messages,
-            "temperature": temperature,
-        },
         timeout=120,
         timeout_message="文本生成失败，请稍后重试",
         timeout_status_code=500,
         request_error_message="文本生成失败，请稍后重试",
         parse_error_message="文本生成服务响应格式异常",
-        request_kwargs=config.requests_kwargs(),
         upstream_detail=lambda upstream, _status_code: f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试",
     )
 
-    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    return TextGenerationResult(
-        content=content,
-        provider=config.provider,
-        model_name=resolved_model,
-        failover=failover,
-    )
 
-
-def ensure_deepseek_configured(model: Optional[str] = None) -> None:
+def _resolve_deepseek_config(model: Optional[str] = None) -> Any:
     config = resolve_provider("deepseek", model)
     if not config.api_key:
         raise AIProxyConfigError(
@@ -386,6 +429,11 @@ def ensure_deepseek_configured(model: Optional[str] = None) -> None:
         )
     if not config.endpoint:
         raise AIProxyConfigError("DeepSeek 服务 endpoint 未配置，请联系管理员", status_code=503)
+    return config
+
+
+def ensure_deepseek_configured(model: Optional[str] = None) -> None:
+    _resolve_deepseek_config(model)
 
 
 def build_deepseek_payload(
@@ -415,14 +463,7 @@ def _sse_event(payload: Dict[str, Any]) -> str:
 
 
 def _deepseek_chat_url(model: Optional[str]) -> tuple[str, Dict[str, Any], str]:
-    config = resolve_provider("deepseek", model)
-    if not config.api_key:
-        raise AIProxyConfigError(
-            "DeepSeek 服务未配置，请在管理后台 (Admin → API 配置) 添加 deepseek 提供商的 API Key 后重试",
-            status_code=503,
-        )
-    if not config.endpoint:
-        raise AIProxyConfigError("DeepSeek 服务 endpoint 未配置，请联系管理员", status_code=503)
+    config = _resolve_deepseek_config(model)
     resolved_model = config.model_name or model or "deepseek-reasoner"
     return config.url_for_operation("chat_completions"), {
         "headers": {
@@ -440,33 +481,36 @@ def generate_deepseek_text(
     temperature: float = 0.2,
     model: Optional[str] = None,
 ) -> str:
-    url, request_kwargs, resolved_model = _deepseek_chat_url(model)
-    payload = build_deepseek_payload(
-        prompt=prompt,
-        model=resolved_model,
-        response_format=response_format,
+    config = _resolve_deepseek_config(model)
+    extra_payload: Dict[str, Any] = {"stream": False}
+    if response_format == "json":
+        extra_payload["response_format"] = {"type": "json_object"}
+
+    result = _post_chat_completion_result_sync(
+        config=config,
+        failover={
+            "active": False,
+            "requested_provider": "deepseek",
+            "selected_provider": config.provider,
+            "reason": None,
+        },
+        messages=[
+            {"role": "system", "content": DEEPSEEK_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
         temperature=temperature,
-        stream=False,
-    )
-    headers = request_kwargs.get("headers", {})
-    result = _post_json_request(
+        requested_model=model,
+        default_model="deepseek-reasoner",
         label="DeepSeek",
-        url=url,
-        headers=headers,
-        payload=payload,
         timeout=180,
         timeout_message="DeepSeek API 调用超时，请稍后重试",
         request_error_message="DeepSeek API 调用失败，请稍后重试",
         parse_error_message="DeepSeek 响应格式异常",
-        request_kwargs={k: v for k, v in request_kwargs.items() if k != "headers"},
         upstream_detail=lambda upstream, status_code: f"DeepSeek API 调用失败: {upstream[:200] or status_code}",
+        empty_content_message="AI服务返回空内容",
+        extra_payload=extra_payload,
     )
-
-    message = (result.get("choices") or [{}])[0].get("message") or {}
-    content = message.get("content", "")
-    if not content:
-        raise AIProxyUpstreamError("AI服务返回空内容")
-    return content
+    return result.content
 
 
 def stream_deepseek_chat(

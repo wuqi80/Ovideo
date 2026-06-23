@@ -4049,6 +4049,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     for snippet in (
         "def _post_json_request(",
         "async def _post_json_request_async(",
+        "def _post_chat_completion_result_sync(",
         "async def _post_chat_completion_result(",
         'label="DeepSeek",',
         'label="Gemini text",',
@@ -4082,8 +4083,12 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "async def generate_gemini_text(",
             1,
         )[0]
+        deepseek_text_source = ai_proxy_text.split("def generate_deepseek_text(", 1)[1].split(
+            "def stream_deepseek_chat(",
+            1,
+        )[0]
     except IndexError:
-        fail("Could not locate Gemini text/chat generation functions in services/ai_proxy_service.py")
+        fail("Could not locate text/chat generation functions in services/ai_proxy_service.py")
     for name, source in (
         ("generate_gemini_text_result", gemini_text_source),
         ("generate_gemini_chat_result", gemini_chat_source),
@@ -4094,6 +4099,12 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         if "_post_json_request_async(" in source:
             fail(f"{name} must not duplicate chat-completions HTTP handling")
         checks += 1
+    if "_post_chat_completion_result_sync(" not in deepseek_text_source:
+        fail("generate_deepseek_text must delegate OpenAI-compatible chat requests to _post_chat_completion_result_sync()")
+    checks += 1
+    if "_post_json_request(" in deepseek_text_source:
+        fail("generate_deepseek_text must not duplicate chat-completions HTTP handling")
+    checks += 1
     if ai_proxy_text.count("requests.post(") > 3:
         fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
     checks += 1

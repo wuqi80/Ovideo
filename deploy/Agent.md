@@ -1,5 +1,19 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 DeepSeek Shared Chat Completion Helper
+
+### Changes
+
+- Refactored `services/ai_proxy_service.py` so non-streaming DeepSeek text generation uses `_post_chat_completion_result_sync()`.
+- The sync helper centralizes OpenAI-compatible chat-completions payload construction, endpoint resolution, request handling, response parsing, empty-content handling, and `TextGenerationResult` shaping.
+- `ensure_deepseek_configured()` and streaming DeepSeek URL resolution now share `_resolve_deepseek_config()`, removing duplicated key/endpoint validation.
+- Strengthened `tests/test_api_provider_runtime_model_env.py` for DeepSeek message payloads, `stream=false`, runtime model selection, and JSON response format preservation.
+- Strengthened `scripts/check_route_contract.py` so `generate_deepseek_text()` cannot reintroduce direct `_post_json_request()` handling.
+
+### Verification
+
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 AI Proxy Shared Chat Completion Helper
 
 ### Changes

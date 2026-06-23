@@ -928,6 +928,11 @@ def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(
     assert result == "deepseek ok"
     assert calls[0]["url"] == "https://deepseek-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == "deepseek-runtime-model"
+    assert calls[0]["json"]["messages"] == [
+        {"role": "system", "content": ai_proxy_service.DEEPSEEK_SYSTEM_PROMPT},
+        {"role": "user", "content": "hello"},
+    ]
+    assert calls[0]["json"]["stream"] is False
 
 
 def test_deepseek_generate_text_explicit_model_overrides_runtime_model(monkeypatch):
@@ -949,12 +954,14 @@ def test_deepseek_generate_text_explicit_model_overrides_runtime_model(monkeypat
 
     result = ai_proxy_service.generate_deepseek_text(
         prompt="hello",
+        response_format="json",
         model="deepseek-chat",
     )
 
     assert result == "deepseek ok"
     assert calls[0]["url"] == "https://deepseek-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == "deepseek-chat"
+    assert calls[0]["json"]["response_format"] == {"type": "json_object"}
 
 
 def test_deepseek_stream_uses_shared_runtime_request(monkeypatch):
