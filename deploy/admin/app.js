@@ -217,6 +217,8 @@ function providerHealthView(health, runtimeStatus) {
       ok: { label: '健康正常', badge: 'badge-green', dot: 'dot-green' },
       error: { label: '健康异常', badge: 'badge-red', dot: 'dot-red' },
       no_key: { label: '未配置 Key', badge: 'badge-gray', dot: 'dot-gray' },
+      blocked_region: { label: '地区受限', badge: 'badge-yellow', dot: 'dot-yellow' },
+      connectivity_ok: { label: '连接可达，生成未验证', badge: 'badge-yellow', dot: 'dot-yellow' },
       unknown: { label: '未知', badge: 'badge-gray', dot: 'dot-gray' },
     };
     return map[key] || map.unknown;
@@ -1122,6 +1124,10 @@ async function testApiConfig(id) {
     const t = data.test || {};
     if (data.success && t.ok) {
       showToast(`健康检查通过 (HTTP ${t.status_code})`, 'success');
+    } else if (t.provider === 'gemini-tts' && t.reachable && t.auth_ok) {
+      showToast('Gemini TTS 连接可达，但此检查不代表真实生成成功；生成失败请看卡片错误详情', 'warn');
+    } else if (String(t.error || '').includes('User location is not supported')) {
+      showToast('Gemini API 地区受限：当前服务器出口不支持 Google AI Studio API', 'warn');
     } else if (t.reachable && t.auth_ok === false) {
       showToast(`认证失败: ${t.error || `HTTP ${t.status_code}`}`, 'error');
     } else if (t.reachable) {
@@ -1143,6 +1149,10 @@ async function testProviderHealth(provider) {
       showToast(`provider ${normalized} 正常 (${data.latency_ms}ms)`, 'success');
     } else if (data.status === 'no_key') {
       showToast(`provider ${normalized} 未配置 Key`, 'warn');
+    } else if (data.status === 'blocked_region') {
+      showToast(`provider ${normalized} 地区受限：当前服务器出口不支持 Gemini API`, 'warn');
+    } else if (data.status === 'connectivity_ok') {
+      showToast(`provider ${normalized} 连接可达，但真实生成未验证`, 'warn');
     } else {
       const detail = data.health || {};
       showToast(`provider ${normalized} 异常: ${detail.error || data.status || 'unknown'}`, 'error');

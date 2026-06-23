@@ -32,7 +32,7 @@ const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
     dashboard: 'dashboard',
 };
 
-type HealthStatus = 'ok' | 'error' | 'no_key' | 'unknown';
+type HealthStatus = 'ok' | 'error' | 'no_key' | 'blocked_region' | 'connectivity_ok' | 'unknown';
 type JsonRecord = Record<string, any>;
 
 interface ApiConfig {
@@ -422,6 +422,20 @@ function statusView(status: HealthStatus) {
             badge: 'bg-r50 text-r400',
             icon: <KeyRound className="w-3.5 h-3.5" />,
         },
+        blocked_region: {
+            label: 'blocked_region',
+            text: '地区受限',
+            dot: 'bg-y400',
+            badge: 'bg-y50 text-y400',
+            icon: <AlertCircle className="w-3.5 h-3.5" />,
+        },
+        connectivity_ok: {
+            label: 'connectivity_ok',
+            text: '连接可达',
+            dot: 'bg-y400',
+            badge: 'bg-y50 text-y400',
+            icon: <Activity className="w-3.5 h-3.5" />,
+        },
         unknown: {
             label: 'unknown',
             text: '未检查',
@@ -439,13 +453,21 @@ function healthStatusFrom(health?: ProviderHealth, runtime?: RuntimeStatus, conf
     if (status === 'ok') return 'ok';
     if (status === 'error') return 'error';
     if (status === 'no_key') return hasKey ? 'unknown' : 'no_key';
+    if (status === 'blocked_region') return 'blocked_region';
+    if (status === 'connectivity_ok') return 'connectivity_ok';
     if (hasKey === false) return 'no_key';
     return 'unknown';
 }
 
 function healthStatusFromResult(result?: ProviderHealth): HealthStatus {
     const status = String(result?.status || '').toLowerCase();
-    if (status === 'ok' || status === 'error' || status === 'no_key') return status;
+    if (
+        status === 'ok'
+        || status === 'error'
+        || status === 'no_key'
+        || status === 'blocked_region'
+        || status === 'connectivity_ok'
+    ) return status;
     if (result?.health?.auth_ok === true) return 'ok';
     if (result?.health?.auth_ok === false) return 'error';
     return 'unknown';
@@ -455,6 +477,9 @@ function healthStatusFromConfigTest(test?: ApiConfigTest): HealthStatus | undefi
     if (!test) return undefined;
     if (test.ok) return 'ok';
     if (isNoKeyTest(test)) return 'no_key';
+    const errorText = String(test.error || '').toLowerCase();
+    if (errorText.includes('user location is not supported')) return 'blocked_region';
+    if (test.provider === 'gemini-tts' && test.reachable && test.auth_ok) return 'connectivity_ok';
     return 'error';
 }
 
@@ -470,8 +495,9 @@ function mergedHealthStatus(
     const configStatus = healthStatusFromConfigTest(configTest);
     if (!configStatus) return runtimeStatus;
     if (configStatus === 'ok') return 'ok';
-    if (hasEffectiveKey) return runtimeStatus;
+    if (configStatus === 'blocked_region' || configStatus === 'connectivity_ok') return configStatus;
     if (runtimeStatus === 'unknown') return configStatus;
+    if (hasEffectiveKey) return runtimeStatus;
     if (runtimeStatus === 'no_key' && configStatus === 'error') return 'error';
     return runtimeStatus;
 }
@@ -1775,7 +1801,7 @@ const ApiConfigPanel: React.FC = () => {
                 .filter(Boolean)
         ));
         const runtimeOnlyKeyProviders = runtimeKeyedProviders.filter(provider => !dbKeyedProviderSet.has(provider));
-        const counts = { ok: 0, error: 0, no_key: 0, unknown: 0 };
+        const counts = { ok: 0, error: 0, no_key: 0, blocked_region: 0, connectivity_ok: 0, unknown: 0 };
         providerIds.forEach(provider => {
             const runtime = runtimeMap.get(provider);
             counts[healthStatusFrom(providerHealthFrom(healthMap, provider, runtime?.runtime_model_name), runtime)] += 1;

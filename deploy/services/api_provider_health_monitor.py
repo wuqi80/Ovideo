@@ -324,10 +324,18 @@ async def list_cached_provider_health(
 
 def summarize_provider_health_results(results: Iterable[Dict[str, Any]]) -> Dict[str, int]:
     rows = list(results)
-    summary = {"total": len(rows), "ok": 0, "error": 0, "no_key": 0, "unknown": 0}
+    summary = {
+        "total": len(rows),
+        "ok": 0,
+        "error": 0,
+        "no_key": 0,
+        "blocked_region": 0,
+        "connectivity_ok": 0,
+        "unknown": 0,
+    }
     for item in rows:
         status = str(item.get("status") or "").strip().lower()
-        if status in {"ok", "error", "no_key"}:
+        if status in {"ok", "error", "no_key", "blocked_region", "connectivity_ok"}:
             summary[status] += 1
         else:
             summary["unknown"] += 1
@@ -480,12 +488,16 @@ async def provider_health_monitor_loop(redis_client: Any = None) -> None:
             )
             ok = sum(1 for item in results if item.get("status") == "ok")
             no_key = sum(1 for item in results if item.get("status") == "no_key")
+            blocked_region = sum(1 for item in results if item.get("status") == "blocked_region")
+            connectivity_ok = sum(1 for item in results if item.get("status") == "connectivity_ok")
             error = sum(1 for item in results if item.get("status") == "error")
             logger.info(
-                "API provider health sweep complete: total=%s ok=%s no_key=%s error=%s",
+                "API provider health sweep complete: total=%s ok=%s no_key=%s blocked_region=%s connectivity_ok=%s error=%s",
                 len(results),
                 ok,
                 no_key,
+                blocked_region,
+                connectivity_ok,
                 error,
             )
         except asyncio.CancelledError:

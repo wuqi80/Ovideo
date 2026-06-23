@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 Demo Stabilization Wrap-up
+
+- Updated Gemini TTS API health semantics so admin health can distinguish `blocked_region` and `connectivity_ok` from hard failures.
+- Updated legacy and new admin API settings UI to display those two warning states instead of showing everything as a generic red error.
+- Cached Gemini TTS generation failures into provider health so region-blocked generation errors become visible in API management.
+- Updated provider contract scanning to ignore `.codex_backups` backup directories, preventing server-side backups from failing deployment contracts.
+- Local verification passed: architecture contracts `10/10`, `py_compile`, and `git diff --check`.
+
 ## 2026-06-23 Provider Endpoint Single Source Contract
 
 - Moved Gemini TTS runtime-loader endpoint upgrade logic to read the default endpoint from `deploy/services/api_provider_registry.py` instead of duplicating the Google endpoint literal.

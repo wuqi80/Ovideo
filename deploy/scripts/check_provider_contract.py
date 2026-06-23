@@ -671,7 +671,7 @@ def string_arg(node: ast.Call, index: int) -> str | None:
 
 
 def iter_python_files(root: Path) -> Iterable[Path]:
-    skipped = {".venv", "__pycache__", "node_modules"}
+    skipped = {".venv", ".codex_backups", "__pycache__", "node_modules"}
     for path in root.rglob("*.py"):
         if any(part in skipped for part in path.parts):
             continue

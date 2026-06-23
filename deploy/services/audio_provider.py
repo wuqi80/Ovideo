@@ -149,6 +149,34 @@ class GeminiAudioProvider(AudioProvider):
             }
         except Exception as e:
             logger.error(f"Gemini audio generation failed: {e}")
+            try:
+                from services.api_config_health_service import is_provider_region_blocked
+                from services.api_provider_health_monitor import cache_provider_health_result
+
+                message = str(e)
+                status = "blocked_region" if is_provider_region_blocked("gemini-tts", message) else "error"
+                await cache_provider_health_result(
+                    {
+                        "success": True,
+                        "provider": "gemini-tts",
+                        "model_name": None,
+                        "status": status,
+                        "latency_ms": None,
+                        "checked_at": __import__("datetime").datetime.utcnow().isoformat(timespec="seconds") + "Z",
+                        "health": {
+                            "ok": False,
+                            "reachable": True,
+                            "auth_ok": True,
+                            "status_code": 400 if status == "blocked_region" else None,
+                            "url": self.endpoint,
+                            "error": message,
+                            "method": "TTS",
+                            "urls_tried": [self.endpoint],
+                        },
+                    }
+                )
+            except Exception:
+                logger.debug("Failed to cache Gemini TTS generation health", exc_info=True)
             raise
 
     async def generate_speech(

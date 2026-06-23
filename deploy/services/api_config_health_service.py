@@ -149,6 +149,20 @@ def api_health_result(
     }
 
 
+def is_provider_region_blocked(provider: str, error: Optional[str]) -> bool:
+    if normalize_provider(provider) != "gemini-tts":
+        return False
+    text = (error or "").lower()
+    return (
+        "failed_precondition" in text
+        and "user location is not supported" in text
+    ) or "user location is not supported for the api use" in text
+
+
+def is_generation_sensitive_provider(provider: str) -> bool:
+    return normalize_provider(provider) in {"gemini-tts"}
+
+
 async def test_api_config_health(
     row: Dict[str, Any],
     api_key: str,
@@ -210,15 +224,23 @@ async def test_api_config_health(
                         reachable = resp.status < 500
                         auth_ok = resp.status not in (401, 403)
                         if 200 <= resp.status < 300:
+                            ok = True
+                            error = None
+                            if is_generation_sensitive_provider(provider):
+                                ok = False
+                                error = (
+                                    "Metadata endpoint reachable, but generation is not verified. "
+                                    "Run an actual TTS request to confirm Gemini TTS availability."
+                                )
                             return api_health_result(
                                 provider=provider,
                                 model_name=model_name,
-                                ok=True,
+                                ok=ok,
                                 reachable=True,
                                 auth_ok=True,
                                 status_code=resp.status,
                                 url=url,
-                                error=None,
+                                error=error,
                                 urls_tried=urls_to_try,
                             )
                         body = (await resp.text())[:300]
@@ -316,11 +338,17 @@ async def check_provider_health(
     latency_ms = int((time.perf_counter() - t0) * 1000)
     test = result.get("test") or {}
     ok = bool(test.get("ok"))
+    status = "ok" if ok else "error"
+    error_text = str(test.get("error") or "")
+    if is_provider_region_blocked(provider, error_text):
+        status = "blocked_region"
+    elif is_generation_sensitive_provider(provider) and test.get("reachable") and test.get("auth_ok"):
+        status = "connectivity_ok"
     return {
         "success": True,
         "provider": provider,
         "model_name": row["model_name"] or None,
-        "status": "ok" if ok else "error",
+        "status": status,
         "latency_ms": latency_ms,
         "checked_at": test.get("checked_at") or checked_at,
         "health": {
