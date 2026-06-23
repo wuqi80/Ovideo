@@ -11,6 +11,7 @@ import { SkeletonScreen } from './components/SkeletonScreen';
 import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock } from './types';
 import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
+import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
 import { estimateDurationMs } from './utils/durationMapping';
 import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/scriptTimelineService';
 import { deleteAllStoryboardItems, exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
@@ -289,18 +290,22 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           const matchedRows = itemsByScript.get(sid) || [];
           const orphanRows = idx === 0 ? (itemsByScript.get(null) || []) : [];
           const fileItems = mapWorkspaceStoryboardRowsToItems([...matchedRows, ...orphanRows]);
+          const fileSegments = segsByScript.get(sid) || (idx === 0 ? (segsByScript.get(null) || []) : []);
+          const adaptedScript = script.adapted_script ?? script.adaptedScript ?? null;
           const file: ProjectFile = {
             id: sid,
             name: script.file_name ?? script.fileName ?? `文件${idx + 1}`,
             originalContent: script.original_content ?? script.originalContent ?? '',
-            scriptContent: script.adapted_script ?? script.adaptedScript ?? null,
+            scriptContent: adaptedScript,
             storyboard: fileItems.length > 0 ? { items: fileItems } : null,
             extractedCharacters: [],
             extractedScenes: [],
             status: FileStatus.Idle,
             lastUpdated: Date.now(),
             versions: [],
-            scriptSegments: segsByScript.get(sid) || (idx === 0 ? (segsByScript.get(null) || []) : []),
+            scriptSegments: fileSegments,
+            // 重进剧本时按持久化数据重建三步生成阶段态，避免阶段徽章全显「未开始」（A.2-2）。
+            generationStages: deriveScriptStagesFromPersisted(fileSegments, adaptedScript, fileItems),
           };
           if (fileItems.length > 0) {
             const chars = new Set<string>();
