@@ -7,7 +7,8 @@
 - `ensure_deepseek_configured()` and streaming DeepSeek URL resolution now share `_resolve_deepseek_config()`, removing duplicated key/endpoint validation.
 - Strengthened `deploy/tests/test_api_provider_runtime_model_env.py` for DeepSeek message payloads, `stream=false`, runtime model selection, and JSON response format preservation.
 - Strengthened `deploy/scripts/check_route_contract.py` so `generate_deepseek_text()` cannot reintroduce direct `_post_json_request()` handling.
-- Status: local implementation in progress; deploy verification pending.
+- Local verification passed: `py_compile`, targeted provider runtime pytest `35/35`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy Shared Chat Completion Helper
 
