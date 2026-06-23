@@ -28,6 +28,11 @@ EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
 }
 
 EXPECTED_RUNTIME_DELEGATION: dict[str, tuple[str, ...]] = {
+    "services/ai_proxy_gpt_image_service.py": (
+        'provider = tier_config["provider"]',
+        'model = tier_config["model"]',
+        "config = resolve_provider(provider, model)",
+    ),
     "services/video_reverse_service.py": (
         "generate_gemini_chat_result(",
         "allow_failover=False",
@@ -1333,18 +1338,18 @@ def check_api_config_service_dao_import_contract() -> int:
 
 
 def check_gpt_image_tier_wiring(registry) -> int:
-    path = deploy_root() / "services" / "ai_proxy_service.py"
+    path = deploy_root() / "services" / "ai_proxy_gpt_image_service.py"
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except Exception as exc:
-        fail(f"Unable to parse services/ai_proxy_service.py: {exc}")
+        fail(f"Unable to parse services/ai_proxy_gpt_image_service.py: {exc}")
 
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
         if not any(isinstance(target, ast.Name) and target.id == "GPT_IMAGE_TIERS" for target in node.targets):
             continue
-        fail("GPT_IMAGE_TIERS must live in services/api_provider_registry.py, not services/ai_proxy_service.py")
+        fail("GPT_IMAGE_TIERS must live in services/api_provider_registry.py, not services/ai_proxy_gpt_image_service.py")
 
     tiers = registry.get_gpt_image_tiers()
     if not isinstance(tiers, dict) or not tiers:

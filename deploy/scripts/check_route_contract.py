@@ -4040,6 +4040,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_deepseek_path = root / "services" / "ai_proxy_deepseek_service.py"
     ai_proxy_gemini_text_path = root / "services" / "ai_proxy_gemini_text_service.py"
     ai_proxy_gemini_image_path = root / "services" / "ai_proxy_gemini_image_service.py"
+    ai_proxy_gpt_image_path = root / "services" / "ai_proxy_gpt_image_service.py"
+    ai_proxy_openai_image_path = root / "services" / "ai_proxy_openai_image_service.py"
     ai_proxy_http_client_path = root / "services" / "ai_proxy_http_client.py"
     ai_proxy_types_path = root / "services" / "ai_proxy_types.py"
     ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
@@ -4056,6 +4058,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy Gemini text helpers must live in services/ai_proxy_gemini_text_service.py")
     if not ai_proxy_gemini_image_path.exists():
         fail("AI proxy Gemini image helpers must live in services/ai_proxy_gemini_image_service.py")
+    if not ai_proxy_gpt_image_path.exists():
+        fail("AI proxy GPT Image helpers must live in services/ai_proxy_gpt_image_service.py")
+    if not ai_proxy_openai_image_path.exists():
+        fail("AI proxy OpenAI-compatible image response helpers must live in services/ai_proxy_openai_image_service.py")
     if not ai_proxy_http_client_path.exists():
         fail("AI proxy HTTP client must live in services/ai_proxy_http_client.py")
     if not ai_proxy_types_path.exists():
@@ -4070,6 +4076,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_deepseek_text = ai_proxy_deepseek_path.read_text(encoding="utf-8")
     ai_proxy_gemini_text_text = ai_proxy_gemini_text_path.read_text(encoding="utf-8")
     ai_proxy_gemini_image_text = ai_proxy_gemini_image_path.read_text(encoding="utf-8")
+    ai_proxy_gpt_image_text = ai_proxy_gpt_image_path.read_text(encoding="utf-8")
+    ai_proxy_openai_image_text = ai_proxy_openai_image_path.read_text(encoding="utf-8")
     ai_proxy_http_client_text = ai_proxy_http_client_path.read_text(encoding="utf-8")
     ai_proxy_types_text = ai_proxy_types_path.read_text(encoding="utf-8")
     ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
@@ -4162,6 +4170,34 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             fail(f"AI proxy Gemini image service must own image helper: {snippet}")
         checks += 1
     for snippet in (
+        "def parse_openai_image_response(",
+        'item.get("b64_json")',
+        'item.get("url")',
+    ):
+        if snippet not in ai_proxy_openai_image_text:
+            fail(f"AI proxy OpenAI-compatible image response service must own response parsing: {snippet}")
+        checks += 1
+    for snippet in (
+        "def resolve_gpt_image_tier_config(",
+        "def normalize_gpt_image_tier(",
+        "def build_gpt_image_generation_payload(",
+        "def build_gpt_image_edit_data(",
+        "def _ensure_gpt_image_config(",
+        "async def _post_gpt_image_edit_request(",
+        "async def _post_gpt_image_generation_request(",
+        "async def generate_gpt_images(",
+        "parse_openai_image_response(result)",
+        'config = resolve_provider(provider, model)',
+        'url=config.url_for_operation("image_edits")',
+        'url=config.url_for_operation("image_generations")',
+        'label="GPT Image edit",',
+        'label="GPT Image generate",',
+        "io.BytesIO(",
+    ):
+        if snippet not in ai_proxy_gpt_image_text:
+            fail(f"AI proxy GPT Image service must own provider helper: {snippet}")
+        checks += 1
+    for snippet in (
         "from services.ai_proxy_chat_service import provider_health_scope_for_failover",
         "from services.ai_proxy_deepseek_service import (",
         "DEEPSEEK_SYSTEM_PROMPT,",
@@ -4177,15 +4213,16 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "build_gemini_image_payload,",
         "generate_gemini_images,",
         "parse_gemini_image_response,",
-        "from services.ai_proxy_http_client import (",
-        "_post_json_request_async,",
-        "_post_form_request_async,",
-        "async def _post_gpt_image_edit_request(",
-        "async def _post_gpt_image_generation_request(",
+        "from services.ai_proxy_gpt_image_service import (",
+        "build_gpt_image_edit_data,",
+        "build_gpt_image_generation_payload,",
+        "generate_gpt_images,",
+        "normalize_gpt_image_tier,",
+        "resolve_gpt_image_tier_config,",
+        "from services.ai_proxy_openai_image_service import parse_openai_image_response",
+        "from services.ai_proxy_http_client import _post_json_request_async",
         "def parse_doubao_image_response(",
         "async def _post_doubao_image_generation(",
-        'label="GPT Image edit",',
-        'label="GPT Image generate",',
         'label="Doubao image",',
     ):
         if snippet not in ai_proxy_text:
@@ -4227,6 +4264,18 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "async def generate_gemini_images(",
         "normalize_gemini_image_model(requested_model)",
         "inlineData",
+        "def resolve_gpt_image_tier_config(",
+        "def normalize_gpt_image_tier(",
+        "def build_gpt_image_generation_payload(",
+        "def build_gpt_image_edit_data(",
+        "def parse_openai_image_response(",
+        "def _ensure_gpt_image_config(",
+        "async def _post_gpt_image_edit_request(",
+        "async def _post_gpt_image_generation_request(",
+        "async def generate_gpt_images(",
+        "_post_form_request_async(",
+        "config.url_for_operation(",
+        "io.BytesIO(",
         "json.loads(data)",
         "class AIProxyError(",
         "class AIProxyConfigError(",
@@ -4270,10 +4319,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             1,
         )[0]
         gemini_image_source = ai_proxy_gemini_image_text.split("async def generate_gemini_images(", 1)[1]
-        gpt_image_source = ai_proxy_text.split("async def generate_gpt_images(", 1)[1].split(
-            "def build_doubao_image_payload(",
-            1,
-        )[0]
+        gpt_image_source = ai_proxy_gpt_image_text.split("async def generate_gpt_images(", 1)[1]
         doubao_image_source = ai_proxy_text.split("async def generate_doubao_images(", 1)[1]
     except IndexError:
         fail("Could not locate AI proxy provider generation functions in their service modules")
