@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 Gemini Image Provider Boundary
+
+- Refactored `deploy/services/ai_proxy_service.py` so `generate_gemini_images()` delegates provider HTTP handling to `_post_gemini_image_generation()`.
+- Added `parse_gemini_image_response()` to centralize Gemini inline image extraction from `candidates[].content.parts[].inlineData`.
+- Strengthened `deploy/tests/test_api_provider_runtime_model_env.py` with parser coverage for inline images and empty image responses.
+- Strengthened `deploy/scripts/check_route_contract.py` so `generate_gemini_images()` cannot reintroduce direct `_post_json_request_async()` calls or inlineData parsing.
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 DeepSeek Shared Chat Completion Helper
 
 - Refactored `deploy/services/ai_proxy_service.py` so non-streaming DeepSeek text generation uses `_post_chat_completion_result_sync()`.

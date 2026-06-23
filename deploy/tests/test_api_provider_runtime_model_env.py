@@ -124,6 +124,39 @@ class _ImageResponse:
         }
 
 
+def test_parse_gemini_image_response_extracts_inline_images():
+    images = ai_proxy_service.parse_gemini_image_response(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {"text": "ignored"},
+                            {
+                                "inlineData": {
+                                    "mimeType": "image/jpeg",
+                                    "data": "anBn",
+                                }
+                            },
+                        ]
+                    }
+                }
+            ]
+        }
+    )
+
+    assert images == ["data:image/jpeg;base64,anBn"]
+
+
+def test_parse_gemini_image_response_returns_empty_list_without_inline_data():
+    assert (
+        ai_proxy_service.parse_gemini_image_response(
+            {"candidates": [{"content": {"parts": [{"text": "no image"}]}}]}
+        )
+        == []
+    )
+
+
 @pytest.mark.asyncio
 async def test_gemini_image_uses_runtime_model_env_when_request_omits_model(monkeypatch):
     env_key = get_provider_env_key("gemini-image")

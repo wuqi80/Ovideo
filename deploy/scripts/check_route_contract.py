@@ -4051,6 +4051,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "async def _post_json_request_async(",
         "def _post_chat_completion_result_sync(",
         "async def _post_chat_completion_result(",
+        "def parse_gemini_image_response(",
+        "async def _post_gemini_image_generation(",
         'label="DeepSeek",',
         'label="Gemini text",',
         'label="Gemini image",',
@@ -4087,6 +4089,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "def stream_deepseek_chat(",
             1,
         )[0]
+        gemini_image_source = ai_proxy_text.split("async def generate_gemini_images(", 1)[1].split(
+            "def resolve_gpt_image_tier_config(",
+            1,
+        )[0]
     except IndexError:
         fail("Could not locate text/chat generation functions in services/ai_proxy_service.py")
     for name, source in (
@@ -4104,6 +4110,15 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     checks += 1
     if "_post_json_request(" in deepseek_text_source:
         fail("generate_deepseek_text must not duplicate chat-completions HTTP handling")
+    checks += 1
+    if "_post_gemini_image_generation(" not in gemini_image_source:
+        fail("generate_gemini_images must delegate provider HTTP handling to _post_gemini_image_generation()")
+    checks += 1
+    if "_post_json_request_async(" in gemini_image_source:
+        fail("generate_gemini_images must not duplicate Gemini image HTTP handling")
+    checks += 1
+    if "inlineData" in gemini_image_source:
+        fail("generate_gemini_images must not parse Gemini inlineData directly")
     checks += 1
     if ai_proxy_text.count("requests.post(") > 3:
         fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
