@@ -23,6 +23,7 @@ from schemas.generation import (
     PanoramaFusionRequest,
 )
 from services.ai_proxy_service import AIProxyError
+from services.ai_proxy_image_persistence_service import persist_generated_ai_images
 from utils.image_reference import storage_path_safe
 
 
@@ -433,52 +434,22 @@ def create_generation_router(
 
             logger.info("✅ 多宫格分镜生成成功 (模式: %s)，图片数量: %s", request.mode, len(images))
 
-            from file_service import save_generated_file_to_db
-
-            files_result = []
-            for img_data_url in images:
-                try:
-                    b64_data = img_data_url.split(",")[1] if "," in img_data_url else img_data_url
-                    img_content = base64.b64decode(b64_data)
-                    saved = await save_generated_file_to_db(
-                        content=img_content,
-                        file_type="image",
-                        user_id=username,
-                        source="gemini",
-                        entity_type=request.entity_type,
-                        entity_id=request.entity_id,
-                        file_role=request.file_role or "storyboard",
-                        original_ext=".png",
-                        episode_id=request.episode_id,
-                        extra_metadata={"prompt": full_prompt[:500], "model": model, "feature": "gemini-multi-grid"},
-                    )
-                    try:
-                        import media_library_service
-                        from dao_content import FileDAO as _FileDAO
-
-                        _file_record = await _FileDAO.get_file(saved["file_id"]) if saved.get("file_id") else None
-                        if _file_record:
-                            await media_library_service.create_from_file(
-                                file_record=_file_record,
-                                source="generated_storyboard_gemini",
-                                episode_id=request.episode_id,
-                                source_entity_type=request.entity_type,
-                                source_entity_id=request.entity_id,
-                                title=full_prompt[:80] or None,
-                                metadata={"prompt": full_prompt[:500], "model": model, "feature": "gemini-multi-grid"},
-                            )
-                    except Exception as media_err:
-                        logger.warning("media_library 同步失败 (storyboard): %s", media_err)
-                    files_result.append(
-                        {
-                            "data_url": img_data_url,
-                            "file_id": saved["file_id"],
-                            "file_url": saved["file_url"],
-                        }
-                    )
-                except Exception as exc:
-                    logger.warning("保存图片到 files 表失败: %s", exc)
-                    files_result.append({"data_url": img_data_url, "file_id": None, "file_url": None})
+            file_metadata = {"prompt": full_prompt[:500], "model": model, "feature": "gemini-multi-grid"}
+            files_result = await persist_generated_ai_images(
+                images,
+                user_id=username,
+                source="gemini",
+                media_source="generated_storyboard_gemini",
+                prompt=full_prompt,
+                model=model,
+                entity_type=request.entity_type,
+                entity_id=request.entity_id,
+                file_role=request.file_role or "storyboard",
+                episode_id=request.episode_id,
+                file_metadata=file_metadata,
+                media_metadata=file_metadata,
+                logger=logger,
+            )
 
             return {
                 "success": True,

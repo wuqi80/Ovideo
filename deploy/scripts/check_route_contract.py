@@ -1463,7 +1463,33 @@ def check_generation_routes_extracted(root: Path) -> int:
 
     if route_count != 12:
         fail(f"routers/generation.py should own 12 generation route registrations, found {route_count}")
-    return route_count
+
+    generation_text = generation_path.read_text(encoding="utf-8")
+    required_snippets = [
+        "from services.ai_proxy_image_persistence_service import persist_generated_ai_images",
+        "files_result = await persist_generated_ai_images(",
+        'media_source="generated_storyboard_gemini"',
+        '"feature": "gemini-multi-grid"',
+    ]
+    for snippet in required_snippets:
+        if snippet not in generation_text:
+            fail(f"Generation multi-grid storyboard must delegate image persistence to service: {snippet}")
+
+    multi_grid_start = generation_text.index('@router.post("/api/generate/multi-grid-storyboard")')
+    materials_start = generation_text.index('@router.post("/api/materials/process")')
+    multi_grid_text = generation_text[multi_grid_start:materials_start]
+    forbidden_snippets = [
+        "save_generated_file_to_db",
+        "import media_library_service",
+        "FileDAO as _FileDAO",
+        "create_from_file(",
+        "base64.b64decode(",
+    ]
+    for snippet in forbidden_snippets:
+        if snippet in multi_grid_text:
+            fail(f"Generation multi-grid storyboard route must not persist images directly: {snippet}")
+
+    return route_count + len(required_snippets) + len(forbidden_snippets)
 
 
 def check_auth_routes_extracted(root: Path) -> int:

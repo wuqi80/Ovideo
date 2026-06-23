@@ -8897,3 +8897,19 @@
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `84c82fc`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 Generation Multi-Grid Image Persistence Boundary
+
+### Changes
+
+- Reused `services/ai_proxy_image_persistence_service.py` for `/api/generate/multi-grid-storyboard` generated-image file persistence and media-library indexing.
+- `routers/generation.py` still owns request validation, reference-image shaping, Gemini image provider dispatch, and HTTP error mapping, but no longer directly imports `file_service`, `media_library_service`, or `FileDAO` for the multi-grid storyboard save path.
+- Strengthened `scripts/check_route_contract.py` so the multi-grid storyboard route cannot regress to route-local `save_generated_file_to_db`, `media_library_service`, `FileDAO`, `create_from_file()`, or generated-image `base64.b64decode()` persistence logic.
+
+### Verification
+
+- Local `py_compile` for changed route/contract files passed.
+- Local `pytest tests/test_ai_proxy_image_persistence_service.py tests/test_api_provider_runtime_model_env.py -q` passed with 36 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Deployment and online smoke pending.
