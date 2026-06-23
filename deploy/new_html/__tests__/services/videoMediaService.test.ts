@@ -28,7 +28,8 @@ beforeEach(() => {
 describe('video media service', () => {
   it('secures media URLs with the current auth token', () => {
     expect(secureMediaUrl('/uploads/a.mp4')).toBe('/uploads/a.mp4?token=test-token');
-    expect(secureMediaUrl('/uploads/a.mp4?token=existing')).toBe('/uploads/a.mp4?token=existing');
+    // 旧的（可能隔天过期的）token 必须被当前 token 覆盖，否则媒体会在 JWT 过期后 401 消失。
+    expect(secureMediaUrl('/uploads/a.mp4?token=existing')).toBe('/uploads/a.mp4?token=test-token');
     expect(compatSecureMediaUrl('/uploads/a.mp4')).toBe('/uploads/a.mp4?token=test-token');
   });
 

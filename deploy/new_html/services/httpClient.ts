@@ -193,17 +193,37 @@ export function authTokenFromHeaders(options: HeaderOptions = {}): string {
   return auth.replace(/^Bearer\s+/i, '').trim();
 }
 
+/** 从 URL 的查询串里移除任何 token= 参数（保留 path、其余 query 和 #fragment）。 */
+function stripTokenParam(url: string): string {
+  const hashIdx = url.indexOf('#');
+  const hash = hashIdx >= 0 ? url.slice(hashIdx) : '';
+  const noHash = hashIdx >= 0 ? url.slice(0, hashIdx) : url;
+  const qIdx = noHash.indexOf('?');
+  if (qIdx < 0) return url;
+  const path = noHash.slice(0, qIdx);
+  const kept = noHash
+    .slice(qIdx + 1)
+    .split('&')
+    .filter(part => part && !/^token=/i.test(part));
+  return kept.length ? `${path}?${kept.join('&')}${hash}` : `${path}${hash}`;
+}
+
 export function secureApiUrl(url: string, options: { absolute?: boolean; requireAuth?: boolean } = {}): string {
   if (!url) return url;
   const base = options.absolute && url.startsWith('/')
     ? `${window.location.origin}${url}`
     : url;
-  if (base.includes('token=')) return base;
 
   const token = authTokenFromHeaders({ requireAuth: options.requireAuth ?? false });
+  // 没有可用 token 时保持原样（无法做得更好，也不要把仅有的旧 token 删掉）。
   if (!token) return base;
 
-  return `${base}${base.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+  // 关键：始终用当前 token 覆盖 URL 里可能已过期的旧 token。
+  // 媒体 <img>/<video> 无法携带 Authorization 头，只能把 JWT 拼进 ?token=。
+  // JWT 默认 24h 过期，若某个带旧 token 的 URL 被持久化下来，旧逻辑“已含 token 就跳过”
+  // 会导致隔天 token 失效后媒体 401 消失（配音/分镜“隔天不见”）。先剥旧再注新可自愈。
+  const cleaned = stripTokenParam(base);
+  return `${cleaned}${cleaned.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
 }
 
 export async function apiFetch(
