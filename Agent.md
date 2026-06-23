@@ -6,7 +6,8 @@
 - Added `parse_doubao_image_response()` to centralize Doubao image response extraction while preserving `b64_json` and URL handling.
 - Strengthened `deploy/tests/test_api_provider_runtime_model_env.py` with Doubao parser coverage for base64 images, URL images, and empty responses.
 - Strengthened `deploy/scripts/check_route_contract.py` so `generate_doubao_images()` cannot reintroduce direct HTTP calls or response parsing.
-- Status: local implementation in progress; deploy verification pending.
+- Local verification passed: `py_compile`, targeted provider runtime pytest `41/41`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 GPT Image Provider Boundary
 
