@@ -8662,3 +8662,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Verification:
   - Local Vitest targeted run passed: `videoModelService.test.ts` and `projectWorkflowService.test.ts` (7 tests).
   - Local `vite build` for `deploy/new_html` passed; only the existing chunk-size warning remained.
+  - Commit `983b209`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh` sync/restart, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
