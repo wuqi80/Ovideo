@@ -7,7 +7,7 @@
 - Updated the AI proxy failover contract to patch health checks through `services.ai_proxy_chat_service` while preserving `ai_proxy_service.py` public entrypoints.
 - Strengthened `deploy/scripts/check_route_contract.py` so chat completion/failover helpers cannot drift back into the provider service.
 - Local verification passed: `py_compile`, provider runtime pytest `39/39`, targeted image content/reference/provider runtime pytest `47/47`, failover contract, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
-- Status: deploy verification pending.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy HTTP Client Boundary
 
