@@ -19,7 +19,7 @@
 - Local shell syntax check for `scripts/live_deploy_mvc2.sh`: passed.
 - Local `git diff --check`: passed.
 - Local smoke test: `9/9` passed.
-- Deployment and online smoke pending.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-21 Video Provider Default Model Registry Move
 

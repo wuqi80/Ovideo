@@ -7,7 +7,7 @@
 - Added `deploy/tests/test_ai_proxy_reference_service.py` for data URL references, `/storage/` references, invalid reference skipping, prompt enhancement, and Doubao conversion.
 - Strengthened `deploy/scripts/check_route_contract.py` so the AI proxy router cannot grow direct `base64`, `read_bytes()`, `storage_path_safe()`, or `GptImageReferenceInput` handling again.
 - Local verification passed: `py_compile`, targeted AI proxy/provider pytest `47/47`, route contract, architecture contracts, `bash -n scripts/live_deploy_mvc2.sh`, `git diff --check`, and local smoke `9/9`.
-- Deployment and online smoke pending.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-21 Video Provider Default Model Registry Move
 
