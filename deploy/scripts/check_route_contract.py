@@ -4035,15 +4035,19 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     checks += 1
     ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
     ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
+    ai_proxy_image_content_path = root / "services" / "ai_proxy_image_content_service.py"
     ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
     ai_proxy_task_path = root / "services" / "ai_proxy_task_service.py"
     if not ai_proxy_image_persistence_path.exists():
         fail("AI proxy generated image persistence must live in services/ai_proxy_image_persistence_service.py")
+    if not ai_proxy_image_content_path.exists():
+        fail("AI proxy generated image content loading must live in services/ai_proxy_image_content_service.py")
     if not ai_proxy_reference_path.exists():
         fail("AI proxy reference preparation must live in services/ai_proxy_reference_service.py")
     if not ai_proxy_task_path.exists():
         fail("AI proxy task persistence must live in services/ai_proxy_task_service.py")
     ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
+    ai_proxy_image_content_text = ai_proxy_image_content_path.read_text(encoding="utf-8")
     ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
     ai_proxy_task_text = ai_proxy_task_path.read_text(encoding="utf-8")
     for snippet in (
@@ -4067,11 +4071,19 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "def _post_stream_request(",
         "def _ensure_stream_response_ok(",
         'label="DeepSeek stream",',
-        "def generated_image_content(",
         'label="Doubao image",',
     ):
         if snippet not in ai_proxy_text:
             fail(f"AI proxy providers must route through shared helpers: {snippet}")
+        checks += 1
+    for forbidden in (
+        "import base64",
+        "assert_public_http_url",
+        "requests.get(",
+        "def generated_image_content(",
+    ):
+        if forbidden in ai_proxy_text:
+            fail(f"AI proxy provider service must not load generated image content directly: {forbidden}")
         checks += 1
     for snippet in (
         'url=config.url_for_operation("chat_completions")',
@@ -4162,7 +4174,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
     checks += 1
     for snippet in (
-        "from services.ai_proxy_service import generated_image_content",
+        "from services.ai_proxy_image_content_service import generated_image_content",
         "async def persist_generated_ai_images(",
         "content = image_content_loader(image)",
         "saved = await save_generated_file_to_db(",
@@ -4173,6 +4185,15 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ):
         if snippet not in ai_proxy_image_persistence_text:
             fail(f"AI proxy generated image persistence service is missing: {snippet}")
+        checks += 1
+    for snippet in (
+        "def generated_image_content(",
+        "base64.b64decode(",
+        "assert_public_http_url(image)",
+        "requests.get(image, timeout=timeout)",
+    ):
+        if snippet not in ai_proxy_image_content_text:
+            fail(f"AI proxy generated image content service is missing: {snippet}")
         checks += 1
     video_reverse_text = (root / "services" / "video_reverse_service.py").read_text(encoding="utf-8")
     if "requests.post(" in video_reverse_text or "import requests" in video_reverse_text:

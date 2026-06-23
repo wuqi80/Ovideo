@@ -346,15 +346,6 @@ def test_parse_openai_image_response_returns_empty_list_without_images():
     ) == []
 
 
-class _GeneratedImageDownloadResponse:
-    status_code = 200
-    text = ""
-    content = b"remote-image"
-
-    def raise_for_status(self):
-        return None
-
-
 class _MinimaxTaskResponse:
     def raise_for_status(self):
         return None
@@ -536,33 +527,6 @@ async def test_gpt_image_edit_uses_runtime_endpoint(monkeypatch):
     assert calls[0]["files"][0][0] == "image[]"
     assert calls[0]["files"][0][1][0] == "reference.png"
     assert calls[0]["files"][0][1][2] == "image/png"
-
-
-def test_generated_image_content_decodes_data_url():
-    content = ai_proxy_service.generated_image_content("data:image/png;base64,ZGF0YS1pbWFnZQ==")
-
-    assert content == b"data-image"
-
-
-def test_generated_image_content_downloads_public_url(monkeypatch):
-    checks = []
-    calls = []
-
-    def fake_assert_public_http_url(url):
-        checks.append(url)
-
-    def fake_get(url, **kwargs):
-        calls.append({"url": url, **kwargs})
-        return _GeneratedImageDownloadResponse()
-
-    monkeypatch.setattr(ai_proxy_service, "assert_public_http_url", fake_assert_public_http_url)
-    monkeypatch.setattr(ai_proxy_service.requests, "get", fake_get)
-
-    content = ai_proxy_service.generated_image_content("https://images.example.test/generated.png", timeout=12)
-
-    assert content == b"remote-image"
-    assert checks == ["https://images.example.test/generated.png"]
-    assert calls == [{"url": "https://images.example.test/generated.png", "timeout": 12}]
 
 
 def test_minimax_video_uses_runtime_model_when_worker_passes_legacy_default(monkeypatch):

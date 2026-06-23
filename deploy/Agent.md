@@ -1,5 +1,19 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Generated Image Content Boundary
+
+### Changes
+
+- Added `services/ai_proxy_image_content_service.py` to own generated image content loading from data URLs and provider-hosted public URLs.
+- Updated `services/ai_proxy_image_persistence_service.py` to use the new content loader service instead of importing from `ai_proxy_service.py`.
+- Removed generated image content decoding/downloading, `base64`, and public URL guard imports from `services/ai_proxy_service.py`.
+- Added `tests/test_ai_proxy_image_content_service.py` for data URL decoding and public URL download behavior.
+- Strengthened `scripts/check_route_contract.py` so provider service cannot reintroduce generated image content loading.
+
+### Verification
+
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 Doubao Image Provider Boundary
 
 ### Changes

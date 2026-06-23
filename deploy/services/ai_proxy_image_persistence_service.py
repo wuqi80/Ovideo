@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Awaitable, Callable, Dict, Iterable, List, Optional
 
-from services.ai_proxy_service import generated_image_content
+from services.ai_proxy_image_content_service import generated_image_content
 
 
 SaveGeneratedFile = Callable[..., Awaitable[Dict[str, Any]]]
