@@ -6,7 +6,8 @@
 - Added `_ensure_gpt_image_config()` and `_gpt_image_upstream_detail()` so GPT Image key/endpoint validation and upstream error shaping are centralized.
 - Strengthened `deploy/tests/test_api_provider_runtime_model_env.py` with OpenAI image response parser coverage for `b64_json`, URL images, and empty image responses.
 - Strengthened `deploy/scripts/check_route_contract.py` so `generate_gpt_images()` cannot reintroduce direct HTTP, endpoint, or multipart handling.
-- Status: local implementation in progress; deploy verification pending.
+- Local verification passed: `py_compile`, targeted provider runtime pytest `39/39`, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Deployed to `https://mecha.one/`; `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 Gemini Image Provider Boundary
 
