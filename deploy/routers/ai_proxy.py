@@ -30,9 +30,9 @@ from services.ai_proxy_service import (
     generate_gemini_images as proxy_generate_gemini_images,
     generate_gpt_images as proxy_generate_gpt_images,
     generate_gemini_text_result,
-    generated_image_content,
     stream_deepseek_chat,
 )
+from services.ai_proxy_image_persistence_service import persist_generated_ai_images
 from utils.image_reference import storage_path_safe, to_doubao_image_input
 
 logger = logging.getLogger(__name__)
@@ -258,53 +258,22 @@ def create_ai_proxy_router(
             except Exception as save_error:
                 logger.error("⚠️ 保存Gemini图像生成任务失败: %s", save_error, exc_info=True)
 
-            from file_service import save_generated_file_to_db
-
-            files_result = []
-            for img_data_url in images:
-                try:
-                    b64_data = img_data_url.split(",")[1] if "," in img_data_url else img_data_url
-                    img_content = base64.b64decode(b64_data)
-                    saved = await save_generated_file_to_db(
-                        content=img_content,
-                        file_type="image",
-                        user_id=username,
-                        source="gemini",
-                        entity_type=request.entity_type,
-                        entity_id=request.entity_id,
-                        file_role=request.file_role or "generated_image",
-                        original_ext=".png",
-                        episode_id=request.episode_id,
-                        extra_metadata={"prompt": request.prompt, "model": model},
-                    )
-                    try:
-                        import media_library_service
-                        from dao_content import FileDAO as _FileDAO
-
-                        _file_record = await _FileDAO.get_file(saved["file_id"]) if saved.get("file_id") else None
-                        if _file_record:
-                            await media_library_service.create_from_file(
-                                file_record=_file_record,
-                                source="generated_image_gemini",
-                                episode_id=request.episode_id,
-                                source_task_id=task_id,
-                                source_entity_type=request.entity_type,
-                                source_entity_id=request.entity_id,
-                                title=(request.prompt or "")[:80] or None,
-                                metadata={"prompt": request.prompt, "model": model},
-                            )
-                    except Exception as _e:
-                        logger.warning("media_library 同步失败 (Gemini): %s", _e)
-                    files_result.append(
-                        {
-                            "data_url": img_data_url,
-                            "file_id": saved["file_id"],
-                            "file_url": saved["file_url"],
-                        }
-                    )
-                except Exception as e:
-                    logger.warning("保存图片到 files 表失败: %s", e)
-                    files_result.append({"data_url": img_data_url, "file_id": None, "file_url": None})
+            files_result = await persist_generated_ai_images(
+                images,
+                user_id=username,
+                source="gemini",
+                media_source="generated_image_gemini",
+                prompt=request.prompt,
+                model=model,
+                entity_type=request.entity_type,
+                entity_id=request.entity_id,
+                file_role=request.file_role,
+                episode_id=request.episode_id,
+                file_metadata={"prompt": request.prompt, "model": model},
+                media_metadata={"prompt": request.prompt, "model": model},
+                source_task_id=task_id,
+                logger=logger,
+            )
 
             return {"success": True, "images": images, "files": files_result}
 
@@ -366,69 +335,29 @@ def create_ai_proxy_router(
                 quality=request.quality,
             )
 
-            from file_service import save_generated_file_to_db
-
-            files_result = []
-            for img in images:
-                try:
-                    if img.startswith("data:"):
-                        content = generated_image_content(img)
-                    else:
-                        content = generated_image_content(img, timeout=60)
-                    saved = await save_generated_file_to_db(
-                        content=content,
-                        file_type="image",
-                        user_id=username,
-                        source=f"gpt-image-{tier}",
-                        entity_type=request.entity_type,
-                        entity_id=request.entity_id,
-                        file_role=request.file_role or "generated_image",
-                        original_ext=".png",
-                        episode_id=request.episode_id,
-                        extra_metadata={
-                            "prompt": request.prompt,
-                            "model": model,
-                            "tier": tier,
-                            "size": request.size,
-                            "quality": request.quality,
-                            "ref_count": len(request.references or []),
-                        },
-                    )
-                    try:
-                        import media_library_service
-                        from dao_content import FileDAO as _FileDAO
-
-                        _file_record = await _FileDAO.get_file(saved["file_id"]) if saved.get("file_id") else None
-                        if _file_record:
-                            await media_library_service.create_from_file(
-                                file_record=_file_record,
-                                source="generated_image_gpt",
-                                episode_id=request.episode_id,
-                                source_entity_type=request.entity_type,
-                                source_entity_id=request.entity_id,
-                                title=(request.prompt or "")[:80] or None,
-                                metadata={"prompt": request.prompt, "model": model, "tier": tier},
-                            )
-                    except Exception as _e:
-                        logger.warning("media_library 同步失败 (GPT Image): %s", _e)
-                    files_result.append(
-                        {
-                            "data_url": img if img.startswith("data:") else None,
-                            "url": None if img.startswith("data:") else img,
-                            "file_id": saved["file_id"],
-                            "file_url": saved["file_url"],
-                        }
-                    )
-                except Exception as e:
-                    logger.warning("GPT Image 保存到 files 表失败: %s", e)
-                    files_result.append(
-                        {
-                            "data_url": img if img.startswith("data:") else None,
-                            "url": img if not img.startswith("data:") else None,
-                            "file_id": None,
-                            "file_url": None,
-                        }
-                    )
+            files_result = await persist_generated_ai_images(
+                images,
+                user_id=username,
+                source=f"gpt-image-{tier}",
+                media_source="generated_image_gpt",
+                prompt=request.prompt,
+                model=model,
+                entity_type=request.entity_type,
+                entity_id=request.entity_id,
+                file_role=request.file_role,
+                episode_id=request.episode_id,
+                file_metadata={
+                    "prompt": request.prompt,
+                    "model": model,
+                    "tier": tier,
+                    "size": request.size,
+                    "quality": request.quality,
+                    "ref_count": len(request.references or []),
+                },
+                media_metadata={"prompt": request.prompt, "model": model, "tier": tier},
+                include_url=True,
+                logger=logger,
+            )
 
             logger.info("✅ GPT Image %s 生成 %s 张, 用户: %s", tier, len(images), username)
             return {"success": True, "images": images, "files": files_result, "model": model, "tier": tier}
@@ -485,52 +414,21 @@ def create_ai_proxy_router(
             except Exception as save_error:
                 logger.error("⚠️ 保存豆包图像生成任务失败: %s", save_error, exc_info=True)
 
-            from file_service import save_generated_file_to_db
-
-            files_result = []
-            for img_data_url in images:
-                try:
-                    b64_data = img_data_url.split(",")[1] if "," in img_data_url else img_data_url
-                    img_content = base64.b64decode(b64_data)
-                    saved = await save_generated_file_to_db(
-                        content=img_content,
-                        file_type="image",
-                        user_id=username,
-                        source="doubao",
-                        entity_type=request.entity_type,
-                        entity_id=request.entity_id,
-                        file_role=request.file_role or "generated_image",
-                        original_ext=".png",
-                        episode_id=request.episode_id,
-                        extra_metadata={"prompt": request.prompt, "model": "doubao"},
-                    )
-                    try:
-                        import media_library_service
-                        from dao_content import FileDAO as _FileDAO
-
-                        _file_record = await _FileDAO.get_file(saved["file_id"]) if saved.get("file_id") else None
-                        if _file_record:
-                            await media_library_service.create_from_file(
-                                file_record=_file_record,
-                                source="generated_image_doubao",
-                                episode_id=request.episode_id,
-                                source_entity_type=request.entity_type,
-                                source_entity_id=request.entity_id,
-                                title=(request.prompt or "")[:80] or None,
-                                metadata={"prompt": request.prompt, "model": "doubao"},
-                            )
-                    except Exception as _e:
-                        logger.warning("media_library 同步失败 (Doubao): %s", _e)
-                    files_result.append(
-                        {
-                            "data_url": img_data_url,
-                            "file_id": saved["file_id"],
-                            "file_url": saved["file_url"],
-                        }
-                    )
-                except Exception as e:
-                    logger.warning("保存图片到 files 表失败: %s", e)
-                    files_result.append({"data_url": img_data_url, "file_id": None, "file_url": None})
+            files_result = await persist_generated_ai_images(
+                images,
+                user_id=username,
+                source="doubao",
+                media_source="generated_image_doubao",
+                prompt=request.prompt,
+                model="doubao",
+                entity_type=request.entity_type,
+                entity_id=request.entity_id,
+                file_role=request.file_role,
+                episode_id=request.episode_id,
+                file_metadata={"prompt": request.prompt, "model": "doubao"},
+                media_metadata={"prompt": request.prompt, "model": "doubao"},
+                logger=logger,
+            )
 
             return {"success": True, "images": images, "files": files_result}
         except AIProxyError as e:

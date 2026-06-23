@@ -4008,6 +4008,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("DashScope video client should centralize aiohttp session creation in _request_json")
     checks += 1
     ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
+    ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
+    if not ai_proxy_image_persistence_path.exists():
+        fail("AI proxy generated image persistence must live in services/ai_proxy_image_persistence_service.py")
+    ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
     for snippet in (
         "def _post_json_request(",
         "async def _post_json_request_async(",
@@ -4030,13 +4034,40 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     if ai_proxy_text.count("requests.post(") > 3:
         fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
     checks += 1
+    for snippet in (
+        "from services.ai_proxy_service import generated_image_content",
+        "async def persist_generated_ai_images(",
+        "content = image_content_loader(image)",
+        "saved = await save_generated_file_to_db(",
+        "file_record = await get_file_record(file_id) if file_id else None",
+        "await create_media_library_item(",
+        "source_task_id=source_task_id",
+        "include_url",
+    ):
+        if snippet not in ai_proxy_image_persistence_text:
+            fail(f"AI proxy generated image persistence service is missing: {snippet}")
+        checks += 1
     video_reverse_text = (root / "services" / "video_reverse_service.py").read_text(encoding="utf-8")
     if "requests.post(" in video_reverse_text or "import requests" in video_reverse_text:
         fail("video_reverse_service must call Gemini through services.ai_proxy_service, not direct requests.post")
     checks += 1
-    if "generated_image_content(" not in router_text:
-        fail("AI proxy router must delegate generated image URL/data decoding to services.ai_proxy_service")
-    checks += 1
+    for snippet in (
+        "from services.ai_proxy_image_persistence_service import persist_generated_ai_images",
+        "persist_generated_ai_images(",
+    ):
+        if snippet not in router_text:
+            fail(f"AI proxy router must delegate generated image persistence to service: {snippet}")
+        checks += 1
+    for forbidden in (
+        "generated_image_content(",
+        "save_generated_file_to_db",
+        "import media_library_service",
+        "FileDAO as _FileDAO",
+        "create_from_file(",
+    ):
+        if forbidden in router_text:
+            fail(f"AI proxy router must not perform generated image persistence directly: {forbidden}")
+        checks += 1
     if "requests." in router_text or "import requests" in router_text:
         fail("AI proxy router must not perform direct HTTP requests")
     checks += 1

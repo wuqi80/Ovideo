@@ -8879,3 +8879,21 @@
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
 - Commit `ce430f0`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 AI Proxy Image Persistence Boundary
+
+### Changes
+
+- Moved generated-image file persistence and media-library indexing for `/api/gemini/image`, `/api/gpt-image/generate`, and `/api/materials/doubao` from `routers/ai_proxy.py` into `services/ai_proxy_image_persistence_service.py`.
+- The router still owns auth, request/reference shaping, provider dispatch, task row creation, and HTTP error mapping, but now delegates generated image byte loading, `save_generated_file_to_db()`, file-record lookup, media-library sync, and per-image failure fallback to the service layer.
+- Added `tests/test_ai_proxy_image_persistence_service.py` to cover successful image persistence/media sync, GPT-style remote URL response shape, save failure fallback, and nonfatal media-library failure.
+- Strengthened `scripts/check_route_contract.py` so AI proxy image routes cannot regress to route-local `generated_image_content()`, `save_generated_file_to_db`, `media_library_service`, `FileDAO`, or `create_from_file()` usage.
+- Added the new AI proxy image persistence test to `scripts/live_deploy_mvc2.sh` so server sync includes it.
+
+### Verification
+
+- Local `py_compile` for changed route/service/contract/test files passed.
+- Local `pytest tests/test_ai_proxy_image_persistence_service.py tests/test_api_provider_runtime_model_env.py -q` passed with 36 tests.
+- Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+- Local `scripts/smoke_test.py` passed 9/9.
+- Deployment and online smoke pending.
