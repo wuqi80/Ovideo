@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 Video Task Import Boundary
+
+- Added `deploy/new_html/utils/videoTaskImport.ts` to convert exported `project.video_tasks` into video workspace images, task groups, prompts, and skipped-item diagnostics in one pure function.
+- Updated `deploy/new_html/components/VideoPage.tsx` so initial session loading owns the first `video_tasks` check, while the active-page effect only checks after the initial load completes. This avoids duplicate first-entry requests and duplicate import work.
+- Replaced the two duplicated in-component conversion blocks with `buildVideoTaskImport()` and kept clearing `project.video_tasks` whenever the backend returned pending tasks, including all-skipped invalid queues.
+- Added `deploy/new_html/__tests__/utils/videoTaskImport.test.ts` for successful conversion and missing-image skip behavior.
+- Local verification passed: targeted Vitest `7/7`, Vite production build, and `git diff --check`.
+
 ## 2026-06-23 AI Proxy Router Provider Imports
 
 - Updated `deploy/routers/ai_proxy.py` to import DeepSeek, Gemini text, Gemini image, GPT Image, and Doubao provider calls directly from their dedicated provider service modules.

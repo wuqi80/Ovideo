@@ -73,6 +73,7 @@ import { MediaBadges } from './video/MediaBadges';
 // DashScopeVideoCard 不再直接 import — 走 DashScopeCardWithCandidates 包装器以注入 mention candidates。
 import { createVideoSegment } from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
+import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import type { SyncMode } from './video/StoryboardSyncModal';
@@ -276,6 +277,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const editVideoRef = useRef<HTMLVideoElement>(null);
     const pollingIntervals = useRef<Record<string, NodeJS.Timeout>>({});
     const isScrollSyncing = useRef(false);
+    const initialVideoTaskCheckDoneRef = useRef(false);
     
     // Seedance 2.0 参数（按 group.uuid 索引），不污染 TaskGroup 类型
     const [seedanceParamsByUuid, setSeedanceParamsByUuid] = useState<Record<string, SeedanceParams>>({});
@@ -550,6 +552,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // ==================== 初始化和会话管理 ====================
     
     useEffect(() => {
+        initialVideoTaskCheckDoneRef.current = false;
         loadSession();
         // 2026-05-20 (M2)：组件 unmount 时不再 clearInterval —— 切页后台任务持续。
         // 仅 detach 回调（避免持有过期 setTasksStatus 闭包），以及清掉本组件
@@ -625,7 +628,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
 
     // 🆕 当页面激活时检查是否有新导出的 video_tasks
     useEffect(() => {
-        if (isActive) {
+        if (isActive && initialVideoTaskCheckDoneRef.current) {
             checkAndLoadVideoTasks();
         }
     }, [isActive]);
@@ -646,43 +649,22 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             
             if (videoTasks.length > 0) {
                 console.log(`📦 发现 ${videoTasks.length} 个新导出的镜头，追加到现有数据`);
-                
-                const newImages: UploadedImage[] = [];
-                const newGroups: TaskGroup[] = [];
-                const newPrompts: Record<string, string> = {};
-                
-                videoTasks.forEach((task: any, index: number) => {
-                    const imgId = `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
-                    const imageUrl = secureMediaUrl(task.image_url || '');
-                    
-                    if (!imageUrl) {
-                        console.warn(`⚠️ 镜头 ${task.storyboard_id} 没有图片，跳过`);
-                        return;
-                    }
-                    
-                    newImages.push({
-                        id: imgId,
-                        url: imageUrl,
-                        filename: `${task.scene || 'shot'}_${task.storyboard_id}.png`,
-                        uploadTime: Date.now()
-                    });
-                    
-                    newPrompts[imgId] = task.video_prompt || '';
-                    
-                    newGroups.push({
-                        uuid: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                        ids: [imgId],
-                        model: 'HappyHorse',  // 默认炼虚（百炼，可用）；原 'Wan2' 需 GPU agent
-                        createdAt: Date.now()
-                    });
+
+                const imported = buildVideoTaskImport(videoTasks, {
+                    normalizeUrl: url => secureMediaUrl(url),
                 });
-                
+                imported.skipped.forEach(item => {
+                    console.warn(`⚠️ 镜头 ${item.storyboardId || 'unknown'} 没有图片，跳过`);
+                });
+
                 // 追加到现有数据
-                setUploadedImages(prev => [...prev, ...newImages]);
-                setTaskGroups(prev => [...prev, ...newGroups]);
-                setImagePrompts(prev => ({...prev, ...newPrompts}));
+                if (imported.images.length > 0) {
+                    setUploadedImages(prev => [...prev, ...imported.images]);
+                    setTaskGroups(prev => [...prev, ...imported.groups]);
+                    setImagePrompts(prev => ({...prev, ...imported.prompts}));
+                }
                 
-                console.log(`✅ 已追加 ${newImages.length} 个新导出的镜头`);
+                console.log(`✅ 已追加 ${imported.images.length} 个新导出的镜头`);
                 
                 // 清空项目的 video_tasks（避免重复加载）
                 try {
@@ -864,49 +846,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     if (videoTasks.length > 0) {
                         console.log(`📦 从项目发现 ${videoTasks.length} 个新导出的镜头，追加到现有数据`);
 
-                        // 🆕 转换 video_tasks 并追加到现有数据
-                        const newImages: UploadedImage[] = [];
-                        const newGroups: TaskGroup[] = [];
-                        const newPrompts: Record<string, string> = {};
-
-                        videoTasks.forEach((task: any, index: number) => {
-                            // 🔧 修复：允许没有 image_url 的任务也导入，用户可以后续上传图片
-                            const imgId = `img_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`;
-                            const imageUrl = secureMediaUrl(task.image_url || '');
-
-                            // 🔧 如果没有图片URL，跳过这个任务（在画面分镜中没有选择图片）
-                            if (!imageUrl) {
-                                console.warn(`⚠️ 镜头 ${task.storyboard_id} 没有图片，跳过`);
-                                return;
-                            }
-
-                            newImages.push({
-                                id: imgId,
-                                url: imageUrl,
-                                filename: `${task.scene || 'shot'}_${task.storyboard_id}.png`,
-                                uploadTime: Date.now()
-                            });
-
-                            // 使用 video_prompt 作为提示词
-                            newPrompts[imgId] = task.video_prompt || '';
-
-                            // 创建任务组
-                            newGroups.push({
-                                uuid: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                ids: [imgId],
-                                model: 'HappyHorse',  // 默认炼虚（百炼，可用）；原 'Wan2' 需 GPU agent
-                                createdAt: Date.now()
-                            });
+                        const imported = buildVideoTaskImport(videoTasks, {
+                            normalizeUrl: url => secureMediaUrl(url),
+                        });
+                        imported.skipped.forEach(item => {
+                            console.warn(`⚠️ 镜头 ${item.storyboardId || 'unknown'} 没有图片，跳过`);
                         });
 
                         // 🆕 追加到现有数据后面
-                        setUploadedImages([...existingImages, ...newImages]);
-                        setTaskGroups([...existingGroups, ...newGroups]);
-                        setImagePrompts({...existingPrompts, ...newPrompts});
+                        setUploadedImages([...existingImages, ...imported.images]);
+                        setTaskGroups([...existingGroups, ...imported.groups]);
+                        setImagePrompts({...existingPrompts, ...imported.prompts});
                         setTasksStatus(existingStatus);
 
-                        console.log(`✅ 已追加 ${newImages.length} 个新导出的镜头`);
-                        console.log(`📊 当前总计: ${existingImages.length + newImages.length}张图片, ${existingGroups.length + newGroups.length}个任务组`);
+                        console.log(`✅ 已追加 ${imported.images.length} 个新导出的镜头`);
+                        console.log(`📊 当前总计: ${existingImages.length + imported.images.length}张图片, ${existingGroups.length + imported.groups.length}个任务组`);
 
                         // 🔧 清空项目的 video_tasks（避免重复加载）
                         try {
@@ -941,6 +895,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         } catch (error) {
             console.error('加载会话失败:', error);
         } finally {
+            initialVideoTaskCheckDoneRef.current = true;
             setIsLoading(false);
         }
     };
