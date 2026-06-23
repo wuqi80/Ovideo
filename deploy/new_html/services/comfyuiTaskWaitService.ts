@@ -4,6 +4,10 @@ import type { ComfyQueueRegistryMeta } from './comfyuiTaskQueue';
 import { apiJson } from './httpClient';
 import { taskRegistry } from './taskRegistry';
 
+// 轮询任务状态时，允许的最大连续瞬时错误次数。2 秒一次轮询，5 次约等于容忍 10 秒的网络抖动，
+// 超过才判定生成失败，避免单次网关抖动误杀仍在后端运行的生成任务。
+const MAX_CONSECUTIVE_POLL_ERRORS = 5;
+
 export interface ComfyUITaskRegistryMeta {
     title: string;
     kind: TaskKind;
@@ -135,6 +139,7 @@ export const waitForComfyUITask = async (
     return new Promise((resolve, reject) => {
         let pollInterval: ReturnType<typeof setInterval> | null = null;
         let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+        let consecutiveErrors = 0;
 
         const finish = (cb: () => void) => {
             if (pollInterval !== null) clearInterval(pollInterval);
@@ -145,6 +150,8 @@ export const waitForComfyUITask = async (
         pollInterval = setInterval(async () => {
             try {
                 const status = await checkComfyUITaskStatus(taskId);
+                // 一次状态读取成功就清零瞬时错误计数。
+                consecutiveErrors = 0;
 
                 if (onProgress && status.progress) {
                     onProgress(status.progress);
@@ -166,8 +173,15 @@ export const waitForComfyUITask = async (
                     finish(() => reject(new Error(message)));
                 }
             } catch (error: any) {
-                failTask(registryKey, hasRegistryMeta, error?.message || 'Generation failed');
-                finish(() => reject(error));
+                // 单次轮询出错（网络抖动 / 网关 502 等）不代表生成失败：后端任务很可能仍在运行。
+                // 容忍若干次连续失败后才放弃，避免把正常生成中的镜头误判为失败。
+                consecutiveErrors += 1;
+                if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+                    failTask(registryKey, hasRegistryMeta, error?.message || 'Generation failed');
+                    finish(() => reject(error));
+                } else {
+                    console.warn(`轮询任务 ${taskId} 第 ${consecutiveErrors} 次出错，继续重试:`, error?.message || error);
+                }
             }
         }, 2000);
 
@@ -189,6 +203,7 @@ export const waitForComfyUITaskAllImages = async (
     return new Promise((resolve, reject) => {
         let pollInterval: ReturnType<typeof setInterval> | null = null;
         let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+        let consecutiveErrors = 0;
 
         const finish = (cb: () => void) => {
             if (pollInterval !== null) clearInterval(pollInterval);
@@ -199,6 +214,8 @@ export const waitForComfyUITaskAllImages = async (
         pollInterval = setInterval(async () => {
             try {
                 const status = await checkComfyUITaskStatus(taskId);
+                // 一次状态读取成功就清零瞬时错误计数。
+                consecutiveErrors = 0;
 
                 if (onProgress && status.progress) {
                     onProgress(status.progress);
@@ -230,8 +247,15 @@ export const waitForComfyUITaskAllImages = async (
                     finish(() => reject(new Error(message)));
                 }
             } catch (error: any) {
-                failTask(registryKey, hasRegistryMeta, error?.message || 'Generation failed');
-                finish(() => reject(error));
+                // 单次轮询出错（网络抖动 / 网关 502 等）不代表生成失败：后端任务很可能仍在运行。
+                // 容忍若干次连续失败后才放弃，避免把正常生成中的镜头误判为失败。
+                consecutiveErrors += 1;
+                if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+                    failTask(registryKey, hasRegistryMeta, error?.message || 'Generation failed');
+                    finish(() => reject(error));
+                } else {
+                    console.warn(`轮询任务 ${taskId} 第 ${consecutiveErrors} 次出错，继续重试:`, error?.message || error);
+                }
             }
         }, 2000);
 

@@ -1070,26 +1070,40 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           return next;
       });
       let successCount = 0;
+      const failures: { label: string; message: string }[] = [];
 
       for (let i = 0; i < ids.length; i++) {
           const id = ids[i];
           const shot = selectedFile.storyboard?.items.find(item => item.id === id);
           if (shot) {
+              const shotLabel = String(shot.shotNumber || `#${String(shot.id).slice(0, 6)}`);
               try {
                   const isCurrent = id === selectedShot.id;
                   const model = shotModels[shot.id] || globalModel;
                   await generateForShot(shot, isCurrent, model);
                   successCount++;
               } catch (e) {
-                  console.error(e);
+                  // 不能静默吞掉：记录是哪个镜头、为什么失败，结束后明确告知用户需要重试哪些。
+                  const message = e instanceof Error ? e.message : String(e);
+                  console.error(`镜头 ${shotLabel} 批量生成失败:`, e);
+                  failures.push({ label: shotLabel, message });
               }
           }
           setBatchProgress({ current: i + 1, total: ids.length });
           setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       }
-      
+
       setBatchProgress(null);
-      alert(`批量生成完成: ${successCount}/${ids.length} 成功`);
+      if (failures.length === 0) {
+          alert(`批量生成完成: ${successCount}/${ids.length} 全部成功`);
+      } else {
+          const detail = failures
+              .map(f => `• 镜头 ${f.label}: ${f.message || '生成失败'}`)
+              .join('\n');
+          alert(
+              `批量生成完成: ${successCount}/${ids.length} 成功，${failures.length} 个失败，请重新生成以下镜头:\n${detail}`,
+          );
+      }
   };
 
   const handleDeleteResult = async (imgId: string) => {
