@@ -54,4 +54,23 @@ describe('LazyImage', () => {
     expect(img.getAttribute('src')).toBe('/uploads/shot.png');
     expect(disconnect).toHaveBeenCalled();
   });
+
+  it('keeps the image bound when src changes after it has entered view', async () => {
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+    const { rerender } = render(<LazyImage src="/uploads/shot.png" alt="shot" />);
+    const img = screen.getByAltText('shot') as HTMLImageElement;
+
+    await act(async () => {
+      lastObserverCallback?.(
+        [{ isIntersecting: true, target: img } as unknown as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+    expect(img.getAttribute('src')).toBe('/uploads/shot.png');
+
+    // 重新生成分镜后换上新 URL：应原地替换，不得回退到 src=undefined 的空白态。
+    rerender(<LazyImage src="/uploads/shot-v2.png" alt="shot" />);
+    expect(img.getAttribute('src')).toBe('/uploads/shot-v2.png');
+  });
 });
