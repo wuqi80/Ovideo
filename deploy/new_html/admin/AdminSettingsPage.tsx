@@ -382,6 +382,16 @@ function formatEndpoint(endpoint?: string): string {
     return endpoint.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
+function endpointIdentity(endpoint?: string): string {
+    return String(endpoint || '').trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function endpointMismatch(left?: string, right?: string): boolean {
+    const leftKey = endpointIdentity(left);
+    const rightKey = endpointIdentity(right);
+    return Boolean(leftKey && rightKey && leftKey !== rightKey);
+}
+
 function formatTime(value?: string): string {
     if (!value) return '-';
     const date = new Date(value);
@@ -1137,6 +1147,9 @@ const ApiConfigCard: React.FC<{
     const healthLatency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const healthCheckedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
     const runtimeIssue = runtimeIssueText(runtime?.issues);
+    const runtimeEndpoint = runtime?.endpoint || '';
+    const dbEndpoint = config.endpoint || '';
+    const runtimeDbEndpointMismatch = endpointMismatch(runtimeEndpoint, dbEndpoint);
     const effectiveConfig = runtime?.db_effective_config_name || runtime?.db_effective_config_id || '';
     const keyedCount = runtime?.db_keyed_enabled_config_count || 0;
     const endpointCount = runtime?.db_enabled_endpoint_count || 0;
@@ -1257,7 +1270,12 @@ const ApiConfigCard: React.FC<{
                     <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
                         <div className="min-w-0 rounded bg-n20 border border-n40 px-3 py-2">
                             <div className="text-[10px] uppercase tracking-wider text-n100 mb-1">Runtime</div>
-                            <div className="font-mono text-xs text-n700 break-all">{formatEndpoint(config.endpoint || runtime?.endpoint)}</div>
+                            <div className="font-mono text-xs text-n700 break-all">{formatEndpoint(runtimeEndpoint || dbEndpoint)}</div>
+                            {runtimeDbEndpointMismatch && (
+                                <div className="mt-1 text-[11px] text-y400 break-all">
+                                    DB Endpoint: <span className="font-mono">{formatEndpoint(dbEndpoint)}</span>
+                                </div>
+                            )}
                             <div className="mt-2 grid gap-1 text-[11px] text-n100 sm:grid-cols-2">
                                 <div className="min-w-0">
                                     Key: <span className="font-mono text-n700 break-all">{sourceText(runtime?.api_key_source, runtime?.api_key_env)}</span>
@@ -1414,7 +1432,9 @@ const ProviderQuickCard: React.FC<{
     const view = statusView(status);
     const latency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const checkedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
-    const endpoint = primaryConfig?.endpoint || runtime?.endpoint || meta.default_endpoint || '';
+    const endpoint = runtime?.endpoint || primaryConfig?.endpoint || meta.default_endpoint || '';
+    const primaryDbEndpoint = primaryConfig?.endpoint || '';
+    const runtimePrimaryEndpointMismatch = endpointMismatch(runtime?.endpoint, primaryDbEndpoint);
     const model = primaryConfig?.model_name || runtime?.runtime_model_name || meta.default_model_name || '';
     const enabledCount = configs.filter(config => config.enabled !== false).length;
     const keySource = keySourceText(runtime, hasSavedKey);
@@ -1478,6 +1498,11 @@ const ProviderQuickCard: React.FC<{
                 <div className="min-w-0">
                     <div className="text-n100">Endpoint</div>
                     <div className="font-mono text-n700 break-all">{formatEndpoint(endpoint)}</div>
+                    {runtimePrimaryEndpointMismatch && (
+                        <div className="mt-1 text-y400 break-all">
+                            DB Endpoint: <span className="font-mono">{formatEndpoint(primaryDbEndpoint)}</span>
+                        </div>
+                    )}
                 </div>
                 <div className="min-w-0">
                     <div className="text-n100">Model</div>

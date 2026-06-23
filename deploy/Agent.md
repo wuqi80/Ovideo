@@ -1,5 +1,23 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 Admin API Runtime Endpoint Display
+
+### Changes
+
+- Updated `new_html/admin/AdminSettingsPage.tsx` so provider and config cards display the actual `runtime.endpoint` first.
+- Added explicit `DB Endpoint` diagnostics when a saved DB endpoint differs from the runtime endpoint that generation calls will use.
+- Strengthened `scripts/check_route_contract.py` with UI contract snippets that forbid reverting to DB-endpoint-first runtime displays.
+
+### Verification
+
+- Local `py_compile` for `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_route_contract.py`: passed, including `admin_api_config_ui_checks=62`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Local frontend build could not run because this Windows environment has no `npm` on PATH and bundled `pnpm` blocks `esbuild` build scripts; live deploy will use the server Node/npm build path.
+- Deployment and online smoke pending.
+
 ## 2026-06-23 AI Proxy Reference Preparation Boundary
 
 ### Changes
