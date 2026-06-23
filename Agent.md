@@ -6,8 +6,8 @@
 - When the saved DB endpoint differs from the runtime endpoint, the card now shows a separate `DB Endpoint` line instead of silently presenting the DB value as the live runtime value.
 - Strengthened `deploy/scripts/check_route_contract.py` to keep this display contract from regressing.
 - Local verification passed: `py_compile`, route contract, architecture contracts, `git diff --check`, and local smoke `9/9`.
-- Local frontend build could not run because this Windows environment has no `npm` on PATH and bundled `pnpm` blocks `esbuild` build scripts; live deploy will use the server Node/npm build path.
-- Deployment and online smoke pending.
+- Local frontend build could not run because this Windows environment has no `npm` on PATH and bundled `pnpm` blocks `esbuild` build scripts; live deploy used the server Node/npm build path successfully.
+- Deployed to `https://mecha.one/`; remote Vite build completed, `drama.service` stayed `active`, remote architecture contracts passed `10/10`, and online smoke passed `9/9`.
 
 ## 2026-06-23 AI Proxy Reference Preparation Boundary
 
