@@ -84,7 +84,8 @@ from services.api_provider_health_monitor import (
     provider_health_monitor_loop,
     set_provider_health_redis,
 )
-from services.ai_proxy_service import AIProxyError, generate_gemini_images
+from services.ai_proxy_service import generate_gemini_images
+from services.ai_proxy_types import AIProxyError
 from services.auth_user_service import ensure_authenticated_user_record
 from services.api_provider_runtime import build_provider_runtime_status
 from routers.ai_proxy import create_ai_proxy_router

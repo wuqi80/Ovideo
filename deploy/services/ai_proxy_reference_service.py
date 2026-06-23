@@ -5,7 +5,7 @@ import base64
 from pathlib import Path
 from typing import Any, Callable, Iterable, List
 
-from services.ai_proxy_service import GptImageReferenceInput
+from services.ai_proxy_types import GptImageReferenceInput
 from utils.image_reference import storage_path_safe, to_doubao_image_input
 
 StoragePathResolver = Callable[[str], Path]

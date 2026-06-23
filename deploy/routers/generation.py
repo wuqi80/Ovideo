@@ -22,8 +22,8 @@ from schemas.generation import (
     Panorama360Request,
     PanoramaFusionRequest,
 )
-from services.ai_proxy_service import AIProxyError
 from services.ai_proxy_image_persistence_service import persist_generated_ai_images
+from services.ai_proxy_types import AIProxyError
 from utils.image_reference import storage_path_safe
 
 

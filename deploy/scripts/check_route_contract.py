@@ -4036,20 +4036,36 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
     ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
     ai_proxy_image_content_path = root / "services" / "ai_proxy_image_content_service.py"
+    ai_proxy_types_path = root / "services" / "ai_proxy_types.py"
     ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
     ai_proxy_task_path = root / "services" / "ai_proxy_task_service.py"
     if not ai_proxy_image_persistence_path.exists():
         fail("AI proxy generated image persistence must live in services/ai_proxy_image_persistence_service.py")
     if not ai_proxy_image_content_path.exists():
         fail("AI proxy generated image content loading must live in services/ai_proxy_image_content_service.py")
+    if not ai_proxy_types_path.exists():
+        fail("AI proxy shared types must live in services/ai_proxy_types.py")
     if not ai_proxy_reference_path.exists():
         fail("AI proxy reference preparation must live in services/ai_proxy_reference_service.py")
     if not ai_proxy_task_path.exists():
         fail("AI proxy task persistence must live in services/ai_proxy_task_service.py")
     ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
     ai_proxy_image_content_text = ai_proxy_image_content_path.read_text(encoding="utf-8")
+    ai_proxy_types_text = ai_proxy_types_path.read_text(encoding="utf-8")
     ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
     ai_proxy_task_text = ai_proxy_task_path.read_text(encoding="utf-8")
+    generation_router_text = (root / "routers" / "generation.py").read_text(encoding="utf-8")
+    cluster_main_text = (root / "cluster_main.py").read_text(encoding="utf-8")
+    for snippet in (
+        "class AIProxyError(RuntimeError):",
+        "class AIProxyConfigError(AIProxyError):",
+        "class AIProxyUpstreamError(AIProxyError):",
+        "class GptImageReferenceInput:",
+        "class TextGenerationResult:",
+    ):
+        if snippet not in ai_proxy_types_text:
+            fail(f"AI proxy shared types module is missing: {snippet}")
+        checks += 1
     for snippet in (
         "def _post_json_request(",
         "async def _post_json_request_async(",
@@ -4077,6 +4093,12 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             fail(f"AI proxy providers must route through shared helpers: {snippet}")
         checks += 1
     for forbidden in (
+        "from dataclasses import dataclass",
+        "class AIProxyError(",
+        "class AIProxyConfigError(",
+        "class AIProxyUpstreamError(",
+        "class GptImageReferenceInput:",
+        "class TextGenerationResult:",
         "import base64",
         "assert_public_http_url",
         "requests.get(",
@@ -4085,6 +4107,21 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         if forbidden in ai_proxy_text:
             fail(f"AI proxy provider service must not load generated image content directly: {forbidden}")
         checks += 1
+    for path, text in (
+        (root / "cluster_main.py", cluster_main_text),
+        (root / "routers" / "ai_proxy.py", router_text),
+        (root / "routers" / "generation.py", generation_router_text),
+        (ai_proxy_image_content_path, ai_proxy_image_content_text),
+        (ai_proxy_reference_path, ai_proxy_reference_text),
+    ):
+        for forbidden in (
+            "from services.ai_proxy_service import AIProxy",
+            "from services.ai_proxy_service import GptImageReferenceInput",
+            "ai_proxy_service.GptImageReferenceInput",
+        ):
+            if forbidden in text:
+                fail(f"{path.relative_to(root)} must import shared AI proxy types from services.ai_proxy_types: {forbidden}")
+            checks += 1
     for snippet in (
         'url=config.url_for_operation("chat_completions")',
         "return TextGenerationResult(",

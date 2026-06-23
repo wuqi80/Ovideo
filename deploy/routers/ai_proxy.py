@@ -20,7 +20,6 @@ from schemas.generation import (
     GptImageRequest,
 )
 from services.ai_proxy_service import (
-    AIProxyError,
     ensure_deepseek_configured,
     generate_doubao_images as proxy_generate_doubao_images,
     generate_gemini_images as proxy_generate_gemini_images,
@@ -28,6 +27,7 @@ from services.ai_proxy_service import (
     generate_gemini_text_result,
     stream_deepseek_chat,
 )
+from services.ai_proxy_types import AIProxyError
 from services.ai_proxy_image_persistence_service import persist_generated_ai_images
 from services.ai_proxy_task_service import (
     complete_ai_proxy_text_task,

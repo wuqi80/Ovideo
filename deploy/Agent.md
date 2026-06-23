@@ -1,5 +1,18 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Shared Types Boundary
+
+### Changes
+
+- Added `services/ai_proxy_types.py` for shared AI proxy exceptions and lightweight result/reference dataclasses.
+- Moved `AIProxyError`, `AIProxyConfigError`, `AIProxyUpstreamError`, `GptImageReferenceInput`, and `TextGenerationResult` out of `services/ai_proxy_service.py`.
+- Updated `cluster_main.py`, AI proxy/generation routers, image content service, reference service, and provider tests to import shared types from `services.ai_proxy_types`.
+- Strengthened `scripts/check_route_contract.py` so non-provider code cannot import shared AI proxy types from the provider service.
+
+### Verification
+
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 AI Proxy Generated Image Content Boundary
 
 ### Changes

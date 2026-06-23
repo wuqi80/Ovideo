@@ -9,7 +9,6 @@ import asyncio
 import io
 import json
 import logging
-from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterator, List, Optional
 
 import requests
@@ -25,45 +24,15 @@ from services.api_provider_runtime import (
     resolve_provider,
     resolve_provider_with_failover,
 )
+from services.ai_proxy_types import (
+    AIProxyConfigError,
+    AIProxyError,
+    AIProxyUpstreamError,
+    GptImageReferenceInput,
+    TextGenerationResult,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class AIProxyError(RuntimeError):
-    def __init__(
-        self,
-        detail: str,
-        *,
-        status_code: int = 500,
-        upstream: str = "",
-    ):
-        super().__init__(detail)
-        self.detail = detail
-        self.status_code = status_code
-        self.upstream = upstream
-
-
-class AIProxyConfigError(AIProxyError):
-    pass
-
-
-class AIProxyUpstreamError(AIProxyError):
-    pass
-
-
-@dataclass(frozen=True)
-class GptImageReferenceInput:
-    filename: str
-    content: bytes
-    mime_type: str
-
-
-@dataclass(frozen=True)
-class TextGenerationResult:
-    content: str
-    provider: str
-    model_name: str
-    failover: Dict[str, Any]
 
 
 DEEPSEEK_SYSTEM_PROMPT = "You are a helpful assistant for storyboard generation tasks."

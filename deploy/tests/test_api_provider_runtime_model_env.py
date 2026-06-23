@@ -9,6 +9,7 @@ from external_api.video import sora2 as sora2_video
 from external_api.video import veo as veo_video
 from external_api.video import wan2 as wan2_video
 from services import ai_proxy_service, video_reverse_service
+from services.ai_proxy_types import GptImageReferenceInput
 from services.api_provider_registry import (
     SEEDANCE_DEFAULT_MODEL_MAP,
     DASHSCOPE_DEFAULT_MODEL_MAP,
@@ -507,7 +508,7 @@ async def test_gpt_image_edit_uses_runtime_endpoint(monkeypatch):
         tier="official",
         prompt="edit",
         references=[
-            ai_proxy_service.GptImageReferenceInput(
+            GptImageReferenceInput(
                 filename="reference.png",
                 content=b"image-bytes",
                 mime_type="image/png",

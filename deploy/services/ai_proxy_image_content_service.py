@@ -6,7 +6,7 @@ import logging
 
 import requests
 
-from services.ai_proxy_service import AIProxyUpstreamError
+from services.ai_proxy_types import AIProxyUpstreamError
 from utils.net_guard import assert_public_http_url
 
 logger = logging.getLogger(__name__)
