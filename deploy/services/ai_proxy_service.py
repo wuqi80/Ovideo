@@ -330,6 +330,53 @@ def build_chat_payload(
     }
 
 
+async def _post_chat_completion_result(
+    *,
+    config: Any,
+    failover: Dict[str, Any],
+    messages: List[Dict[str, Any]],
+    temperature: float,
+    requested_model: Optional[str],
+    default_model: str,
+    label: str,
+) -> TextGenerationResult:
+    """Call an OpenAI-compatible chat completion provider and normalize output."""
+    if not config.api_key:
+        raise AIProxyConfigError("文本生成服务未配置，请联系管理员")
+    if not config.endpoint:
+        raise AIProxyConfigError("文本生成服务 endpoint 未配置，请联系管理员")
+
+    resolved_model = config.model_name or requested_model or default_model
+    result = await _post_json_request_async(
+        label=label,
+        url=config.url_for_operation("chat_completions"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        payload={
+            "model": resolved_model,
+            "messages": messages,
+            "temperature": temperature,
+        },
+        timeout=120,
+        timeout_message="文本生成失败，请稍后重试",
+        timeout_status_code=500,
+        request_error_message="文本生成失败，请稍后重试",
+        parse_error_message="文本生成服务响应格式异常",
+        request_kwargs=config.requests_kwargs(),
+        upstream_detail=lambda upstream, _status_code: f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试",
+    )
+
+    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+    return TextGenerationResult(
+        content=content,
+        provider=config.provider,
+        model_name=resolved_model,
+        failover=failover,
+    )
+
+
 def ensure_deepseek_configured(model: Optional[str] = None) -> None:
     config = resolve_provider("deepseek", model)
     if not config.api_key:
@@ -520,17 +567,6 @@ async def generate_gemini_text_result(
         "gemini-text",
         model,
     )
-
-    if not config.api_key:
-        raise AIProxyConfigError("文本生成服务未配置，请联系管理员")
-    if not config.endpoint:
-        raise AIProxyConfigError("文本生成服务 endpoint 未配置，请联系管理员")
-
-    url = config.url_for_operation("chat_completions")
-    headers = {
-        "Authorization": f"Bearer {config.api_key}",
-        "Content-Type": "application/json",
-    }
     payload = build_chat_payload(
         model=config.model_name or model or "gemini-2.5-flash",
         prompt=prompt,
@@ -538,26 +574,14 @@ async def generate_gemini_text_result(
         temperature=temperature,
     )
 
-    result = await _post_json_request_async(
-        label="Gemini text",
-        url=url,
-        headers=headers,
-        payload=payload,
-        timeout=120,
-        timeout_message="文本生成失败，请稍后重试",
-        timeout_status_code=500,
-        request_error_message="文本生成失败，请稍后重试",
-        parse_error_message="文本生成服务响应格式异常",
-        request_kwargs=config.requests_kwargs(),
-        upstream_detail=lambda upstream, _status_code: f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试",
-    )
-
-    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    return TextGenerationResult(
-        content=content,
-        provider=config.provider,
-        model_name=config.model_name or model or "gemini-2.5-flash",
+    return await _post_chat_completion_result(
+        config=config,
         failover=failover,
+        messages=payload["messages"],
+        temperature=temperature,
+        requested_model=model,
+        default_model="gemini-2.5-flash",
+        label="Gemini text",
     )
 
 
@@ -583,39 +607,14 @@ async def generate_gemini_chat_result(
             "reason": None,
         }
 
-    if not config.api_key:
-        raise AIProxyConfigError("文本生成服务未配置，请联系管理员")
-    if not config.endpoint:
-        raise AIProxyConfigError("文本生成服务 endpoint 未配置，请联系管理员")
-
-    resolved_model = config.model_name or model or "gemini-2.5-flash"
-    result = await _post_json_request_async(
-        label=label,
-        url=config.url_for_operation("chat_completions"),
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        payload={
-            "model": resolved_model,
-            "messages": messages,
-            "temperature": temperature,
-        },
-        timeout=120,
-        timeout_message="文本生成失败，请稍后重试",
-        timeout_status_code=500,
-        request_error_message="文本生成失败，请稍后重试",
-        parse_error_message="文本生成服务响应格式异常",
-        request_kwargs=config.requests_kwargs(),
-        upstream_detail=lambda upstream, _status_code: f"文本生成失败：{upstream[:200]}" if upstream else "文本生成失败，请稍后重试",
-    )
-
-    content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-    return TextGenerationResult(
-        content=content,
-        provider=config.provider,
-        model_name=resolved_model,
+    return await _post_chat_completion_result(
+        config=config,
         failover=failover,
+        messages=messages,
+        temperature=temperature,
+        requested_model=model,
+        default_model="gemini-2.5-flash",
+        label=label,
     )
 
 

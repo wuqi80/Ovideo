@@ -4049,6 +4049,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     for snippet in (
         "def _post_json_request(",
         "async def _post_json_request_async(",
+        "async def _post_chat_completion_result(",
         'label="DeepSeek",',
         'label="Gemini text",',
         'label="Gemini image",',
@@ -4064,6 +4065,34 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ):
         if snippet not in ai_proxy_text:
             fail(f"AI proxy providers must route through shared helpers: {snippet}")
+        checks += 1
+    for snippet in (
+        'url=config.url_for_operation("chat_completions")',
+        "return TextGenerationResult(",
+    ):
+        if snippet not in ai_proxy_text:
+            fail(f"AI proxy OpenAI-compatible chat helper is missing: {snippet}")
+        checks += 1
+    try:
+        gemini_text_source = ai_proxy_text.split("async def generate_gemini_text_result", 1)[1].split(
+            "async def generate_gemini_chat_result",
+            1,
+        )[0]
+        gemini_chat_source = ai_proxy_text.split("async def generate_gemini_chat_result", 1)[1].split(
+            "async def generate_gemini_text(",
+            1,
+        )[0]
+    except IndexError:
+        fail("Could not locate Gemini text/chat generation functions in services/ai_proxy_service.py")
+    for name, source in (
+        ("generate_gemini_text_result", gemini_text_source),
+        ("generate_gemini_chat_result", gemini_chat_source),
+    ):
+        if "_post_chat_completion_result(" not in source:
+            fail(f"{name} must delegate OpenAI-compatible chat requests to _post_chat_completion_result()")
+        checks += 1
+        if "_post_json_request_async(" in source:
+            fail(f"{name} must not duplicate chat-completions HTTP handling")
         checks += 1
     if ai_proxy_text.count("requests.post(") > 3:
         fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")

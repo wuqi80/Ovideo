@@ -1,5 +1,18 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Shared Chat Completion Helper
+
+### Changes
+
+- Refactored `services/ai_proxy_service.py` so Gemini text generation and Gemini chat generation share `_post_chat_completion_result()`.
+- The shared helper centralizes OpenAI-compatible chat completion URL resolution, runtime key/endpoint usage, request error handling, response parsing, and `TextGenerationResult` shaping.
+- Added runtime-provider tests in `tests/test_api_provider_runtime_model_env.py` for both Gemini text and chat paths.
+- Strengthened `scripts/check_route_contract.py` so these entrypoints cannot reintroduce duplicated `_post_json_request_async()` handling.
+
+### Verification
+
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 API Config Health Test Helper
 
 ### Changes

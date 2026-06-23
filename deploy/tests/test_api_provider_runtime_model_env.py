@@ -205,6 +205,25 @@ class _ChatResponse:
         }
 
 
+class _TextResponse:
+    status_code = 200
+    text = ""
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": "runtime text ok",
+                    }
+                }
+            ]
+        }
+
+
 class _DeepseekResponse:
     status_code = 200
     text = ""
@@ -969,6 +988,77 @@ def test_deepseek_stream_uses_shared_runtime_request(monkeypatch):
     assert events[-1] == "data: [DONE]\n\n"
     assert completed == ["stream ok"]
     assert response.closed is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_text_result_uses_shared_runtime_chat_completion(monkeypatch):
+    env_key = get_provider_env_key("gemini-text")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-text-key")
+    monkeypatch.setenv(endpoint_env, "https://text-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "gemini-shared-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _TextResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    result = await ai_proxy_service.generate_gemini_text_result(
+        prompt="hello",
+        system_prompt="system",
+        temperature=0.4,
+    )
+
+    assert result.content == "runtime text ok"
+    assert result.model_name == "gemini-shared-runtime-model"
+    assert calls[0]["url"] == "https://text-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"]["model"] == "gemini-shared-runtime-model"
+    assert calls[0]["json"]["temperature"] == 0.4
+    assert calls[0]["json"]["messages"] == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "hello"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gemini_chat_result_uses_shared_runtime_chat_completion(monkeypatch):
+    env_key = get_provider_env_key("gemini-text")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+    messages = [{"role": "user", "content": [{"type": "text", "text": "describe"}]}]
+
+    monkeypatch.setenv(env_key, "test-text-key")
+    monkeypatch.setenv(endpoint_env, "https://chat-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "gemini-chat-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return _TextResponse()
+
+    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+
+    result = await ai_proxy_service.generate_gemini_chat_result(
+        messages=messages,
+        temperature=0.6,
+        allow_failover=False,
+        label="Gemini shared chat",
+    )
+
+    assert result.content == "runtime text ok"
+    assert result.model_name == "gemini-chat-runtime-model"
+    assert calls[0]["url"] == "https://chat-runtime.example.test/v1/chat/completions"
+    assert calls[0]["json"] == {
+        "model": "gemini-chat-runtime-model",
+        "messages": messages,
+        "temperature": 0.6,
+    }
 
 
 @pytest.mark.asyncio

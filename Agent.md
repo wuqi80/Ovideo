@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 AI Proxy Shared Chat Completion Helper
+
+- Refactored `deploy/services/ai_proxy_service.py` so Gemini text generation and Gemini chat generation share `_post_chat_completion_result()`.
+- The helper centralizes OpenAI-compatible chat completion URL resolution, runtime key/endpoint usage, request error handling, response parsing, and `TextGenerationResult` shaping.
+- Added runtime-provider tests in `deploy/tests/test_api_provider_runtime_model_env.py` for both Gemini text and chat paths, covering runtime endpoint/model selection and payload shape.
+- Strengthened `deploy/scripts/check_route_contract.py` so these entrypoints cannot reintroduce duplicated `_post_json_request_async()` handling.
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 API Config Health Test Helper
 
 - Refactored `deploy/services/api_config_service.py` so single-config and batch API config health tests share `_test_api_config_row_health()`.
