@@ -26,6 +26,7 @@ async def main() -> int:
 
     from services import api_config_reload_service as reload_service  # noqa: PLC0415
     from services import api_config_service as service  # noqa: PLC0415
+    service_source = (root / "services" / "api_config_service.py").read_text(encoding="utf-8")
 
     rows: list[dict[str, Any]] = [
         {
@@ -312,6 +313,30 @@ async def main() -> int:
             else:
                 os.environ["GPT_IMAGE_ENDPOINT"] = previous_gpt_image_endpoint
 
+        if "async def _test_api_config_row_health(" not in service_source:
+            fail("api_config_service must keep config health test shaping in _test_api_config_row_health()")
+        if service_source.count("await ApiConfigDAO.get_decrypted_key(") != 1:
+            fail("API config health tests should decrypt keys in one shared helper only")
+        try:
+            single_health_source = service_source.split("async def test_saved_api_config_health", 1)[1].split(
+                "def summarize_config_test_results",
+                1,
+            )[0]
+            batch_health_source = service_source.split("async def test_all_saved_api_config_health", 1)[1]
+        except IndexError:
+            fail("Could not locate API config health test functions")
+        if "return await _test_api_config_row_health(row)" not in single_health_source:
+            fail("test_saved_api_config_health must delegate to _test_api_config_row_health()")
+        if "result = await _test_api_config_row_health(row)" not in batch_health_source:
+            fail("test_all_saved_api_config_health must delegate each row to _test_api_config_row_health()")
+        for forbidden in (
+            "await ApiConfigDAO.get_decrypted_key(",
+            "_annotate_config_health_test(",
+            "_test_row_and_endpoint_source(",
+        ):
+            if forbidden in single_health_source or forbidden in batch_health_source:
+                fail(f"API config health entrypoints must not duplicate helper internals: {forbidden}")
+
         deleted = await service.delete_api_config("apicfg_empty", reload_api_env=fake_reload)
         if deleted != {"success": True, "deleted": True, "env_refreshed": True}:
             fail(f"delete_api_config result changed: {deleted}")
@@ -488,6 +513,7 @@ async def main() -> int:
     print("  health_wrapper_no_key=1")
     print("  health_wrapper_runtime_key_fallback=1")
     print("  health_wrapper_endpoint_diagnostics=1")
+    print("  shared_health_test_helper=1")
     print("  default_service_reload_checks=1")
     print("  reload_service_checks=2")
     return 0

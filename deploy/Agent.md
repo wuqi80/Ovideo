@@ -1,5 +1,22 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 API Config Health Test Helper
+
+### Changes
+
+- Refactored `services/api_config_service.py` so `test_saved_api_config_health()` and `test_all_saved_api_config_health()` share `_test_api_config_row_health()`.
+- The shared helper centralizes runtime resolution, DB key decryption, runtime key fallback, endpoint source diagnostics, and config-test annotation.
+- Strengthened `scripts/check_admin_api_config_crud.py` so future changes cannot duplicate key/runtime/endpoint shaping in the single and batch API config test paths.
+
+### Verification
+
+- Local `py_compile` for `services/api_config_service.py` and `scripts/check_admin_api_config_crud.py`: passed.
+- Local `scripts/check_admin_api_config_crud.py`: passed with `shared_health_test_helper=1`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Deployment and online smoke pending.
+
 ## 2026-06-23 Admin API Runtime Endpoint Display
 
 ### Changes
