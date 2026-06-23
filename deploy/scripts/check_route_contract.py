@@ -3391,7 +3391,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             "def _deepseek_chat_url(model: Optional[str])",
         ),
         (
-            root / "services" / "ai_proxy_service.py",
+            root / "services" / "ai_proxy_doubao_image_service.py",
             'config = resolve_provider("doubao", model)',
         ),
         (
@@ -4038,6 +4038,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_image_content_path = root / "services" / "ai_proxy_image_content_service.py"
     ai_proxy_chat_path = root / "services" / "ai_proxy_chat_service.py"
     ai_proxy_deepseek_path = root / "services" / "ai_proxy_deepseek_service.py"
+    ai_proxy_doubao_image_path = root / "services" / "ai_proxy_doubao_image_service.py"
     ai_proxy_gemini_text_path = root / "services" / "ai_proxy_gemini_text_service.py"
     ai_proxy_gemini_image_path = root / "services" / "ai_proxy_gemini_image_service.py"
     ai_proxy_gpt_image_path = root / "services" / "ai_proxy_gpt_image_service.py"
@@ -4054,6 +4055,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy chat completion helpers must live in services/ai_proxy_chat_service.py")
     if not ai_proxy_deepseek_path.exists():
         fail("AI proxy DeepSeek helpers must live in services/ai_proxy_deepseek_service.py")
+    if not ai_proxy_doubao_image_path.exists():
+        fail("AI proxy Doubao image helpers must live in services/ai_proxy_doubao_image_service.py")
     if not ai_proxy_gemini_text_path.exists():
         fail("AI proxy Gemini text helpers must live in services/ai_proxy_gemini_text_service.py")
     if not ai_proxy_gemini_image_path.exists():
@@ -4074,6 +4077,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_image_content_text = ai_proxy_image_content_path.read_text(encoding="utf-8")
     ai_proxy_chat_text = ai_proxy_chat_path.read_text(encoding="utf-8")
     ai_proxy_deepseek_text = ai_proxy_deepseek_path.read_text(encoding="utf-8")
+    ai_proxy_doubao_image_text = ai_proxy_doubao_image_path.read_text(encoding="utf-8")
     ai_proxy_gemini_text_text = ai_proxy_gemini_text_path.read_text(encoding="utf-8")
     ai_proxy_gemini_image_text = ai_proxy_gemini_image_path.read_text(encoding="utf-8")
     ai_proxy_gpt_image_text = ai_proxy_gpt_image_path.read_text(encoding="utf-8")
@@ -4178,6 +4182,20 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             fail(f"AI proxy OpenAI-compatible image response service must own response parsing: {snippet}")
         checks += 1
     for snippet in (
+        "def build_doubao_image_payload(",
+        "def parse_doubao_image_response(",
+        "async def _post_doubao_image_generation(",
+        "async def generate_doubao_images(",
+        'config = resolve_provider("doubao", model)',
+        "parse_openai_image_response(result)",
+        "_post_json_request_async(",
+        "config.url_for()",
+        'label="Doubao image",',
+    ):
+        if snippet not in ai_proxy_doubao_image_text:
+            fail(f"AI proxy Doubao image service must own provider helper: {snippet}")
+        checks += 1
+    for snippet in (
         "def resolve_gpt_image_tier_config(",
         "def normalize_gpt_image_tier(",
         "def build_gpt_image_generation_payload(",
@@ -4205,6 +4223,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "ensure_deepseek_configured,",
         "generate_deepseek_text,",
         "stream_deepseek_chat,",
+        "from services.ai_proxy_doubao_image_service import (",
+        "build_doubao_image_payload,",
+        "generate_doubao_images,",
+        "parse_doubao_image_response,",
         "from services.ai_proxy_gemini_text_service import (",
         "generate_gemini_chat_result,",
         "generate_gemini_text,",
@@ -4220,10 +4242,6 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "normalize_gpt_image_tier,",
         "resolve_gpt_image_tier_config,",
         "from services.ai_proxy_openai_image_service import parse_openai_image_response",
-        "from services.ai_proxy_http_client import _post_json_request_async",
-        "def parse_doubao_image_response(",
-        "async def _post_doubao_image_generation(",
-        'label="Doubao image",',
     ):
         if snippet not in ai_proxy_text:
             fail(f"AI proxy providers must route through shared helpers: {snippet}")
@@ -4276,6 +4294,13 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "_post_form_request_async(",
         "config.url_for_operation(",
         "io.BytesIO(",
+        "def build_doubao_image_payload(",
+        "def parse_doubao_image_response(",
+        "async def _post_doubao_image_generation(",
+        "async def generate_doubao_images(",
+        'resolve_provider("doubao"',
+        "config.url_for()",
+        'label="Doubao image",',
         "json.loads(data)",
         "class AIProxyError(",
         "class AIProxyConfigError(",
@@ -4320,7 +4345,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         )[0]
         gemini_image_source = ai_proxy_gemini_image_text.split("async def generate_gemini_images(", 1)[1]
         gpt_image_source = ai_proxy_gpt_image_text.split("async def generate_gpt_images(", 1)[1]
-        doubao_image_source = ai_proxy_text.split("async def generate_doubao_images(", 1)[1]
+        doubao_image_source = ai_proxy_doubao_image_text.split("async def generate_doubao_images(", 1)[1]
     except IndexError:
         fail("Could not locate AI proxy provider generation functions in their service modules")
     for name, source in (

@@ -11,10 +11,8 @@ from typing import Any, Iterable
 
 
 EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
-    "services/ai_proxy_service.py": {
-        "doubao",
-    },
     "services/ai_proxy_deepseek_service.py": {"deepseek"},
+    "services/ai_proxy_doubao_image_service.py": {"doubao"},
     "services/ai_proxy_gemini_text_service.py": {"gemini-text"},
     "services/ai_proxy_gemini_image_service.py": {"gemini-image"},
     "services/audio_provider.py": {"gemini-tts"},
