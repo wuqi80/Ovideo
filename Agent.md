@@ -1,5 +1,14 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 AI Proxy Reference Preparation Boundary
+
+- Added `deploy/services/ai_proxy_reference_service.py` to own reference-image preparation for AI proxy calls.
+- `deploy/routers/ai_proxy.py` now delegates Gemini image parts, GPT Image multipart references, and Doubao reference inputs to the service layer.
+- Added `deploy/tests/test_ai_proxy_reference_service.py` for data URL references, `/storage/` references, invalid reference skipping, prompt enhancement, and Doubao conversion.
+- Strengthened `deploy/scripts/check_route_contract.py` so the AI proxy router cannot grow direct `base64`, `read_bytes()`, `storage_path_safe()`, or `GptImageReferenceInput` handling again.
+- Local verification passed: `py_compile`, targeted AI proxy/provider pytest `47/47`, route contract, architecture contracts, `bash -n scripts/live_deploy_mvc2.sh`, `git diff --check`, and local smoke `9/9`.
+- Deployment and online smoke pending.
+
 ## 2026-06-21 Video Provider Default Model Registry Move
 
 - MiniMax, Sora2, Veo, and Wan2.6 video default model names now live in `deploy/services/api_provider_registry.py`.

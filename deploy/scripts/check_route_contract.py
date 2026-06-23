@@ -4035,12 +4035,16 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     checks += 1
     ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
     ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
+    ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
     ai_proxy_task_path = root / "services" / "ai_proxy_task_service.py"
     if not ai_proxy_image_persistence_path.exists():
         fail("AI proxy generated image persistence must live in services/ai_proxy_image_persistence_service.py")
+    if not ai_proxy_reference_path.exists():
+        fail("AI proxy reference preparation must live in services/ai_proxy_reference_service.py")
     if not ai_proxy_task_path.exists():
         fail("AI proxy task persistence must live in services/ai_proxy_task_service.py")
     ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
+    ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
     ai_proxy_task_text = ai_proxy_task_path.read_text(encoding="utf-8")
     for snippet in (
         "def _post_json_request(",
@@ -4084,6 +4088,10 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     for snippet in (
         "from services.ai_proxy_image_persistence_service import persist_generated_ai_images",
         "persist_generated_ai_images(",
+        "from services.ai_proxy_reference_service import (",
+        "prepare_gemini_image_parts(",
+        "prepare_gpt_image_reference_inputs(",
+        "prepare_doubao_reference_inputs(",
         "from services.ai_proxy_task_service import (",
         "create_deepseek_text_task(",
         "complete_ai_proxy_text_task(",
@@ -4103,9 +4111,28 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "TaskDAO.create_task(",
         "TaskDAO.update_task_status(",
         "time.time(",
+        "GptImageReferenceInput(",
+        "storage_path_safe(",
+        "to_doubao_image_input(",
+        "base64.b64encode(",
+        "base64.b64decode(",
+        ".read_bytes()",
     ):
         if forbidden in router_text:
-            fail(f"AI proxy router must not perform generated image/task persistence directly: {forbidden}")
+            fail(f"AI proxy router must not perform generated image/task/reference preparation directly: {forbidden}")
+        checks += 1
+    for snippet in (
+        "def prepare_gemini_image_parts(",
+        "def prepare_gpt_image_reference_inputs(",
+        "def prepare_doubao_reference_inputs(",
+        "GptImageReferenceInput(",
+        "storage_path_safe",
+        "to_doubao_image_input",
+        "base64.b64encode(",
+        "base64.b64decode(",
+    ):
+        if snippet not in ai_proxy_reference_text:
+            fail(f"AI proxy reference preparation service is missing: {snippet}")
         checks += 1
     for snippet in (
         "async def create_deepseek_text_task(",

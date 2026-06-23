@@ -1,5 +1,26 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Reference Preparation Boundary
+
+### Changes
+
+- Added `services/ai_proxy_reference_service.py` to centralize AI proxy reference-image preparation.
+- Updated `routers/ai_proxy.py` so Gemini image, GPT Image, and Doubao routes delegate reference shaping to the service layer.
+- Added `tests/test_ai_proxy_reference_service.py` for data URL references, `/storage/` references, invalid reference skipping, prompt enhancement, and Doubao conversion.
+- Strengthened `scripts/check_route_contract.py` so the AI proxy router cannot reintroduce direct `base64`, `read_bytes()`, `storage_path_safe()`, or `GptImageReferenceInput` handling.
+- Added the new reference service test to `scripts/live_deploy_mvc2.sh` so it is synced during live deploys.
+
+### Verification
+
+- Local `py_compile`: passed.
+- Local targeted pytest for AI proxy/provider runtime: `47/47` passed.
+- Local `scripts/check_route_contract.py`: passed.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local shell syntax check for `scripts/live_deploy_mvc2.sh`: passed.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Deployment and online smoke pending.
+
 ## 2026-06-21 Video Provider Default Model Registry Move
 
 ### Changes

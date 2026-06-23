@@ -6,9 +6,8 @@ the HTTP route layer focused on auth, request shaping, and response format.
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -22,7 +21,6 @@ from schemas.generation import (
 )
 from services.ai_proxy_service import (
     AIProxyError,
-    GptImageReferenceInput,
     ensure_deepseek_configured,
     generate_doubao_images as proxy_generate_doubao_images,
     generate_gemini_images as proxy_generate_gemini_images,
@@ -37,7 +35,11 @@ from services.ai_proxy_task_service import (
     create_completed_image_task,
     create_deepseek_text_task,
 )
-from utils.image_reference import storage_path_safe, to_doubao_image_input
+from services.ai_proxy_reference_service import (
+    prepare_doubao_reference_inputs,
+    prepare_gemini_image_parts,
+    prepare_gpt_image_reference_inputs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,48 +148,11 @@ def create_ai_proxy_router(
     async def gemini_image_generate(request: GeminiImageRequest, username: str = Depends(require_auth_dependency)):
         """Gemini图像生成接口（代理）"""
         try:
-            parts = []
-            ref_count = 0
-            for ref in request.references[:5]:
-                try:
-                    if ref.startswith("data:"):
-                        mime_type = ref.split(";")[0].split(":")[1]
-                        b64_data = ref.split(",")[1] if "," in ref else ref
-                        parts.append({"inlineData": {"mimeType": mime_type, "data": b64_data}})
-                        ref_count += 1
-                    elif ref.startswith("/storage/"):
-                        file_path = storage_path_safe(ref)
-                        if file_path.exists():
-                            img_bytes = file_path.read_bytes()
-                            ext = file_path.suffix.lower()
-                            mime_map = {
-                                ".png": "image/png",
-                                ".jpg": "image/jpeg",
-                                ".jpeg": "image/jpeg",
-                                ".webp": "image/webp",
-                                ".gif": "image/gif",
-                                ".bmp": "image/bmp",
-                            }
-                            mime_type = mime_map.get(ext, "image/png")
-                            b64_data = base64.b64encode(img_bytes).decode("utf-8")
-                            parts.append({"inlineData": {"mimeType": mime_type, "data": b64_data}})
-                            ref_count += 1
-                            logger.info("📷 从磁盘读取参考图: %s (%s bytes)", file_path, len(img_bytes))
-                        else:
-                            logger.warning("⚠️ 参考图文件不存在: %s", file_path)
-                    else:
-                        logger.warning("⚠️ 不支持的参考图格式: %s", ref[:80])
-                except Exception as ref_err:
-                    logger.warning("⚠️ 处理参考图失败: %s", ref_err)
-
-            enhanced_prompt = request.prompt
-            if ref_count > 0:
-                if ref_count == 1:
-                    enhanced_prompt = f"请严格参考上面提供的参考图片，{request.prompt}\n\n重要提示：请紧密遵循参考图的画风、构图、角色设计、色彩风格和视觉元素。在保持与参考图一致性的同时，融入描述中的变化。确保生成的图像在视觉风格上与参考图高度相似。"
-                else:
-                    enhanced_prompt = f"请严格参考上面提供的{ref_count}张参考图片，{request.prompt}\n\n重要提示：请紧密遵循这些参考图的画风、构图、角色设计、色彩风格和视觉元素。在保持与参考图一致性的同时，融入描述中的变化。确保生成的图像在视觉风格上与参考图高度相似。"
-
-            parts.append({"text": enhanced_prompt})
+            parts = prepare_gemini_image_parts(
+                prompt=request.prompt,
+                references=request.references,
+                logger=logger,
+            )
 
             images, model = await proxy_generate_gemini_images(
                 parts=parts,
@@ -245,40 +210,12 @@ def create_ai_proxy_router(
             raise HTTPException(status_code=400, detail="prompt 不能为空")
 
         try:
-            reference_inputs: List[GptImageReferenceInput] = []
-            if request.references:
-                for idx, ref in enumerate(request.references[:8]):
-                    img_bytes = None
-                    ext = "png"
-                    if ref.startswith("data:"):
-                        mime = ref.split(";")[0].split(":")[1] if ":" in ref.split(";")[0] else "image/png"
-                        ext = "jpeg" if "jpeg" in mime or "jpg" in mime else ("webp" if "webp" in mime else "png")
-                        b64_data = ref.split(",", 1)[1] if "," in ref else ref
-                        try:
-                            img_bytes = base64.b64decode(b64_data)
-                        except Exception as decode_error:
-                            logger.warning("⚠️ GPT Image edit 跳过无法解码的参考图: %s", decode_error)
-                            continue
-                    elif ref.startswith("/storage/"):
-                        fp = storage_path_safe(ref)
-                        if fp.exists():
-                            img_bytes = fp.read_bytes()
-                            ext = fp.suffix.lstrip(".").lower() or "png"
-                            if ext == "jpg":
-                                ext = "jpeg"
-                    if img_bytes is None:
-                        logger.warning("⚠️ GPT Image edit 跳过无效参考图: %s...", ref[:60])
-                        continue
-                    reference_inputs.append(
-                        GptImageReferenceInput(
-                            filename=f"ref_{idx}.{ext}",
-                            content=img_bytes,
-                            mime_type=f"image/{ext}",
-                        )
-                    )
-
-                if not reference_inputs:
-                    raise HTTPException(status_code=400, detail="提供了 references 但全部无法读取，无法发起图改图")
+            reference_inputs = prepare_gpt_image_reference_inputs(
+                request.references,
+                logger=logger,
+            )
+            if request.references and not reference_inputs:
+                raise HTTPException(status_code=400, detail="提供了 references 但全部无法读取，无法发起图改图")
 
             images, model, tier = await proxy_generate_gpt_images(
                 tier=request.tier,
@@ -327,12 +264,7 @@ def create_ai_proxy_router(
     @router.post("/api/materials/doubao")
     async def generate_doubao_images(request: DoubaoImageRequest, username: str = Depends(require_auth_dependency)):
         try:
-            ref_inputs: List[str] = []
-            if request.references:
-                for ref in request.references[:14]:
-                    converted = to_doubao_image_input(ref)
-                    if converted:
-                        ref_inputs.append(converted)
+            ref_inputs = prepare_doubao_reference_inputs(request.references)
 
             images = await proxy_generate_doubao_images(
                 prompt=request.prompt,
