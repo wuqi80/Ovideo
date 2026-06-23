@@ -4036,6 +4036,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
     ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
     ai_proxy_image_content_path = root / "services" / "ai_proxy_image_content_service.py"
+    ai_proxy_chat_path = root / "services" / "ai_proxy_chat_service.py"
     ai_proxy_http_client_path = root / "services" / "ai_proxy_http_client.py"
     ai_proxy_types_path = root / "services" / "ai_proxy_types.py"
     ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
@@ -4044,6 +4045,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy generated image persistence must live in services/ai_proxy_image_persistence_service.py")
     if not ai_proxy_image_content_path.exists():
         fail("AI proxy generated image content loading must live in services/ai_proxy_image_content_service.py")
+    if not ai_proxy_chat_path.exists():
+        fail("AI proxy chat completion helpers must live in services/ai_proxy_chat_service.py")
     if not ai_proxy_http_client_path.exists():
         fail("AI proxy HTTP client must live in services/ai_proxy_http_client.py")
     if not ai_proxy_types_path.exists():
@@ -4054,6 +4057,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy task persistence must live in services/ai_proxy_task_service.py")
     ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
     ai_proxy_image_content_text = ai_proxy_image_content_path.read_text(encoding="utf-8")
+    ai_proxy_chat_text = ai_proxy_chat_path.read_text(encoding="utf-8")
     ai_proxy_http_client_text = ai_proxy_http_client_path.read_text(encoding="utf-8")
     ai_proxy_types_text = ai_proxy_types_path.read_text(encoding="utf-8")
     ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
@@ -4085,14 +4089,33 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy HTTP client should centralize direct requests.post calls for JSON, form, and stream requests")
     checks += 1
     for snippet in (
+        "def _unique_provider_ids(",
+        "def provider_health_scope_for_failover(",
+        "async def resolve_ai_proxy_provider(",
+        "def build_chat_payload(",
+        "def _post_chat_completion_result_sync(",
+        "async def _post_chat_completion_result(",
+        'url=config.url_for_operation("chat_completions")',
+        "return TextGenerationResult(",
+        "resolve_provider_with_failover(",
+        "list_cached_provider_health(",
+        "_post_json_request(",
+    ):
+        if snippet not in ai_proxy_chat_text:
+            fail(f"AI proxy chat service must own OpenAI-compatible chat helper: {snippet}")
+        checks += 1
+    for snippet in (
+        "from services.ai_proxy_chat_service import (",
+        "_post_chat_completion_result,",
+        "_post_chat_completion_result_sync,",
+        "build_chat_payload,",
+        "provider_health_scope_for_failover,",
+        "resolve_ai_proxy_provider,",
         "from services.ai_proxy_http_client import (",
-        "_post_json_request,",
         "_post_json_request_async,",
         "_post_form_request_async,",
         "_post_stream_request,",
         "_ensure_stream_response_ok,",
-        "def _post_chat_completion_result_sync(",
-        "async def _post_chat_completion_result(",
         "def parse_gemini_image_response(",
         "async def _post_gemini_image_generation(",
         "async def _post_gpt_image_edit_request(",
@@ -4122,6 +4145,14 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "async def _post_form_request_async(",
         "def _post_stream_request(",
         "def _ensure_stream_response_ok(",
+        "def _unique_provider_ids(",
+        "def provider_health_scope_for_failover(",
+        "async def resolve_ai_proxy_provider(",
+        "def build_chat_payload(",
+        "def _post_chat_completion_result_sync(",
+        "async def _post_chat_completion_result(",
+        "resolve_provider_with_failover(",
+        "list_cached_provider_health(",
         "class AIProxyError(",
         "class AIProxyConfigError(",
         "class AIProxyUpstreamError(",
@@ -4150,13 +4181,6 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             if forbidden in text:
                 fail(f"{path.relative_to(root)} must import shared AI proxy types from services.ai_proxy_types: {forbidden}")
             checks += 1
-    for snippet in (
-        'url=config.url_for_operation("chat_completions")',
-        "return TextGenerationResult(",
-    ):
-        if snippet not in ai_proxy_text:
-            fail(f"AI proxy OpenAI-compatible chat helper is missing: {snippet}")
-        checks += 1
     try:
         gemini_text_source = ai_proxy_text.split("async def generate_gemini_text_result", 1)[1].split(
             "async def generate_gemini_chat_result",

@@ -54,6 +54,7 @@ class EnvGuard:
 
 async def run_case(
     proxy,
+    chat_service,
     http_client,
     *,
     env: dict[str, str],
@@ -77,9 +78,9 @@ async def run_case(
         calls.append({"url": url, **kwargs})
         return FakeResponse({"choices": [{"message": {"content": "ok"}}]})
 
-    original_health = proxy.list_cached_provider_health
+    original_health = chat_service.list_cached_provider_health
     original_post = http_client.requests.post
-    proxy.list_cached_provider_health = fake_health
+    chat_service.list_cached_provider_health = fake_health
     http_client.requests.post = fake_post
     try:
         for key, value in env.items():
@@ -91,7 +92,7 @@ async def run_case(
             model=request_model,
         )
     finally:
-        proxy.list_cached_provider_health = original_health
+        chat_service.list_cached_provider_health = original_health
         http_client.requests.post = original_post
 
     if result.content != "ok":
@@ -125,6 +126,7 @@ async def main() -> int:
     sys.path.insert(0, str(root))
 
     from services import api_provider_registry as registry  # noqa: PLC0415
+    from services import ai_proxy_chat_service as chat_service  # noqa: PLC0415
     from services import ai_proxy_http_client as http_client  # noqa: PLC0415
     from services import ai_proxy_service as proxy  # noqa: PLC0415
 
@@ -144,6 +146,7 @@ async def main() -> int:
     with EnvGuard(managed_env):
         await run_case(
             proxy,
+            chat_service,
             http_client,
             env={"DEEPSEEK_API_KEY": "deepseek-key"},
             health_rows=[
@@ -161,6 +164,7 @@ async def main() -> int:
     with EnvGuard(managed_env):
         await run_case(
             proxy,
+            chat_service,
             http_client,
             env={
                 "GEMINI_TEXT_API_KEY": "gemini-key",
@@ -181,6 +185,7 @@ async def main() -> int:
     with EnvGuard(managed_env):
         await run_case(
             proxy,
+            chat_service,
             http_client,
             env={
                 "GEMINI_TEXT_API_KEY": "gemini-key",

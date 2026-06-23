@@ -1,5 +1,14 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 AI Proxy Chat Completion Boundary
+
+- Added `deploy/services/ai_proxy_chat_service.py` for OpenAI-compatible chat payload construction, provider failover resolution, and text completion result shaping.
+- Moved `provider_health_scope_for_failover()`, `resolve_ai_proxy_provider()`, `build_chat_payload()`, `_post_chat_completion_result_sync()`, and `_post_chat_completion_result()` out of `deploy/services/ai_proxy_service.py`.
+- Updated the AI proxy failover contract to patch health checks through `services.ai_proxy_chat_service` while preserving `ai_proxy_service.py` public entrypoints.
+- Strengthened `deploy/scripts/check_route_contract.py` so chat completion/failover helpers cannot drift back into the provider service.
+- Local verification passed: `py_compile`, provider runtime pytest `39/39`, targeted image content/reference/provider runtime pytest `47/47`, failover contract, route contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Status: deploy verification pending.
+
 ## 2026-06-23 AI Proxy HTTP Client Boundary
 
 - Added `deploy/services/ai_proxy_http_client.py` for shared AI proxy JSON, form, and streaming HTTP request handling.

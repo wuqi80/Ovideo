@@ -1,5 +1,26 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Chat Completion Boundary
+
+### Changes
+
+- Added `services/ai_proxy_chat_service.py` for OpenAI-compatible chat payload construction, provider failover resolution, and text completion result shaping.
+- Moved `provider_health_scope_for_failover()`, `resolve_ai_proxy_provider()`, `build_chat_payload()`, `_post_chat_completion_result_sync()`, and `_post_chat_completion_result()` out of `services/ai_proxy_service.py`.
+- Updated `scripts/check_ai_proxy_failover.py` to patch health checks through `services.ai_proxy_chat_service` while preserving `ai_proxy_service.py` public entrypoints.
+- Strengthened `scripts/check_route_contract.py` so chat completion/failover helpers cannot drift back into the provider service.
+
+### Verification
+
+- Local `py_compile` for chat service, provider service, failover contract, route contract, and provider-runtime test files: passed.
+- Local provider runtime pytest: `39/39` passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_ai_proxy_failover.py`: passed.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=344` and `service_mapper_purity_checks=1419`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Status: deploy verification pending.
+
 ## 2026-06-23 AI Proxy HTTP Client Boundary
 
 ### Changes
