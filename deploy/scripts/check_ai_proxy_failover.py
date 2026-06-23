@@ -54,6 +54,7 @@ class EnvGuard:
 
 async def run_case(
     proxy,
+    http_client,
     *,
     env: dict[str, str],
     health_rows: list[dict[str, Any]],
@@ -77,9 +78,9 @@ async def run_case(
         return FakeResponse({"choices": [{"message": {"content": "ok"}}]})
 
     original_health = proxy.list_cached_provider_health
-    original_post = proxy.requests.post
+    original_post = http_client.requests.post
     proxy.list_cached_provider_health = fake_health
-    proxy.requests.post = fake_post
+    http_client.requests.post = fake_post
     try:
         for key, value in env.items():
             os.environ[key] = value
@@ -91,7 +92,7 @@ async def run_case(
         )
     finally:
         proxy.list_cached_provider_health = original_health
-        proxy.requests.post = original_post
+        http_client.requests.post = original_post
 
     if result.content != "ok":
         fail(f"Unexpected generated text: {result.content}")
@@ -124,6 +125,7 @@ async def main() -> int:
     sys.path.insert(0, str(root))
 
     from services import api_provider_registry as registry  # noqa: PLC0415
+    from services import ai_proxy_http_client as http_client  # noqa: PLC0415
     from services import ai_proxy_service as proxy  # noqa: PLC0415
 
     if proxy.provider_health_scope_for_failover("gemini-text") != ["gemini-text", "deepseek"]:
@@ -142,6 +144,7 @@ async def main() -> int:
     with EnvGuard(managed_env):
         await run_case(
             proxy,
+            http_client,
             env={"DEEPSEEK_API_KEY": "deepseek-key"},
             health_rows=[
                 {"provider": "gemini-text", "status": "error"},
@@ -158,6 +161,7 @@ async def main() -> int:
     with EnvGuard(managed_env):
         await run_case(
             proxy,
+            http_client,
             env={
                 "GEMINI_TEXT_API_KEY": "gemini-key",
                 "DEEPSEEK_API_KEY": "deepseek-key",
@@ -177,6 +181,7 @@ async def main() -> int:
     with EnvGuard(managed_env):
         await run_case(
             proxy,
+            http_client,
             env={
                 "GEMINI_TEXT_API_KEY": "gemini-key",
                 "DEEPSEEK_API_KEY": "deepseek-key",

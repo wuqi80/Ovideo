@@ -1,5 +1,23 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy HTTP Client Boundary
+
+### Changes
+
+- Added `services/ai_proxy_http_client.py` for shared AI proxy JSON, form, and streaming HTTP request handling.
+- Moved direct `requests.post` usage and upstream response normalization out of `services/ai_proxy_service.py`.
+- Updated AI proxy provider tests and `scripts/check_ai_proxy_failover.py` to patch the HTTP client boundary instead of `ai_proxy_service.requests`.
+- Strengthened `scripts/check_route_contract.py` so provider logic cannot reintroduce direct `requests.post` or local request helper definitions.
+
+### Verification
+
+- Local `py_compile` for HTTP client, provider service, failover contract, route contract, and provider-runtime test files: passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=324` and `service_mapper_purity_checks=1399`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local smoke test: `9/9` passed.
+- Status: deploy verification pending.
+
 ## 2026-06-23 AI Proxy Shared Types Boundary
 
 ### Changes

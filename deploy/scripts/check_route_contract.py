@@ -4036,6 +4036,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
     ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
     ai_proxy_image_content_path = root / "services" / "ai_proxy_image_content_service.py"
+    ai_proxy_http_client_path = root / "services" / "ai_proxy_http_client.py"
     ai_proxy_types_path = root / "services" / "ai_proxy_types.py"
     ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
     ai_proxy_task_path = root / "services" / "ai_proxy_task_service.py"
@@ -4043,6 +4044,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy generated image persistence must live in services/ai_proxy_image_persistence_service.py")
     if not ai_proxy_image_content_path.exists():
         fail("AI proxy generated image content loading must live in services/ai_proxy_image_content_service.py")
+    if not ai_proxy_http_client_path.exists():
+        fail("AI proxy HTTP client must live in services/ai_proxy_http_client.py")
     if not ai_proxy_types_path.exists():
         fail("AI proxy shared types must live in services/ai_proxy_types.py")
     if not ai_proxy_reference_path.exists():
@@ -4051,6 +4054,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy task persistence must live in services/ai_proxy_task_service.py")
     ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
     ai_proxy_image_content_text = ai_proxy_image_content_path.read_text(encoding="utf-8")
+    ai_proxy_http_client_text = ai_proxy_http_client_path.read_text(encoding="utf-8")
     ai_proxy_types_text = ai_proxy_types_path.read_text(encoding="utf-8")
     ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
     ai_proxy_task_text = ai_proxy_task_path.read_text(encoding="utf-8")
@@ -4069,6 +4073,24 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     for snippet in (
         "def _post_json_request(",
         "async def _post_json_request_async(",
+        "def _post_form_request(",
+        "async def _post_form_request_async(",
+        "def _post_stream_request(",
+        "def _ensure_stream_response_ok(",
+    ):
+        if snippet not in ai_proxy_http_client_text:
+            fail(f"AI proxy HTTP client must own shared request helper: {snippet}")
+        checks += 1
+    if ai_proxy_http_client_text.count("requests.post(") != 3:
+        fail("AI proxy HTTP client should centralize direct requests.post calls for JSON, form, and stream requests")
+    checks += 1
+    for snippet in (
+        "from services.ai_proxy_http_client import (",
+        "_post_json_request,",
+        "_post_json_request_async,",
+        "_post_form_request_async,",
+        "_post_stream_request,",
+        "_ensure_stream_response_ok,",
         "def _post_chat_completion_result_sync(",
         "async def _post_chat_completion_result(",
         "def parse_gemini_image_response(",
@@ -4080,12 +4102,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         'label="DeepSeek",',
         'label="Gemini text",',
         'label="Gemini image",',
-        "def _post_form_request(",
-        "async def _post_form_request_async(",
         'label="GPT Image edit",',
         'label="GPT Image generate",',
-        "def _post_stream_request(",
-        "def _ensure_stream_response_ok(",
         'label="DeepSeek stream",',
         'label="Doubao image",',
     ):
@@ -4094,6 +4112,16 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         checks += 1
     for forbidden in (
         "from dataclasses import dataclass",
+        "import requests",
+        "requests.post(",
+        "def _default_upstream_detail(",
+        "def _read_post_json_response(",
+        "def _post_json_request(",
+        "async def _post_json_request_async(",
+        "def _post_form_request(",
+        "async def _post_form_request_async(",
+        "def _post_stream_request(",
+        "def _ensure_stream_response_ok(",
         "class AIProxyError(",
         "class AIProxyConfigError(",
         "class AIProxyUpstreamError(",
@@ -4207,8 +4235,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         if forbidden in doubao_image_source:
             fail(f"generate_doubao_images must not perform Doubao HTTP/response parsing directly: {forbidden}")
         checks += 1
-    if ai_proxy_text.count("requests.post(") > 3:
-        fail("AI proxy service should keep direct requests.post limited to JSON helper, form helper, and stream helper")
+    if "requests.post(" in ai_proxy_text:
+        fail("AI proxy provider service must delegate direct requests.post calls to ai_proxy_http_client")
     checks += 1
     for snippet in (
         "from services.ai_proxy_image_content_service import generated_image_content",

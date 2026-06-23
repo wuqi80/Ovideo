@@ -8,7 +8,7 @@ from external_api.video import seedance as seedance_video
 from external_api.video import sora2 as sora2_video
 from external_api.video import veo as veo_video
 from external_api.video import wan2 as wan2_video
-from services import ai_proxy_service, video_reverse_service
+from services import ai_proxy_http_client, ai_proxy_service, video_reverse_service
 from services.ai_proxy_types import GptImageReferenceInput
 from services.api_provider_registry import (
     SEEDANCE_DEFAULT_MODEL_MAP,
@@ -174,7 +174,7 @@ async def test_gemini_image_uses_runtime_model_env_when_request_omits_model(monk
         calls.append({"url": url, **kwargs})
         return _ImageResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     images, model = await ai_proxy_service.generate_gemini_images(
         parts=[{"text": "draw"}],
@@ -205,7 +205,7 @@ async def test_gemini_image_explicit_request_model_overrides_runtime_model(monke
         calls.append({"url": url, **kwargs})
         return _ImageResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     images, model = await ai_proxy_service.generate_gemini_images(
         parts=[{"text": "draw"}],
@@ -407,7 +407,7 @@ async def test_doubao_image_uses_runtime_model_env_when_request_omits_model(monk
         calls.append({"url": url, **kwargs})
         return _DoubaoResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     images = await ai_proxy_service.generate_doubao_images(
         prompt="draw",
@@ -438,7 +438,7 @@ async def test_doubao_image_explicit_model_overrides_runtime_model(monkeypatch):
         calls.append({"url": url, **kwargs})
         return _DoubaoResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     images = await ai_proxy_service.generate_doubao_images(
         prompt="draw",
@@ -468,7 +468,7 @@ async def test_gpt_image_generation_uses_runtime_endpoint(monkeypatch):
         calls.append({"url": url, **kwargs})
         return _OpenAIImageResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     images, model, tier = await ai_proxy_service.generate_gpt_images(
         tier="vip",
@@ -502,7 +502,7 @@ async def test_gpt_image_edit_uses_runtime_endpoint(monkeypatch):
         calls.append({"url": url, **kwargs})
         return _OpenAIImageResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     images, model, tier = await ai_proxy_service.generate_gpt_images(
         tier="official",
@@ -964,7 +964,7 @@ def test_deepseek_generate_text_uses_runtime_model_env_when_request_omits_model(
         calls.append({"url": url, **kwargs})
         return _DeepseekResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     result = ai_proxy_service.generate_deepseek_text(prompt="hello")
 
@@ -993,7 +993,7 @@ def test_deepseek_generate_text_explicit_model_overrides_runtime_model(monkeypat
         calls.append({"url": url, **kwargs})
         return _DeepseekResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     result = ai_proxy_service.generate_deepseek_text(
         prompt="hello",
@@ -1024,7 +1024,7 @@ def test_deepseek_stream_uses_shared_runtime_request(monkeypatch):
         calls.append({"url": url, **kwargs})
         return response
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     events = list(ai_proxy_service.stream_deepseek_chat(prompt="hello", on_complete=completed.append))
 
@@ -1056,7 +1056,7 @@ async def test_gemini_text_result_uses_shared_runtime_chat_completion(monkeypatc
         calls.append({"url": url, **kwargs})
         return _TextResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     result = await ai_proxy_service.generate_gemini_text_result(
         prompt="hello",
@@ -1092,7 +1092,7 @@ async def test_gemini_chat_result_uses_shared_runtime_chat_completion(monkeypatc
         calls.append({"url": url, **kwargs})
         return _TextResponse()
 
-    monkeypatch.setattr(ai_proxy_service.requests, "post", fake_post)
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
 
     result = await ai_proxy_service.generate_gemini_chat_result(
         messages=messages,
