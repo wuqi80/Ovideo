@@ -88,7 +88,7 @@ async def test_gemini_tts_uses_runtime_model(monkeypatch, tmp_path):
         "resolve_provider",
         lambda provider, model_name=None: SimpleNamespace(
             api_key="runtime-gemini-key",
-            endpoint="https://runtime.example.test/gemini/v1beta/openai",
+            endpoint="https://runtime.example.test/gemini/v1beta",
             model_name="gemini-runtime-tts-model",
             aiohttp_proxy=lambda: None,
         ),

@@ -106,7 +106,7 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
 MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
 MINIMAX_DEFAULT_PROVIDER_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL
 MINIMAX_LEGACY_VIDEO_MODELS = frozenset()
-GEMINI_TTS_DEFAULT_MODEL = "gemini-2.5-flash-preview-tts"
+GEMINI_TTS_DEFAULT_MODEL = "gemini-3.1-flash-tts-preview"
 SORA2_DEFAULT_VIDEO_MODEL = "sora_video2-landscape-15s"
 SORA2_LEGACY_VIDEO_MODELS = frozenset({"sora-2"})
 VEO_DEFAULT_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
@@ -375,7 +375,7 @@ PROVIDER_DEFAULT_ENDPOINTS: Dict[str, str] = {
     "seedance": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
     "laozhang-gpt-image": "https://api.laozhang.ai/v1",
     "laozhang-sora2": "https://api.laozhang.ai/v1",
-    "gemini-tts": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "gemini-tts": "https://generativelanguage.googleapis.com/v1beta",
 }
 
 PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
@@ -387,6 +387,10 @@ PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
     },
     "gemini-image": {
         "generate_content": "models/{model}:generateContent",
+    },
+    "gemini-tts": {
+        "interactions": "interactions",
+        "models": "models",
     },
     "minimax": {
         "video_generation": "video_generation",

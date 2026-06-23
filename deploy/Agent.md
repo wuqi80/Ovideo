@@ -1,5 +1,22 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 Provider Endpoint Single Source Contract
+
+### Changes
+
+- Moved Gemini TTS runtime-loader endpoint upgrade logic to read the default endpoint from `services/api_provider_registry.py` instead of duplicating the Google endpoint literal.
+- Updated API config health checks to decide Gemini TTS `x-goog-api-key` headers from the registered provider endpoint, keeping provider domains centralized in the registry.
+- Preserved Gemini TTS health URL derivation for old `/openai` endpoints through `services/api_provider_endpoints.py`.
+
+### Verification
+
+- Local architecture contracts: `10/10` passed.
+- Local targeted provider/audio pytest: `47/47` passed.
+- Local admin API config health contract: passed.
+- Local audio provider runtime contract: passed.
+- Local `py_compile`: passed.
+- Local `git diff --check`: passed.
+
 ## 2026-06-23 Video Task Import Boundary
 
 ### Changes

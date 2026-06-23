@@ -42,7 +42,7 @@ def main() -> int:
     import external_api.audio.minimax_audio as minimax_audio  # noqa: PLC0415
 
     default_base, default_version = audio_provider._derive_gemini_sdk_endpoint(
-        "https://generativelanguage.googleapis.com/v1beta/openai/"
+        "https://generativelanguage.googleapis.com/v1beta"
     )
     if default_base != "https://generativelanguage.googleapis.com":
         fail(f"Gemini default baseUrl derivation changed: {default_base}")
@@ -80,7 +80,7 @@ def main() -> int:
         calls.append((provider, model_name or ""))
         return FakeConfig(
             api_key="runtime-key",
-            endpoint="https://runtime.example.test/gemini/v1beta/openai",
+            endpoint="https://runtime.example.test/gemini/v1beta",
             model_name="gemini-runtime-tts-model",
             proxy="http://runtime-proxy.example.test:8080",
         )
@@ -96,7 +96,7 @@ def main() -> int:
         fail(f"GeminiAudioProvider did not resolve gemini-tts runtime config: {calls}")
     if provider.api_key != "runtime-key":
         fail("GeminiAudioProvider did not pick up resolved key")
-    if provider.endpoint != "https://runtime.example.test/gemini/v1beta/openai":
+    if provider.endpoint != "https://runtime.example.test/gemini/v1beta":
         fail("GeminiAudioProvider did not retain resolved endpoint")
     if provider.model_name != "gemini-runtime-tts-model":
         fail(f"GeminiAudioProvider did not pick up resolved runtime model: {provider.model_name}")

@@ -29,6 +29,7 @@ from services.api_provider_registry import (
     get_endpoint_env_key,
     get_gpt_image_tiers,
     get_model_env_key,
+    get_provider_default_endpoint,
     get_provider_extra_env_keys,
     get_provider_env_key,
     get_proxy_mode_env_key,
@@ -55,8 +56,13 @@ GEMINI_IMAGE_LEGACY_MODELS = {
     "nanobanana",
 }
 GEMINI_IMAGE_NEW_MODEL = "gemini-3.1-flash-image-preview"
-GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash"}
+GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash", "gemini-2.5-flash-preview-tts"}
 GEMINI_TTS_NEW_MODEL = GEMINI_TTS_DEFAULT_MODEL
+GEMINI_TTS_NEW_ENDPOINT = get_provider_default_endpoint("gemini-tts")
+GEMINI_TTS_LEGACY_ENDPOINTS = {
+    f"{GEMINI_TTS_NEW_ENDPOINT}/openai",
+    f"{GEMINI_TTS_NEW_ENDPOINT}/openai/",
+}
 SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL
 VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL
 
@@ -285,17 +291,24 @@ async def seed_default_api_providers() -> Dict[str, Any]:
             if provider != "gemini-tts":
                 continue
             model_name = str(_config_get(row, "model_name", "") or "").strip()
-            if model_name not in GEMINI_TTS_LEGACY_MODELS:
+            endpoint = str(_config_get(row, "endpoint", "") or "").strip()
+            update_kwargs: Dict[str, Any] = {}
+            if model_name in GEMINI_TTS_LEGACY_MODELS:
+                update_kwargs["model_name"] = GEMINI_TTS_NEW_MODEL
+            if endpoint in GEMINI_TTS_LEGACY_ENDPOINTS:
+                update_kwargs["endpoint"] = GEMINI_TTS_NEW_ENDPOINT
+            if not update_kwargs:
                 continue
 
             old_name = str(_config_get(row, "name", "") or "")
-            await ApiConfigDAO.update(_config_get(row, "config_id", ""), model_name=GEMINI_TTS_NEW_MODEL)
+            await ApiConfigDAO.update(_config_get(row, "config_id", ""), **update_kwargs)
             upgraded += 1
             logger.info(
-                "Upgraded Gemini TTS API config %r from %s to %s",
+                "Upgraded Gemini TTS API config %r from model=%s endpoint=%s to %s",
                 old_name,
                 model_name,
-                GEMINI_TTS_NEW_MODEL,
+                endpoint,
+                update_kwargs,
             )
 
         for row in existing:

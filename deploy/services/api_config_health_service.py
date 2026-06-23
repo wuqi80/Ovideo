@@ -14,6 +14,7 @@ from services.api_provider_registry import (
     PROVIDER_CATALOG,
     get_api_model_preset,
     get_api_provider_catalog,
+    get_provider_default_endpoint,
     normalize_provider,
 )
 from services.api_provider_runtime import resolve_provider
@@ -103,6 +104,21 @@ def api_config_health_urls(row: Dict[str, Any]) -> List[str]:
     return dedupe_urls(candidates)
 
 
+def uses_provider_api_key_header(provider: str, urls: List[str]) -> bool:
+    normalized = normalize_provider(provider)
+    if normalized != "gemini-tts":
+        return False
+
+    default_endpoint = get_provider_default_endpoint(normalized).strip().rstrip("/").lower()
+    if not default_endpoint:
+        return False
+
+    return any(
+        (url or "").strip().rstrip("/").lower().startswith(default_endpoint)
+        for url in urls
+    )
+
+
 def api_health_result(
     *,
     provider: str,
@@ -161,7 +177,10 @@ async def test_api_config_health(
     headers: Dict[str, str] = {}
     if isinstance(hdrs_raw, dict):
         headers = {str(k): str(v) for k, v in hdrs_raw.items()}
-    if "Authorization" not in headers and "authorization" not in headers:
+    if uses_provider_api_key_header(provider, urls_to_try):
+        if "x-goog-api-key" not in {key.lower() for key in headers}:
+            headers["x-goog-api-key"] = api_key
+    elif "Authorization" not in headers and "authorization" not in headers:
         headers["Authorization"] = f"Bearer {api_key}"
 
     proxy = await resolve_proxy_for_request(
