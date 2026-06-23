@@ -993,37 +993,27 @@ def build_doubao_image_payload(
     return payload
 
 
-async def generate_doubao_images(
+def parse_doubao_image_response(result: Dict[str, Any]) -> List[str]:
+    return parse_openai_image_response(result)
+
+
+async def _post_doubao_image_generation(
     *,
-    prompt: str,
-    reference_inputs: List[str],
-    size: str,
-    sequential: str,
-    count: int,
-    model: Optional[str] = None,
+    config: Any,
+    payload: Dict[str, Any],
 ) -> List[str]:
-    config = resolve_provider("doubao", model)
     if not config.api_key:
         raise AIProxyConfigError("未配置 ARK_API_KEY，无法调用豆包接口")
     if not config.endpoint:
         raise AIProxyConfigError("未配置豆包 endpoint，无法调用豆包接口")
 
-    payload = build_doubao_image_payload(
-        prompt=prompt,
-        model=config.model_name or model or "doubao-seedream-4-0-250828",
-        size=size,
-        sequential=sequential,
-        count=count,
-        reference_inputs=reference_inputs,
-    )
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {config.api_key}",
-    }
     result = await _post_json_request_async(
         label="Doubao image",
         url=config.url_for(),
-        headers=headers,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {config.api_key}",
+        },
         payload=payload,
         timeout=120,
         timeout_message="图像生成失败，请稍后重试",
@@ -1035,13 +1025,31 @@ async def generate_doubao_images(
         upstream_detail=lambda upstream, _status_code: f"豆包生成失败: {upstream[:200]}",
         upstream_status_code=500,
     )
+    return parse_doubao_image_response(result)
 
-    images: List[str] = []
-    for item in result.get("data", []):
-        if item.get("b64_json"):
-            images.append(f"data:image/png;base64,{item['b64_json']}")
-        elif item.get("url"):
-            images.append(item["url"])
+
+async def generate_doubao_images(
+    *,
+    prompt: str,
+    reference_inputs: List[str],
+    size: str,
+    sequential: str,
+    count: int,
+    model: Optional[str] = None,
+) -> List[str]:
+    config = resolve_provider("doubao", model)
+    payload = build_doubao_image_payload(
+        prompt=prompt,
+        model=config.model_name or model or "doubao-seedream-4-0-250828",
+        size=size,
+        sequential=sequential,
+        count=count,
+        reference_inputs=reference_inputs,
+    )
+    images = await _post_doubao_image_generation(
+        config=config,
+        payload=payload,
+    )
     if not images:
         raise AIProxyUpstreamError("豆包未返回图片")
     return images

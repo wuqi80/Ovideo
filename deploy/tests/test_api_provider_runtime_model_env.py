@@ -293,6 +293,28 @@ class _DoubaoResponse:
         return {"data": [{"b64_json": "ZG91YmFv"}]}
 
 
+def test_parse_doubao_image_response_extracts_base64_and_urls():
+    images = ai_proxy_service.parse_doubao_image_response(
+        {
+            "data": [
+                {"b64_json": "ZG91YmFvLWltYWdl"},
+                {"url": "https://cdn.example.test/doubao.png"},
+            ]
+        }
+    )
+
+    assert images == [
+        "data:image/png;base64,ZG91YmFvLWltYWdl",
+        "https://cdn.example.test/doubao.png",
+    ]
+
+
+def test_parse_doubao_image_response_returns_empty_list_without_images():
+    assert ai_proxy_service.parse_doubao_image_response(
+        {"data": [{"ignored": True}]}
+    ) == []
+
+
 class _OpenAIImageResponse:
     status_code = 200
     text = ""

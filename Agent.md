@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 Doubao Image Provider Boundary
+
+- Refactored `deploy/services/ai_proxy_service.py` so `generate_doubao_images()` delegates provider HTTP handling to `_post_doubao_image_generation()`.
+- Added `parse_doubao_image_response()` to centralize Doubao image response extraction while preserving `b64_json` and URL handling.
+- Strengthened `deploy/tests/test_api_provider_runtime_model_env.py` with Doubao parser coverage for base64 images, URL images, and empty responses.
+- Strengthened `deploy/scripts/check_route_contract.py` so `generate_doubao_images()` cannot reintroduce direct HTTP calls or response parsing.
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 GPT Image Provider Boundary
 
 - Refactored `deploy/services/ai_proxy_service.py` so `generate_gpt_images()` delegates edit and generation provider requests to `_post_gpt_image_edit_request()` and `_post_gpt_image_generation_request()`.

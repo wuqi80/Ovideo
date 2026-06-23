@@ -1,5 +1,18 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 Doubao Image Provider Boundary
+
+### Changes
+
+- Refactored `services/ai_proxy_service.py` so `generate_doubao_images()` delegates provider HTTP handling to `_post_doubao_image_generation()`.
+- Added `parse_doubao_image_response()` to centralize Doubao image response extraction while preserving `b64_json` and URL handling.
+- Strengthened `tests/test_api_provider_runtime_model_env.py` with Doubao parser coverage for base64 images, URL images, and empty responses.
+- Strengthened `scripts/check_route_contract.py` so `generate_doubao_images()` cannot reintroduce direct HTTP calls or response parsing.
+
+### Verification
+
+- Status: local implementation in progress; deploy verification pending.
+
 ## 2026-06-23 GPT Image Provider Boundary
 
 ### Changes
