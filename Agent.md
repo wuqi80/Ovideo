@@ -1,5 +1,14 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-23 AI Proxy Gemini Text Provider Boundary
+
+- Added `deploy/services/ai_proxy_gemini_text_service.py` for Gemini text generation, Gemini chat generation, failover-aware runtime resolution, and text result shaping.
+- Moved `generate_gemini_text_result()`, `generate_gemini_chat_result()`, and `generate_gemini_text()` out of `deploy/services/ai_proxy_service.py`.
+- Kept the same public Gemini text entrypoints available from `deploy/services/ai_proxy_service.py` for existing routers, `video_reverse_service.py`, and tests.
+- Updated provider/runtime contracts so `resolve_provider("gemini-text")` ownership lives in the new service and cannot drift back into the provider aggregation file.
+- Local verification passed: `py_compile`, provider runtime pytest `39/39`, targeted image content/reference/provider runtime pytest `47/47`, route contract, provider contract, architecture contracts `10/10`, `git diff --check`, and local smoke `9/9`.
+- Status: deploy verification pending.
+
 ## 2026-06-23 AI Proxy DeepSeek Provider Boundary
 
 - Added `deploy/services/ai_proxy_deepseek_service.py` for DeepSeek configuration resolution, non-streaming text generation, SSE payload building, and streaming response parsing.

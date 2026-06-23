@@ -12,11 +12,11 @@ from typing import Any, Iterable
 
 EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
     "services/ai_proxy_service.py": {
-        "gemini-text",
         "gemini-image",
         "doubao",
     },
     "services/ai_proxy_deepseek_service.py": {"deepseek"},
+    "services/ai_proxy_gemini_text_service.py": {"gemini-text"},
     "services/audio_provider.py": {"gemini-tts"},
     "external_api/audio/minimax_audio.py": {"minimax"},
     "external_api/video/minimax.py": {"minimax"},

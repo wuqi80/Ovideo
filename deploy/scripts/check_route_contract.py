@@ -4038,6 +4038,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_image_content_path = root / "services" / "ai_proxy_image_content_service.py"
     ai_proxy_chat_path = root / "services" / "ai_proxy_chat_service.py"
     ai_proxy_deepseek_path = root / "services" / "ai_proxy_deepseek_service.py"
+    ai_proxy_gemini_text_path = root / "services" / "ai_proxy_gemini_text_service.py"
     ai_proxy_http_client_path = root / "services" / "ai_proxy_http_client.py"
     ai_proxy_types_path = root / "services" / "ai_proxy_types.py"
     ai_proxy_reference_path = root / "services" / "ai_proxy_reference_service.py"
@@ -4050,6 +4051,8 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         fail("AI proxy chat completion helpers must live in services/ai_proxy_chat_service.py")
     if not ai_proxy_deepseek_path.exists():
         fail("AI proxy DeepSeek helpers must live in services/ai_proxy_deepseek_service.py")
+    if not ai_proxy_gemini_text_path.exists():
+        fail("AI proxy Gemini text helpers must live in services/ai_proxy_gemini_text_service.py")
     if not ai_proxy_http_client_path.exists():
         fail("AI proxy HTTP client must live in services/ai_proxy_http_client.py")
     if not ai_proxy_types_path.exists():
@@ -4062,6 +4065,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     ai_proxy_image_content_text = ai_proxy_image_content_path.read_text(encoding="utf-8")
     ai_proxy_chat_text = ai_proxy_chat_path.read_text(encoding="utf-8")
     ai_proxy_deepseek_text = ai_proxy_deepseek_path.read_text(encoding="utf-8")
+    ai_proxy_gemini_text_text = ai_proxy_gemini_text_path.read_text(encoding="utf-8")
     ai_proxy_http_client_text = ai_proxy_http_client_path.read_text(encoding="utf-8")
     ai_proxy_types_text = ai_proxy_types_path.read_text(encoding="utf-8")
     ai_proxy_reference_text = ai_proxy_reference_path.read_text(encoding="utf-8")
@@ -4127,17 +4131,30 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
             fail(f"AI proxy DeepSeek service must own text/stream helper: {snippet}")
         checks += 1
     for snippet in (
-        "from services.ai_proxy_chat_service import (",
-        "_post_chat_completion_result,",
-        "build_chat_payload,",
-        "provider_health_scope_for_failover,",
-        "resolve_ai_proxy_provider,",
+        "async def generate_gemini_text_result(",
+        "async def generate_gemini_chat_result(",
+        "async def generate_gemini_text(",
+        "_post_chat_completion_result(",
+        "build_chat_payload(",
+        "resolve_ai_proxy_provider(",
+        'config = resolve_provider("gemini-text", model)',
+        'label="Gemini text",',
+    ):
+        if snippet not in ai_proxy_gemini_text_text:
+            fail(f"AI proxy Gemini text service must own text/chat helper: {snippet}")
+        checks += 1
+    for snippet in (
+        "from services.ai_proxy_chat_service import provider_health_scope_for_failover",
         "from services.ai_proxy_deepseek_service import (",
         "DEEPSEEK_SYSTEM_PROMPT,",
         "build_deepseek_payload,",
         "ensure_deepseek_configured,",
         "generate_deepseek_text,",
         "stream_deepseek_chat,",
+        "from services.ai_proxy_gemini_text_service import (",
+        "generate_gemini_chat_result,",
+        "generate_gemini_text,",
+        "generate_gemini_text_result,",
         "from services.ai_proxy_http_client import (",
         "_post_json_request_async,",
         "_post_form_request_async,",
@@ -4147,7 +4164,6 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "async def _post_gpt_image_generation_request(",
         "def parse_doubao_image_response(",
         "async def _post_doubao_image_generation(",
-        'label="Gemini text",',
         'label="Gemini image",',
         'label="GPT Image edit",',
         'label="GPT Image generate",',
@@ -4183,6 +4199,9 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "def _deepseek_chat_url(",
         "def generate_deepseek_text(",
         "def stream_deepseek_chat(",
+        "async def generate_gemini_text_result(",
+        "async def generate_gemini_chat_result(",
+        "async def generate_gemini_text(",
         "json.loads(data)",
         "class AIProxyError(",
         "class AIProxyConfigError(",
@@ -4213,11 +4232,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
                 fail(f"{path.relative_to(root)} must import shared AI proxy types from services.ai_proxy_types: {forbidden}")
             checks += 1
     try:
-        gemini_text_source = ai_proxy_text.split("async def generate_gemini_text_result", 1)[1].split(
+        gemini_text_source = ai_proxy_gemini_text_text.split("async def generate_gemini_text_result", 1)[1].split(
             "async def generate_gemini_chat_result",
             1,
         )[0]
-        gemini_chat_source = ai_proxy_text.split("async def generate_gemini_chat_result", 1)[1].split(
+        gemini_chat_source = ai_proxy_gemini_text_text.split("async def generate_gemini_chat_result", 1)[1].split(
             "async def generate_gemini_text(",
             1,
         )[0]
@@ -4235,7 +4254,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         )[0]
         doubao_image_source = ai_proxy_text.split("async def generate_doubao_images(", 1)[1]
     except IndexError:
-        fail("Could not locate text/chat generation functions in services/ai_proxy_service.py")
+        fail("Could not locate text/chat generation functions in services/ai_proxy_gemini_text_service.py")
     for name, source in (
         ("generate_gemini_text_result", gemini_text_source),
         ("generate_gemini_chat_result", gemini_chat_source),

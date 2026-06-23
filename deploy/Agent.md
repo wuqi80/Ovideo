@@ -1,5 +1,26 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-23 AI Proxy Gemini Text Provider Boundary
+
+### Changes
+
+- Added `services/ai_proxy_gemini_text_service.py` for Gemini text generation, Gemini chat generation, failover-aware runtime resolution, and text result shaping.
+- Moved `generate_gemini_text_result()`, `generate_gemini_chat_result()`, and `generate_gemini_text()` out of `services/ai_proxy_service.py`.
+- Kept the same public Gemini text entrypoints available from `services/ai_proxy_service.py` for existing routers, `video_reverse_service.py`, and tests.
+- Updated provider/runtime contracts so `resolve_provider("gemini-text")` ownership lives in the new service and cannot drift back into the provider aggregation file.
+
+### Verification
+
+- Local `py_compile` for Gemini text service, provider service, route/provider contracts, and provider-runtime test files: passed.
+- Local provider runtime pytest: `39/39` passed.
+- Local targeted image content, reference, and provider runtime pytest: `47/47` passed.
+- Local `scripts/check_route_contract.py`: passed, including `api_provider_runtime_model_checks=376` and `service_mapper_purity_checks=1459`.
+- Local `scripts/check_provider_contract.py`: passed, including `runtime_wired_files=12`.
+- Local `scripts/check_architecture_contracts.py`: passed `10/10`.
+- Local `git diff --check`: passed.
+- Local smoke test: `9/9` passed.
+- Status: deploy verification pending.
+
 ## 2026-06-23 AI Proxy DeepSeek Provider Boundary
 
 ### Changes
