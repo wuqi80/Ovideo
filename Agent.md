@@ -8650,3 +8650,15 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `d29ef39`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 Excel Test Issue Fix Batch 1
+
+- Read `C:/Users/Administrator/Desktop/漫剧平台测试问题.xlsx`; both `06.23` and `Sheet1` contain test issues.
+- Fixed Seedance single-image video generation: one storyboard image marked as `first_frame` is now accepted as `seedance_i2v` instead of being blocked by the first/last-frame pair validation or misrouted as `seedance_multi`.
+- Stabilized episode duplication UX: added a shared `duplicateEpisode()` frontend service call and changed episode card numbers to render from current list order, preventing visible skipped numbers after delete/copy/sort drift.
+- Reduced audio batch noise: "全部生成" on the dubbing page now only submits clips that do not already have generated audio and uses a local running lock to prevent duplicate batch clicks.
+- Added frontend regression tests for episode duplication API wiring and Seedance task-type inference.
+- Still open from the spreadsheet: image/storyboard quality consistency, intermittent next-day missing media, and deeper storyboard generation partial failures require separate data/provider investigation.
+- Verification:
+  - Local Vitest targeted run passed: `videoModelService.test.ts` and `projectWorkflowService.test.ts` (7 tests).
+  - Local `vite build` for `deploy/new_html` passed; only the existing chunk-size warning remained.

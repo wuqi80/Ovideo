@@ -338,6 +338,7 @@ export const AudioStagePage: React.FC = () => {
   const [playingKey, setPlayingKey] = useState('');
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const dubbingRef = useRef<DubbingPanelHandle>(null);
+  const batchRunningRef = useRef(false);
 
   // 2026-05-24 (Task 7)：per-clip AbortController map。每条 clip 对应一个
   // runGenerate 调用 / 一个 minimaxTTS 入队请求 / 一个 pollTtsTaskUntilDone 轮询。
@@ -510,14 +511,21 @@ export const AudioStagePage: React.FC = () => {
   }, [voiceMap, localOverrides, clipKey, episodeId, projectId, updateAudioStageStoryboardItem]);
 
   const handleBatchGenerate = useCallback(async () => {
-    if (batchRunning || clips.length === 0) return;
+    if (batchRunningRef.current || batchRunning || clips.length === 0) return;
+    const pendingClips = clips.filter(clip => {
+      const key = clipKey(clip);
+      return !generatingIds.has(key) && !(localAudio[key]?.url || clip.audioUrl);
+    });
+    if (pendingClips.length === 0) return;
+    batchRunningRef.current = true;
     setBatchRunning(true);
     try {
-      for (const clip of clips) await runGenerate(clip);
+      for (const clip of pendingClips) await runGenerate(clip);
     } finally {
+      batchRunningRef.current = false;
       setBatchRunning(false);
     }
-  }, [clips, batchRunning, runGenerate]);
+  }, [clips, batchRunning, runGenerate, clipKey, generatingIds, localAudio]);
 
   const handleTextPersist = useCallback(async (itemId: string, speaker: string, newText: string) => {
     const fullDialogue = newText ? (speaker ? `${speaker}：${newText}` : newText) : '';

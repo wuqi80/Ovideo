@@ -102,6 +102,12 @@ export async function updateEpisode(episodeId: string, data: UpdateEpisodePayloa
   }, 'updateEpisode');
 }
 
+export async function duplicateEpisode(episodeId: string) {
+  return apiJson<any>(`/api/episodes/${episodeId}/duplicate`, {
+    method: 'POST',
+  }, 'duplicateEpisode');
+}
+
 export async function deleteEpisode(episodeId: string) {
   return apiJson<any>(`/api/episodes/${episodeId}`, { method: 'DELETE' }, 'deleteEpisode');
 }

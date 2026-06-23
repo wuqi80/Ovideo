@@ -80,7 +80,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
         const hasLast = images.some(m => m.role === 'last_frame');
         const hasRef = images.some(m => m.role === 'reference_image');
         if ((hasFirst || hasLast) && hasRef) return { ok: false, msg: '首尾帧 与 参考图 不能同时使用' };
-        if (hasFirst !== hasLast) return { ok: false, msg: '首帧 / 尾帧 必须成对出现' };
+        if (hasLast && !hasFirst) return { ok: false, msg: '首帧 / 尾帧 必须成对出现' };
         if (value.media_inputs.length === 0 && !value.prompt.trim()) return { ok: false, msg: '至少提供 1 个媒体或非空提示词' };
         if (audios.length > 0 && images.length === 0 && videos.length === 0) {
             return { ok: false, msg: '不可单独输入音频，必须至少包含 1 张图或 1 段视频' };

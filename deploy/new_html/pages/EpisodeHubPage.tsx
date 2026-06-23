@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, LogOut, Pencil, Copy } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
+import { duplicateEpisode as duplicateEpisodeRequest } from '../services/projectWorkflowService';
 import type { Episode } from '../types';
 
 export const EpisodeHubPage: React.FC = () => {
@@ -81,9 +82,7 @@ export const EpisodeHubPage: React.FC = () => {
     if (duplicatingId) return;
     setDuplicatingId(episodeId);
     try {
-      const data = await apiJson<any>(`/api/episodes/${episodeId}/duplicate`, {
-        method: 'POST',
-      }, '复制分集');
+      const data = await duplicateEpisodeRequest(episodeId);
       if (data.success) {
         await loadEpisodes();
       } else {
@@ -226,7 +225,7 @@ export const EpisodeHubPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-mono text-primary bg-primary-light px-2 py-0.5 rounded">
-                          #{(ep.sortOrder ?? 0) + 1}
+                          #{idx + 1}
                         </span>
                         <span className={`text-xs px-2 py-0.5 rounded ${statusColors[ep.status] || statusColors.draft}`}>
                           {ep.status === 'draft' ? '草稿' : ep.status === 'in_progress' ? '制作中' : ep.status === 'completed' ? '已完成' : ep.status === 'published' ? '已发布' : ep.status}

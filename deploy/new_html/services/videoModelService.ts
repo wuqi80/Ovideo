@@ -50,7 +50,11 @@ export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: 
   const hasFirst = images.some((m) => m.role === 'first_frame');
   const hasLast = images.some((m) => m.role === 'last_frame');
   if (hasFirst && hasLast) return 'seedance_morph';
-  if (media.length === 1 && images.length === 1 && !images[0].role) return 'seedance_i2v';
+  if (
+    media.length === 1
+    && images.length === 1
+    && (!images[0].role || images[0].role === 'first_frame')
+  ) return 'seedance_i2v';
   return 'seedance_multi';
 }
 
