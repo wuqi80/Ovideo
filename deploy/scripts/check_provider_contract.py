@@ -12,11 +12,11 @@ from typing import Any, Iterable
 
 EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
     "services/ai_proxy_service.py": {
-        "gemini-image",
         "doubao",
     },
     "services/ai_proxy_deepseek_service.py": {"deepseek"},
     "services/ai_proxy_gemini_text_service.py": {"gemini-text"},
+    "services/ai_proxy_gemini_image_service.py": {"gemini-image"},
     "services/audio_provider.py": {"gemini-tts"},
     "external_api/audio/minimax_audio.py": {"minimax"},
     "external_api/video/minimax.py": {"minimax"},
@@ -1377,12 +1377,12 @@ def check_gpt_image_tier_wiring(registry) -> int:
 
 
 def check_gemini_image_alias_wiring(registry) -> int:
-    path = deploy_root() / "services" / "ai_proxy_service.py"
+    path = deploy_root() / "services" / "ai_proxy_gemini_image_service.py"
     text = path.read_text(encoding="utf-8")
     try:
         tree = ast.parse(text, filename=str(path))
     except Exception as exc:
-        fail(f"Unable to parse services/ai_proxy_service.py: {exc}")
+        fail(f"Unable to parse services/ai_proxy_gemini_image_service.py: {exc}")
 
     for node in tree.body:
         if isinstance(node, ast.Assign):
@@ -1404,7 +1404,7 @@ def check_gemini_image_alias_wiring(registry) -> int:
     if registry.normalize_gemini_image_model("custom-model") != "custom-model":
         fail("Gemini image alias helper should preserve unknown explicit models")
     if "normalize_gemini_image_model," not in text and "normalize_gemini_image_model" not in text:
-        fail("ai_proxy_service.py must import/use registry normalize_gemini_image_model")
+        fail("ai_proxy_gemini_image_service.py must import/use registry normalize_gemini_image_model")
     return len(aliases) + 3
 
 
