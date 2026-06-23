@@ -4035,9 +4035,13 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     checks += 1
     ai_proxy_text = (root / "services" / "ai_proxy_service.py").read_text(encoding="utf-8")
     ai_proxy_image_persistence_path = root / "services" / "ai_proxy_image_persistence_service.py"
+    ai_proxy_task_path = root / "services" / "ai_proxy_task_service.py"
     if not ai_proxy_image_persistence_path.exists():
         fail("AI proxy generated image persistence must live in services/ai_proxy_image_persistence_service.py")
+    if not ai_proxy_task_path.exists():
+        fail("AI proxy task persistence must live in services/ai_proxy_task_service.py")
     ai_proxy_image_persistence_text = ai_proxy_image_persistence_path.read_text(encoding="utf-8")
+    ai_proxy_task_text = ai_proxy_task_path.read_text(encoding="utf-8")
     for snippet in (
         "def _post_json_request(",
         "async def _post_json_request_async(",
@@ -4080,9 +4084,14 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
     for snippet in (
         "from services.ai_proxy_image_persistence_service import persist_generated_ai_images",
         "persist_generated_ai_images(",
+        "from services.ai_proxy_task_service import (",
+        "create_deepseek_text_task(",
+        "complete_ai_proxy_text_task(",
+        "create_completed_gemini_text_task(",
+        "create_completed_image_task(",
     ):
         if snippet not in router_text:
-            fail(f"AI proxy router must delegate generated image persistence to service: {snippet}")
+            fail(f"AI proxy router must delegate image/task persistence to services: {snippet}")
         checks += 1
     for forbidden in (
         "generated_image_content(",
@@ -4090,9 +4099,26 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "import media_library_service",
         "FileDAO as _FileDAO",
         "create_from_file(",
+        "from dao_task import TaskDAO",
+        "TaskDAO.create_task(",
+        "TaskDAO.update_task_status(",
+        "time.time(",
     ):
         if forbidden in router_text:
-            fail(f"AI proxy router must not perform generated image persistence directly: {forbidden}")
+            fail(f"AI proxy router must not perform generated image/task persistence directly: {forbidden}")
+        checks += 1
+    for snippet in (
+        "async def create_deepseek_text_task(",
+        "async def complete_ai_proxy_text_task(",
+        "async def create_completed_gemini_text_task(",
+        "async def create_completed_image_task(",
+        "from dao_task import TaskDAO",
+        "await dao.create_task(",
+        "await dao.update_task_status(",
+        "return int(time.time() * 1000)",
+    ):
+        if snippet not in ai_proxy_task_text:
+            fail(f"AI proxy task persistence service is missing: {snippet}")
         checks += 1
     if "requests." in router_text or "import requests" in router_text:
         fail("AI proxy router must not perform direct HTTP requests")

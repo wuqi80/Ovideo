@@ -1,15 +1,13 @@
 """AI proxy routes.
 
 The external provider calls live in services.ai_proxy_service. This router keeps
-the HTTP route layer focused on auth, request shaping, persistence, and response
-format.
+the HTTP route layer focused on auth, request shaping, and response format.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
 import logging
-import time
 from typing import Callable, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -33,25 +31,15 @@ from services.ai_proxy_service import (
     stream_deepseek_chat,
 )
 from services.ai_proxy_image_persistence_service import persist_generated_ai_images
+from services.ai_proxy_task_service import (
+    complete_ai_proxy_text_task,
+    create_completed_gemini_text_task,
+    create_completed_image_task,
+    create_deepseek_text_task,
+)
 from utils.image_reference import storage_path_safe, to_doubao_image_input
 
 logger = logging.getLogger(__name__)
-
-
-async def _save_text_result(task_id: str, text_content: str):
-    """Persist a completed streaming text result back to the task table."""
-    try:
-        from dao_task import TaskDAO
-
-        truncated_text = text_content[:2000] if len(text_content) > 2000 else text_content
-        await TaskDAO.update_task_status(
-            task_id=task_id,
-            status="completed",
-            result_data={"text": truncated_text, "full_length": len(text_content)},
-        )
-        logger.info("✅ 文本结果已保存到数据库: %s, 长度: %s", task_id, len(text_content))
-    except Exception as e:
-        logger.error("⚠️ 保存文本结果失败: %s", e, exc_info=True)
 
 
 def create_ai_proxy_router(
@@ -68,7 +56,11 @@ def create_ai_proxy_router(
         if loop is not None and not loop.is_closed():
             try:
                 asyncio.run_coroutine_threadsafe(
-                    _save_text_result(task_id, complete_text),
+                    complete_ai_proxy_text_task(
+                        task_id=task_id,
+                        text_content=complete_text,
+                        logger=logger,
+                    ),
                     loop,
                 )
             except Exception as e:
@@ -85,25 +77,13 @@ def create_ai_proxy_router(
             raise HTTPException(status_code=e.status_code, detail=e.detail)
 
         try:
-            task_id = None
-            try:
-                from dao_task import TaskDAO
-
-                task_id = f"deepseek_text_{int(time.time() * 1000)}"
-                await TaskDAO.create_task(
-                    task_id=task_id,
-                    user_id=username,
-                    task_type="deepseek_text",
-                    task_data={
-                        "prompt": request.prompt[:500],
-                        "response_format": request.response_format,
-                        "temperature": request.temperature,
-                    },
-                )
-                logger.info("✅ DeepSeek文本生成任务已创建: %s", task_id)
-            except Exception as save_error:
-                logger.error("⚠️ 保存DeepSeek任务失败: %s", save_error, exc_info=True)
-                task_id = None
+            task_id = await create_deepseek_text_task(
+                user_id=username,
+                prompt=request.prompt,
+                response_format=request.response_format,
+                temperature=request.temperature,
+                logger=logger,
+            )
 
             return StreamingResponse(
                 stream_deepseek_chat(
@@ -138,30 +118,15 @@ def create_ai_proxy_router(
             )
             content = text_result.content
 
-            try:
-                from dao_task import TaskDAO
-
-                task_id = f"gemini_text_{int(time.time() * 1000)}"
-                await TaskDAO.create_task(
-                    task_id=task_id,
-                    user_id=username,
-                    task_type="gemini_text",
-                    task_data={
-                        "prompt": request.prompt[:500],
-                        "system_prompt": request.system_prompt[:200] if request.system_prompt else None,
-                        "temperature": request.temperature,
-                        "model": request.model,
-                    },
-                )
-                truncated_text = content[:2000] if len(content) > 2000 else content
-                await TaskDAO.update_task_status(
-                    task_id=task_id,
-                    status="completed",
-                    result_data={"text": truncated_text, "full_length": len(content)},
-                )
-                logger.info("✅ Gemini文本生成任务已保存: %s, 长度: %s", task_id, len(content))
-            except Exception as save_error:
-                logger.error("⚠️ 保存Gemini文本任务失败: %s", save_error, exc_info=True)
+            await create_completed_gemini_text_task(
+                user_id=username,
+                prompt=request.prompt,
+                system_prompt=request.system_prompt,
+                temperature=request.temperature,
+                model=request.model,
+                content=content,
+                logger=logger,
+            )
 
             return {
                 "content": content,
@@ -233,30 +198,19 @@ def create_ai_proxy_router(
 
             logger.info("✅ 图像生成成功: %s 张图片, 用户: %s", len(images), username)
 
-            task_id = None
-            try:
-                from dao_task import TaskDAO
-
-                task_id = f"gemini_img_{int(time.time() * 1000)}"
-                await TaskDAO.create_task(
-                    task_id=task_id,
-                    user_id=username,
-                    task_type=f"gemini_image_{model.replace('gemini-', '').replace('-image', '')}",
-                    task_data={
-                        "prompt": request.prompt,
-                        "model": model,
-                        "aspectRatio": request.aspectRatio,
-                        "imageSize": request.imageSize,
-                    },
-                )
-                await TaskDAO.update_task_status(
-                    task_id=task_id,
-                    status="completed",
-                    result_data={"images_count": len(images)},
-                )
-                logger.info("✅ Gemini图像生成任务已保存: %s", task_id)
-            except Exception as save_error:
-                logger.error("⚠️ 保存Gemini图像生成任务失败: %s", save_error, exc_info=True)
+            task_id = await create_completed_image_task(
+                task_id_prefix="gemini_img",
+                user_id=username,
+                task_type=f"gemini_image_{model.replace('gemini-', '').replace('-image', '')}",
+                task_data={
+                    "prompt": request.prompt,
+                    "model": model,
+                    "aspectRatio": request.aspectRatio,
+                    "imageSize": request.imageSize,
+                },
+                images_count=len(images),
+                logger=logger,
+            )
 
             files_result = await persist_generated_ai_images(
                 images,
@@ -390,29 +344,19 @@ def create_ai_proxy_router(
             )
             logger.info("✅ 豆包生成 %s 张图片, 用户: %s", len(images), username)
 
-            try:
-                from dao_task import TaskDAO
-
-                task_id = f"doubao_img_{int(time.time() * 1000)}"
-                await TaskDAO.create_task(
-                    task_id=task_id,
-                    user_id=username,
-                    task_type="doubao_image",
-                    task_data={
-                        "prompt": request.prompt,
-                        "size": request.size,
-                        "count": request.count,
-                        "sequential": request.sequential,
-                    },
-                )
-                await TaskDAO.update_task_status(
-                    task_id=task_id,
-                    status="completed",
-                    result_data={"images_count": len(images)},
-                )
-                logger.info("✅ 豆包图像生成任务已保存: %s", task_id)
-            except Exception as save_error:
-                logger.error("⚠️ 保存豆包图像生成任务失败: %s", save_error, exc_info=True)
+            await create_completed_image_task(
+                task_id_prefix="doubao_img",
+                user_id=username,
+                task_type="doubao_image",
+                task_data={
+                    "prompt": request.prompt,
+                    "size": request.size,
+                    "count": request.count,
+                    "sequential": request.sequential,
+                },
+                images_count=len(images),
+                logger=logger,
+            )
 
             files_result = await persist_generated_ai_images(
                 images,

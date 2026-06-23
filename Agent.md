@@ -8472,3 +8472,17 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
   - Local `scripts/smoke_test.py` passed 9/9.
   - Commit `7566737`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-06-23 AI Proxy Task Persistence Boundary
+
+- Moved AI proxy task row creation/completion for `/api/deepseek/chat`, `/api/gemini/text`, `/api/gemini/image`, and `/api/materials/doubao` from `deploy/routers/ai_proxy.py` into `deploy/services/ai_proxy_task_service.py`.
+- The router still owns auth, request/reference shaping, provider dispatch, streaming response wiring, and HTTP error mapping, but now delegates task id generation, `TaskDAO.create_task()`, `TaskDAO.update_task_status()`, result truncation, and best-effort task persistence failure handling to the service layer.
+- Added `deploy/tests/test_ai_proxy_task_service.py` to cover DeepSeek task creation, text result completion/truncation, Gemini text task create+complete, image task create+complete, and nonfatal DAO failures.
+- Strengthened `deploy/scripts/check_route_contract.py` so AI proxy routes cannot regress to route-local `TaskDAO` imports/calls or `time.time()` task id generation.
+- Added the new AI proxy task service test to `deploy/scripts/live_deploy_mvc2.sh` so server sync includes it.
+- Verification:
+  - Local `py_compile` for changed route/service/contract/test files passed.
+  - Local `pytest tests/test_ai_proxy_task_service.py tests/test_ai_proxy_image_persistence_service.py tests/test_api_provider_runtime_model_env.py -q` passed with 41 tests.
+  - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
+  - Local `scripts/smoke_test.py` passed 9/9.
+  - Deployment and online smoke pending.
