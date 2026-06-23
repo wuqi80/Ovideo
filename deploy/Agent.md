@@ -8787,4 +8787,4 @@
 - Local `pytest tests/test_project_save_service.py tests/test_project_image_service.py tests/test_project_read_access.py -q` passed with 10 tests.
 - Local `scripts/check_route_contract.py` and `scripts/check_architecture_contracts.py` passed.
 - Local `scripts/smoke_test.py` passed 9/9.
-- Deployment and online smoke pending.
+- Commit `fb2296f`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh`, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
