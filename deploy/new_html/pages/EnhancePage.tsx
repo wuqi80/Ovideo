@@ -14,6 +14,7 @@ import { submitUpscaleTaskQueued } from '../services/videoTaskService';
 import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
+import { LazyVideo } from '../components/LazyVideo';
 
 interface MediaClip {
   id: string;
@@ -485,10 +486,11 @@ export const EnhancePage: React.FC = () => {
             )}
             <div className="w-full max-w-3xl aspect-video bg-black rounded-md border border-n40 shadow-2xl overflow-hidden relative">
               {videoUnderPlayhead?.url ? (
-                <video
+                <LazyVideo
                   src={videoUnderPlayhead.url}
                   preload="none"
                   controls={false}
+                  hoverPreview={false}
                   className="w-full h-full object-contain"
                 />
               ) : (

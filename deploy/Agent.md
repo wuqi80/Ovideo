@@ -1,5 +1,18 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-29 Enhance Preview Lazy Video
+
+### Changes
+
+- Updated `new_html/pages/EnhancePage.tsx` to render the main video preview with `LazyVideo` instead of binding the video `src` immediately.
+- Kept hover auto-preview disabled for the main preview so the page's existing play/edit behavior is unchanged while offscreen metadata requests are avoided.
+
+### Verification
+
+- Local targeted LazyVideo Vitest: `3/3` passed.
+- Local Vite production build: passed.
+- Local `git diff --check`: passed.
+
 ## 2026-06-29 LazyVideo Source Rebind
 
 ### Changes

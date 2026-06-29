@@ -1,5 +1,11 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-29 Enhance Preview Lazy Video
+
+- Updated `deploy/new_html/pages/EnhancePage.tsx` to render the main video preview with `LazyVideo` instead of binding the video `src` immediately.
+- Kept hover auto-preview disabled for the main preview so the page's existing play/edit behavior is unchanged while offscreen metadata requests are avoided.
+- Local verification passed: targeted LazyVideo Vitest `3/3`, Vite production build, and `git diff --check`.
+
 ## 2026-06-29 LazyVideo Source Rebind
 
 - Updated `deploy/new_html/components/LazyVideo.tsx` so videos that have already entered the viewport keep their source bound when `src` changes, matching the existing `LazyImage` behavior.
