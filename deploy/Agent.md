@@ -1,5 +1,19 @@
 # MECHA Deploy Agent Notes
 
+## 2026-06-29 LazyVideo Source Rebind
+
+### Changes
+
+- Updated `new_html/components/LazyVideo.tsx` so videos that have already entered the viewport keep their source bound when `src` changes, matching the existing `LazyImage` behavior.
+- This avoids a blank/unloaded frame when generated video URLs, signed media URLs, or restored task results refresh after the card is already visible.
+- Added `new_html/__tests__/components/LazyVideo.test.tsx` to cover deferred binding, first-frame fragments, and in-view source replacement.
+
+### Verification
+
+- Local targeted LazyImage/LazyVideo Vitest: `5/5` passed.
+- Local Vite production build: passed.
+- Local `git diff --check`: passed.
+
 ## 2026-06-23 Demo Stabilization Wrap-up
 
 ### Changes

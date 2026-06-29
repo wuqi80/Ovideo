@@ -1,5 +1,12 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-29 LazyVideo Source Rebind
+
+- Updated `deploy/new_html/components/LazyVideo.tsx` so videos that have already entered the viewport keep their source bound when `src` changes, matching the existing `LazyImage` behavior.
+- This avoids a blank/unloaded frame when generated video URLs, signed media URLs, or restored task results refresh after the card is already visible.
+- Added `deploy/new_html/__tests__/components/LazyVideo.test.tsx` to cover deferred binding, first-frame fragments, and in-view source replacement.
+- Local verification passed: targeted LazyImage/LazyVideo Vitest `5/5`, Vite production build, and `git diff --check`.
+
 ## 2026-06-23 Demo Stabilization Wrap-up
 
 - Updated Gemini TTS API health semantics so admin health can distinguish `blocked_region` and `connectivity_ok` from hard failures.

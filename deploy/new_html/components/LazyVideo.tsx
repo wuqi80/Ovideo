@@ -27,21 +27,26 @@ export const LazyVideo: React.FC<LazyVideoProps> = ({
   ...props
 }) => {
   const ref = useRef<HTMLVideoElement | null>(null);
+  const hasEnteredView = useRef(false);
   const [inView, setInView] = useState(false);
 
   useEffect(() => {
-    setInView(false);
+    if (!hasEnteredView.current) {
+      setInView(false);
+    }
   }, [src]);
 
   useEffect(() => {
     const element = ref.current;
     if (!element || inView) return;
     if (typeof IntersectionObserver === 'undefined') {
+      hasEnteredView.current = true;
       setInView(true);
       return;
     }
     const observer = new IntersectionObserver((entries) => {
       if (entries.some(entry => entry.isIntersecting)) {
+        hasEnteredView.current = true;
         setInView(true);
         observer.disconnect();
       }
