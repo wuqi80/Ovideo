@@ -150,18 +150,36 @@ async def main() -> int:
     test = no_key.get("test") or {}
     if test.get("ok") is not False or test.get("error") != "No API key configured":
         fail(f"No-key health result changed: {test}")
+    if test.get("status") != "no_key":
+        fail(f"No-key health status changed: {test}")
     if test.get("urls_tried") != urls:
         fail("No-key health result did not report derived URLs")
+
+    laozhang_row = {
+        "provider": "laozhang-gpt-image",
+        "model_name": "gpt-image-2-vip",
+        "endpoint": "https://api.laozhang.ai/v1",
+        "proxy_mode": "direct",
+        "custom_proxy": "",
+    }
+    laozhang_factory = FakeSessionFactory([(200, '{"data": []}')])
+    laozhang_health = await test_api_config_health(laozhang_row, "laozhang-secret", session_factory=laozhang_factory)
+    laozhang_test = laozhang_health.get("test") or {}
+    if laozhang_test.get("ok") is not False or laozhang_test.get("status") != "connectivity_ok":
+        fail(f"Laozhang metadata-only health should not report ok: {laozhang_test}")
+    if not laozhang_test.get("reachable") or not laozhang_test.get("auth_ok"):
+        fail(f"Laozhang connectivity result lost reachability/auth: {laozhang_test}")
 
     batch_summary = summarize_config_test_results(
         [
             {"test": {"ok": True, "auth_ok": True}},
             {"test": {"ok": False, "auth_ok": False}},
             {"test": {"ok": False, "error": "No API key configured"}},
+            {"test": {"ok": False, "auth_ok": True, "status": "connectivity_ok"}},
             {"test": {"ok": False, "auth_ok": True, "error": "HTTP 500"}},
         ]
     )
-    if batch_summary != {"total": 4, "ok": 1, "no_key": 1, "auth_error": 1, "error": 1}:
+    if batch_summary != {"total": 5, "ok": 1, "no_key": 1, "auth_error": 1, "connectivity_ok": 1, "error": 1}:
         fail(f"Batch config test summary changed: {batch_summary}")
 
     async def proxy_loader():
@@ -218,6 +236,16 @@ async def main() -> int:
         )
         if runtime_model_ok.get("model_name") != "deepseek-chat":
             fail(f"Provider runtime health did not preserve model_name override: {runtime_model_ok}")
+
+        os.environ["GPT_IMAGE_API_KEY"] = "runtime-laozhang-secret"
+        os.environ["GPT_IMAGE_ENDPOINT"] = "https://runtime.laozhang.example.test/v1"
+        runtime_laozhang_factory = FakeSessionFactory([(200, '{"data": []}')])
+        runtime_laozhang = await check_provider_health(
+            "laozhang-gpt-image",
+            session_factory=runtime_laozhang_factory,
+        )
+        if runtime_laozhang.get("status") != "connectivity_ok":
+            fail(f"Laozhang runtime health should be connectivity_ok: {runtime_laozhang}")
     finally:
         for key, value in saved_env.items():
             if value is None:
@@ -231,7 +259,8 @@ async def main() -> int:
     print("  no_key_result_ok=1")
     print("  batch_summary_ok=1")
     print(f"  fake_http_calls={len(factory.calls)}")
-    print("  provider_runtime_health=2")
+    print("  laozhang_connectivity_only=2")
+    print("  provider_runtime_health=3")
     return 0
 
 

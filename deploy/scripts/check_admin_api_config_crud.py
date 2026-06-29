@@ -327,7 +327,7 @@ async def main() -> int:
             fail("Could not locate API config health test functions")
         if "return await _test_api_config_row_health(row)" not in single_health_source:
             fail("test_saved_api_config_health must delegate to _test_api_config_row_health()")
-        if "result = await _test_api_config_row_health(row)" not in batch_health_source:
+        if "result = await _test_api_config_row_health(row" not in batch_health_source:
             fail("test_all_saved_api_config_health must delegate each row to _test_api_config_row_health()")
         for forbidden in (
             "await ApiConfigDAO.get_decrypted_key(",

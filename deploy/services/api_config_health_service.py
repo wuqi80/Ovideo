@@ -28,6 +28,22 @@ class ProviderHealthNotFound(RuntimeError):
     pass
 
 
+CONNECTIVITY_ONLY_STATUS = "connectivity_ok"
+CONNECTIVITY_ONLY_ERROR = (
+    "Metadata endpoint reachable, but generation is not verified. "
+    "Run an actual generation request to confirm provider availability."
+)
+GENERATION_SENSITIVE_PROVIDERS = {
+    "gemini-tts",
+    "gemini-text",
+    "gemini-image",
+    "sora2",
+    "veo",
+    "laozhang-gpt-image",
+    "laozhang-sora2",
+}
+
+
 def _jsonb_to_python(value: Any) -> Any:
     if value is None:
         return None
@@ -130,11 +146,16 @@ def api_health_result(
     url: Optional[str],
     error: Optional[str],
     urls_tried: List[str],
+    status: Optional[str] = None,
 ) -> Dict[str, Any]:
+    result_status = status or ("ok" if ok else "error")
+    if error == "No API key configured":
+        result_status = "no_key"
     return {
         "success": True,
         "test": {
             "ok": ok,
+            "status": result_status,
             "reachable": reachable,
             "auth_ok": auth_ok,
             "status_code": status_code,
@@ -160,7 +181,7 @@ def is_provider_region_blocked(provider: str, error: Optional[str]) -> bool:
 
 
 def is_generation_sensitive_provider(provider: str) -> bool:
-    return normalize_provider(provider) in {"gemini-tts"}
+    return normalize_provider(provider) in GENERATION_SENSITIVE_PROVIDERS
 
 
 async def test_api_config_health(
@@ -226,12 +247,11 @@ async def test_api_config_health(
                         if 200 <= resp.status < 300:
                             ok = True
                             error = None
+                            status = "ok"
                             if is_generation_sensitive_provider(provider):
                                 ok = False
-                                error = (
-                                    "Metadata endpoint reachable, but generation is not verified. "
-                                    "Run an actual TTS request to confirm Gemini TTS availability."
-                                )
+                                status = CONNECTIVITY_ONLY_STATUS
+                                error = CONNECTIVITY_ONLY_ERROR
                             return api_health_result(
                                 provider=provider,
                                 model_name=model_name,
@@ -242,6 +262,7 @@ async def test_api_config_health(
                                 url=url,
                                 error=error,
                                 urls_tried=urls_to_try,
+                                status=status,
                             )
                         body = (await resp.text())[:300]
                         if resp.status in (401, 403):
@@ -338,7 +359,7 @@ async def check_provider_health(
     latency_ms = int((time.perf_counter() - t0) * 1000)
     test = result.get("test") or {}
     ok = bool(test.get("ok"))
-    status = "ok" if ok else "error"
+    status = str(test.get("status") or ("ok" if ok else "error"))
     error_text = str(test.get("error") or "")
     if is_provider_region_blocked(provider, error_text):
         status = "blocked_region"

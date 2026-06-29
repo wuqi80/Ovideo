@@ -1123,9 +1123,17 @@ async function testApiConfig(id) {
     const data = await apiCall(`/api/admin/api-configs/${id}/test`, { method: 'POST' });
     const t = data.test || {};
     if (data.success && t.ok) {
-      showToast(`健康检查通过 (HTTP ${t.status_code})`, 'success');
-    } else if (t.provider === 'gemini-tts' && t.reachable && t.auth_ok) {
-      showToast('Gemini TTS 连接可达，但此检查不代表真实生成成功；生成失败请看卡片错误详情', 'warn');
+      const runtimeWarning = t.config_enabled === false
+        ? '此条 DB 配置未启用，真实调用不会使用它'
+        : t.is_runtime_effective === false
+          ? `真实调用当前使用：${t.runtime_effective_config_name || t.runtime_effective_config_id || '其它配置'}`
+          : '';
+      showToast(runtimeWarning || `健康检查通过 (HTTP ${t.status_code})`, runtimeWarning ? 'warn' : 'success');
+    } else if (
+      String(t.status || '').toLowerCase() === 'connectivity_ok'
+      || (t.reachable && t.auth_ok && String(t.error || '').toLowerCase().includes('generation is not verified'))
+    ) {
+      showToast('连接可达，但此检查不代表真实生成成功；请用一次真实生成确认厂商可用性', 'warn');
     } else if (String(t.error || '').includes('User location is not supported')) {
       showToast('Gemini API 地区受限：当前服务器出口不支持 Google AI Studio API', 'warn');
     } else if (t.reachable && t.auth_ok === false) {

@@ -163,6 +163,8 @@ interface ProviderHealthMonitorState {
         ok?: number;
         error?: number;
         no_key?: number;
+        blocked_region?: number;
+        connectivity_ok?: number;
         unknown?: number;
     } | null;
     last_error?: string | null;
@@ -170,6 +172,7 @@ interface ProviderHealthMonitorState {
 
 interface ApiConfigTest {
     ok?: boolean;
+    status?: HealthStatus | string;
     reachable?: boolean;
     auth_ok?: boolean;
     status_code?: number | null;
@@ -191,6 +194,10 @@ interface ApiConfigTest {
     runtime_endpoint_env?: string | null;
     runtime_model_name?: string | null;
     endpoint_matches_runtime?: boolean | null;
+    config_enabled?: boolean;
+    is_runtime_effective?: boolean;
+    runtime_effective_config_id?: string | null;
+    runtime_effective_config_name?: string | null;
 }
 
 interface ApiConfigTestResponse {
@@ -264,6 +271,8 @@ interface ProviderHealthSweepResponse {
         ok?: number;
         error?: number;
         no_key?: number;
+        blocked_region?: number;
+        connectivity_ok?: number;
         unknown?: number;
     };
     monitor_state?: ProviderHealthMonitorState;
@@ -297,6 +306,7 @@ interface ApiConfigBatchTestResponse {
         error?: number;
         no_key?: number;
         auth_error?: number;
+        connectivity_ok?: number;
     };
 }
 
@@ -477,9 +487,12 @@ function healthStatusFromConfigTest(test?: ApiConfigTest): HealthStatus | undefi
     if (!test) return undefined;
     if (test.ok) return 'ok';
     if (isNoKeyTest(test)) return 'no_key';
+    const status = String(test.status || '').toLowerCase();
+    if (status === 'connectivity_ok') return 'connectivity_ok';
+    if (status === 'blocked_region') return 'blocked_region';
     const errorText = String(test.error || '').toLowerCase();
     if (errorText.includes('user location is not supported')) return 'blocked_region';
-    if (test.provider === 'gemini-tts' && test.reachable && test.auth_ok) return 'connectivity_ok';
+    if (test.reachable && test.auth_ok && errorText.includes('generation is not verified')) return 'connectivity_ok';
     return 'error';
 }
 
@@ -754,6 +767,20 @@ function configTestEndpointText(test?: ApiConfigTest): string {
     return parts.join('；');
 }
 
+function configTestRuntimeWarning(test?: ApiConfigTest): string {
+    if (!test) return '';
+    if (test.config_enabled === false) {
+        return '此条 DB 配置未启用，真实调用不会使用它';
+    }
+    if (test.is_runtime_effective === false) {
+        const effective = test.runtime_effective_config_name || test.runtime_effective_config_id;
+        return effective
+            ? `真实调用当前使用：${effective}`
+            : '此条 DB 配置未成为运行时生效配置';
+    }
+    return '';
+}
+
 function dbKeyStateText(hasSavedKey: boolean, runtimeHasKey: boolean): string {
     if (hasSavedKey) return 'DB 已保存 Key';
     if (runtimeHasKey) return 'DB 未保存 Key，真实调用使用运行时 Key';
@@ -882,7 +909,7 @@ const ProviderHealthMonitorStrip: React.FC<{ state: ProviderHealthMonitorState |
                 {typeof state.last_sweep_duration_ms === 'number' ? `${state.last_sweep_duration_ms} ms` : '- ms'}
             </span>
             <span className="font-mono text-n700">
-                ok {summary.ok ?? 0} / error {summary.error ?? 0} / no_key {summary.no_key ?? 0}
+                ok {summary.ok ?? 0} / reachable {summary.connectivity_ok ?? 0} / error {summary.error ?? 0} / no_key {summary.no_key ?? 0}
             </span>
             <span className="font-mono text-n100">
                 source {state.last_sweep_source || '-'}
@@ -1189,7 +1216,8 @@ const ApiConfigCard: React.FC<{
     ].filter(Boolean).join(' / ');
     const failoverActive = Boolean(runtime?.failover_active);
     const configTestNoKey = isNoKeyTest(configTest);
-    const configTestUsesRuntimeKey = Boolean(configTest?.ok && configTest.used_runtime_key);
+    const configTestRuntimeWarningText = configTest?.ok ? configTestRuntimeWarning(configTest) : '';
+    const configTestUsesRuntimeKey = Boolean(configTest?.ok && (configTest.used_runtime_key || configTestRuntimeWarningText));
     const configTestClass = configTest?.ok
         ? configTestUsesRuntimeKey
             ? 'border-y200 bg-y50 text-y400'
@@ -1200,9 +1228,10 @@ const ApiConfigCard: React.FC<{
     const configTestLabel = !configTest
         ? ''
         : configTest.ok
-            ? configTest.used_runtime_key
+            ? configTestRuntimeWarningText
+                || (configTest.used_runtime_key
                 ? '运行时连通正常；此条 DB 记录仍未保存 Key'
-                : '此条记录连通正常'
+                : '此条记录连通正常')
             : configTestNoKey
                 ? '此条 DB 记录未保存 Key'
                 : '此条记录异常';
@@ -1468,7 +1497,8 @@ const ProviderQuickCard: React.FC<{
     const dbKeyText = dbKeyStateText(hasSavedKey, runtimeHasKey);
     const dbKeyClass = dbKeyStateClass(hasSavedKey, runtimeHasKey);
     const quickConfigTestNoKey = isNoKeyTest(configTest);
-    const quickConfigTestUsesRuntimeKey = Boolean(configTest?.ok && configTest.used_runtime_key);
+    const quickConfigTestRuntimeWarningText = configTest?.ok ? configTestRuntimeWarning(configTest) : '';
+    const quickConfigTestUsesRuntimeKey = Boolean(configTest?.ok && (configTest.used_runtime_key || quickConfigTestRuntimeWarningText));
     const quickConfigTestClass = configTest?.ok
         ? quickConfigTestUsesRuntimeKey
             ? 'border-y200 bg-y50 text-y400'
@@ -1479,9 +1509,10 @@ const ProviderQuickCard: React.FC<{
     const quickConfigTestLabel = !configTest
         ? ''
         : configTest.ok
-            ? configTest.used_runtime_key
+            ? quickConfigTestRuntimeWarningText
+                || (configTest.used_runtime_key
                 ? '运行时连通正常；DB 仍未保存 Key'
-                : 'DB 配置可用'
+                : 'DB 配置可用')
             : quickConfigTestNoKey
                 ? 'DB 配置未保存 Key'
                 : 'DB 配置异常';
@@ -1693,7 +1724,7 @@ const ApiConfigPanel: React.FC = () => {
             setMonitorState(result.monitor_state || null);
             setHealthMap(buildProviderHealthMap(rows));
             const summary = result.summary || {};
-            crmMessage.success(`状态已刷新：ok ${summary.ok ?? 0} / error ${summary.error ?? 0} / no_key ${summary.no_key ?? 0}`);
+            crmMessage.success(`状态已刷新：ok ${summary.ok ?? 0} / reachable ${summary.connectivity_ok ?? 0} / error ${summary.error ?? 0} / no_key ${summary.no_key ?? 0}`);
         } catch (err: any) {
             crmMessage.error(`刷新状态失败：${err?.message || 'unknown'}`);
         } finally {
@@ -1840,6 +1871,10 @@ const ApiConfigPanel: React.FC = () => {
                 crmMessage.success(`${provider} 连接正常 (${result.latency_ms ?? '-'} ms)`);
             } else if (status === 'no_key') {
                 crmMessage.warning(`${provider} 缺少 API Key`);
+            } else if (status === 'connectivity_ok') {
+                crmMessage.warning(`${provider} 连接可达，但真实生成未验证 (${result.latency_ms ?? '-'} ms)`);
+            } else if (status === 'blocked_region') {
+                crmMessage.warning(`${provider} 地区受限：${result.health?.error || result.status || 'unknown'}`);
             } else {
                 crmMessage.error(`${provider} 连接异常：${result.health?.error || result.status || 'unknown'}`);
             }
@@ -1864,13 +1899,20 @@ const ApiConfigPanel: React.FC = () => {
             const test = { ...(result.test || {}), latency_ms: latencyMs };
             setConfigTestMap(prev => ({ ...prev, [configId]: test }));
             if (test.ok) {
-                if (test.used_runtime_key) {
+                const runtimeWarning = configTestRuntimeWarning(test);
+                if (runtimeWarning) {
+                    crmMessage.warning(`${config.name || config.provider} ${runtimeWarning}`);
+                } else if (test.used_runtime_key) {
                     crmMessage.warning(`${config.name || config.provider} 运行时 Key 可用，但 DB 未保存 Key`);
                 } else {
                     crmMessage.success(`${config.name || config.provider} 配置可用`);
                 }
             } else if (test.error === 'No API key configured') {
                 crmMessage.warning(`${config.name || config.provider} 缺少 API Key`);
+            } else if (healthStatusFromConfigTest(test) === 'connectivity_ok') {
+                crmMessage.warning(`${config.name || config.provider} 连接可达，但真实生成未验证`);
+            } else if (healthStatusFromConfigTest(test) === 'blocked_region') {
+                crmMessage.warning(`${config.name || config.provider} 地区受限：${test.error || `HTTP ${test.status_code || '-'}`}`);
             } else {
                 crmMessage.error(`${config.name || config.provider} 配置异常：${test.error || `HTTP ${test.status_code || '-'}`}`);
             }
@@ -1899,7 +1941,7 @@ const ApiConfigPanel: React.FC = () => {
             });
             const summary = result.summary || {};
             crmMessage.success(
-                `配置测试完成：ok ${summary.ok ?? 0} / no_key ${summary.no_key ?? 0} / auth ${summary.auth_error ?? 0} / error ${summary.error ?? 0}`
+                `配置测试完成：ok ${summary.ok ?? 0} / reachable ${summary.connectivity_ok ?? 0} / no_key ${summary.no_key ?? 0} / auth ${summary.auth_error ?? 0} / error ${summary.error ?? 0}`
             );
         } catch (err: any) {
             crmMessage.error(`批量配置测试失败：${err?.message || 'unknown'}`);
@@ -1938,7 +1980,7 @@ const ApiConfigPanel: React.FC = () => {
             });
             await loadConfigs({ showLoading: false });
             const summary = result.summary || {};
-            crmMessage.success(`巡检完成：ok ${summary.ok ?? 0} / error ${summary.error ?? 0} / no_key ${summary.no_key ?? 0}`);
+            crmMessage.success(`巡检完成：ok ${summary.ok ?? 0} / reachable ${summary.connectivity_ok ?? 0} / error ${summary.error ?? 0} / no_key ${summary.no_key ?? 0}`);
         } catch (err: any) {
             crmMessage.error(`批量巡检失败：${err?.message || 'unknown'}`);
         } finally {

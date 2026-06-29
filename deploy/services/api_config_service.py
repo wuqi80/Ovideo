@@ -29,7 +29,11 @@ from services.api_provider_registry import (
     normalize_provider,
     summarize_api_provider_configs,
 )
-from services.api_provider_runtime import build_provider_runtime_status, resolve_provider
+from services.api_provider_runtime import (
+    build_effective_provider_config_sources,
+    build_provider_runtime_status,
+    resolve_provider,
+)
 from utils.config_helpers import _config_get
 
 
@@ -133,14 +137,21 @@ def _annotate_config_health_test(
     *,
     row: Any,
     runtime: Any,
+    effective_config: Optional[Dict[str, Any]],
     key_source: str,
     key_env: Optional[str],
     endpoint_source: str,
     used_runtime_endpoint: bool,
 ) -> None:
+    config_id = _row_config_id(row)
+    effective_config_id = str((effective_config or {}).get("config_id") or "")
     test["key_source"] = key_source
     test["key_env"] = key_env
     test["used_runtime_key"] = key_source == "runtime"
+    test["config_enabled"] = _row_enabled(row)
+    test["runtime_effective_config_id"] = effective_config_id or None
+    test["runtime_effective_config_name"] = (effective_config or {}).get("name") or None
+    test["is_runtime_effective"] = bool(config_id and effective_config_id and config_id == effective_config_id)
     test["endpoint_source"] = endpoint_source
     test["used_runtime_endpoint"] = used_runtime_endpoint
 
@@ -161,13 +172,27 @@ def _annotate_config_health_test(
         test["endpoint_matches_runtime"] = None
 
 
-async def _test_api_config_row_health(row: Any) -> Dict[str, Any]:
+async def _test_api_config_row_health(
+    row: Any,
+    *,
+    effective_sources: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     config_id = _row_config_id(row)
     runtime = None
     try:
         runtime = _runtime_for_row(row)
     except Exception as exc:
         logger.warning("Runtime config lookup failed for config %s: %s", config_id, exc, exc_info=True)
+    effective_config: Optional[Dict[str, Any]] = None
+    try:
+        sources = (
+            effective_sources
+            if effective_sources is not None
+            else build_effective_provider_config_sources(list(await ApiConfigDAO.list_all()))
+        )
+        effective_config = (sources.get(normalize_provider(_row_provider(row))) or {}).get("effective")
+    except Exception as exc:
+        logger.warning("Effective runtime config lookup failed for config %s: %s", config_id, exc, exc_info=True)
 
     key = await ApiConfigDAO.get_decrypted_key(config_id) if config_id else None
     key_source = "db" if key else "missing"
@@ -185,6 +210,7 @@ async def _test_api_config_row_health(row: Any) -> Dict[str, Any]:
             test,
             row=row,
             runtime=runtime,
+            effective_config=effective_config,
             key_source=key_source,
             key_env=key_env,
             endpoint_source=endpoint_source,
@@ -352,7 +378,8 @@ async def repair_api_config_provider_conflicts(
     projects rows in that order, so the last enabled keyed row for a provider is
     kept active.
     """
-    rows = list(await ApiConfigDAO.list_all())
+    all_rows = list(await ApiConfigDAO.list_all())
+    rows = list(all_rows)
     grouped: Dict[str, List[Any]] = {}
     for row in rows:
         provider = normalize_provider(_row_provider(row))
@@ -413,6 +440,7 @@ def summarize_config_test_results(results: Iterable[Dict[str, Any]]) -> Dict[str
     ok = 0
     no_key = 0
     auth_error = 0
+    connectivity_ok = 0
     error = 0
     for item in rows:
         test = item.get("test") or {}
@@ -421,6 +449,8 @@ def summarize_config_test_results(results: Iterable[Dict[str, Any]]) -> Dict[str
             continue
         if test.get("error") == "No API key configured":
             no_key += 1
+        elif str(test.get("status") or "").strip().lower() == "connectivity_ok":
+            connectivity_ok += 1
         elif test.get("auth_ok") is False:
             auth_error += 1
         else:
@@ -430,6 +460,7 @@ def summarize_config_test_results(results: Iterable[Dict[str, Any]]) -> Dict[str
         "ok": ok,
         "no_key": no_key,
         "auth_error": auth_error,
+        "connectivity_ok": connectivity_ok,
         "error": error,
     }
 
@@ -446,6 +477,7 @@ async def test_all_saved_api_config_health(
         rows = [row for row in rows if str(row.get("config_id") or "") in wanted]
     if enabled_only:
         rows = [row for row in rows if bool(row.get("enabled"))]
+    effective_sources = build_effective_provider_config_sources(all_rows)
 
     limit = max(1, min(int(concurrency or 3), 8))
     sem = asyncio.Semaphore(limit)
@@ -454,7 +486,7 @@ async def test_all_saved_api_config_health(
         config_id = str(row.get("config_id") or "")
         async with sem:
             try:
-                result = await _test_api_config_row_health(row)
+                result = await _test_api_config_row_health(row, effective_sources=effective_sources)
                 test = result.get("test") or {}
             except Exception as exc:
                 logger.warning("API config batch test failed for %s: %s", config_id, exc, exc_info=True)

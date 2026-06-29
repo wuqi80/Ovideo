@@ -1,5 +1,14 @@
 # Agent.md - 本地部署记录
 
+## 2026-06-29 API Health Connectivity Semantics
+
+- Fixed a misleading admin API health result for gateway providers such as laozhang: a successful lightweight metadata request now reports `connectivity_ok` instead of green `ok` when real generation was not executed.
+- Added structured `test.status` to `/api/admin/api-configs/{id}/test` results and kept provider runtime health aligned with the same `connectivity_ok` state.
+- Added saved-config diagnostics for `config_enabled`, `is_runtime_effective`, and the currently effective DB config id/name so the admin UI can explain "DB test passed but real calls do not use this row."
+- Updated the new admin API settings panel and legacy admin panel so DB config tests, runtime health refreshes, and batch summaries show these cases as yellow "reachable, generation not verified" instead of success or hard error.
+- Added contract coverage for laozhang metadata-only success on both saved-config health and runtime provider health.
+- Deployment note: Hong Kong to mainland-China providers can remain slow even when connectivity is valid. Use the existing provider-level `proxy_mode=custom` / `custom_proxy` or global system proxy to route selected providers through a mainland VPS; do not hard-code proxy behavior in generation handlers.
+
 ## 2026-06-29 Enhance Preview Lazy Video
 
 - Updated `deploy/new_html/pages/EnhancePage.tsx` to render the main video preview with `LazyVideo` instead of binding the video `src` immediately.
