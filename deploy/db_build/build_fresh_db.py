@@ -7,9 +7,8 @@ schema 不跑迁移，要么按文件名字母序跑导致 FK/ALTER 目标表尚
 经过拓扑排序的 manifest，保证全新空库一次跑通。所有迁移均 IF NOT EXISTS，幂等可重复执行。
 
 用法：
-    # 连接信息从环境变量读（与应用一致）
-    DB_HOST=localhost DB_PORT=5432 DB_NAME=my2_db DB_USER=my2_user DB_PASSWORD=xxx \
-        python db_build/build_fresh_db.py
+    # 连接信息优先从环境变量读，未设置时读取 configs/database.env（与应用一致）
+    python db_build/build_fresh_db.py
 
     # 或仅校验顺序/文件存在，不连库：
     python db_build/build_fresh_db.py --check

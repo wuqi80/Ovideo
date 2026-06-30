@@ -57,7 +57,9 @@ CREATE DATABASE my2_db OWNER my2_user;
 SQL
 
 # 用有序建库 runner 一次跑通 schema + 全部迁移（已按依赖顺序拓扑排序，幂等可重复）
-export DB_HOST=127.0.0.1 DB_PORT=5432 DB_NAME=my2_db DB_USER=my2_user DB_PASSWORD='上面的强密码'
+cp configs/database.env.example configs/database.env
+nano configs/database.env
+
 .venv/bin/python db_build/build_fresh_db.py
 ```
 
@@ -69,7 +71,7 @@ export DB_HOST=127.0.0.1 DB_PORT=5432 DB_NAME=my2_db DB_USER=my2_user DB_PASSWOR
 
 ## 4. 配置密钥（仓库里没有，必须自己填）
 
-复制模板，填入团队负责人提供的真实密钥：
+复制模板，填入团队负责人提供的真实密钥（非数据库连接密钥）：
 
 ```bash
 cp .env.example .env
@@ -80,7 +82,7 @@ nano .env
 
 | 变量 | 用途 |
 |---|---|
-| `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASSWORD` | 数据库连接（DB_NAME=my2_db, DB_USER=my2_user）|
+| `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASSWORD` | 可选：通过进程环境变量覆盖 `configs/database.env` 中的数据库连接 |
 | `REDIS_HOST` `REDIS_PORT` | Redis |
 | `DEEPSEEK_API_KEY` | DeepSeek 文本（化神推断兜底）|
 | `GEMINI_TEXT_API_KEY` `GEMINI_IMAGE_API_KEY` `GEMINI_API_KEY` | Gemini 文本/图像（化神）走 laozhang 网关 |
@@ -91,6 +93,8 @@ nano .env
 | `SUPER_ADMIN_PASSWORD` | 超级管理员 lllsdhr 密码 |
 | `LITE_WORKERS_COUNT` | 轻 worker 数（建议 2~4）|
 | `AGENT_ONLY_MODE` | `false`（无 ComfyUI agent 时）|
+
+PostgreSQL 连接配置优先从进程环境变量读取；未设置时读取 `deploy/configs/database.env`。生产 systemd 仍可通过 `EnvironmentFile` 覆盖这些值。
 
 > 安全：`.env` 已被 gitignore，**绝不要提交**。密钥来源分散（部分在数据库 API 配置表里，上线后也可在后台「系统设置 › API 厂商配置」补填）。
 

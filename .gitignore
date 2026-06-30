@@ -19,6 +19,7 @@ API密钥清单.md
 .env
 .env.*
 !.env.example
+deploy/configs/database.env
 # JWT 签名密钥（无 JWT_SECRET_KEY 环境变量时自动生成的持久化随机密钥）【不入库】
 deploy/.jwt_secret
 .jwt_secret
