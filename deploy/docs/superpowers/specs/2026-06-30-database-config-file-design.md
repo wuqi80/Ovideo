@@ -15,7 +15,7 @@ PostgreSQL connection settings should be editable in one backend-owned file inst
 
 Add a small loader module at `deploy/core/db_config_loader.py`.
 
-The loader will read `deploy/config/database.env` by default and expose helpers for database-related settings. It will support simple `KEY=value` lines, comments, blank lines, and quoted values. It will not write into `os.environ`; callers ask the loader for values so behavior is explicit and testable.
+The loader will read `deploy/configs/database.env` by default and expose helpers for database-related settings. It will support simple `KEY=value` lines, comments, blank lines, and quoted values. It will not write into `os.environ`; callers ask the loader for values so behavior is explicit and testable.
 
 The loader will use this precedence:
 
@@ -28,8 +28,8 @@ This keeps production and CI behavior intact: systemd `EnvironmentFile`, shell e
 ## Files
 
 - Add `deploy/core/db_config_loader.py`.
-- Add `deploy/config/database.env.example`.
-- Ignore `deploy/config/database.env` in `.gitignore`.
+- Add `deploy/configs/database.env.example`.
+- Ignore `deploy/configs/database.env` in `.gitignore`.
 - Update `deploy/core/db_manager.py` and `deploy/core/database_config.py` to use the shared loader.
 - Update `deploy/db_build/build_fresh_db.py` to use the same loader.
 - Update the relevant run/deployment docs only where they mention PostgreSQL config entry points.
