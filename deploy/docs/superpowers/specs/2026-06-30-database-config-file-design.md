@@ -20,7 +20,7 @@ The loader will read `deploy/configs/database.env` by default and expose helpers
 The loader will use this precedence:
 
 1. Existing process environment variables.
-2. Values in `deploy/config/database.env`.
+2. Values in `deploy/configs/database.env`.
 3. Existing hardcoded defaults.
 
 This keeps production and CI behavior intact: systemd `EnvironmentFile`, shell exports, or container env vars can still override the local file.
@@ -41,7 +41,7 @@ At import or command execution time:
 ```text
 caller -> core.db_config_loader.get_db_config_value()
        -> os.environ if set
-       -> deploy/config/database.env if present
+       -> deploy/configs/database.env if present
        -> default value
 ```
 
