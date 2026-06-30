@@ -2,26 +2,29 @@
 """
 数据库管理器 - PostgreSQL连接池和操作封装
 """
-import os
 import asyncpg
 import logging
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+from core.db_config_loader import get_db_config_value
+
 logger = logging.getLogger(__name__)
 
 class DatabaseConfig:
     """数据库配置"""
-    HOST = os.getenv("DB_HOST", "localhost")
-    PORT = int(os.getenv("DB_PORT", "5432"))
-    DATABASE = os.getenv("DB_NAME", "my2_db")
-    USER = os.getenv("DB_USER", "my2_user")
-    PASSWORD = os.getenv("DB_PASSWORD", "changeme")
-    MIN_SIZE = int(os.getenv("DB_POOL_MIN_SIZE", "10"))
-    MAX_SIZE = int(os.getenv("DB_POOL_MAX_SIZE", "50"))
-    MAX_QUERIES = int(os.getenv("DB_MAX_QUERIES", "50000"))
-    MAX_INACTIVE_CONNECTION_LIFETIME = float(os.getenv("DB_MAX_IDLE_TIME", "300"))
+
+    def __init__(self):
+        self.HOST = get_db_config_value("DB_HOST", "localhost")
+        self.PORT = int(get_db_config_value("DB_PORT", "5432"))
+        self.DATABASE = get_db_config_value("DB_NAME", "my2_db")
+        self.USER = get_db_config_value("DB_USER", "my2_user")
+        self.PASSWORD = get_db_config_value("DB_PASSWORD", "changeme")
+        self.MIN_SIZE = int(get_db_config_value("DB_POOL_MIN_SIZE", "10"))
+        self.MAX_SIZE = int(get_db_config_value("DB_POOL_MAX_SIZE", "50"))
+        self.MAX_QUERIES = int(get_db_config_value("DB_MAX_QUERIES", "50000"))
+        self.MAX_INACTIVE_CONNECTION_LIFETIME = float(get_db_config_value("DB_MAX_IDLE_TIME", "300"))
 
 class DatabaseManager:
     """数据库管理器 - 连接池和查询封装"""

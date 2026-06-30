@@ -5,34 +5,31 @@
 """
 import os
 
+from core.db_config_loader import get_db_config_value
+
 class DatabaseConfig:
     """PostgreSQL 数据库配置"""
-    HOST = os.getenv('DB_HOST', 'localhost')
-    PORT = int(os.getenv('DB_PORT', '5432'))
-    NAME = os.getenv('DB_NAME', 'my2_db')
-    USER = os.getenv('DB_USER', 'my2_user')
-    PASSWORD = os.getenv('DB_PASSWORD', 'changeme')
-    
-    # 连接池配置
-    POOL_MIN_SIZE = int(os.getenv('DB_POOL_MIN_SIZE', '10'))
-    POOL_MAX_SIZE = int(os.getenv('DB_POOL_MAX_SIZE', '50'))
-    
+
     # 连接字符串
     @classmethod
     def get_connection_string(cls):
-        return f"postgresql://{cls.USER}:{cls.PASSWORD}@{cls.HOST}:{cls.PORT}/{cls.NAME}"
-    
+        params = cls.get_connection_params()
+        return (
+            f"postgresql://{params['user']}:{params['password']}"
+            f"@{params['host']}:{params['port']}/{params['database']}"
+        )
+
     # 连接参数
     @classmethod
     def get_connection_params(cls):
         return {
-            'host': cls.HOST,
-            'port': cls.PORT,
-            'database': cls.NAME,
-            'user': cls.USER,
-            'password': cls.PASSWORD,
-            'min_size': cls.POOL_MIN_SIZE,
-            'max_size': cls.POOL_MAX_SIZE
+            'host': get_db_config_value('DB_HOST', 'localhost'),
+            'port': int(get_db_config_value('DB_PORT', '5432')),
+            'database': get_db_config_value('DB_NAME', 'my2_db'),
+            'user': get_db_config_value('DB_USER', 'my2_user'),
+            'password': get_db_config_value('DB_PASSWORD', 'changeme'),
+            'min_size': int(get_db_config_value('DB_POOL_MIN_SIZE', '10')),
+            'max_size': int(get_db_config_value('DB_POOL_MAX_SIZE', '50')),
         }
 
 class JWTConfig:
@@ -52,4 +49,3 @@ class StorageConfig:
     CDN_BASE_URL = os.getenv('CDN_BASE_URL', '')
     CDN_ACCESS_KEY = os.getenv('CDN_ACCESS_KEY', '')
     CDN_SECRET_KEY = os.getenv('CDN_SECRET_KEY', '')
-
