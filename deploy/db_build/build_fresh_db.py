@@ -17,7 +17,6 @@ schema 不跑迁移，要么按文件名字母序跑导致 FK/ALTER 目标表尚
 退出码：0 成功；非 0 失败（并打印第一条失败的文件与错误）。
 """
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -28,6 +27,11 @@ except Exception:
     pass
 
 DEPLOY_DIR = Path(__file__).resolve().parent.parent  # .../deploy
+if str(DEPLOY_DIR) not in sys.path:
+    sys.path.insert(0, str(DEPLOY_DIR))
+
+from core.db_config_loader import get_db_config_value
+
 MANIFEST = Path(__file__).resolve().parent / "manifest.txt"
 
 
@@ -57,6 +61,16 @@ def check(files: list[str]) -> int:
     return 0
 
 
+def db_connection_config() -> dict:
+    return {
+        "host": get_db_config_value("DB_HOST", "localhost"),
+        "port": int(get_db_config_value("DB_PORT", "5432")),
+        "database": get_db_config_value("DB_NAME", "my2_db"),
+        "user": get_db_config_value("DB_USER", "my2_user"),
+        "password": get_db_config_value("DB_PASSWORD", ""),
+    }
+
+
 async def run(files: list[str]) -> int:
     try:
         import asyncpg
@@ -64,13 +78,7 @@ async def run(files: list[str]) -> int:
         print("❌ 需要 asyncpg（应用依赖之一）。请在应用 venv 下运行。")
         return 2
 
-    cfg = dict(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=int(os.getenv("DB_PORT", "5432")),
-        database=os.getenv("DB_NAME", "my2_db"),
-        user=os.getenv("DB_USER", "my2_user"),
-        password=os.getenv("DB_PASSWORD", ""),
-    )
+    cfg = db_connection_config()
     print(f"连接 {cfg['user']}@{cfg['host']}:{cfg['port']}/{cfg['database']}")
     try:
         conn = await asyncpg.connect(**cfg)

@@ -80,3 +80,29 @@ def test_database_config_helper_uses_same_database_env_file(tmp_path, monkeypatc
     assert config_module.DatabaseConfig.get_connection_string() == (
         "postgresql://file_user:file_password@file-host:15432/file_db"
     )
+
+
+def test_fresh_db_builder_uses_database_env_file(tmp_path, monkeypatch):
+    from core import db_config_loader
+    from db_build import build_fresh_db
+
+    clear_db_env(monkeypatch)
+    config_file = tmp_path / "database.env"
+    config_file.write_text(
+        "DB_HOST=builder-host\n"
+        "DB_PORT=25432\n"
+        "DB_NAME=builder_db\n"
+        "DB_USER=builder_user\n"
+        "DB_PASSWORD=builder_password\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(db_config_loader, "DEFAULT_DATABASE_CONFIG_FILE", config_file)
+
+    assert build_fresh_db.db_connection_config() == {
+        "host": "builder-host",
+        "port": 25432,
+        "database": "builder_db",
+        "user": "builder_user",
+        "password": "builder_password",
+    }
