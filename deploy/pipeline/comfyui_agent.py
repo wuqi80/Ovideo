@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import platform
+import re
 import signal
 import subprocess
 import sys
@@ -25,7 +26,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-07-01-qwen-diagnostics-v2"
+AGENT_VERSION = "2026-07-01-agent-control-v3"
 
 
 class ComfyUIAgent:
@@ -256,6 +257,79 @@ class ComfyUIAgent:
         except Exception as e:
             return {"status": "failed", "error": str(e), "output_files": []}
 
+    def execute_agent_control_task(self, task):
+        data = task.get("params", {}) or task.get("data", {})
+        action = data.get("action", "status")
+
+        if action == "status":
+            return {
+                "status": "completed",
+                "result_payload": {
+                    "action": action,
+                    "agent_id": self.agent_id,
+                    "agent_version": AGENT_VERSION,
+                    "hostname": platform.node(),
+                    "pid": os.getpid(),
+                    "cwd": os.getcwd(),
+                    "script_path": str(Path(__file__).resolve()),
+                    "python": sys.executable,
+                    "ports": self.ports,
+                },
+                "output_files": [],
+            }
+
+        if action == "self_update":
+            result = self._self_update(data)
+            return {
+                "status": "completed",
+                "result_payload": result,
+                "output_files": [],
+                "restart_agent": True,
+            }
+
+        return {
+            "status": "failed",
+            "error": f"Unsupported agent_control action: {action}",
+            "output_files": [],
+        }
+
+    def _self_update(self, data):
+        script_url = data.get("script_url") or f"{self.server_url}/storage/tools/comfyui_agent.py"
+        current_path = Path(__file__).resolve()
+        tmp_path = current_path.with_name(f".{current_path.name}.download")
+        backup_path = current_path.with_name(
+            f"{current_path.name}.bak.{time.strftime('%Y%m%d%H%M%S')}"
+        )
+
+        resp = requests.get(script_url, headers=self._headers(), timeout=60)
+        resp.raise_for_status()
+        content = resp.text
+        if "class ComfyUIAgent" not in content or "AGENT_VERSION" not in content:
+            raise RuntimeError("Downloaded script does not look like comfyui_agent.py")
+
+        version_match = re.search(r'AGENT_VERSION\s*=\s*["\']([^"\']+)["\']', content)
+        new_version = version_match.group(1) if version_match else "unknown"
+        tmp_path.write_text(content, encoding="utf-8")
+        os.chmod(tmp_path, 0o755)
+        current_path.replace(backup_path)
+        tmp_path.replace(current_path)
+
+        return {
+            "action": "self_update",
+            "agent_id": self.agent_id,
+            "old_version": AGENT_VERSION,
+            "new_version": new_version,
+            "script_url": script_url,
+            "script_path": str(current_path),
+            "backup_path": str(backup_path),
+            "restart": True,
+        }
+
+    def _restart_process(self):
+        logger.info("Restarting agent process with original argv...")
+        time.sleep(1)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
     def complete(self, task_id, status, duration, output_files=None, error="", result_payload=None):
         files_payload = []
         for fpath in (output_files or []):
@@ -437,6 +511,8 @@ class ComfyUIAgent:
                     try:
                         if task_type == "api_call":
                             result = self.execute_api_call_task(task)
+                        elif task_type == "agent_control":
+                            result = self.execute_agent_control_task(task)
                         else:
                             result = self.execute_comfyui_task(task)
                         duration = time.time() - start_time
@@ -447,6 +523,8 @@ class ComfyUIAgent:
                             result_payload=result.get("result_payload")
                         )
                         logger.info(f"Task {task_id} {result['status']} in {duration:.1f}s")
+                        if result.get("restart_agent"):
+                            self._restart_process()
                     except Exception as e:
                         duration = time.time() - start_time
                         logger.error(f"Task {task_id} failed: {e}")
