@@ -25,7 +25,7 @@ import {
 import { crmConfirm, crmMessage } from './crmUI';
 import { apiJson } from '../services/httpClient';
 
-const LEGACY_VER = '20260619c';
+const LEGACY_VER = '20260701-qwen-agent-v2';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
     cluster: 'cluster',
     workflows: 'workflows',

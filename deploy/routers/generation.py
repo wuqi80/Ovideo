@@ -484,7 +484,7 @@ def create_generation_router(
 
             task_data = {"image_path": request.image_filename, seed_key: seed}
             _attach_entity_fields(task_data, request)
-            task_id = await task_service_module.get().submit(request.workflow_type, task_data, username, prepare=False)
+            task_id = await task_service_module.get().submit(request.workflow_type, task_data, username)
 
             workflow_names = {
                 "upscale_hd": "高清放大",

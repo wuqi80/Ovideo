@@ -14,6 +14,8 @@ import {
   type Edge,
   type NodeTypes,
   BackgroundVariant,
+  ConnectionMode,
+  MarkerType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -48,7 +50,22 @@ const CanvasInner: React.FC = () => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) => {
+      if (!params.source || !params.target || params.source === params.target) return;
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            id: `edge_${params.source}_${params.sourceHandle || 'out'}_${params.target}_${params.targetHandle || 'in'}_${Date.now()}`,
+            type: 'smoothstep',
+            animated: true,
+            style: { stroke: '#7c83ff', strokeWidth: 2.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#7c83ff' },
+          },
+          eds
+        )
+      );
+    },
     [setEdges]
   );
 
@@ -77,6 +94,18 @@ const CanvasInner: React.FC = () => {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
+        connectionMode={ConnectionMode.Loose}
+        connectionLineStyle={{ stroke: '#7c83ff', strokeWidth: 2.5 }}
+        connectionLineType="smoothstep"
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: true,
+          style: { stroke: '#7c83ff', strokeWidth: 2.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#7c83ff' },
+        }}
+        isValidConnection={(connection) =>
+          Boolean(connection.source && connection.target && connection.source !== connection.target)
+        }
         fitView
         style={{ background: '#0d0d1a' }}
       >
