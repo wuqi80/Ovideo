@@ -39,6 +39,7 @@ deploy/logs/
 deploy/persistent_storage/
 deploy/uploads/
 deploy/outputs/
+deploy/redis_data/
 deploy/temp/
 deploy/history/
 *.log
@@ -56,3 +57,10 @@ Thumbs.db
 
 # 端到端成片生成的素材产物（不入库）
 deploy/output_film/
+
+# Local deployment snapshots and transient workflow backups
+/deploy-v1.zip
+deploy/workflows.zip
+deploy/server_backups/
+deploy/new_html/pnpm-lock.yaml
+deploy/new_html/pnpm-workspace.yaml

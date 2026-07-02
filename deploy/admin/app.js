@@ -500,7 +500,7 @@ async function createAgent() {
   const token = data.token;
   document.getElementById('token-value').textContent = token;
   document.getElementById('token-command').textContent =
-    `python comfyui_agent.py \\\n  --server ${location.origin} \\\n  --token ${token} \\\n  --ports 8188,8189`;
+    `curl -fsSL ${location.origin}/storage/tools/comfyui_agent.py -o comfyui_agent.py\npython comfyui_agent.py \\\n  --server ${location.origin} \\\n  --token ${token} \\\n  --ports 8188,8189`;
   document.getElementById('token-result').classList.remove('hidden');
   showToast('Agent 创建成功', 'success');
   fetchAgents();
@@ -526,6 +526,13 @@ async function fetchAgents() {
   document.getElementById('agent-list').innerHTML = agents.map(a => {
     const instances = (typeof a.comfyui_instances === 'string' ? JSON.parse(a.comfyui_instances) : a.comfyui_instances) || [];
     const stats = (typeof a.stats === 'string' ? JSON.parse(a.stats) : a.stats) || {};
+    let systemInfo = {};
+    try {
+      systemInfo = (typeof a.system_info === 'string' ? JSON.parse(a.system_info) : a.system_info) || {};
+    } catch (_) {
+      systemInfo = {};
+    }
+    const agentVersion = systemInfo.agent_version || 'legacy';
     const isOnline = a.status === 'online' || a.status === 'busy';
     const dotClass = isOnline ? 'dot-green dot-pulse' : 'dot-red';
     const statusBadge = a.status === 'online' ? 'badge-green' : a.status === 'busy' ? 'badge-yellow' : 'badge-red';
@@ -545,6 +552,7 @@ async function fetchAgents() {
         <div class="agent-stats">
           <span>完成 <b style="color:var(--text-0)">${stats.tasks_completed || 0}</b></span>
           <span>失败 <b style="color:var(--text-0)">${stats.tasks_failed || 0}</b></span>
+          <span title="Agent 版本" style="font-family:var(--font-mono);font-size:11px;color:${agentVersion === 'legacy' ? 'var(--danger)' : 'var(--success)'}">v ${agentVersion}</span>
           ${a.last_heartbeat ? `<span style="font-family:var(--font-mono);font-size:11px">${new Date(a.last_heartbeat).toLocaleTimeString('zh-CN')}</span>` : ''}
         </div>
         <div class="agent-actions">
@@ -556,11 +564,12 @@ async function fetchAgents() {
           <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">Token:</div>
           <code style="font-size:11px;color:var(--accent);word-break:break-all">${a.token}</code>
           <div style="font-size:11px;color:var(--text-3);margin-top:8px;margin-bottom:4px">启动命令:</div>
-          <pre style="font-size:11px;color:var(--text-1);white-space:pre-wrap;margin:0">python comfyui_agent.py \\
+          <pre style="font-size:11px;color:var(--text-1);white-space:pre-wrap;margin:0">curl -fsSL ${location.origin}/storage/tools/comfyui_agent.py -o comfyui_agent.py
+python comfyui_agent.py \\
   --server ${location.origin} \\
   --token ${a.token} \\
   --ports 8188</pre>
-          <button class="btn btn-ghost btn-xs" style="margin-top:6px" onclick="navigator.clipboard.writeText('python comfyui_agent.py --server ${location.origin} --token ${a.token} --ports 8188');showToast('已复制','success')">复制命令</button>
+          <button class="btn btn-ghost btn-xs" style="margin-top:6px" onclick="navigator.clipboard.writeText('curl -fsSL ${location.origin}/storage/tools/comfyui_agent.py -o comfyui_agent.py\\npython comfyui_agent.py --server ${location.origin} --token ${a.token} --ports 8188');showToast('已复制','success')">复制命令</button>
         </div>
       </div>`;
   }).join('');

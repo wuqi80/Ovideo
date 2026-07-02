@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import platform
+import re
 import signal
 import subprocess
 import sys
@@ -25,6 +26,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
+AGENT_VERSION = "2026-07-01-agent-control-v3"
 
 
 class ComfyUIAgent:
@@ -46,7 +48,11 @@ class ComfyUIAgent:
         return {"Authorization": f"Bearer {self.token}"}
 
     def _get_system_info(self):
-        info = {"hostname": platform.node(), "os": platform.system()}
+        info = {
+            "hostname": platform.node(),
+            "os": platform.system(),
+            "agent_version": AGENT_VERSION,
+        }
         try:
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=name,memory.total",
@@ -128,6 +134,7 @@ class ComfyUIAgent:
             return {"status": "failed", "error": "No workflow_json in task", "output_files": []}
 
         filename_map = {}
+        transfer_errors = []
         for file_info in task.get("files", []):
             url = file_info.get("url", "")
             expected = file_info.get("filename", "")
@@ -136,10 +143,21 @@ class ComfyUIAgent:
             try:
                 local_path = self._download_file(url, expected_filename=expected)
                 comfyui_name = self._upload_to_comfyui(port, local_path)
-                if comfyui_name and expected and comfyui_name != expected:
+                if not comfyui_name:
+                    transfer_errors.append(f"{expected or url}: upload to ComfyUI failed")
+                    continue
+                if expected and comfyui_name != expected:
                     filename_map[expected] = comfyui_name
             except Exception as e:
                 logger.error(f"File transfer failed for {expected}: {e}")
+                transfer_errors.append(f"{expected or url}: {e}")
+
+        if transfer_errors:
+            return {
+                "status": "failed",
+                "error": "File transfer failed: " + "; ".join(transfer_errors),
+                "output_files": [],
+            }
 
         workflow_str = json.dumps(workflow_json)
         for old_name, new_name in filename_map.items():
@@ -153,16 +171,34 @@ class ComfyUIAgent:
             json={"prompt": final_workflow},
             timeout=30
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            return {
+                "status": "failed",
+                "error": f"ComfyUI /prompt failed: HTTP {resp.status_code} {resp.text[:1000]}",
+                "output_files": [],
+            }
         prompt_id = resp.json().get("prompt_id")
         if not prompt_id:
             return {"status": "failed", "error": "No prompt_id returned", "output_files": []}
 
-        output_files = self._wait_for_completion(port, prompt_id)
+        try:
+            output_files = self._wait_for_completion(port, prompt_id)
+        except Exception as e:
+            return {
+                "status": "failed",
+                "error": f"ComfyUI prompt {prompt_id} failed: {e}",
+                "output_files": [],
+            }
+        if not output_files:
+            return {
+                "status": "failed",
+                "error": f"ComfyUI prompt {prompt_id} finished without downloadable output files",
+                "output_files": [],
+            }
         return {"status": "completed", "output_files": output_files}
 
     def execute_api_call_task(self, task):
-        data = task.get("params", {})
+        data = task.get("params", {}) or task.get("data", {})
         endpoint = data.get("endpoint", "")
         method = data.get("method", "POST").upper()
         headers = data.get("headers", {})
@@ -181,12 +217,120 @@ class ComfyUIAgent:
                 resp = requests.post(endpoint, json=body, headers=headers, proxies=proxies, timeout=120)
             else:
                 resp = requests.get(endpoint, headers=headers, proxies=proxies, timeout=120)
-            resp.raise_for_status()
-            return {"status": "completed", "api_response": resp.json(), "http_status": resp.status_code, "output_files": []}
+            if not resp.ok:
+                return {
+                    "status": "failed",
+                    "error": f"API call failed: HTTP {resp.status_code} {resp.text[:1000]}",
+                    "output_files": [],
+                }
+            api_response = resp.json()
+            result_payload = {
+                "http_status": resp.status_code,
+                "response_type": type(api_response).__name__,
+                "response_size": len(resp.text),
+            }
+            if isinstance(api_response, dict):
+                result_payload["object_count"] = len(api_response)
+                result_payload["keys_sample"] = list(api_response.keys())[:50]
+                if endpoint.rstrip("/").endswith("/object_info"):
+                    interesting = [
+                        "TextEncodeQwenImageEdit",
+                        "TextEncodeQwenImageEditPlus",
+                        "FluxKontextMultiReferenceLatentMethod",
+                        "LayerUtility: ImageScaleByAspectRatio V2",
+                        "ImageScaleToTotalPixels",
+                        "EmptyLatentImage",
+                        "EmptySD3LatentImage",
+                        "VAEEncode",
+                        "KSampler",
+                        "CFGNorm",
+                        "ModelSamplingAuraFlow",
+                        "UNETLoader",
+                        "CLIPLoader",
+                        "VAELoader",
+                        "LoraLoaderModelOnly",
+                    ]
+                    result_payload["interesting_nodes"] = {
+                        key: key in api_response for key in interesting
+                    }
+            return {"status": "completed", "result_payload": result_payload, "output_files": []}
         except Exception as e:
             return {"status": "failed", "error": str(e), "output_files": []}
 
-    def complete(self, task_id, status, duration, output_files=None, error=""):
+    def execute_agent_control_task(self, task):
+        data = task.get("params", {}) or task.get("data", {})
+        action = data.get("action", "status")
+
+        if action == "status":
+            return {
+                "status": "completed",
+                "result_payload": {
+                    "action": action,
+                    "agent_id": self.agent_id,
+                    "agent_version": AGENT_VERSION,
+                    "hostname": platform.node(),
+                    "pid": os.getpid(),
+                    "cwd": os.getcwd(),
+                    "script_path": str(Path(__file__).resolve()),
+                    "python": sys.executable,
+                    "ports": self.ports,
+                },
+                "output_files": [],
+            }
+
+        if action == "self_update":
+            result = self._self_update(data)
+            return {
+                "status": "completed",
+                "result_payload": result,
+                "output_files": [],
+                "restart_agent": True,
+            }
+
+        return {
+            "status": "failed",
+            "error": f"Unsupported agent_control action: {action}",
+            "output_files": [],
+        }
+
+    def _self_update(self, data):
+        script_url = data.get("script_url") or f"{self.server_url}/storage/tools/comfyui_agent.py"
+        current_path = Path(__file__).resolve()
+        tmp_path = current_path.with_name(f".{current_path.name}.download")
+        backup_path = current_path.with_name(
+            f"{current_path.name}.bak.{time.strftime('%Y%m%d%H%M%S')}"
+        )
+
+        resp = requests.get(script_url, headers=self._headers(), timeout=60)
+        resp.raise_for_status()
+        content = resp.text
+        if "class ComfyUIAgent" not in content or "AGENT_VERSION" not in content:
+            raise RuntimeError("Downloaded script does not look like comfyui_agent.py")
+
+        version_match = re.search(r'AGENT_VERSION\s*=\s*["\']([^"\']+)["\']', content)
+        new_version = version_match.group(1) if version_match else "unknown"
+        tmp_path.write_text(content, encoding="utf-8")
+        os.chmod(tmp_path, 0o755)
+        current_path.replace(backup_path)
+        tmp_path.replace(current_path)
+
+        return {
+            "action": "self_update",
+            "agent_id": self.agent_id,
+            "old_version": AGENT_VERSION,
+            "new_version": new_version,
+            "script_url": script_url,
+            "script_path": str(current_path),
+            "backup_path": str(backup_path),
+            "restart": True,
+        }
+
+    def _restart_process(self):
+        logger.info("Restarting agent process with original argv...")
+        time.sleep(1)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    def complete(self, task_id, status, duration, output_files=None, error="", result_payload=None):
         files_payload = []
         for fpath in (output_files or []):
             if os.path.exists(fpath):
@@ -199,6 +343,8 @@ class ComfyUIAgent:
             "duration": str(round(duration, 2)),
             "error_message": error,
         }
+        if result_payload:
+            form_data["result_json"] = json.dumps(result_payload, ensure_ascii=False)
         try:
             requests.post(
                 f"{self.server_url}/api/agent/complete",
@@ -259,16 +405,44 @@ class ComfyUIAgent:
                 resp = requests.get(f"http://127.0.0.1:{port}/history/{prompt_id}", timeout=10)
                 history = resp.json()
                 if prompt_id in history:
-                    outputs = history[prompt_id].get("outputs", {})
-                    files = []
-                    for node_output in outputs.values():
-                        for img in node_output.get("images", []):
-                            files.append(self._download_comfyui_output(port, img))
-                        for vid in node_output.get("gifs", []) + node_output.get("videos", []):
-                            files.append(self._download_comfyui_output(port, vid))
-                    return [f for f in files if f]
-            except Exception:
-                pass
+                    entry = history[prompt_id]
+                    status_info = entry.get("status") or {}
+                    status_str = str(status_info.get("status_str") or "").lower()
+                    if status_str in {"error", "failed"}:
+                        messages = entry.get("status", {}).get("messages", [])
+                        raise RuntimeError(
+                            "ComfyUI execution failed: "
+                            + json.dumps({"status": status_info, "messages": messages}, ensure_ascii=False)[:1500]
+                        )
+
+                    outputs = entry.get("outputs", {})
+                    is_done = (
+                        status_info.get("completed") is True
+                        or status_str in {"success", "completed"}
+                    )
+                    if is_done:
+                        if not outputs:
+                            raise RuntimeError(
+                                "ComfyUI completed without outputs: "
+                                + json.dumps({"status": status_info}, ensure_ascii=False)[:1000]
+                            )
+                        files = []
+                        for node_output in outputs.values():
+                            for img in node_output.get("images", []):
+                                files.append(self._download_comfyui_output(port, img))
+                            for vid in node_output.get("gifs", []) + node_output.get("videos", []):
+                                files.append(self._download_comfyui_output(port, vid))
+                        downloaded = [f for f in files if f]
+                        if not downloaded:
+                            raise RuntimeError(
+                                "ComfyUI produced outputs but no files could be downloaded: "
+                                + json.dumps(outputs, ensure_ascii=False)[:1500]
+                            )
+                        return downloaded
+            except RuntimeError:
+                raise
+            except Exception as e:
+                logger.debug(f"History poll failed for {prompt_id}: {e}")
             time.sleep(2)
         logger.warning(f"Task timed out after {timeout}s")
         return []
@@ -337,15 +511,20 @@ class ComfyUIAgent:
                     try:
                         if task_type == "api_call":
                             result = self.execute_api_call_task(task)
+                        elif task_type == "agent_control":
+                            result = self.execute_agent_control_task(task)
                         else:
                             result = self.execute_comfyui_task(task)
                         duration = time.time() - start_time
                         self.complete(
                             task_id, result.get("status", "completed"), duration,
                             output_files=result.get("output_files", []),
-                            error=result.get("error", "")
+                            error=result.get("error", ""),
+                            result_payload=result.get("result_payload")
                         )
                         logger.info(f"Task {task_id} {result['status']} in {duration:.1f}s")
+                        if result.get("restart_agent"):
+                            self._restart_process()
                     except Exception as e:
                         duration = time.time() - start_time
                         logger.error(f"Task {task_id} failed: {e}")
@@ -374,6 +553,7 @@ def main():
     ports = [int(p.strip()) for p in args.ports.split(",")]
     logger.info(f"Starting agent -> {args.server}")
     logger.info(f"ComfyUI ports: {ports}")
+    logger.info(f"Agent version: {AGENT_VERSION}")
     agent = ComfyUIAgent(args.server, args.token, ports)
     agent.run()
 

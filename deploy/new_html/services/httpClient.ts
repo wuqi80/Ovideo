@@ -7,11 +7,11 @@ interface HeaderOptions {
   authErrorMessage?: string;
   includeContentType?: boolean;
   includeAuth?: boolean;
+  apiName?: string;
+  redirectOnMissingAuth?: boolean;
 }
 
-interface ApiFetchConfig extends HeaderOptions {
-  apiName?: string;
-}
+interface ApiFetchConfig extends HeaderOptions {}
 
 /**
  * 统一的响应处理函数
@@ -23,12 +23,18 @@ interface ApiFetchConfig extends HeaderOptions {
  *   - 其他路径 → 清 localStorage 主站 token，跳 /login（行为不变）
  *   - 在 /admin/login 或 /login 自身上 401 → 不再跳（防死循环）
  * 旧 bug：admin 路径下 401 清的是主站 token，跳 /login 又被 App.tsx 的 path="*" 兜底到 /projects。
+ *
+ * 2026-07-01 修复：缺少本地 token 的受保护 API 请求也会走这里。
+ * 旧行为是在 buildAuthHeaders 阶段直接抛“未登录”，请求尚未发出，因此绕过了 401 跳转。
  */
-export function handleUnauthorized(apiName: string = 'API'): never {
+export function handleUnauthorized(apiName: string = 'API', reason: 'response401' | 'missingToken' = 'response401'): never {
   const path = typeof window !== 'undefined' ? window.location.pathname : '';
   const isAdminPath = path.startsWith('/admin');
   const isLoginPage = path === '/login' || path === '/admin/login';
-  console.error(`${apiName} 返回401，token可能已失效（path=${path}, isAdmin=${isAdminPath}）`);
+  const reasonText = reason === 'missingToken'
+    ? '缺少登录 token'
+    : '返回401，token可能已失效';
+  console.error(`${apiName} ${reasonText}（path=${path}, isAdmin=${isAdminPath}）`);
 
   if (isAdminPath) {
     try {
@@ -170,6 +176,9 @@ export function buildAuthHeaders(
   };
 
   if (options.requireAuth !== false && options.includeAuth !== false && !hasAuthorization(headers)) {
+    if (options.redirectOnMissingAuth) {
+      handleUnauthorized(options.apiName || 'API', 'missingToken');
+    }
     throw new Error(options.authErrorMessage || '未登录，请先登录');
   }
 
@@ -237,6 +246,8 @@ export async function apiFetch(
       requireAuth: config.requireAuth,
       authErrorMessage: config.authErrorMessage,
       includeContentType: config.includeContentType,
+      apiName: config.apiName,
+      redirectOnMissingAuth: true,
     }),
   });
 

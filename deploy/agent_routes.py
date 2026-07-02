@@ -292,6 +292,7 @@ async def agent_complete(
     status: str = Form("completed"),
     duration: float = Form(0.0),
     error_message: str = Form(""),
+    result_json: str = Form(""),
     files: List[UploadFile] = File(default=[]),
     authorization: str = Header(...)
 ):
@@ -331,6 +332,17 @@ async def agent_complete(
         await _persist_to_db(file_entries, task_id, task_data, user_id)
 
     result = build_task_result(file_entries, duration) if file_entries else None
+    result_payload = None
+    if result_json:
+        try:
+            result_payload = json.loads(result_json)
+        except Exception as e:
+            logger.warning(f"agent_complete: invalid result_json for {task_id}: {e}")
+    if result_payload:
+        if result:
+            result.update(result_payload)
+        else:
+            result = result_payload
     logger.info(f"agent_complete: task={task_id}, status={status}, files={len(file_entries)}")
 
     # ---- 2. Update Redis (critical path — unblocks frontend) ----

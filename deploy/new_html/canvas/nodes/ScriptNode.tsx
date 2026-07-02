@@ -2,6 +2,14 @@ import React, { memo, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { FileText } from 'lucide-react';
 
+const handleStyle = {
+  width: 14,
+  height: 14,
+  border: '2px solid #fff',
+  zIndex: 20,
+  cursor: 'crosshair',
+};
+
 export const ScriptNode = memo(({ data, id }: NodeProps) => {
   const [text, setText] = useState(data?.text as string || '');
 
@@ -10,7 +18,7 @@ export const ScriptNode = memo(({ data, id }: NodeProps) => {
       background: '#252540', borderRadius: '12px', padding: '16px',
       border: '1px solid #7c83ff44', minWidth: '240px', color: '#e0e0e0'
     }}>
-      <Handle type="target" position={Position.Left} style={{ background: '#7c83ff' }} />
+      <Handle id="in" type="target" position={Position.Left} isConnectable style={{ ...handleStyle, background: '#7c83ff' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <FileText size={16} color="#7c83ff" />
         <span style={{ fontSize: '12px', color: '#888' }}>剧本节点</span>
@@ -26,7 +34,7 @@ export const ScriptNode = memo(({ data, id }: NodeProps) => {
           boxSizing: 'border-box'
         }}
       />
-      <Handle type="source" position={Position.Right} style={{ background: '#7c83ff' }} />
+      <Handle id="out" type="source" position={Position.Right} isConnectable style={{ ...handleStyle, background: '#7c83ff' }} />
     </div>
   );
 });

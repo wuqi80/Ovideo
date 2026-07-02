@@ -102,6 +102,17 @@ class TaskService:
             wh = get_workflow_handler()
             workflow_json = wh.build_workflow_for_task(task_type, task_data)
             task_data["workflow_json"] = workflow_json
+            task_data.setdefault(
+                "workflow_name",
+                {
+                    "i2i_fj": "I2I_FJ",
+                    "i2i_human": "I2I_HUMAN",
+                    "i2i_around": "I2I_Around",
+                    "upscale_hd": "upscale_hd",
+                    "remove_watermark": "remove_watermark",
+                    "three_view": "three_view",
+                }.get(task_type, task_type),
+            )
 
             agent_files = []
             file_params = (
@@ -131,4 +142,6 @@ class TaskService:
             task_data["agent_files"] = agent_files
             logger.info(f"✅ Pre-built workflow for {task_type}, {len(agent_files)} agent files")
         except Exception as e:
-            logger.warning(f"⚠️ prepare_task_for_agent failed for {task_type}: {e}")
+            logger.exception(f"prepare_task_for_agent failed for {task_type}: {e}")
+            raise HTTPException(status_code=500, detail=f"任务预处理失败: {e}")
+

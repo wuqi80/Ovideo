@@ -48,6 +48,20 @@ class WorkflowHandler:
             except Exception as e:
                 logger.warning(f"⚠️ 读取工作流文件失败 {file_path}: {e}")
         return self.workflows.get(name)
+
+    def extract_executable_nodes(self, workflow: Dict, workflow_name: str) -> Dict:
+        """Return a ComfyUI prompt graph without template metadata entries."""
+        cleaned = {
+            str(node_id): node
+            for node_id, node in workflow.items()
+            if isinstance(node, dict)
+            and node.get('class_type')
+            and node.get('class_type') != 'placeholder_node'
+        }
+        removed = len(workflow) - len(cleaned)
+        if removed:
+            logger.info(f"🧹 工作流 {workflow_name} 已移除 {removed} 个非执行节点/元信息字段")
+        return cleaned
     
     def replace_placeholders(self, workflow: Dict, params: Dict[str, Any]) -> Dict:
         """
@@ -107,6 +121,9 @@ class WorkflowHandler:
             '"{image_filename}"': json.dumps(params.get('image', '')),  # 保持字符串格式
             '"{image_end}"': json.dumps(params.get('image_end', '')),  # 保持字符串格式
             '"{image_filename_end}"': json.dumps(params.get('image_end', '')),  # 保持字符串格式
+            '"{image_BK}"': json.dumps(params.get('image_BK', '')),  # 融合/迁移/模仿: 背景图
+            '"{image_HU}"': json.dumps(params.get('image_HU', '')),  # 融合/迁移/模仿: 人物图
+            '"{image_MB}"': json.dumps(params.get('image_MB', '')),  # 迁移学习: 蒙版图
             '"{video}"': json.dumps(params.get('video', '')),  # 保持字符串格式
             '"{Audio}"': json.dumps(params.get('Audio', '')),  # 音频文件名
         }
@@ -179,6 +196,7 @@ class WorkflowHandler:
             'i2i_around': 'I2I_Around',  # 🆕 全景角度生成
             'upscale_hd': 'upscale_hd',  # 图像高清放大
             'remove_watermark': 'remove_watermark',  # 去水印
+            'three_view': 'three_view',  # 三视图
             # 🆕 抠图工作流
             'matting_subject': 'matting_subject',
             'matting_split': 'matting_split',
@@ -212,6 +230,7 @@ class WorkflowHandler:
         if not workflow_name:
             # qwen_1 ~ qwen_6, qwenN_1 ~ qwenN_6, qwenN_lora_1 ~ qwenN_lora_6 直接使用任务类型作为工作流名
             if (task_type.startswith('qwen_') or 
+                task_type.startswith('qwen_lora_') or
                 task_type.startswith('qwenN_') or 
                 task_type.startswith('qwenN_lora_') or
                 task_type.startswith('kontext')):
@@ -221,8 +240,12 @@ class WorkflowHandler:
         
         # 获取工作流模板
         workflow = self.get_workflow(workflow_name)
-        if not workflow:
+        if workflow is None:
             raise ValueError(f"找不到工作流: {workflow_name}")
+        workflow = self.extract_executable_nodes(workflow, workflow_name)
+        executable_nodes = list(workflow.values())
+        if not executable_nodes:
+            raise ValueError(f"工作流模板 {workflow_name}.json 不是可执行的 ComfyUI 节点图，请在后台导入完整 workflow JSON")
         
         # 🔧 调试：打印接收到的 task_data 中的图片字段
         image_fields_in_data = {k: v for k, v in task_data.items() if 'image' in k.lower()}
@@ -310,6 +333,9 @@ def get_workflow_handler() -> WorkflowHandler:
         # 🔧 使用绝对路径，避免工作目录问题
         script_dir = Path(__file__).parent.resolve()
         workflow_dir = script_dir / "workflows"
+        legacy_workflow_dir = script_dir.parent / "workflows"
+        if not workflow_dir.exists() and legacy_workflow_dir.exists():
+            workflow_dir = legacy_workflow_dir
         _workflow_handler = WorkflowHandler(str(workflow_dir))
         logger.info(f"📂 工作流目录（绝对路径）: {workflow_dir}")
     return _workflow_handler
