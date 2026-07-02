@@ -24,9 +24,11 @@ const COMPLETED_RETAIN_MS = 30 * 60 * 1000;
 // 2026-06-14：active（pending/queued/running）任务超过此时长仍未完成，视为僵尸/超时，
 // rehydrate 时自动判失败清出「运行中」。否则卡死的任务（如无 GPU agent 的 qwen 出图）
 // 会永远显示「运行中 0%」幽灵在通知面板里。
-const STALE_ACTIVE_MS = 15 * 60 * 1000;
+const STALE_ACTIVE_MS = 120 * 60 * 1000;
 // listTasks 默认排序时，已完成 / 失败保留前 N 条（避免 store 无限增长）
 const MAX_COMPLETED_KEEP = 50;
+const FRONTEND_QUEUE_TASK_ID_RE = /^comfyui_\d+_\d+$/;
+const FRONTEND_QUEUE_TASK_LOST_MESSAGE = '页面刷新后，本地排队任务已失效，请重新提交';
 
 export type TaskRegistryEvent =
     | { type: 'register'; task: RegisteredTask }
@@ -415,7 +417,15 @@ class TaskRegistry {
                     continue;
                 }
                 // active 但创建太久仍未完成 → 判为超时失败，清出「运行中」
-                if (t.createdAt < staleCutoff) {
+                if (isFrontendOnlyQueueTask(t)) {
+                    this.tasks.set(t.taskId, {
+                        ...t,
+                        status: 'failed',
+                        completedAt: Date.now(),
+                        error: FRONTEND_QUEUE_TASK_LOST_MESSAGE,
+                    });
+                    mutated = true;
+                } else if (t.createdAt < staleCutoff) {
                     this.tasks.set(t.taskId, { ...t, status: 'failed', completedAt: Date.now(), error: '任务超时，已自动清理' });
                     mutated = true;
                 } else {
@@ -520,6 +530,10 @@ class TaskRegistry {
 
 function isActive(status: GlobalTaskStatus): boolean {
     return status === 'pending' || status === 'queued' || status === 'running';
+}
+
+function isFrontendOnlyQueueTask(task: RegisteredTask): boolean {
+    return FRONTEND_QUEUE_TASK_ID_RE.test(task.taskId);
 }
 
 // 全局单例（生产 / dev / 浏览器）。测试用 `new TaskRegistry(memoryStorage)` 隔离。
