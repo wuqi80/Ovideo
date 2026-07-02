@@ -2,16 +2,20 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Film } from 'lucide-react';
 
-const handleStyle = {
+const handleStyle: React.CSSProperties = {
   width: 24,
   height: 24,
   border: '3px solid #fff',
   borderRadius: '999px',
+  top: '50%',
+  transform: 'translateY(-50%)',
   zIndex: 1000,
   cursor: 'crosshair',
-  pointerEvents: 'all' as const,
+  pointerEvents: 'all',
   boxShadow: '0 0 0 4px rgba(233, 30, 99, 0.22)',
 };
+const inputHandleStyle: React.CSSProperties = { ...handleStyle, left: -12, right: 'auto' };
+const outputHandleStyle: React.CSSProperties = { ...handleStyle, left: 'auto', right: -12 };
 
 export const VideoNode = memo(({ data, isConnectable }: NodeProps) => {
   const videoUrl = data?.videoUrl as string | undefined;
@@ -22,7 +26,7 @@ export const VideoNode = memo(({ data, isConnectable }: NodeProps) => {
       border: '1px solid #e91e6344', minWidth: '220px', color: '#e0e0e0',
       position: 'relative'
     }}>
-      <Handle id="in" type="target" position={Position.Left} isConnectable={isConnectable} className="nodrag nopan" style={{ ...handleStyle, background: '#e91e63' }} />
+      <Handle id="in" type="target" position={Position.Left} isConnectable={isConnectable} className="nodrag nopan" style={{ ...inputHandleStyle, background: '#e91e63' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <Film size={16} color="#e91e63" />
         <span style={{ fontSize: '12px', color: '#888' }}>视频节点</span>
@@ -40,7 +44,7 @@ export const VideoNode = memo(({ data, isConnectable }: NodeProps) => {
           <Film size={32} />
         </div>
       )}
-      <Handle id="out" type="source" position={Position.Right} isConnectable={isConnectable} className="nodrag nopan" style={{ ...handleStyle, background: '#e91e63' }} />
+      <Handle id="out" type="source" position={Position.Right} isConnectable={isConnectable} className="nodrag nopan" style={{ ...outputHandleStyle, background: '#e91e63' }} />
     </div>
   );
 });

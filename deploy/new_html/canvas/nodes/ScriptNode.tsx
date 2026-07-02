@@ -2,16 +2,20 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { FileText } from 'lucide-react';
 
-const handleStyle = {
+const handleStyle: React.CSSProperties = {
   width: 24,
   height: 24,
   border: '3px solid #fff',
   borderRadius: '999px',
+  top: '50%',
+  transform: 'translateY(-50%)',
   zIndex: 1000,
   cursor: 'crosshair',
-  pointerEvents: 'all' as const,
+  pointerEvents: 'all',
   boxShadow: '0 0 0 4px rgba(124, 131, 255, 0.22)',
 };
+const inputHandleStyle: React.CSSProperties = { ...handleStyle, left: -12, right: 'auto' };
+const outputHandleStyle: React.CSSProperties = { ...handleStyle, left: 'auto', right: -12 };
 
 export const ScriptNode = memo(({ data, id, isConnectable }: NodeProps) => {
   const [text, setText] = useState(data?.text as string || '');
@@ -27,7 +31,7 @@ export const ScriptNode = memo(({ data, id, isConnectable }: NodeProps) => {
       border: '1px solid #7c83ff44', minWidth: '240px', color: '#e0e0e0',
       position: 'relative'
     }}>
-      <Handle id="in" type="target" position={Position.Left} isConnectable={isConnectable} className="nodrag nopan" style={{ ...handleStyle, background: '#7c83ff' }} />
+      <Handle id="in" type="target" position={Position.Left} isConnectable={isConnectable} className="nodrag nopan" style={{ ...inputHandleStyle, background: '#7c83ff' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <FileText size={16} color="#7c83ff" />
         <span style={{ fontSize: '12px', color: '#888' }}>剧本节点</span>
@@ -47,7 +51,7 @@ export const ScriptNode = memo(({ data, id, isConnectable }: NodeProps) => {
           boxSizing: 'border-box'
         }}
       />
-      <Handle id="out" type="source" position={Position.Right} isConnectable={isConnectable} className="nodrag nopan" style={{ ...handleStyle, background: '#7c83ff' }} />
+      <Handle id="out" type="source" position={Position.Right} isConnectable={isConnectable} className="nodrag nopan" style={{ ...outputHandleStyle, background: '#7c83ff' }} />
     </div>
   );
 });

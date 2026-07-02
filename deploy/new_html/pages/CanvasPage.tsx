@@ -32,6 +32,7 @@ import { ScriptNode } from '../canvas/nodes/ScriptNode';
 import { ImageNode } from '../canvas/nodes/ImageNode';
 import { AudioNode } from '../canvas/nodes/AudioNode';
 import { VideoNode } from '../canvas/nodes/VideoNode';
+import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import {
   createCanvasBoard,
   createCanvasConnection,
@@ -55,6 +56,7 @@ const INITIAL_EDGES: Edge[] = [];
 
 const edgeStyle = { stroke: '#7c83ff', strokeWidth: 2.5 };
 const edgeMarker = { type: MarkerType.ArrowClosed, color: '#7c83ff' };
+const CANVAS_IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 type CanvasApiNode = Record<string, any>;
 type CanvasApiConnection = Record<string, any>;
@@ -122,6 +124,11 @@ const normalizeNodeType = (type: string) => {
 const sameStringList = (a: string[], b: string[]) => (
   a.length === b.length && a.every((value, index) => value === b[index])
 );
+
+const getSerializableNodeData = (node: Node) => {
+  const { onTextChange: _onTextChange, ...serializableData } = (node.data || {}) as Record<string, any>;
+  return serializableData;
+};
 
 
 type CanvasEdgeOverlayProps = {
@@ -223,6 +230,8 @@ const CanvasInner: React.FC = () => {
   const [statusText, setStatusText] = useState('正在加载画布...');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
+  const [agentCommand, setAgentCommand] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const saveTextTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -529,6 +538,78 @@ const CanvasInner: React.FC = () => {
     selectEdge(edge.id);
   }, [selectEdge]);
 
+  const generateCanvasImage = useCallback(async () => {
+    if (isGenerating) return;
+
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const selectedImageNodeId = selectedNodeIds.find((nodeId) => nodeMap.get(nodeId)?.type === 'image');
+    const imageFlowEdges = edges.filter((edge) => (
+      nodeMap.get(edge.source)?.type === 'script' && nodeMap.get(edge.target)?.type === 'image'
+    ));
+    const flowEdge = imageFlowEdges.find((edge) => !selectedImageNodeId || edge.target === selectedImageNodeId) || imageFlowEdges[0];
+
+    if (!flowEdge) {
+      setStatusText('请先将“脚本节点”的右侧圆点连接到“图片节点”的左侧圆点');
+      return;
+    }
+
+    const scriptNode = nodeMap.get(flowEdge.source);
+    const imageNode = nodeMap.get(flowEdge.target);
+    const scriptText = String(scriptNode?.data?.text || '').trim();
+    const instruction = agentCommand.trim();
+
+    if (!scriptNode || !imageNode || (!scriptText && !instruction)) {
+      setStatusText('请先在脚本节点或底部 AI 指令中输入要生成的内容');
+      return;
+    }
+
+    const prompt = [
+      scriptText,
+      instruction ? `额外要求：${instruction}` : '',
+      '画面要求：高质量动漫/漫剧分镜风格，电影感构图，主体清晰，细节丰富。',
+    ].filter(Boolean).join('\n\n');
+
+    setIsGenerating(true);
+    setStatusText('正在按照流程生成图片...');
+
+    try {
+      const results = await generateGeminiImageVariant({
+        model: CANVAS_IMAGE_MODEL,
+        prompt,
+        aspectRatio: '16:9',
+        imageSize: '2K',
+        entityType: 'canvas_node',
+        entityId: imageNode.id,
+        fileRole: 'canvas_image',
+        episodeId,
+      });
+      const generatedUrl = results[0]?.fileUrl || results[0]?.url;
+      if (!generatedUrl) throw new Error('图片生成接口未返回图片地址');
+
+      const nextData = {
+        ...getSerializableNodeData(imageNode),
+        imageUrl: generatedUrl,
+        prompt,
+        generatedAt: new Date().toISOString(),
+        sourceScriptNodeId: scriptNode.id,
+      };
+
+      setNodes((current) => current.map((node) => (
+        node.id === imageNode.id ? { ...node, data: { ...node.data, ...nextData } } : node
+      )));
+      await updateCanvasNode(imageNode.id, { data: nextData });
+      setSelectedNodeIds([imageNode.id]);
+      setSelectedEdgeIds([]);
+      setStatusText('图片已生成并写入图片节点');
+    } catch (error) {
+      console.error('canvas image generation failed', error);
+      const message = error instanceof Error ? error.message : '图片生成失败';
+      setStatusText(`图片生成失败：${message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [agentCommand, edges, episodeId, isGenerating, nodes, selectedNodeIds, setNodes]);
+
   const goToWorkflow = () => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script`);
   };
@@ -697,18 +778,29 @@ const CanvasInner: React.FC = () => {
             <input
               className="nodrag nowheel"
               type="text"
+              value={agentCommand}
+              onChange={(event) => setAgentCommand(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  generateCanvasImage();
+                }
+              }}
               placeholder="AI 指令：描述你想创建的内容..."
               style={{
                 flex: 1, background: 'transparent', border: 'none',
                 color: '#e0e0e0', outline: 'none', fontSize: '14px'
               }}
             />
-            <button style={{
-              padding: '6px 16px', background: '#7c83ff', color: '#fff',
-              border: 'none', borderRadius: '6px', cursor: 'pointer',
+            <button
+              onClick={generateCanvasImage}
+              disabled={isGenerating}
+              style={{
+              padding: '6px 16px', background: isGenerating ? '#4b5563' : '#7c83ff', color: '#fff',
+              border: 'none', borderRadius: '6px', cursor: isGenerating ? 'wait' : 'pointer',
               fontSize: '13px'
             }}>
-              生成
+              {isGenerating ? '生成中' : '生成'}
             </button>
           </div>
         </Panel>
