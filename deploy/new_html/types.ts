@@ -536,6 +536,7 @@ export interface StoryboardItemDB {
   dialogueAudioUrl: string | null;
   narrationAudioUrl: string | null;
   sfxAudioUrl: string | null;
+  mixedAudioUrl?: string | null;
   audioDurationMs: number | null;
   plannedDurationMs: number | null;
 }

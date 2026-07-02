@@ -23,6 +23,13 @@ if ! command -v node &>/dev/null; then
 fi
 echo "Node $(node -v), npm $(npm -v)"
 
+# ── 1.1 安装媒体处理工具（成片合成 / 音频混音依赖）────────────────────
+echo "[1.1/8] 安装 ffmpeg..."
+if ! command -v ffmpeg &>/dev/null || ! command -v ffprobe &>/dev/null; then
+    sudo apt install -y ffmpeg
+fi
+echo "ffmpeg $(ffmpeg -version | head -n 1)"
+
 # ── 1.5 构建前端（dist/ 由 vite 输出，后端直接 serve）──────────────────
 echo "[1.5/8] 构建前端..."
 cd "${DEPLOY_DIR}/new_html"

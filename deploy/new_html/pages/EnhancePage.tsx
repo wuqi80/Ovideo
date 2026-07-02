@@ -5,7 +5,7 @@ import {
   Maximize, Loader, CheckCircle, Download,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
-import type { VideoSegment, StoryboardItemDB } from '../types';
+import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
 // 2026-05-20 (Task System Overhaul M4)：把 EnhancePage 的「假进度」改成真后端 worker。
 // upscale 接到 videoTaskService.submitUpscaleTaskQueued + videoTaskPoller，状态实时同步
 // 到 taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
@@ -14,7 +14,8 @@ import { submitUpscaleTaskQueued } from '../services/videoTaskService';
 import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
-import { LazyVideo } from '../components/LazyVideo';
+import { secureApiUrl } from '../services/httpClient';
+import { syncTimelineAudioPlayback } from '../utils/enhanceTimelineAudio';
 
 interface MediaClip {
   id: string;
@@ -27,6 +28,11 @@ interface MediaClip {
 }
 
 type EnhancementKind = 'dub' | 'upscale' | 'interpolate' | 'lipSync';
+
+function secureMediaUrl(url: string): string {
+  if (!url || url.startsWith('blob:') || url.startsWith('data:')) return url;
+  return secureApiUrl(url, { requireAuth: false });
+}
 
 const ENHANCE_OPTIONS: { kind: EnhancementKind; label: string; desc: string; Icon: React.FC<{ size?: number; className?: string }> }[] = [
   { kind: 'upscale', label: '高清放大', desc: '提升至 4K 画质', Icon: Maximize },
@@ -58,24 +64,151 @@ function normalizeStoryboardAudioItem(r: any): StoryboardItemDB {
     dialogueAudioUrl: r.dialogue_audio_url ?? r.dialogueAudioUrl ?? null,
     narrationAudioUrl: r.narration_audio_url ?? r.narrationAudioUrl ?? null,
     sfxAudioUrl: r.sfx_audio_url ?? r.sfxAudioUrl ?? null,
+    mixedAudioUrl: r.mixed_audio_url ?? r.mixedAudioUrl ?? null,
     audioDurationMs: r.audio_duration_ms ?? r.audioDurationMs ?? null,
     plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
-  };
+  } as StoryboardItemDB;
+}
+
+function itemId(item: StoryboardItemDB & Record<string, any>): string {
+  return String(item.itemId ?? item.item_id ?? '');
+}
+
+function itemSort(item: StoryboardItemDB & Record<string, any>): number {
+  const raw = item.sortOrder ?? item.sort_order;
+  return typeof raw === 'number' ? raw : 0;
+}
+
+function itemDurationMs(item: StoryboardItemDB & Record<string, any>): number {
+  const raw = item.audioDurationMs ?? item.audio_duration_ms ?? item.plannedDurationMs ?? item.planned_duration_ms;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 3000;
+}
+
+function buildEnhanceSourceClips(
+  videoSegments: VideoSegment[],
+  storyboardAudioItems: StoryboardItemDB[],
+  audioTracks: AudioTrack[],
+): MediaClip[] {
+  const allClips: MediaClip[] = [];
+  let videoTime = 0;
+
+  const sortedSegs = [...videoSegments].sort((a, b) => a.sortOrder - b.sortOrder);
+  for (let i = 0; i < sortedSegs.length; i++) {
+    const seg = sortedSegs[i];
+    const dur = (seg.durationMs || 5000) / 1000;
+    allClips.push({
+      id: seg.segmentId || `vid_${i}`,
+      url: secureMediaUrl(seg.videoUrl || ''),
+      startTime: videoTime,
+      duration: dur,
+      sourceOffset: 0,
+      type: 'video',
+      settings: { upscale: false, interpolate: false, lipSync: false },
+    });
+    videoTime += dur;
+  }
+
+  const sortedItems = [...storyboardAudioItems].sort((a, b) =>
+    itemSort(a as StoryboardItemDB & Record<string, any>) - itemSort(b as StoryboardItemDB & Record<string, any>)
+  );
+  const itemStartMs = new Map<string, number>();
+  let audioTimelineMs = 0;
+  for (const raw of sortedItems) {
+    const item = raw as StoryboardItemDB & Record<string, any>;
+    const id = itemId(item);
+    if (id) itemStartMs.set(id, audioTimelineMs);
+    audioTimelineMs += itemDurationMs(item);
+  }
+
+  for (const raw of sortedItems) {
+    const item = raw as StoryboardItemDB & Record<string, any>;
+    const id = itemId(item);
+    if (!id) continue;
+    const startTime = (itemStartMs.get(id) || 0) / 1000;
+    const duration = itemDurationMs(item) / 1000;
+    const mixedUrl = item.mixedAudioUrl ?? item.mixed_audio_url;
+    if (mixedUrl) {
+      allClips.push({
+        id: `aud_sb_${id}_mixed`,
+        url: secureMediaUrl(String(mixedUrl)),
+        startTime,
+        duration,
+        sourceOffset: 0,
+        type: 'audio',
+      });
+      continue;
+    }
+
+    const audioParts = [
+      ['dialogue', item.dialogueAudioUrl ?? item.dialogue_audio_url],
+      ['narration', item.narrationAudioUrl ?? item.narration_audio_url],
+      ['sfx', item.sfxAudioUrl ?? item.sfx_audio_url],
+    ] as const;
+    for (const [kind, url] of audioParts) {
+      if (!url) continue;
+      allClips.push({
+        id: `aud_sb_${id}_${kind}`,
+        url: secureMediaUrl(String(url)),
+        startTime,
+        duration,
+        sourceOffset: 0,
+        type: 'audio',
+      });
+    }
+  }
+
+  for (const track of audioTracks) {
+    if (!track.audioUrl) continue;
+    const startMs = track.startItemId ? itemStartMs.get(track.startItemId) ?? 0 : 0;
+    const durationMs = track.durationMs || Math.max(audioTimelineMs, 3000);
+    allClips.push({
+      id: `aud_track_${track.trackId}`,
+      url: secureMediaUrl(track.audioUrl),
+      startTime: startMs / 1000,
+      duration: durationMs / 1000,
+      sourceOffset: 0,
+      type: 'audio',
+    });
+  }
+
+  return allClips;
+}
+
+function mergeSourceClips(prev: MediaClip[], source: MediaClip[]): MediaClip[] {
+  if (prev.length === 0) return source;
+  const prevById = new Map(prev.map(clip => [clip.id, clip]));
+  const sourceIds = new Set(source.map(clip => clip.id));
+  const merged = source.map(clip => {
+    const existing = prevById.get(clip.id);
+    if (!existing) return clip;
+    return {
+      ...clip,
+      startTime: existing.startTime,
+      sourceOffset: existing.sourceOffset,
+      settings: existing.settings ?? clip.settings,
+    };
+  });
+  const manualClips = prev.filter(clip => !sourceIds.has(clip.id) && (/^aud_\d+/.test(clip.id) || clip.id.includes('_s_')));
+  return [...merged, ...manualClips];
 }
 
 export const EnhancePage: React.FC = () => {
-  const { videoSegments, isLoading, error, reload, loadSlices, projectId, episodeId, selectedScriptId } = useEpisode();
+  const { videoSegments, audioTracks, isLoading, error, reload, loadSlices, projectId, episodeId, selectedScriptId } = useEpisode();
   const [storyboardAudioItems, setStoryboardAudioItems] = useState<StoryboardItemDB[]>([]);
+  const [storyboardAudioLoaded, setStoryboardAudioLoaded] = useState(false);
   const [storyboardAudioReloadKey, setStoryboardAudioReloadKey] = useState(0);
 
   useEffect(() => {
-    loadSlices('videoSegments');
+    loadSlices('videoSegments', 'audioTracks');
   }, [loadSlices]);
 
   useEffect(() => {
     let active = true;
+    setStoryboardAudioLoaded(false);
     if (!episodeId) {
       setStoryboardAudioItems([]);
+      setStoryboardAudioLoaded(true);
       return () => { active = false; };
     }
     getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'audio' })
@@ -86,6 +219,9 @@ export const EnhancePage: React.FC = () => {
       .catch(err => {
         console.warn('storyboard audio fields load failed:', err);
         if (active) setStoryboardAudioItems([]);
+      })
+      .finally(() => {
+        if (active) setStoryboardAudioLoaded(true);
       });
     return () => { active = false; };
   }, [episodeId, selectedScriptId, storyboardAudioReloadKey]);
@@ -147,54 +283,32 @@ export const EnhancePage: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const audioElementRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const playTimerRef = useRef<number | null>(null);
+  const clipScopeRef = useRef('');
 
   useEffect(() => {
-    if ((videoSegments.length > 0 || storyboardAudioItems.length > 0) && clips.length === 0) {
-      const allClips: MediaClip[] = [];
-      let t = 0;
+    if (!storyboardAudioLoaded) return;
+    const sourceClips = buildEnhanceSourceClips(videoSegments, storyboardAudioItems, audioTracks);
+    if (sourceClips.length === 0) return;
+    setClips(prev => mergeSourceClips(prev, sourceClips));
+    setSelectedClipId(prev => {
+      if (prev && sourceClips.some(c => c.id === prev)) return prev;
+      return sourceClips.find(c => c.type === 'video')?.id ?? sourceClips[0]?.id ?? null;
+    });
+  }, [videoSegments, storyboardAudioItems, audioTracks, storyboardAudioLoaded]);
 
-      const sortedSegs = [...videoSegments].sort((a, b) => a.sortOrder - b.sortOrder);
-      for (let i = 0; i < sortedSegs.length; i++) {
-        const seg = sortedSegs[i];
-        const dur = (seg.durationMs || 5000) / 1000;
-        allClips.push({
-          id: seg.segmentId || `vid_${i}`,
-          url: seg.videoUrl || '',
-          startTime: t,
-          duration: dur,
-          sourceOffset: 0,
-          type: 'video',
-          settings: { upscale: false, interpolate: false, lipSync: false },
-        });
-        t += dur;
-      }
-
-      let audioTime = 0;
-      const sortedItems = [...storyboardAudioItems]
-        .sort((a, b) => ((a as any).sort_order ?? (a as any).sortOrder ?? 0) - ((b as any).sort_order ?? (b as any).sortOrder ?? 0));
-      for (const item of sortedItems) {
-        const audioUrl = (item as any).dialogue_audio_url ?? (item as any).dialogueAudioUrl;
-        if (audioUrl) {
-          const durMs = (item as any).audio_duration_ms ?? (item as any).audioDurationMs ?? 3000;
-          const dur = durMs / 1000;
-          allClips.push({
-            id: `aud_sb_${(item as any).item_id ?? (item as any).itemId}`,
-            url: audioUrl,
-            startTime: audioTime,
-            duration: dur,
-            sourceOffset: 0,
-            type: 'audio',
-          });
-          audioTime += dur;
-        }
-      }
-
-      setClips(allClips);
-      const firstVideo = allClips.find(c => c.type === 'video');
-      if (firstVideo) setSelectedClipId(firstVideo.id);
+  useEffect(() => {
+    const scope = `${episodeId || ''}:${selectedScriptId || ''}`;
+    if (clipScopeRef.current && clipScopeRef.current !== scope) {
+      setClips([]);
+      setSelectedClipId(null);
+      setCurrentTime(0);
+      setPlaying(false);
     }
-  }, [videoSegments, storyboardAudioItems]);
+    clipScopeRef.current = scope;
+  }, [episodeId, selectedScriptId]);
 
   useEffect(() => {
     return () => { if (playTimerRef.current) clearInterval(playTimerRef.current); };
@@ -206,6 +320,31 @@ export const EnhancePage: React.FC = () => {
   const videoUnderPlayhead = videoClips.find(
     c => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
   ) || videoClips[0];
+
+  useEffect(() => {
+    const video = previewVideoRef.current;
+    if (!video || !videoUnderPlayhead?.url) return;
+    const target = Math.max(0, currentTime - videoUnderPlayhead.startTime + videoUnderPlayhead.sourceOffset);
+    if (!playing || Math.abs(video.currentTime - target) > 0.75) {
+      try { video.currentTime = Math.min(target, Math.max(0, videoUnderPlayhead.duration - 0.05)); } catch {}
+    }
+    if (playing) void video.play().catch(() => setPlaying(false));
+    else video.pause();
+  }, [playing, currentTime, videoUnderPlayhead?.id, videoUnderPlayhead?.url, videoUnderPlayhead?.startTime, videoUnderPlayhead?.duration, videoUnderPlayhead?.sourceOffset]);
+
+  useEffect(() => {
+    void syncTimelineAudioPlayback({
+      clips: audioClips.map(clip => ({
+        id: clip.id,
+        startTime: clip.startTime,
+        duration: clip.duration,
+        sourceOffset: clip.sourceOffset,
+      })),
+      audioElements: audioElementRefs.current,
+      currentTime,
+      playing,
+    }).catch(() => {});
+  }, [audioClips, currentTime, playing]);
 
   const totalDuration = useMemo(
     () => Math.max(...clips.map(c => c.startTime + c.duration), currentTime + 10, 60),
@@ -486,11 +625,12 @@ export const EnhancePage: React.FC = () => {
             )}
             <div className="w-full max-w-3xl aspect-video bg-black rounded-md border border-n40 shadow-2xl overflow-hidden relative">
               {videoUnderPlayhead?.url ? (
-                <LazyVideo
+                <video
+                  ref={previewVideoRef}
                   src={videoUnderPlayhead.url}
-                  preload="none"
+                  preload="metadata"
                   controls={false}
-                  hoverPreview={false}
+                  muted
                   className="w-full h-full object-contain"
                 />
               ) : (
@@ -622,6 +762,19 @@ export const EnhancePage: React.FC = () => {
 
       {/* Bottom Timeline */}
       <div className="h-56 bg-n0 border-t border-n40 flex flex-col shrink-0 z-20">
+        <div className="hidden" aria-hidden="true">
+          {audioClips.map(clip => (
+            <audio
+              key={clip.id}
+              ref={(el) => {
+                if (el) audioElementRefs.current.set(clip.id, el);
+                else audioElementRefs.current.delete(clip.id);
+              }}
+              src={clip.url}
+              preload="metadata"
+            />
+          ))}
+        </div>
         {/* Toolbar */}
         <div className="responsive-toolbar px-4 py-1.5 border-b border-n40 flex justify-between items-center shrink-0 bg-n0">
           <div className="toolbar-group">

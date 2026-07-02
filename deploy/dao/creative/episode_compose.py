@@ -17,6 +17,7 @@ class EpisodeComposeDAO:
             SELECT si.item_id, si.sort_order,
                    si.scene_heading, si.dialogue,
                    si.mixed_audio_url AS audio_url,
+                   si.dialogue_audio_url, si.narration_audio_url, si.sfx_audio_url,
                    COALESCE(si.audio_duration_ms,0) AS audio_ms,
                    vs.segment_id, vs.video_url, vs.created_at,
                    f.thumbnail_url
