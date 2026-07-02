@@ -119,6 +119,10 @@ const normalizeNodeType = (type: string) => {
   return 'script';
 };
 
+const sameStringList = (a: string[], b: string[]) => (
+  a.length === b.length && a.every((value, index) => value === b[index])
+);
+
 
 type CanvasEdgeOverlayProps = {
   nodes: Node[];
@@ -229,15 +233,17 @@ const CanvasInner: React.FC = () => {
     };
   }, []);
 
+  const nodeIdsForInternals = useMemo(() => nodes.map((node) => node.id).join('|'), [nodes]);
+
   useEffect(() => {
-    if (!nodes.length) return;
+    if (!nodeIdsForInternals) return;
 
     const frameId = window.requestAnimationFrame(() => {
-      nodes.forEach((node) => updateNodeInternals(node.id));
+      nodeIdsForInternals.split('|').forEach((nodeId) => updateNodeInternals(nodeId));
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [nodes, updateNodeInternals]);
+  }, [nodeIdsForInternals, updateNodeInternals]);
 
   const deleteEdgesFromServer = useCallback((edgesToDelete: Edge[]) => {
     edgesToDelete.forEach((edge) => {
@@ -471,6 +477,13 @@ const CanvasInner: React.FC = () => {
     });
   }, []);
 
+  const onSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
+    const nextNodeIds = selectedNodes.map((node) => node.id);
+    const nextEdgeIds = selectedEdges.map((edge) => edge.id);
+    setSelectedNodeIds((current) => sameStringList(current, nextNodeIds) ? current : nextNodeIds);
+    setSelectedEdgeIds((current) => sameStringList(current, nextEdgeIds) ? current : nextEdgeIds);
+  }, []);
+
   const goToWorkflow = () => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script`);
   };
@@ -484,10 +497,7 @@ const CanvasInner: React.FC = () => {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
-        onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) => {
-          setSelectedNodeIds(selectedNodes.map((node) => node.id));
-          setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
-        }}
+        onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
         connectionMode={ConnectionMode.Loose}
         connectionLineStyle={edgeStyle}
