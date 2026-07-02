@@ -54,10 +54,25 @@ export async function deleteCanvasNode(nodeId: string) {
   return apiJson<any>(`/api/canvas/nodes/${nodeId}`, { method: 'DELETE' }, 'deleteCanvasNode');
 }
 
-export async function createCanvasConnection(boardId: string, sourceNodeId: string, targetNodeId: string) {
+export async function createCanvasConnection(
+  boardId: string,
+  sourceNodeId: string,
+  targetNodeId: string,
+  sourcePort?: string | null,
+  targetPort?: string | null,
+  label?: string | null
+) {
+  const body: Record<string, any> = {
+    board_id: boardId,
+    source_node_id: sourceNodeId,
+    target_node_id: targetNodeId,
+  };
+  if (sourcePort) body.source_port = sourcePort;
+  if (targetPort) body.target_port = targetPort;
+  if (label) body.label = label;
   return apiJson<any>('/api/canvas/connections', {
     method: 'POST',
-    body: JSON.stringify({ board_id: boardId, source_node_id: sourceNodeId, target_node_id: targetNodeId }),
+    body: JSON.stringify(body),
   }, 'createCanvasConnection');
 }
 

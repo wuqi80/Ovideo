@@ -91,7 +91,7 @@ describe('canvas service', () => {
       .mockResolvedValueOnce(mockJsonResponse({ success: true, connection_id: 'conn_1' }))
       .mockResolvedValueOnce(mockJsonResponse({ success: true }));
 
-    await createCanvasConnection('board_1', 'source_1', 'target_1');
+    await createCanvasConnection('board_1', 'source_1', 'target_1', 'out', 'in');
     await deleteCanvasConnection('conn_1');
 
     expect(mockFetch.mock.calls[0][0]).toBe('/api/canvas/connections');
@@ -100,6 +100,8 @@ describe('canvas service', () => {
       board_id: 'board_1',
       source_node_id: 'source_1',
       target_node_id: 'target_1',
+      source_port: 'out',
+      target_port: 'in',
     });
     expect(mockFetch.mock.calls[1][0]).toBe('/api/canvas/connections/conn_1');
     expect(mockFetch.mock.calls[1][1].method).toBe('DELETE');
