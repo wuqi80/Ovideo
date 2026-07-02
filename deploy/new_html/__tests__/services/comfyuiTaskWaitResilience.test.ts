@@ -17,7 +17,7 @@ vi.mock('../../services/taskRegistry', () => ({
   },
 }));
 
-import { waitForComfyUITask } from '../../services/comfyuiTaskWaitService';
+import { normalizeComfyUITaskError, waitForComfyUITask } from '../../services/comfyuiTaskWaitService';
 
 describe('waitForComfyUITask 轮询韧性', () => {
   beforeEach(() => {
@@ -52,5 +52,17 @@ describe('waitForComfyUITask 轮询韧性', () => {
     await vi.advanceTimersByTimeAsync(10000 + 50);
     await assertion;
     expect(apiJson).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('normalizeComfyUITaskError', () => {
+  it('hides local ComfyUI prompt URLs from user-facing errors', () => {
+    const message = normalizeComfyUITaskError(
+      '400 Client Error: Bad Request for url: http://127.0.0.1:8188/prompt',
+    );
+
+    expect(message).toContain('本地 ComfyUI');
+    expect(message).toContain('HTTP 400');
+    expect(message).not.toContain('127.0.0.1:8188');
   });
 });

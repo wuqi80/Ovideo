@@ -146,10 +146,11 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 targetProjectId: t.projectId,
                 progress: t.progress,
               });
-            } else if (existing.status !== t.status) {
+            } else if (existing.status !== t.status || existing.progress !== t.progress || existing.error) {
               taskRegistry.update(t.id, {
                 status: t.status,
                 progress: t.progress,
+                error: undefined,
               });
             }
           }

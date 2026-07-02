@@ -7,6 +7,7 @@ import { taskRegistry } from './taskRegistry';
 // 轮询任务状态时，允许的最大连续瞬时错误次数。2 秒一次轮询，5 次约等于容忍 10 秒的网络抖动，
 // 超过才判定生成失败，避免单次网关抖动误杀仍在后端运行的生成任务。
 const MAX_CONSECUTIVE_POLL_ERRORS = 5;
+const COMFYUI_TASK_TIMEOUT_MS = 30 * 60 * 1000;
 
 export interface ComfyUITaskRegistryMeta {
     title: string;
@@ -41,6 +42,41 @@ export function toQueueMeta(m: ComfyUITaskRegistryMeta): ComfyQueueRegistryMeta 
 }
 
 export { getComfyUIQueueStatus };
+
+export function normalizeComfyUITaskError(error: unknown): string {
+    const raw = error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+            ? error
+            : '';
+    const message = raw.trim();
+
+    if (!message) {
+        return 'ComfyUI task failed. Please check the GPU agent and local ComfyUI logs.';
+    }
+
+    if (/400\s+Client Error|Bad Request/i.test(message) && /127\.0\.0\.1:8188\/prompt|\/prompt/i.test(message)) {
+        return '本地 ComfyUI 拒绝了角度调整工作流（HTTP 400）。请检查 GPU 机器是否安装 I2I_FJ 所需节点和模型，然后重试。';
+    }
+
+    if (/ComfyUI\s+\/prompt\s+failed:\s*HTTP\s+400/i.test(message)) {
+        return message.replace(/https?:\/\/127\.0\.0\.1:8188\/prompt/gi, '本地 ComfyUI /prompt');
+    }
+
+    if (/Task timed out/i.test(message)) {
+        return 'ComfyUI 等待超时。GPU 首次加载模型可能较慢，请检查本地 GPU Agent 和 ComfyUI 队列后再重试。';
+    }
+
+    if (/Auto-cleanup:\s*stale task exceeded timeout/i.test(message)) {
+        return '任务长时间未被 GPU Agent 接走，已被系统自动清理。请确认本地 GPU Agent 在线后再重试。';
+    }
+
+    return message.replace(/https?:\/\/127\.0\.0\.1:8188\/prompt/gi, '本地 ComfyUI /prompt');
+}
+
+function errorWithTaskId(message: string, taskId: string): Error {
+    return new Error(`${message} (task_id: ${taskId})`);
+}
 
 export const checkComfyUITaskStatus = async (taskId: string): Promise<{
     status: string;
@@ -168,17 +204,18 @@ export const waitForComfyUITask = async (
                     completeTask(registryKey, hasRegistryMeta, [url]);
                     finish(() => resolve(url));
                 } else if (status.status === 'failed') {
-                    const message = status.error || 'Generation failed';
+                    const message = normalizeComfyUITaskError(status.error || 'Generation failed');
                     failTask(registryKey, hasRegistryMeta, message);
-                    finish(() => reject(new Error(message)));
+                    finish(() => reject(errorWithTaskId(message, taskId)));
                 }
             } catch (error: any) {
                 // 单次轮询出错（网络抖动 / 网关 502 等）不代表生成失败：后端任务很可能仍在运行。
                 // 容忍若干次连续失败后才放弃，避免把正常生成中的镜头误判为失败。
                 consecutiveErrors += 1;
                 if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
-                    failTask(registryKey, hasRegistryMeta, error?.message || 'Generation failed');
-                    finish(() => reject(error));
+                    const message = normalizeComfyUITaskError(error?.message || 'Generation failed');
+                    failTask(registryKey, hasRegistryMeta, message);
+                    finish(() => reject(errorWithTaskId(message, taskId)));
                 } else {
                     console.warn(`轮询任务 ${taskId} 第 ${consecutiveErrors} 次出错，继续重试:`, error?.message || error);
                 }
@@ -186,9 +223,10 @@ export const waitForComfyUITask = async (
         }, 2000);
 
         timeoutHandle = setTimeout(() => {
-            failTask(registryKey, hasRegistryMeta, 'Task timed out');
-            finish(() => reject(new Error('Task timed out')));
-        }, 300000);
+            const message = normalizeComfyUITaskError('Task timed out');
+            failTask(registryKey, hasRegistryMeta, message);
+            finish(() => reject(errorWithTaskId(message, taskId)));
+        }, COMFYUI_TASK_TIMEOUT_MS);
     });
 };
 
@@ -242,17 +280,18 @@ export const waitForComfyUITaskAllImages = async (
                     completeTask(registryKey, hasRegistryMeta, results.map(r => r.url));
                     finish(() => resolve(results));
                 } else if (status.status === 'failed') {
-                    const message = status.error || 'Generation failed';
+                    const message = normalizeComfyUITaskError(status.error || 'Generation failed');
                     failTask(registryKey, hasRegistryMeta, message);
-                    finish(() => reject(new Error(message)));
+                    finish(() => reject(errorWithTaskId(message, taskId)));
                 }
             } catch (error: any) {
                 // 单次轮询出错（网络抖动 / 网关 502 等）不代表生成失败：后端任务很可能仍在运行。
                 // 容忍若干次连续失败后才放弃，避免把正常生成中的镜头误判为失败。
                 consecutiveErrors += 1;
                 if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
-                    failTask(registryKey, hasRegistryMeta, error?.message || 'Generation failed');
-                    finish(() => reject(error));
+                    const message = normalizeComfyUITaskError(error?.message || 'Generation failed');
+                    failTask(registryKey, hasRegistryMeta, message);
+                    finish(() => reject(errorWithTaskId(message, taskId)));
                 } else {
                     console.warn(`轮询任务 ${taskId} 第 ${consecutiveErrors} 次出错，继续重试:`, error?.message || error);
                 }
@@ -260,8 +299,9 @@ export const waitForComfyUITaskAllImages = async (
         }, 2000);
 
         timeoutHandle = setTimeout(() => {
-            failTask(registryKey, hasRegistryMeta, 'Task timed out');
-            finish(() => reject(new Error('Task timed out')));
-        }, 300000);
+            const message = normalizeComfyUITaskError('Task timed out');
+            failTask(registryKey, hasRegistryMeta, message);
+            finish(() => reject(errorWithTaskId(message, taskId)));
+        }, COMFYUI_TASK_TIMEOUT_MS);
     });
 };

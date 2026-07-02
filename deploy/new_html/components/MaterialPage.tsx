@@ -650,7 +650,16 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 episodeId: selectedFileId || undefined,
             }
         );
-        const resultUrl = await waitForComfyUITask(taskId);
+        const resultUrl = await waitForComfyUITask(taskId, undefined, {
+            title: `角度调整 · ${payload.tagName}`,
+            kind: 'angle-adjust',
+            targetPage: 'materials',
+            targetEntityType: 'asset',
+            targetEntityId: targetAssetId,
+            targetItemId: targetAssetId,
+            episodeId: selectedFileId || undefined,
+            fileRole: 'material_image',
+        });
 
         const newMaterial: Material = {
             id: uuidv4(),
