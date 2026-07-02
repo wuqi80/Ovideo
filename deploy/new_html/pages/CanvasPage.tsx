@@ -22,6 +22,7 @@ import {
   ConnectionLineType,
   MarkerType,
   useUpdateNodeInternals,
+  useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -120,6 +121,145 @@ const sameStringList = (a: string[], b: string[]) => (
 const getSerializableNodeData = (node: Node) => {
   const { onTextChange: _onTextChange, ...serializableData } = (node.data || {}) as Record<string, any>;
   return serializableData;
+};
+
+type CanvasEdgeOverlayProps = {
+  wrapperRef: React.RefObject<HTMLDivElement | null>;
+  edges: Edge[];
+  selectedEdgeIds: string[];
+  onEdgeSelect: (edgeId: string) => void;
+};
+
+const getCssEscapedValue = (value: string) => {
+  if (typeof window !== 'undefined' && window.CSS?.escape) return window.CSS.escape(value);
+  return value.replace(/["\\]/g, '\\$&');
+};
+
+const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ wrapperRef, edges, selectedEdgeIds, onEdgeSelect }) => {
+  const viewport = useViewport();
+  const selectedEdgeSet = useMemo(() => new Set(selectedEdgeIds), [selectedEdgeIds]);
+  const [paths, setPaths] = useState<Array<{ id: string; path: string; hitPath: string }>>([]);
+
+  const measurePaths = useCallback(() => {
+    const flowRoot = wrapperRef.current?.querySelector('.react-flow') as HTMLElement | null;
+    if (!flowRoot || edges.length === 0) {
+      setPaths([]);
+      return;
+    }
+
+    const rootRect = flowRoot.getBoundingClientRect();
+    const getHandleCenter = (nodeId: string, handleId: string | null | undefined, type: 'source' | 'target') => {
+      const safeNodeId = getCssEscapedValue(nodeId);
+      const safeHandleId = handleId ? getCssEscapedValue(handleId) : '';
+      const handleSelector = safeHandleId
+        ? `.react-flow__handle.${type}[data-nodeid="${safeNodeId}"][data-handleid="${safeHandleId}"]`
+        : `.react-flow__handle.${type}[data-nodeid="${safeNodeId}"]`;
+      const handle = flowRoot.querySelector(handleSelector) as HTMLElement | null;
+      if (!handle) return null;
+
+      const rect = handle.getBoundingClientRect();
+      return {
+        x: rect.left - rootRect.left + rect.width / 2,
+        y: rect.top - rootRect.top + rect.height / 2,
+      };
+    };
+
+    const nextPaths = edges
+      .map((edge) => {
+        const source = getHandleCenter(edge.source, edge.sourceHandle || 'out', 'source');
+        const target = getHandleCenter(edge.target, edge.targetHandle || 'in', 'target');
+        if (!source || !target) return null;
+
+        const direction = target.x >= source.x ? 1 : -1;
+        const delta = Math.max(Math.abs(target.x - source.x) * 0.45, 80);
+        const endpointInset = Math.min(30, Math.max(Math.abs(target.x - source.x) / 5, 12));
+        const hitSourceX = source.x + direction * endpointInset;
+        const hitTargetX = target.x - direction * endpointInset;
+
+        return {
+          id: edge.id,
+          path: `M ${source.x} ${source.y} C ${source.x + direction * delta} ${source.y}, ${target.x - direction * delta} ${target.y}, ${target.x} ${target.y}`,
+          hitPath: `M ${hitSourceX} ${source.y} C ${source.x + direction * delta} ${source.y}, ${target.x - direction * delta} ${target.y}, ${hitTargetX} ${target.y}`,
+        };
+      })
+      .filter(Boolean) as Array<{ id: string; path: string; hitPath: string }>;
+
+    setPaths(nextPaths);
+  }, [edges, wrapperRef]);
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(measurePaths);
+    const timerId = window.setTimeout(measurePaths, 120);
+    window.addEventListener('resize', measurePaths);
+
+    const flowRoot = wrapperRef.current?.querySelector('.react-flow') as HTMLElement | null;
+    const resizeObserver = flowRoot ? new ResizeObserver(measurePaths) : null;
+    if (flowRoot && resizeObserver) resizeObserver.observe(flowRoot);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timerId);
+      window.removeEventListener('resize', measurePaths);
+      resizeObserver?.disconnect();
+    };
+  }, [measurePaths, viewport.x, viewport.y, viewport.zoom, wrapperRef]);
+
+  if (paths.length === 0) return null;
+
+  return (
+    <svg
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'visible',
+        pointerEvents: 'none',
+        zIndex: 4,
+      }}
+    >
+      <defs>
+        <marker id="canvas-overlay-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6" />
+        </marker>
+        <marker id="canvas-overlay-arrow-selected" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#f87171" />
+        </marker>
+      </defs>
+      {paths.map(({ id, path, hitPath }) => {
+        const selected = selectedEdgeSet.has(id);
+        return (
+          <g key={id}>
+            <path
+              d={hitPath}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={24}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdgeSelect(id);
+              }}
+            />
+            <path
+              d={path}
+              fill="none"
+              stroke={selected ? '#f87171' : '#8b5cf6'}
+              strokeWidth={selected ? 5 : 4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              markerEnd={selected ? 'url(#canvas-overlay-arrow-selected)' : 'url(#canvas-overlay-arrow)'}
+              filter={selected ? 'drop-shadow(0 0 9px rgba(248, 113, 113, 0.7))' : 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.55))'}
+              style={{ pointerEvents: 'none' }}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
 };
 
 const CanvasInner: React.FC = () => {
@@ -610,6 +750,12 @@ const CanvasInner: React.FC = () => {
         fitView
         style={{ background: '#0d0d1a' }}
       >
+        <CanvasEdgeOverlay
+          wrapperRef={reactFlowWrapper}
+          edges={edges}
+          selectedEdgeIds={selectedEdgeIds}
+          onEdgeSelect={selectEdge}
+        />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#333" />
         <Controls style={{ background: '#252540', borderColor: '#444' }} />
         <MiniMap style={{ background: '#1a1a2e' }} nodeColor="#7c83ff" maskColor="rgba(0,0,0,0.6)" />
