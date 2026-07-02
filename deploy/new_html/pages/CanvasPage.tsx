@@ -22,17 +22,19 @@ import {
   ConnectionLineType,
   MarkerType,
   useUpdateNodeInternals,
-  useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { EpisodeProvider, useEpisode } from '../contexts/EpisodeContext';
-import { Plus, LayoutList, ArrowLeft, Sparkles, Image, FileText, Film, Volume2, Trash2 } from 'lucide-react';
+import { Plus, LayoutList, ArrowLeft, Sparkles, Image, FileText, Film, Volume2, Trash2, Zap } from 'lucide-react';
 import { ScriptNode } from '../canvas/nodes/ScriptNode';
 import { ImageNode } from '../canvas/nodes/ImageNode';
 import { AudioNode } from '../canvas/nodes/AudioNode';
 import { VideoNode } from '../canvas/nodes/VideoNode';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
+import { generateWithComfyUIWorkflowQueued } from '../services/comfyuiGenerationService';
+import type { GeneratedImageResult } from '../services/comfyuiTaskWaitService';
+import { fetchComfyuiAvailable } from '../services/videoWorkflowService';
 import {
   createCanvasBoard,
   createCanvasConnection,
@@ -54,27 +56,17 @@ const nodeTypes: NodeTypes = {
 const INITIAL_NODES: Node[] = [];
 const INITIAL_EDGES: Edge[] = [];
 
-const edgeStyle = { stroke: '#7c83ff', strokeWidth: 2.5 };
+const edgeStyle = { stroke: '#7c83ff', strokeWidth: 3 };
+const selectedEdgeStyle = { stroke: '#f87171', strokeWidth: 4 };
 const edgeMarker = { type: MarkerType.ArrowClosed, color: '#7c83ff' };
+const selectedEdgeMarker = { type: MarkerType.ArrowClosed, color: '#f87171' };
 const CANVAS_IMAGE_MODEL = 'gemini-2.5-flash-image';
+const EMPTY_REFERENCE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 type CanvasApiNode = Record<string, any>;
 type CanvasApiConnection = Record<string, any>;
+type CanvasGenerationMode = 'api' | 'gpu';
 
-
-const FALLBACK_NODE_WIDTH = 260;
-const FALLBACK_NODE_HEIGHT = 160;
-const SCRIPT_NODE_WIDTH = 320;
-const SCRIPT_NODE_HEIGHT = 170;
-const IMAGE_NODE_WIDTH = 280;
-const IMAGE_NODE_HEIGHT = 230;
-
-const getNodeSize = (node: Node) => {
-  const measured = (node as any).measured || {};
-  const width = (node as any).width || measured.width || (node.type === 'script' ? SCRIPT_NODE_WIDTH : IMAGE_NODE_WIDTH) || FALLBACK_NODE_WIDTH;
-  const height = (node as any).height || measured.height || (node.type === 'script' ? SCRIPT_NODE_HEIGHT : IMAGE_NODE_HEIGHT) || FALLBACK_NODE_HEIGHT;
-  return { width, height };
-};
 
 const isDuplicateConnectionError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error || '');
@@ -109,10 +101,10 @@ const normalizeCanvasEdge = (edge: Edge, sourceHandle = 'out', targetHandle = 'i
   type: 'smoothstep',
   animated: true,
   hidden: false,
-  zIndex: 10,
-  interactionWidth: 24,
-  style: edgeStyle,
-  markerEnd: edgeMarker,
+  zIndex: edge.selected ? 2 : 0,
+  interactionWidth: 32,
+  style: edge.selected ? selectedEdgeStyle : edgeStyle,
+  markerEnd: edge.selected ? selectedEdgeMarker : edgeMarker,
 });
 
 const normalizeNodeType = (type: string) => {
@@ -130,93 +122,6 @@ const getSerializableNodeData = (node: Node) => {
   return serializableData;
 };
 
-
-type CanvasEdgeOverlayProps = {
-  nodes: Node[];
-  edges: Edge[];
-  selectedEdgeIds: string[];
-  onEdgeSelect: (edgeId: string) => void;
-};
-
-const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ nodes, edges, selectedEdgeIds, onEdgeSelect }) => {
-  const { x, y, zoom } = useViewport();
-  const selectedEdgeSet = useMemo(() => new Set(selectedEdgeIds), [selectedEdgeIds]);
-  const paths = useMemo(() => {
-    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-    return edges
-      .map((edge) => {
-        const source = nodeMap.get(edge.source);
-        const target = nodeMap.get(edge.target);
-        if (!source || !target) return null;
-        const sourceSize = getNodeSize(source);
-        const targetSize = getNodeSize(target);
-        const sx = source.position.x + sourceSize.width;
-        const sy = source.position.y + sourceSize.height / 2;
-        const tx = target.position.x;
-        const ty = target.position.y + targetSize.height / 2;
-        const delta = Math.max(Math.abs(tx - sx) * 0.5, 80);
-        return {
-          id: edge.id,
-          path: `M ${sx} ${sy} C ${sx + delta} ${sy}, ${tx - delta} ${ty}, ${tx} ${ty}`,
-        };
-      })
-      .filter(Boolean) as Array<{ id: string; path: string }>;
-  }, [edges, nodes]);
-
-  if (paths.length === 0) return null;
-
-  return (
-    <svg
-      aria-hidden="true"
-      style={{
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        overflow: 'visible',
-        pointerEvents: 'none',
-        zIndex: 8,
-      }}
-    >
-      <defs>
-        <marker id="canvas-visible-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6" />
-        </marker>
-      </defs>
-      <g transform={`translate(${x}, ${y}) scale(${zoom})`}>
-        {paths.map(({ id, path }) => (
-          <g key={id}>
-            <path
-              d={path}
-              fill="none"
-              stroke="transparent"
-              strokeWidth={22}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
-              onClick={(event) => {
-                event.stopPropagation();
-                onEdgeSelect(id);
-              }}
-            />
-            <path
-              d={path}
-              fill="none"
-              stroke={selectedEdgeSet.has(id) ? '#fca5a5' : '#8b5cf6'}
-              strokeWidth={selectedEdgeSet.has(id) ? 6 : 4}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              markerEnd="url(#canvas-visible-arrow)"
-              filter={selectedEdgeSet.has(id) ? 'drop-shadow(0 0 10px rgba(248, 113, 113, 0.75))' : 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.55))'}
-              style={{ pointerEvents: 'none' }}
-            />
-          </g>
-        ))}
-      </g>
-    </svg>
-  );
-};
-
 const CanvasInner: React.FC = () => {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
   const navigate = useNavigate();
@@ -232,6 +137,7 @@ const CanvasInner: React.FC = () => {
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [agentCommand, setAgentCommand] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationMode, setGenerationMode] = useState<CanvasGenerationMode>('api');
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const saveTextTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -526,10 +432,28 @@ const CanvasInner: React.FC = () => {
     setSelectedEdgeIds((current) => sameStringList(current, nextEdgeIds) ? current : nextEdgeIds);
   }, []);
 
+  useEffect(() => {
+    const selectedEdgeSet = new Set(selectedEdgeIds);
+    setEdges((current) => {
+      let changed = false;
+      const nextEdges = current.map((edge) => {
+        const shouldSelect = selectedEdgeSet.has(edge.id);
+        const currentStroke = (edge.style as React.CSSProperties | undefined)?.stroke;
+        const expectedStroke = shouldSelect ? selectedEdgeStyle.stroke : edgeStyle.stroke;
+        if (edge.selected === shouldSelect && currentStroke === expectedStroke) return edge;
+        changed = true;
+        return normalizeCanvasEdge({ ...edge, selected: shouldSelect }, edge.sourceHandle || 'out', edge.targetHandle || 'in');
+      });
+      return changed ? nextEdges : current;
+    });
+  }, [selectedEdgeIds, setEdges]);
+
   const selectEdge = useCallback((edgeId: string) => {
     setSelectedNodeIds([]);
     setSelectedEdgeIds((current) => sameStringList(current, [edgeId]) ? current : [edgeId]);
-    setEdges((current) => current.map((edge) => ({ ...edge, selected: edge.id === edgeId })));
+    setEdges((current) => current.map((edge) => (
+      normalizeCanvasEdge({ ...edge, selected: edge.id === edgeId }, edge.sourceHandle || 'out', edge.targetHandle || 'in')
+    )));
     setStatusText('已选中线条，可点击右上角“删除线条”或按 Delete');
   }, [setEdges]);
 
@@ -570,26 +494,63 @@ const CanvasInner: React.FC = () => {
     ].filter(Boolean).join('\n\n');
 
     setIsGenerating(true);
-    setStatusText('正在按照流程生成图片...');
+    setStatusText(generationMode === 'gpu' ? '正在提交本地GPU生成任务...' : '正在通过 API 生成图片...');
 
     try {
-      const results = await generateGeminiImageVariant({
-        model: CANVAS_IMAGE_MODEL,
-        prompt,
-        aspectRatio: '16:9',
-        imageSize: '2K',
-        entityType: 'canvas_node',
-        entityId: imageNode.id,
-        fileRole: 'canvas_image',
-        episodeId,
-      });
-      const generatedUrl = results[0]?.fileUrl || results[0]?.url;
+      let generatedUrl = '';
+      let generatedFileId: string | null | undefined;
+
+      if (generationMode === 'gpu') {
+        const comfyuiAvailable = await fetchComfyuiAvailable();
+        if (!comfyuiAvailable) {
+          throw new Error('当前没有在线 GPU Agent，请在后台“集群节点监控”确认节点在线，或切回 API 生成');
+        }
+
+        const gpuResults = await generateWithComfyUIWorkflowQueued(
+          'qwen',
+          prompt,
+          EMPTY_REFERENCE_IMAGE,
+          [],
+          -1,
+          undefined,
+          { entityType: 'canvas_node', entityId: imageNode.id, fileRole: 'canvas_image', episodeId },
+          {
+            title: '画布 GPU 图片生成',
+            kind: 'qwen-image',
+            targetPage: 'canvas',
+            targetEntityType: 'canvas_node',
+            targetEntityId: imageNode.id,
+            targetItemId: imageNode.id,
+            targetProjectId: projectId,
+            episodeId,
+            fileRole: 'canvas_image',
+          },
+        ) as GeneratedImageResult[];
+        generatedUrl = gpuResults[0]?.url || '';
+        generatedFileId = gpuResults[0]?.fileId;
+      } else {
+        const results = await generateGeminiImageVariant({
+          model: CANVAS_IMAGE_MODEL,
+          prompt,
+          aspectRatio: '16:9',
+          imageSize: '2K',
+          entityType: 'canvas_node',
+          entityId: imageNode.id,
+          fileRole: 'canvas_image',
+          episodeId,
+        });
+        generatedUrl = results[0]?.fileUrl || results[0]?.url || '';
+        generatedFileId = results[0]?.fileId;
+      }
+
       if (!generatedUrl) throw new Error('图片生成接口未返回图片地址');
 
       const nextData = {
         ...getSerializableNodeData(imageNode),
         imageUrl: generatedUrl,
+        fileId: generatedFileId,
         prompt,
+        generationMode,
         generatedAt: new Date().toISOString(),
         sourceScriptNodeId: scriptNode.id,
       };
@@ -600,7 +561,7 @@ const CanvasInner: React.FC = () => {
       await updateCanvasNode(imageNode.id, { data: nextData });
       setSelectedNodeIds([imageNode.id]);
       setSelectedEdgeIds([]);
-      setStatusText('图片已生成并写入图片节点');
+      setStatusText(generationMode === 'gpu' ? 'GPU 图片已生成并写入图片节点' : 'API 图片已生成并写入图片节点');
     } catch (error) {
       console.error('canvas image generation failed', error);
       const message = error instanceof Error ? error.message : '图片生成失败';
@@ -608,7 +569,7 @@ const CanvasInner: React.FC = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [agentCommand, edges, episodeId, isGenerating, nodes, selectedNodeIds, setNodes]);
+  }, [agentCommand, edges, episodeId, generationMode, isGenerating, nodes, projectId, selectedNodeIds, setNodes]);
 
   const goToWorkflow = () => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script`);
@@ -639,8 +600,8 @@ const CanvasInner: React.FC = () => {
           animated: true,
           style: edgeStyle,
           markerEnd: edgeMarker,
-          zIndex: 10,
-          interactionWidth: 24,
+          zIndex: 0,
+          interactionWidth: 32,
         }}
         isValidConnection={(connection) =>
           Boolean(connection.source && connection.target && connection.source !== connection.target)
@@ -649,12 +610,6 @@ const CanvasInner: React.FC = () => {
         fitView
         style={{ background: '#0d0d1a' }}
       >
-        <CanvasEdgeOverlay
-          nodes={nodes}
-          edges={edges}
-          selectedEdgeIds={selectedEdgeIds}
-          onEdgeSelect={selectEdge}
-        />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#333" />
         <Controls style={{ background: '#252540', borderColor: '#444' }} />
         <MiniMap style={{ background: '#1a1a2e' }} nodeColor="#7c83ff" maskColor="rgba(0,0,0,0.6)" />
@@ -772,8 +727,49 @@ const CanvasInner: React.FC = () => {
           <div style={{
             background: '#252540', borderRadius: '12px', padding: '12px 20px',
             border: '1px solid #7c83ff44', display: 'flex', gap: '12px',
-            alignItems: 'center', minWidth: '420px'
+            alignItems: 'center', minWidth: '620px'
           }}>
+            <div
+              className="nodrag nopan"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: '#1a1a2e',
+                border: '1px solid #444',
+                borderRadius: 8,
+                padding: 3,
+                gap: 3,
+              }}
+            >
+              {([
+                { mode: 'api' as const, label: 'API', icon: <Sparkles size={13} /> },
+                { mode: 'gpu' as const, label: '本地GPU', icon: <Zap size={13} /> },
+              ]).map((item) => (
+                <button
+                  key={item.mode}
+                  type="button"
+                  onClick={() => setGenerationMode(item.mode)}
+                  disabled={isGenerating}
+                  title={item.mode === 'gpu' ? '使用 ComfyUI GPU Agent 生成' : '使用外部图像 API 生成'}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '5px 9px',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                    color: generationMode === item.mode ? '#fff' : '#a5b4fc',
+                    background: generationMode === item.mode ? '#7c83ff' : 'transparent',
+                    fontSize: 12,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+            </div>
             <Sparkles size={18} color="#7c83ff" />
             <input
               className="nodrag nowheel"
@@ -800,7 +796,7 @@ const CanvasInner: React.FC = () => {
               border: 'none', borderRadius: '6px', cursor: isGenerating ? 'wait' : 'pointer',
               fontSize: '13px'
             }}>
-              {isGenerating ? '生成中' : '生成'}
+              {isGenerating ? '生成中' : generationMode === 'gpu' ? 'GPU生成' : '生成'}
             </button>
           </div>
         </Panel>
