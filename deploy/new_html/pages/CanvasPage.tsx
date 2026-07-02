@@ -127,10 +127,13 @@ const sameStringList = (a: string[], b: string[]) => (
 type CanvasEdgeOverlayProps = {
   nodes: Node[];
   edges: Edge[];
+  selectedEdgeIds: string[];
+  onEdgeSelect: (edgeId: string) => void;
 };
 
-const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ nodes, edges }) => {
+const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ nodes, edges, selectedEdgeIds, onEdgeSelect }) => {
   const { x, y, zoom } = useViewport();
+  const selectedEdgeSet = useMemo(() => new Set(selectedEdgeIds), [selectedEdgeIds]);
   const paths = useMemo(() => {
     const nodeMap = new Map(nodes.map((node) => [node.id, node]));
     return edges
@@ -175,17 +178,32 @@ const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ nodes, edges }) =
       </defs>
       <g transform={`translate(${x}, ${y}) scale(${zoom})`}>
         {paths.map(({ id, path }) => (
-          <path
-            key={id}
-            d={path}
-            fill="none"
-            stroke="#8b5cf6"
-            strokeWidth={4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            markerEnd="url(#canvas-visible-arrow)"
-            filter="drop-shadow(0 0 8px rgba(139, 92, 246, 0.55))"
-          />
+          <g key={id}>
+            <path
+              d={path}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={22}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onEdgeSelect(id);
+              }}
+            />
+            <path
+              d={path}
+              fill="none"
+              stroke={selectedEdgeSet.has(id) ? '#fca5a5' : '#8b5cf6'}
+              strokeWidth={selectedEdgeSet.has(id) ? 6 : 4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              markerEnd="url(#canvas-visible-arrow)"
+              filter={selectedEdgeSet.has(id) ? 'drop-shadow(0 0 10px rgba(248, 113, 113, 0.75))' : 'drop-shadow(0 0 8px rgba(139, 92, 246, 0.55))'}
+              style={{ pointerEvents: 'none' }}
+            />
+          </g>
         ))}
       </g>
     </svg>
@@ -252,6 +270,21 @@ const CanvasInner: React.FC = () => {
       deleteCanvasConnection(connectionId).catch((error) => console.warn('delete canvas connection failed', error));
     });
   }, []);
+
+  const deleteSelectedEdges = useCallback(() => {
+    if (selectedEdgeIds.length === 0) {
+      setStatusText('请先选中要删除的线条');
+      return;
+    }
+
+    const selectedEdgeSet = new Set(selectedEdgeIds);
+    const edgesToDelete = edges.filter((edge) => selectedEdgeSet.has(edge.id));
+
+    setEdges((current) => current.filter((edge) => !selectedEdgeSet.has(edge.id)));
+    setSelectedEdgeIds([]);
+    deleteEdgesFromServer(edgesToDelete);
+    setStatusText(`已删除 ${edgesToDelete.length} 条线条`);
+  }, [deleteEdgesFromServer, edges, selectedEdgeIds, setEdges]);
 
   const deleteSelected = useCallback(() => {
     if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 0) {
@@ -484,6 +517,18 @@ const CanvasInner: React.FC = () => {
     setSelectedEdgeIds((current) => sameStringList(current, nextEdgeIds) ? current : nextEdgeIds);
   }, []);
 
+  const selectEdge = useCallback((edgeId: string) => {
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds((current) => sameStringList(current, [edgeId]) ? current : [edgeId]);
+    setEdges((current) => current.map((edge) => ({ ...edge, selected: edge.id === edgeId })));
+    setStatusText('已选中线条，可点击右上角“删除线条”或按 Delete');
+  }, [setEdges]);
+
+  const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.stopPropagation();
+    selectEdge(edge.id);
+  }, [selectEdge]);
+
   const goToWorkflow = () => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script`);
   };
@@ -498,6 +543,7 @@ const CanvasInner: React.FC = () => {
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
         onSelectionChange={onSelectionChange}
+        onEdgeClick={onEdgeClick}
         nodeTypes={nodeTypes}
         connectionMode={ConnectionMode.Loose}
         connectionLineStyle={edgeStyle}
@@ -522,7 +568,12 @@ const CanvasInner: React.FC = () => {
         fitView
         style={{ background: '#0d0d1a' }}
       >
-        <CanvasEdgeOverlay nodes={nodes} edges={edges} />
+        <CanvasEdgeOverlay
+          nodes={nodes}
+          edges={edges}
+          selectedEdgeIds={selectedEdgeIds}
+          onEdgeSelect={selectEdge}
+        />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#333" />
         <Controls style={{ background: '#252540', borderColor: '#444' }} />
         <MiniMap style={{ background: '#1a1a2e' }} nodeColor="#7c83ff" maskColor="rgba(0,0,0,0.6)" />
@@ -554,11 +605,27 @@ const CanvasInner: React.FC = () => {
           </div>
         </Panel>
 
+        <Panel position="top-center">
+          {statusText && (
+            <div style={{
+              background: 'rgba(37,37,64,0.92)',
+              border: '1px solid #7c83ff33',
+              borderRadius: 999,
+              color: '#c7d2fe',
+              fontSize: '12px',
+              padding: '7px 13px',
+              boxShadow: '0 10px 24px rgba(0,0,0,0.22)',
+            }}>
+              {statusText}
+            </div>
+          )}
+        </Panel>
+
         <Panel position="top-right">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
             {(selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) && (
               <button
-                onClick={deleteSelected}
+                onClick={selectedNodeIds.length === 0 && selectedEdgeIds.length > 0 ? deleteSelectedEdges : deleteSelected}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -571,8 +638,9 @@ const CanvasInner: React.FC = () => {
                   cursor: 'pointer',
                   boxShadow: '0 12px 28px rgba(0,0,0,0.3)',
                 }}
+                title={selectedNodeIds.length === 0 && selectedEdgeIds.length > 0 ? '删除选中的线条' : '删除选中的节点和线条'}
               >
-                <Trash2 size={16} /> {'\u5220\u9664\u9009\u4e2d'}
+                <Trash2 size={16} /> {selectedNodeIds.length === 0 && selectedEdgeIds.length > 0 ? `删除线条 (${selectedEdgeIds.length})` : '\u5220\u9664\u9009\u4e2d'}
               </button>
             )}
             <button
@@ -629,7 +697,7 @@ const CanvasInner: React.FC = () => {
             <input
               className="nodrag nowheel"
               type="text"
-              placeholder={statusText || 'AI 指令：描述你想创建的内容...'}
+              placeholder="AI 指令：描述你想创建的内容..."
               style={{
                 flex: 1, background: 'transparent', border: 'none',
                 color: '#e0e0e0', outline: 'none', fontSize: '14px'
