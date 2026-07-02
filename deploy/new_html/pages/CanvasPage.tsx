@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -19,13 +19,15 @@ import {
   type EdgeChange,
   BackgroundVariant,
   ConnectionMode,
+  ConnectionLineType,
   MarkerType,
   useUpdateNodeInternals,
+  useViewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { EpisodeProvider, useEpisode } from '../contexts/EpisodeContext';
-import { Plus, LayoutList, ArrowLeft, Sparkles, Image, FileText, Film, Volume2 } from 'lucide-react';
+import { Plus, LayoutList, ArrowLeft, Sparkles, Image, FileText, Film, Volume2, Trash2 } from 'lucide-react';
 import { ScriptNode } from '../canvas/nodes/ScriptNode';
 import { ImageNode } from '../canvas/nodes/ImageNode';
 import { AudioNode } from '../canvas/nodes/AudioNode';
@@ -56,6 +58,34 @@ const edgeMarker = { type: MarkerType.ArrowClosed, color: '#7c83ff' };
 
 type CanvasApiNode = Record<string, any>;
 type CanvasApiConnection = Record<string, any>;
+
+
+const FALLBACK_NODE_WIDTH = 260;
+const FALLBACK_NODE_HEIGHT = 160;
+const SCRIPT_NODE_WIDTH = 320;
+const SCRIPT_NODE_HEIGHT = 170;
+const IMAGE_NODE_WIDTH = 280;
+const IMAGE_NODE_HEIGHT = 230;
+
+const getNodeSize = (node: Node) => {
+  const measured = (node as any).measured || {};
+  const width = (node as any).width || measured.width || (node.type === 'script' ? SCRIPT_NODE_WIDTH : IMAGE_NODE_WIDTH) || FALLBACK_NODE_WIDTH;
+  const height = (node as any).height || measured.height || (node.type === 'script' ? SCRIPT_NODE_HEIGHT : IMAGE_NODE_HEIGHT) || FALLBACK_NODE_HEIGHT;
+  return { width, height };
+};
+
+const isDuplicateConnectionError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('409') ||
+    lower.includes('duplicate') ||
+    lower.includes('already') ||
+    lower.includes('exist') ||
+    message.includes('\u5df2\u5b58\u5728') ||
+    message.includes('\u91cd\u590d')
+  );
+};
 
 const getId = (value: Record<string, any> | undefined, ...keys: string[]) => {
   for (const key of keys) {
@@ -89,6 +119,75 @@ const normalizeNodeType = (type: string) => {
   return 'script';
 };
 
+
+type CanvasEdgeOverlayProps = {
+  nodes: Node[];
+  edges: Edge[];
+};
+
+const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ nodes, edges }) => {
+  const { x, y, zoom } = useViewport();
+  const paths = useMemo(() => {
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    return edges
+      .map((edge) => {
+        const source = nodeMap.get(edge.source);
+        const target = nodeMap.get(edge.target);
+        if (!source || !target) return null;
+        const sourceSize = getNodeSize(source);
+        const targetSize = getNodeSize(target);
+        const sx = source.position.x + sourceSize.width;
+        const sy = source.position.y + sourceSize.height / 2;
+        const tx = target.position.x;
+        const ty = target.position.y + targetSize.height / 2;
+        const delta = Math.max(Math.abs(tx - sx) * 0.5, 80);
+        return {
+          id: edge.id,
+          path: `M ${sx} ${sy} C ${sx + delta} ${sy}, ${tx - delta} ${ty}, ${tx} ${ty}`,
+        };
+      })
+      .filter(Boolean) as Array<{ id: string; path: string }>;
+  }, [edges, nodes]);
+
+  if (paths.length === 0) return null;
+
+  return (
+    <svg
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'visible',
+        pointerEvents: 'none',
+        zIndex: 8,
+      }}
+    >
+      <defs>
+        <marker id="canvas-visible-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6" />
+        </marker>
+      </defs>
+      <g transform={`translate(${x}, ${y}) scale(${zoom})`}>
+        {paths.map(({ id, path }) => (
+          <path
+            key={id}
+            d={path}
+            fill="none"
+            stroke="#8b5cf6"
+            strokeWidth={4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            markerEnd="url(#canvas-visible-arrow)"
+            filter="drop-shadow(0 0 8px rgba(139, 92, 246, 0.55))"
+          />
+        ))}
+      </g>
+    </svg>
+  );
+};
+
 const CanvasInner: React.FC = () => {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
   const navigate = useNavigate();
@@ -100,6 +199,8 @@ const CanvasInner: React.FC = () => {
   const [showMenu, setShowMenu] = useState(false);
   const [boardId, setBoardId] = useState('');
   const [statusText, setStatusText] = useState('正在加载画布...');
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const saveTextTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -137,6 +238,56 @@ const CanvasInner: React.FC = () => {
 
     return () => window.cancelAnimationFrame(frameId);
   }, [nodes, updateNodeInternals]);
+
+  const deleteEdgesFromServer = useCallback((edgesToDelete: Edge[]) => {
+    edgesToDelete.forEach((edge) => {
+      const connectionId = String(edge.data?.connectionId || edge.id);
+      if (connectionId.startsWith('edge_')) return;
+      deleteCanvasConnection(connectionId).catch((error) => console.warn('delete canvas connection failed', error));
+    });
+  }, []);
+
+  const deleteSelected = useCallback(() => {
+    if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 0) {
+      setStatusText('\u8bf7\u5148\u9009\u4e2d\u8981\u5220\u9664\u7684\u8282\u70b9\u6216\u8fde\u7ebf');
+      return;
+    }
+
+    const selectedNodeSet = new Set(selectedNodeIds);
+    const selectedEdgeSet = new Set(selectedEdgeIds);
+    const edgesToDelete = edges.filter(
+      (edge) => selectedEdgeSet.has(edge.id) || selectedNodeSet.has(edge.source) || selectedNodeSet.has(edge.target)
+    );
+    const nodesToDelete = nodes.filter((node) => selectedNodeSet.has(node.id));
+
+    setEdges((current) =>
+      current.filter(
+        (edge) => !selectedEdgeSet.has(edge.id) && !selectedNodeSet.has(edge.source) && !selectedNodeSet.has(edge.target)
+      )
+    );
+    setNodes((current) => current.filter((node) => !selectedNodeSet.has(node.id)));
+    setSelectedEdgeIds([]);
+    setSelectedNodeIds([]);
+    deleteEdgesFromServer(edgesToDelete);
+    nodesToDelete.forEach((node) => {
+      deleteCanvasNode(node.id).catch((error) => console.warn('delete canvas node failed', error));
+    });
+    setStatusText('\u5df2\u5220\u9664\u9009\u4e2d\u7684\u8282\u70b9/\u8fde\u7ebf');
+  }, [deleteEdgesFromServer, edges, nodes, selectedEdgeIds, selectedNodeIds, setEdges, setNodes]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target?.isContentEditable) return;
+      if (selectedNodeIds.length === 0 && selectedEdgeIds.length === 0) return;
+      event.preventDefault();
+      deleteSelected();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteSelected, selectedEdgeIds.length, selectedNodeIds.length]);
 
   const mapApiNode = useCallback((item: CanvasApiNode): Node => {
     const id = getId(item, 'node_id', 'nodeId', 'id');
@@ -259,8 +410,11 @@ const CanvasInner: React.FC = () => {
       setStatusText('连线已保存');
     } catch (error) {
       console.error('create canvas connection failed', error);
-      setEdges((current) => current.filter((edge) => edge.id !== optimisticId));
-      setStatusText('连线保存失败，请重试');
+      if (isDuplicateConnectionError(error)) {
+        setStatusText('\u540e\u7aef\u5df2\u6709\u8fd9\u6761\u8fde\u7ebf\uff0c\u5df2\u4fdd\u7559\u753b\u5e03\u663e\u793a');
+        return;
+      }
+      setStatusText('\u8fde\u7ebf\u5df2\u663e\u793a\uff0c\u4f46\u540e\u53f0\u4fdd\u5b58\u5931\u8d25\uff0c\u5237\u65b0\u540e\u53ef\u80fd\u4e22\u5931');
     }
   }, [boardId, edges, setEdges]);
 
@@ -276,12 +430,8 @@ const CanvasInner: React.FC = () => {
     const removedIds = changes.filter((change) => change.type === 'remove').map((change) => change.id);
     const removedEdges = edges.filter((edge) => removedIds.includes(edge.id));
     setEdges((current) => applyEdgeChanges(changes, current));
-    removedEdges.forEach((edge) => {
-      const connectionId = String(edge.data?.connectionId || edge.id);
-      if (connectionId.startsWith('edge_')) return;
-      deleteCanvasConnection(connectionId).catch((error) => console.warn('delete canvas connection failed', error));
-    });
-  }, [edges, setEdges]);
+    deleteEdgesFromServer(removedEdges);
+  }, [deleteEdgesFromServer, edges, setEdges]);
 
   const addNode = useCallback(async (type: string) => {
     if (!boardId) {
@@ -334,10 +484,14 @@ const CanvasInner: React.FC = () => {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
+        onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) => {
+          setSelectedNodeIds(selectedNodes.map((node) => node.id));
+          setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
+        }}
         nodeTypes={nodeTypes}
         connectionMode={ConnectionMode.Loose}
         connectionLineStyle={edgeStyle}
-        connectionLineType="smoothstep"
+        connectionLineType={ConnectionLineType.SmoothStep}
         connectOnClick
         connectionRadius={48}
         nodesConnectable
@@ -354,9 +508,11 @@ const CanvasInner: React.FC = () => {
         isValidConnection={(connection) =>
           Boolean(connection.source && connection.target && connection.source !== connection.target)
         }
+        deleteKeyCode={null}
         fitView
         style={{ background: '#0d0d1a' }}
       >
+        <CanvasEdgeOverlay nodes={nodes} edges={edges} />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#333" />
         <Controls style={{ background: '#252540', borderColor: '#444' }} />
         <MiniMap style={{ background: '#1a1a2e' }} nodeColor="#7c83ff" maskColor="rgba(0,0,0,0.6)" />
@@ -389,7 +545,26 @@ const CanvasInner: React.FC = () => {
         </Panel>
 
         <Panel position="top-right">
-          <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative' }}>
+            {(selectedNodeIds.length > 0 || selectedEdgeIds.length > 0) && (
+              <button
+                onClick={deleteSelected}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  border: '1px solid rgba(248,113,113,0.7)',
+                  background: 'rgba(127,29,29,0.82)',
+                  color: '#fecaca',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  cursor: 'pointer',
+                  boxShadow: '0 12px 28px rgba(0,0,0,0.3)',
+                }}
+              >
+                <Trash2 size={16} /> {'\u5220\u9664\u9009\u4e2d'}
+              </button>
+            )}
             <button
               onClick={() => setShowMenu(!showMenu)}
               style={{
