@@ -20,6 +20,7 @@ import {
   BackgroundVariant,
   ConnectionMode,
   MarkerType,
+  useUpdateNodeInternals,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -67,6 +68,20 @@ const unwrapBoard = (response: any) => response?.board || response;
 const unwrapBoards = (response: any) => response?.boards || [];
 const unwrapNode = (response: any) => response?.node || response;
 const unwrapConnection = (response: any) => response?.connection || response;
+const normalizeHandle = (handle: string | null | undefined, fallback: string) => handle || fallback;
+
+const normalizeCanvasEdge = (edge: Edge, sourceHandle = 'out', targetHandle = 'in'): Edge => ({
+  ...edge,
+  sourceHandle: normalizeHandle(edge.sourceHandle, sourceHandle),
+  targetHandle: normalizeHandle(edge.targetHandle, targetHandle),
+  type: 'smoothstep',
+  animated: true,
+  hidden: false,
+  zIndex: 10,
+  interactionWidth: 24,
+  style: edgeStyle,
+  markerEnd: edgeMarker,
+});
 
 const normalizeNodeType = (type: string) => {
   if (type === 'audio' || type === 'image' || type === 'video' || type === 'script') return type;
@@ -81,6 +96,7 @@ const CanvasInner: React.FC = () => {
 
   const [nodes, setNodes] = useNodesState(INITIAL_NODES);
   const [edges, setEdges] = useEdgesState(INITIAL_EDGES);
+  const updateNodeInternals = useUpdateNodeInternals();
   const [showMenu, setShowMenu] = useState(false);
   const [boardId, setBoardId] = useState('');
   const [statusText, setStatusText] = useState('正在加载画布...');
@@ -112,6 +128,16 @@ const CanvasInner: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!nodes.length) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      nodes.forEach((node) => updateNodeInternals(node.id));
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [nodes, updateNodeInternals]);
+
   const mapApiNode = useCallback((item: CanvasApiNode): Node => {
     const id = getId(item, 'node_id', 'nodeId', 'id');
     const rawType = String(item.node_type || item.nodeType || item.type || 'script');
@@ -137,18 +163,14 @@ const CanvasInner: React.FC = () => {
     const id = getId(item, 'connection_id', 'connectionId', 'id');
     const source = getId(item, 'source_node_id', 'sourceNodeId', 'source');
     const target = getId(item, 'target_node_id', 'targetNodeId', 'target');
-    return {
+    return normalizeCanvasEdge({
       id,
       source,
       target,
       sourceHandle: item.source_port || item.sourcePort || 'out',
       targetHandle: item.target_port || item.targetPort || 'in',
-      type: 'smoothstep',
-      animated: true,
-      style: edgeStyle,
-      markerEnd: edgeMarker,
       data: { connectionId: id, persisted: true },
-    };
+    });
   }, []);
 
   const loadBoard = useCallback(async () => {
@@ -195,29 +217,30 @@ const CanvasInner: React.FC = () => {
 
     const sourceHandle = params.sourceHandle || 'out';
     const targetHandle = params.targetHandle || 'in';
-    const duplicate = edges.some((edge) =>
+    const isSameConnection = (edge: Edge) =>
       edge.source === params.source &&
       edge.target === params.target &&
       (edge.sourceHandle || 'out') === sourceHandle &&
-      (edge.targetHandle || 'in') === targetHandle
-    );
+      (edge.targetHandle || 'in') === targetHandle;
+    const duplicate = edges.find(isSameConnection);
+
     if (duplicate) {
-      setStatusText('这两个节点已经连接过了');
+      setEdges((current) => [
+        ...current.filter((edge) => !isSameConnection(edge)),
+        normalizeCanvasEdge(duplicate, sourceHandle, targetHandle),
+      ]);
+      setStatusText('这两个节点已经连接过了，已刷新连线显示');
       return;
     }
 
     const optimisticId = `edge_${params.source}_${sourceHandle}_${params.target}_${targetHandle}_${Date.now()}`;
-    const optimisticEdge: Edge = {
+    const optimisticEdge: Edge = normalizeCanvasEdge({
       ...params,
       id: optimisticId,
       sourceHandle,
       targetHandle,
-      type: 'smoothstep',
-      animated: true,
-      style: edgeStyle,
-      markerEnd: edgeMarker,
       data: { persisted: false },
-    };
+    }, sourceHandle, targetHandle);
 
     setEdges((current) => addEdge(optimisticEdge, current));
     setStatusText('正在保存连线...');
@@ -325,6 +348,8 @@ const CanvasInner: React.FC = () => {
           animated: true,
           style: edgeStyle,
           markerEnd: edgeMarker,
+          zIndex: 10,
+          interactionWidth: 24,
         }}
         isValidConnection={(connection) =>
           Boolean(connection.source && connection.target && connection.source !== connection.target)
