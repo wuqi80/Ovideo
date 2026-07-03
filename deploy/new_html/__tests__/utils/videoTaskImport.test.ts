@@ -22,6 +22,7 @@ describe('buildVideoTaskImport', () => {
       expect.objectContaining({
         id: expect.stringMatching(/^img_1000_0_/),
         url: 'secure:/uploads/shot.png',
+        storageUrl: 'secure:/uploads/shot.png',
         filename: 'living-room_sb_1.png',
         uploadTime: 1000,
       }),

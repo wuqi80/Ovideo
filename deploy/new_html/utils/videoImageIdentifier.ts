@@ -19,6 +19,13 @@ function isUsableTransferRef(ref?: string): boolean {
     return value.startsWith('http') || value.startsWith('/') || Boolean(extractFileId(value));
 }
 
+function isDisplayOnlyFilename(filename?: string): boolean {
+    const value = cleanRef(filename);
+    return /^storyboard_\d+\.[A-Za-z0-9]+$/i.test(value)
+        || /^placeholder_\d+$/i.test(value)
+        || value === '空卡片';
+}
+
 export function resolveVideoImageIdentifier(img: UploadedImage, isExternalAPI: boolean): string {
     const storageRef = cleanRef(img.storageUrl);
     const urlRef = cleanRef(img.url);
@@ -32,5 +39,6 @@ export function resolveVideoImageIdentifier(img: UploadedImage, isExternalAPI: b
     if (img.comfyuiFilename) return img.comfyuiFilename;
     if (isUsableTransferRef(storageRef)) return storageRef;
     if (isUsableTransferRef(urlRef)) return urlRef;
+    if (isDisplayOnlyFilename(img.filename)) return '';
     return img.filename || urlRef.split('/').pop() || '';
 }

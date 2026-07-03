@@ -1687,6 +1687,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             // 获取正确的图片标识符
             const filename1 = getImageIdentifier(img1, isExternalAPI);
             const filename2 = img2 ? getImageIdentifier(img2, isExternalAPI) : null;
+            if (!filename1 || (img2 && !filename2)) {
+                throw new Error('图片缺少真实存储地址，请重新同步分镜或重新上传图片');
+            }
             
             const prompt = imagePrompts[group.ids[0]] || '';
             
@@ -2033,7 +2036,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const videoUrl = status.videos[selectedVideoIndex] || status.videos[0];
         const videoFilename = videoUrl;
         const img = uploadedImages.find(i => i.id === group.ids[0]);
-        const imageFilename = img?.filename || '';
+        const imageFilename = img ? resolveVideoImageIdentifier(img, false) : '';
+        if (!imageFilename) {
+            showToast('图片缺少真实存储地址，请重新同步分镜或重新上传图片');
+            return;
+        }
         const prompt = voicePrompt || '生动的表情、自然的口型同步';
         
         setIsSubmitting(true);

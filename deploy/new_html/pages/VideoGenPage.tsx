@@ -157,6 +157,7 @@ export const VideoGenPage: React.FC = () => {
           id: itemId,
           url: imgUrl,
           filename: imgUrl ? `storyboard_${sortOrder + 1}.png` : `placeholder_${sortOrder + 1}`,
+          storageUrl: imgUrl || undefined,
           uploadTime: Date.now(),
           isPlaceholder,
           storyboardItemId: itemId,

@@ -4,6 +4,7 @@
 """
 import uuid
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -32,6 +33,8 @@ MIME_EXTENSION_MAP = {
     "audio/wav": ".wav",
     "audio/x-wav": ".wav",
 }
+
+DISPLAY_ONLY_FILE_REF_RE = re.compile(r"^(?:storyboard_\d+\.[A-Za-z0-9]+|placeholder_\d+|空卡片)$", re.IGNORECASE)
 
 
 def _file_type_for_agent_param(param: str) -> str:
@@ -99,6 +102,13 @@ def _ensure_url_extension(url: str, filename: str) -> str:
         base, query = url.split("?", 1)
         return f"{base}{suffix}?{query}"
     return f"{url}{suffix}"
+
+
+def _is_display_only_file_ref(ref: str) -> bool:
+    value = (ref or "").strip()
+    if not value or value.startswith("http") or value.startswith("/"):
+        return False
+    return bool(DISPLAY_ONLY_FILE_REF_RE.match(value))
 
 
 def init(redis_client):
@@ -239,6 +249,25 @@ class TaskService:
             resolved_file_id = file_record.get("file_id") or file_id
             filename = _filename_from_file_record(file_record, original_ref, file_type)
             return {"param": param, "filename": filename, "url": f"/api/files/{resolved_file_id}/download"}
+
+        if "/" not in original_ref and "\\" not in original_ref:
+            try:
+                from dao_content import FileDAO
+
+                get_file_by_name = getattr(FileDAO, "get_file_by_name", None)
+                if get_file_by_name:
+                    file_record = await get_file_by_name(original_ref)
+            except Exception as exc:
+                logger.warning("Failed to resolve file name %s for agent transfer: %s", original_ref, exc)
+
+        if file_record:
+            resolved_file_id = file_record.get("file_id")
+            filename = _filename_from_file_record(file_record, original_ref, file_type)
+            if resolved_file_id:
+                return {"param": param, "filename": filename, "url": f"/api/files/{resolved_file_id}/download"}
+
+        if _is_display_only_file_ref(original_ref):
+            raise ValueError(f"{param} 缺少真实存储地址，收到的是展示文件名: {original_ref}")
 
         if self.redis:
             try:

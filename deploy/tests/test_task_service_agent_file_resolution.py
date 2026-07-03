@@ -3,6 +3,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from services.task_service import TaskService
 
@@ -18,6 +19,12 @@ class _FileDAO:
     @classmethod
     async def get_file(cls, file_id):
         if cls.record and cls.record["file_id"] == file_id:
+            return cls.record
+        return None
+
+    @classmethod
+    async def get_file_by_name(cls, file_name):
+        if cls.record and cls.record.get("file_name") == file_name:
             return cls.record
         return None
 
@@ -93,3 +100,35 @@ async def test_prepare_adds_extension_to_extensionless_storage_url(fake_dependen
     assert agent_file["filename"] == "file_d0b2371a362b.png"
     assert agent_file["url"] == "/storage/image/admin/202607/file_d0b2371a362b.png"
     assert task_data["uploaded_image"] == "file_d0b2371a362b.png"
+
+
+@pytest.mark.asyncio
+async def test_prepare_resolves_plain_filename_from_file_table(fake_dependencies):
+    file_id = "file_storyboard123"
+    _FileDAO.record = {
+        "file_id": file_id,
+        "file_path": "persistent_storage/image/admin/202607/file_storyboard123.png",
+        "file_url": f"/api/files/{file_id}/download",
+        "file_name": "storyboard_1.png",
+        "mime_type": "image/png",
+    }
+    task_data = {"image_path": "storyboard_1.png", "prompt": "x"}
+
+    await TaskService(_Redis())._prepare_for_agent("i2v", task_data, "admin")
+
+    assert task_data["image_path"] == "file_storyboard123.png"
+    assert task_data["agent_files"][0] == {
+        "param": "image_path",
+        "filename": "file_storyboard123.png",
+        "url": f"/api/files/{file_id}/download",
+    }
+
+
+@pytest.mark.asyncio
+async def test_prepare_rejects_storyboard_display_filename_without_file_record(fake_dependencies):
+    task_data = {"image_path": "storyboard_1.png", "prompt": "x"}
+
+    with pytest.raises(HTTPException) as exc:
+        await TaskService(_Redis())._prepare_for_agent("i2v", task_data, "admin")
+
+    assert "展示文件名" in str(exc.value.detail)

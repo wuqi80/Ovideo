@@ -44,6 +44,7 @@ export function buildVideoTaskImport(
     images.push({
       id: imgId,
       url: imageUrl,
+      storageUrl: imageUrl,
       filename: `${task.scene || 'shot'}_${task.storyboard_id || index + 1}.png`,
       uploadTime: imageTs,
     });

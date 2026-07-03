@@ -46,4 +46,10 @@ describe('resolveVideoImageIdentifier', () => {
 
         expect(resolveVideoImageIdentifier(img, true)).toBe('file_real123');
     });
+
+    it('does not use storyboard or placeholder display names as ComfyUI transfer refs', () => {
+        expect(resolveVideoImageIdentifier(image({ filename: 'storyboard_1.png' }), false)).toBe('');
+        expect(resolveVideoImageIdentifier(image({ filename: 'placeholder_1' }), false)).toBe('');
+        expect(resolveVideoImageIdentifier(image({ filename: '空卡片' }), false)).toBe('');
+    });
 });
