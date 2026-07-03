@@ -1933,7 +1933,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const videoUrl = status?.videos?.[0];
             if (!videoUrl) continue;
             
-            const filename = videoUrl.split('/').pop()?.split('?')[0] || '';
+            const filename = videoUrl;
             if (!filename) continue;
             
             try {
@@ -1975,7 +1975,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
         
         const videoUrl = status.videos[selectedVideoIndex] || status.videos[0];
-        const filename = videoUrl.split('/').pop()?.split('?')[0] || '';
+        const filename = videoUrl;
         
         if (!filename) {
             showToast('无法获取视频文件名');
@@ -2042,7 +2042,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!group) return;
         
         const videoUrl = status.videos[selectedVideoIndex] || status.videos[0];
-        const videoFilename = videoUrl.split('/').pop()?.split('?')[0] || '';
+        const videoFilename = videoUrl;
         const img = uploadedImages.find(i => i.id === group.ids[0]);
         const imageFilename = img?.filename || '';
         const prompt = voicePrompt || '生动的表情、自然的口型同步';
@@ -2162,7 +2162,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             return;
         }
         
-        const filename = videoUrl.split('/').pop()?.split('?')[0] || '';
+        const filename = videoUrl;
         
         setIsSubmitting(true);
         try {

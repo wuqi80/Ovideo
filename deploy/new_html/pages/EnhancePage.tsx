@@ -505,7 +505,7 @@ export const EnhancePage: React.FC = () => {
       alert('请先在时间线上选择一个视频片段。');
       return;
     }
-    const filename = targetClip.url.split('/').pop()?.split('?')[0] || '';
+    const filename = targetClip.url;
     if (!filename) {
       alert('无法从视频 URL 解析文件名，无法发起放大任务。');
       return;

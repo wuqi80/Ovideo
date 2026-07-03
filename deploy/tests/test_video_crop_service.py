@@ -241,6 +241,50 @@ async def test_resolve_video_source_from_db_comfyui(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_resolve_video_source_extracts_file_id_from_download_url(tmp_path):
+    local_file = tmp_path / "persistent_storage" / "videos" / "admin" / "202607" / "clip.mp4"
+    local_file.parent.mkdir(parents=True)
+    local_file.write_bytes(b"video-from-db")
+    _FileDAO.records["file_video123"] = {
+        "file_id": "file_video123",
+        "file_path": str(local_file),
+        "file_name": "clip.mp4",
+        "metadata": {},
+    }
+
+    source = await svc.resolve_video_source(
+        "/api/files/file_video123/download",
+        deploy_root=tmp_path,
+        file_dao=_FileDAO,
+        get_video_cluster_manager=lambda: None,
+        get_cluster_manager=lambda: None,
+        logger=_Logger(),
+    )
+
+    assert source.content == b"video-from-db"
+    assert source.original_file_name == "clip.mp4"
+
+
+@pytest.mark.asyncio
+async def test_resolve_video_source_reads_storage_url(tmp_path):
+    local_file = tmp_path / "persistent_storage" / "video" / "admin" / "202607" / "clip.mp4"
+    local_file.parent.mkdir(parents=True)
+    local_file.write_bytes(b"video-from-storage")
+
+    source = await svc.resolve_video_source(
+        "/storage/video/admin/202607/clip.mp4",
+        deploy_root=tmp_path,
+        file_dao=_FileDAO,
+        get_video_cluster_manager=lambda: None,
+        get_cluster_manager=lambda: None,
+        logger=_Logger(),
+    )
+
+    assert source.content == b"video-from-storage"
+    assert source.original_file_name == "clip.mp4"
+
+
+@pytest.mark.asyncio
 async def test_resolve_video_source_falls_back_to_direct_comfyui(monkeypatch, tmp_path):
     calls = []
 

@@ -98,7 +98,9 @@ export function secureMediaUrl(url: string, options: { absolute?: boolean } = {}
 }
 
 export async function uploadImage(file: File, options?: UploadOptions): Promise<{
+  file_id: string;
   filename: string;
+  server_filename?: string;
   storage_url: string;
   url: string;
   path: string;

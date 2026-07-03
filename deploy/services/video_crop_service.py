@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+from urllib.parse import urlparse
 
 from services.video_source_service import fetch_comfyui_file_bytes
 
@@ -35,6 +36,17 @@ class VideoSource:
     content: bytes
     source_info: str
     original_file_name: str
+
+
+def _extract_file_id_from_ref(ref: str) -> Optional[str]:
+    path = urlparse(ref or "").path or (ref or "").split("?", 1)[0]
+    parts = [part for part in path.split("/") if part]
+    if len(parts) >= 3 and parts[0] == "api" and parts[1] == "files":
+        return parts[2]
+    basename = Path(path).name
+    if basename.startswith("file_") and not Path(basename).suffix:
+        return basename
+    return None
 
 
 def _read_file_bytes(path: str) -> bytes:
@@ -106,7 +118,15 @@ async def _resolve_db_file_source(
 
 
 def _persistent_storage_candidates(video_filename: str) -> list[str]:
-    normalized = video_filename.replace("\\", "/")
+    normalized = (urlparse(video_filename).path or video_filename).replace("\\", "/")
+    if normalized.startswith("/storage/"):
+        storage_suffix = normalized.replace("/storage/", "", 1)
+        candidates = [os.path.join("persistent_storage", storage_suffix)]
+        if storage_suffix.startswith("video/"):
+            candidates.append(os.path.join("persistent_storage", "videos", storage_suffix.replace("video/", "", 1)))
+        if storage_suffix.startswith("videos/"):
+            candidates.append(os.path.join("persistent_storage", "video", storage_suffix.replace("videos/", "", 1)))
+        return candidates
     if normalized.startswith("video/"):
         suffix = normalized.replace("video/", "", 1)
         return [
@@ -163,6 +183,8 @@ async def resolve_video_source(
     get_cluster_manager: Callable[[], Any],
     logger: Any,
 ) -> VideoSource:
+    video_filename = _extract_file_id_from_ref(video_filename) or video_filename
+
     source = await _resolve_db_file_source(
         video_filename,
         deploy_root=deploy_root,

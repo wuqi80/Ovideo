@@ -17,6 +17,26 @@ THUMBNAIL_CACHE_DIR = Path("temp") / "thumbnail_cache"
 DEFAULT_THUMBNAIL_CACHE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 DEFAULT_THUMBNAIL_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_THUMBNAIL_TMP_MAX_AGE_SECONDS = 60 * 60
+MIME_EXTENSION_MAP = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "image/bmp": ".bmp",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+}
+FILE_TYPE_EXTENSIONS = {
+    "image": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"},
+    "video": {".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".webm"},
+    "audio": {".mp3", ".wav", ".m4a", ".aac", ".ogg"},
+}
 
 
 class FileRouteServiceError(RuntimeError):
@@ -237,6 +257,16 @@ def detect_upload_file_type(filename: str, content_type: str) -> str:
     raise UnsupportedUploadFileType(content_type)
 
 
+def upload_extension(filename: str, content_type: str, file_type: str) -> str:
+    ext = Path(filename or "").suffix.lower()
+    if ext in FILE_TYPE_EXTENSIONS.get(file_type, set()):
+        return ext
+    mime_ext = MIME_EXTENSION_MAP.get((content_type or "").split(";", 1)[0].lower())
+    if mime_ext:
+        return mime_ext
+    return ext
+
+
 async def _ensure_upload_version(
     *,
     username: str,
@@ -295,11 +325,12 @@ async def upload_generic_file(
     safe_filename = filename or "upload"
     file_type = detect_upload_file_type(safe_filename, content_type)
     file_id = f"file_{uuid_hex_provider()[:12]}"
-    ext = Path(safe_filename).suffix
+    ext = upload_extension(safe_filename, content_type, file_type)
+    server_filename = f"{file_id}{ext}"
     year_month = now_provider().strftime("%Y%m")
     storage_dir = storage_root / f"{file_type}s" / username / year_month
     storage_dir.mkdir(parents=True, exist_ok=True)
-    file_path = storage_dir / f"{file_id}{ext}"
+    file_path = storage_dir / server_filename
 
     file_path.write_bytes(content)
 
@@ -336,7 +367,8 @@ async def upload_generic_file(
     return {
         "success": True,
         "file_id": file_record["file_id"],
-        "filename": file_record["file_id"],
+        "filename": server_filename,
+        "server_filename": server_filename,
         "original_filename": safe_filename,
         "storage_url": file_record["file_url"],
         "url": file_record["file_url"],

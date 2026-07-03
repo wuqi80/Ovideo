@@ -177,6 +177,9 @@ async def test_upload_generic_file_creates_default_project_version_and_record(tm
 
     assert result["success"] is True
     assert result["file_id"] == "file_abcdef123456"
+    assert result["filename"] == "file_abcdef123456.png"
+    assert result["server_filename"] == "file_abcdef123456.png"
+    assert result["original_filename"] == "shot.png"
     assert result["file_type"] == "image"
     assert Path(result["path"]).read_bytes() == b"image-bytes"
     assert _ProjectDAO.saved[0]["project_id"] == "proj_abcdef123456"
@@ -203,9 +206,35 @@ async def test_upload_generic_file_uses_existing_version_and_video_type(tmp_path
     )
 
     assert result["file_type"] == "video"
+    assert result["file_id"] == "file_111111111111"
+    assert result["filename"] == "file_111111111111.mp4"
+    assert result["server_filename"] == "file_111111111111.mp4"
     assert _ProjectDAO.saved == []
     assert _VersionDAO.created == []
     assert _FileDAO.created[0]["version_id"] == "ver_existing"
+
+
+@pytest.mark.asyncio
+async def test_upload_generic_file_adds_extension_from_mime_type(tmp_path):
+    result = await svc.upload_generic_file(
+        filename="clipboard",
+        content_type="image/png",
+        content=b"image-bytes",
+        version_id="ver_existing",
+        username="yuan",
+        max_upload_size=1024,
+        file_dao=_FileDAO,
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        logger=_Logger(),
+        storage_root=tmp_path / "storage",
+        now_provider=lambda: datetime(2026, 6, 23),
+        uuid_hex_provider=lambda: "222222222222",
+    )
+
+    assert result["filename"] == "file_222222222222.png"
+    assert result["server_filename"] == "file_222222222222.png"
+    assert Path(result["path"]).suffix == ".png"
 
 
 @pytest.mark.asyncio
