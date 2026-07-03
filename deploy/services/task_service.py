@@ -4,8 +4,10 @@
 """
 import uuid
 import logging
+from pathlib import Path
 from typing import Optional
 from datetime import datetime
+from urllib.parse import urlparse
 
 from fastapi import HTTPException
 
@@ -14,6 +16,89 @@ from task_queue import TaskQueue, Task
 logger = logging.getLogger(__name__)
 
 _service: Optional['TaskService'] = None
+
+
+MIME_EXTENSION_MAP = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+}
+
+
+def _file_type_for_agent_param(param: str) -> str:
+    if param == "video_filename":
+        return "video"
+    if param == "audio_filename":
+        return "audio"
+    return "image"
+
+
+def _default_extension_for_file_type(file_type: str) -> str:
+    return {"video": ".mp4", "audio": ".mp3"}.get(file_type, ".png")
+
+
+def _extract_file_id(ref: str) -> Optional[str]:
+    if not ref:
+        return None
+    path = urlparse(ref).path or ref.split("?", 1)[0]
+    parts = [part for part in path.split("/") if part]
+    if len(parts) >= 3 and parts[0] == "api" and parts[1] == "files":
+        return parts[2]
+    basename = Path(path).name
+    if basename.startswith("file_") and not Path(basename).suffix:
+        return basename
+    return None
+
+
+def _filename_from_file_record(file_record: dict, fallback: str, file_type: str) -> str:
+    for key in ("file_path", "file_url"):
+        value = file_record.get(key)
+        if value:
+            name = Path(urlparse(str(value)).path).name
+            if Path(name).suffix:
+                return name
+
+    file_id = file_record.get("file_id")
+    mime_type = (file_record.get("mime_type") or "").split(";", 1)[0].lower()
+    ext = MIME_EXTENSION_MAP.get(mime_type)
+
+    original_name = file_record.get("file_name")
+    if original_name and Path(str(original_name)).suffix:
+        if file_id and ext:
+            return f"{file_id}{ext}"
+        return Path(str(original_name)).name
+
+    if not ext:
+        ext = _default_extension_for_file_type(file_type)
+    return f"{file_id or Path(fallback).stem}{ext}"
+
+
+def _ensure_filename_extension(filename: str, file_type: str) -> str:
+    if Path(filename).suffix:
+        return filename
+    return f"{filename}{_default_extension_for_file_type(file_type)}"
+
+
+def _ensure_url_extension(url: str, filename: str) -> str:
+    path = urlparse(url).path
+    if Path(path).suffix:
+        return url
+    suffix = Path(filename).suffix
+    if not suffix:
+        return url
+    if "?" in url:
+        base, query = url.split("?", 1)
+        return f"{base}{suffix}?{query}"
+    return f"{url}{suffix}"
 
 
 def init(redis_client):
@@ -86,6 +171,19 @@ class TaskService:
         try:
             from workflow_handler import get_workflow_handler
 
+            file_params = (
+                ["image_path", "image_path_end", "video_filename", "audio_filename"]
+                + [f"image_path_{i}" for i in range(1, 7)]
+                + [f"image_{s}" for s in ("BK", "HU", "MB")]
+            )
+            agent_files = []
+            for param in file_params:
+                resolved = await self._resolve_agent_file(param, task_data.get(param), username)
+                if not resolved:
+                    continue
+                task_data[param] = resolved["filename"]
+                agent_files.append(resolved)
+
             if "image_path" in task_data:
                 task_data["uploaded_image"] = task_data["image_path"]
             if "image_path_end" in task_data:
@@ -114,34 +212,63 @@ class TaskService:
                 }.get(task_type, task_type),
             )
 
-            agent_files = []
-            file_params = (
-                ["image_path", "image_path_end", "video_filename", "audio_filename"]
-                + [f"image_path_{i}" for i in range(1, 7)]
-                + [f"image_{s}" for s in ("BK", "HU", "MB")]
-            )
-            for param in file_params:
-                filename = task_data.get(param)
-                if not filename or not isinstance(filename, str) or not filename.strip():
-                    continue
-                download_url = None
-                if self.redis:
-                    try:
-                        file_id = await self.redis.get(f"comfyui:file:{filename}")
-                        if file_id:
-                            if isinstance(file_id, bytes):
-                                file_id = file_id.decode()
-                            download_url = f"/api/files/{file_id}/download"
-                    except Exception:
-                        pass
-                if not download_url:
-                    year_month = datetime.now().strftime('%Y%m')
-                    download_url = f"/storage/image/{username}/{year_month}/{filename}"
-                agent_files.append({"param": param, "filename": filename, "url": download_url})
-
             task_data["agent_files"] = agent_files
             logger.info(f"✅ Pre-built workflow for {task_type}, {len(agent_files)} agent files")
         except Exception as e:
             logger.exception(f"prepare_task_for_agent failed for {task_type}: {e}")
             raise HTTPException(status_code=500, detail=f"任务预处理失败: {e}")
+
+    async def _resolve_agent_file(self, param: str, file_ref, username: str) -> Optional[dict]:
+        if not file_ref or not isinstance(file_ref, str) or not file_ref.strip():
+            return None
+
+        original_ref = file_ref.strip()
+        file_type = _file_type_for_agent_param(param)
+        file_record = None
+        file_id = _extract_file_id(original_ref)
+
+        if file_id:
+            try:
+                from dao_content import FileDAO
+
+                file_record = await FileDAO.get_file(file_id)
+            except Exception as exc:
+                logger.warning("Failed to resolve file_id %s for agent transfer: %s", file_id, exc)
+
+        if file_record:
+            resolved_file_id = file_record.get("file_id") or file_id
+            filename = _filename_from_file_record(file_record, original_ref, file_type)
+            return {"param": param, "filename": filename, "url": f"/api/files/{resolved_file_id}/download"}
+
+        if self.redis:
+            try:
+                mapped_file_id = await self.redis.get(f"comfyui:file:{original_ref}")
+                if mapped_file_id:
+                    if isinstance(mapped_file_id, bytes):
+                        mapped_file_id = mapped_file_id.decode()
+                    filename = original_ref
+                    try:
+                        from dao_content import FileDAO
+
+                        file_record = await FileDAO.get_file(mapped_file_id)
+                        if file_record:
+                            filename = _filename_from_file_record(file_record, original_ref, file_type)
+                    except Exception as exc:
+                        logger.warning("Failed to load Redis-mapped file %s: %s", mapped_file_id, exc)
+                    return {
+                        "param": param,
+                        "filename": _ensure_filename_extension(filename, file_type),
+                        "url": f"/api/files/{mapped_file_id}/download",
+                    }
+            except Exception as exc:
+                logger.warning("Failed to resolve Redis file mapping for %s: %s", original_ref, exc)
+
+        filename = Path(urlparse(original_ref).path).name or original_ref
+        filename = _ensure_filename_extension(filename, file_type)
+        if original_ref.startswith("http") or original_ref.startswith("/"):
+            download_url = _ensure_url_extension(original_ref, filename)
+        else:
+            year_month = datetime.now().strftime("%Y%m")
+            download_url = f"/storage/{file_type}/{username}/{year_month}/{filename}"
+        return {"param": param, "filename": filename, "url": download_url}
 
