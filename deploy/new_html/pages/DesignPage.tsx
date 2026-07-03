@@ -79,6 +79,12 @@ function secureMediaUrl(url: string | null): string | null {
   return secureApiUrl(normalized, { absolute: true });
 }
 
+function isAssetNotFoundError(error: unknown): boolean {
+  const err = error as { status?: number; message?: string } | null | undefined;
+  const msg = err?.message || String(error || '');
+  return err?.status === 404 || /(^|\D)404(\D|$)|资产不存在|not found/i.test(msg);
+}
+
 async function ensureDataUrl(input: string): Promise<string> {
   if (!input) throw new Error('图片URL无效');
   if (input.startsWith('data:')) return input;
@@ -235,9 +241,20 @@ export const DesignPage: React.FC = () => {
 
   const handleDelete = useCallback(async (assetId: string) => {
     setDeletingId(assetId);
-    try { const res = await deleteAsset(assetId); if (res?.success) await reload(); } catch (e) { console.error(e); }
+    try {
+      const res = await deleteAsset(assetId);
+      if (res?.success) await forceReloadSlices('assets');
+    } catch (e) {
+      if (isAssetNotFoundError(e)) {
+        crmMessage.warning('该资产已不存在，已刷新列表');
+        await forceReloadSlices('assets');
+      } else {
+        console.error(e);
+        crmMessage.error(`删除失败：${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     finally { setDeletingId(null); }
-  }, [reload]);
+  }, [forceReloadSlices]);
 
   const handleUploadImage = useCallback(async (assetId: string, file: File) => {
     setUploadingId(assetId);

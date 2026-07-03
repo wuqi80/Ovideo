@@ -111,6 +111,13 @@ export async function batchCreateStoryboardItems(episodeId: string, items: any[]
     }, 'batchCreateStoryboardItems');
 }
 
+export async function syncStoryboardItems(episodeId: string, items: any[], scriptId?: string) {
+    return apiJson<any>(`/api/episodes/${episodeId}/storyboard-items/sync`, {
+        method: 'POST',
+        body: JSON.stringify({ items, script_id: scriptId })
+    }, 'syncStoryboardItems');
+}
+
 export async function extractToAssets(episodeId: string, characters: any[], scenes: any[], scriptId?: string) {
     return apiJson<any>(`/api/episodes/${episodeId}/extract-to-assets`, {
         method: 'POST',

@@ -3,13 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { Mic, ArrowRight } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import {
-  // 2026-05-24 (Bug 2)：移除 generateSpeech（Gemini TTS）导入。
-  // 配音页所有 TTS 统一走 MiniMax；没有绑定 voice_id 的角色用 MINIMAX_DEFAULT_VOICE 兜底，
-  // 历史持久化里残留的 legacy persona 字符串（'narrator'/'male_young'/...）通过
-  // LEGACY_VOICE_ALIAS 转译成 MiniMax 官方音色 id。
-  createStoryboardItem as apiCreateStoryboardItem,
-} from '../services/storyboardMutationService';
-import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
+  getStoryboardItems,
+  syncStoryboardItems,
+  updateStoryboardItem as apiUpdateStoryboardItem,
+} from '../services/episodeDataService';
 import { minimaxTTS } from '../services/audioGenerationService';
 import { crmMessage } from '../admin/crmUI';
 
@@ -133,9 +130,8 @@ export const AudioStagePage: React.FC = () => {
   const [storyboardError, setStoryboardError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  // 「导出到分镜」= 把当前脚本+素材绑定「导出」成一套**全新的分镜镜头**追加到分镜列表
-  // （复制场景/动作/台词/提示词 + 素材绑定，但不带已生成的图/音 → 新镜头待重新出图），
-  // 原有镜头不动。这样每改一次前面的素材，点一下就生成一套新分镜去重新生成画面。
+  // 「同步到分镜」只原地更新发生变化的配音字段；找不到对应分镜时才新增。
+  // 保留原 item_id，避免误伤已经生成的画面、视频段和未改动配音。
   const handleExportToStoryboard = useCallback(async () => {
     if (exporting) return;
     const items = [...storyboardItems].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -145,33 +141,27 @@ export const AudioStagePage: React.FC = () => {
     }
     setExporting(true);
     try {
-      let nextSort = items.reduce((m, it) => Math.max(m, it.sortOrder ?? 0), 0);
-      for (const it of items) {
-        nextSort += 1;
-        const res: any = await apiCreateStoryboardItem(episodeId, {
-          sort_order: nextSort,
-          script_id: selectedScriptId || undefined,
-          scene_heading: it.sceneHeading || '',
-          action_text: it.actionText || '',
-          dialogue: it.dialogue || '',
-          camera_movement: it.cameraMovement || '',
-          image_prompt: it.imagePrompt || '',
-          video_prompt: it.videoPrompt || '',
-        });
-        const newId = res?.item?.item_id || res?.item?.itemId;
-        // 复制素材绑定（create 接口不收 bound_assets，用 update 补）
-        if (newId && Array.isArray(it.boundAssets) && it.boundAssets.length) {
-          await apiUpdateStoryboardItem(newId, { bound_assets: it.boundAssets });
-        }
-      }
-      crmMessage.success(`已导出 ${items.length} 个新分镜，去分镜页生成画面`);
+      const payload = items.map(it => ({
+        item_id: it.itemId,
+        sort_order: it.sortOrder ?? 0,
+        dialogue: it.dialogue || '',
+        dialogue_audio_url: it.dialogueAudioUrl || null,
+        narration_audio_url: it.narrationAudioUrl || null,
+        sfx_audio_url: it.sfxAudioUrl || null,
+        audio_duration_ms: it.audioDurationMs ?? null,
+        planned_duration_ms: it.plannedDurationMs ?? null,
+        bound_assets: Array.isArray(it.boundAssets) ? it.boundAssets : [],
+      }));
+      const res: any = await syncStoryboardItems(episodeId, payload, selectedScriptId || undefined);
+      crmMessage.success(`已同步分镜：更新 ${res?.updated || 0}，新增 ${res?.created || 0}，未变化 ${res?.skipped || 0}`);
+      forceReloadSlices('storyboardItems').catch(err => console.warn('同步后刷新分镜失败:', err));
       navigate(`/projects/${projectId}/ep/${episodeId}/workflow/storyboard`);
     } catch (e: any) {
-      crmMessage.error(`导出到分镜失败：${e?.message || e}`);
+      crmMessage.error(`同步到分镜失败：${e?.message || e}`);
     } finally {
       setExporting(false);
     }
-  }, [exporting, storyboardItems, episodeId, selectedScriptId, projectId, navigate]);
+  }, [exporting, storyboardItems, episodeId, selectedScriptId, projectId, navigate, forceReloadSlices]);
 
   const updateAudioStageStoryboardItem = useCallback(async (itemId: string, data: Record<string, any>) => {
     await apiUpdateStoryboardItem(itemId, data);
@@ -592,10 +582,10 @@ export const AudioStagePage: React.FC = () => {
         <button
           onClick={handleExportToStoryboard}
           disabled={exporting}
-          title="把当前脚本+素材导出成一套全新分镜（原有镜头不动）"
+          title="把配音字段同步回现有分镜；缺失时才新增"
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-success hover:bg-success text-white text-sm font-semibold transition-all disabled:opacity-60"
         >
-          {exporting ? '导出中…' : <>导出到分镜 <ArrowRight size={14} /></>}
+          {exporting ? '同步中…' : <>同步到分镜 <ArrowRight size={14} /></>}
         </button>
       </header>
 

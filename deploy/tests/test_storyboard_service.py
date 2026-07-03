@@ -9,8 +9,11 @@ from services import storyboard_service
 
 class FakeStoryboardDAO:
     calls = []
+    episode_rows = None
     created = None
+    created_rows = []
     updated = None
+    updates = []
     deleted = []
     delete_scope = None
     export_kwargs = None
@@ -23,6 +26,8 @@ class FakeStoryboardDAO:
     @classmethod
     async def get_by_episode(cls, episode_id, script_id=None, limit=None, offset=0, fields=None):
         cls.calls.append((episode_id, script_id, limit, offset, fields))
+        if cls.episode_rows is not None:
+            return cls.episode_rows
         if script_id:
             return [{"item_id": "sb_stale", "bound_assets": "[bad-json"}]
         return [{"item_id": "sb_current", "bound_assets": '[{"asset_id":"a1"}]'}]
@@ -34,11 +39,15 @@ class FakeStoryboardDAO:
     @classmethod
     async def create(cls, **kwargs):
         cls.created = kwargs
-        return {"item_id": "sb_new", **kwargs}
+        item_id = "sb_new" if not cls.created_rows else f"sb_new_{len(cls.created_rows) + 1}"
+        row = {"item_id": item_id, **kwargs}
+        cls.created_rows.append(row)
+        return row
 
     @classmethod
     async def update(cls, item_id, **kwargs):
         cls.updated = {"item_id": item_id, **kwargs}
+        cls.updates.append(cls.updated)
         if cls.update_returns_none:
             return None
         return cls.updated
@@ -126,8 +135,11 @@ class FakeMixInput:
 
 def setup_function():
     FakeStoryboardDAO.calls = []
+    FakeStoryboardDAO.episode_rows = None
     FakeStoryboardDAO.created = None
+    FakeStoryboardDAO.created_rows = []
     FakeStoryboardDAO.updated = None
+    FakeStoryboardDAO.updates = []
     FakeStoryboardDAO.deleted = []
     FakeStoryboardDAO.delete_scope = None
     FakeStoryboardDAO.export_kwargs = None
@@ -286,6 +298,139 @@ async def test_mix_storyboard_audio_delegates_to_injected_mixer():
     assert result["mixed_audio_url"] == "/mixed.wav"
     assert captured["item_id"] == "sb_1"
     assert captured["mix_input"].dialogue_gain_db == 1.5
+
+
+async def test_sync_storyboard_items_updates_existing_audio_without_creating():
+    FakeStoryboardDAO.episode_rows = [
+        {
+            "item_id": "sb_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "sort_order": 0,
+            "dialogue": "Alice: hi",
+            "dialogue_audio_url": "/old.wav",
+            "narration_audio_url": None,
+            "sfx_audio_url": None,
+            "audio_duration_ms": 1000,
+            "planned_duration_ms": 3000,
+            "bound_assets": '["char:Alice"]',
+            "mixed_audio_url": "/old-mix.wav",
+            "mixed_audio_hash": "old-hash",
+            "generated_image_url": "/keep-image.png",
+        }
+    ]
+
+    result = await storyboard_service.sync_storyboard_items(
+        "ep_1",
+        items=[
+            {
+                "item_id": "sb_1",
+                "sort_order": 0,
+                "dialogue": "Alice: hi",
+                "dialogue_audio_url": "/new.wav",
+                "audio_duration_ms": 1200,
+                "planned_duration_ms": 3000,
+                "bound_assets": ["char:Alice"],
+            }
+        ],
+        script_id="script_1",
+        storyboard_dao=FakeStoryboardDAO,
+    )
+
+    assert result["created"] == 0
+    assert result["updated"] == 1
+    assert result["skipped"] == 0
+    assert FakeStoryboardDAO.created is None
+    assert FakeStoryboardDAO.updates == [
+        {
+            "item_id": "sb_1",
+            "dialogue_audio_url": "/new.wav",
+            "audio_duration_ms": 1200,
+            "mixed_audio_url": None,
+            "mixed_audio_hash": None,
+        }
+    ]
+
+
+async def test_sync_storyboard_items_skips_unchanged_existing_rows():
+    FakeStoryboardDAO.episode_rows = [
+        {
+            "item_id": "sb_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "sort_order": 0,
+            "dialogue": "Alice: hi",
+            "dialogue_audio_url": "/same.wav",
+            "narration_audio_url": None,
+            "sfx_audio_url": None,
+            "audio_duration_ms": 1000,
+            "planned_duration_ms": 3000,
+            "bound_assets": '["char:Alice"]',
+        }
+    ]
+
+    result = await storyboard_service.sync_storyboard_items(
+        "ep_1",
+        items=[
+            {
+                "itemId": "sb_1",
+                "sortOrder": 0,
+                "dialogue": "Alice: hi",
+                "dialogueAudioUrl": "/same.wav",
+                "audioDurationMs": 1000,
+                "plannedDurationMs": 3000,
+                "boundAssets": ["char:Alice"],
+            }
+        ],
+        script_id="script_1",
+        storyboard_dao=FakeStoryboardDAO,
+    )
+
+    assert result["created"] == 0
+    assert result["updated"] == 0
+    assert result["skipped"] == 1
+    assert FakeStoryboardDAO.created is None
+    assert FakeStoryboardDAO.updates == []
+
+
+async def test_sync_storyboard_items_creates_missing_rows_and_applies_audio_fields():
+    FakeStoryboardDAO.episode_rows = []
+
+    result = await storyboard_service.sync_storyboard_items(
+        "ep_1",
+        items=[
+            {
+                "sort_order": 2,
+                "scene_heading": "Room",
+                "action_text": "Alice enters",
+                "dialogue": "Alice: hi",
+                "camera_movement": "static",
+                "image_prompt": "image",
+                "video_prompt": "video",
+                "dialogue_audio_url": "/new.wav",
+                "audio_duration_ms": 1200,
+                "planned_duration_ms": 3000,
+                "bound_assets": ["char:Alice"],
+            }
+        ],
+        script_id="script_1",
+        storyboard_dao=FakeStoryboardDAO,
+    )
+
+    assert result["created"] == 1
+    assert result["updated"] == 0
+    assert result["skipped"] == 0
+    assert FakeStoryboardDAO.created["script_id"] == "script_1"
+    assert FakeStoryboardDAO.created["sort_order"] == 2
+    assert FakeStoryboardDAO.updates == [
+        {
+            "item_id": "sb_new",
+            "dialogue_audio_url": "/new.wav",
+            "audio_duration_ms": 1200,
+            "mixed_audio_url": None,
+            "mixed_audio_hash": None,
+        }
+    ]
 
 
 async def test_extract_to_assets_skips_existing_and_blank_names():

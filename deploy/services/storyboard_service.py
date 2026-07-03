@@ -8,6 +8,17 @@ from typing import Any, Dict, Iterable, Optional
 
 SUPPORTED_STORYBOARD_FIELDS = {"audio", "video", "audio_stage", "materials"}
 
+SYNC_UPDATE_FIELDS = (
+    ("dialogue", ("dialogue",)),
+    ("dialogue_audio_url", ("dialogue_audio_url", "dialogueAudioUrl")),
+    ("narration_audio_url", ("narration_audio_url", "narrationAudioUrl")),
+    ("sfx_audio_url", ("sfx_audio_url", "sfxAudioUrl")),
+    ("audio_duration_ms", ("audio_duration_ms", "audioDurationMs")),
+    ("planned_duration_ms", ("planned_duration_ms", "plannedDurationMs")),
+    ("bound_assets", ("bound_assets", "boundAssets")),
+)
+AUDIO_URL_FIELDS = {"dialogue_audio_url", "narration_audio_url", "sfx_audio_url"}
+
 
 class StoryboardServiceError(RuntimeError):
     pass
@@ -55,6 +66,148 @@ def _normalize_bound_assets(item: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:
             item["bound_assets"] = []
     return item
+
+
+def _value_for_keys(data: Dict[str, Any], *keys: str) -> tuple[bool, Any]:
+    for key in keys:
+        if key in data:
+            return True, data[key]
+    return False, None
+
+
+def _row_value(row: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in row:
+            return row[key]
+    return None
+
+
+def _bound_assets_value(value: Any) -> list[Any]:
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value) if value else []
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return value if isinstance(value, list) else []
+
+
+def _comparable_storyboard_value(field: str, value: Any) -> Any:
+    if field == "bound_assets":
+        return _bound_assets_value(value)
+    if field in AUDIO_URL_FIELDS:
+        return value or None
+    return value
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _match_storyboard_item(
+    item: Dict[str, Any],
+    *,
+    by_item_id: Dict[str, Dict[str, Any]],
+    by_segment: Dict[tuple[str, str], Dict[str, Any]],
+    by_sort_order: Dict[int, list[Dict[str, Any]]],
+    used_item_ids: set[str],
+) -> Optional[Dict[str, Any]]:
+    _, item_id = _value_for_keys(item, "item_id", "itemId")
+    if item_id:
+        row = by_item_id.get(str(item_id))
+        if row and str(_row_value(row, "item_id", "itemId")) not in used_item_ids:
+            return row
+
+    _, segment_id = _value_for_keys(item, "script_segment_id", "scriptSegmentId")
+    _, source_shot_no = _value_for_keys(item, "source_video_shot_no", "sourceVideoShotNo")
+    if segment_id and source_shot_no:
+        row = by_segment.get((str(segment_id), str(source_shot_no)))
+        if row and str(_row_value(row, "item_id", "itemId")) not in used_item_ids:
+            return row
+
+    present_sort_order, sort_order = _value_for_keys(item, "sort_order", "sortOrder")
+    if present_sort_order:
+        sort_order_int = _int_or_none(sort_order)
+        if sort_order_int is None:
+            return None
+        for row in by_sort_order.get(sort_order_int, []):
+            row_id = str(_row_value(row, "item_id", "itemId"))
+            if row_id not in used_item_ids:
+                return row
+    return None
+
+
+def _sync_update_fields(item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+    updates: Dict[str, Any] = {}
+    audio_changed = False
+    for field, keys in SYNC_UPDATE_FIELDS:
+        present, incoming = _value_for_keys(item, *keys)
+        if not present:
+            continue
+        current = _row_value(row, field)
+        incoming_cmp = _comparable_storyboard_value(field, incoming)
+        current_cmp = _comparable_storyboard_value(field, current)
+        if incoming_cmp == current_cmp:
+            continue
+        updates[field] = incoming_cmp if field == "bound_assets" or field in AUDIO_URL_FIELDS else incoming
+        if field in AUDIO_URL_FIELDS:
+            audio_changed = True
+    if audio_changed:
+        updates["mixed_audio_url"] = None
+        updates["mixed_audio_hash"] = None
+    return updates
+
+
+def _creation_kwargs_from_sync_item(
+    episode_id: str,
+    item: Dict[str, Any],
+    script_id: Optional[str],
+) -> Dict[str, Any]:
+    def value(default: Any, *keys: str) -> Any:
+        present, found = _value_for_keys(item, *keys)
+        return found if present else default
+
+    return {
+        "episode_id": episode_id,
+        "sort_order": _int_or_none(value(0, "sort_order", "sortOrder")) or 0,
+        "scene_heading": value("", "scene_heading", "sceneHeading"),
+        "action_text": value("", "action_text", "actionText"),
+        "dialogue": value("", "dialogue"),
+        "camera_movement": value("", "camera_movement", "cameraMovement"),
+        "image_prompt": value("", "image_prompt", "imagePrompt"),
+        "video_prompt": value("", "video_prompt", "videoPrompt"),
+        "bound_assets": _bound_assets_value(value([], "bound_assets", "boundAssets")),
+        "script_id": script_id or value(None, "script_id", "scriptId"),
+        "script_segment_id": value(None, "script_segment_id", "scriptSegmentId"),
+        "source_video_shot_no": value("", "source_video_shot_no", "sourceVideoShotNo"),
+        "video_script_block": value("", "video_script_block", "videoScriptBlock"),
+        "shot_size": value("", "shot_size", "shotSize"),
+        "camera_angle": value("", "camera_angle", "cameraAngle"),
+        "planned_duration_ms": _int_or_none(value(None, "planned_duration_ms", "plannedDurationMs")),
+    }
+
+
+def _audio_update_fields_from_sync_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    updates: Dict[str, Any] = {}
+    audio_changed = False
+    for field, keys in SYNC_UPDATE_FIELDS:
+        if field not in AUDIO_URL_FIELDS and field != "audio_duration_ms":
+            continue
+        present, incoming = _value_for_keys(item, *keys)
+        if not present:
+            continue
+        updates[field] = (incoming or None) if field in AUDIO_URL_FIELDS else incoming
+        if field in AUDIO_URL_FIELDS:
+            audio_changed = True
+    if audio_changed:
+        updates["mixed_audio_url"] = None
+        updates["mixed_audio_hash"] = None
+    return updates
 
 
 async def get_storyboard_items(
@@ -185,6 +338,12 @@ async def update_storyboard_item(
     *,
     storyboard_dao: Any,
 ) -> Dict[str, Any]:
+    if any(field in fields for field in AUDIO_URL_FIELDS):
+        fields = {
+            **fields,
+            "mixed_audio_url": None,
+            "mixed_audio_hash": None,
+        }
     item = await storyboard_dao.update(item_id, **fields)
     if not item:
         raise StoryboardItemNotFound("Storyboard item not found")
@@ -311,6 +470,83 @@ async def batch_create_storyboard_items(
 ) -> Dict[str, Any]:
     created = await storyboard_dao.batch_create(episode_id, items, script_id=script_id)
     return {"success": True, "items": _rows_to_dicts(created)}
+
+
+async def sync_storyboard_items(
+    episode_id: str,
+    *,
+    items: list[dict],
+    script_id: Optional[str],
+    storyboard_dao: Any,
+) -> Dict[str, Any]:
+    existing_rows = _rows_to_dicts(
+        await storyboard_dao.get_by_episode(episode_id, script_id=script_id)
+    )
+    by_item_id: Dict[str, Dict[str, Any]] = {}
+    by_segment: Dict[tuple[str, str], Dict[str, Any]] = {}
+    by_sort_order: Dict[int, list[Dict[str, Any]]] = {}
+
+    for row in existing_rows:
+        item_id = _row_value(row, "item_id", "itemId")
+        if item_id:
+            by_item_id[str(item_id)] = row
+        segment_id = _row_value(row, "script_segment_id", "scriptSegmentId")
+        source_shot_no = _row_value(row, "source_video_shot_no", "sourceVideoShotNo")
+        if segment_id and source_shot_no:
+            by_segment[(str(segment_id), str(source_shot_no))] = row
+        sort_order = _int_or_none(_row_value(row, "sort_order", "sortOrder"))
+        if sort_order is not None:
+            by_sort_order.setdefault(sort_order, []).append(row)
+
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    synced_items: list[Dict[str, Any]] = []
+    used_item_ids: set[str] = set()
+
+    for raw_item in items:
+        item = dict(raw_item or {})
+        matched = _match_storyboard_item(
+            item,
+            by_item_id=by_item_id,
+            by_segment=by_segment,
+            by_sort_order=by_sort_order,
+            used_item_ids=used_item_ids,
+        )
+
+        if matched:
+            matched_id = str(_row_value(matched, "item_id", "itemId"))
+            used_item_ids.add(matched_id)
+            updates = _sync_update_fields(item, matched)
+            if updates:
+                updated = await storyboard_dao.update(matched_id, **updates)
+                synced_items.append(dict(updated) if updated else {**matched, **updates})
+                updated_count += 1
+            else:
+                synced_items.append(matched)
+                skipped_count += 1
+            continue
+
+        created = await storyboard_dao.create(**_creation_kwargs_from_sync_item(episode_id, item, script_id))
+        if not created:
+            continue
+        created_count += 1
+        created_row = dict(created)
+        created_id = _row_value(created_row, "item_id", "itemId")
+        audio_updates = _audio_update_fields_from_sync_item(item)
+        if created_id and audio_updates:
+            updated = await storyboard_dao.update(str(created_id), **audio_updates)
+            if updated:
+                created_row = dict(updated)
+        synced_items.append(created_row)
+
+    return {
+        "success": True,
+        "created": created_count,
+        "updated": updated_count,
+        "skipped": skipped_count,
+        "items": synced_items,
+    }
 
 
 async def extract_to_assets(

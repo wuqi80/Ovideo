@@ -357,10 +357,19 @@ class StoryboardDAO:
             'script_segment_id', 'source_video_shot_no', 'video_script_block',
             'shot_size', 'camera_angle',
         }
+        nullable_fields = {
+            'dialogue_audio_url',
+            'narration_audio_url',
+            'sfx_audio_url',
+            'audio_duration_ms',
+            'planned_duration_ms',
+            'mixed_audio_url',
+            'mixed_audio_hash',
+        }
         json_fields = {'bound_assets'}
         sets, vals, idx = [], [], 1
         for key, val in kwargs.items():
-            if key in allowed and val is not None:
+            if key in allowed and (val is not None or key in nullable_fields):
                 sets.append(f"{key} = ${idx}")
                 vals.append(val)
                 idx += 1

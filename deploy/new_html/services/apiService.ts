@@ -21,6 +21,7 @@ export {
     getEpisodeScript,
     getStoryboardItems,
     getVideoSegments,
+    syncStoryboardItems,
     updateEpisodeScript,
     updateStoryboardItem,
     type StoryboardItemsQueryOptions,

@@ -78,6 +78,17 @@ export const StoryboardGenPage: React.FC = () => {
     }
   }, [loadStoryboardItemsPage, storyboardItems.length]);
 
+  const handleLoadAllStoryboardItems = useCallback(async () => {
+    const count = Math.max(
+      storyboardTotalCount || 0,
+      storyboardItems.length,
+      visibleEntityShotCount,
+      STORYBOARD_INITIAL_SHOT_COUNT,
+    );
+    setVisibleEntityShotCount(count);
+    await loadStoryboardItemsPage({ limit: count, includeTotal: true });
+  }, [loadStoryboardItemsPage, storyboardItems.length, storyboardTotalCount, visibleEntityShotCount]);
+
   const visibleStoryboardItems = useMemo(
     () => storyboardItems.slice(0, visibleEntityShotCount),
     [storyboardItems, visibleEntityShotCount],
@@ -454,6 +465,7 @@ export const StoryboardGenPage: React.FC = () => {
             shotPageSize={STORYBOARD_INITIAL_SHOT_COUNT}
             totalShotCount={storyboardTotalCount || storyboardItems.length}
             onVisibleShotCountChange={handleVisibleShotCountChange}
+            onLoadAllStoryboardItems={handleLoadAllStoryboardItems}
             materialLibrary={materialLibrary}
             onUpdateStoryboardItem={handleUpdateStoryboardItem}
             onDeleteStoryboardItem={handleDeleteStoryboardItem}

@@ -22,6 +22,7 @@ from services.storyboard_service import (
     get_storyboard_items as get_storyboard_items_service,
     mix_storyboard_audio as mix_storyboard_audio_service,
     reorder_storyboard_items as reorder_storyboard_items_service,
+    sync_storyboard_items as sync_storyboard_items_service,
     update_storyboard_item as update_storyboard_item_service,
 )
 
@@ -87,6 +88,11 @@ class MixAudioResponse(BaseModel):
 
 
 class BatchStoryboardCreate(BaseModel):
+    items: list
+    script_id: Optional[str] = None
+
+
+class SyncStoryboardItemsRequest(BaseModel):
     items: list
     script_id: Optional[str] = None
 
@@ -272,6 +278,19 @@ def create_storyboard_router(
         user_id: str = Depends(get_current_user),
     ):
         return await batch_create_storyboard_items_service(
+            episode_id,
+            items=data.items,
+            script_id=data.script_id,
+            storyboard_dao=StoryboardDAO,
+        )
+
+    @router.post("/api/episodes/{episode_id}/storyboard-items/sync")
+    async def sync_storyboard_items(
+        episode_id: str,
+        data: SyncStoryboardItemsRequest,
+        user_id: str = Depends(get_current_user),
+    ):
+        return await sync_storyboard_items_service(
             episode_id,
             items=data.items,
             script_id=data.script_id,

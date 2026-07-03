@@ -78,6 +78,7 @@ interface GenerationPageProps {
   shotPageSize?: number;
   totalShotCount?: number;
   onVisibleShotCountChange?: (count: number) => void;
+  onLoadAllStoryboardItems?: () => Promise<void> | void;
   onDeleteStoryboardItem?: (itemId: string) => void;  // 2026-06-14：删除分镜镜头
   onBatchDeleteStoryboardItems?: (itemIds: string[]) => Promise<void> | void;  // 2026-06-14：批量删除选中镜头
 }
@@ -97,6 +98,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   shotPageSize,
   totalShotCount,
   onVisibleShotCountChange,
+  onLoadAllStoryboardItems,
   onDeleteStoryboardItem,
   onBatchDeleteStoryboardItems,
 }) => {
@@ -113,6 +115,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   
   // Batch Selection — 多选 Set 不持久化（运行时态，刷新清空合理）
   const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set());
+  const [isLoadingAllShotsForSelection, setIsLoadingAllShotsForSelection] = useState(false);
+  const [selectAllAfterLoad, setSelectAllAfterLoad] = useState(false);
   // 分镜列表默认只渲染前 N 个，避免镜头很多时（如 70+）一次性渲染卡顿；点"展开更多"按需加载
   const SHOT_PAGE_SIZE = Math.max(1, shotPageSize || 10);
   const [visibleShotCount, setVisibleShotCount] = useState<number>(SHOT_PAGE_SIZE);
@@ -615,7 +619,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   // Always show UI, even without data
   const hasStoryboard = selectedFile && selectedFile.storyboard && selectedFile.storyboard.items.length > 0;
   const storyboardTotalCount = totalShotCount ?? selectedFile?.storyboard?.items.length ?? 0;
+  const loadedStoryboardCount = selectedFile?.storyboard?.items.length ?? 0;
+  const hasUnloadedStoryboardItems = storyboardTotalCount > loadedStoryboardCount;
+  const allStoryboardItemsSelected = storyboardTotalCount > 0 && selectedShotIds.size === storyboardTotalCount;
   const selectedShot = hasStoryboard && selectedFile ? selectedFile.storyboard!.items.find(i => i.id === selectedShotId) : null;
+
+  useEffect(() => {
+      if (!selectAllAfterLoad || !selectedFile?.storyboard?.items.length) return;
+      const items = selectedFile.storyboard.items;
+      const total = storyboardTotalCount || items.length;
+      if (items.length < total) return;
+      setVisibleShotCount(total);
+      setSelectedShotIds(new Set(items.map(i => i.id)));
+      setSelectAllAfterLoad(false);
+  }, [selectAllAfterLoad, selectedFile?.storyboard?.items, storyboardTotalCount]);
 
   // --- Selection Logic ---
   const toggleShotSelection = (e: React.MouseEvent, id: string) => {
@@ -628,10 +645,24 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       });
   };
 
-  const toggleSelectAll = () => {
-      if (selectedShotIds.size === selectedFile.storyboard?.items.length) {
+  const toggleSelectAll = async () => {
+      if (allStoryboardItemsSelected) {
           setSelectedShotIds(new Set());
+          setSelectAllAfterLoad(false);
       } else {
+          if (hasUnloadedStoryboardItems && onLoadAllStoryboardItems) {
+              setIsLoadingAllShotsForSelection(true);
+              setSelectAllAfterLoad(true);
+              try {
+                  await onLoadAllStoryboardItems();
+              } catch (e) {
+                  console.error('加载全部分镜失败:', e);
+                  setSelectAllAfterLoad(false);
+              } finally {
+                  setIsLoadingAllShotsForSelection(false);
+              }
+              return;
+          }
           setSelectedShotIds(new Set(selectedFile.storyboard?.items.map(i => i.id)));
       }
   };
@@ -1909,10 +1940,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   <div className="flex items-center gap-2">
                       <button 
                         onClick={toggleSelectAll}
-                        className="text-xs text-n300 hover:text-n800 flex items-center gap-1"
+                        disabled={isLoadingAllShotsForSelection}
+                        className="text-xs text-n300 hover:text-n800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait"
                       >
-                         {selectedShotIds.size === selectedFile?.storyboard?.items.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
-                         全选
+                         {isLoadingAllShotsForSelection ? <CircleDashed className="w-4 h-4 animate-spin" /> : allStoryboardItemsSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                         {isLoadingAllShotsForSelection ? '加载全部...' : '全选'}
                       </button>
                       <span className="text-xs text-n100">
                           已选 {selectedShotIds.size} 项
