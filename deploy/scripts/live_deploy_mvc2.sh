@@ -33,6 +33,7 @@ FILES=(
   "Agent.md"
   "login.html"
   "admin"
+  "core"
   "dao"
   "docs"
   "pipeline"

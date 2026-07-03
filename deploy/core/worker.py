@@ -26,6 +26,7 @@ if current_dir not in sys.path:
 
 from cluster_config import WorkerConfig, ClusterConfig, ComfyUINode, RedisConfig
 from cluster_manager import ClusterManager
+from task_types import is_external_api_task as shared_is_external_api_task
 from task_queue import TaskQueue, Task, TaskStatus
 
 # 2026-05-24: MiniMax TTS 异步任务依赖（worker 内完成 5-10 分钟轮询，
@@ -61,11 +62,7 @@ def is_external_api_task(task_type: str) -> bool:
     任何新增的外部 API 任务族都必须加进 EXTERNAL_API_TASK_TYPES_EXACT 或 _PREFIXES，
     否则在 AGENT_ONLY_MODE=true（默认）下会被错误地丢回队列给 agent。
     """
-    if not task_type:
-        return False
-    if task_type in EXTERNAL_API_TASK_TYPES_EXACT:
-        return True
-    return any(task_type.startswith(p) for p in EXTERNAL_API_TASK_TYPE_PREFIXES)
+    return shared_is_external_api_task(task_type)
 
 # 🆕 导入数据库DAO
 try:

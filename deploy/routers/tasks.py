@@ -11,6 +11,7 @@ import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
+from core.task_types import is_external_api_task
 from schemas.generation import GenerateRequest
 from services.task_read_service import (
     delete_db_task,
@@ -19,6 +20,11 @@ from services.task_read_service import (
     list_user_tasks_response,
     soft_delete_user_file_by_path_fragment,
 )
+
+
+def _should_prepare_workflow(task_type: str) -> bool:
+    """Return whether /api/generate should attach a ComfyUI workflow."""
+    return not is_external_api_task(task_type)
 
 
 def create_task_router(
@@ -47,12 +53,13 @@ def create_task_router(
                 task_data["file_role"] = request.file_role
             if request.episode_id:
                 task_data["episode_id"] = request.episode_id
+            prepare_workflow = _should_prepare_workflow(request.task_type)
             task_id = await task_service_module.get().submit(
                 request.task_type,
                 task_data,
                 username,
                 priority=request.priority,
-                prepare=False,
+                prepare=prepare_workflow,
             )
             logger.info("用户 %s 创建任务 %s", username, task_id)
 
