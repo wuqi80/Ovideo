@@ -256,7 +256,7 @@ class WorkflowHandler:
             'prompt': task_data.get('prompt', ''),
             'prompt_AU': task_data.get('prompt_AU', ''),
             'seed': task_data.get('seed', -1),
-            'seed_0': task_data.get('seed', random.randint(100000, 999999)),  # 6位随机数
+            'seed_0': task_data.get('seed_0', task_data.get('seed', random.randint(100000, 999999))),  # 6位随机数
             'seed_1': task_data.get('seed', -1),  # 默认使用相同seed
             'seed_6': task_data.get('seed', random.randint(100000, 999999)),  # 6位随机数
             'image': task_data.get('uploaded_image', task_data.get('image', '')),

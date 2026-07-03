@@ -27,6 +27,41 @@ export interface GeneratedImageResult {
     fileId: string | null;
 }
 
+type ErrorNormalizeContext = Pick<ComfyUITaskRegistryMeta, 'kind' | 'title'>;
+
+function sanitizeComfyUIErrorDetail(message: string): string {
+    return message
+        .replace(/https?:\/\/127\.0\.0\.1:8188\/prompt/gi, '本地 ComfyUI /prompt')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function workflowLabelFromContext(message: string, context?: ErrorNormalizeContext): string {
+    const workflowMatch = message.match(/\bworkflow=([A-Za-z0-9_.-]+)/);
+    const workflow = workflowMatch?.[1];
+    const workflowLabels: Record<string, string> = {
+        I2I_FJ: '角度调整',
+        I2I_HUMAN: '多角度人物生成',
+        I2I_Around: '全景角度生成',
+        upscale_hd: '高清放大',
+        remove_watermark: '去水印',
+        three_view: '三视图',
+    };
+    if (workflow && workflowLabels[workflow]) return workflowLabels[workflow];
+
+    const titlePrefix = context?.title?.split('·')[0]?.trim();
+    if (titlePrefix) return titlePrefix;
+
+    const kindLabels: Partial<Record<TaskKind, string>> = {
+        'angle-adjust': '角度调整',
+        'video-upscale': '高清放大',
+        matting: '抠图/去水印',
+    };
+    if (context?.kind && kindLabels[context.kind]) return kindLabels[context.kind]!;
+
+    return '当前';
+}
+
 export function toQueueMeta(m: ComfyUITaskRegistryMeta): ComfyQueueRegistryMeta {
     return {
         title: m.title,
@@ -43,7 +78,7 @@ export function toQueueMeta(m: ComfyUITaskRegistryMeta): ComfyQueueRegistryMeta 
 
 export { getComfyUIQueueStatus };
 
-export function normalizeComfyUITaskError(error: unknown): string {
+export function normalizeComfyUITaskError(error: unknown, context?: ErrorNormalizeContext): string {
     const raw = error instanceof Error
         ? error.message
         : typeof error === 'string'
@@ -56,11 +91,15 @@ export function normalizeComfyUITaskError(error: unknown): string {
     }
 
     if (/400\s+Client Error|Bad Request/i.test(message) && /127\.0\.0\.1:8188\/prompt|\/prompt/i.test(message)) {
-        return '本地 ComfyUI 拒绝了角度调整工作流（HTTP 400）。请检查 GPU 机器是否安装 I2I_FJ 所需节点和模型，然后重试。';
+        const label = workflowLabelFromContext(message, context);
+        const detail = sanitizeComfyUIErrorDetail(message);
+        return `本地 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查 GPU 机器是否安装该工作流所需节点和模型，然后重试。详情：${detail}`;
     }
 
     if (/ComfyUI\s+\/prompt\s+failed:\s*HTTP\s+400/i.test(message)) {
-        return message.replace(/https?:\/\/127\.0\.0\.1:8188\/prompt/gi, '本地 ComfyUI /prompt');
+        const label = workflowLabelFromContext(message, context);
+        const detail = sanitizeComfyUIErrorDetail(message);
+        return `本地 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查 GPU 机器是否安装该工作流所需节点和模型，然后重试。详情：${detail}`;
     }
 
     if (/Task timed out/i.test(message)) {
@@ -71,7 +110,7 @@ export function normalizeComfyUITaskError(error: unknown): string {
         return '任务长时间未被 GPU Agent 接走，已被系统自动清理。请确认本地 GPU Agent 在线后再重试。';
     }
 
-    return message.replace(/https?:\/\/127\.0\.0\.1:8188\/prompt/gi, '本地 ComfyUI /prompt');
+    return sanitizeComfyUIErrorDetail(message);
 }
 
 function errorWithTaskId(message: string, taskId: string): Error {
@@ -204,7 +243,7 @@ export const waitForComfyUITask = async (
                     completeTask(registryKey, hasRegistryMeta, [url]);
                     finish(() => resolve(url));
                 } else if (status.status === 'failed') {
-                    const message = normalizeComfyUITaskError(status.error || 'Generation failed');
+                    const message = normalizeComfyUITaskError(status.error || 'Generation failed', registryMeta);
                     failTask(registryKey, hasRegistryMeta, message);
                     finish(() => reject(errorWithTaskId(message, taskId)));
                 }
@@ -213,7 +252,7 @@ export const waitForComfyUITask = async (
                 // 容忍若干次连续失败后才放弃，避免把正常生成中的镜头误判为失败。
                 consecutiveErrors += 1;
                 if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
-                    const message = normalizeComfyUITaskError(error?.message || 'Generation failed');
+                    const message = normalizeComfyUITaskError(error?.message || 'Generation failed', registryMeta);
                     failTask(registryKey, hasRegistryMeta, message);
                     finish(() => reject(errorWithTaskId(message, taskId)));
                 } else {
@@ -223,7 +262,7 @@ export const waitForComfyUITask = async (
         }, 2000);
 
         timeoutHandle = setTimeout(() => {
-            const message = normalizeComfyUITaskError('Task timed out');
+            const message = normalizeComfyUITaskError('Task timed out', registryMeta);
             failTask(registryKey, hasRegistryMeta, message);
             finish(() => reject(errorWithTaskId(message, taskId)));
         }, COMFYUI_TASK_TIMEOUT_MS);
@@ -280,7 +319,7 @@ export const waitForComfyUITaskAllImages = async (
                     completeTask(registryKey, hasRegistryMeta, results.map(r => r.url));
                     finish(() => resolve(results));
                 } else if (status.status === 'failed') {
-                    const message = normalizeComfyUITaskError(status.error || 'Generation failed');
+                    const message = normalizeComfyUITaskError(status.error || 'Generation failed', registryMeta);
                     failTask(registryKey, hasRegistryMeta, message);
                     finish(() => reject(errorWithTaskId(message, taskId)));
                 }
@@ -289,7 +328,7 @@ export const waitForComfyUITaskAllImages = async (
                 // 容忍若干次连续失败后才放弃，避免把正常生成中的镜头误判为失败。
                 consecutiveErrors += 1;
                 if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
-                    const message = normalizeComfyUITaskError(error?.message || 'Generation failed');
+                    const message = normalizeComfyUITaskError(error?.message || 'Generation failed', registryMeta);
                     failTask(registryKey, hasRegistryMeta, message);
                     finish(() => reject(errorWithTaskId(message, taskId)));
                 } else {
@@ -299,7 +338,7 @@ export const waitForComfyUITaskAllImages = async (
         }, 2000);
 
         timeoutHandle = setTimeout(() => {
-            const message = normalizeComfyUITaskError('Task timed out');
+            const message = normalizeComfyUITaskError('Task timed out', registryMeta);
             failTask(registryKey, hasRegistryMeta, message);
             finish(() => reject(errorWithTaskId(message, taskId)));
         }, COMFYUI_TASK_TIMEOUT_MS);

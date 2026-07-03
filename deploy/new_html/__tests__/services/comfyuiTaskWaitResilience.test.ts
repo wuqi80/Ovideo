@@ -65,4 +65,15 @@ describe('normalizeComfyUITaskError', () => {
     expect(message).toContain('HTTP 400');
     expect(message).not.toContain('127.0.0.1:8188');
   });
+
+  it('uses task context for ComfyUI prompt validation errors', () => {
+    const message = normalizeComfyUITaskError(
+      'task_type=upscale_hd workflow=upscale_hd ComfyUI /prompt failed: HTTP 400 missing SeedVR2',
+      { title: '高清放大 · abc123', kind: 'video-upscale' },
+    );
+
+    expect(message).toContain('高清放大工作流');
+    expect(message).toContain('SeedVR2');
+    expect(message).not.toContain('角度调整工作流');
+  });
 });

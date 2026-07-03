@@ -126,6 +126,13 @@ class ComfyUIAgent:
         if not port:
             return {"status": "failed", "error": "No healthy ComfyUI instance", "output_files": []}
 
+        task_type = task.get("task_type", "comfyui")
+        workflow_name = task.get("workflow_name")
+        if not workflow_name:
+            params = task.get("params", {}) or {}
+            workflow_name = params.get("workflow_name")
+        workflow_name = workflow_name or task_type
+
         workflow_json = task.get("workflow_json")
         if not workflow_json:
             params = task.get("params", {})
@@ -174,7 +181,10 @@ class ComfyUIAgent:
         if not resp.ok:
             return {
                 "status": "failed",
-                "error": f"ComfyUI /prompt failed: HTTP {resp.status_code} {resp.text[:1000]}",
+                "error": (
+                    f"task_type={task_type} workflow={workflow_name} "
+                    f"ComfyUI /prompt failed: HTTP {resp.status_code} {resp.text[:1000]}"
+                ),
                 "output_files": [],
             }
         prompt_id = resp.json().get("prompt_id")
