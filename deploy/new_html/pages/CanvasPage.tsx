@@ -36,6 +36,10 @@ import { generateGeminiImageVariant } from '../services/geminiImageGenerationSer
 import { generateWithComfyUIWorkflowQueued } from '../services/comfyuiGenerationService';
 import type { GeneratedImageResult } from '../services/comfyuiTaskWaitService';
 import { fetchComfyuiAvailable } from '../services/videoWorkflowService';
+import { minimaxTTSSync } from '../services/audioGenerationService';
+import { generateUUID, submitSeedanceTask } from '../services/videoTaskService';
+import { startVideoPoll } from '../services/videoTaskPoller';
+import type { SeedanceMediaInput } from '../services/videoModelService';
 import {
   createCanvasBoard,
   createCanvasConnection,
@@ -62,11 +66,41 @@ const selectedEdgeStyle = { stroke: '#f87171', strokeWidth: 4 };
 const edgeMarker = { type: MarkerType.ArrowClosed, color: '#7c83ff' };
 const selectedEdgeMarker = { type: MarkerType.ArrowClosed, color: '#f87171' };
 const CANVAS_IMAGE_MODEL = 'gemini-2.5-flash-image';
+const CANVAS_DEFAULT_VOICE_ID = 'presenter_male';
+const CANVAS_DEFAULT_VIDEO_PROMPT = '让参考画面自然动起来，保持人物与场景一致，动作连贯，镜头自然。';
 const EMPTY_REFERENCE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 type CanvasApiNode = Record<string, any>;
 type CanvasApiConnection = Record<string, any>;
 type CanvasGenerationMode = 'api' | 'gpu';
+type CanvasNodeKind = 'script' | 'image' | 'audio' | 'video';
+
+export type CanvasGenerationTarget =
+  | {
+      kind: 'image';
+      targetNodeId: string;
+      scriptNodeId: string;
+      text: string;
+      prompt: string;
+      hasPromptInput: boolean;
+    }
+  | {
+      kind: 'audio';
+      targetNodeId: string;
+      scriptNodeId?: string;
+      imageNodeId?: string;
+      text: string;
+    }
+  | {
+      kind: 'video';
+      targetNodeId: string;
+      scriptNodeId?: string;
+      imageNodeId?: string;
+      audioNodeId?: string;
+      imageUrl?: string;
+      audioUrl?: string;
+      prompt: string;
+    };
 
 
 const isDuplicateConnectionError = (error: unknown) => {
@@ -123,10 +157,190 @@ const getSerializableNodeData = (node: Node) => {
   return serializableData;
 };
 
+const isCanvasNodeKind = (node: Node | undefined, kind: CanvasNodeKind) => node?.type === kind;
+
+const getNodeText = (node: Node | undefined) => String(node?.data?.text || '').trim();
+const getImageUrl = (node: Node | undefined) => String(node?.data?.imageUrl || node?.data?.fileUrl || node?.data?.url || '').trim();
+const getAudioUrl = (node: Node | undefined) => String(node?.data?.audioUrl || node?.data?.fileUrl || node?.data?.url || '').trim();
+const getVideoUrl = (node: Node | undefined) => String(node?.data?.videoUrl || node?.data?.fileUrl || node?.data?.url || '').trim();
+
+const buildCanvasImagePrompt = (scriptText: string, instruction: string) => [
+  scriptText,
+  instruction ? `额外要求：${instruction}` : '',
+  '画面要求：高质量动漫/漫剧分镜风格，电影感构图，主体清晰，细节丰富。',
+].filter(Boolean).join('\n\n');
+
+const buildCanvasVideoPrompt = (scriptText: string, instruction: string) => {
+  const prompt = [
+    scriptText,
+    instruction ? `额外要求：${instruction}` : '',
+    '视频要求：基于参考画面生成自然连续的短镜头，保持人物、场景和画风一致，动作连贯。',
+  ].filter(Boolean).join('\n\n');
+  return prompt || CANVAS_DEFAULT_VIDEO_PROMPT;
+};
+
+const findConnectedNode = (
+  nodes: Node[],
+  edges: Edge[],
+  startNodeId: string,
+  kind: CanvasNodeKind,
+  direction: 'upstream' | 'downstream',
+  predicate: (node: Node) => boolean = () => true,
+) => {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+  const visited = new Set([startNodeId]);
+  const queue = [startNodeId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const linkedIds = edges
+      .filter((edge) => direction === 'upstream' ? edge.target === currentId : edge.source === currentId)
+      .map((edge) => direction === 'upstream' ? edge.source : edge.target);
+
+    for (const linkedId of linkedIds) {
+      if (visited.has(linkedId)) continue;
+      visited.add(linkedId);
+      const linkedNode = nodeMap.get(linkedId);
+      if (!linkedNode) continue;
+      if (isCanvasNodeKind(linkedNode, kind) && predicate(linkedNode)) return linkedNode;
+      queue.push(linkedId);
+    }
+  }
+
+  return undefined;
+};
+
+const buildImageTarget = (nodes: Node[], edges: Edge[], imageNode: Node, instruction: string): CanvasGenerationTarget | null => {
+  const scriptNode = findConnectedNode(nodes, edges, imageNode.id, 'script', 'upstream');
+  if (!scriptNode) return null;
+
+  const scriptText = getNodeText(scriptNode);
+  return {
+    kind: 'image',
+    targetNodeId: imageNode.id,
+    scriptNodeId: scriptNode.id,
+    text: scriptText,
+    prompt: buildCanvasImagePrompt(scriptText, instruction),
+    hasPromptInput: Boolean(scriptText || instruction),
+  };
+};
+
+const buildAudioTarget = (nodes: Node[], edges: Edge[], audioNode: Node, instruction: string): CanvasGenerationTarget => {
+  const scriptNode = findConnectedNode(nodes, edges, audioNode.id, 'script', 'upstream');
+  const imageNode = findConnectedNode(nodes, edges, audioNode.id, 'image', 'upstream');
+  const scriptText = getNodeText(scriptNode);
+  return {
+    kind: 'audio',
+    targetNodeId: audioNode.id,
+    scriptNodeId: scriptNode?.id,
+    imageNodeId: imageNode?.id,
+    text: scriptText || instruction,
+  };
+};
+
+const buildVideoTarget = (nodes: Node[], edges: Edge[], videoNode: Node, instruction: string): CanvasGenerationTarget => {
+  const scriptNode = findConnectedNode(nodes, edges, videoNode.id, 'script', 'upstream');
+  const imageNode = findConnectedNode(nodes, edges, videoNode.id, 'image', 'upstream');
+  const audioNode = findConnectedNode(nodes, edges, videoNode.id, 'audio', 'upstream');
+  const scriptText = getNodeText(scriptNode);
+
+  return {
+    kind: 'video',
+    targetNodeId: videoNode.id,
+    scriptNodeId: scriptNode?.id,
+    imageNodeId: imageNode?.id,
+    audioNodeId: audioNode?.id,
+    imageUrl: getImageUrl(imageNode),
+    audioUrl: getAudioUrl(audioNode),
+    prompt: buildCanvasVideoPrompt(scriptText, instruction),
+  };
+};
+
+const resolveFromSelectedImage = (nodes: Node[], edges: Edge[], imageNode: Node, instruction: string) => {
+  if (getImageUrl(imageNode)) {
+    const nextAudioNode = findConnectedNode(nodes, edges, imageNode.id, 'audio', 'downstream', (node) => !getAudioUrl(node));
+    if (nextAudioNode) return buildAudioTarget(nodes, edges, nextAudioNode, instruction);
+
+    const nextVideoNode = findConnectedNode(nodes, edges, imageNode.id, 'video', 'downstream', (node) => !getVideoUrl(node));
+    if (nextVideoNode) return buildVideoTarget(nodes, edges, nextVideoNode, instruction);
+  }
+
+  return buildImageTarget(nodes, edges, imageNode, instruction);
+};
+
+const resolveFromSelectedAudio = (nodes: Node[], edges: Edge[], audioNode: Node, instruction: string) => {
+  if (getAudioUrl(audioNode)) {
+    const nextVideoNode = findConnectedNode(nodes, edges, audioNode.id, 'video', 'downstream', (node) => !getVideoUrl(node));
+    if (nextVideoNode) return buildVideoTarget(nodes, edges, nextVideoNode, instruction);
+  }
+
+  return buildAudioTarget(nodes, edges, audioNode, instruction);
+};
+
+export const resolveCanvasGenerationTarget = (
+  nodes: Node[],
+  edges: Edge[],
+  selectedNodeIds: string[],
+  agentCommand: string,
+): CanvasGenerationTarget | null => {
+  const instruction = agentCommand.trim();
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+
+  for (const selectedNodeId of selectedNodeIds) {
+    const selectedNode = nodeMap.get(selectedNodeId);
+    if (isCanvasNodeKind(selectedNode, 'video')) return buildVideoTarget(nodes, edges, selectedNode, instruction);
+    if (isCanvasNodeKind(selectedNode, 'audio')) return resolveFromSelectedAudio(nodes, edges, selectedNode, instruction);
+    if (isCanvasNodeKind(selectedNode, 'image')) return resolveFromSelectedImage(nodes, edges, selectedNode, instruction);
+  }
+
+  for (const imageNode of nodes.filter((node) => isCanvasNodeKind(node, 'image') && !getImageUrl(node))) {
+    const target = buildImageTarget(nodes, edges, imageNode, instruction);
+    if (target) return target;
+  }
+
+  const emptyAudioNode = nodes.find((node) => isCanvasNodeKind(node, 'audio') && !getAudioUrl(node));
+  if (emptyAudioNode) return buildAudioTarget(nodes, edges, emptyAudioNode, instruction);
+
+  const emptyVideoNode = nodes.find((node) => isCanvasNodeKind(node, 'video') && !getVideoUrl(node));
+  if (emptyVideoNode) return buildVideoTarget(nodes, edges, emptyVideoNode, instruction);
+
+  const firstImageTarget = nodes
+    .filter((node) => isCanvasNodeKind(node, 'image'))
+    .map((node) => buildImageTarget(nodes, edges, node, instruction))
+    .find(Boolean);
+  if (firstImageTarget) return firstImageTarget;
+
+  const firstAudioNode = nodes.find((node) => isCanvasNodeKind(node, 'audio'));
+  if (firstAudioNode) return buildAudioTarget(nodes, edges, firstAudioNode, instruction);
+
+  const firstVideoNode = nodes.find((node) => isCanvasNodeKind(node, 'video'));
+  if (firstVideoNode) return buildVideoTarget(nodes, edges, firstVideoNode, instruction);
+
+  return null;
+};
+
+const getCanvasVideoResult = (status: any) => {
+  const result = status?.result || {};
+  const firstVideo = Array.isArray(result.videos) ? result.videos[0] : null;
+  return {
+    url: firstVideo?.url || result.video_url || result.file_url || result.url || '',
+    filename: firstVideo?.filename || result.filename || '',
+    generateTime: firstVideo?.generateTime ?? result.generateTime,
+  };
+};
+
+export const buildCanvasSeedanceVideoParams = (target: Extract<CanvasGenerationTarget, { kind: 'video' }>) => ({
+  media_inputs: target.imageUrl
+    ? [{ kind: 'image' as const, url: target.imageUrl, role: 'first_frame' as const }]
+    : [],
+  generate_audio: !target.audioUrl,
+});
+
 type CanvasEdgeOverlayProps = {
   wrapperRef: React.RefObject<HTMLDivElement | null>;
   edges: Edge[];
   selectedEdgeIds: string[];
+  nodePositionKey?: string;
   onEdgeSelect: (edgeId: string) => void;
 };
 
@@ -135,7 +349,7 @@ const getCssEscapedValue = (value: string) => {
   return value.replace(/["\\]/g, '\\$&');
 };
 
-const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ wrapperRef, edges, selectedEdgeIds, onEdgeSelect }) => {
+export const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ wrapperRef, edges, selectedEdgeIds, nodePositionKey, onEdgeSelect }) => {
   const viewport = useViewport();
   const selectedEdgeSet = useMemo(() => new Set(selectedEdgeIds), [selectedEdgeIds]);
   const [paths, setPaths] = useState<Array<{ id: string; path: string; hitPath: string }>>([]);
@@ -202,7 +416,7 @@ const CanvasEdgeOverlay: React.FC<CanvasEdgeOverlayProps> = ({ wrapperRef, edges
       window.removeEventListener('resize', measurePaths);
       resizeObserver?.disconnect();
     };
-  }, [measurePaths, viewport.x, viewport.y, viewport.zoom, wrapperRef]);
+  }, [measurePaths, viewport.x, viewport.y, viewport.zoom, wrapperRef, nodePositionKey]);
 
   if (paths.length === 0) return null;
 
@@ -307,6 +521,10 @@ const CanvasInner: React.FC = () => {
   }, []);
 
   const nodeIdsForInternals = useMemo(() => nodes.map((node) => node.id).join('|'), [nodes]);
+  const nodePositionKey = useMemo(
+    () => nodes.map((node) => `${node.id}:${node.position.x}:${node.position.y}:${node.width || ''}:${node.height || ''}`).join('|'),
+    [nodes],
+  );
 
   useEffect(() => {
     if (!nodeIdsForInternals) return;
@@ -602,36 +820,26 @@ const CanvasInner: React.FC = () => {
     selectEdge(edge.id);
   }, [selectEdge]);
 
-  const generateCanvasImage = useCallback(async () => {
-    if (isGenerating) return;
+  const persistGeneratedNodeData = useCallback(async (node: Node, nextData: Record<string, any>) => {
+    setNodes((current) => current.map((item) => (
+      item.id === node.id ? { ...item, data: { ...item.data, ...nextData } } : item
+    )));
+    await updateCanvasNode(node.id, { data: nextData });
+  }, [setNodes]);
 
+  const generateCanvasImageTarget = useCallback(async (target: Extract<CanvasGenerationTarget, { kind: 'image' }>) => {
     const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-    const selectedImageNodeId = selectedNodeIds.find((nodeId) => nodeMap.get(nodeId)?.type === 'image');
-    const imageFlowEdges = edges.filter((edge) => (
-      nodeMap.get(edge.source)?.type === 'script' && nodeMap.get(edge.target)?.type === 'image'
-    ));
-    const flowEdge = imageFlowEdges.find((edge) => !selectedImageNodeId || edge.target === selectedImageNodeId) || imageFlowEdges[0];
+    const imageNode = nodeMap.get(target.targetNodeId);
+    const scriptNode = nodeMap.get(target.scriptNodeId);
 
-    if (!flowEdge) {
-      setStatusText('请先将“脚本节点”的右侧圆点连接到“图片节点”的左侧圆点');
+    if (!imageNode || !scriptNode) {
+      setStatusText('请先将“剧本节点”的右侧圆点连接到“图片节点”的左侧圆点');
       return;
     }
-
-    const scriptNode = nodeMap.get(flowEdge.source);
-    const imageNode = nodeMap.get(flowEdge.target);
-    const scriptText = String(scriptNode?.data?.text || '').trim();
-    const instruction = agentCommand.trim();
-
-    if (!scriptNode || !imageNode || (!scriptText && !instruction)) {
-      setStatusText('请先在脚本节点或底部 AI 指令中输入要生成的内容');
+    if (!target.hasPromptInput) {
+      setStatusText('请先在剧本节点或底部 AI 指令中输入要生成的内容');
       return;
     }
-
-    const prompt = [
-      scriptText,
-      instruction ? `额外要求：${instruction}` : '',
-      '画面要求：高质量动漫/漫剧分镜风格，电影感构图，主体清晰，细节丰富。',
-    ].filter(Boolean).join('\n\n');
 
     setIsGenerating(true);
     setStatusText(generationMode === 'gpu' ? '正在提交本地GPU生成任务...' : '正在通过 API 生成图片...');
@@ -648,7 +856,7 @@ const CanvasInner: React.FC = () => {
 
         const gpuResults = await generateWithComfyUIWorkflowQueued(
           'qwen',
-          prompt,
+          target.prompt,
           EMPTY_REFERENCE_IMAGE,
           [],
           -1,
@@ -671,7 +879,7 @@ const CanvasInner: React.FC = () => {
       } else {
         const results = await generateGeminiImageVariant({
           model: CANVAS_IMAGE_MODEL,
-          prompt,
+          prompt: target.prompt,
           aspectRatio: '16:9',
           imageSize: '2K',
           entityType: 'canvas_node',
@@ -689,19 +897,16 @@ const CanvasInner: React.FC = () => {
         ...getSerializableNodeData(imageNode),
         imageUrl: generatedUrl,
         fileId: generatedFileId,
-        prompt,
+        prompt: target.prompt,
         generationMode,
         generatedAt: new Date().toISOString(),
         sourceScriptNodeId: scriptNode.id,
       };
 
-      setNodes((current) => current.map((node) => (
-        node.id === imageNode.id ? { ...node, data: { ...node.data, ...nextData } } : node
-      )));
-      await updateCanvasNode(imageNode.id, { data: nextData });
+      await persistGeneratedNodeData(imageNode, nextData);
       setSelectedNodeIds([imageNode.id]);
       setSelectedEdgeIds([]);
-      setStatusText(generationMode === 'gpu' ? 'GPU 图片已生成并写入图片节点' : 'API 图片已生成并写入图片节点');
+      setStatusText(generationMode === 'gpu' ? 'GPU 图片已生成并写入图片节点，可继续生成下游音频/视频' : 'API 图片已生成并写入图片节点，可继续生成下游音频/视频');
     } catch (error) {
       console.error('canvas image generation failed', error);
       const message = error instanceof Error ? error.message : '图片生成失败';
@@ -709,7 +914,217 @@ const CanvasInner: React.FC = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [agentCommand, edges, episodeId, generationMode, isGenerating, nodes, projectId, selectedNodeIds, setNodes]);
+  }, [episodeId, generationMode, nodes, persistGeneratedNodeData, projectId]);
+
+  const generateCanvasAudioTarget = useCallback(async (target: Extract<CanvasGenerationTarget, { kind: 'audio' }>) => {
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const audioNode = nodeMap.get(target.targetNodeId);
+    const text = target.text.trim();
+
+    if (!audioNode) {
+      setStatusText('请先添加或选中音频节点');
+      return;
+    }
+    if (!text) {
+      setStatusText('请先连接有文字的剧本节点，或在底部 AI 指令中输入要朗读的文本');
+      return;
+    }
+
+    setIsGenerating(true);
+    setStatusText('正在生成音频...');
+
+    try {
+      const result = await minimaxTTSSync({
+        text,
+        voice_id: CANVAS_DEFAULT_VOICE_ID,
+        speed: 1,
+        pitch: 0,
+        entity_type: 'canvas_node',
+        entity_id: audioNode.id,
+        file_role: 'canvas_audio',
+        episode_id: episodeId,
+      });
+      const audioUrl = result.audio_url || result.file_url || '';
+      if (!audioUrl) throw new Error('音频生成接口未返回 audio_url');
+
+      const nextData = {
+        ...getSerializableNodeData(audioNode),
+        audioUrl,
+        fileId: result.file_id,
+        fileUrl: result.file_url,
+        durationMs: result.duration_ms,
+        text,
+        voiceId: CANVAS_DEFAULT_VOICE_ID,
+        generatedAt: new Date().toISOString(),
+        sourceScriptNodeId: target.scriptNodeId,
+        sourceImageNodeId: target.imageNodeId,
+      };
+
+      await persistGeneratedNodeData(audioNode, nextData);
+      setSelectedNodeIds([audioNode.id]);
+      setSelectedEdgeIds([]);
+      setStatusText('音频已生成并写入音频节点，可继续生成下游视频');
+    } catch (error) {
+      console.error('canvas audio generation failed', error);
+      const message = error instanceof Error ? error.message : '音频生成失败';
+      setStatusText(`音频生成失败：${message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [episodeId, nodes, persistGeneratedNodeData]);
+
+  const generateCanvasVideoTarget = useCallback(async (target: Extract<CanvasGenerationTarget, { kind: 'video' }>) => {
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const videoNode = nodeMap.get(target.targetNodeId);
+
+    if (!videoNode) {
+      setStatusText('请先添加或选中视频节点');
+      return;
+    }
+    if (!target.imageUrl) {
+      setStatusText('请先生成上游图片，或将已有图片节点连接到视频节点');
+      return;
+    }
+
+    const videoParams = buildCanvasSeedanceVideoParams(target);
+    const mediaInputs: SeedanceMediaInput[] = videoParams.media_inputs;
+    const prompt = target.prompt || CANVAS_DEFAULT_VIDEO_PROMPT;
+    const submittedAt = new Date().toISOString();
+
+    setIsGenerating(true);
+    setStatusText(target.audioUrl ? '正在提交视频生成任务（先按图片生成，音频节点保留用于后续合成）...' : '正在提交视频生成任务...');
+
+    try {
+      const response = await submitSeedanceTask({
+        sub_model: 'fast',
+        prompt,
+        media_inputs: mediaInputs,
+        resolution: '720p',
+        ratio: 'adaptive',
+        duration: 5,
+        generate_audio: videoParams.generate_audio,
+      }, {
+        entity_type: 'canvas_node',
+        entity_id: videoNode.id,
+        file_role: 'canvas_video',
+        episode_id: episodeId,
+      });
+
+      const backendTaskId = response.task_id;
+      if (!backendTaskId) throw new Error('视频生成接口未返回 task_id');
+
+      const pendingData = {
+        ...getSerializableNodeData(videoNode),
+        taskId: backendTaskId,
+        taskStatus: 'processing',
+        prompt,
+        mediaInputs,
+        submittedAt,
+        sourceScriptNodeId: target.scriptNodeId,
+        sourceImageNodeId: target.imageNodeId,
+        sourceAudioNodeId: target.audioNodeId,
+      };
+
+      await persistGeneratedNodeData(videoNode, pendingData);
+      setSelectedNodeIds([videoNode.id]);
+      setSelectedEdgeIds([]);
+
+      startVideoPoll(`canvas-video:${videoNode.id}:${generateUUID()}`, {
+        taskId: backendTaskId,
+        title: '画布视频生成',
+        kind: 'seedance-fast',
+        targetPage: 'canvas',
+        targetEntityType: 'canvas_node',
+        targetEntityId: videoNode.id,
+        episodeId,
+        projectId,
+        callbacks: {
+          onProgress: (progress) => {
+            const displayProgress = progress > 1 ? Math.round(progress) : Math.round(progress * 100);
+            setStatusText(`视频生成中 ${displayProgress}%...`);
+          },
+          onComplete: ({ status }) => {
+            const result = getCanvasVideoResult(status);
+            if (!result.url) {
+              setStatusText('视频任务已完成，但后端未返回视频地址');
+              return;
+            }
+
+            const nextData = {
+              ...pendingData,
+              videoUrl: result.url,
+              videoFilename: result.filename,
+              videoGenerateTime: result.generateTime,
+              taskStatus: 'completed',
+              completedAt: new Date().toISOString(),
+              generatedAt: new Date().toISOString(),
+            };
+
+            persistGeneratedNodeData(videoNode, nextData)
+              .then(() => setStatusText('视频已生成并写入视频节点'))
+              .catch((error) => {
+                console.warn('persist canvas video result failed', error);
+                setStatusText('视频已生成，但写入视频节点失败，请刷新后检查任务历史');
+              });
+          },
+          onFail: (error) => {
+            setStatusText(`视频生成失败：${error}`);
+            const nextData = {
+              ...pendingData,
+              taskStatus: 'failed',
+              error,
+            };
+            persistGeneratedNodeData(videoNode, nextData).catch((persistError) => {
+              console.warn('persist canvas video failure failed', persistError);
+            });
+          },
+        },
+      });
+
+      setStatusText(target.audioUrl ? '视频任务已提交，完成后会写入视频节点；音频节点暂不传入 Seedance' : '视频任务已提交；上游音频为空，将由视频模型自行生成或保持无音频');
+    } catch (error) {
+      console.error('canvas video generation failed', error);
+      const message = error instanceof Error ? error.message : '视频生成失败';
+      setStatusText(`视频生成失败：${message}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [episodeId, nodes, persistGeneratedNodeData, projectId]);
+
+  const generateCanvasContent = useCallback(async () => {
+    if (isGenerating) return;
+
+    const target = resolveCanvasGenerationTarget(nodes, edges, selectedNodeIds, agentCommand);
+    if (!target) {
+      setStatusText('请先添加并连接剧本、图片、音频或视频节点');
+      return;
+    }
+
+    if (target.kind === 'image') {
+      await generateCanvasImageTarget(target);
+      return;
+    }
+    if (target.kind === 'audio') {
+      await generateCanvasAudioTarget(target);
+      return;
+    }
+    await generateCanvasVideoTarget(target);
+  }, [agentCommand, edges, generateCanvasAudioTarget, generateCanvasImageTarget, generateCanvasVideoTarget, isGenerating, nodes, selectedNodeIds]);
+
+  const currentGenerationTarget = useMemo(
+    () => resolveCanvasGenerationTarget(nodes, edges, selectedNodeIds, agentCommand),
+    [agentCommand, edges, nodes, selectedNodeIds],
+  );
+
+  const generateButtonLabel = isGenerating
+    ? '生成中'
+    : currentGenerationTarget?.kind === 'audio'
+      ? '生成音频'
+      : currentGenerationTarget?.kind === 'video'
+        ? '生成视频'
+        : generationMode === 'gpu'
+          ? 'GPU生成'
+          : '生成图片';
 
   const goToWorkflow = () => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script`);
@@ -754,6 +1169,7 @@ const CanvasInner: React.FC = () => {
           wrapperRef={reactFlowWrapper}
           edges={edges}
           selectedEdgeIds={selectedEdgeIds}
+          nodePositionKey={nodePositionKey}
           onEdgeSelect={selectEdge}
         />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#333" />
@@ -925,7 +1341,7 @@ const CanvasInner: React.FC = () => {
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  generateCanvasImage();
+                  generateCanvasContent();
                 }
               }}
               placeholder="AI 指令：描述你想创建的内容..."
@@ -935,14 +1351,14 @@ const CanvasInner: React.FC = () => {
               }}
             />
             <button
-              onClick={generateCanvasImage}
+              onClick={generateCanvasContent}
               disabled={isGenerating}
               style={{
               padding: '6px 16px', background: isGenerating ? '#4b5563' : '#7c83ff', color: '#fff',
               border: 'none', borderRadius: '6px', cursor: isGenerating ? 'wait' : 'pointer',
               fontSize: '13px'
             }}>
-              {isGenerating ? '生成中' : generationMode === 'gpu' ? 'GPU生成' : '生成'}
+              {generateButtonLabel}
             </button>
           </div>
         </Panel>
