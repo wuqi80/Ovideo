@@ -75,6 +75,7 @@ import { createVideoSegment } from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
+import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
@@ -1487,28 +1488,16 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     // ==================== 任务执行 ====================
     
-    // 辅助函数：从URL提取file_id
-    const extractFileId = (url: string): string | null => {
-        const match = url.match(/\/api\/files\/(file_[a-f0-9]+)/);
-        return match ? match[1] : null;
-    };
-    
     // 辅助函数：获取图片标识符（外部API使用file_id，ComfyUI使用filename）
     const getImageIdentifier = (img: UploadedImage, isExternalAPI: boolean): string => {
-        if (isExternalAPI) {
-            // 外部API模型（大能、Sora2、Veo、MINI）：需要file_id
-            // 优先使用storageUrl中的file_id
-            const storageUrl = img.storageUrl || img.url;
-            const fileId = extractFileId(storageUrl);
-            if (fileId) {
-                console.log('🌐 外部API使用file_id:', fileId);
-                return fileId;
-            }
-            // 回退到filename（可能不起作用，但作为最后尝试）
-            console.warn('⚠️ 无法提取file_id，使用filename:', img.filename);
+        const identifier = resolveVideoImageIdentifier(img, isExternalAPI);
+        if (isExternalAPI && identifier.startsWith('file_')) {
+            console.log('🌐 外部API使用file_id:', identifier);
         }
-        // ComfyUI工作流：使用filename
-        return img.filename || img.url.split('/').pop() || '';
+        if (!identifier) {
+            console.warn('⚠️ 无法获取图片真实引用:', img);
+        }
+        return identifier;
     };
     
     // uuid(任务组) → 真实 video_segments.segment_id 缓存，避免重跑任务重复建 segment 行。
