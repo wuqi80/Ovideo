@@ -610,6 +610,7 @@ async def admin_import_workflows():
                 update_fields["workflow_key"] = str(category_key)
 
             disk_placeholder_names = {str(p.get("key", "")) for p in ph_objs if isinstance(p, dict)}
+            disk_workflow_placeholder_names = set(_placeholder_names_from_workflow_json(workflow_json))
             existing_placeholders = _jsonb_to_python(existing.get("placeholders")) or []
             existing_placeholder_names = {
                 str(p.get("key", ""))
@@ -619,9 +620,9 @@ async def admin_import_workflows():
             existing_workflow_json = _jsonb_to_python(existing.get("workflow_json")) or {}
             existing_workflow_placeholders = set(_placeholder_names_from_workflow_json(existing_workflow_json))
 
-            if disk_placeholder_names and not disk_placeholder_names.issubset(existing_placeholder_names):
+            if disk_placeholder_names and existing_placeholder_names != disk_placeholder_names:
                 update_fields["placeholders"] = ph_objs
-            if disk_placeholder_names and not disk_placeholder_names.issubset(existing_workflow_placeholders):
+            if disk_workflow_placeholder_names and not disk_workflow_placeholder_names.issubset(existing_workflow_placeholders):
                 update_fields["workflow_json"] = workflow_json
 
             if update_fields:

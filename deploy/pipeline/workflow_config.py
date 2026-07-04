@@ -59,13 +59,9 @@ WORKFLOW_CONFIGS = {
         name='图片上传工作流',
         file='image_upload.json',
         description='用于上传图片后的处理工作流',
-        placeholders=['image', 'seed'],
+        placeholders=['image'],
         param_mapping={
-            'image_data': 'image',  # 前端的 image_data 映射到工作流的 {image}
-            'seed': 'seed'
-        },
-        default_params={
-            'seed': -1  # -1 表示随机
+            'image_data': 'image'  # 前端的 image_data 映射到工作流的 {image}
         }
     ),
     # Wan2 I2V 工作流
@@ -397,13 +393,9 @@ WORKFLOW_CONFIGS = {
         name='多角度人物生成',
         file='I2I_HUMAN.json',
         description='基于单张参考图进行多角度人物生成',
-        placeholders=['image', 'seed'],
+        placeholders=['image'],
         param_mapping={
-            'image_data': 'image',  # 单张输入图
-            'seed': 'seed'
-        },
-        default_params={
-            'seed': -1
+            'image_data': 'image'  # 单张输入图
         }
     ),
 
@@ -428,14 +420,9 @@ WORKFLOW_CONFIGS = {
         name='全景角度生成',
         file='I2I_Around.json',
         description='基于单张参考图生成全景/环绕角度结果',
-        placeholders=['image', 'prompt', 'seed'],
+        placeholders=['image'],
         param_mapping={
-            'image_data': 'image',
-            'prompt': 'prompt',
-            'seed': 'seed'
-        },
-        default_params={
-            'seed': -1
+            'image_data': 'image'
         }
     ),
 
@@ -474,9 +461,9 @@ WORKFLOW_CONFIGS = {
         name='Qwen图像生成(1张)',
         file='qwen_1.json',
         description='基于Qwen模型的高质量图像生成(1张参考图)',
-        placeholders=['image', 'prompt', 'seed'],
+        placeholders=['image_1', 'prompt', 'seed'],
         param_mapping={
-            'image_data': 'image',
+            'image_1': 'image_1',
             'prompt': 'prompt',
             'seed': 'seed'
         },
@@ -700,10 +687,9 @@ WORKFLOW_CONFIGS = {
         name='Kontext图像生成',
         file='Kontext.json',
         description='基于Kontext模型的上下文连贯图像生成',
-        placeholders=['image', 'ref_images', 'prompt', 'negative_prompt', 'seed'],
+        placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
-            'ref_images': 'ref_images',
             'prompt': 'prompt',
             'negative_prompt': 'negative_prompt',
             'seed': 'seed'
@@ -719,9 +705,9 @@ WORKFLOW_CONFIGS = {
         name='Qwen LoRA图像生成(1张)',
         file='qwen_lora_1.json',
         description='基于Qwen LoRA模型的高质量图像生成(1张参考图)',
-        placeholders=['image', 'prompt', 'seed'],
+        placeholders=['image_1', 'prompt', 'seed'],
         param_mapping={
-            'image_data': 'image',
+            'image_1': 'image_1',
             'prompt': 'prompt',
             'seed': 'seed'
         },
