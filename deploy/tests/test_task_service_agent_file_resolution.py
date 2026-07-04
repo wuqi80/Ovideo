@@ -32,9 +32,24 @@ class _FileDAO:
 class _WorkflowHandler:
     calls = []
 
-    def build_workflow_for_task(self, task_type, task_data):
-        self.calls.append((task_type, dict(task_data)))
+    def resolve_workflow_name(self, task_type, _task_data):
+        return {"upscale_hd": "upscale_hd"}.get(task_type, task_type)
+
+    def build_workflow_for_task(self, task_type, task_data, workflow_override=None):
+        self.calls.append((task_type, dict(task_data), workflow_override))
+        if workflow_override is not None:
+            return workflow_override
         return {"node": {"inputs": {"image": task_data.get("uploaded_image")}}}
+
+
+class _WorkflowTemplateDAO:
+    row = None
+
+    @classmethod
+    async def get_enabled_by_key(cls, workflow_key):
+        if cls.row and cls.row.get("workflow_key") == workflow_key:
+            return cls.row
+        return None
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +62,9 @@ def fake_dependencies(monkeypatch):
         SimpleNamespace(get_workflow_handler=lambda: handler),
     )
     monkeypatch.setitem(sys.modules, "dao_content", SimpleNamespace(FileDAO=_FileDAO))
+    monkeypatch.setitem(sys.modules, "dao_workflow_template", SimpleNamespace(WorkflowTemplateDAO=_WorkflowTemplateDAO))
     _FileDAO.record = None
+    _WorkflowTemplateDAO.row = None
     return handler
 
 
@@ -132,3 +149,22 @@ async def test_prepare_rejects_storyboard_display_filename_without_file_record(f
         await TaskService(_Redis())._prepare_for_agent("i2v", task_data, "admin")
 
     assert "展示文件名" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_prepare_prefers_enabled_workflow_template(fake_dependencies):
+    full_template = {
+        "node_1": {"class_type": "LoadImage", "inputs": {"image": "{image}"}},
+        "node_2": {"class_type": "SeedVR2", "inputs": {"images": ["node_1", 0]}},
+    }
+    _WorkflowTemplateDAO.row = {
+        "workflow_key": "upscale_hd",
+        "workflow_json": full_template,
+    }
+    task_data = {"image_path": "input.png", "seed_0": 123456}
+
+    await TaskService(_Redis())._prepare_for_agent("upscale_hd", task_data, "admin")
+
+    assert task_data["workflow_name"] == "upscale_hd"
+    assert task_data["workflow_json"] is full_template
+    assert fake_dependencies.calls[0][2] is full_template

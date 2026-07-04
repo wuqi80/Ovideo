@@ -157,21 +157,13 @@ class WorkflowHandler:
         """生成6位随机数"""
         # 生成 100000 到 999999 之间的随机数
         return random.randint(100000, 999999)
-    
-    def build_workflow_for_task(self, task_type: str, task_data: Dict[str, Any]) -> Dict:
+
+    def resolve_workflow_name(self, task_type: str, task_data: Dict[str, Any]) -> str:
         """
-        为任务构建工作流
-        
-        Args:
-            task_type: 任务类型 (i2v, morph, qwen_1, qwen_lora_2, i2i_fj, etc.)
-            task_data: 任务数据，包含 image_path, prompt, model 等
-        
-        Returns:
-            处理后的工作流JSON
+        根据任务类型和模型参数解析 workflow key。
         """
-        # 获取模型参数（用于选择不同的工作流变体）
         model = task_data.get('model', 'Wan2')
-        
+
         # 🆕 模型到工作流前缀的映射
         model_workflow_prefix = {
             'Wan2': 'wan2',
@@ -237,12 +229,34 @@ class WorkflowHandler:
                 workflow_name = task_type
             else:
                 raise ValueError(f"不支持的任务类型: {task_type}")
+
+        return workflow_name
+
+    def build_workflow_for_task(
+        self,
+        task_type: str,
+        task_data: Dict[str, Any],
+        workflow_override: Optional[Dict[str, Any]] = None,
+    ) -> Dict:
+        """
+        为任务构建工作流
         
+        Args:
+            task_type: 任务类型 (i2v, morph, qwen_1, qwen_lora_2, i2i_fj, etc.)
+            task_data: 任务数据，包含 image_path, prompt, model 等
+            workflow_override: 后台 workflow_templates 中的完整工作流；为空时回退磁盘文件
+        
+        Returns:
+            处理后的工作流JSON
+        """
+        workflow_name = self.resolve_workflow_name(task_type, task_data)
+
         # 获取工作流模板
-        workflow = self.get_workflow(workflow_name)
+        workflow = workflow_override if workflow_override is not None else self.get_workflow(workflow_name)
         if workflow is None:
             raise ValueError(f"找不到工作流: {workflow_name}")
-        workflow = self.extract_executable_nodes(workflow, workflow_name)
+        if workflow_override is None:
+            workflow = self.extract_executable_nodes(workflow, workflow_name)
         executable_nodes = list(workflow.values())
         if not executable_nodes:
             raise ValueError(f"工作流模板 {workflow_name}.json 不是可执行的 ComfyUI 节点图，请在后台导入完整 workflow JSON")

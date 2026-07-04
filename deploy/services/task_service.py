@@ -208,25 +208,42 @@ class TaskService:
                     task_data[f"uploaded_image_{suffix}"] = task_data[src]
 
             wh = get_workflow_handler()
-            workflow_json = wh.build_workflow_for_task(task_type, task_data)
-            task_data["workflow_json"] = workflow_json
-            task_data.setdefault(
-                "workflow_name",
-                {
-                    "i2i_fj": "I2I_FJ",
-                    "i2i_human": "I2I_HUMAN",
-                    "i2i_around": "I2I_Around",
-                    "upscale_hd": "upscale_hd",
-                    "remove_watermark": "remove_watermark",
-                    "three_view": "three_view",
-                }.get(task_type, task_type),
+            workflow_name = wh.resolve_workflow_name(task_type, task_data)
+            workflow_override = await self._load_workflow_template(task_type, workflow_name)
+            workflow_json = wh.build_workflow_for_task(
+                task_type,
+                task_data,
+                workflow_override=workflow_override,
             )
+            task_data["workflow_json"] = workflow_json
+            task_data.setdefault("workflow_name", workflow_name)
 
             task_data["agent_files"] = agent_files
             logger.info(f"✅ Pre-built workflow for {task_type}, {len(agent_files)} agent files")
         except Exception as e:
             logger.exception(f"prepare_task_for_agent failed for {task_type}: {e}")
             raise HTTPException(status_code=500, detail=f"任务预处理失败: {e}")
+
+    async def _load_workflow_template(self, task_type: str, workflow_name: str) -> Optional[dict]:
+        try:
+            from dao_workflow_template import WorkflowTemplateDAO
+
+            get_enabled_by_key = getattr(WorkflowTemplateDAO, "get_enabled_by_key", None)
+            if not get_enabled_by_key:
+                return None
+            seen = set()
+            for key in (task_type, workflow_name):
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                row = await get_enabled_by_key(key)
+                workflow_json = row.get("workflow_json") if row else None
+                if isinstance(workflow_json, dict) and workflow_json:
+                    logger.info("✅ 使用后台工作流模板: %s -> %s (%s nodes)", key, workflow_name, len(workflow_json))
+                    return workflow_json
+        except Exception as exc:
+            logger.warning("加载后台工作流模板失败，回退磁盘工作流 %s: %s", workflow_name, exc)
+        return None
 
     async def _resolve_agent_file(self, param: str, file_ref, username: str) -> Optional[dict]:
         if not file_ref or not isinstance(file_ref, str) or not file_ref.strip():

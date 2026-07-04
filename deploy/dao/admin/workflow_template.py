@@ -74,6 +74,27 @@ class WorkflowTemplateDAO:
         )
 
     @staticmethod
+    async def get_enabled_by_key(workflow_key: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db or not workflow_key:
+            return None
+        row = await db.fetchrow(
+            """
+            SELECT * FROM workflow_templates
+            WHERE workflow_key = $1 AND enabled = TRUE
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """,
+            workflow_key,
+        )
+        if row and isinstance(row.get("workflow_json"), str):
+            try:
+                row["workflow_json"] = json.loads(row["workflow_json"])
+            except Exception:
+                pass
+        return row
+
+    @staticmethod
     async def list_all() -> List[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
