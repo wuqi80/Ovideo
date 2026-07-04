@@ -18,10 +18,13 @@ import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
 import type { AssetItem } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
+import { isAssetImageFileRole } from '../utils/assetImageRoles';
 
 type AssetTab = 'character' | 'scene' | 'prop';
 type MaterialAIEngine = 'nanobanana' | 'doubao';
 interface ModalMaterial { id: string; url: string; thumbnail?: string; name?: string }
+type AssetEntityFile = NonNullable<AssetItem['entityFiles']>[number];
+type RawAssetImage = { key: string; rawUrl: string; fileId?: string };
 
 const TAB_CONFIG: { key: AssetTab; label: string; Icon: React.FC<{ size?: number }> }[] = [
   { key: 'character', label: '人物', Icon: User },
@@ -85,6 +88,39 @@ function isAssetNotFoundError(error: unknown): boolean {
   return err?.status === 404 || /(^|\D)404(\D|$)|资产不存在|not found/i.test(msg);
 }
 
+function getLegacyAssetImageUrls(asset: AssetItem): string[] {
+  const urls = [...(asset.referenceImages || [])];
+  if (asset.thumbnailUrl && !urls.includes(asset.thumbnailUrl)) urls.unshift(asset.thumbnailUrl);
+  return urls.filter(Boolean);
+}
+
+function getSortedAssetImageFiles(entityFiles: AssetEntityFile[] | undefined): AssetEntityFile[] {
+  return (entityFiles || [])
+    .filter(f => isAssetImageFileRole(f.fileRole) && Boolean(f.fileUrl))
+    .sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
+}
+
+function collectAssetImages(assetId: string, entityFiles: AssetEntityFile[] | undefined, legacyImages: string[]): RawAssetImage[] {
+  const images: RawAssetImage[] = [];
+  const seenUrls = new Set<string>();
+  const pushImage = (url: string | null | undefined, key: string, fileId?: string) => {
+    if (!url || seenUrls.has(url)) return;
+    seenUrls.add(url);
+    images.push({ key, rawUrl: url, fileId });
+  };
+
+  legacyImages.forEach((url, index) => pushImage(url, `${assetId}_legacy_${index}`));
+  getSortedAssetImageFiles(entityFiles).forEach((file, index) => {
+    pushImage(file.fileUrl, file.fileId || `${assetId}_entity_${index}`, file.fileId);
+  });
+
+  return images;
+}
+
+function assetHasDesignImages(asset: AssetItem): boolean {
+  return collectAssetImages(asset.assetId, asset.entityFiles, getLegacyAssetImageUrls(asset)).length > 0;
+}
+
 async function ensureDataUrl(input: string): Promise<string> {
   if (!input) throw new Error('图片URL无效');
   if (input.startsWith('data:')) return input;
@@ -99,18 +135,8 @@ async function ensureDataUrl(input: string): Promise<string> {
 const randomSeed = () => Math.floor(Math.random() * 900000000000000) + 100000000000000;
 
 function assetToMaterials(asset: AssetItem): ModalMaterial[] {
-  const mats: ModalMaterial[] = [];
-  const efRefs = (asset.entityFiles || [])
-    .filter(f => f.fileRole === 'reference_image')
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  if (efRefs.length > 0) {
-    efRefs.forEach((f, i) => { mats.push({ id: `${asset.assetId}_${i}`, url: f.fileUrl, name: asset.name }); });
-  } else {
-    const allImages = [...(asset.referenceImages || [])];
-    if (asset.thumbnailUrl && !allImages.includes(asset.thumbnailUrl)) allImages.unshift(asset.thumbnailUrl);
-    allImages.forEach((url, i) => { if (url) mats.push({ id: `${asset.assetId}_${i}`, url, name: asset.name }); });
-  }
-  return mats;
+  return collectAssetImages(asset.assetId, asset.entityFiles, getLegacyAssetImageUrls(asset))
+    .map((img, index) => ({ id: `${asset.assetId}_${index}`, url: img.rawUrl, name: asset.name }));
 }
 
 /* ---- AI Describe Prompt ---- */
@@ -128,34 +154,22 @@ function buildRefinePrompt(assetType: string, assetName: string, existingDesc: s
 /* ======================== Asset Image Row (entity-file backed) ======================== */
 const AssetImageRow: React.FC<{
   assetId: string;
-  entityFiles: Array<{ fileId: string; fileUrl: string; fileRole: string; createdAt: string }>;
+  entityFiles: AssetEntityFile[];
   legacyImages: string[];
   onLightbox: (url: string) => void;
   onDeleteImage: (assetId: string, imageUrl: string, fileId?: string) => void;
   busy: boolean;
 }> = ({ assetId, entityFiles, legacyImages, onLightbox, onDeleteImage, busy }) => {
-  const efRefs = useMemo(() =>
-    entityFiles
-      .filter(f => f.fileRole === 'reference_image')
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [entityFiles],
-  );
-
   const images: { key: string; displayUrl: string; rawUrl: string; fileId?: string }[] = useMemo(() => {
-    if (efRefs.length > 0) {
-      return efRefs.map(f => ({
-        key: f.fileId,
-        displayUrl: secureMediaUrl(f.fileUrl) || '',
-        rawUrl: f.fileUrl,
-        fileId: f.fileId,
-      })).filter(i => i.displayUrl);
-    }
-    return legacyImages.map((url, i) => ({
-      key: `${assetId}_legacy_${i}`,
-      displayUrl: secureMediaUrl(url) || '',
-      rawUrl: url,
-    })).filter(i => i.displayUrl);
-  }, [efRefs, legacyImages, assetId]);
+    return collectAssetImages(assetId, entityFiles, legacyImages)
+      .map(img => ({
+        key: img.key,
+        displayUrl: secureMediaUrl(img.rawUrl) || '',
+        rawUrl: img.rawUrl,
+        fileId: img.fileId,
+      }))
+      .filter(i => i.displayUrl);
+  }, [assetId, entityFiles, legacyImages]);
 
   if (images.length === 0) return null;
   return (
@@ -213,14 +227,14 @@ export const DesignPage: React.FC = () => {
   const [batchModal, setBatchModal] = useState(false);
 
   const filtered = useMemo(() => assets.filter(a => a.assetType === tab), [assets, tab]);
-  const hasDesign = (a: AssetItem) => (a.entityFiles || []).some(f => f.fileRole === 'reference_image') || a.thumbnailUrl || (a.referenceImages?.length > 0);
-  const totalDesignedCount = assets.filter(hasDesign).length;
-  const tabDesignedCount = filtered.filter(hasDesign).length;
+  const assetHasDesign = (a: AssetItem) => assetHasDesignImages(a);
+  const totalDesignedCount = assets.filter(assetHasDesign).length;
+  const tabDesignedCount = filtered.filter(assetHasDesign).length;
   const scriptText = script?.adaptedScript || script?.originalContent || '';
 
   const toggleSelect = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectAllFiltered = () => setSelectedIds(new Set(filtered.map(a => a.assetId)));
-  const selectUndesigned = () => setSelectedIds(new Set(filtered.filter(a => !hasDesign(a)).map(a => a.assetId)));
+  const selectUndesigned = () => setSelectedIds(new Set(filtered.filter(a => !assetHasDesign(a)).map(a => a.assetId)));
   const isBusy = (id: string) => busyAssetId === id || uploadingId === id || deletingId === id;
 
   /* ---- CRUD ---- */
@@ -502,9 +516,8 @@ export const DesignPage: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {filtered.map((asset) => {
-                const hasDesign = !!(asset.thumbnailUrl || (asset.referenceImages?.length > 0));
-                const legacyImgs = [...(asset.referenceImages || [])];
-                if (asset.thumbnailUrl && !legacyImgs.includes(asset.thumbnailUrl)) legacyImgs.unshift(asset.thumbnailUrl);
+                const hasDesign = assetHasDesign(asset);
+                const legacyImgs = getLegacyAssetImageUrls(asset);
                 const busy = isBusy(asset.assetId);
                 const checked = selectedIds.has(asset.assetId);
                 return (

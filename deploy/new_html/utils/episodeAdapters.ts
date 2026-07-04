@@ -8,12 +8,12 @@ import type {
   ProjectFile, StoryboardItem, StoryboardData,
   FileStatus, FileVersion, GeneratedImage,
 } from '../types';
+import { isAssetImageFileRole } from './assetImageRoles';
 
 const CHAR_PREFIX = 'char:';
 const SCENE_PREFIX = 'scene:';
 const SEL_PREFIX = 'sel:';
 const NOSEL_PREFIX = 'nosel:';
-const ASSET_MATERIAL_FILE_ROLES = new Set(['reference_image', 'material_image', 'generated_image']);
 
 export function parseBoundAssetTags(boundAssets: string[]): {
   charNames: string[];
@@ -48,7 +48,7 @@ export function parseBoundAssetTags(boundAssets: string[]): {
 }
 
 function assetHasImages(asset: AssetItem): boolean {
-  const ef = (asset.entityFiles || []).filter(f => ASSET_MATERIAL_FILE_ROLES.has(f.fileRole));
+  const ef = (asset.entityFiles || []).filter(f => isAssetImageFileRole(f.fileRole));
   if (ef.length > 0) return true;
   const refs = Array.isArray(asset.referenceImages) ? asset.referenceImages.filter(Boolean) : [];
   return refs.length > 0 || !!asset.thumbnailUrl;
@@ -262,7 +262,7 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
     });
 
     const efImages = (asset.entityFiles || [])
-      .filter(f => ASSET_MATERIAL_FILE_ROLES.has(f.fileRole) && Boolean(f.fileUrl))
+      .filter(f => isAssetImageFileRole(f.fileRole) && Boolean(f.fileUrl))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     efImages.forEach((f) => {
       pushMaterial(f.fileUrl, f.fileUrl, `entity_file:${f.fileRole}`);

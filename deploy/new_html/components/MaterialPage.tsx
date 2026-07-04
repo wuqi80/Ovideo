@@ -6,7 +6,7 @@ import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Tra
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle } from '../services/comfyuiGenerationService';
-import { waitForComfyUITask, waitForComfyUITaskAllImages } from '../services/comfyuiTaskWaitService';
+import { waitForComfyUITaskAllImages } from '../services/comfyuiTaskWaitService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { generateThumbnail } from '../utils/imageOptimization';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
@@ -538,12 +538,37 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     try {
         setCameraGeneratingTag(tagName);
         
+        const targetAssetId = assetNameToId?.[tagName];
         const { processMaterialImage } = await import('../services/comfyuiGenerationService');
-        const { taskId } = await processMaterialImage(targetMaterial.url, workflow);
-        const resultUrl = await waitForComfyUITask(taskId);
+        const { taskId } = await processMaterialImage(
+            targetMaterial.url,
+            workflow,
+            targetAssetId
+                ? {
+                    entityType: 'asset',
+                    entityId: targetAssetId,
+                    fileRole: 'material_image',
+                    episodeId: selectedFileId || undefined,
+                }
+                : undefined,
+        );
+        const results = await waitForComfyUITaskAllImages(taskId, undefined, {
+            title: `${workflow === 'upscale_hd' ? '高清放大' : '去水印'} · ${tagName}`,
+            kind: workflow === 'upscale_hd' ? 'video-upscale' : 'matting',
+            targetPage: 'materials',
+            targetEntityType: targetAssetId ? 'asset' : undefined,
+            targetEntityId: targetAssetId,
+            targetItemId: targetAssetId,
+            episodeId: selectedFileId || undefined,
+            fileRole: targetAssetId ? 'material_image' : undefined,
+        });
+        const resultUrl = results[0]?.url;
+        if (!resultUrl) {
+            throw new Error('处理完成但未返回图片');
+        }
 
         const existing = materialLibrary[tagName] || [];
-        const newMaterialId = getNextMaterialId(tagName);
+        const newMaterialId = getNextMaterialId(tagName, 0, results[0]?.fileId);
         const newMaterial: Material = {
             id: newMaterialId,
             url: resultUrl,
