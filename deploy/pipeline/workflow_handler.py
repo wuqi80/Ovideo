@@ -119,8 +119,12 @@ class WorkflowHandler:
             '"{Seed_6}"': str(params.get('seed_6')),  # 替换为数字（移除引号）- 兼容大写
             '"{image}"': json.dumps(params.get('image', '')),  # 保持字符串格式
             '"{image_filename}"': json.dumps(params.get('image', '')),  # 保持字符串格式
+            '"{start_image}"': json.dumps(params.get('start_image', '')),  # 首帧别名
+            '"{first_frame_image}"': json.dumps(params.get('first_frame_image', '')),  # 首帧别名
             '"{image_end}"': json.dumps(params.get('image_end', '')),  # 保持字符串格式
             '"{image_filename_end}"': json.dumps(params.get('image_end', '')),  # 保持字符串格式
+            '"{end_image}"': json.dumps(params.get('end_image', '')),  # 尾帧别名
+            '"{last_frame_image}"': json.dumps(params.get('last_frame_image', '')),  # 尾帧别名
             '"{image_BK}"': json.dumps(params.get('image_BK', '')),  # 融合/迁移/模仿: 背景图
             '"{image_HU}"': json.dumps(params.get('image_HU', '')),  # 融合/迁移/模仿: 人物图
             '"{image_MB}"': json.dumps(params.get('image_MB', '')),  # 迁移学习: 蒙版图
@@ -265,6 +269,23 @@ class WorkflowHandler:
         logger.info(f"🔍 workflow_handler 接收到的图片字段: {image_fields_in_data}")
         
         # 准备替换参数
+        primary_image = (
+            task_data.get('uploaded_image')
+            or task_data.get('image')
+            or task_data.get('image_path')
+            or task_data.get('start_image')
+            or task_data.get('first_frame_image')
+            or ''
+        )
+        tail_image = (
+            task_data.get('uploaded_image_end')
+            or task_data.get('image_end')
+            or task_data.get('image_path_end')
+            or task_data.get('end_image')
+            or task_data.get('last_frame_image')
+            or ''
+        )
+
         params = {
             'prompt': task_data.get('prompt', ''),
             'prompt_AU': task_data.get('prompt_AU', ''),
@@ -272,8 +293,12 @@ class WorkflowHandler:
             'seed_0': task_data.get('seed_0', task_data.get('seed', random.randint(100000, 999999))),  # 6位随机数
             'seed_1': task_data.get('seed', -1),  # 默认使用相同seed
             'seed_6': task_data.get('seed', random.randint(100000, 999999)),  # 6位随机数
-            'image': task_data.get('uploaded_image', task_data.get('image', '')),
-            'image_end': '',
+            'image': primary_image,
+            'start_image': primary_image,
+            'first_frame_image': primary_image,
+            'image_end': tail_image,
+            'end_image': tail_image,
+            'last_frame_image': tail_image,
             'video': '',
             'Audio': '',
         }
@@ -332,6 +357,8 @@ class WorkflowHandler:
         # morph 模式需要结束帧
         if task_type == 'morph' and 'uploaded_image_end' in task_data:
             params['image_end'] = task_data['uploaded_image_end']
+            params['end_image'] = task_data['uploaded_image_end']
+            params['last_frame_image'] = task_data['uploaded_image_end']
         
         # 替换占位符
         return self.replace_placeholders(workflow, params)
