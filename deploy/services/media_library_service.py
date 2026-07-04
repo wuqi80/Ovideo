@@ -144,6 +144,7 @@ async def list_items(
     item_type: Optional[str] = None,
     source: Optional[str] = None,
     permission_scope: Optional[str] = None,
+    include_shared: bool = False,
     is_favorite: Optional[bool] = None,
     keyword: Optional[str] = None,
     tag: Optional[str] = None,
@@ -167,13 +168,25 @@ async def list_items(
         keyword=keyword,
         tag=tag,
         episode_id=episode_id,
+        include_shared=include_shared,
         folder_id=folder_id,
         limit=limit,
         offset=offset,
         org_id=org_id,
     )
     total = await MediaLibraryDAO.count_for_user(
-        user_id, project_id=project_id, org_id=org_id,
+        user_id,
+        project_id=project_id,
+        item_type=item_type,
+        source=source,
+        permission_scope=permission_scope,
+        is_favorite=is_favorite,
+        keyword=keyword,
+        tag=tag,
+        episode_id=episode_id,
+        include_shared=include_shared,
+        folder_id=folder_id,
+        org_id=org_id,
     )
     return {'items': items, 'total': total, 'limit': limit, 'offset': offset}
 

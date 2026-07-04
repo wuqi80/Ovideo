@@ -87,6 +87,7 @@ export const MaterialsPage: React.FC = () => {
   const {
     episodeId, projectId, selectedScriptId,
     script, assets,
+    assetScopeMode, setAssetScopeMode,
     isLoading, error,
     forceReloadSlices,
   } = useEpisode();
@@ -511,6 +512,8 @@ export const MaterialsPage: React.FC = () => {
         onImportProject={noopImportProject}
         hideVersionArchive
         assetNameToId={assetNameToId}
+        assetScopeMode={assetScopeMode}
+        onAssetScopeModeChange={setAssetScopeMode}
       />
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-success text-white text-sm rounded-lg shadow-bottom">

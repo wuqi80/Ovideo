@@ -1,9 +1,10 @@
 // new_html/components/SeedanceAssetPickerModal.tsx
 import React, { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Layers } from 'lucide-react';
 import type { SeedanceParams } from '../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { insertMention, parseArkAssetId } from '../utils/seedanceMedia';
+import { useEpisode } from '../contexts/EpisodeContext';
 
 export interface SeedanceAssetPickerModalProps {
     open: boolean;
@@ -26,6 +27,7 @@ const GROUP_LABELS: Record<string, string> = {
 export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> = (p) => {
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [arkRaw, setArkRaw] = useState('');
+    const { episodeId, assetScopeMode, setAssetScopeMode } = useEpisode();
 
     if (!p.open) return null;
 
@@ -56,6 +58,34 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
             <div className="w-[600px] max-h-[80vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-3 py-2 border-b border-n40">
                     <div className="text-sm text-n700">插入素材（多选）</div>
+                    {episodeId && (
+                        <div className="ml-auto mr-2 flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n20" title="素材引用范围">
+                            <button
+                                type="button"
+                                onClick={() => setAssetScopeMode('episode')}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                                    assetScopeMode === 'episode'
+                                        ? 'bg-primary text-white'
+                                        : 'text-n300 hover:text-n800 hover:bg-n0'
+                                }`}
+                            >
+                                <ImageIcon size={12} />
+                                本集素材
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAssetScopeMode('project')}
+                                className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                                    assetScopeMode === 'project'
+                                        ? 'bg-primary text-white'
+                                        : 'text-n300 hover:text-n800 hover:bg-n0'
+                                }`}
+                            >
+                                <Layers size={12} />
+                                全部素材
+                            </button>
+                        </div>
+                    )}
                     <button onClick={p.onClose} className="p-1 text-n300 hover:text-n800"><X size={14} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">

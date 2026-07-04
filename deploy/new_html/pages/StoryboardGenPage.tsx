@@ -44,6 +44,7 @@ export const StoryboardGenPage: React.FC = () => {
   const {
     episodeId, projectId, selectedScriptId,
     script, storyboardItems, assets,
+    assetScopeMode, setAssetScopeMode,
     storyboardTotalCount,
     isLoading, error,
     loadSlicesQuiet, forceReloadSlices, loadStoryboardItemsPage,
@@ -470,6 +471,8 @@ export const StoryboardGenPage: React.FC = () => {
             onUpdateStoryboardItem={handleUpdateStoryboardItem}
             onDeleteStoryboardItem={handleDeleteStoryboardItem}
             onBatchDeleteStoryboardItems={handleBatchDeleteStoryboardItems}
+            assetScopeMode={assetScopeMode}
+            onAssetScopeModeChange={setAssetScopeMode}
             onSaveVersion={noopSaveVersion}
             onRestoreVersion={noopRestoreVersion}
             onDeleteVersion={noopDeleteVersion}

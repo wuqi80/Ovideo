@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Clapperboard, Download, Film, AlertCircle, Loader2, Wand2, Check, X, RefreshCw } from 'lucide-react';
+import { Clapperboard, Download, Film, AlertCircle, Loader2, Wand2, Check, X, RefreshCw, Layers } from 'lucide-react';
 import { listMediaItems } from '../services/mediaLibraryService';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { getVideoTakes, startCompose, getComposeStatus, type VideoShot, type ComposeStatus } from '../services/videoWorkflowService';
@@ -18,7 +18,7 @@ const isFinalFilm = (title: string | null | undefined) =>
 
 export const FinalProductPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
-  const { episodeId } = useEpisode();
+  const { episodeId, assetScopeMode, setAssetScopeMode } = useEpisode();
   const [videos, setVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -38,7 +38,12 @@ export const FinalProductPage: React.FC = () => {
     (async () => {
       setLoading(true); setErr(null);
       try {
-        const resp = await listMediaItems({ project_id: projectId, item_type: 'video', limit: 200 } as any);
+        const params: any = { project_id: projectId, item_type: 'video', limit: 200 };
+        if (episodeId && assetScopeMode === 'episode') {
+          params.episode_id = episodeId;
+          params.include_shared = true;
+        }
+        const resp = await listMediaItems(params);
         if (alive) setVideos((resp as any).items || []);
       } catch (e: any) {
         if (alive) setErr(e?.message || '加载成品失败');
@@ -47,7 +52,7 @@ export const FinalProductPage: React.FC = () => {
       }
     })();
     return () => { alive = false; };
-  }, [projectId, reloadKey]);
+  }, [projectId, episodeId, assetScopeMode, reloadKey]);
 
   // 打开挑选面板：拉取每镜的所有 take，默认选最新一条
   const openPicker = useCallback(async () => {
@@ -114,6 +119,34 @@ export const FinalProductPage: React.FC = () => {
         <h1 className="text-lg font-semibold text-n800">成品</h1>
         <span className="text-xs text-n100">合成好的整片在这里查看与下载</span>
         <div className="flex-1 min-w-[16px]" />
+        {episodeId && (
+          <div className="flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n0" title="成品可见范围">
+            <button
+              type="button"
+              onClick={() => setAssetScopeMode('episode')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                assetScopeMode === 'episode'
+                  ? 'bg-primary text-white'
+                  : 'text-n300 hover:text-n800 hover:bg-n0'
+              }`}
+            >
+              <Film size={12} />
+              本集成品
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssetScopeMode('project')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                assetScopeMode === 'project'
+                  ? 'bg-primary text-white'
+                  : 'text-n300 hover:text-n800 hover:bg-n0'
+              }`}
+            >
+              <Layers size={12} />
+              全部成品
+            </button>
+          </div>
+        )}
         {compose?.status === 'running' ? (
           <span className="flex items-center gap-1 px-3 py-1.5 bg-primary-light text-primary text-xs rounded-lg border border-primary/20">
             <Loader2 size={13} className="animate-spin" /> 合成中 {compose.done}/{compose.total || '…'}
@@ -173,7 +206,7 @@ export const FinalProductPage: React.FC = () => {
             </div>
           ) : (
             <div className="bg-y50 border border-y200 rounded-md p-4 text-sm text-y400">
-              暂无「完整成片」（标题含“成片/完整/全片”）。下面是本项目的全部视频片段——在「视频/美化」合成整片后会自动归到这里置顶。
+              暂无「完整成片」（标题含“成片/完整/全片”）。下面是{assetScopeMode === 'episode' ? '本集' : '本项目'}的视频片段——在「视频/美化」合成整片后会自动归到这里置顶。
             </div>
           )}
 

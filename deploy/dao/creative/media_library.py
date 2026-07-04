@@ -143,6 +143,7 @@ class MediaLibraryDAO:
         keyword: Optional[str] = None,
         tag: Optional[str] = None,
         episode_id: Optional[str] = None,
+        include_shared: bool = False,
         folder_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
@@ -198,7 +199,10 @@ class MediaLibraryDAO:
             params.append(project_id)
             idx += 1
         if episode_id:
-            where.append(f"ml.episode_id = ${idx}")
+            if include_shared:
+                where.append(f"(ml.episode_id = ${idx} OR ml.episode_id IS NULL)")
+            else:
+                where.append(f"ml.episode_id = ${idx}")
             params.append(episode_id)
             idx += 1
         if folder_id is not None:
@@ -302,6 +306,15 @@ class MediaLibraryDAO:
         user_id: str,
         *,
         project_id: Optional[str] = None,
+        item_type: Optional[str] = None,
+        source: Optional[str] = None,
+        permission_scope: Optional[str] = None,
+        is_favorite: Optional[bool] = None,
+        keyword: Optional[str] = None,
+        tag: Optional[str] = None,
+        episode_id: Optional[str] = None,
+        include_shared: bool = False,
+        folder_id: Optional[str] = None,
         org_id: Optional[str] = None,
     ) -> int:
         """count_for_user 与 list_for_user 同义；org_id 模式下也复用相同可见性子句。
@@ -339,10 +352,51 @@ class MediaLibraryDAO:
             params = [user_id, org_id]
             idx = 3
 
-        extra = ""
+        extra_where: List[str] = []
         if project_id:
-            extra = f" AND ml.project_id = ${idx}"
+            extra_where.append(f"ml.project_id = ${idx}")
             params.append(project_id)
+            idx += 1
+        if episode_id:
+            if include_shared:
+                extra_where.append(f"(ml.episode_id = ${idx} OR ml.episode_id IS NULL)")
+            else:
+                extra_where.append(f"ml.episode_id = ${idx}")
+            params.append(episode_id)
+            idx += 1
+        if folder_id is not None:
+            if folder_id == "__unfiled__":
+                extra_where.append("ml.folder_id IS NULL")
+            else:
+                extra_where.append(f"ml.folder_id = ${idx}")
+                params.append(folder_id)
+                idx += 1
+        if item_type:
+            extra_where.append(f"ml.item_type = ${idx}")
+            params.append(item_type)
+            idx += 1
+        if source:
+            extra_where.append(f"ml.source = ${idx}")
+            params.append(source)
+            idx += 1
+        if permission_scope:
+            extra_where.append(f"ml.permission_scope = ${idx}")
+            params.append(permission_scope)
+            idx += 1
+        if is_favorite is not None:
+            extra_where.append(f"ml.is_favorite = ${idx}")
+            params.append(is_favorite)
+            idx += 1
+        if keyword:
+            extra_where.append(f"(ml.title ILIKE ${idx} OR ml.description ILIKE ${idx})")
+            params.append(f"%{keyword}%")
+            idx += 1
+        if tag:
+            extra_where.append(f"ml.tags @> ${idx}::jsonb")
+            params.append(json.dumps([tag]))
+            idx += 1
+
+        extra = "".join(f" AND {clause}" for clause in extra_where)
 
         return await db.fetchval(
             f"""

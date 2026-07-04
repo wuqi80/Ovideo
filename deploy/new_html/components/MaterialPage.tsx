@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion } from '../types';
-import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle } from '../services/comfyuiGenerationService';
@@ -170,6 +170,8 @@ interface MaterialPageProps {
   onRemoveAppendedStoryboard?: (sourceFileId?: string) => void;  // 🆕 移除追加的分镜
   /** tagName → assetId lookup for entity-aware AI generation */
   assetNameToId?: Record<string, string>;
+  assetScopeMode?: 'episode' | 'project';
+  onAssetScopeModeChange?: (mode: 'episode' | 'project') => void;
 }
 
 export const MaterialPage: React.FC<MaterialPageProps> = ({
@@ -188,6 +190,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   onAppendStoryboard,
   onRemoveAppendedStoryboard,
   assetNameToId,
+  assetScopeMode = 'episode',
+  onAssetScopeModeChange,
 }) => {
   const selectedFile = files.find(f => f.id === selectedFileId);
   const storyboardItems = selectedFile?.storyboard?.items || [];
@@ -907,6 +911,34 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
              </div>
 
              <div className="flex items-center gap-4">
+                 {onAssetScopeModeChange && (
+                   <div className="flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n20" title="素材可见范围">
+                     <button
+                       type="button"
+                       onClick={() => onAssetScopeModeChange('episode')}
+                       className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                         assetScopeMode === 'episode'
+                           ? 'bg-primary text-white'
+                           : 'text-n300 hover:text-n800 hover:bg-n0'
+                       }`}
+                     >
+                       <ImageIcon className="w-3 h-3" />
+                       本集素材
+                     </button>
+                     <button
+                       type="button"
+                       onClick={() => onAssetScopeModeChange('project')}
+                       className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                         assetScopeMode === 'project'
+                           ? 'bg-primary text-white'
+                           : 'text-n300 hover:text-n800 hover:bg-n0'
+                       }`}
+                     >
+                       <Layers className="w-3 h-3" />
+                       全部素材
+                     </button>
+                   </div>
+                 )}
                  <div className="flex items-center gap-2 text-[10px] text-success bg-green-950/20 px-2 py-1 rounded border border-green-500/20">
                      <Database className="w-3 h-3" />
                      <span>素材绑定数据已自动保存</span>

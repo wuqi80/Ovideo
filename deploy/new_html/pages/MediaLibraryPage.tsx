@@ -19,6 +19,7 @@ import {
   Upload, Download, Star, StarOff, Trash2, Eye, RefreshCw, Filter,
   Grid as GridIcon, List as ListIcon, Image as ImageIcon, Film, Music, FileText,
   Search, Folder, FolderPlus, FolderOpen, ChevronRight, ChevronDown, Pencil, X as XIcon,
+  Layers,
 } from 'lucide-react';
 import {
   listMediaItems,
@@ -38,6 +39,7 @@ import {
 import { buildFolderTree, flattenForSelect, type FolderNode } from '../utils/mediaFolderTree';
 import ShareResourceDialog from '../components/ShareResourceDialog';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
+import { useEpisode } from '../contexts/EpisodeContext';
 import { LazyVideo } from '../components/LazyVideo';
 
 type CategoryKey = 'all' | 'mine' | 'shared' | 'image' | 'video' | 'audio' | 'frame' | 'favorite';
@@ -73,8 +75,12 @@ const SCOPE_LABEL: Record<PermissionScope, string> = {
 };
 
 export const MediaLibraryPage: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectId, episodeId: routeEpisodeId } = useParams<{ projectId: string; episodeId?: string }>();
   const navigate = useNavigate();
+  const episodeContext = useEpisode();
+  const episodeId = episodeContext.episodeId || routeEpisodeId || '';
+  const assetScopeMode = episodeId ? episodeContext.assetScopeMode : 'project';
+  const setAssetScopeMode = episodeContext.setAssetScopeMode;
   const myUserId = localStorage.getItem('username') || '';
 
   const [items, setItems] = useState<MediaLibraryItem[]>([]);
@@ -139,6 +145,10 @@ export const MediaLibraryPage: React.FC = () => {
     setError(null);
     try {
       const params: any = { project_id: projectId, limit: 200 };
+      if (episodeId && assetScopeMode === 'episode') {
+        params.episode_id = episodeId;
+        params.include_shared = true;
+      }
       switch (category) {
         case 'mine':
           params.permission_scope = 'private';
@@ -172,7 +182,7 @@ export const MediaLibraryPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [projectId, category, keyword, selectedFolderId]);
+  }, [projectId, episodeId, assetScopeMode, category, keyword, selectedFolderId]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -188,6 +198,7 @@ export const MediaLibraryPage: React.FC = () => {
       for (const f of files) {
         await uploadMediaItem(f, {
           projectId,
+          episodeId: episodeId || undefined,
           permissionScope: 'project',  // 默认项目共享，方便组员看到
           title: f.name,
           visibility: uploadVisibility,
@@ -321,9 +332,38 @@ export const MediaLibraryPage: React.FC = () => {
           ← 返回项目
         </button>
         <div className="text-sm font-medium ml-2">素材库</div>
-        <div className="text-xs text-n100">项目 {projectId}</div>
+        <div className="text-xs text-n100">{episodeId && assetScopeMode === 'episode' ? '本集素材' : `项目 ${projectId}`}</div>
 
         <div className="toolbar-actions ml-auto">
+          {episodeId && (
+            <div className="flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n20" title="素材可见范围">
+              <button
+                type="button"
+                onClick={() => setAssetScopeMode('episode')}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                  assetScopeMode === 'episode'
+                    ? 'bg-primary text-white'
+                    : 'text-n300 hover:text-n800 hover:bg-n0'
+                }`}
+              >
+                <ImageIcon size={12} />
+                本集素材
+              </button>
+              <button
+                type="button"
+                onClick={() => setAssetScopeMode('project')}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                  assetScopeMode === 'project'
+                    ? 'bg-primary text-white'
+                    : 'text-n300 hover:text-n800 hover:bg-n0'
+                }`}
+              >
+                <Layers size={12} />
+                全部素材
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-1 px-2 py-1 rounded bg-n0">
             <Search size={14} className="text-n100" />
             <input

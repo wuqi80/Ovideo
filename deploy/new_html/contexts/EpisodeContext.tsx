@@ -13,6 +13,7 @@ import {
   updateEpisodeScript as apiUpdateEpisodeScript,
 } from '../services/episodeDataService';
 import type { AssetItem, StoryboardItemDB, VideoSegment, AudioTrack, EpisodeScript, CharacterVoice } from '../types';
+import { filterAssetsForEpisodeScope, type AssetScopeMode } from '../utils/assetScope';
 
 const EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT = 10;
 
@@ -151,6 +152,8 @@ interface EpisodeContextValue {
   audioTracks: AudioTrack[];
   videoSegments: VideoSegment[];
   characterVoices: CharacterVoice[];
+  assetScopeMode: AssetScopeMode;
+  setAssetScopeMode: (mode: AssetScopeMode) => void;
   loadSlices: (...slices: DataSlice[]) => Promise<void>;
   loadSlicesQuiet: (...slices: DataSlice[]) => Promise<void>;
   forceReloadSlices: (...slices: DataSlice[]) => Promise<void>;
@@ -177,6 +180,8 @@ const EpisodeContext = createContext<EpisodeContextValue>({
   audioTracks: [],
   videoSegments: [],
   characterVoices: [],
+  assetScopeMode: 'episode',
+  setAssetScopeMode: () => {},
   loadSlices: async () => {},
   loadSlicesQuiet: async () => {},
   forceReloadSlices: async () => {},
@@ -212,11 +217,36 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [videoSegments, setVideoSegments] = useState<VideoSegment[]>([]);
   const [characterVoices, setCharacterVoices] = useState<CharacterVoice[]>([]);
+  const [assetScopeMode, setAssetScopeModeState] = useState<AssetScopeMode>('episode');
 
   const loadedSlicesRef = useRef<Set<DataSlice>>(new Set());
   const selectedScriptIdRef = useRef<string | null>(null);
   const prevScriptIdRef = useRef<string | null>(null);
+  const assetScopeModeRef = useRef<AssetScopeMode>('episode');
   selectedScriptIdRef.current = selectedScriptId;
+  assetScopeModeRef.current = assetScopeMode;
+
+  useEffect(() => {
+    if (!episodeId) {
+      setAssetScopeModeState('episode');
+      return;
+    }
+    try {
+      const saved = sessionStorage.getItem(`episodeAssetScope:${episodeId}`);
+      setAssetScopeModeState(saved === 'project' ? 'project' : 'episode');
+    } catch {
+      setAssetScopeModeState('episode');
+    }
+  }, [episodeId]);
+
+  const setAssetScopeMode = useCallback((mode: AssetScopeMode) => {
+    setAssetScopeModeState(mode);
+    if (episodeId) {
+      try {
+        sessionStorage.setItem(`episodeAssetScope:${episodeId}`, mode);
+      } catch {}
+    }
+  }, [episodeId]);
 
   const clearStaleScriptSelectionFromStoryboardFallback = useCallback((res: any, sid?: string) => {
     const fallbackScriptId = res?.fallbackScriptId ?? res?.fallback_script_id;
@@ -253,9 +283,13 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
         }
       },
       assets: async () => {
-        const sid = selectedScriptIdRef.current || undefined;
-        const res = await getAssets(projectId, episodeId, undefined, sid).catch(() => ({ success: false, assets: [] }));
-        if (res.success) setAssets((res.assets || []).map(normalizeAsset));
+        const scopeMode = assetScopeModeRef.current;
+        const queryEpisodeId = scopeMode === 'project' ? undefined : episodeId;
+        const res = await getAssets(projectId, queryEpisodeId).catch(() => ({ success: false, assets: [] }));
+        if (res.success) {
+          const normalized = (res.assets || []).map(normalizeAsset);
+          setAssets(filterAssetsForEpisodeScope(normalized, episodeId, scopeMode));
+        }
       },
       audioTracks: async () => {
         const res = await getAudioTracks(episodeId).catch(() => ({ success: false, tracks: [] }));
@@ -286,6 +320,12 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       if (!quiet) setIsLoading(false);
     }
   }, [episodeId, projectId, clearStaleScriptSelectionFromStoryboardFallback]);
+
+  useEffect(() => {
+    if (loadedSlicesRef.current.has('assets')) {
+      void fetchSlices({ quiet: true }, 'assets');
+    }
+  }, [assetScopeMode, fetchSlices]);
 
   const loadSlices = useCallback(async (...slices: DataSlice[]) => {
     const newSlices = slices.filter(s => !loadedSlicesRef.current.has(s));
@@ -439,6 +479,8 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       audioTracks,
       videoSegments: filteredVideoSegments,
       characterVoices,
+      assetScopeMode,
+      setAssetScopeMode,
       loadSlices,
       loadSlicesQuiet,
       forceReloadSlices: fetchSlices,

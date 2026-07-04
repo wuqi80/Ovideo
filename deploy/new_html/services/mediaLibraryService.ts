@@ -58,6 +58,7 @@ export interface ListItemsResponse {
 export interface ListItemsParams {
   project_id?: string;
   episode_id?: string;
+  include_shared?: boolean;
   item_type?: MediaItemType;
   source?: string;
   permission_scope?: PermissionScope;

@@ -81,6 +81,8 @@ interface GenerationPageProps {
   onLoadAllStoryboardItems?: () => Promise<void> | void;
   onDeleteStoryboardItem?: (itemId: string) => void;  // 2026-06-14：删除分镜镜头
   onBatchDeleteStoryboardItems?: (itemIds: string[]) => Promise<void> | void;  // 2026-06-14：批量删除选中镜头
+  assetScopeMode?: 'episode' | 'project';
+  onAssetScopeModeChange?: (mode: 'episode' | 'project') => void;
 }
 
 export const GenerationPage: React.FC<GenerationPageProps> = ({
@@ -101,6 +103,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   onLoadAllStoryboardItems,
   onDeleteStoryboardItem,
   onBatchDeleteStoryboardItems,
+  assetScopeMode = 'episode',
+  onAssetScopeModeChange,
 }) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -1953,6 +1957,34 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               </div>
 
               <div className="flex items-center gap-3 min-w-0">
+                  {onAssetScopeModeChange && (
+                    <div className="flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n20" title="素材引用范围">
+                      <button
+                        type="button"
+                        onClick={() => onAssetScopeModeChange('episode')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                          assetScopeMode === 'episode'
+                            ? 'bg-primary text-white'
+                            : 'text-n300 hover:text-n800 hover:bg-n0'
+                        }`}
+                      >
+                        <ImageIcon className="w-3 h-3" />
+                        本集素材
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onAssetScopeModeChange('project')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+                          assetScopeMode === 'project'
+                            ? 'bg-primary text-white'
+                            : 'text-n300 hover:text-n800 hover:bg-n0'
+                        }`}
+                      >
+                        <Layers className="w-3 h-3" />
+                        全部素材
+                      </button>
+                    </div>
+                  )}
                   {onBatchDeleteStoryboardItems && selectedShotIds.size > 0 && !batchProgress && (
                       <button
                           onClick={async () => {
