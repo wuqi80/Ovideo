@@ -406,6 +406,62 @@ WORKFLOW_CONFIGS = {
             'seed': -1
         }
     ),
+
+    # I2I_angel 工作流（旧版角度调整模板，保留后台可配置入口）
+    'i2i_angel': WorkflowConfig(
+        name='旧版图像角度调整',
+        file='I2I_angel.json',
+        description='旧版图像角度调整模板，保留用于后台查看和手动维护',
+        placeholders=[],
+        param_mapping={},
+        default_params={}
+    ),
+
+    # I2I_Around 工作流（全景角度生成）
+    'i2i_around': WorkflowConfig(
+        name='全景角度生成',
+        file='I2I_Around.json',
+        description='基于单张参考图生成全景/环绕角度结果',
+        placeholders=['image', 'prompt', 'seed'],
+        param_mapping={
+            'image_data': 'image',
+            'prompt': 'prompt',
+            'seed': 'seed'
+        },
+        default_params={
+            'seed': -1
+        }
+    ),
+
+    # 视频处理工作流（GPU Agent 执行）
+    'upscale': WorkflowConfig(
+        name='视频高清放大',
+        file='viedo_upscaler.json',
+        description='使用 SeedVR2 对视频进行高清放大',
+        placeholders=['video', 'Seed_6'],
+        param_mapping={
+            'video_filename': 'video',
+            'seed_6': 'Seed_6'
+        },
+        default_params={
+            'seed_6': 123456
+        }
+    ),
+
+    'voice': WorkflowConfig(
+        name='视频口型配音',
+        file='video_infinitetalk.json',
+        description='使用 InfiniteTalk 根据音频驱动视频口型和表情',
+        placeholders=['video', 'Audio', 'prompt_AU'],
+        param_mapping={
+            'video_filename': 'video',
+            'audio_filename': 'Audio',
+            'prompt_AU': 'prompt_AU'
+        },
+        default_params={
+            'prompt_AU': '生动的表情、自然的口型同步'
+        }
+    ),
     
     # Qwen 工作流（千问模型图像生成）- 1张参考图
     'qwen_1': WorkflowConfig(

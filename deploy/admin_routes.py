@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -92,6 +93,31 @@ async def require_admin(request: Request) -> str:
 # api-configs 增删改等公网无鉴权可调（严重漏洞）。现旧控制台 app.js 已改为携带 admin JWT
 # （读同源 iframe 共享的 sessionStorage.admin_session_token），故可安全挂全局鉴权。
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+
+_WORKFLOW_CATEGORY_MAP = {
+    "image_upload": "image",
+    "qwen": "image",
+    "i2i": "image",
+    "kontext": "image",
+    "wan2": "video",
+    "minimax": "video",
+    "sora2": "video",
+    "veo": "video",
+    "dashscope": "video",
+    "morph": "video",
+    "infinitetalk": "video",
+    "voice": "video",
+    "upscale": "upscale",
+    "remove_watermark": "tool",
+    "matting": "tool",
+    "panorama": "tool",
+    "three_view": "tool",
+    "storyboard": "tool",
+    "pose": "tool",
+    "transfer": "tool",
+    "fusion": "tool",
+}
+_WORKFLOW_PLACEHOLDER_RE = re.compile(r"^\{([A-Za-z0-9_]+)\}$")
 
 
 def _require_db() -> None:
@@ -268,6 +294,11 @@ def _instance_healthy(inst: Dict[str, Any]) -> bool:
 def _placeholders_from_workflow_config(cfg: Any) -> List[Dict[str, Any]]:
     raw = list(getattr(cfg, "placeholders", None) or [])
     defaults = getattr(cfg, "default_params", None) or {}
+    return _placeholder_objects(raw, defaults)
+
+
+def _placeholder_objects(raw: List[Any], defaults: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    defaults = defaults or {}
     out: List[Dict[str, Any]] = []
     for p in raw:
         key = str(p)
@@ -281,6 +312,50 @@ def _placeholders_from_workflow_config(cfg: Any) -> List[Dict[str, Any]]:
             }
         )
     return out
+
+
+def _workflow_category_for(*parts: Any) -> str:
+    key = " ".join(str(p or "") for p in parts).lower()
+    for prefix, cat in _WORKFLOW_CATEGORY_MAP.items():
+        if prefix in key:
+            return cat
+    return "other"
+
+
+def _collect_workflow_placeholders(value: Any, out: set[str]) -> None:
+    if isinstance(value, str):
+        match = _WORKFLOW_PLACEHOLDER_RE.match(value)
+        if match:
+            out.add(match.group(1))
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            _collect_workflow_placeholders(item, out)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect_workflow_placeholders(item, out)
+
+
+def _placeholder_names_from_workflow_json(workflow_json: Dict[str, Any]) -> List[str]:
+    names: set[str] = set()
+    _collect_workflow_placeholders(workflow_json, names)
+    return sorted(names)
+
+
+async def _get_workflow_template_by_key(workflow_key: str) -> Optional[Dict[str, Any]]:
+    db = get_db_manager()
+    if not db or not workflow_key:
+        return None
+    return await db.fetchrow(
+        """
+        SELECT * FROM workflow_templates
+        WHERE workflow_key = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """,
+        workflow_key,
+    )
 
 
 # --- Agents ---
@@ -394,24 +469,17 @@ async def admin_parse_workflow_json(request: Request):
 
 @router.get("/workflows/scan-disk")
 async def admin_scan_disk_workflows():
-    """Return all workflows defined in workflow_config.py with their on-disk status."""
+    """Return configured workflows plus disk-only JSON workflows with DB import status."""
     from workflow_config import WORKFLOW_CONFIGS
     wf_dir = Path(__file__).resolve().parent / "workflows"
 
     _require_db()
     db_templates = await WorkflowTemplateDAO.list_all()
     db_names = {r.get("name", "") for r in db_templates}
+    db_keys = {r.get("workflow_key", "") for r in db_templates}
 
     items: List[Dict[str, Any]] = []
-    cat_map = {
-        "image_upload": "image", "qwen_image": "image", "qwen_lora_image": "image",
-        "I2I": "image", "kontext": "image",
-        "wan2": "video", "minimax": "video", "sora2": "video", "veo": "video",
-        "dashscope": "video", "morph": "video", "infinitetalk": "video",
-        "upscale": "upscale", "remove_watermark": "tool", "matting": "tool",
-        "panorama": "tool", "three_view": "tool", "storyboard": "tool",
-        "pose": "tool", "transfer": "tool", "fusion": "tool",
-    }
+    configured_files: set[str] = set()
 
     for key, cfg in WORKFLOW_CONFIGS.items():
         name = getattr(cfg, "name", None) or str(key)
@@ -420,13 +488,8 @@ async def admin_scan_disk_workflows():
         placeholders = getattr(cfg, "placeholders", []) or []
         has_file = bool(file_name and (wf_dir / file_name).is_file())
         is_api = file_name is None
-
-        category = "other"
-        key_lower = key.lower()
-        for prefix, cat in cat_map.items():
-            if prefix.lower() in key_lower:
-                category = cat
-                break
+        if file_name:
+            configured_files.add(file_name)
 
         items.append({
             "key": key,
@@ -434,10 +497,37 @@ async def admin_scan_disk_workflows():
             "file": file_name,
             "description": desc,
             "placeholders": placeholders,
-            "category": category,
+            "category": _workflow_category_for(key, file_name, name),
             "has_file": has_file,
             "is_api": is_api,
-            "imported": name in db_names,
+            "imported": key in db_keys or name in db_names,
+        })
+
+    for path in sorted(wf_dir.glob("*.json"), key=lambda p: p.name.lower()):
+        if path.name in configured_files:
+            continue
+        key = path.stem
+        workflow_json: Dict[str, Any] = {}
+        placeholders: List[str] = []
+        try:
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                workflow_json = parsed
+                placeholders = _placeholder_names_from_workflow_json(workflow_json)
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("扫描磁盘工作流失败 %s: %s", path.name, exc)
+
+        items.append({
+            "key": key,
+            "name": key,
+            "file": path.name,
+            "description": f"磁盘工作流文件 {path.name}",
+            "placeholders": placeholders,
+            "category": _workflow_category_for(key, path.name),
+            "has_file": True,
+            "is_api": False,
+            "imported": key in db_keys or key in db_names,
+            "source": "disk",
         })
 
     return {"success": True, "workflows": items, "total": len(items)}
@@ -451,17 +541,30 @@ async def admin_import_workflows():
     wf_dir = Path(__file__).resolve().parent / "workflows"
     imported = 0
     skipped = 0
+    repaired = 0
     errors: List[str] = []
+    configured_files: set[str] = set()
 
     for category_key, cfg in WORKFLOW_CONFIGS.items():
         name = getattr(cfg, "name", None) or str(category_key)
-        existing = await WorkflowTemplateDAO.get_by_name(name)
+        file_name = getattr(cfg, "file", None)
+        if file_name:
+            configured_files.add(file_name)
+        existing = await _get_workflow_template_by_key(str(category_key))
+        if not existing:
+            existing = await WorkflowTemplateDAO.get_by_name(name)
         if existing:
+            if not existing.get("workflow_key"):
+                updated = await WorkflowTemplateDAO.update(
+                    existing["template_id"],
+                    workflow_key=str(category_key),
+                )
+                if updated:
+                    repaired += 1
             skipped += 1
             continue
         description = getattr(cfg, "description", "") or ""
         ph_objs = _placeholders_from_workflow_config(cfg)
-        file_name = getattr(cfg, "file", None)
         workflow_json: Dict[str, Any] = {}
         if file_name:
             path = wf_dir / file_name
@@ -491,7 +594,52 @@ async def admin_import_workflows():
             continue
         imported += 1
 
-    return {"success": True, "imported": imported, "skipped": skipped, "errors": errors}
+    for path in sorted(wf_dir.glob("*.json"), key=lambda p: p.name.lower()):
+        if path.name in configured_files:
+            continue
+        key = path.stem
+        existing = await _get_workflow_template_by_key(key)
+        if not existing:
+            existing = await WorkflowTemplateDAO.get_by_name(key)
+        if existing:
+            if not existing.get("workflow_key"):
+                updated = await WorkflowTemplateDAO.update(existing["template_id"], workflow_key=key)
+                if updated:
+                    repaired += 1
+            skipped += 1
+            continue
+        try:
+            workflow_json = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(workflow_json, dict):
+                errors.append(f"{key}: workflow JSON root must be object")
+                continue
+        except (OSError, json.JSONDecodeError) as e:
+            errors.append(f"{key}: read/parse error: {e}")
+            continue
+
+        placeholder_names = _placeholder_names_from_workflow_json(workflow_json)
+        row = await WorkflowTemplateDAO.create(
+            name=key,
+            category=_workflow_category_for(key, path.name),
+            workflow_json=workflow_json,
+            placeholders=_placeholder_objects(placeholder_names),
+            description=f"磁盘工作流文件 {path.name}",
+            node_type="any",
+            estimated_time=30,
+            workflow_key=key,
+        )
+        if not row:
+            errors.append(f"{key}: database insert failed")
+            continue
+        imported += 1
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "repaired": repaired,
+        "errors": errors,
+    }
 
 
 class WorkflowCreateBody(BaseModel):

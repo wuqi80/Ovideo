@@ -1,0 +1,24 @@
+{
+  "1": {
+    "inputs": {
+      "image": "{image}"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Uploaded Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "filename_prefix": "Uploaded",
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Uploaded Image"
+    }
+  }
+}

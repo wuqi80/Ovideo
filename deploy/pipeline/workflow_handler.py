@@ -255,8 +255,7 @@ class WorkflowHandler:
         workflow = workflow_override if workflow_override is not None else self.get_workflow(workflow_name)
         if workflow is None:
             raise ValueError(f"找不到工作流: {workflow_name}")
-        if workflow_override is None:
-            workflow = self.extract_executable_nodes(workflow, workflow_name)
+        workflow = self.extract_executable_nodes(workflow, workflow_name)
         executable_nodes = list(workflow.values())
         if not executable_nodes:
             raise ValueError(f"工作流模板 {workflow_name}.json 不是可执行的 ComfyUI 节点图，请在后台导入完整 workflow JSON")
