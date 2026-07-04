@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion } from '../types';
-import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle } from '../services/comfyuiGenerationService';
@@ -12,6 +12,7 @@ import { generateThumbnail } from '../utils/imageOptimization';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 
 type MaterialAIEngine = 'nanobanana' | 'doubao';
+type BindingAssetType = 'character' | 'scene' | 'prop';
 
 type MaterialAIGenerationPayload = {
   tagName: string;
@@ -27,7 +28,7 @@ type MaterialAIGenerationPayload = {
 
 type MaterialAIModalConfig = {
   tagName: string;
-  type: 'character' | 'scene';
+  type: BindingAssetType;
   defaultPrompt: string;
   materials: Material[];
 };
@@ -45,14 +46,14 @@ type CameraGenerationPayload = {
 
 type CameraModalConfig = {
   tagName: string;
-  type: 'character' | 'scene';
+  type: BindingAssetType;
   materials: Material[];
   selectedMaterialId: string;
 };
 
 type ProcessModalConfig = {
   tagName: string;
-  type: 'character' | 'scene';
+  type: BindingAssetType;
   materials: Material[];
   selectedMaterialId: string;
   workflow: 'upscale_hd' | 'remove_watermark';
@@ -60,7 +61,7 @@ type ProcessModalConfig = {
 
 type ThreeViewModalConfig = {
   tagName: string;
-  type: 'character' | 'scene';
+  type: BindingAssetType;
   materials: Material[];
   selectedMaterialId: string;
 };
@@ -373,13 +374,13 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     return targetAssetId ? `${targetAssetId}_${existing.length + offset}` : (fallback || uuidv4());
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, tagName: string, type: 'character' | 'scene') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, tagName: string, type: BindingAssetType) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       try {
         const { uploadEntityFile } = await import('../services/entityFileService');
         const shotId = selectedShot?.id || 'temp';
-        const saved = await uploadEntityFile(file, 'material', shotId, type === 'character' ? 'character_ref' : 'scene_ref', '');
+        const saved = await uploadEntityFile(file, 'material', shotId, `${type}_ref`, '');
         const newId = getNextMaterialId(tagName, 0, saved.fileId);
         const newMaterial: Material = {
           id: newId,
@@ -403,7 +404,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     }
   };
 
-  const openAIGenerator = (tagName: string, type: 'character' | 'scene') => {
+  const openAIGenerator = (tagName: string, type: BindingAssetType) => {
     if (!selectedShot) return;
     const context = selectedShot.imagePrompt || selectedShot.scriptSegment || '';
     setAiModalConfig({
@@ -473,7 +474,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     }
   };
 
-  const openProcessModal = (tagName: string, type: 'character' | 'scene', workflow: 'upscale_hd' | 'remove_watermark' | 'three_view') => {
+  const openProcessModal = (tagName: string, type: BindingAssetType, workflow: 'upscale_hd' | 'remove_watermark' | 'three_view') => {
     const library = materialLibrary[tagName] || [];
     if (library.length === 0) {
       alert('请先上传或生成至少一张素材。');
@@ -505,7 +506,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     });
   };
 
-  const openCameraModal = (tagName: string, type: 'character' | 'scene') => {
+  const openCameraModal = (tagName: string, type: BindingAssetType) => {
     if (!selectedShot) return;
     const library = materialLibrary[tagName] || [];
     if (library.length === 0) {
@@ -840,7 +841,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
           
           {visibleStoryboardItems.map((item, index) => {
             const isSelected = item.id === selectedShot?.id;
-            const tags = [...item.characters, item.scene].filter(t => t);
+            const tags = [...(item.characters || []), ...(item.scene ? [item.scene] : []), ...(item.props || [])].filter(t => t);
             const isBound = tags.length > 0 && tags.every(t => item.materialSelections?.[t]);
             const hasTags = tags.length > 0;
             const isAppended = !!item.sourceFileId;  // 🆕 是否为追加的镜头
@@ -886,7 +887,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 </div>
                 <p className="text-[10px] text-n300 line-clamp-2 leading-relaxed opacity-80 mb-2">"{item.scriptSegment}"</p>
                 <div className="flex gap-1 overflow-hidden flex-wrap">
-                   {item.characters.map(c => (
+                   {(item.characters || []).map(c => (
                      <span key={c} className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[c] ? 'bg-primary-light border-primary/30 text-primary' : 'bg-n30 border-n40 text-n100'}`}>
                          {c}
                      </span>
@@ -896,6 +897,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                          {item.scene}
                      </span>
                    )}
+                   {(item.props || []).map(p => (
+                     <span key={`p-${p}`} className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[p] ? 'bg-yellow-900/30 border-yellow-500/30 text-yellow-500' : 'bg-n30 border-n40 text-n100'}`}>
+                         {p}
+                     </span>
+                   ))}
                 </div>
               </div>
             );
@@ -1095,12 +1101,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                  <span className="text-[10px] font-normal text-n100 ml-2">绑定后将自动应用于后续同名角色</span>
              </h4>
              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
-                 {!selectedShot || selectedShot.characters.length === 0 ? (
+                 {!selectedShot || (selectedShot.characters || []).length === 0 ? (
                      <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
                         <span className="text-xs">本镜头无登场角色</span>
                      </div>
                  ) : (
-                  selectedShot.characters.map(charName => (
+                  (selectedShot.characters || []).map(charName => (
                      <MaterialCard 
                         key={charName}
                         name={charName}
@@ -1127,7 +1133,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                  场景素材 (Scene)
                  <span className="text-[10px] font-normal text-n100 ml-2">为该场景绑定背景参考</span>
              </h4>
-             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
+             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
                  {!selectedShot.scene ? (
                      <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
                          <span className="text-xs">本镜头无特定场景描述</span>
@@ -1149,6 +1155,39 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                         onUnbind={() => onUnbindMaterial(selectedShot.id, selectedShot.scene)}
                        onViewImage={(url) => setLightboxImage(url)}
                      />
+                 )}
+             </div>
+
+             <h4 className="text-sm font-bold text-n700 mb-4 flex items-center gap-2 px-1">
+                 <Box className="w-4 h-4 text-yellow-500" />
+                 道具素材 (Props)
+                 <span className="text-[10px] font-normal text-n100 ml-2">手持物、武器、关键陈设等独立参考</span>
+             </h4>
+             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
+                 {!selectedShot || (selectedShot.props || []).length === 0 ? (
+                     <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
+                         <span className="text-xs">本镜头无特定道具</span>
+                     </div>
+                 ) : (
+                    (selectedShot.props || []).map(propName => (
+                       <MaterialCard
+                          key={propName}
+                          name={propName}
+                          type="prop"
+                          materials={materialLibrary[propName] || []}
+                          selectedMaterialId={selectedShot.materialSelections?.[propName]}
+                          aiGenerating={aiGeneratingTag === propName}
+                          cameraGenerating={cameraGeneratingTag === propName}
+                          onUpload={(e) => handleFileUpload(e, propName, 'prop')}
+                          onOpenAI={() => openAIGenerator(propName, 'prop')}
+                          onOpenCamera={() => openCameraModal(propName, 'prop')}
+                          onProcessMaterial={(workflow) => openProcessModal(propName, 'prop', workflow as 'upscale_hd' | 'remove_watermark')}
+                          onDeleteFromLibrary={(id) => removeMaterialFromLibrary(propName, id)}
+                          onBind={(id) => onBindMaterial(selectedShot.id, propName, id)}
+                          onUnbind={() => onUnbindMaterial(selectedShot.id, propName)}
+                          onViewImage={(url) => setLightboxImage(url)}
+                       />
+                    ))
                  )}
              </div>
                      </div>
@@ -1392,8 +1431,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         let currentIndex = -1;
         
         if (selectedShot) {
-          // 合并角色和场景的所有素材
-          const allTags = [...(selectedShot.characters || []), ...(selectedShot.scene ? [selectedShot.scene] : [])];
+          // 合并人物、场景和道具的所有素材
+          const allTags = [...(selectedShot.characters || []), ...(selectedShot.scene ? [selectedShot.scene] : []), ...(selectedShot.props || [])];
           allTags.forEach(tag => {
             const tagMaterials = materialLibrary[tag] || [];
             tagMaterials.forEach(m => {
@@ -1468,7 +1507,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 // Sub-component for individual tag card
 const MaterialCard: React.FC<{
     name: string;
-    type: 'character' | 'scene';
+    type: BindingAssetType;
     materials: Material[];
     selectedMaterialId?: string;
     aiGenerating: boolean;
@@ -1484,17 +1523,22 @@ const MaterialCard: React.FC<{
 }> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, onUnbind, onViewImage }) => {
     
     const boundMaterial = materials.find(m => m.id === selectedMaterialId);
-    const hasMaterials = materials.length > 0;
+    const typeStyles: Record<BindingAssetType, { header: string; badge: string; label: string }> = {
+        character: { header: 'bg-primary-light', badge: 'text-primary border-primary/20 bg-primary-light', label: 'Character' },
+        scene: { header: 'bg-orange-950/20', badge: 'text-orange-300 border-orange-500/20 bg-orange-500/10', label: 'Scene' },
+        prop: { header: 'bg-yellow-950/20', badge: 'text-yellow-600 border-yellow-500/20 bg-yellow-500/10', label: 'Prop' },
+    };
+    const style = typeStyles[type];
 
     return (
         <div className="bg-n0 border border-n40 rounded-md overflow-hidden flex flex-col h-[520px] shadow-card hover:shadow-atlas hover:border-n40 transition-all group">
-            <div className={`px-4 py-3 border-b border-n40 flex justify-between items-center ${type === 'character' ? 'bg-primary-light' : 'bg-orange-950/20'}`}>
+            <div className={`px-4 py-3 border-b border-n40 flex justify-between items-center ${style.header}`}>
                 <div className="flex items-center gap-2">
                     <div className="font-bold text-sm text-n800">{name}</div>
                     {selectedMaterialId && <CheckCircle className="w-3.5 h-3.5 text-success" />}
                 </div>
-                <div className={`text-[9px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${type === 'character' ? 'text-primary border-primary/20 bg-primary-light' : 'text-orange-300 border-orange-500/20 bg-orange-500/10'}`}>
-                    {type === 'character' ? 'Character' : 'Scene'}
+                <div className={`text-[9px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${style.badge}`}>
+                    {style.label}
                 </div>
             </div>
             
@@ -1741,7 +1785,7 @@ const MaterialAIModal: React.FC<{
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-bold text-n800">AI 生成素材 - {config.tagName}</h3>
-                        <p className="text-xs text-n300 mt-1">选择模型与参考图，自定义提示词快速生成角色/场景素材。</p>
+                        <p className="text-xs text-n300 mt-1">选择模型与参考图，自定义提示词快速生成角色/场景/道具素材。</p>
                     </div>
                     <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />
@@ -1995,7 +2039,7 @@ const CameraModal: React.FC<{
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-bold text-n800">角度调整 - {config.tagName}</h3>
-                        <p className="text-xs text-n300 mt-1">基于现有素材重建镜头角度，保持角色/场景一致性。</p>
+                        <p className="text-xs text-n300 mt-1">基于现有素材重建镜头角度，保持角色/场景/道具一致性。</p>
                     </div>
                     <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />

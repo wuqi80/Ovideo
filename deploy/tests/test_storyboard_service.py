@@ -246,6 +246,7 @@ async def test_export_script_delegates_transaction_and_counts_inputs():
         storyboard_items=[{"sort_order": 0}, {"sort_order": 1}],
         characters=[{"name": "Alice"}],
         scenes=[{"name": "Room"}],
+        props=[{"name": "Sword"}],
         script_id="script_1",
         user_id="user_1",
         storyboard_dao=FakeStoryboardDAO,
@@ -258,6 +259,7 @@ async def test_export_script_delegates_transaction_and_counts_inputs():
         "storyboard_items_created": 2,
         "characters_count": 1,
         "scenes_count": 1,
+        "props_count": 1,
     }
     assert FakeStoryboardDAO.export_kwargs["created_by"] == "user_1"
 
@@ -438,15 +440,17 @@ async def test_extract_to_assets_skips_existing_and_blank_names():
         "ep_1",
         characters=[{"name": "Alice"}, {"name": " Bob ", "description": "hero"}, {"name": ""}],
         scenes=[{"name": "Room", "description": "interior"}],
+        props=[{"name": " Sword ", "description": "weapon"}],
         script_id="script_1",
         user_id="user_1",
         episode_dao=FakeEpisodeDAO,
         asset_dao=FakeAssetDAO,
     )
 
-    assert [asset["name"] for asset in result["assets"]] == ["Bob", "Room"]
+    assert [asset["name"] for asset in result["assets"]] == ["Bob", "Room", "Sword"]
     assert FakeAssetDAO.created[0]["asset_type"] == "character"
     assert FakeAssetDAO.created[1]["asset_type"] == "scene"
+    assert FakeAssetDAO.created[2]["asset_type"] == "prop"
 
 
 async def test_extract_to_assets_raises_when_episode_missing():
@@ -457,6 +461,7 @@ async def test_extract_to_assets_raises_when_episode_missing():
             "missing",
             characters=[],
             scenes=[],
+            props=[],
             script_id=None,
             user_id="user_1",
             episode_dao=FakeEpisodeDAO,

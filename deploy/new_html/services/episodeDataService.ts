@@ -118,9 +118,9 @@ export async function syncStoryboardItems(episodeId: string, items: any[], scrip
     }, 'syncStoryboardItems');
 }
 
-export async function extractToAssets(episodeId: string, characters: any[], scenes: any[], scriptId?: string) {
+export async function extractToAssets(episodeId: string, characters: any[], scenes: any[], props: any[] = [], scriptId?: string) {
     return apiJson<any>(`/api/episodes/${episodeId}/extract-to-assets`, {
         method: 'POST',
-        body: JSON.stringify({ characters, scenes, script_id: scriptId })
+        body: JSON.stringify({ characters, scenes, props, script_id: scriptId })
     }, 'extractToAssets');
 }

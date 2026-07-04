@@ -225,6 +225,7 @@ class StoryboardDAO:
         storyboard_items: List[Dict[str, Any]],
         characters: List[Dict[str, Any]],
         scenes: List[Dict[str, Any]],
+        props: Optional[List[Dict[str, Any]]] = None,
         script_id: Optional[str],
         created_by: str,
     ) -> int:
@@ -242,6 +243,7 @@ class StoryboardDAO:
                     metadata={
                         "extracted_characters": [c.get("name", "") for c in characters],
                         "extracted_scenes": [s.get("name", "") for s in scenes],
+                        "extracted_props": [p.get("name", "") for p in (props or [])],
                     },
                 )
                 await StoryboardDAO.delete_by_episode_transactional(conn, episode_id, script_id=script_id)
@@ -267,6 +269,15 @@ class StoryboardDAO:
                     script_id=script_id,
                     asset_type="scene",
                     items=scenes,
+                    created_by=created_by,
+                )
+                await asset_dao.create_missing_episode_assets_transactional(
+                    conn,
+                    project_id=project_id,
+                    episode_id=episode_id,
+                    script_id=script_id,
+                    asset_type="prop",
+                    items=props or [],
                     created_by=created_by,
                 )
         return created

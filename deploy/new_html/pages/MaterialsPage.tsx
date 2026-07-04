@@ -193,7 +193,7 @@ export const MaterialsPage: React.FC = () => {
     return map;
   }, [assets]);
 
-  // Auto-patch: add char:/scene: tags to storyboard items that lack them
+  // Auto-patch: add char:/scene:/prop: tags to storyboard items that lack them
   const patchedItemIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     patchedItemIdsRef.current.clear();
@@ -203,39 +203,41 @@ export const MaterialsPage: React.FC = () => {
     if (!storyboardItems.length || !assets.length) return;
     const charAssets = assets.filter(a => a.assetType === 'character' && a.name);
     const sceneAssets = assets.filter(a => a.assetType === 'scene' && a.name);
-    if (!charAssets.length && !sceneAssets.length) return;
+    const propAssets = assets.filter(a => a.assetType === 'prop' && a.name);
+    if (!charAssets.length && !sceneAssets.length && !propAssets.length) return;
 
     const uncheckedItems = storyboardItems.filter(item =>
       item.itemId && !patchedItemIdsRef.current.has(item.itemId)
     );
     if (!uncheckedItems.length) return;
 
-    const needsPatch = uncheckedItems.filter(item => {
-      const bound = Array.isArray(item.boundAssets) ? item.boundAssets : [];
-      return !bound.some((b: string) => typeof b === 'string' && (b.startsWith('char:') || b.startsWith('scene:')));
-    });
     uncheckedItems.forEach(item => patchedItemIdsRef.current.add(item.itemId));
-    if (!needsPatch.length) return;
 
     const doPatch = async () => {
       let patched = 0;
-      for (const item of needsPatch) {
+      for (const item of uncheckedItems) {
         const searchText = [
           item.sceneHeading, item.actionText, item.dialogue,
           (item as any).imagePrompt, (item as any).videoPrompt,
         ].filter(Boolean).join(' ');
         const existing = Array.isArray(item.boundAssets) ? [...item.boundAssets] : [];
         const tags = [...existing];
+        const hasTag = (tag: string) => tags.includes(tag);
 
         const matchedChars = searchText
           ? charAssets.filter(a => searchText.includes(a.name))
           : charAssets;
-        tags.push(...matchedChars.map(a => `char:${a.name}`));
+        tags.push(...matchedChars.map(a => `char:${a.name}`).filter(tag => !hasTag(tag)));
 
         const matchedScene = searchText
           ? sceneAssets.find(a => searchText.includes(a.name))
           : (sceneAssets.length === 1 ? sceneAssets[0] : undefined);
-        if (matchedScene) tags.push(`scene:${matchedScene.name}`);
+        if (matchedScene && !hasTag(`scene:${matchedScene.name}`)) tags.push(`scene:${matchedScene.name}`);
+
+        const matchedProps = searchText
+          ? propAssets.filter(a => searchText.includes(a.name))
+          : [];
+        tags.push(...matchedProps.map(a => `prop:${a.name}`).filter(tag => !hasTag(tag)));
 
         if (tags.length > existing.length) {
           try {
@@ -247,7 +249,7 @@ export const MaterialsPage: React.FC = () => {
         }
       }
       if (patched > 0) {
-        console.log(`Auto-patched ${patched} storyboard items with char/scene tags`);
+        console.log(`Auto-patched ${patched} storyboard items with char/scene/prop tags`);
       }
     };
     doPatch();
@@ -264,7 +266,10 @@ export const MaterialsPage: React.FC = () => {
             const assetType = storyboardItems.some(si => {
               const converted = dbItemToStoryboardItem(si, assets);
               return converted.characters.includes(tagName);
-            }) ? 'character' : 'scene';
+            }) ? 'character' : storyboardItems.some(si => {
+              const converted = dbItemToStoryboardItem(si, assets);
+              return (converted.props || []).includes(tagName);
+            }) ? 'prop' : 'scene';
 
             await apiCreateAsset({
               project_id: projectId,
@@ -316,7 +321,7 @@ export const MaterialsPage: React.FC = () => {
     if (!item || currentIndex < 0) return;
 
     const asset = assets.find(a => a.name === tagName);
-    const prefix = asset?.assetType === 'scene' ? 'scene' : 'char';
+    const prefix = asset?.assetType === 'scene' ? 'scene' : asset?.assetType === 'prop' ? 'prop' : 'char';
     const tagEntry = `${prefix}:${tagName}`;
 
     const buildBoundAssets = (si: typeof item) => {
@@ -344,7 +349,7 @@ export const MaterialsPage: React.FC = () => {
     for (let i = currentIndex + 1; i < storyboardItems.length; i++) {
       const si = storyboardItems[i];
       const bound = Array.isArray(si.boundAssets) ? si.boundAssets : [];
-      const hasTag = bound.some((b: string) => b === `char:${tagName}` || b === `scene:${tagName}`);
+      const hasTag = bound.some((b: string) => b === `char:${tagName}` || b === `scene:${tagName}` || b === `prop:${tagName}`);
       if (!hasTag) continue;
       const alreadyBound = bound.some((b: string) => b.startsWith(`sel:${tagName}:`));
       if (alreadyBound) continue;

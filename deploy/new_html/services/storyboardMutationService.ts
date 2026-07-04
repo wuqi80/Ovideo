@@ -36,6 +36,7 @@ export async function exportScript(episodeId: string, data: {
   storyboard_items: any[];
   characters: { name: string; description: string }[];
   scenes: { name: string; description: string }[];
+  props?: { name: string; description: string }[];
   script_id?: string | null;
 }) {
   return apiJson<any>(`/api/episodes/${episodeId}/export-script`, {

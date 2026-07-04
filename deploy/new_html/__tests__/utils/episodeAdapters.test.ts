@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assetsToMaterialLibrary } from '../../utils/episodeAdapters';
+import { assetsToMaterialLibrary, dbItemToStoryboardItem, newShotToDbFields } from '../../utils/episodeAdapters';
 
 describe('assetsToMaterialLibrary', () => {
   it('includes generated material_image files alongside reference images', () => {
@@ -73,5 +73,74 @@ describe('assetsToMaterialLibrary', () => {
         source: 'entity_file:material_image',
       }),
     ]);
+  });
+});
+
+describe('prop storyboard bindings', () => {
+  it('maps prop bound tags and selections into storyboard items', () => {
+    const item = dbItemToStoryboardItem({
+      itemId: 'sb_1',
+      sceneHeading: '小悟拿起扇子',
+      actionText: '桌边动作',
+      dialogue: '',
+      imagePrompt: '',
+      videoPrompt: '',
+      cameraMovement: '',
+      generatedImageUrl: null,
+      boundAssets: ['char:小悟', 'scene:办公室', 'prop:扇子', 'sel:扇子:asset_prop_0'],
+      status: 'draft',
+    } as any, [
+      {
+        assetId: 'asset_prop',
+        assetType: 'prop',
+        name: '扇子',
+        referenceImages: ['/storage/fan.png'],
+        thumbnailUrl: null,
+        entityFiles: [],
+      } as any,
+    ]);
+
+    expect(item.props).toEqual(['扇子']);
+    expect(item.materialSelections?.['扇子']).toBe('asset_prop_0');
+  });
+
+  it('auto-selects prop materials even when the shot has no scene', () => {
+    const item = dbItemToStoryboardItem({
+      itemId: 'sb_1',
+      sceneHeading: '小悟拿起扇子',
+      actionText: '小悟拿起扇子',
+      dialogue: '',
+      imagePrompt: '',
+      videoPrompt: '',
+      cameraMovement: '',
+      generatedImageUrl: null,
+      boundAssets: ['prop:扇子'],
+      status: 'draft',
+    } as any, [
+      {
+        assetId: 'asset_prop',
+        assetType: 'prop',
+        name: '扇子',
+        referenceImages: ['/storage/fan.png'],
+        thumbnailUrl: null,
+        entityFiles: [],
+      } as any,
+    ]);
+
+    expect(item.scene).toBe('');
+    expect(item.props).toEqual(['扇子']);
+    expect(item.materialSelections?.['扇子']).toBe('asset_prop_0');
+  });
+
+  it('writes props back as prop bound asset tags', () => {
+    const fields = newShotToDbFields({
+      originalText: '小悟拿着扇子进入办公室',
+      scriptSegment: '小悟入场',
+      characters: ['小悟'],
+      scene: '办公室',
+      props: ['扇子'],
+    } as any, 0);
+
+    expect(fields.bound_assets).toEqual(['char:小悟', 'scene:办公室', 'prop:扇子']);
   });
 });

@@ -12,18 +12,21 @@ import { isAssetImageFileRole } from './assetImageRoles';
 
 const CHAR_PREFIX = 'char:';
 const SCENE_PREFIX = 'scene:';
+const PROP_PREFIX = 'prop:';
 const SEL_PREFIX = 'sel:';
 const NOSEL_PREFIX = 'nosel:';
 
 export function parseBoundAssetTags(boundAssets: string[]): {
   charNames: string[];
   sceneName: string;
+  propNames: string[];
   assetIds: string[];
   selections: Record<string, string>;
   noSelections: Set<string>;
 } {
   const charNames: string[] = [];
   let sceneName = '';
+  const propNames: string[] = [];
   const assetIds: string[] = [];
   const selections: Record<string, string> = {};
   const noSelections = new Set<string>();
@@ -32,6 +35,8 @@ export function parseBoundAssetTags(boundAssets: string[]): {
       charNames.push(entry.slice(CHAR_PREFIX.length));
     } else if (entry.startsWith(SCENE_PREFIX)) {
       sceneName = entry.slice(SCENE_PREFIX.length);
+    } else if (entry.startsWith(PROP_PREFIX)) {
+      propNames.push(entry.slice(PROP_PREFIX.length));
     } else if (entry.startsWith(SEL_PREFIX)) {
       const rest = entry.slice(SEL_PREFIX.length);
       const idx = rest.indexOf(':');
@@ -44,7 +49,7 @@ export function parseBoundAssetTags(boundAssets: string[]): {
       assetIds.push(entry);
     }
   }
-  return { charNames, sceneName, assetIds, selections, noSelections };
+  return { charNames, sceneName, propNames, assetIds, selections, noSelections };
 }
 
 function assetHasImages(asset: AssetItem): boolean {
@@ -56,10 +61,11 @@ function assetHasImages(asset: AssetItem): boolean {
 
 export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetItem[]): StoryboardItem {
   const boundAssets = Array.isArray(item.boundAssets) ? item.boundAssets : [];
-  const { charNames, sceneName, assetIds, selections, noSelections } = parseBoundAssetTags(boundAssets);
+  const { charNames, sceneName, propNames, assetIds, selections, noSelections } = parseBoundAssetTags(boundAssets);
 
   let characters = charNames;
   let scene = sceneName;
+  let props = propNames;
 
   if (assets && assetIds.length > 0) {
     const boundChars = assets
@@ -72,9 +78,16 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     if (!scene) {
       scene = assets.find(a => assetIds.includes(a.assetId) && a.assetType === 'scene')?.name || '';
     }
+    const boundProps = assets
+      .filter(a => assetIds.includes(a.assetId) && a.assetType === 'prop')
+      .map(a => a.name);
+    if (boundProps.length > 0) {
+      const merged = new Set([...props, ...boundProps]);
+      props = Array.from(merged);
+    }
   }
 
-  if (assets && (characters.length === 0 || !scene)) {
+  if (assets && (characters.length === 0 || !scene || props.length === 0)) {
     const searchText = [
       item.sceneHeading, item.actionText, item.dialogue,
       item.imagePrompt, item.videoPrompt,
@@ -88,6 +101,11 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
       scene = assets
         .find(a => a.assetType === 'scene' && a.name && searchText.includes(a.name))
         ?.name || '';
+    }
+    if (searchText && props.length === 0) {
+      props = assets
+        .filter(a => a.assetType === 'prop' && a.name && searchText.includes(a.name))
+        .map(a => a.name);
     }
   }
 
@@ -130,6 +148,17 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
         }
       }
     }
+    for (const propName of props) {
+      if (selections[propName]) {
+        materialSelections[propName] = selections[propName];
+        continue;
+      }
+      if (noSelections.has(propName)) continue;
+      const propAsset = assets.find(a => a.assetType === 'prop' && a.name === propName);
+      if (propAsset && assetHasImages(propAsset)) {
+        materialSelections[propName] = `${propAsset.assetId}_0`;
+      }
+    }
   }
 
   return {
@@ -138,6 +167,7 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     scriptSegment: item.actionText || '',
     characters,
     scene,
+    props,
     dialogue: item.dialogue || '',
     imagePrompt: item.imagePrompt || '',
     videoPrompt: item.videoPrompt || '',
@@ -148,6 +178,7 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     materialSelections,
     boundCharNames: charNames,
     boundSceneName: sceneName,
+    boundPropNames: propNames,
     isLocked: item.status === 'locked',
     status: item.status,
   };
@@ -208,6 +239,7 @@ export function newShotToDbFields(shot: Omit<StoryboardItem, 'id'>, sortOrder: n
     bound_assets: [
       ...(shot.characters || []).map((c: string) => `${CHAR_PREFIX}${c}`),
       ...(shot.scene ? [`${SCENE_PREFIX}${shot.scene}`] : []),
+      ...((shot.props || []).map((p: string) => `${PROP_PREFIX}${p}`)),
     ],
   };
 }
@@ -226,6 +258,7 @@ export function scriptToProjectFile(
     storyboard: items.length > 0 ? dbItemsToStoryboardData(items, assets) : null,
     extractedCharacters: script?.metadata?.extracted_characters || [],
     extractedScenes: script?.metadata?.extracted_scenes || [],
+    extractedProps: script?.metadata?.extracted_props || [],
     status: 'Idle' as FileStatus,
     lastUpdated: Date.now(),
     versions: [],

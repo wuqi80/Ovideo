@@ -380,6 +380,7 @@ async def export_script(
     storyboard_items: list[dict],
     characters: list[dict],
     scenes: list[dict],
+    props: list[dict] | None = None,
     script_id: Optional[str],
     user_id: str,
     storyboard_dao: Any,
@@ -396,6 +397,7 @@ async def export_script(
         storyboard_items=storyboard_items,
         characters=characters,
         scenes=scenes,
+        props=props or [],
         script_id=script_id,
         created_by=user_id,
     )
@@ -404,6 +406,7 @@ async def export_script(
         "storyboard_items_created": created,
         "characters_count": len(characters),
         "scenes_count": len(scenes),
+        "props_count": len(props or []),
     }
 
 
@@ -554,6 +557,7 @@ async def extract_to_assets(
     *,
     characters: list,
     scenes: list,
+    props: list | None = None,
     script_id: Optional[str],
     user_id: str,
     episode_dao: Any,
@@ -568,7 +572,7 @@ async def extract_to_assets(
     existing_names = {(asset["asset_type"], asset["name"]) for asset in existing_assets}
 
     created = []
-    for asset_type, rows in (("character", characters), ("scene", scenes)):
+    for asset_type, rows in (("character", characters), ("scene", scenes), ("prop", props or [])):
         for row in rows:
             name = row.get("name", "").strip()
             if not name or (asset_type, name) in existing_names:

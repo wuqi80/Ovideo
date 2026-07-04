@@ -46,12 +46,12 @@ export const aiGenerateStoryboards = async (
 };
 
 /**
- * 提取剧本元数据（角色、场景）
+ * 提取剧本元数据（角色、场景、道具）
  */
 export const aiExtractScriptMetadata = async (
   model: AiModel,
   scriptContent: string
-): Promise<{ characters: string[]; scenes: string[] }> => {
+): Promise<{ characters: string[]; scenes: string[]; props: string[] }> => {
   return await callAIForJSON(
     model,
     PROMPTS.EXTRACT_SCRIPT_METADATA,
@@ -186,6 +186,7 @@ export const aiGenerateShotDetails = async (
   dialogue: string;
   characters: string[];
   scene: string;
+  props: string[];
 }> => {
   const requirementsText = userRequirements 
     ? `**用户整体要求：**\n${userRequirements}\n` 

@@ -15,7 +15,7 @@ import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
 import { estimateDurationMs } from './utils/durationMapping';
 import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/scriptTimelineService';
 import { deleteAllStoryboardItems, exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
-import { extractToAssets, batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
+import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
 
 const loadAiModelService = () => import('./services/aiModelService');
@@ -30,6 +30,14 @@ const LegacyGenerationPage = React.lazy(() => import('./components/GenerationPag
 const LegacyVideoPage = React.lazy(() => import('./components/VideoPage').then(m => ({ default: m.VideoPage })));
 const LegacyAdminPage = React.lazy(() => import('./components/AdminPage').then(m => ({ default: m.AdminPage })));
 const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
+
+function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
+  return [
+    ...((item.characters || []).map((c: string) => `char:${c}`)),
+    ...(item.scene ? [`scene:${item.scene}`] : []),
+    ...((item.props || []).map((p: string) => `prop:${p}`)),
+  ];
+}
 
 const LegacyViewFallback: React.FC<{ label: string }> = ({ label }) => (
   <div className="h-full w-full flex items-center justify-center text-sm text-n300">
@@ -65,6 +73,7 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
       selectedImageId: imageUrl ? imageId : undefined,
       characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
       scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
+      props: boundAssets.filter((a: string) => a.startsWith('prop:')).map((a: string) => a.replace('prop:', '')),
       plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
       scriptSegmentId: r.script_segment_id ?? r.scriptSegmentId ?? undefined,
       sourceVideoShotNo: r.source_video_shot_no ?? r.sourceVideoShotNo ?? '',
@@ -300,6 +309,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
             storyboard: fileItems.length > 0 ? { items: fileItems } : null,
             extractedCharacters: [],
             extractedScenes: [],
+            extractedProps: [],
             status: FileStatus.Idle,
             lastUpdated: Date.now(),
             versions: [],
@@ -310,12 +320,15 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           if (fileItems.length > 0) {
             const chars = new Set<string>();
             const scenes = new Set<string>();
+            const props = new Set<string>();
             fileItems.forEach(item => {
               (item.characters || []).forEach((c: string) => { if (c) chars.add(c); });
               if (item.scene) scenes.add(item.scene);
+              (item.props || []).forEach((p: string) => { if (p) props.add(p); });
             });
             file.extractedCharacters = Array.from(chars);
             file.extractedScenes = Array.from(scenes);
+            file.extractedProps = Array.from(props);
           }
           return file;
         });
@@ -331,6 +344,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           storyboard: allItems.length > 0 ? { items: allItems } : null,
           extractedCharacters: [],
           extractedScenes: [],
+          extractedProps: [],
           status: FileStatus.Idle,
           lastUpdated: Date.now(),
           versions: [],
@@ -418,10 +432,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           video_prompt: item.videoPrompt || '',
           generated_image_url: persistImg,
           planned_duration_ms: item.plannedDurationMs || null,
-          bound_assets: [
-            ...(item.characters || []).map((c: string) => `char:${c}`),
-            ...(item.scene ? [`scene:${item.scene}`] : []),
-          ],
+          bound_assets: buildBoundAssetTags(item),
           script_segment_id: item.scriptSegmentId || null,
           source_video_shot_no: item.sourceVideoShotNo || '',
           video_script_block: item.videoScriptBlock || '',
@@ -673,6 +684,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                   storyboard: f.storyboard,
                   extractedCharacters: f.extractedCharacters,
                   extractedScenes: f.extractedScenes,
+                  extractedProps: f.extractedProps,
                   lastUpdated: f.lastUpdated,
               }
           };
@@ -861,6 +873,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
               storyboard: null,
               extractedCharacters: [],
               extractedScenes: [],
+              extractedProps: [],
               status: FileStatus.Idle,
               lastUpdated: Date.now(),
               versions: [],
@@ -893,6 +906,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           storyboard: null,
           extractedCharacters: [],
           extractedScenes: [],
+          extractedProps: [],
           status: FileStatus.Idle,
           lastUpdated: Date.now(),
           versions: [],
@@ -966,6 +980,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         storyboard: null,
         extractedCharacters: [],
         extractedScenes: [],
+        extractedProps: [],
         lastUpdated: Date.now(),
       }));
       return;
@@ -1164,12 +1179,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
 
       if (currentItem) {
           const actualUpdates = typeof updates === 'function' ? updates(currentItem) : updates;
-          if ('characters' in actualUpdates || 'scene' in actualUpdates) {
+          if ('characters' in actualUpdates || 'scene' in actualUpdates || 'props' in actualUpdates) {
               const updatedItem = { ...currentItem, ...actualUpdates };
-              const bound_assets = [
-                  ...(updatedItem.characters || []).map((c: string) => `char:${c}`),
-                  ...(updatedItem.scene ? [`scene:${updatedItem.scene}`] : []),
-              ];
+              const bound_assets = buildBoundAssetTags(updatedItem);
               updateStoryboardItem(itemId, { bound_assets }).catch(err => {
                   console.error('❌ 保存分镜标签失败:', err);
               });
@@ -1202,8 +1214,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       // Propagate forward: from current shot to end
       for (let i = currentShotIndex; i < newItems.length; i++) {
         const item = newItems[i];
-        // If this shot contains the tag (Character or Scene)
-        if (item.characters.includes(tagName) || item.scene === tagName) {
+        // If this shot contains the tag (Character, Scene or Prop)
+        if ((item.characters || []).includes(tagName) || item.scene === tagName || (item.props || []).includes(tagName)) {
            newItems[i] = {
              ...item,
              materialSelections: {
@@ -1235,7 +1247,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       // Delete forward: from current shot to end
       for (let i = currentShotIndex; i < newItems.length; i++) {
         const item = newItems[i];
-        if (item.characters.includes(tagName) || item.scene === tagName) {
+        if ((item.characters || []).includes(tagName) || item.scene === tagName || (item.props || []).includes(tagName)) {
            const newSelections = { ...(item.materialSelections || {}) };
            delete newSelections[tagName];
 
@@ -1322,19 +1334,22 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       };
     });
     
-    // 合并所有源文件的角色和场景
+    // 合并所有源文件的人物、场景和道具
     const allCharacters = sortedSourceFiles.flatMap(f => f.extractedCharacters || []);
     const allScenes = sortedSourceFiles.flatMap(f => f.extractedScenes || []);
+    const allProps = sortedSourceFiles.flatMap(f => f.extractedProps || []);
     
-    if (allCharacters.length || allScenes.length) {
+    if (allCharacters.length || allScenes.length || allProps.length) {
       setFiles(prev => prev.map(f => {
         if (f.id === selectedFileId) {
           const newCharacters = [...new Set([...(f.extractedCharacters || []), ...allCharacters])];
           const newScenes = [...new Set([...(f.extractedScenes || []), ...allScenes])];
+          const newProps = [...new Set([...(f.extractedProps || []), ...allProps])];
           return {
             ...f,
             extractedCharacters: newCharacters,
-            extractedScenes: newScenes
+            extractedScenes: newScenes,
+            extractedProps: newProps
           };
         }
         return f;
@@ -1584,14 +1599,17 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         if (pid && eid && selectedFile) {
           const charSet = new Set<string>(selectedFile.extractedCharacters || []);
           const sceneSet = new Set<string>(selectedFile.extractedScenes || []);
+          const propSet = new Set<string>(selectedFile.extractedProps || []);
           if (selectedFile.storyboard?.items) {
             for (const item of selectedFile.storyboard.items) {
               if (item.characters) item.characters.forEach(c => { if (c) charSet.add(c); });
               if (item.scene) sceneSet.add(item.scene);
+              if (item.props) item.props.forEach(p => { if (p) propSet.add(p); });
             }
           }
           const charNames = Array.from(charSet);
           const sceneNames = Array.from(sceneSet);
+          const propNames = Array.from(propSet);
 
           // 2026-05-20 (Bug 3)：导出时永远写入非 NULL 的 planned_duration_ms。
           // 优先 LLM 解析的「时间：N秒」字段，失败回退按台词字数估算（4 字/秒），
@@ -1608,10 +1626,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
               durationStr: item.duration,
               dialogueText: item.dialogue,
             }),
-            bound_assets: [
-              ...(item.characters || []).map((c: string) => `char:${c}`),
-              ...(item.scene ? [`scene:${item.scene}`] : []),
-            ],
+            bound_assets: buildBoundAssetTags(item),
           }));
 
           try {
@@ -1622,6 +1637,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
               storyboard_items: dbItems,
               characters: charNames.map(n => ({ name: n, description: '' })),
               scenes: sceneNames.map(n => ({ name: n, description: '' })),
+              props: propNames.map(n => ({ name: n, description: '' })),
               script_id: selectedFile.id,
             });
             console.log(`✅ 原子导出完成: ${dbItems.length} 个分镜`);
@@ -2071,6 +2087,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
             scriptSegment: ex.sceneDescription || '',
             characters: ex.characters || [],           // 人物 → bound_assets char:
             scene: ex.scene || '',                     // 场景 → bound_assets scene:
+            props: ex.props || [],                     // 道具 → bound_assets prop:
             imagePrompt: ex.imagePrompt || '',
             // Stage 2 单镜头块原文 → video_prompt（视频页消费）
             videoPrompt: block.rawBlock,
@@ -2206,6 +2223,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                  ...f,
                  extractedCharacters: metadata.characters,
                  extractedScenes: metadata.scenes,
+                 extractedProps: metadata.props || [],
                  status: FileStatus.Idle
              }));
         } catch (error) {
@@ -2287,6 +2305,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
               dialogue: item.dialogue,
               characters: item.characters,
               scene: item.scene,
+              props: item.props || [],
               timestamp: Date.now()
           }));
 

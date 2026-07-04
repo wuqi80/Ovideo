@@ -163,7 +163,7 @@ interface EpisodeContextValue {
   saveScript: (data: { original_content?: string; adapted_script?: string; metadata?: Record<string, any> }) => Promise<void>;
   saveStoryboardItem: (itemId: string, data: Record<string, any>) => Promise<void>;
   createStoryboardItems: (items: any[]) => Promise<void>;
-  extractToAssets: (characters: any[], scenes: any[]) => Promise<void>;
+  extractToAssets: (characters: any[], scenes: any[], props?: any[]) => Promise<void>;
 }
 
 const EpisodeContext = createContext<EpisodeContextValue>({
@@ -445,9 +445,9 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     }
   }, [episodeId, reload]);
 
-  const extractToAssetsFn = useCallback(async (characters: any[], scenes: any[]) => {
+  const extractToAssetsFn = useCallback(async (characters: any[], scenes: any[], props: any[] = []) => {
     try {
-      await apiExtractToAssets(episodeId, characters, scenes, selectedScriptIdRef.current || undefined);
+      await apiExtractToAssets(episodeId, characters, scenes, props, selectedScriptIdRef.current || undefined);
       await reload();
     } catch (e: any) {
       console.error('Failed to extract to assets:', e);

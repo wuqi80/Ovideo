@@ -194,7 +194,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       console.log('🔍 自动填充绑定素材');
       
       const newRefs: GenerationReference[] = [];
-      const validTags = [...(shot.characters || [])];
+      const validTags = [...(shot.characters || []), ...(shot.props || [])];
       if (shot.scene) validTags.push(shot.scene);
       
       Object.entries(shot.materialSelections).forEach(([tagName, materialId]) => {
@@ -693,12 +693,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       console.log('当前绑定关系:', selectedShot.materialSelections);
       console.log('当前镜头角色:', selectedShot.characters);
       console.log('当前镜头场景:', selectedShot.scene);
+      console.log('当前镜头道具:', selectedShot.props);
       
       const newRefs: GenerationReference[] = [];
       const usedIds = new Set(references.map(r => r.url)); // simple dedup by url
 
-      // 🔧 只填充当前镜头中实际存在的角色和场景的绑定素材
-      const validTags = [...(selectedShot.characters || [])];
+      // 🔧 只填充当前镜头中实际存在的人物、场景和道具的绑定素材
+      const validTags = [...(selectedShot.characters || []), ...(selectedShot.props || [])];
       if (selectedShot.scene) validTags.push(selectedShot.scene);
 
       // Iterate through bound selections
@@ -707,7 +708,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           
           // 🔧 检查tag是否在当前镜头中
           if (!validTags.includes(tagName)) {
-              console.log(`  ⏭️ 跳过tag "${tagName}"（不在当前镜头的角色/场景中）`);
+              console.log(`  ⏭️ 跳过tag "${tagName}"（不在当前镜头的人物/场景/道具中）`);
               return;
           }
           

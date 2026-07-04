@@ -125,10 +125,11 @@ ${text}
     return result.trim();
 };
 
-export const extractScriptMetadata = async (scriptText: string): Promise<{ characters: string[]; scenes: string[] }> => {
+export const extractScriptMetadata = async (scriptText: string): Promise<{ characters: string[]; scenes: string[]; props: string[] }> => {
     const prompt = `
 请分析以下剧本并输出 JSON。
-JSON 结构必须为 {"characters": [], "scenes": []}
+JSON 结构必须为 {"characters": [], "scenes": [], "props": []}
+道具只包含人物使用或画面需要稳定展示的物品，例如手持物、武器、关键陈设；人物衣着、服装、妆容属于人物，不要放进 props。
 
 剧本内容:
 ${scriptText}
@@ -138,11 +139,12 @@ ${scriptText}
         const parsed = JSON.parse(result);
         return {
             characters: parsed.characters || [],
-            scenes: parsed.scenes || []
+            scenes: parsed.scenes || [],
+            props: parsed.props || []
         };
     } catch (error) {
         console.error('DeepSeek metadata parse error', error);
-        return { characters: [], scenes: [] };
+        return { characters: [], scenes: [], props: [] };
     }
 };
 
@@ -159,6 +161,7 @@ JSON 结构必须为 {"items": [ ... ]}
 - dialogue: 人物台词（如果有）
 - characters: 出现的角色列表（数组）
 - scene: 场景位置（字符串）
+- props: 道具列表（数组；服装衣着不要作为道具）
 
 重要：originalText 必须是剧本中的原始文本段落，scriptSegment 是你提炼的场景描述。
 
@@ -183,7 +186,7 @@ ${scriptText}
 export const regenerateSingleShot = async (scriptSegment: string, instruction?: string): Promise<Omit<StoryboardItem, 'id'>> => {
     const prompt = `
 请根据以下剧本片段，重新生成分镜描述信息，并返回 JSON。
-JSON 必须包含: imagePrompt, videoPrompt, dialogue, characters, scene。
+JSON 必须包含: imagePrompt, videoPrompt, dialogue, characters, scene, props。
 
 剧本片段: "${scriptSegment}"
 ${instruction ? `用户额外要求: ${instruction}` : ''}

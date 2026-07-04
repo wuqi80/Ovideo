@@ -29,6 +29,7 @@ export interface ShotBlockFields {
   转场?: string;
   场景名称?: string;
   人物名称?: string;
+  道具名称?: string;
   视觉化描述?: string;
 }
 
@@ -122,7 +123,7 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
     '运动', '镜头运动',    // 支持新旧格式
     '机位', 
     '站位与构图', '动作与神态', '氛围与特效', 
-    '人声', '音效', '转场', '场景名称', '人物名称',
+    '人声', '音效', '转场', '场景名称', '人物名称', '道具名称',
     '视觉化描述'
   ];
   
@@ -274,6 +275,9 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
   const characters = fields.人物名称
     ? fields.人物名称.split(/[,，、]/).map(c => c.trim()).filter(c => c)
     : [];
+  const props = fields.道具名称 && fields.道具名称.trim() !== '无'
+    ? fields.道具名称.split(/[,，、]/).map(p => p.trim()).filter(p => p)
+    : [];
 
   // 构建原始文本用于存储和显示
   const originalTextParts = [
@@ -290,7 +294,8 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
     fields.音效 ? `音效：${fields.音效}` : '',
     fields.转场 ? `转场：${fields.转场}` : '',
     fields.场景名称 ? `场景名称：${fields.场景名称}` : '',
-    fields.人物名称 ? `人物名称：${fields.人物名称}` : ''
+    fields.人物名称 ? `人物名称：${fields.人物名称}` : '',
+    fields.道具名称 ? `道具名称：${fields.道具名称}` : ''
   ].filter(Boolean).join('\n');
 
   // 生成场景描述 (scriptSegment)
@@ -312,6 +317,7 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
     dialogue: fields.人声 || '',  // 🔧 人物台词对应人声字段
     characters,
     scene: fields.场景名称 || '',
+    props,
     shotNumber: fields.shotId,
     duration: 时长  // 🔧 兼容 时长/时间 两种字段名
   };

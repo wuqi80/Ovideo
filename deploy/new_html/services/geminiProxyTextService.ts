@@ -48,7 +48,7 @@ ${novelText}
 export const generateStoryboards = async (scriptContent: string): Promise<GeminiResponse<any>> => {
     console.log('🎬 开始生成分镜，剧本长度:', scriptContent.length);
     
-    const systemPrompt = `你是一位专业的分镜师，擅长将剧本拆解为具体的分镜。每个分镜应包含：画面提示词、视频提示词、台词、角色、场景。`;
+    const systemPrompt = `你是一位专业的分镜师，擅长将剧本拆解为具体的分镜。每个分镜应包含：画面提示词、视频提示词、台词、角色、场景、道具。`;
     
     const prompt = `请将以下剧本拆解为分镜：
 
@@ -60,6 +60,7 @@ ${scriptContent}
 - dialogue: 台词（中文）
 - characters: 角色列表（数组）
 - scene: 场景名称（中文）
+- props: 道具列表（数组；服装衣着不要作为道具）
 
 示例格式：
 [
@@ -68,7 +69,8 @@ ${scriptContent}
     "videoPrompt": "Camera slowly zooms in, wind gently blowing the curtains",
     "dialogue": "又是一个孤独的早晨...",
     "characters": ["李娜"],
-    "scene": "卧室"
+    "scene": "卧室",
+    "props": []
   }
 ]
 
@@ -101,19 +103,22 @@ ${scriptContent}
 };
 
 /**
- * 提取剧本元数据（角色、场景）
+ * 提取剧本元数据（角色、场景、道具）
  */
 export const extractScriptMetadata = async (scriptContent: string): Promise<GeminiResponse<any>> => {
     const systemPrompt = `你是一个文本分析专家，擅长从剧本中提取关键信息。`;
     
-    const prompt = `请分析以下剧本，提取所有角色和场景：
+    const prompt = `请分析以下剧本，提取所有角色、场景和道具：
 
 ${scriptContent}
+
+道具定义：只提取人物使用或画面需要稳定展示的物品，例如手持物、武器、关键陈设；人物衣着、服装、妆容属于人物，不要放进道具。
 
 返回JSON格式：
 {
   "characters": ["角色1", "角色2"],
-  "scenes": ["场景1", "场景2"]
+  "scenes": ["场景1", "场景2"],
+  "props": ["道具1", "道具2"]
 }
 
 只返回JSON，不要其他文字。`;
@@ -188,7 +193,8 @@ ${instruction}
         "videoPrompt": "动作描述",
         "dialogue": "台词",
         "characters": ["角色"],
-        "scene": "场景"
+        "scene": "场景",
+        "props": ["道具"]
       }
     ]
   }
@@ -230,7 +236,8 @@ ${instruction ? `用户指令：${instruction}` : ''}
   "videoPrompt": "动作描述（英文）",
   "dialogue": "台词（中文）",
   "characters": ["角色"],
-  "scene": "场景"
+  "scene": "场景",
+  "props": ["道具"]
 }
 
 只返回JSON，不要其他文字。`;
@@ -387,6 +394,7 @@ export const generateShotDetails = async (
     dialogue: string;
     characters: string[];
     scene: string;
+    props: string[];
 }> => {
     const prompt = `你是专业的镜头设计师。请为以下场景生成详细的镜头设计信息。
 
@@ -405,7 +413,8 @@ ${userRequirements ? `**用户整体要求：**\n${userRequirements}\n` : ''}
   "videoPrompt": "中文视频提示词，描述镜头运动（推拉摇移跟）、画面节奏、转场方式",
   "dialogue": "人物台词（直接从原文提取）",
   "characters": ["角色1", "角色2"],
-  "scene": "场景位置"
+  "scene": "场景位置",
+  "props": ["道具1", "道具2"]
 }`;
 
     const response = await callGeminiProxyWithRetry(prompt);

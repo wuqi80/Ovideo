@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ProjectFile, StoryboardItem, FileVersion } from '../types';
-import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle } from 'lucide-react';
+import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box } from 'lucide-react';
 
 interface StoryboardColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -118,7 +118,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
 
   // Tag Adding State
   const [addingTagToItem, setAddingTagToItem] = useState<string | null>(null);
-  const [tagInputType, setTagInputType] = useState<'character' | 'scene'>('character');
+  const [tagInputType, setTagInputType] = useState<'character' | 'scene' | 'prop'>('character');
   const [tagInputValue, setTagInputValue] = useState('');
 
   // ✨ 插入新分镜状态
@@ -133,7 +133,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
     videoPrompt: '',
     dialogue: '',
     characters: '',
-    scene: ''
+    scene: '',
+    props: ''
   });
 
   // 🎬 Loading动画文字循环
@@ -224,7 +225,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
       videoPrompt: '',
       dialogue: '',
       characters: '',
-      scene: ''
+      scene: '',
+      props: ''
     });
   };
 
@@ -249,7 +251,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
         videoPrompt: newShotData.videoPrompt.trim(),
         dialogue: newShotData.dialogue.trim(),
         characters: newShotData.characters.split(',').map(c => c.trim()).filter(c => c),
-        scene: newShotData.scene.trim()
+        scene: newShotData.scene.trim(),
+        props: newShotData.props.split(',').map(p => p.trim()).filter(p => p)
       });
     } else {
       // AI模式：只需要原文段落
@@ -308,8 +311,13 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
           if (!item.characters.includes(tagInputValue.trim())) {
              onUpdateItem(item.id, { characters: [...item.characters, tagInputValue.trim()] });
           }
-      } else {
+      } else if (tagInputType === 'scene') {
           onUpdateItem(item.id, { scene: tagInputValue.trim() });
+      } else {
+          const currentProps = item.props || [];
+          if (!currentProps.includes(tagInputValue.trim())) {
+             onUpdateItem(item.id, { props: [...currentProps, tagInputValue.trim()] });
+          }
       }
       setAddingTagToItem(null);
       setTagInputValue('');
@@ -319,6 +327,13 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
       e.stopPropagation();
       if (confirm(`确定删除角色标签 "${charName}" 吗？`)) {
           onUpdateItem(item.id, { characters: item.characters.filter(c => c !== charName) });
+      }
+  };
+
+  const handleRemoveProp = (e: React.MouseEvent, item: StoryboardItem, propName: string) => {
+      e.stopPropagation();
+      if (confirm(`确定删除道具标签 "${propName}" 吗？`)) {
+          onUpdateItem(item.id, { props: (item.props || []).filter(p => p !== propName) });
       }
   };
 
@@ -644,6 +659,18 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                   {item.scene}
                               </div>
                           )}
+                          {(item.props || []).map((prop, i) => (
+                              <div
+                                key={`p-${i}`}
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-950/30 border border-yellow-500/20 text-[9px] text-yellow-600 hover:bg-r50 hover:border-r75 hover:text-danger cursor-pointer transition-colors group/tag"
+                                onClick={(e) => handleRemoveProp(e, item, prop)}
+                                title="点击删除道具"
+                              >
+                                  <Box className="w-2.5 h-2.5" />
+                                  {prop}
+                                  <X className="w-2 h-2 opacity-0 group-hover/tag:opacity-100" />
+                              </div>
+                          ))}
 
                           {/* Add Tag Button */}
                           <button
@@ -671,6 +698,12 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                   >
                                       场景 (Scene)
                                   </button>
+                                  <button
+                                    onClick={() => setTagInputType('prop')}
+                                    className={`flex-1 text-[9px] py-1 rounded border ${tagInputType === 'prop' ? 'bg-yellow-600 text-white border-yellow-500' : 'bg-n30 text-n300 border-n40'}`}
+                                  >
+                                      道具 (Prop)
+                                  </button>
                               </div>
                               <div className="flex gap-1">
                                 <input
@@ -678,7 +711,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                     autoFocus
                                     value={tagInputValue}
                                     onChange={(e) => setTagInputValue(e.target.value)}
-                                    placeholder={tagInputType === 'character' ? "输入角色名..." : "输入场景名..."}
+                                    placeholder={tagInputType === 'character' ? "输入角色名..." : tagInputType === 'scene' ? "输入场景名..." : "输入道具名..."}
                                     className="flex-1 bg-n0 border border-n40 rounded px-2 py-1 text-xs text-n800 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') submitAddTag(item);
@@ -981,8 +1014,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                     />
                   </div>
 
-                  {/* 角色和场景 */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* 角色、场景和道具 */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-n700 mb-2">
                         角色 (逗号分隔)
@@ -1005,6 +1038,18 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                         onChange={(e) => setNewShotData({...newShotData, scene: e.target.value})}
                         className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-n700 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                         placeholder="场景名称"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-n700 mb-2">
+                        道具 (逗号分隔)
+                      </label>
+                      <input
+                        type="text"
+                        value={newShotData.props}
+                        onChange={(e) => setNewShotData({...newShotData, props: e.target.value})}
+                        className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-n700 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        placeholder="扇子, 武器"
                       />
                     </div>
                   </div>

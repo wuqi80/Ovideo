@@ -33,6 +33,7 @@ export interface StoryboardItem {
   dialogue?: string; // 人物台词（如果有）
   characters?: string[]; // 出现的角色列表
   scene?: string; // 场景位置
+  props?: string[]; // 道具列表（手持物、武器、关键陈设等；服装归人物）
   cameraMovement?: string; // 运镜/景别/角度组合描述（保存路径读取，写入 camera_movement）
   plannedDurationMs?: number | null; // 计划时长（毫秒），写入 planned_duration_ms
   
@@ -43,6 +44,7 @@ export interface StoryboardItem {
   // 🎭 素材绑定
   boundCharNames?: string[];
   boundSceneName?: string;
+  boundPropNames?: string[];
   materialSelections?: Record<string, string>; // 标签名 → 素材ID映射
   
   // 📸 生成数据
@@ -109,6 +111,7 @@ export interface ExtractedStoryboardPrompt {
   sceneDescription: string;  // 画面描述
   characters: string[];      // 人物（按 、，/ 切分；"无" → []）
   scene: string;             // 场景（"无" → ''）
+  props: string[];           // 道具（按 、，/ 切分；"无" → []）
   imagePrompt: string;       // 分镜生成提示词
   cameraAngle: string;       // 拍摄角度
   cameraMove: string;        // 运镜方式
@@ -131,6 +134,7 @@ export interface ProjectFile {
   storyboard: StoryboardData | null;
   extractedCharacters: string[];
   extractedScenes: string[];
+  extractedProps?: string[];
   status: FileStatus;
   lastUpdated: number;
   versions: FileVersion[];

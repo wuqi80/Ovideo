@@ -90,7 +90,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
     const items = selectedFile.storyboard.items;
     
     // 🔧 新表头格式（按用户图片）
-    const headers = ['镜号', '镜头描述', '画面描述', '转场', '时间', '人声', '音效', '人物名称', '场景名称'];
+    const headers = ['镜号', '镜头描述', '画面描述', '转场', '时间', '人声', '音效', '人物名称', '场景名称', '道具名称'];
     
     // 解析每个镜头的详细信息（支持新旧字段名）
     const parseOriginalText = (text: string) => {
@@ -111,6 +111,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
         '时间': /(?:时长|时间)[:：]\s*(.+?)(?:\n|$)/,    // 支持 "时长" 或 "时间"
         '人物名称': /人物名称[:：]\s*(.+?)(?:\n|$)/,
         '场景名称': /场景名称[:：]\s*(.+?)(?:\n|$)/,
+        '道具名称': /道具名称[:：]\s*(.+?)(?:\n|$)/,
       };
       
       for (const [field, pattern] of Object.entries(fieldPatterns)) {
@@ -156,6 +157,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
       
       // 🔧 场景名称
       const 场景名称 = parsed['场景名称'] || item.scene || '';
+      const 道具名称 = parsed['道具名称'] || (item.props || []).join('、');
       
       const row = [
         getShotNumberStr(item.shotNumber).replace(/镜头0?/, '') || `${index + 1}`.padStart(3, '0'),  // 镜号：001, 002...
@@ -166,7 +168,8 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
         人声,
         parsed['音效'] || '',  // 音效
         人物名称,
-        场景名称
+        场景名称,
+        道具名称
       ];
       
       // CSV格式需要对包含逗号、引号或换行的字段用引号包裹
@@ -725,7 +728,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                       dangerouslySetInnerHTML={{ __html: renderScriptContentWithHighlight() }}
                     />
 
-                    {(selectedFile.extractedCharacters.length > 0 || selectedFile.extractedScenes.length > 0) && (
+                    {(selectedFile.extractedCharacters.length > 0 || selectedFile.extractedScenes.length > 0 || (selectedFile.extractedProps || []).length > 0) && (
                         <div className="mt-8 pt-6 border-t border-n40 space-y-4">
                             <h3 className="text-xs font-bold text-n100 uppercase flex items-center gap-2">
                                 <Tags className="w-3 h-3" />
@@ -752,6 +755,19 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                                         {selectedFile.extractedScenes.map((scene, i) => (
                                             <span key={i} className="px-2 py-1 bg-orange-900/30 border border-orange-500/20 rounded text-[10px] text-orange-200">
                                                 {scene}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {(selectedFile.extractedProps || []).length > 0 && (
+                                <div>
+                                    <span className="text-[10px] text-yellow-600 font-bold mb-2 block">道具 (Props)</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {(selectedFile.extractedProps || []).map((prop, i) => (
+                                            <span key={i} className="px-2 py-1 bg-yellow-900/20 border border-yellow-500/20 rounded text-[10px] text-yellow-600">
+                                                {prop}
                                             </span>
                                         ))}
                                     </div>
@@ -1102,8 +1118,8 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                           </div>
                         )}
 
-                        {/* 角色和场景 */}
-                        <div className="grid grid-cols-2 gap-4">
+                        {/* 角色、场景和道具 */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           {shot.characters && shot.characters.length > 0 && (
                             <div>
                               <label className="text-xs font-bold text-n300 block mb-2">角色</label>
@@ -1121,6 +1137,18 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                               <label className="text-xs font-bold text-n300 block mb-2">场景</label>
                               <div className="px-2 py-1 bg-n0 text-n700 rounded text-xs border border-n40">
                                 📍 {shot.scene}
+                              </div>
+                            </div>
+                          )}
+                          {shot.props && shot.props.length > 0 && (
+                            <div>
+                              <label className="text-xs font-bold text-n300 block mb-2">道具</label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {shot.props.map(prop => (
+                                  <span key={prop} className="px-2 py-1 bg-yellow-900/20 text-yellow-700 rounded text-xs border border-yellow-500/20">
+                                    {prop}
+                                  </span>
+                                ))}
                               </div>
                             </div>
                           )}

@@ -34,6 +34,7 @@ class ExportScriptRequest(BaseModel):
     storyboard_items: List[dict] = []
     characters: List[dict] = []
     scenes: List[dict] = []
+    props: List[dict] = []
     script_id: Optional[str] = None
 
 
@@ -98,8 +99,9 @@ class SyncStoryboardItemsRequest(BaseModel):
 
 
 class ExtractToAssetsRequest(BaseModel):
-    characters: list
-    scenes: list
+    characters: list = []
+    scenes: list = []
+    props: list = []
     script_id: Optional[str] = None
 
 
@@ -220,6 +222,7 @@ def create_storyboard_router(
                 storyboard_items=req.storyboard_items,
                 characters=req.characters,
                 scenes=req.scenes,
+                props=req.props,
                 script_id=req.script_id,
                 user_id=user_id,
                 storyboard_dao=StoryboardDAO,
@@ -308,6 +311,7 @@ def create_storyboard_router(
                 episode_id,
                 characters=data.characters,
                 scenes=data.scenes,
+                props=data.props,
                 script_id=data.script_id,
                 user_id=user_id,
                 episode_dao=EpisodeDAO,

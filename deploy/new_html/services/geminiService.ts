@@ -77,23 +77,26 @@ export const rewriteNovelToScript = async (text: string): Promise<string> => {
   });
 };
 
-export const extractScriptMetadata = async (scriptText: string): Promise<{ characters: string[], scenes: string[] }> => {
+export const extractScriptMetadata = async (scriptText: string): Promise<{ characters: string[], scenes: string[], props: string[] }> => {
   return callWithRetry(async () => {
     try {
         const prompt = `
           Analyze the following script and extract:
           1. A list of all unique **Characters** (names).
           2. A list of all unique **Scene Locations** (headings).
+          3. A list of all unique **Props** that are used by characters or must stay visually consistent.
+          Props exclude clothing, outfits, makeup, and appearance details because those belong to characters.
+          Return only JSON in this shape: {"characters":[],"scenes":[],"props":[]}.
           
           Script Content:
           ${scriptText}
         `;
 
-        return await callGeminiJson<{ characters: string[], scenes: string[] }>(prompt, undefined, MODEL_LOGIC);
+        return await callGeminiJson<{ characters: string[], scenes: string[], props: string[] }>(prompt, undefined, MODEL_LOGIC);
 
     } catch (error) {
         console.error("Extraction Error:", error);
-        return { characters: [], scenes: [] };
+        return { characters: [], scenes: [], props: [] };
     }
   });
 };
@@ -112,6 +115,7 @@ export const generateStoryboards = async (scriptText: string): Promise<Storyboar
           5. **dialogue**: 该镜头中的人物台词（如果没有台词则留空）。
           6. **characters**: 该镜头中出现的角色名字列表。
           7. **scene**: 该镜头所在的场景地点。
+          8. **props**: 该镜头中需要稳定展示或被人物使用的道具列表；服装衣着不要作为道具。
 
           重要：originalText 必须是剧本中的原始文本段落，scriptSegment 是你提炼的场景描述。
 
@@ -142,7 +146,7 @@ export const regenerateSingleShot = async (scriptSegment: string, instruction?: 
 
               剧本片段: "${scriptSegment}"
 
-              请返回 JSON 包含 imagePrompt, videoPrompt, dialogue, characters, scene。
+              请返回 JSON 包含 imagePrompt, videoPrompt, dialogue, characters, scene, props。
             `;
 
             const data = await callGeminiJson<any>(prompt, undefined, MODEL_LOGIC);

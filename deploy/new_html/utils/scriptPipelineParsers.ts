@@ -178,12 +178,13 @@ export function extractSpokenDialogue(
     return { speaker, text };
 }
 
-const STORYBOARD_LABELS: Array<{ key: keyof ExtractedStoryboardPrompt | 'shotNoRaw' | 'charactersRaw'; label: RegExp }> = [
+const STORYBOARD_LABELS: Array<{ key: keyof ExtractedStoryboardPrompt | 'shotNoRaw' | 'charactersRaw' | 'propsRaw'; label: RegExp }> = [
     { key: 'shotNoRaw', label: /^镜头号\s*[:：]\s*(.*)$/ },
     { key: 'shotSize', label: /^景别\s*[:：]\s*(.*)$/ },
     { key: 'sceneDescription', label: /^画面描述\s*[:：]\s*(.*)$/ },
     { key: 'charactersRaw', label: /^人物\s*[:：]\s*(.*)$/ },
     { key: 'scene', label: /^场景\s*[:：]\s*(.*)$/ },
+    { key: 'propsRaw', label: /^道具\s*[:：]\s*(.*)$/ },
     { key: 'imagePrompt', label: /^分镜生成提示词\s*[:：]\s*(.*)$/ },
     { key: 'cameraAngle', label: /^拍摄角度\s*[:：]\s*(.*)$/ },
     { key: 'cameraMove', label: /^运镜方式\s*[:：]\s*(.*)$/ },
@@ -196,13 +197,13 @@ const STORYBOARD_LABELS: Array<{ key: keyof ExtractedStoryboardPrompt | 'shotNoR
  */
 function parseOneStoryboardBlock(text: string): ExtractedStoryboardPrompt {
     const result: ExtractedStoryboardPrompt = {
-        shotNo: '', shotSize: '', sceneDescription: '', characters: [], scene: '',
+        shotNo: '', shotSize: '', sceneDescription: '', characters: [], scene: '', props: [],
         imagePrompt: '', cameraAngle: '', cameraMove: '', dialogue: '', durationSec: null,
     };
     if (!text) return result;
 
     const lines = text.split('\n');
-    let currentKey: keyof ExtractedStoryboardPrompt | 'shotNoRaw' | 'charactersRaw' | null = null;
+    let currentKey: keyof ExtractedStoryboardPrompt | 'shotNoRaw' | 'charactersRaw' | 'propsRaw' | null = null;
     const buf: Record<string, string[]> = {};
 
     const matchLabel = (line: string) => {
@@ -237,6 +238,10 @@ function parseOneStoryboardBlock(text: string): ExtractedStoryboardPrompt {
         : charactersRaw.split(/[、，,/／]/).map(c => c.trim()).filter(Boolean);
     const scene = take('scene');
     result.scene = scene.trim() === '无' ? '' : scene;
+    const propsRaw = take('propsRaw');
+    result.props = propsRaw.trim() === '无'
+        ? []
+        : propsRaw.split(/[、，,/／]/).map(p => p.trim()).filter(Boolean);
     result.imagePrompt = take('imagePrompt');
     result.cameraAngle = take('cameraAngle');
     result.cameraMove = take('cameraMove');

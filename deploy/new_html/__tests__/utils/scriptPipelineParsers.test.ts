@@ -132,12 +132,20 @@ describe('parseStoryboardPromptExtractions', () => {
         expect(list[0].scene).toBe('浅浅家');
     });
 
+    it('splits 道具 by 、，/ into an array', () => {
+        const list = parseStoryboardPromptExtractions(
+            '镜头号：1\n景别：中景\n画面描述：小悟亮出扇子和长剑。\n人物：小悟\n场景：茶馆\n道具：扇子、长剑\n分镜生成提示词：P\n台词：无\n时长：5秒'
+        );
+        expect(list[0].props).toEqual(['扇子', '长剑']);
+    });
+
     it('converts 人物：无 / 场景：无 to [] and empty string', () => {
         const list = parseStoryboardPromptExtractions(
-            '镜头号：1\n景别：远景\n画面描述：空镜。\n人物：无\n场景：无\n分镜生成提示词：P\n台词：无\n时长：3秒'
+            '镜头号：1\n景别：远景\n画面描述：空镜。\n人物：无\n场景：无\n道具：无\n分镜生成提示词：P\n台词：无\n时长：3秒'
         );
         expect(list[0].characters).toEqual([]);
         expect(list[0].scene).toBe('');
+        expect(list[0].props).toEqual([]);
     });
 
     it('splits one video shot into multiple finer 镜头号 blocks', () => {
