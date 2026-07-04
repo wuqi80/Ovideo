@@ -189,6 +189,7 @@ class WorkflowHandler:
             'upscale': 'viedo_upscaler',  # 视频放大
             'voice': 'video_infinitetalk',  # 视频配音
             'i2i_fj': 'I2I_FJ',  # 图生图角度调整
+            'i2i_angel': 'I2I_angel',  # 旧版图生图角度调整
             'i2i_human': 'I2I_HUMAN',  # 多角度人物生成
             'i2i_around': 'I2I_Around',  # 🆕 全景角度生成
             'upscale_hd': 'upscale_hd',  # 图像高清放大

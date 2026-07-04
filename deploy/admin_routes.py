@@ -585,35 +585,51 @@ async def admin_import_workflows():
             continue
         if file_name:
             configured_files.add(file_name)
+        description = getattr(cfg, "description", "") or ""
+        ph_objs = _placeholders_from_workflow_config(cfg)
+        workflow_json: Dict[str, Any] = {}
+        path = wf_dir / file_name
+        if not path.is_file():
+            errors.append(f"{name}: missing file workflows/{file_name}")
+            continue
+        try:
+            workflow_json = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(workflow_json, dict):
+                errors.append(f"{name}: workflow JSON root must be object")
+                continue
+        except (OSError, json.JSONDecodeError) as e:
+            errors.append(f"{name}: read/parse error: {e}")
+            continue
+
         existing = await _get_workflow_template_by_key(str(category_key))
         if not existing:
             existing = await WorkflowTemplateDAO.get_by_name(name)
         if existing:
+            update_fields: Dict[str, Any] = {}
             if not existing.get("workflow_key"):
-                updated = await WorkflowTemplateDAO.update(
-                    existing["template_id"],
-                    workflow_key=str(category_key),
-                )
+                update_fields["workflow_key"] = str(category_key)
+
+            disk_placeholder_names = {str(p.get("key", "")) for p in ph_objs if isinstance(p, dict)}
+            existing_placeholders = _jsonb_to_python(existing.get("placeholders")) or []
+            existing_placeholder_names = {
+                str(p.get("key", ""))
+                for p in existing_placeholders
+                if isinstance(p, dict)
+            }
+            existing_workflow_json = _jsonb_to_python(existing.get("workflow_json")) or {}
+            existing_workflow_placeholders = set(_placeholder_names_from_workflow_json(existing_workflow_json))
+
+            if disk_placeholder_names and not disk_placeholder_names.issubset(existing_placeholder_names):
+                update_fields["placeholders"] = ph_objs
+            if disk_placeholder_names and not disk_placeholder_names.issubset(existing_workflow_placeholders):
+                update_fields["workflow_json"] = workflow_json
+
+            if update_fields:
+                updated = await WorkflowTemplateDAO.update(existing["template_id"], **update_fields)
                 if updated:
                     repaired += 1
             skipped += 1
             continue
-        description = getattr(cfg, "description", "") or ""
-        ph_objs = _placeholders_from_workflow_config(cfg)
-        workflow_json: Dict[str, Any] = {}
-        if file_name:
-            path = wf_dir / file_name
-            if not path.is_file():
-                errors.append(f"{name}: missing file workflows/{file_name}")
-                continue
-            try:
-                workflow_json = json.loads(path.read_text(encoding="utf-8"))
-                if not isinstance(workflow_json, dict):
-                    errors.append(f"{name}: workflow JSON root must be object")
-                    continue
-            except (OSError, json.JSONDecodeError) as e:
-                errors.append(f"{name}: read/parse error: {e}")
-                continue
         row = await WorkflowTemplateDAO.create(
             name=name,
             category=str(category_key),

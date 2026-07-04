@@ -1,7 +1,7 @@
 {
   "3": {
     "inputs": {
-      "seed": 119014427859262,
+      "seed": "{seed}",
       "steps": 4,
       "cfg": 1.5,
       "sampler_name": "euler",
@@ -116,7 +116,7 @@
   },
   "78": {
     "inputs": {
-      "image": "男2多视图.png"
+      "image": "{image}"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -161,7 +161,7 @@
   },
   "111": {
     "inputs": {
-      "prompt": "提示词:45度半侧，低角度仰视，中景，广角 人物略微后仰，不满不屑的表情，略微皱眉。\n眯眼，眼神看向前上方，双手自然张开，一只手上漂浮着一条龙鞭。",
+      "prompt": "{prompt}",
       "speak_and_recognation": true,
       "clip": [
         "38",

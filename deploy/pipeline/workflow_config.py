@@ -411,10 +411,16 @@ WORKFLOW_CONFIGS = {
     'i2i_angel': WorkflowConfig(
         name='旧版图像角度调整',
         file='I2I_angel.json',
-        description='旧版图像角度调整模板，保留用于后台查看和手动维护',
-        placeholders=[],
-        param_mapping={},
-        default_params={}
+        description='旧版图像角度调整模板，基于单张参考图和提示词生成新角度',
+        placeholders=['image', 'prompt', 'seed'],
+        param_mapping={
+            'image_data': 'image',
+            'prompt': 'prompt',
+            'seed': 'seed'
+        },
+        default_params={
+            'seed': -1
+        }
     ),
 
     # I2I_Around 工作流（全景角度生成）
