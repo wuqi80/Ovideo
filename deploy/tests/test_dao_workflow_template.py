@@ -36,6 +36,20 @@ async def test_get_by_name(test_db):
     assert found["name"] == "unique_tpl_name"
 
 
+async def test_create_workflow_template_can_start_disabled(test_db):
+    from dao_workflow_template import WorkflowTemplateDAO
+
+    wf = {"1": {"class_type": "Empty", "inputs": {}}}
+    row = await WorkflowTemplateDAO.create(
+        name="tpl_disabled_on_create",
+        category="other",
+        workflow_json=wf,
+        enabled=False,
+    )
+    assert row is not None
+    assert row["enabled"] is False
+
+
 async def test_list_enabled_filters_disabled(test_db):
     from dao_workflow_template import WorkflowTemplateDAO
 

@@ -174,7 +174,7 @@ export const generateWithComfyUI = async (
  * @param seed 随机种子
  */
 export const generateWithComfyUIWorkflow = async (
-    workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN',
+    workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN' | 'qwenN_lora',
     prompt: string,
     mainImage: string,
     refImages: string[] = [],
@@ -256,7 +256,7 @@ export const processMaterialImage = async (
  * 确保同一时间只有一个ComfyUI任务在执行
  */
 export const generateWithComfyUIWorkflowQueued = async (
-    workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN',
+    workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN' | 'qwenN_lora',
     prompt: string,
     mainImage: string,
     refImages: string[] = [],

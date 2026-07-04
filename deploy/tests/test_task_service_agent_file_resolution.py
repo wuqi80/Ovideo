@@ -168,3 +168,22 @@ async def test_prepare_prefers_enabled_workflow_template(fake_dependencies):
     assert task_data["workflow_name"] == "upscale_hd"
     assert task_data["workflow_json"] is full_template
     assert fake_dependencies.calls[0][2] is full_template
+
+
+@pytest.mark.asyncio
+async def test_prepare_skips_placeholder_workflow_template(fake_dependencies):
+    _WorkflowTemplateDAO.row = {
+        "workflow_key": "upscale_hd",
+        "workflow_json": {
+            "placeholder_node": {
+                "class_type": "PlaceholderNode",
+                "inputs": {"image": "{image}"},
+            }
+        },
+    }
+    task_data = {"image_path": "input.png", "seed_0": 123456}
+
+    await TaskService(_Redis())._prepare_for_agent("upscale_hd", task_data, "admin")
+
+    assert task_data["workflow_name"] == "upscale_hd"
+    assert fake_dependencies.calls[0][2] is None

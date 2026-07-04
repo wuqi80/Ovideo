@@ -966,7 +966,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               if (!resultUrl) throw new Error('天劫系列未返回可用图片 URL');
           } else {
               // 使用ComfyUI工作流生成
-              let workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN';
+              let workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN' | 'qwenN_lora';
               const imageCount = refImages.length;
               
               if (modelToUse === 'qwen') {
@@ -979,6 +979,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               } else if (modelToUse === 'qwenN') {
                   // 🔧 交换：K神(qwenN) 实际使用 kontext 工作流
                   workflowType = 'kontext';
+              } else if (modelToUse === 'qwenN_lora') {
+                  workflowType = 'qwenN_lora';
               } else {
                   workflowType = 'kontext';
               }
@@ -1006,7 +1008,17 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       saveRunningTask({ taskId, shotId: shot.id, fileId: selectedFileId || '', model: modelToUse, startedAt: Date.now() });
                   },
                   { entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId },
-                  buildRegistryMeta(shot, workflowType === 'qwen_lora' ? 'qwen-lora' : workflowType === 'kontext' ? 'kontext' : 'qwen-image', `画面分镜 ${workflowType}`),
+                  buildRegistryMeta(
+                      shot,
+                      workflowType === 'qwen_lora'
+                          ? 'qwen-lora'
+                          : workflowType === 'kontext'
+                              ? 'kontext'
+                              : workflowType === 'qwenN_lora'
+                                  ? 'qwenN-lora'
+                                  : 'qwen-image',
+                      `画面分镜 ${workflowType}`,
+                  ),
               );
               if (currentTaskId) removeRunningTask(currentTaskId);
               

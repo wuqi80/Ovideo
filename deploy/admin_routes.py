@@ -343,6 +343,22 @@ def _placeholder_names_from_workflow_json(workflow_json: Dict[str, Any]) -> List
     return sorted(names)
 
 
+def _workflow_executable_node_count(workflow_json: Any) -> int:
+    if not isinstance(workflow_json, dict):
+        return 0
+    return sum(
+        1
+        for node in workflow_json.values()
+        if isinstance(node, dict)
+        and node.get("class_type")
+        and str(node.get("class_type")).lower() not in {"placeholder_node", "placeholdernode"}
+    )
+
+
+def _workflow_is_executable(workflow_json: Any) -> bool:
+    return _workflow_executable_node_count(workflow_json) > 0
+
+
 async def _get_workflow_template_by_key(workflow_key: str) -> Optional[Dict[str, Any]]:
     db = get_db_manager()
     if not db or not workflow_key:
@@ -488,6 +504,15 @@ async def admin_scan_disk_workflows():
         placeholders = getattr(cfg, "placeholders", []) or []
         has_file = bool(file_name and (wf_dir / file_name).is_file())
         is_api = file_name is None
+        workflow_json: Dict[str, Any] = {}
+        if has_file:
+            try:
+                parsed = json.loads((wf_dir / file_name).read_text(encoding="utf-8"))
+                if isinstance(parsed, dict):
+                    workflow_json = parsed
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("扫描磁盘工作流失败 %s: %s", file_name, exc)
+        node_count = _workflow_executable_node_count(workflow_json)
         if file_name:
             configured_files.add(file_name)
 
@@ -500,6 +525,9 @@ async def admin_scan_disk_workflows():
             "category": _workflow_category_for(key, file_name, name),
             "has_file": has_file,
             "is_api": is_api,
+            "node_count": node_count,
+            "is_executable": node_count > 0,
+            "can_import": bool(has_file and node_count > 0),
             "imported": key in db_keys or name in db_names,
         })
 
@@ -526,6 +554,9 @@ async def admin_scan_disk_workflows():
             "category": _workflow_category_for(key, path.name),
             "has_file": True,
             "is_api": False,
+            "node_count": _workflow_executable_node_count(workflow_json),
+            "is_executable": _workflow_is_executable(workflow_json),
+            "can_import": _workflow_is_executable(workflow_json),
             "imported": key in db_keys or key in db_names,
             "source": "disk",
         })
@@ -542,12 +573,16 @@ async def admin_import_workflows():
     imported = 0
     skipped = 0
     repaired = 0
+    disabled_empty = 0
     errors: List[str] = []
     configured_files: set[str] = set()
 
     for category_key, cfg in WORKFLOW_CONFIGS.items():
         name = getattr(cfg, "name", None) or str(category_key)
         file_name = getattr(cfg, "file", None)
+        if not file_name:
+            skipped += 1
+            continue
         if file_name:
             configured_files.add(file_name)
         existing = await _get_workflow_template_by_key(str(category_key))
@@ -633,11 +668,73 @@ async def admin_import_workflows():
             continue
         imported += 1
 
+    valid_disk_workflows: Dict[str, Dict[str, Any]] = {}
+    valid_disk_placeholders: Dict[str, List[Dict[str, Any]]] = {}
+    configured_files_for_repair: set[str] = set()
+
+    for category_key, cfg in WORKFLOW_CONFIGS.items():
+        file_name = getattr(cfg, "file", None)
+        if not file_name:
+            continue
+        configured_files_for_repair.add(file_name)
+        path = wf_dir / file_name
+        if not path.is_file():
+            continue
+        try:
+            workflow_json = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not _workflow_is_executable(workflow_json):
+            continue
+        key = str(category_key)
+        valid_disk_workflows[key] = workflow_json
+        valid_disk_placeholders[key] = _placeholder_objects(
+            _placeholder_names_from_workflow_json(workflow_json),
+            getattr(cfg, "default_params", None) or {},
+        )
+
+    for path in sorted(wf_dir.glob("*.json"), key=lambda p: p.name.lower()):
+        if path.name in configured_files_for_repair:
+            continue
+        try:
+            workflow_json = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not _workflow_is_executable(workflow_json):
+            continue
+        key = path.stem
+        valid_disk_workflows[key] = workflow_json
+        valid_disk_placeholders[key] = _placeholder_objects(
+            _placeholder_names_from_workflow_json(workflow_json)
+        )
+
+    for row in await WorkflowTemplateDAO.list_all():
+        key = row.get("workflow_key") or row.get("category") or row.get("name") or ""
+        workflow_json = _jsonb_to_python(row.get("workflow_json")) or {}
+        if _workflow_is_executable(workflow_json):
+            continue
+        if key in valid_disk_workflows:
+            updated = await WorkflowTemplateDAO.update(
+                row["template_id"],
+                workflow_json=valid_disk_workflows[key],
+                placeholders=valid_disk_placeholders.get(key, []),
+                enabled=True,
+            )
+            if updated:
+                repaired += 1
+            continue
+        if bool(row.get("enabled", True)):
+            updated = await WorkflowTemplateDAO.update(row["template_id"], enabled=False)
+            if updated:
+                repaired += 1
+                disabled_empty += 1
+
     return {
         "success": True,
         "imported": imported,
         "skipped": skipped,
         "repaired": repaired,
+        "disabled_empty": disabled_empty,
         "errors": errors,
     }
 

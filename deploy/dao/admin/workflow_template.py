@@ -25,6 +25,7 @@ class WorkflowTemplateDAO:
         node_type: str = "any",
         estimated_time: int = 30,
         workflow_key: str = "",
+        enabled: bool = True,
     ) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
@@ -39,7 +40,7 @@ class WorkflowTemplateDAO:
                 workflow_json, placeholders, node_type, estimated_time, enabled,
                 workflow_key
             )
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, TRUE, $9)
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10)
             RETURNING *
         """
         return await db.fetchrow(
@@ -52,6 +53,7 @@ class WorkflowTemplateDAO:
             ph_s,
             node_type,
             estimated_time,
+            enabled,
             workflow_key or None,
         )
 

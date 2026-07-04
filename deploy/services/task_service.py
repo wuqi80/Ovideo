@@ -111,6 +111,18 @@ def _is_display_only_file_ref(ref: str) -> bool:
     return bool(DISPLAY_ONLY_FILE_REF_RE.match(value))
 
 
+def _workflow_executable_node_count(workflow_json) -> int:
+    if not isinstance(workflow_json, dict):
+        return 0
+    return sum(
+        1
+        for node in workflow_json.values()
+        if isinstance(node, dict)
+        and node.get("class_type")
+        and str(node.get("class_type")).lower() not in {"placeholder_node", "placeholdernode"}
+    )
+
+
 def init(redis_client):
     """应用启动时调用，Redis 连接后、AGENT_ONLY_MODE 判断前"""
     global _service
@@ -220,6 +232,9 @@ class TaskService:
 
             task_data["agent_files"] = agent_files
             logger.info(f"✅ Pre-built workflow for {task_type}, {len(agent_files)} agent files")
+        except ValueError as e:
+            logger.warning("prepare_task_for_agent rejected %s: %s", task_type, e)
+            raise HTTPException(status_code=400, detail=f"任务预处理失败: {e}")
         except Exception as e:
             logger.exception(f"prepare_task_for_agent failed for {task_type}: {e}")
             raise HTTPException(status_code=500, detail=f"任务预处理失败: {e}")
@@ -238,9 +253,12 @@ class TaskService:
                 seen.add(key)
                 row = await get_enabled_by_key(key)
                 workflow_json = row.get("workflow_json") if row else None
-                if isinstance(workflow_json, dict) and workflow_json:
-                    logger.info("✅ 使用后台工作流模板: %s -> %s (%s nodes)", key, workflow_name, len(workflow_json))
+                node_count = _workflow_executable_node_count(workflow_json)
+                if node_count > 0:
+                    logger.info("✅ 使用后台工作流模板: %s -> %s (%s nodes)", key, workflow_name, node_count)
                     return workflow_json
+                if isinstance(workflow_json, dict) and workflow_json:
+                    logger.warning("后台工作流模板不可执行，回退磁盘: %s -> %s", key, workflow_name)
         except Exception as exc:
             logger.warning("加载后台工作流模板失败，回退磁盘工作流 %s: %s", workflow_name, exc)
         return None

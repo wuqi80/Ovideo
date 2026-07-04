@@ -56,7 +56,7 @@ class WorkflowHandler:
             for node_id, node in workflow.items()
             if isinstance(node, dict)
             and node.get('class_type')
-            and node.get('class_type') != 'placeholder_node'
+            and str(node.get('class_type')).lower() not in {'placeholder_node', 'placeholdernode'}
         }
         removed = len(workflow) - len(cleaned)
         if removed:
@@ -111,6 +111,7 @@ class WorkflowHandler:
         # 替换占位符
         replacements = {
             '"{prompt}"': json.dumps(params.get('prompt', '')),  # 保持字符串格式
+            '"{negative_prompt}"': json.dumps(params.get('negative_prompt', '')),
             '"{prompt_AU}"': json.dumps(params.get('prompt_AU', '')),  # 配音提示词
             '"{seed}"': str(params.get('seed')),  # 替换为数字（移除引号）
             '"{seed_0}"': str(params.get('seed_0', params.get('seed', 123456))),  # seed_0
@@ -288,6 +289,7 @@ class WorkflowHandler:
 
         params = {
             'prompt': task_data.get('prompt', ''),
+            'negative_prompt': task_data.get('negative_prompt', ''),
             'prompt_AU': task_data.get('prompt_AU', ''),
             'seed': task_data.get('seed', -1),
             'seed_0': task_data.get('seed_0', task_data.get('seed', random.randint(100000, 999999))),  # 6位随机数
