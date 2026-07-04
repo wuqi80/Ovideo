@@ -6,7 +6,7 @@ import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Tra
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle } from '../services/comfyuiGenerationService';
-import { waitForComfyUITask } from '../services/comfyuiTaskWaitService';
+import { waitForComfyUITask, waitForComfyUITaskAllImages } from '../services/comfyuiTaskWaitService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { generateThumbnail } from '../utils/imageOptimization';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
@@ -363,6 +363,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     ? (selectedFile.storyboard!.items.find(i => i.id === effectiveSelectedShotId) || selectedFile.storyboard!.items[0])
     : null;
 
+  const getNextMaterialId = (tagName: string, offset = 0, fallback?: string | null) => {
+    const targetAssetId = assetNameToId?.[tagName];
+    const existing = materialLibrary[tagName] || [];
+    return targetAssetId ? `${targetAssetId}_${existing.length + offset}` : (fallback || uuidv4());
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, tagName: string, type: 'character' | 'scene') => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
@@ -370,7 +376,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         const { uploadEntityFile } = await import('../services/entityFileService');
         const shotId = selectedShot?.id || 'temp';
         const saved = await uploadEntityFile(file, 'material', shotId, type === 'character' ? 'character_ref' : 'scene_ref', '');
-        const newId = saved.fileId || uuidv4();
+        const newId = getNextMaterialId(tagName, 0, saved.fileId);
         const newMaterial: Material = {
           id: newId,
           url: saved.fileUrl,
@@ -441,8 +447,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         if (!results.length) throw new Error('未返回图片');
         
         const existing = materialLibrary[payload.tagName] || [];
-        const newMaterials: Material[] = results.map((r) => ({
-            id: uuidv4(),
+        const newMaterials: Material[] = results.map((r, index) => ({
+            id: getNextMaterialId(payload.tagName, index, r.fileId),
             url: r.url,
             type: 'image',
             source: 'ai',
@@ -533,9 +539,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         const resultUrl = await waitForComfyUITask(taskId);
 
         const existing = materialLibrary[tagName] || [];
+        const newMaterialId = getNextMaterialId(tagName);
         const newMaterial: Material = {
-            id: `${Date.now()}_processed`,
+            id: newMaterialId,
             url: resultUrl,
+            type: 'image',
+            source: 'ai',
             timestamp: Date.now()
         };
 
@@ -607,8 +616,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         const imageUrl = results[0].url;
 
         const existing = materialLibrary[tagName] || [];
+        const newMaterialId = getNextMaterialId(tagName, 0, results[0].fileId);
         const newMaterial: Material = {
-            id: `${Date.now()}_threeview`,
+            id: newMaterialId,
             url: imageUrl,
             type: 'image',
             source: 'ai',
@@ -650,7 +660,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 episodeId: selectedFileId || undefined,
             }
         );
-        const resultUrl = await waitForComfyUITask(taskId, undefined, {
+        const results = await waitForComfyUITaskAllImages(taskId, undefined, {
             title: `角度调整 · ${payload.tagName}`,
             kind: 'angle-adjust',
             targetPage: 'materials',
@@ -660,21 +670,26 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             episodeId: selectedFileId || undefined,
             fileRole: 'material_image',
         });
+        const resultUrl = results[0]?.url;
+        if (!resultUrl) {
+            throw new Error('角度调整未返回图片');
+        }
 
+        const existing = materialLibrary[payload.tagName] || [];
+        const newMaterialId = getNextMaterialId(payload.tagName, 0, results[0]?.fileId);
         const newMaterial: Material = {
-            id: uuidv4(),
+            id: newMaterialId,
             url: resultUrl,
             type: 'image',
             source: 'ai',
             timestamp: Date.now()
         };
 
-        const existing = materialLibrary[payload.tagName] || [];
         onUpdateLibrary({
             ...materialLibrary,
             [payload.tagName]: [...existing, newMaterial]
         });
-        onBindMaterial(selectedShot.id, payload.tagName, newMaterial.id);
+        onBindMaterial(selectedShot.id, payload.tagName, newMaterialId);
 
     } catch (error:any) {
         console.error('Camera adjust failed', error);

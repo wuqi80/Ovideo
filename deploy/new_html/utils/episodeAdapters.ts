@@ -13,6 +13,7 @@ const CHAR_PREFIX = 'char:';
 const SCENE_PREFIX = 'scene:';
 const SEL_PREFIX = 'sel:';
 const NOSEL_PREFIX = 'nosel:';
+const ASSET_MATERIAL_FILE_ROLES = new Set(['reference_image', 'material_image', 'generated_image']);
 
 export function parseBoundAssetTags(boundAssets: string[]): {
   charNames: string[];
@@ -47,7 +48,7 @@ export function parseBoundAssetTags(boundAssets: string[]): {
 }
 
 function assetHasImages(asset: AssetItem): boolean {
-  const ef = (asset.entityFiles || []).filter(f => f.fileRole === 'reference_image');
+  const ef = (asset.entityFiles || []).filter(f => ASSET_MATERIAL_FILE_ROLES.has(f.fileRole));
   if (ef.length > 0) return true;
   const refs = Array.isArray(asset.referenceImages) ? asset.referenceImages.filter(Boolean) : [];
   return refs.length > 0 || !!asset.thumbnailUrl;
@@ -236,38 +237,39 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
   for (const asset of assets) {
     const key = asset.name;
     if (!lib[key]) lib[key] = [];
+    const seenUrls = new Set<string>();
+
+    const pushMaterial = (url: string, thumbnail: string | undefined, source: string) => {
+      if (!url || seenUrls.has(url)) return;
+      seenUrls.add(url);
+      const index = lib[key].length;
+      lib[key].push({
+        id: `${asset.assetId}_${index}`,
+        url,
+        thumbnail: index === 0 ? (asset.thumbnailUrl || thumbnail || url) : (thumbnail || url),
+        name: asset.name,
+        source,
+      });
+    };
+
+    const refs = Array.isArray(asset.referenceImages) ? asset.referenceImages.filter(Boolean) : [];
+    const legacyUrls = [...refs];
+    if (asset.thumbnailUrl && !legacyUrls.includes(asset.thumbnailUrl)) {
+      legacyUrls.unshift(asset.thumbnailUrl);
+    }
+    legacyUrls.forEach((url) => {
+      pushMaterial(url, url, 'asset');
+    });
 
     const efImages = (asset.entityFiles || [])
-      .filter(f => f.fileRole === 'reference_image')
+      .filter(f => ASSET_MATERIAL_FILE_ROLES.has(f.fileRole) && Boolean(f.fileUrl))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    efImages.forEach((f) => {
+      pushMaterial(f.fileUrl, f.fileUrl, `entity_file:${f.fileRole}`);
+    });
 
-    if (efImages.length > 0) {
-      efImages.forEach((f, i) => {
-        lib[key].push({
-          id: `${asset.assetId}_${i}`,
-          url: f.fileUrl,
-          thumbnail: i === 0 ? (asset.thumbnailUrl || f.fileUrl) : f.fileUrl,
-          name: asset.name,
-          source: 'entity_file',
-        });
-      });
-    } else {
-      const refs = Array.isArray(asset.referenceImages) ? asset.referenceImages.filter(Boolean) : [];
-      const allUrls = [...refs];
-      if (asset.thumbnailUrl && !allUrls.includes(asset.thumbnailUrl)) {
-        allUrls.unshift(asset.thumbnailUrl);
-      }
-      if (allUrls.length > 0) {
-        allUrls.forEach((url, i) => {
-          lib[key].push({
-            id: `${asset.assetId}_${i}`,
-            url,
-            thumbnail: i === 0 ? (asset.thumbnailUrl || url) : url,
-            name: asset.name,
-            source: 'asset',
-          });
-        });
-      }
+    if (lib[key].length === 0 && asset.thumbnailUrl) {
+      pushMaterial(asset.thumbnailUrl, asset.thumbnailUrl, 'asset');
     }
   }
   return lib;
