@@ -1523,6 +1523,7 @@ const MaterialCard: React.FC<{
 }> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, onUnbind, onViewImage }) => {
     
     const boundMaterial = materials.find(m => m.id === selectedMaterialId);
+    const hasMaterials = materials.length > 0;
     const typeStyles: Record<BindingAssetType, { header: string; badge: string; label: string }> = {
         character: { header: 'bg-primary-light', badge: 'text-primary border-primary/20 bg-primary-light', label: 'Character' },
         scene: { header: 'bg-orange-950/20', badge: 'text-orange-300 border-orange-500/20 bg-orange-500/10', label: 'Scene' },
