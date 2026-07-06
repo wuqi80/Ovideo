@@ -64,6 +64,23 @@ function isAdminRoute(): boolean {
   }
 }
 
+function notifyEpisodeDataChanged(notification: TaskNotification) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('drama:episode-data-changed', {
+    detail: {
+      episodeId: notification.episodeId,
+      entityType: notification.entityType,
+      entityId: notification.entityId,
+      fileRole: notification.fileRole,
+      targetPage: notification.targetPage,
+      targetItemId: notification.targetItemId,
+      taskId: notification.taskId,
+      status: notification.status,
+      type: notification.type,
+    },
+  }));
+}
+
 export const useTaskManager = (): TaskContextValue => {
   const ctx = useContext(TaskContext);
   return ctx || STUB_VALUE;
@@ -184,6 +201,9 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (n.episodeId) {
             void queryClient.invalidateQueries({ queryKey: ['storyboardItems', n.episodeId] });
             void queryClient.invalidateQueries({ queryKey: ['videoSegments', n.episodeId] });
+          }
+          if (n.status === 'completed') {
+            notifyEpisodeDataChanged(n);
           }
 
           if (n.taskId) {

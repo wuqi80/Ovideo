@@ -327,6 +327,38 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     }
   }, [assetScopeMode, fetchSlices]);
 
+  useEffect(() => {
+    if (!episodeId || typeof window === 'undefined') return;
+    const onEpisodeDataChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        episodeId?: string;
+        entityType?: string;
+        fileRole?: string;
+        type?: string;
+      }>).detail || {};
+      if (detail.episodeId && detail.episodeId !== episodeId) return;
+
+      const slices = new Set<DataSlice>();
+      if (!detail.entityType || detail.entityType === 'asset' || detail.type === 'image' || detail.type === 'material') {
+        slices.add('assets');
+      }
+      if (!detail.entityType || detail.entityType === 'storyboard_item') {
+        slices.add('storyboardItems');
+      }
+      if (detail.type === 'video') {
+        slices.add('videoSegments');
+      }
+
+      const loaded = Array.from(slices).filter(slice => loadedSlicesRef.current.has(slice));
+      if (loaded.length > 0) {
+        void fetchSlices({ quiet: true }, ...loaded);
+      }
+    };
+
+    window.addEventListener('drama:episode-data-changed', onEpisodeDataChanged);
+    return () => window.removeEventListener('drama:episode-data-changed', onEpisodeDataChanged);
+  }, [episodeId, fetchSlices]);
+
   const loadSlices = useCallback(async (...slices: DataSlice[]) => {
     const newSlices = slices.filter(s => !loadedSlicesRef.current.has(s));
     if (newSlices.length === 0) return;

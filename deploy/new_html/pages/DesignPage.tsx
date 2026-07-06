@@ -197,7 +197,7 @@ const AssetImageRow: React.FC<{
 /* ======================== Main Component ======================== */
 export const DesignPage: React.FC = () => {
   const navigate = useNavigate();
-  const { episodeId, projectId, selectedScriptId, assets, script, isLoading, error, reload, loadSlices, forceReloadSlices } = useEpisode();
+  const { episodeId, projectId, selectedScriptId, assets, script, isLoading, error, forceReloadSlices } = useEpisode();
   useEffect(() => {
     // 2026-06-14：强制刷新资产，保证别处新生成的资产图在设计页可见。
     forceReloadSlices('assets', 'script');
@@ -248,10 +248,10 @@ export const DesignPage: React.FC = () => {
       const res = await createAsset({ project_id: projectId, asset_type: tab, name: n, episode_id: episodeId || undefined, script_id: selectedScriptId || undefined, description: description.trim() || undefined });
       if (!res?.success) { setFormError(typeof res?.detail === 'string' ? res.detail : '创建失败'); return; }
       setName(''); setDescription('');
-      await reload();
+      await forceReloadSlices('assets');
     } catch (e: unknown) { setFormError(e instanceof Error ? e.message : '创建失败'); }
     finally { setIsCreating(false); }
-  }, [name, description, projectId, episodeId, tab, reload]);
+  }, [name, description, projectId, episodeId, selectedScriptId, tab, forceReloadSlices]);
 
   const handleDelete = useCallback(async (assetId: string) => {
     setDeletingId(assetId);
@@ -275,17 +275,17 @@ export const DesignPage: React.FC = () => {
     try {
       const { uploadEntityFile } = await import('../services/entityFileService');
       await uploadEntityFile(file, 'asset', assetId, 'reference_image', episodeId);
-      await reload();
+      await forceReloadSlices('assets');
     } catch (err) { console.error('上传失败:', err); }
     finally { setUploadingId(null); }
-  }, [episodeId, reload]);
+  }, [episodeId, forceReloadSlices]);
 
   const handleDeleteImage = useCallback(async (assetId: string, imageUrl: string, fileId?: string) => {
     if (fileId) {
       const { deleteEntityFile } = await import('../services/entityFileService');
       try {
         await deleteEntityFile(fileId);
-        await reload();
+        await forceReloadSlices('assets');
       } catch (err) { console.error('删除图片失败:', err); }
       return;
     }
@@ -295,9 +295,9 @@ export const DesignPage: React.FC = () => {
     const newThumb = asset.thumbnailUrl === imageUrl ? (newRefs[0] || '') : asset.thumbnailUrl;
     try {
       await updateAsset(assetId, { reference_images: newRefs, thumbnail_url: newThumb });
-      await reload();
+      await forceReloadSlices('assets');
     } catch (err) { console.error('删除图片失败:', err); }
-  }, [assets, reload]);
+  }, [assets, forceReloadSlices]);
 
   /* ---- AI Generation (from modal) ---- */
   const handleAIGeneration = useCallback(async (payload: {
@@ -315,10 +315,10 @@ export const DesignPage: React.FC = () => {
       } else {
         await generateDoubaoImages({ prompt: payload.prompt, references: payload.references, size: payload.resolution, sequential: payload.sequential as any, count: payload.count, ...entityOpts });
       }
-      await reload();
+      await forceReloadSlices('assets');
     } catch (err: any) { console.error('AI生成失败:', err); crmMessage.error(err?.message || 'AI生成失败'); }
     finally { setBusyAssetId(null); }
-  }, [episodeId, reload]);
+  }, [episodeId, forceReloadSlices]);
 
   /* ---- Camera ---- */
   const handleCameraGenerate = useCallback(async (payload: { assetId: string; imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number }) => {
@@ -347,10 +347,10 @@ export const DesignPage: React.FC = () => {
         episodeId: episodeId || undefined,
         fileRole: 'reference_image',
       });
-      await reload();
+      await forceReloadSlices('assets');
     } catch (err: any) { console.error('角度调整失败:', err); crmMessage.error(err?.message || '角度调整失败'); }
     finally { setBusyAssetId(null); }
-  }, [episodeId, projectId, reload]);
+  }, [episodeId, projectId, forceReloadSlices]);
 
   /* ---- Process (upscale/watermark) ---- */
   const handleProcessSubmit = useCallback(async (materialUrl: string) => {
@@ -373,10 +373,10 @@ export const DesignPage: React.FC = () => {
         episodeId: episodeId || undefined,
         fileRole: 'reference_image',
       });
-      await reload();
+      await forceReloadSlices('assets');
     } catch (err: any) { console.error('处理失败:', err); crmMessage.error(err?.message || '处理失败'); }
     finally { setBusyAssetId(null); }
-  }, [processModal, episodeId, projectId, reload]);
+  }, [processModal, episodeId, projectId, forceReloadSlices]);
 
   /* ---- Batch Generation ---- */
   const handleBatchGenerate = useCallback(async (config: {
@@ -430,7 +430,7 @@ export const DesignPage: React.FC = () => {
         console.error(`批量生成 ${asset.name} 失败:`, err);
       }
     }
-    await reload();
+    await forceReloadSlices('assets');
     setBusyAssetId(null); setBusyLabel('');
     if (!errors.length) {
       crmMessage.success(`批量生成完成：成功 ${okCount} 项`);
@@ -439,7 +439,7 @@ export const DesignPage: React.FC = () => {
     } else {
       crmMessage.error(`批量生成全部失败（${errors.length} 项）。原因 → ${errors[0]}`);
     }
-  }, [assets, scriptText, episodeId, reload]);
+  }, [assets, scriptText, episodeId, forceReloadSlices]);
 
   const tabLabel = tab === 'character' ? '人物' : tab === 'scene' ? '场景' : '道具';
 

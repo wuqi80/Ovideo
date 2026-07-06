@@ -55,6 +55,22 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+function notifyStoryboardImageChanged(episodeId: string | undefined, shotId: string | undefined) {
+  if (typeof window === 'undefined' || !shotId) return;
+  window.dispatchEvent(new CustomEvent('drama:episode-data-changed', {
+    detail: {
+      episodeId,
+      entityType: 'storyboard_item',
+      entityId: shotId,
+      fileRole: 'generated_image',
+      type: 'image',
+      targetPage: 'generation',
+      targetItemId: shotId,
+      status: 'completed',
+    },
+  }));
+}
+
 const ModalChunkFallback: React.FC = () => (
   <div className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center">
     <div className="rounded-md border border-n40 bg-n0 px-4 py-3 text-sm text-n300 shadow-bottom">
@@ -899,6 +915,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   queryClient.invalidateQueries({
                       queryKey: ['entityFiles', 'storyboard_item', selectedShot.id, 'generated_image'],
                   });
+                  notifyStoryboardImageChanged(episodeId, selectedShot.id);
                   console.log('✅ 已添加到生成结果（已持久化，视频页可正常导入）');
               } catch (err) {
                   console.error('❌ 拖拽上传到生成结果失败:', err);
@@ -1440,6 +1457,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         console.log('💾 角度调整完成，触发立即保存');
         onForceSave();
         queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        notifyStoryboardImageChanged(episodeId, selectedShot?.id);
         
         // 🔧 处理完成后关闭模态框
         setCameraModalImage(null);
@@ -1493,6 +1511,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         console.log('💾 多角度生成完成，触发立即保存');
         onForceSave();
         queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        notifyStoryboardImageChanged(episodeId, selectedShot?.id);
         
         setHumanMultiAngleModalImage(null);
     } catch (error: any) {
@@ -1544,6 +1563,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         console.log('💾 全景角度生成完成，触发立即保存');
         onForceSave();
         queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        notifyStoryboardImageChanged(episodeId, selectedShot?.id);
         
         setAroundAngleModalImage(null);
     } catch (error: any) {
@@ -1598,6 +1618,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         console.log('💾 抠图完成，触发保存');
         onForceSave();
         queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        notifyStoryboardImageChanged(episodeId, selectedShot?.id);
         
         setMattingModalImage(null);
     } catch (error: any) {
@@ -1730,6 +1751,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         
         onForceSave();
         queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+        notifyStoryboardImageChanged(episodeId, selectedShot?.id);
         setShowFusionModal(false);
     } catch (error: any) {
         console.error('Image fusion failed', error);
@@ -1786,6 +1808,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     
     onForceSave();
     queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+    notifyStoryboardImageChanged(episodeId, selectedShot?.id);
     return result;
   };
 
@@ -1820,6 +1843,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
             }));
             onForceSave();
             queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+            notifyStoryboardImageChanged(episodeId, selectedShot?.id);
         }
     }
     
@@ -2698,6 +2722,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                 selectedImageId: newImage.id,
                                                 generatedImage: saved.fileUrl,
                                             });
+                                            queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
+                                            notifyStoryboardImageChanged(episodeId, selectedShot?.id);
                                         } catch (err) {
                                             console.error('上传图片失败:', err);
                                         }
