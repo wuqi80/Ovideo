@@ -39,6 +39,9 @@ deploy/logs/
 deploy/persistent_storage/
 deploy/uploads/
 deploy/outputs/
+deploy/storage_audit_reports/
+deploy/clean_migration_export/
+deploy/orphan_storage_export/
 deploy/redis_data/
 deploy/temp/
 deploy/history/

@@ -385,6 +385,9 @@ class FileDAO:
         entity_id: str = None,
         file_role: str = None,
         is_selected: bool = False,
+        project_id: str = None,
+        episode_id: str = None,
+        source: str = None,
     ) -> Dict[str, Any]:
         """创建文件记录"""
         db = get_db_manager()
@@ -398,6 +401,29 @@ class FileDAO:
             INSERT INTO files (
                 file_id, version_id, user_id, file_type, file_name,
                 file_path, file_url, file_size_bytes, mime_type, metadata,
+                entity_type, entity_id, file_role, is_selected,
+                project_id, episode_id, source
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb,
+                    $11, $12, $13, $14, $15, $16, $17)
+            RETURNING *
+        """
+        try:
+            return await db.fetchrow(
+                query, file_id, version_id, user_id, file_type, file_name,
+                file_path, file_url, file_size_bytes, mime_type, metadata_json,
+                entity_type, entity_id, file_role, is_selected,
+                project_id, episode_id, source,
+            )
+        except Exception as e:
+            if not any(name in str(e) for name in ("project_id", "episode_id", "source")):
+                raise
+            logger.warning("files ownership columns unavailable, falling back to legacy insert: %s", e)
+
+        legacy_query = """
+            INSERT INTO files (
+                file_id, version_id, user_id, file_type, file_name,
+                file_path, file_url, file_size_bytes, mime_type, metadata,
                 entity_type, entity_id, file_role, is_selected
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb,
@@ -405,7 +431,7 @@ class FileDAO:
             RETURNING *
         """
         return await db.fetchrow(
-            query, file_id, version_id, user_id, file_type, file_name,
+            legacy_query, file_id, version_id, user_id, file_type, file_name,
             file_path, file_url, file_size_bytes, mime_type, metadata_json,
             entity_type, entity_id, file_role, is_selected,
         )

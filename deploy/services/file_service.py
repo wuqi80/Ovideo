@@ -21,6 +21,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from dao_file import FileDAO
+from utils.storage_layout import (
+    build_storage_relative_path,
+    canonical_file_type,
+    storage_url_for,
+    year_month_from,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +113,7 @@ class FileService:
                 file_size_bytes=len(content),
                 mime_type=content_type,
                 metadata={"task_id": task_id, "source": source},
+                source=source,
             )
         except Exception as e:
             logger.warning(f"Failed to create file DB record (non-fatal): {e}")
@@ -150,6 +157,17 @@ from dao_content import FileDAO as ContentFileDAO
 from dao_entity_file import EntityFileDAO
 
 
+async def _resolve_project_id_for_storage(project_id: Optional[str], episode_id: Optional[str]) -> Optional[str]:
+    if project_id or not episode_id:
+        return project_id
+    try:
+        from dao_episode import EpisodeDAO
+        return await EpisodeDAO.get_project_id(episode_id)
+    except Exception as e:
+        logger.debug("episode->project lookup failed for storage path (episode_id=%s): %s", episode_id, e)
+        return None
+
+
 async def save_generated_file_to_db(
     content: bytes,
     file_type: str,
@@ -160,6 +178,7 @@ async def save_generated_file_to_db(
     file_role: str = None,
     original_ext: str = '.png',
     is_selected: bool = False,
+    project_id: str = None,
     episode_id: str = None,
     extra_metadata: dict = None,
 ) -> dict:
@@ -171,7 +190,14 @@ async def save_generated_file_to_db(
     import io
     import uuid as _uuid
 
-    year_month = datetime.now().strftime('%Y%m')
+    metadata = {**({'source': source, 'project_id': project_id, 'episode_id': episode_id}), **(extra_metadata or {})}
+    project_id = project_id or metadata.get('project_id')
+    episode_id = episode_id or metadata.get('episode_id')
+    project_id = await _resolve_project_id_for_storage(project_id, episode_id)
+    metadata['project_id'] = project_id
+    metadata['episode_id'] = episode_id
+    file_type = canonical_file_type(file_type)
+    year_month = year_month_from()
     file_id = str(_uuid.uuid4())
 
     if file_type == 'image' and original_ext.lower() in ('.png', '.jpg', '.jpeg'):
@@ -185,13 +211,21 @@ async def save_generated_file_to_db(
         except Exception as e:
             logger.warning(f"WebP 转换失败，使用原始格式: {e}")
 
-    safe_filename = f"{file_id}{original_ext}"
-    sub_dir = Path(f"persistent_storage/{file_type}/{user_id}/{year_month}")
-    sub_dir.mkdir(parents=True, exist_ok=True)
-    local_path = sub_dir / safe_filename
+    rel_path = build_storage_relative_path(
+        file_type=file_type,
+        user_id=user_id,
+        project_id=project_id,
+        episode_id=episode_id,
+        year_month=year_month,
+        file_id=file_id,
+        extension=original_ext,
+    )
+    local_path = STORAGE_ROOT / rel_path
+    local_path.parent.mkdir(parents=True, exist_ok=True)
     local_path.write_bytes(content)
 
-    file_url = f"/storage/{file_type}/{user_id}/{year_month}/{safe_filename}"
+    safe_filename = local_path.name
+    file_url = storage_url_for(rel_path)
 
     _MIME_MAP = {
         '.webp': 'image/webp', '.png': 'image/png',
@@ -212,12 +246,15 @@ async def save_generated_file_to_db(
             file_url=file_url,
             file_size_bytes=len(content),
             mime_type=mime_type,
-            metadata={**({'source': source, 'episode_id': episode_id}), **(extra_metadata or {})},
+            metadata=metadata,
             file_id=file_id,
             entity_type=entity_type,
             entity_id=entity_id,
             file_role=file_role,
             is_selected=is_selected,
+            project_id=project_id,
+            episode_id=episode_id,
+            source=source,
         )
     except Exception as e:
         logger.error(f"save_generated_file_to_db DB 写入失败: {e}", exc_info=True)

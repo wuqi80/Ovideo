@@ -9394,3 +9394,84 @@
 - Local Vitest targeted run passed: `videoModelService.test.ts` and `projectWorkflowService.test.ts` (7 tests).
 - Local `vite build` for `new_html` passed; only the existing chunk-size warning remained.
 - Commit `983b209`, push to `origin/refactor/v2`, `live_deploy_mvc2.sh` sync/restart, remote architecture contracts, and online smoke `https://mecha.one` passed 9/9.
+
+## 2026-07-07 Storage Layout Migration Preparation
+
+### Changes
+
+- Added canonical storage path helper `utils/storage_layout.py`.
+- Updated generated file persistence so new image/video/audio outputs are written as `persistent_storage/{file_type}/{user_id}/{project_id}/{episode_id}/{YYYYMM}/{uuid.ext}` when project/episode context is available.
+- Added best-effort `episode_id -> project_id` DAO lookup before choosing the generated-file storage path.
+- Added optional `project_id`, `episode_id`, and `source` write support in the `files` DAO with legacy-column fallback.
+- Added SQL migration `sql/db_migration_files_project_episode_source.sql` to add and backfill `files.project_id`, `files.episode_id`, and `files.source`.
+- Added read-only audit script `scripts/audit_storage_manifest.py` for missing DB refs, disk orphans, and unowned media files.
+- Added dry-run restructure manifest script `scripts/restructure_storage_manifest.py`; it generates CSV and SQL update plans but does not move/delete files.
+- Added `sql/` plus the two storage migration scripts to `scripts/live_deploy_mvc2.sh` so server deployments do not miss migration tooling.
+- Added clean migration package script `scripts/build_clean_migration_package.py` to export only valid referenced files and generate new-server cleanup SQL for excluded dirty records.
+
+### Migration Notes
+
+- Do not delete or move `persistent_storage` data until `storage_audit_reports/*.csv` has been reviewed.
+- Suggested server order: deploy code, run SQL migration, run audit script, review orphan/unowned/missing lists, then generate restructure manifest.
+- Old generated files remain readable because existing `file_url` values are unchanged until a reviewed migration SQL is applied.
+
+### Remaining
+
+- Add an apply script only after reviewing dry-run manifests on the live server.
+- Decide cleanup policy for disk orphans: quarantine first, delete only after backup and user confirmation.
+
+## 2026-07-07 Clean Migration Package
+
+### Server Output
+
+- Built clean migration package on the current GCP server at `/home/Administrator/deploy/clean_migration_export`.
+- Materialized `clean_migration_export/persistent_storage` with hardlinks, so the export tree is ready for rsync while avoiding duplicate disk blocks on the old server.
+- Generated local copies under `deploy/clean_migration_export/`.
+
+### Counts
+
+- Valid referenced files included: 1891 files, about 4.98 GB by DB size.
+- Included by type: image 984, audio 595, video 312.
+- Excluded dirty file records: 193.
+- Excluded missing file references: 175.
+- Excluded unowned file references: 80.
+- Excluded disk orphan files: 873.
+
+### Outputs
+
+- `clean_migration_export/manifests/clean_files_manifest.csv`
+- `clean_migration_export/manifests/excluded_file_records.csv`
+- `clean_migration_export/sql/01_update_valid_file_paths.sql`
+- `clean_migration_export/sql/02_exclude_dirty_file_records.sql`
+- `/tmp/mecha-clean-migration-manifests.tgz` on the server for manifest/SQL transfer.
+
+### Migration Rule
+
+- New server should receive only `clean_migration_export/persistent_storage`.
+- After restoring DB on the new server, run the two generated SQL files in order.
+- Do not migrate `storage_audit_reports/disk_orphans.csv` paths, missing file references, or unowned file records.
+- Disk-only orphan files should be packaged separately and transferred back to the local workstation for manual review.
+- Use `scripts/package_storage_orphans.py --archive` after `scripts/audit_storage_manifest.py` has produced `storage_audit_reports/disk_orphans.csv`.
+- The orphan package must not be copied to the new production server wholesale; only owner-selected files should be re-uploaded later.
+
+## 2026-07-07 Admin Recycle Bin And Multi-Key Management
+
+### Changes
+
+- Added admin file recycle-bin backend:
+  - `GET /api/admin/trash/files`
+  - `POST /api/admin/trash/files/{file_id}/restore`
+  - `DELETE /api/admin/trash/files/{file_id}/purge`
+  - `POST /api/admin/trash/files/purge`
+- Permanent purge requires `risk_ack=true` and is restricted to files under `persistent_storage`; this keeps local disk cleanup from touching code or unrelated server files.
+- Existing admin media deletion already soft-deletes `media_library_items` and related `files`, so the recycle bin can restore those rows or permanently release local disk space.
+- Added multi API key management:
+  - `POST /api/admin/api-configs/bulk-keys` creates multiple key rows for one provider.
+  - `POST /api/admin/api-configs/{config_id}/activate` makes one key active and disables sibling keyed rows for the same provider.
+- Updated `new_html/admin/AdminSettingsPage.tsx` with batch-key input, active-key badge, key suffix preview, active-key switch button, and a recycle-bin panel.
+
+### Operational Notes
+
+- For local-disk storage, "release disk" deletes the file and file row after confirmation.
+- If storage moves to OSS later, keep the admin API shape but change purge implementation according to bucket lifecycle/soft-delete policy.
+- `scripts/live_deploy_mvc2.sh` includes `admin_recycle_bin_routes.py` and syncs full `services`, `dao`, and `utils` directories.

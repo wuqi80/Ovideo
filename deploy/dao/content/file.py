@@ -3,10 +3,13 @@
 File DAO -- files 表的增删改查
 """
 import json
+import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
 from db_manager import get_db_manager
+
+logger = logging.getLogger(__name__)
 
 
 class FileDAO:
@@ -26,12 +29,37 @@ class FileDAO:
         mime_type: str = "application/octet-stream",
         version_id: Optional[str] = None,
         metadata: Optional[dict] = None,
+        project_id: Optional[str] = None,
+        episode_id: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
             return None
         meta_json = json.dumps(metadata or {}, ensure_ascii=False)
         query = """
+            INSERT INTO files (
+                file_id, version_id, user_id, file_type, file_name,
+                file_path, file_url, file_size_bytes, mime_type, metadata,
+                project_id, episode_id, source
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13)
+            ON CONFLICT (file_id) DO NOTHING
+            RETURNING *
+        """
+        try:
+            return await db.fetchrow(
+                query,
+                file_id, version_id, user_id, file_type, file_name,
+                file_path, file_url, file_size_bytes, mime_type, meta_json,
+                project_id, episode_id, source,
+            )
+        except Exception as e:
+            if not any(name in str(e) for name in ("project_id", "episode_id", "source")):
+                raise
+            logger.warning("files ownership columns unavailable, falling back to legacy insert: %s", e)
+
+        legacy_query = """
             INSERT INTO files (
                 file_id, version_id, user_id, file_type, file_name,
                 file_path, file_url, file_size_bytes, mime_type, metadata
@@ -41,7 +69,7 @@ class FileDAO:
             RETURNING *
         """
         return await db.fetchrow(
-            query,
+            legacy_query,
             file_id, version_id, user_id, file_type, file_name,
             file_path, file_url, file_size_bytes, mime_type, meta_json,
         )

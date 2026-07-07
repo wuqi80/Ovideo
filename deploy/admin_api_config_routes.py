@@ -17,9 +17,12 @@ from services.api_config_health_service import ProviderHealthNotFound, check_pro
 from services.api_config_import_service import ApiConfigImportOptions, import_preset_api_configs
 from services.api_config_reload_service import ApiConfigReloadFailed, reload_api_env_runtime
 from services.api_config_service import (
+    ApiConfigActivationFailed,
     ApiConfigCreateFailed,
     ApiConfigNotFound,
+    activate_api_config,
     create_api_config,
+    create_api_config_key_batch,
     delete_api_config,
     get_api_config_presets,
     list_api_configs,
@@ -114,6 +117,9 @@ def _audit_result_summary(result: Dict[str, Any]) -> Dict[str, Any]:
         "total_conflicts",
         "total_disabled",
         "would_disable",
+        "created",
+        "active_config_id",
+        "disabled_config_ids",
     )
     summary = {key: result.get(key) for key in summary_keys if key in result}
     if "api_config" in result:
@@ -179,6 +185,23 @@ class ApiConfigCreateBody(BaseModel):
     request_template: Dict[str, Any] = Field(default_factory=dict)
     headers: Dict[str, Any] = Field(default_factory=dict)
     category: str = ""
+    enabled: bool = True
+
+
+class ApiConfigBulkKeysBody(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    provider: str = Field(..., min_length=1)
+    endpoint: str = Field(..., min_length=1)
+    api_keys: List[str] = Field(..., min_length=1)
+    name_prefix: str = ""
+    model_name: str = ""
+    proxy_mode: str = "direct"
+    custom_proxy: str = ""
+    request_template: Dict[str, Any] = Field(default_factory=dict)
+    headers: Dict[str, Any] = Field(default_factory=dict)
+    category: str = ""
+    activate_index: int = 0
 
 
 class ApiConfigUpdateBody(BaseModel):
@@ -241,6 +264,7 @@ async def admin_create_api_config(body: ApiConfigCreateBody, request: Request):
             request_template=body.request_template,
             headers=body.headers,
             category=body.category,
+            enabled=body.enabled,
         )
         target_id = (result.get("api_config") or {}).get("config_id")
         await _record_api_config_audit(
@@ -252,6 +276,34 @@ async def admin_create_api_config(body: ApiConfigCreateBody, request: Request):
         return result
     except ApiConfigCreateFailed:
         raise HTTPException(status_code=500, detail="Failed to create API config")
+
+
+@router.post("/api-configs/bulk-keys", status_code=status.HTTP_201_CREATED)
+async def admin_create_api_config_key_batch(body: ApiConfigBulkKeysBody, request: Request):
+    _require_db()
+    try:
+        result = await create_api_config_key_batch(
+            provider=body.provider,
+            endpoint=body.endpoint,
+            api_keys=body.api_keys,
+            name_prefix=body.name_prefix,
+            model_name=body.model_name,
+            proxy_mode=body.proxy_mode,
+            custom_proxy=body.custom_proxy,
+            request_template=body.request_template,
+            headers=body.headers,
+            category=body.category,
+            activate_index=body.activate_index,
+        )
+        await _record_api_config_audit(
+            request,
+            action="api_config_bulk_keys_create",
+            target_id=result.get("active_config_id"),
+            after=_audit_result_summary(result),
+        )
+        return result
+    except ApiConfigCreateFailed as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/api-configs/reload-env")
@@ -372,6 +424,24 @@ async def admin_test_api_config(config_id: str):
         return await test_saved_api_config_health(config_id)
     except ApiConfigNotFound:
         raise HTTPException(status_code=404, detail="Config not found")
+
+
+@router.post("/api-configs/{config_id}/activate")
+async def admin_activate_api_config(config_id: str, request: Request):
+    _require_db()
+    try:
+        result = await activate_api_config(config_id)
+        await _record_api_config_audit(
+            request,
+            action="api_config_activate",
+            target_id=config_id,
+            after=_audit_result_summary(result),
+        )
+        return result
+    except ApiConfigNotFound:
+        raise HTTPException(status_code=404, detail="Config not found")
+    except ApiConfigActivationFailed as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/api-configs/{provider_id}/health")

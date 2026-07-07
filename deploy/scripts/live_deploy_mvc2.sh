@@ -28,6 +28,7 @@ FILES=(
   "compose_service.py"
   "admin_routes.py"
   "admin_api_config_routes.py"
+  "admin_recycle_bin_routes.py"
   "api_routes.py"
   "ARCHITECTURE.md"
   "Agent.md"
@@ -36,10 +37,10 @@ FILES=(
   "core"
   "dao"
   "docs"
-  "pipeline"
   "routers"
   "schemas"
   "services"
+  "sql"
   "utils"
   "workflows"
   "external_api/video/base.py"
@@ -51,6 +52,10 @@ FILES=(
   "external_api/video/wan2.py"
   "external_api/audio/minimax_audio.py"
   "scripts/live_deploy_mvc2.sh"
+  "scripts/audit_storage_manifest.py"
+  "scripts/build_clean_migration_package.py"
+  "scripts/package_storage_orphans.py"
+  "scripts/restructure_storage_manifest.py"
   scripts/check_*.py
   tests/test_ai_proxy_image_persistence_service.py
   tests/test_ai_proxy_reference_service.py

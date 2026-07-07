@@ -84,6 +84,7 @@ class ApiConfigDAO:
         headers: Optional[dict] = None,
         custom_proxy: str = "",
         category: str = "",
+        enabled: bool = True,
     ) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
@@ -99,9 +100,9 @@ class ApiConfigDAO:
         query = """
             INSERT INTO api_configurations (
                 config_id, name, provider, endpoint, api_key_encrypted,
-                model_name, request_template, headers, proxy_mode, custom_proxy, category
+                model_name, request_template, headers, proxy_mode, custom_proxy, category, enabled
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12)
             RETURNING *
         """
         return await db.fetchrow(
@@ -117,6 +118,7 @@ class ApiConfigDAO:
             proxy_mode,
             custom_proxy,
             category,
+            enabled,
         )
 
     @staticmethod

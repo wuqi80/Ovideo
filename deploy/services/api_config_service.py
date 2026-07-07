@@ -52,6 +52,10 @@ class ApiConfigCreateFailed(ApiConfigServiceError):
     pass
 
 
+class ApiConfigActivationFailed(ApiConfigServiceError):
+    pass
+
+
 def _row_to_jsonable(row: Any) -> Dict[str, Any]:
     if row is None:
         return {}
@@ -72,8 +76,15 @@ def _row_to_jsonable(row: Any) -> Dict[str, Any]:
 
 def mask_api_config_row(row: Any) -> Dict[str, Any]:
     data = _row_to_jsonable(row)
+    encrypted_key = data.get("api_key_encrypted")
     if "api_key_encrypted" in data:
-        data["api_key_encrypted"] = "***" if data["api_key_encrypted"] else ""
+        data["has_key"] = bool(encrypted_key)
+        if encrypted_key:
+            key = ApiConfigDAO.decrypt_key(str(encrypted_key))
+            data["api_key_preview"] = f"****{key[-4:]}" if key else "****"
+        else:
+            data["api_key_preview"] = ""
+        data["api_key_encrypted"] = "***" if encrypted_key else ""
     return data
 
 
@@ -298,6 +309,7 @@ async def create_api_config(
     request_template: Optional[Dict[str, Any]] = None,
     headers: Optional[Dict[str, Any]] = None,
     category: str = "",
+    enabled: bool = True,
     reload_api_env: Optional[ReloadCallback] = None,
 ) -> Dict[str, Any]:
     row = await ApiConfigDAO.create(
@@ -311,6 +323,7 @@ async def create_api_config(
         request_template=request_template,
         headers=headers,
         category=category,
+        enabled=enabled,
     )
     if not row:
         raise ApiConfigCreateFailed("Failed to create API config")
@@ -322,6 +335,106 @@ async def create_api_config(
         "api_config": mask_api_config_row(row),
         "env_refreshed": env_refreshed,
         "disabled_conflicting_config_ids": disabled_conflicts,
+    }
+
+
+async def create_api_config_key_batch(
+    *,
+    provider: str,
+    endpoint: str,
+    api_keys: List[str],
+    name_prefix: str = "",
+    model_name: str = "",
+    proxy_mode: str = "direct",
+    custom_proxy: str = "",
+    request_template: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, Any]] = None,
+    category: str = "",
+    activate_index: int = 0,
+    reload_api_env: Optional[ReloadCallback] = None,
+) -> Dict[str, Any]:
+    cleaned_keys = [key.strip() for key in api_keys if key and key.strip()]
+    deduped_keys = list(dict.fromkeys(cleaned_keys))
+    if not deduped_keys:
+        raise ApiConfigCreateFailed("No API keys provided")
+
+    active_index = max(0, min(int(activate_index or 0), len(deduped_keys) - 1))
+    prefix = name_prefix.strip() or f"{provider.strip()} key"
+    created_rows: List[Any] = []
+    for index, api_key in enumerate(deduped_keys):
+        row = await ApiConfigDAO.create(
+            name=f"{prefix} #{index + 1}",
+            provider=provider.strip(),
+            endpoint=endpoint.strip(),
+            api_key=api_key,
+            model_name=model_name,
+            proxy_mode=proxy_mode,
+            custom_proxy=custom_proxy,
+            request_template=request_template,
+            headers=headers,
+            category=category,
+            enabled=index == active_index,
+        )
+        if not row:
+            raise ApiConfigCreateFailed("Failed to create API config")
+        created_rows.append(row)
+
+    active_row = created_rows[active_index]
+    disabled_conflicts, disabled_conflict_rows = await _disable_conflicting_provider_configs(active_row)
+    env_refreshed = await reload_api_env_after_config_change(reload_api_env)
+    await invalidate_provider_health_for_items([*created_rows, *disabled_conflict_rows])
+    return {
+        "success": True,
+        "created": len(created_rows),
+        "active_config_id": _row_config_id(active_row),
+        "api_configs": [mask_api_config_row(row) for row in created_rows],
+        "env_refreshed": env_refreshed,
+        "disabled_conflicting_config_ids": disabled_conflicts,
+    }
+
+
+async def activate_api_config(
+    config_id: str,
+    *,
+    reload_api_env: Optional[ReloadCallback] = None,
+) -> Dict[str, Any]:
+    target = await ApiConfigDAO.get_by_id(config_id)
+    if not target:
+        raise ApiConfigNotFound("Config not found")
+    if not _row_has_key(target):
+        raise ApiConfigActivationFailed("Cannot activate config without API key")
+    provider = _row_provider(target)
+    if not provider:
+        raise ApiConfigActivationFailed("Cannot activate config without provider")
+
+    touched_rows: List[Any] = [target]
+    activated = await ApiConfigDAO.update(config_id, enabled=True)
+    if not activated:
+        raise ApiConfigNotFound("Config not found")
+    touched_rows.append(activated)
+
+    disabled_ids: List[str] = []
+    for row in await ApiConfigDAO.list_all():
+        other_id = _row_config_id(row)
+        if not other_id or other_id == config_id:
+            continue
+        if _row_provider(row).lower() != provider.lower():
+            continue
+        if not _row_has_key(row) or not _row_enabled(row):
+            continue
+        disabled = await ApiConfigDAO.update(other_id, enabled=False)
+        disabled_ids.append(other_id)
+        if disabled:
+            touched_rows.append(disabled)
+
+    env_refreshed = await reload_api_env_after_config_change(reload_api_env)
+    await invalidate_provider_health_for_items(touched_rows)
+    return {
+        "success": True,
+        "active_config_id": config_id,
+        "api_config": mask_api_config_row(activated),
+        "disabled_config_ids": disabled_ids,
+        "env_refreshed": env_refreshed,
     }
 
 

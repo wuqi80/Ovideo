@@ -36,6 +36,7 @@ from admin_api_config_routes import (
     admin_update_api_config,
     router as api_config_router,
 )
+from admin_recycle_bin_routes import router as recycle_bin_router
 from dao_agent import AgentDAO
 from dao_system_settings import SystemSettingsDAO
 from dao_task import TaskDAO
@@ -873,6 +874,7 @@ async def admin_delete_workflow(template_id: str):
 
 
 router.include_router(api_config_router)
+router.include_router(recycle_bin_router)
 
 
 # --- System settings ---

@@ -41,6 +41,8 @@ interface ApiConfig {
     provider: string;
     endpoint?: string;
     api_key_encrypted?: string;
+    has_key?: boolean;
+    api_key_preview?: string;
     model_name?: string;
     proxy_mode?: string;
     custom_proxy?: string;
@@ -221,6 +223,8 @@ interface ApiConfigFormState {
     provider: string;
     endpoint: string;
     api_key: string;
+    bulk_api_keys: string;
+    bulk_mode: boolean;
     model_name: string;
     proxy_mode: string;
     custom_proxy: string;
@@ -234,9 +238,50 @@ interface ApiConfigFormState {
 interface ApiConfigWriteResponse {
     success: boolean;
     api_config?: ApiConfig;
+    api_configs?: ApiConfig[];
+    created?: number;
+    active_config_id?: string;
     deleted?: boolean;
     env_refreshed?: boolean | null;
     disabled_conflicting_config_ids?: string[];
+    disabled_config_ids?: string[];
+}
+
+interface TrashFile {
+    file_id: string;
+    file_name?: string;
+    file_type?: string;
+    file_url?: string;
+    file_path?: string;
+    disk_path?: string;
+    disk_exists?: boolean;
+    disk_size_bytes?: number;
+    purge_eligible?: boolean;
+    purge_blocked_reason?: string;
+    user_id?: string;
+    project_id?: string;
+    episode_id?: string;
+    deleted_at?: string;
+    media_name?: string;
+}
+
+interface TrashFilesResponse {
+    success: boolean;
+    items?: TrashFile[];
+    total?: number;
+    limit?: number;
+    offset?: number;
+    disk_bytes?: number;
+}
+
+interface TrashPurgeResponse {
+    success: boolean;
+    file_id?: string;
+    purged?: number;
+    freed_bytes?: number;
+    removed_disk?: boolean;
+    deleted_db_record?: boolean;
+    errors?: Array<{ file_id?: string; error?: string }>;
 }
 
 interface ApiConfigImportResponse {
@@ -543,8 +588,8 @@ function categoryFromProviderMeta(meta: ProviderMeta): string {
 function bestConfigForProvider(configs: ApiConfig[], providerRaw: string): ApiConfig | undefined {
     const provider = normalizeProvider(providerRaw);
     const matches = configs.filter(config => normalizeProvider(config.provider) === provider);
-    return matches.find(config => config.enabled !== false && Boolean(config.api_key_encrypted))
-        || matches.find(config => Boolean(config.api_key_encrypted))
+    return matches.find(config => config.enabled !== false && Boolean(config.has_key ?? config.api_key_encrypted))
+        || matches.find(config => Boolean(config.has_key ?? config.api_key_encrypted))
         || matches.find(config => config.enabled !== false)
         || matches[0];
 }
@@ -647,6 +692,8 @@ function emptyConfigForm(): ApiConfigFormState {
         provider: '',
         endpoint: '',
         api_key: '',
+        bulk_api_keys: '',
+        bulk_mode: false,
         model_name: '',
         proxy_mode: 'direct',
         custom_proxy: '',
@@ -680,6 +727,8 @@ function configToForm(config: ApiConfig, extraFields: ProviderExtraField[] = [])
         provider: config.provider || '',
         endpoint: config.endpoint || '',
         api_key: '',
+        bulk_api_keys: '',
+        bulk_mode: false,
         model_name: config.model_name || '',
         proxy_mode: config.proxy_mode || 'direct',
         custom_proxy: config.custom_proxy || '',
@@ -700,6 +749,33 @@ function envRefreshMessage(result: { env_refreshed?: boolean | null }, action: s
 function conflictDisableSuffix(result: { disabled_conflicting_config_ids?: string[] }): string {
     const count = result.disabled_conflicting_config_ids?.length || 0;
     return count > 0 ? `，已自动关闭 ${count} 条同 provider 冲突配置` : '';
+}
+
+function activationDisableSuffix(result: { disabled_config_ids?: string[] }): string {
+    const count = result.disabled_config_ids?.length || 0;
+    return count > 0 ? `锛屽凡鍏抽棴 ${count} 鏉″悓 provider 鏃?Key` : '';
+}
+
+function splitBulkApiKeys(value: string): string[] {
+    return Array.from(new Set(
+        String(value || '')
+            .split(/[\n,，;；]+/)
+            .map(item => item.trim())
+            .filter(Boolean)
+    ));
+}
+
+function formatBytes(bytes?: number): string {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = value;
+    let unit = 0;
+    while (size >= 1024 && unit < units.length - 1) {
+        size /= 1024;
+        unit += 1;
+    }
+    return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
 }
 
 const RUNTIME_ISSUE_LABELS: Record<string, string> = {
@@ -1032,6 +1108,17 @@ const ApiConfigEditorModal: React.FC<{
                         </div>
                     )}
 
+                    {!isEdit && (
+                        <label className="inline-flex items-center gap-2 text-sm text-n700">
+                            <input
+                                type="checkbox"
+                                checked={form.bulk_mode}
+                                onChange={event => patch({ bulk_mode: event.target.checked })}
+                            />
+                            <span>批量添加多个 API Key</span>
+                        </label>
+                    )}
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <label className="block min-w-0">
                             <span className="block text-xs font-medium text-n300 mb-1">模型名</span>
@@ -1046,14 +1133,30 @@ const ApiConfigEditorModal: React.FC<{
                             <span className="block text-xs font-medium text-n300 mb-1">API Key</span>
                             <input
                                 type="password"
-                                required={!isEdit}
+                                required={!isEdit && !form.bulk_mode}
                                 value={form.api_key}
+                                disabled={form.bulk_mode && !isEdit}
                                 onChange={event => patch({ api_key: event.target.value })}
                                 className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
                                 placeholder={isEdit ? '留空保留现有 Key' : 'sk-...'}
                             />
                         </label>
                     </div>
+
+                    {form.bulk_mode && !isEdit && (
+                        <label className="block min-w-0">
+                            <span className="block text-xs font-medium text-n300 mb-1">API Key 列表</span>
+                            <textarea
+                                required
+                                value={form.bulk_api_keys}
+                                onChange={event => patch({ bulk_api_keys: event.target.value })}
+                                rows={5}
+                                className="w-full min-h-[120px] resize-y rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono leading-relaxed break-all focus:border-primary focus:outline-none"
+                                placeholder="每行一个 Key，或用逗号分隔。第一个 Key 默认生效。"
+                            />
+                            <span className="mt-1 block text-[11px] text-n100">保存后会生成多条 Key 记录，第一条自动设为当前生效 Key。</span>
+                        </label>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <label className="block min-w-0">
@@ -1188,12 +1291,13 @@ const ApiConfigCard: React.FC<{
     onCheck: (provider: string, modelName?: string | null) => void;
     onTestConfig: (config: ApiConfig) => void;
     onEdit: (config: ApiConfig) => void;
+    onActivate: (config: ApiConfig) => void;
     onToggle: (config: ApiConfig) => void;
     onDelete: (config: ApiConfig) => void;
-}> = ({ config, meta, runtime, health, configTest, checking, testingConfig, onCheck, onTestConfig, onEdit, onToggle, onDelete }) => {
+}> = ({ config, meta, runtime, health, configTest, checking, testingConfig, onCheck, onTestConfig, onEdit, onActivate, onToggle, onDelete }) => {
     const provider = normalizeProvider(config.provider);
-    const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.api_key_encrypted);
-    const configHasKey = Boolean(config.api_key_encrypted);
+    const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.has_key ?? config.api_key_encrypted);
+    const configHasKey = Boolean(config.has_key ?? config.api_key_encrypted);
     const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
     const view = statusView(status);
     const healthError = health?.health?.error || runtime?.health_error || '';
@@ -1204,6 +1308,11 @@ const ApiConfigCard: React.FC<{
     const dbEndpoint = config.endpoint || '';
     const runtimeDbEndpointMismatch = endpointMismatch(runtimeEndpoint, dbEndpoint);
     const effectiveConfig = runtime?.db_effective_config_name || runtime?.db_effective_config_id || '';
+    const isRuntimeActive = Boolean(
+        config.config_id
+        && runtime?.db_effective_config_id
+        && config.config_id === runtime.db_effective_config_id
+    );
     const keyedCount = runtime?.db_keyed_enabled_config_count || 0;
     const endpointCount = runtime?.db_enabled_endpoint_count || 0;
     const fallbackText = (runtime?.fallback || [])
@@ -1255,6 +1364,12 @@ const ApiConfigCard: React.FC<{
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
                                 <h3 className="text-sm font-semibold text-n800 leading-snug break-words">{config.name || meta?.label || provider}</h3>
+                                {isRuntimeActive && (
+                                    <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">当前生效 Key</span>
+                                )}
+                                {config.api_key_preview && (
+                                    <span className="rounded bg-n20 text-n300 px-1.5 py-0.5 text-[10px] font-mono">{config.api_key_preview}</span>
+                                )}
                                 {!config.enabled && (
                                     <span className="rounded bg-r50 text-danger px-1.5 py-0.5 text-[10px] font-semibold">禁用</span>
                                 )}
@@ -1296,6 +1411,17 @@ const ApiConfigCard: React.FC<{
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                                 测试生效配置
                             </button>
+                            {!isRuntimeActive && (
+                                <button
+                                    type="button"
+                                    onClick={() => onActivate(config)}
+                                    disabled={!configHasKey || !config.config_id}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-g75 bg-g50 text-g400 hover:bg-g50 disabled:opacity-60 shrink-0"
+                                >
+                                    <KeyRound className="w-3.5 h-3.5" />
+                                    设为生效
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={() => onEdit(config)}
@@ -1481,7 +1607,7 @@ const ProviderQuickCard: React.FC<{
 }> = ({ meta, configs, runtime, health, configTest, checking, testingConfig, onConfigure, onEditConfig, onTestConfig, onCheck }) => {
     const provider = normalizeProvider(meta.provider);
     const primaryConfig = bestConfigForProvider(configs, provider);
-    const hasSavedKey = configs.some(config => Boolean(config.api_key_encrypted));
+    const hasSavedKey = configs.some(config => Boolean(config.has_key ?? config.api_key_encrypted));
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : hasSavedKey;
     const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
     const view = statusView(status);
@@ -1671,6 +1797,196 @@ const ProviderQuickCard: React.FC<{
     );
 };
 
+const AdminRecycleBinPanel: React.FC = () => {
+    const [items, setItems] = useState<TrashFile[]>([]);
+    const [total, setTotal] = useState(0);
+    const [diskBytes, setDiskBytes] = useState(0);
+    const [keyword, setKeyword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [busy, setBusy] = useState<Record<string, boolean>>({});
+
+    const loadTrash = useCallback(async () => {
+        setLoading(true);
+        try {
+            const query = new URLSearchParams({ limit: '50', offset: '0' });
+            if (keyword.trim()) query.set('keyword', keyword.trim());
+            const result = await apiJson<TrashFilesResponse>(`/api/admin/trash/files?${query.toString()}`);
+            setItems(result.items || []);
+            setTotal(result.total || 0);
+            setDiskBytes(result.disk_bytes || 0);
+        } catch (err: any) {
+            crmMessage.error(`回收站加载失败：${err?.message || 'unknown'}`);
+        } finally {
+            setLoading(false);
+        }
+    }, [keyword]);
+
+    useEffect(() => {
+        loadTrash();
+    }, [loadTrash]);
+
+    const setItemBusy = (fileId: string, value: boolean) => {
+        setBusy(prev => ({ ...prev, [fileId]: value }));
+    };
+
+    const restoreFile = useCallback(async (item: TrashFile) => {
+        if (!item.file_id) return;
+        setItemBusy(item.file_id, true);
+        try {
+            await apiJson<{ success: boolean }>(`/api/admin/trash/files/${encodeURIComponent(item.file_id)}/restore`, {
+                method: 'POST',
+                body: JSON.stringify({}),
+            });
+            crmMessage.success('文件已从回收站恢复');
+            await loadTrash();
+        } catch (err: any) {
+            crmMessage.error(`恢复失败：${err?.message || 'unknown'}`);
+        } finally {
+            setItemBusy(item.file_id, false);
+        }
+    }, [loadTrash]);
+
+    const purgeFile = useCallback(async (item: TrashFile) => {
+        if (!item.file_id) return;
+        const ok = await crmConfirm({
+            title: '彻底释放磁盘空间',
+            message: `将永久删除磁盘文件并删除文件库记录，操作不可恢复。文件：${item.file_name || item.file_id}，预计释放 ${formatBytes(item.disk_size_bytes)}。确认继续？`,
+            type: 'danger',
+            confirmText: '彻底删除',
+        });
+        if (!ok) return;
+        setItemBusy(item.file_id, true);
+        try {
+            const result = await apiJson<TrashPurgeResponse>(`/api/admin/trash/files/${encodeURIComponent(item.file_id)}/purge`, {
+                method: 'DELETE',
+                body: JSON.stringify({ risk_ack: true, delete_db_record: true }),
+            });
+            if (result.success) {
+                crmMessage.success(`已释放 ${formatBytes(result.freed_bytes)}`);
+            } else {
+                crmMessage.error(`释放失败：${result.errors?.[0]?.error || 'unknown'}`);
+            }
+            await loadTrash();
+        } catch (err: any) {
+            crmMessage.error(`释放失败：${err?.message || 'unknown'}`);
+        } finally {
+            setItemBusy(item.file_id, false);
+        }
+    }, [loadTrash]);
+
+    return (
+        <section className="bg-n0 border border-n40 rounded-md shadow-card p-4 min-w-0">
+            <div className="responsive-toolbar flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-n100">
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Recycle Bin
+                    </div>
+                    <h2 className="mt-1 text-sm font-semibold text-n800">文件回收站</h2>
+                    <p className="mt-0.5 text-xs text-n100">仅展示已软删除文件。释放磁盘会永久删除本地文件；以后切到 OSS 后可调整为对象软删除。</p>
+                </div>
+                <div className="toolbar-actions">
+                    <input
+                        value={keyword}
+                        onChange={event => setKeyword(event.target.value)}
+                        onKeyDown={event => { if (event.key === 'Enter') loadTrash(); }}
+                        className="w-52 rounded border border-n40 bg-n0 px-3 py-1.5 text-xs text-n800 focus:border-primary focus:outline-none"
+                        placeholder="搜索文件名 / URL"
+                    />
+                    <button
+                        type="button"
+                        onClick={loadTrash}
+                        disabled={loading}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                    >
+                        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        刷新
+                    </button>
+                </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded border border-n40 bg-n20 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-n100">Deleted Files</div>
+                    <div className="mt-1 font-mono text-lg font-semibold text-n800">{total}</div>
+                </div>
+                <div className="rounded border border-n40 bg-n20 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-n100">Current Page Disk</div>
+                    <div className="mt-1 font-mono text-lg font-semibold text-n800">{formatBytes(diskBytes)}</div>
+                </div>
+                <div className="rounded border border-y200 bg-y50 px-3 py-2 md:col-span-2">
+                    <div className="text-xs font-semibold text-y400">风险提示</div>
+                    <div className="mt-1 text-[11px] text-y400">恢复只撤销软删除；释放磁盘会删除本机 persistent_storage 文件并移除文件记录，不可恢复。</div>
+                </div>
+            </div>
+
+            <div className="mt-3 overflow-x-auto border border-n40 rounded-md">
+                <table className="min-w-full text-xs">
+                    <thead className="bg-n20 text-n100">
+                        <tr>
+                            <th className="text-left font-medium px-3 py-2">文件</th>
+                            <th className="text-left font-medium px-3 py-2">类型</th>
+                            <th className="text-left font-medium px-3 py-2">磁盘</th>
+                            <th className="text-left font-medium px-3 py-2">删除时间</th>
+                            <th className="text-right font-medium px-3 py-2">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-n40">
+                        {loading ? (
+                            <tr>
+                                <td colSpan={5} className="px-3 py-8 text-center text-n100">
+                                    <Loader2 className="inline w-4 h-4 animate-spin mr-2" />
+                                    加载中
+                                </td>
+                            </tr>
+                        ) : items.length === 0 ? (
+                            <tr>
+                                <td colSpan={5} className="px-3 py-8 text-center text-n100">暂无回收站文件</td>
+                            </tr>
+                        ) : items.map(item => (
+                            <tr key={item.file_id} className="bg-n0">
+                                <td className="px-3 py-2 min-w-[260px]">
+                                    <div className="font-medium text-n800 break-words">{item.media_name || item.file_name || item.file_id}</div>
+                                    <div className="mt-0.5 font-mono text-[11px] text-n100 break-all">{item.file_url || item.file_path || '-'}</div>
+                                </td>
+                                <td className="px-3 py-2 font-mono text-n700">{item.file_type || '-'}</td>
+                                <td className="px-3 py-2">
+                                    <div className={item.disk_exists ? 'text-g400' : 'text-n100'}>{item.disk_exists ? '存在' : '不存在'}</div>
+                                    <div className="font-mono text-n700">{formatBytes(item.disk_size_bytes)}</div>
+                                </td>
+                                <td className="px-3 py-2 font-mono text-n700">{formatTime(item.deleted_at)}</td>
+                                <td className="px-3 py-2">
+                                    <div className="flex items-center justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => restoreFile(item)}
+                                            disabled={Boolean(busy[item.file_id])}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                        >
+                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                            恢复
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => purgeFile(item)}
+                                            disabled={Boolean(busy[item.file_id]) || !item.purge_eligible}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-danger/30 bg-r50 text-danger hover:bg-r50 disabled:opacity-60"
+                                            title={item.purge_blocked_reason || ''}
+                                        >
+                                            {busy[item.file_id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                            释放磁盘
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
+};
+
 const ApiConfigPanel: React.FC = () => {
     const [configs, setConfigs] = useState<ApiConfig[]>([]);
     const [providers, setProviders] = useState<ProviderMeta[]>([]);
@@ -1820,7 +2136,7 @@ const ApiConfigPanel: React.FC = () => {
         const providerIds = Array.from(new Set(configs.map(item => normalizeProvider(item.provider)).filter(Boolean)));
         const dbKeyedProviders = Array.from(new Set(
             configs
-                .filter(item => Boolean(item.api_key_encrypted))
+                .filter(item => Boolean(item.has_key ?? item.api_key_encrypted))
                 .map(item => normalizeProvider(item.provider))
                 .filter(Boolean)
         ));
@@ -1840,7 +2156,7 @@ const ApiConfigPanel: React.FC = () => {
         return {
             total: configs.length,
             providers: providerIds.length,
-            configured: configs.filter(item => Boolean(item.api_key_encrypted)).length,
+            configured: configs.filter(item => Boolean(item.has_key ?? item.api_key_encrypted)).length,
             dbKeyedProviders: dbKeyedProviders.length,
             runtimeKeyedProviders: runtimeKeyedProviders.length,
             runtimeOnlyKeyProviders,
@@ -2074,11 +2390,16 @@ const ApiConfigPanel: React.FC = () => {
         const provider = normalizeProvider(editingForm.provider);
         const endpoint = editingForm.endpoint.trim();
         const apiKey = editingForm.api_key.trim();
+        const bulkApiKeys = splitBulkApiKeys(editingForm.bulk_api_keys);
         if (!name || !provider || !endpoint) {
             crmMessage.warning('请填写名称、provider 和 endpoint');
             return;
         }
-        if (!editingForm.config_id && !apiKey) {
+        if (!editingForm.config_id && editingForm.bulk_mode && bulkApiKeys.length === 0) {
+            crmMessage.warning('请至少填写一个 API Key');
+            return;
+        }
+        if (!editingForm.config_id && !editingForm.bulk_mode && !apiKey) {
             crmMessage.warning('新增 API 配置需要填写 API Key');
             return;
         }
@@ -2125,6 +2446,16 @@ const ApiConfigPanel: React.FC = () => {
                     method: 'PUT',
                     body: JSON.stringify(body),
                 })
+                : editingForm.bulk_mode
+                ? await apiJson<ApiConfigWriteResponse>('/api/admin/api-configs/bulk-keys', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        ...body,
+                        api_keys: bulkApiKeys,
+                        name_prefix: name,
+                        activate_index: 0,
+                    }),
+                })
                 : await apiJson<ApiConfigWriteResponse>('/api/admin/api-configs', {
                     method: 'POST',
                     body: JSON.stringify({ ...body, api_key: apiKey }),
@@ -2167,6 +2498,27 @@ const ApiConfigPanel: React.FC = () => {
             await loadConfigs();
         } catch (err: any) {
             crmMessage.error(`切换失败：${err?.message || 'unknown'}`);
+        }
+    }, [loadConfigs]);
+
+    const activateConfig = useCallback(async (config: ApiConfig) => {
+        if (!config.config_id) return;
+        try {
+            const result = await apiJson<ApiConfigWriteResponse>(`/api/admin/api-configs/${config.config_id}/activate`, {
+                method: 'POST',
+                body: JSON.stringify({}),
+            });
+            const message = `${envRefreshMessage(result, 'Key 已切换')}${activationDisableSuffix(result)}`;
+            if (result.env_refreshed === false) crmMessage.warning(message);
+            else crmMessage.success(message);
+            setConfigTestMap(prev => {
+                const next = { ...prev };
+                delete next[config.config_id];
+                return next;
+            });
+            await loadConfigs();
+        } catch (err: any) {
+            crmMessage.error(`Key 切换失败：${err?.message || 'unknown'}`);
         }
     }, [loadConfigs]);
 
@@ -2382,6 +2734,8 @@ const ApiConfigPanel: React.FC = () => {
                     <div className="rounded-md border border-r75 bg-r50 px-3 py-2 text-sm text-danger">{error}</div>
                 )}
 
+                <AdminRecycleBinPanel />
+
                 {summary.runtimeOnlyKeyProviders.length > 0 && (
                     <section className="rounded-md border border-y200 bg-y50 px-3 py-2 shadow-card flex flex-wrap items-center justify-between gap-3">
                         <div className="min-w-0 text-xs text-y400">
@@ -2486,6 +2840,7 @@ const ApiConfigPanel: React.FC = () => {
                                                     onCheck={testProvider}
                                                     onTestConfig={testConfig}
                                                     onEdit={openEdit}
+                                                    onActivate={activateConfig}
                                                     onToggle={toggleConfig}
                                                     onDelete={deleteConfig}
                                                 />
