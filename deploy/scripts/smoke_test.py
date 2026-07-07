@@ -77,8 +77,10 @@ def run():
     check("项目读路径(含过滤参数)正常", ok, f"http={st}")
 
     # 4. 首页/SPA
-    st, _ = req("/projects")
-    check("SPA 首页可达(200)", st == 200, f"http={st}")
+    st, b = req("/projects")
+    html = b.decode("utf-8", "ignore") if b else ""
+    ok = st == 200 and "Application is not built" not in html and "/assets/" in html
+    check("SPA 首页为已构建产物", ok, f"http={st}")
 
 if __name__ == "__main__":
     run()
