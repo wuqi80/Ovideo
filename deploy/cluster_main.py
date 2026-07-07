@@ -8,6 +8,7 @@ sys.modules.setdefault('cluster_main', sys.modules[__name__])
 
 import asyncio
 import logging
+import mimetypes
 import os
 import signal
 import uuid
@@ -683,6 +684,20 @@ app.include_router(admin_api_router)
 # 挂载静态文件目录
 import os
 from fastapi.staticfiles import StaticFiles
+
+for _ext, _media_type in {
+    ".webp": "image/webp",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".mp4": "video/mp4",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+}.items():
+    mimetypes.add_type(_media_type, _ext)
+
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if not os.path.exists(static_dir):
     os.makedirs(static_dir)
