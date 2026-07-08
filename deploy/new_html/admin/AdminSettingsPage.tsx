@@ -1664,13 +1664,48 @@ const ProviderQuickCard: React.FC<{
     configTest?: ApiConfigTest;
     checking: boolean;
     testingConfig: boolean;
+    testingConfigMap: Record<string, boolean>;
     onConfigure: (meta: ProviderMeta) => void;
+    onAddConfig: (meta: ProviderMeta) => void;
     onEditConfig: (config: ApiConfig) => void;
+    onActivate: (config: ApiConfig) => void;
+    onToggle: (config: ApiConfig) => void;
+    onDelete: (config: ApiConfig) => void;
     onTestConfig: (config: ApiConfig) => void;
     onCheck: (provider: string, modelName?: string | null) => void;
-}> = ({ meta, configs, runtime, health, configTest, checking, testingConfig, onConfigure, onEditConfig, onTestConfig, onCheck }) => {
+}> = ({
+    meta,
+    configs,
+    runtime,
+    health,
+    configTest,
+    checking,
+    testingConfig,
+    testingConfigMap,
+    onConfigure,
+    onAddConfig,
+    onEditConfig,
+    onActivate,
+    onToggle,
+    onDelete,
+    onTestConfig,
+    onCheck,
+}) => {
     const provider = normalizeProvider(meta.provider);
     const primaryConfig = bestConfigForProvider(configs, provider);
+    const activeConfigId = runtime?.db_effective_config_id || primaryConfig?.config_id || '';
+    const sortedConfigs = [...configs].sort((a, b) => {
+        const aActive = a.config_id === activeConfigId ? 1 : 0;
+        const bActive = b.config_id === activeConfigId ? 1 : 0;
+        if (aActive !== bActive) return bActive - aActive;
+        const aEnabled = a.enabled !== false ? 1 : 0;
+        const bEnabled = b.enabled !== false ? 1 : 0;
+        if (aEnabled !== bEnabled) return bEnabled - aEnabled;
+        const aHasKey = Number(Boolean(a.has_key ?? a.api_key_encrypted));
+        const bHasKey = Number(Boolean(b.has_key ?? b.api_key_encrypted));
+        if (aHasKey !== bHasKey) return bHasKey - aHasKey;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+    });
     const hasSavedKey = configs.some(config => Boolean(config.has_key ?? config.api_key_encrypted));
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : hasSavedKey;
     const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
@@ -1787,6 +1822,100 @@ const ProviderQuickCard: React.FC<{
                 ) : null}
             </div>
 
+            {sortedConfigs.length > 0 && (
+                <div className="mt-3 rounded border border-n40 bg-n20 overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 border-b border-n40 px-3 py-2">
+                        <div className="text-[11px] font-semibold text-n700">API Key 列表</div>
+                        <button
+                            type="button"
+                            onClick={() => onAddConfig(meta)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
+                            title="为该厂商继续添加一个或多个 Key"
+                        >
+                            <Plus className="w-3 h-3" />
+                            添加 Key
+                        </button>
+                    </div>
+                    <div className="divide-y divide-n40">
+                        {sortedConfigs.map(config => {
+                            const hasKey = Boolean(config.has_key ?? config.api_key_encrypted);
+                            const active = config.config_id === activeConfigId;
+                            const rowTesting = testingConfig || Boolean(testingConfigMap[config.config_id]);
+                            return (
+                                <div key={config.config_id} className="px-3 py-2">
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className="font-medium text-n800 break-words">{config.name || config.config_id}</span>
+                                                {active && (
+                                                    <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">当前生效</span>
+                                                )}
+                                                {config.enabled === false && (
+                                                    <span className="rounded bg-r50 text-r400 px-1.5 py-0.5 text-[10px] font-semibold">禁用</span>
+                                                )}
+                                                {config.api_key_preview && (
+                                                    <span className="rounded bg-n0 border border-n40 text-n300 px-1.5 py-0.5 text-[10px] font-mono">{config.api_key_preview}</span>
+                                                )}
+                                                {!hasKey && (
+                                                    <span className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">未保存 Key</span>
+                                                )}
+                                            </div>
+                                            <div className="mt-1 font-mono text-[10px] text-n100 break-all">
+                                                {formatEndpoint(config.endpoint || endpoint)} / {config.model_name || model || '-'}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap justify-end gap-1.5">
+                                            {!active && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onActivate(config)}
+                                                    disabled={!hasKey || !config.config_id}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-g75 bg-g50 text-g400 hover:bg-g50 disabled:opacity-50"
+                                                >
+                                                    <KeyRound className="w-3 h-3" />
+                                                    设为生效
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => onTestConfig(config)}
+                                                disabled={rowTesting || !config.config_id}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                            >
+                                                {rowTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                                测试
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onEditConfig(config)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
+                                            >
+                                                <Edit3 className="w-3 h-3" />
+                                                编辑
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onToggle(config)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
+                                            >
+                                                {config.enabled === false ? '启用' : '禁用'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onDelete(config)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-danger/30 bg-r50 text-danger hover:bg-r50"
+                                            >
+                                                删除
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             <ProviderOperationPaths meta={meta} runtime={runtime} compact />
 
             <div className="mt-3 flex flex-wrap gap-2">
@@ -1821,6 +1950,17 @@ const ProviderQuickCard: React.FC<{
                     >
                         <KeyRound className="w-3.5 h-3.5" />
                         配置 / 修改 API Key
+                    </button>
+                )}
+                {primaryConfig && (
+                    <button
+                        type="button"
+                        onClick={() => onAddConfig(meta)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
+                        title="为该厂商继续添加一个或多个 Key"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        添加 Key
                     </button>
                 )}
                 <button
@@ -2588,6 +2728,16 @@ const ApiConfigPanel: React.FC = () => {
         setEditingForm(providerMetaToForm(meta));
     }, [configsByProvider, providerMetaMap]);
 
+    const openAddProviderConfig = useCallback((meta: ProviderMeta) => {
+        const form = providerMetaToForm(meta);
+        setEditingForm({
+            ...form,
+            name: `${form.name || form.provider} Key`,
+            bulk_mode: true,
+            enabled: true,
+        });
+    }, []);
+
     const saveConfig = useCallback(async () => {
         if (!editingForm) return;
         const name = editingForm.name.trim();
@@ -2994,8 +3144,13 @@ const ApiConfigPanel: React.FC = () => {
                                     configTest={primaryConfig ? configTestMap[primaryConfig.config_id] : undefined}
                                     checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                     testingConfig={testingAllConfigs || Boolean(primaryConfig && testingConfig[primaryConfig.config_id])}
+                                    testingConfigMap={testingConfig}
                                     onConfigure={openProviderConfig}
+                                    onAddConfig={openAddProviderConfig}
                                     onEditConfig={openEdit}
+                                    onActivate={activateConfig}
+                                    onToggle={toggleConfig}
+                                    onDelete={deleteConfig}
                                     onTestConfig={testConfig}
                                     onCheck={testProvider}
                                 />
