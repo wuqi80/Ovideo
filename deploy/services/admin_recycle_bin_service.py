@@ -68,6 +68,77 @@ def _attach_disk_state(row: Dict[str, Any]) -> Dict[str, Any]:
     return item
 
 
+_REFERENCE_TARGET_LABELS = {
+    "storyboard_image": "分镜画面",
+    "storyboard_dialogue_audio": "分镜对白音频",
+    "storyboard_narration_audio": "分镜旁白音频",
+    "storyboard_sfx_audio": "分镜音效",
+    "storyboard_mixed_audio": "分镜混音",
+    "video_segment_video": "视频片段",
+    "video_segment_thumbnail": "视频封面",
+    "asset_thumbnail": "素材封面",
+    "asset_reference_image": "素材参考图",
+}
+
+
+def _positive_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _restore_targets_from_counts(item: Dict[str, Any], reference_counts: Dict[str, int]) -> List[str]:
+    targets: List[str] = []
+    media_library_count = _positive_int(item.get("media_library_count"))
+    if media_library_count:
+        targets.append(f"素材库 {media_library_count} 条")
+
+    entity_type = str(item.get("entity_type") or "").strip()
+    entity_id = str(item.get("entity_id") or "").strip()
+    file_role = str(item.get("file_role") or "").strip()
+    if entity_type and entity_id:
+        suffix = f" / {file_role}" if file_role else ""
+        targets.append(f"{entity_type}:{entity_id}{suffix}")
+
+    for key, label in _REFERENCE_TARGET_LABELS.items():
+        count = _positive_int(reference_counts.get(key))
+        if count:
+            targets.append(f"{label} {count} 条")
+
+    if not targets:
+        targets.append("仅文件记录")
+    return targets
+
+
+async def _attach_restore_context(item: Dict[str, Any]) -> Dict[str, Any]:
+    reference_counts = await AdminRecycleBinDAO.file_reference_counts(str(item.get("file_url") or ""))
+    legacy_reference_count = sum(_positive_int(value) for value in reference_counts.values())
+    media_library_count = _positive_int(item.get("media_library_count"))
+    targets = _restore_targets_from_counts(item, reference_counts)
+
+    warnings: List[str] = []
+    if not item.get("disk_exists"):
+        warnings.append("磁盘文件不存在：恢复后只会恢复数据库记录，原图/视频仍可能打不开。")
+    if not media_library_count and not legacy_reference_count and not item.get("entity_type"):
+        warnings.append("未发现素材库或业务引用：恢复后可能只在文件库中可见。")
+
+    if not item.get("disk_exists"):
+        visibility = "missing_disk"
+    elif media_library_count or legacy_reference_count or item.get("entity_type"):
+        visibility = "normal"
+    else:
+        visibility = "file_record_only"
+
+    item["legacy_reference_counts"] = reference_counts
+    item["legacy_reference_count"] = legacy_reference_count
+    item["media_library_count"] = media_library_count
+    item["restore_targets"] = targets
+    item["restore_warnings"] = warnings
+    item["restore_visibility"] = visibility
+    return item
+
+
 async def list_recycle_bin_files(
     *,
     user_id: Optional[str] = None,
@@ -85,7 +156,9 @@ async def list_recycle_bin_files(
         limit=max(1, min(int(limit or 50), 200)),
         offset=max(0, int(offset or 0)),
     )
-    items = [_attach_disk_state(row) for row in result.get("items", [])]
+    items = []
+    for row in result.get("items", []):
+        items.append(await _attach_restore_context(_attach_disk_state(row)))
     return {
         "success": True,
         "items": items,
@@ -100,7 +173,14 @@ async def restore_recycle_bin_file(file_id: str) -> Dict[str, Any]:
     row = await AdminRecycleBinDAO.restore_file(file_id)
     if not row:
         raise RecycleBinNotFound("Deleted file not found")
-    return {"success": True, "file": _attach_disk_state(row)}
+    item = await _attach_restore_context(_attach_disk_state(row))
+    return {
+        "success": True,
+        "file": item,
+        "restore_targets": item.get("restore_targets", []),
+        "restore_warnings": item.get("restore_warnings", []),
+        "restore_visibility": item.get("restore_visibility"),
+    }
 
 
 async def purge_recycle_bin_file(

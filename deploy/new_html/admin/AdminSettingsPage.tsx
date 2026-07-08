@@ -265,6 +265,20 @@ interface TrashFile {
     episode_id?: string;
     deleted_at?: string;
     media_name?: string;
+    media_library_count?: number;
+    legacy_reference_count?: number;
+    legacy_reference_counts?: Record<string, number>;
+    restore_targets?: string[];
+    restore_warnings?: string[];
+    restore_visibility?: 'normal' | 'file_record_only' | 'missing_disk' | string;
+}
+
+interface TrashRestoreResponse {
+    success: boolean;
+    file?: TrashFile;
+    restore_targets?: string[];
+    restore_warnings?: string[];
+    restore_visibility?: string;
 }
 
 interface TrashFilesResponse {
@@ -797,6 +811,19 @@ function isPreviewableTrashImage(item: TrashFile): boolean {
     const type = String(item.file_type || '').toLowerCase();
     const url = trashPreviewUrl(item).split('?', 1)[0].toLowerCase();
     return type === 'image' || /\.(webp|png|jpe?g|gif|bmp|svg)$/i.test(url);
+}
+
+function restoreVisibilityClass(item: TrashFile): string {
+    if (item.restore_visibility === 'normal') return 'border-g75 bg-g50 text-g400';
+    if (item.restore_visibility === 'missing_disk') return 'border-r75 bg-r50 text-r400';
+    return 'border-y200 bg-y50 text-y400';
+}
+
+function restoreVisibilityText(item: TrashFile): string {
+    if (item.restore_visibility === 'normal') return '可恢复到关联位置';
+    if (item.restore_visibility === 'missing_disk') return '缺少磁盘文件';
+    if (item.restore_visibility === 'file_record_only') return '可能仅恢复记录';
+    return '恢复状态未知';
 }
 
 const RUNTIME_ISSUE_LABELS: Record<string, string> = {
@@ -1853,14 +1880,29 @@ const AdminRecycleBinPanel: React.FC = () => {
 
     const restoreFile = useCallback(async (item: TrashFile) => {
         if (!item.file_id) return;
+        const warnings = item.restore_warnings || [];
+        if (warnings.length) {
+            const ok = await crmConfirm({
+                title: '恢复前确认',
+                message: `文件：${item.media_name || item.file_name || item.file_id}。${warnings.join('；')} 是否继续恢复？`,
+                type: item.restore_visibility === 'missing_disk' ? 'danger' : 'warning',
+                confirmText: '继续恢复',
+            });
+            if (!ok) return;
+        }
         setItemBusy(item.file_id, true);
         try {
-            await apiJson<{ success: boolean }>(`/api/admin/trash/files/${encodeURIComponent(item.file_id)}/restore`, {
+            const result = await apiJson<TrashRestoreResponse>(`/api/admin/trash/files/${encodeURIComponent(item.file_id)}/restore`, {
                 method: 'POST',
                 body: JSON.stringify({}),
             });
             setPreviewItem(null);
-            crmMessage.success('文件已从回收站恢复');
+            if (result.restore_warnings?.length) {
+                crmMessage.warning(`文件已恢复，但请注意：${result.restore_warnings.join('；')}`);
+            } else {
+                const targets = result.restore_targets?.length ? `：${result.restore_targets.join('、')}` : '';
+                crmMessage.success(`文件已从回收站恢复${targets}`);
+            }
             await loadTrash();
         } catch (err: any) {
             crmMessage.error(`恢复失败：${err?.message || 'unknown'}`);
@@ -1940,7 +1982,7 @@ const AdminRecycleBinPanel: React.FC = () => {
                 </div>
                 <div className="rounded border border-y200 bg-y50 px-3 py-2 md:col-span-2">
                     <div className="text-xs font-semibold text-y400">风险提示</div>
-                    <div className="mt-1 text-[11px] text-y400">恢复只撤销软删除；释放磁盘会删除本机 persistent_storage 文件并移除文件记录，不可恢复。</div>
+                    <div className="mt-1 text-[11px] text-y400">恢复会撤销文件和素材库软删除，但不会重建已清空的分镜/视频/资产字段；释放磁盘会删除本机 persistent_storage 文件并移除文件记录，不可恢复。</div>
                 </div>
             </div>
 
@@ -1952,6 +1994,7 @@ const AdminRecycleBinPanel: React.FC = () => {
                             <th className="text-left font-medium px-3 py-2">文件</th>
                             <th className="text-left font-medium px-3 py-2">类型</th>
                             <th className="text-left font-medium px-3 py-2">磁盘</th>
+                            <th className="text-left font-medium px-3 py-2">恢复去向</th>
                             <th className="text-left font-medium px-3 py-2">删除时间</th>
                             <th className="text-right font-medium px-3 py-2">操作</th>
                         </tr>
@@ -1959,14 +2002,14 @@ const AdminRecycleBinPanel: React.FC = () => {
                     <tbody className="divide-y divide-n40">
                         {loading ? (
                             <tr>
-                                <td colSpan={6} className="px-3 py-8 text-center text-n100">
+                                <td colSpan={7} className="px-3 py-8 text-center text-n100">
                                     <Loader2 className="inline w-4 h-4 animate-spin mr-2" />
                                     加载中
                                 </td>
                             </tr>
                         ) : items.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="px-3 py-8 text-center text-n100">暂无回收站文件</td>
+                                <td colSpan={7} className="px-3 py-8 text-center text-n100">暂无回收站文件</td>
                             </tr>
                         ) : items.map(item => (
                             <tr key={item.file_id} className="bg-n0">
@@ -2003,6 +2046,23 @@ const AdminRecycleBinPanel: React.FC = () => {
                                 <td className="px-3 py-2">
                                     <div className={item.disk_exists ? 'text-g400' : 'text-n100'}>{item.disk_exists ? '存在' : '不存在'}</div>
                                     <div className="font-mono text-n700">{formatBytes(item.disk_size_bytes)}</div>
+                                </td>
+                                <td className="px-3 py-2 min-w-[190px]">
+                                    <div className={`inline-flex rounded border px-2 py-0.5 text-[11px] font-medium ${restoreVisibilityClass(item)}`}>
+                                        {restoreVisibilityText(item)}
+                                    </div>
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                        {(item.restore_targets || ['仅文件记录']).map((target, index) => (
+                                            <span key={`${item.file_id}-target-${index}`} className="rounded border border-n40 bg-n20 px-1.5 py-0.5 text-[10px] text-n700">
+                                                {target}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    {item.restore_warnings?.length ? (
+                                        <div className="mt-1 text-[10px] leading-snug text-y400">
+                                            {item.restore_warnings.join('；')}
+                                        </div>
+                                    ) : null}
                                 </td>
                                 <td className="px-3 py-2 font-mono text-n700">{formatTime(item.deleted_at)}</td>
                                 <td className="px-3 py-2">

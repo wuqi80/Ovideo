@@ -13,6 +13,55 @@ logger = logging.getLogger(__name__)
 
 class AdminRecycleBinDAO:
     @staticmethod
+    async def file_reference_counts(file_url: str) -> Dict[str, int]:
+        if not file_url:
+            return {}
+        db = get_db_manager()
+        if not db:
+            return {}
+
+        counts: Dict[str, int] = {}
+        for key, table, column in (
+            ("storyboard_image", "storyboard_items", "generated_image_url"),
+            ("storyboard_dialogue_audio", "storyboard_items", "dialogue_audio_url"),
+            ("storyboard_narration_audio", "storyboard_items", "narration_audio_url"),
+            ("storyboard_sfx_audio", "storyboard_items", "sfx_audio_url"),
+            ("storyboard_mixed_audio", "storyboard_items", "mixed_audio_url"),
+            ("video_segment_video", "video_segments", "video_url"),
+            ("video_segment_thumbnail", "video_segments", "thumbnail_url"),
+            ("asset_thumbnail", "assets", "thumbnail_url"),
+        ):
+            try:
+                value = await db.fetchval(
+                    f"SELECT COUNT(*) FROM {table} WHERE {column} = $1",
+                    file_url,
+                )
+                counts[key] = int(value or 0)
+            except Exception as exc:
+                logger.warning("Failed to count recycle-bin reference %s.%s: %s", table, column, exc)
+
+        try:
+            value = await db.fetchval(
+                """
+                SELECT COUNT(*)
+                FROM assets a
+                WHERE reference_images IS NOT NULL
+                  AND jsonb_typeof(reference_images) = 'array'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements_text(a.reference_images) AS value
+                    WHERE value = $1
+                  )
+                """,
+                file_url,
+            )
+            counts["asset_reference_image"] = int(value or 0)
+        except Exception as exc:
+            logger.warning("Failed to count recycle-bin assets.reference_images references: %s", exc)
+
+        return counts
+
+    @staticmethod
     async def list_deleted_files(
         *,
         user_id: Optional[str] = None,
@@ -99,7 +148,13 @@ class AdminRecycleBinDAO:
             """,
             file_id,
         )
-        return dict(row)
+        data = dict(row)
+        value = await db.fetchval(
+            "SELECT COUNT(*) FROM media_library_items WHERE file_id = $1",
+            file_id,
+        )
+        data["media_library_count"] = int(value or 0)
+        return data
 
     @staticmethod
     async def clear_legacy_references(file_url: str) -> None:
