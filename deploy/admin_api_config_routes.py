@@ -28,6 +28,7 @@ from services.api_config_service import (
     list_api_configs,
     repair_api_config_provider_conflicts,
     test_all_saved_api_config_health,
+    test_saved_api_config_real_generation,
     test_saved_api_config_health,
     update_api_config,
 )
@@ -422,6 +423,33 @@ async def admin_test_api_config(config_id: str):
     _require_db()
     try:
         return await test_saved_api_config_health(config_id)
+    except ApiConfigNotFound:
+        raise HTTPException(status_code=404, detail="Config not found")
+
+
+@router.post("/api-configs/{config_id}/real-test")
+async def admin_real_test_api_config(config_id: str, request: Request):
+    _require_db()
+    try:
+        result = await test_saved_api_config_real_generation(config_id)
+        test = result.get("test") or {}
+        await _record_api_config_audit(
+            request,
+            action="api_config_real_generation_test",
+            target_id=config_id,
+            after={
+                "success": result.get("success"),
+                "ok": test.get("ok"),
+                "status": test.get("status"),
+                "provider": test.get("provider"),
+                "model_name": test.get("model_name"),
+                "status_code": test.get("status_code"),
+                "output_type": test.get("output_type"),
+                "billable": test.get("billable"),
+            },
+            notes="Admin-triggered real generation test; may incur provider cost",
+        )
+        return result
     except ApiConfigNotFound:
         raise HTTPException(status_code=404, detail="Config not found")
 

@@ -203,6 +203,9 @@ interface ApiConfigTest {
     is_runtime_effective?: boolean;
     runtime_effective_config_id?: string | null;
     runtime_effective_config_name?: string | null;
+    real_generation?: boolean;
+    billable?: boolean;
+    output_type?: string | null;
 }
 
 interface ApiConfigTestResponse {
@@ -226,6 +229,8 @@ interface ApiConfigFormState {
     provider: string;
     endpoint: string;
     api_key: string;
+    api_key_preview?: string;
+    has_key?: boolean;
     bulk_api_keys: string;
     bulk_mode: boolean;
     model_name: string;
@@ -552,6 +557,7 @@ function healthStatusFromConfigTest(test?: ApiConfigTest): HealthStatus | undefi
     if (!test) return undefined;
     if (test.ok) return 'ok';
     if (isNoKeyTest(test)) return 'no_key';
+    if (isUnsupportedRealGenerationTest(test)) return 'connectivity_ok';
     const status = String(test.status || '').toLowerCase();
     if (status === 'connectivity_ok') return 'connectivity_ok';
     if (status === 'blocked_region') return 'blocked_region';
@@ -712,6 +718,8 @@ function emptyConfigForm(): ApiConfigFormState {
         provider: '',
         endpoint: '',
         api_key: '',
+        api_key_preview: '',
+        has_key: false,
         bulk_api_keys: '',
         bulk_mode: false,
         model_name: '',
@@ -747,6 +755,8 @@ function configToForm(config: ApiConfig, extraFields: ProviderExtraField[] = [])
         provider: config.provider || '',
         endpoint: config.endpoint || '',
         api_key: '',
+        api_key_preview: config.api_key_preview || '',
+        has_key: Boolean(config.has_key ?? config.api_key_encrypted),
         bulk_api_keys: '',
         bulk_mode: false,
         model_name: config.model_name || '',
@@ -937,6 +947,44 @@ function isNoKeyTest(test?: ApiConfigTest): boolean {
     return test?.error === 'No API key configured';
 }
 
+function isUnsupportedRealGenerationTest(test?: ApiConfigTest): boolean {
+    return Boolean(test?.real_generation && String(test.status || '').toLowerCase() === 'unsupported');
+}
+
+function configTestTitle(test?: ApiConfigTest): string {
+    return test?.real_generation ? '真实生成测试（可能产生费用）：' : 'DB 配置测试：';
+}
+
+function configTestLabelText(
+    test: ApiConfigTest | undefined,
+    runtimeWarningText: string,
+    messages: {
+        runtimeKeyOk: string;
+        dbOk: string;
+        noKey: string;
+        error: string;
+    },
+): string {
+    if (!test) return '';
+    if (test.real_generation) {
+        if (test.ok) {
+            return `真实生成已返回${test.output_type ? ` ${test.output_type}` : '结果'}`;
+        }
+        if (isUnsupportedRealGenerationTest(test)) {
+            return '此 provider 暂不支持后台真实生成测试，请到业务页面验证';
+        }
+        if (isNoKeyTest(test)) {
+            return '未保存 Key，无法真实生成';
+        }
+        return '真实生成异常';
+    }
+    if (test.ok) {
+        return runtimeWarningText || (test.used_runtime_key ? messages.runtimeKeyOk : messages.dbOk);
+    }
+    if (isNoKeyTest(test)) return messages.noKey;
+    return messages.error;
+}
+
 const HealthBadge: React.FC<{ status: HealthStatus }> = ({ status }) => {
     const view = statusView(status);
     return (
@@ -1096,6 +1144,9 @@ const ApiConfigEditorModal: React.FC<{
     const selectedProvider = normalizeProvider(form.provider);
     const selectedMeta = providers.find(item => normalizeProvider(item.provider) === selectedProvider);
     const extraFields = selectedMeta?.extra_fields || [];
+    const lockGeneratedFields = isEdit && Boolean(selectedMeta);
+    const lockedInputClass = 'bg-n20 text-n100 cursor-not-allowed';
+    const normalInputClass = 'bg-n0 text-n800 focus:border-primary focus:outline-none';
 
     return (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-n900/40 backdrop-blur-sm p-4">
@@ -1110,7 +1161,7 @@ const ApiConfigEditorModal: React.FC<{
                     <div className="min-w-0">
                         <h2 className="text-base font-semibold text-n800">{isEdit ? '编辑 API 配置' : '新增 API 配置'}</h2>
                         <div className="text-xs text-n100 mt-0.5">
-                            {isEdit ? 'Key 留空时保留现有密钥' : '新增配置需要填写 API Key'}
+                            {isEdit ? 'Key 留空时保留现有密钥；预设生成的协议字段已锁定' : '新增配置需要填写 API Key'}
                         </div>
                     </div>
                     <button
@@ -1140,8 +1191,9 @@ const ApiConfigEditorModal: React.FC<{
                             <select
                                 required
                                 value={form.provider}
+                                disabled={lockGeneratedFields}
                                 onChange={event => patch({ provider: event.target.value })}
-                                className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
+                                className={`w-full rounded border border-n40 px-3 py-2 text-sm ${lockGeneratedFields ? lockedInputClass : normalInputClass}`}
                             >
                                 <option value="">选择 provider</option>
                                 {providerOptions.map(item => (
@@ -1150,6 +1202,9 @@ const ApiConfigEditorModal: React.FC<{
                                     </option>
                                 ))}
                             </select>
+                            {lockGeneratedFields && (
+                                <span className="mt-1 block text-[11px] text-n100">已有配置的 provider 由预设生成，不能在编辑时改成其他厂商。</span>
+                            )}
                         </label>
                     </div>
 
@@ -1195,6 +1250,13 @@ const ApiConfigEditorModal: React.FC<{
                         </label>
                         <label className="block min-w-0">
                             <span className="block text-xs font-medium text-n300 mb-1">API Key</span>
+                            {isEdit && (
+                                <div className={`mb-1 inline-flex rounded border px-2 py-0.5 text-[11px] font-mono ${
+                                    form.has_key ? 'border-g75 bg-g50 text-g400' : 'border-y200 bg-y50 text-y400'
+                                }`}>
+                                    {form.has_key ? `当前 Key：${form.api_key_preview || '****'}` : '当前未保存 Key'}
+                                </div>
+                            )}
                             <input
                                 type="password"
                                 required={!isEdit && !form.bulk_mode}
@@ -1202,8 +1264,11 @@ const ApiConfigEditorModal: React.FC<{
                                 disabled={form.bulk_mode && !isEdit}
                                 onChange={event => patch({ api_key: event.target.value })}
                                 className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
-                                placeholder={isEdit ? '留空保留现有 Key' : 'sk-...'}
+                                placeholder={isEdit ? `留空保留${form.api_key_preview ? ` ${form.api_key_preview}` : '现有'} Key` : 'sk-...'}
                             />
+                            {isEdit && (
+                                <span className="mt-1 block text-[11px] text-n100">只在需要替换密钥时填写；留空会保留上方显示的当前 Key。</span>
+                            )}
                         </label>
                     </div>
 
@@ -1227,8 +1292,9 @@ const ApiConfigEditorModal: React.FC<{
                             <span className="block text-xs font-medium text-n300 mb-1">分类</span>
                             <select
                                 value={form.category}
+                                disabled={lockGeneratedFields}
                                 onChange={event => patch({ category: event.target.value })}
-                                className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
+                                className={`w-full rounded border border-n40 px-3 py-2 text-sm ${lockGeneratedFields ? lockedInputClass : normalInputClass}`}
                             >
                                 {Object.entries(CATEGORY_LABELS).filter(([key]) => key !== 'other').map(([key, label]) => (
                                     <option key={key} value={key}>{label}</option>
@@ -1302,21 +1368,29 @@ const ApiConfigEditorModal: React.FC<{
                             <span className="block text-xs font-medium text-n300 mb-1">Request Template JSON</span>
                             <textarea
                                 value={form.request_template}
+                                disabled={lockGeneratedFields}
                                 onChange={event => patch({ request_template: event.target.value })}
                                 rows={5}
-                                className="w-full min-h-[120px] resize-y rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono leading-relaxed break-all focus:border-primary focus:outline-none"
+                                className={`w-full min-h-[120px] resize-y rounded border border-n40 px-3 py-2 text-sm font-mono leading-relaxed break-all ${lockGeneratedFields ? lockedInputClass : normalInputClass}`}
                                 placeholder='{"group_id":"..."}'
                             />
+                            {lockGeneratedFields && (
+                                <span className="mt-1 block text-[11px] text-n100">预设生成的底层请求模板已锁定；需要配置的额外字段会在上方单独显示。</span>
+                            )}
                         </label>
                         <label className="block min-w-0">
                             <span className="block text-xs font-medium text-n300 mb-1">Headers JSON</span>
                             <textarea
                                 value={form.headers}
+                                disabled={lockGeneratedFields}
                                 onChange={event => patch({ headers: event.target.value })}
                                 rows={5}
-                                className="w-full min-h-[120px] resize-y rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono leading-relaxed break-all focus:border-primary focus:outline-none"
+                                className={`w-full min-h-[120px] resize-y rounded border border-n40 px-3 py-2 text-sm font-mono leading-relaxed break-all ${lockGeneratedFields ? lockedInputClass : normalInputClass}`}
                                 placeholder='{"X-Custom":"value"}'
                             />
+                            {lockGeneratedFields && (
+                                <span className="mt-1 block text-[11px] text-n100">预设生成的底层 Headers 已锁定，避免误改认证和生成协议。</span>
+                            )}
                         </label>
                     </div>
                 </div>
@@ -1352,13 +1426,15 @@ const ApiConfigCard: React.FC<{
     configTest?: ApiConfigTest;
     checking: boolean;
     testingConfig: boolean;
+    realTestingConfig: boolean;
     onCheck: (provider: string, modelName?: string | null) => void;
     onTestConfig: (config: ApiConfig) => void;
+    onRealTestConfig: (config: ApiConfig) => void;
     onEdit: (config: ApiConfig) => void;
     onActivate: (config: ApiConfig) => void;
     onToggle: (config: ApiConfig) => void;
     onDelete: (config: ApiConfig) => void;
-}> = ({ config, meta, runtime, health, configTest, checking, testingConfig, onCheck, onTestConfig, onEdit, onActivate, onToggle, onDelete }) => {
+}> = ({ config, meta, runtime, health, configTest, checking, testingConfig, realTestingConfig, onCheck, onTestConfig, onRealTestConfig, onEdit, onActivate, onToggle, onDelete }) => {
     const provider = normalizeProvider(config.provider);
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.has_key ?? config.api_key_encrypted);
     const configHasKey = Boolean(config.has_key ?? config.api_key_encrypted);
@@ -1389,25 +1465,23 @@ const ApiConfigCard: React.FC<{
     ].filter(Boolean).join(' / ');
     const failoverActive = Boolean(runtime?.failover_active);
     const configTestNoKey = isNoKeyTest(configTest);
+    const configTestUnsupported = isUnsupportedRealGenerationTest(configTest);
     const configTestRuntimeWarningText = configTest?.ok ? configTestRuntimeWarning(configTest) : '';
     const configTestUsesRuntimeKey = Boolean(configTest?.ok && (configTest.used_runtime_key || configTestRuntimeWarningText));
+    const configTestTitleText = configTestTitle(configTest);
     const configTestClass = configTest?.ok
         ? configTestUsesRuntimeKey
             ? 'border-y200 bg-y50 text-y400'
             : 'border-g75 bg-g50 text-g400'
-        : configTestNoKey
+        : configTestNoKey || configTestUnsupported
             ? 'border-y200 bg-y50 text-y400'
         : 'border-r75 bg-r50 text-r400';
-    const configTestLabel = !configTest
-        ? ''
-        : configTest.ok
-            ? configTestRuntimeWarningText
-                || (configTest.used_runtime_key
-                ? '运行时连通正常；此条 DB 记录仍未保存 Key'
-                : '此条记录连通正常')
-            : configTestNoKey
-                ? '此条 DB 记录未保存 Key'
-                : '此条记录异常';
+    const configTestLabel = configTestLabelText(configTest, configTestRuntimeWarningText, {
+        runtimeKeyOk: '运行时连通正常；此条 DB 记录仍未保存 Key',
+        dbOk: '此条记录连通正常',
+        noKey: '此条 DB 记录未保存 Key',
+        error: '此条记录异常',
+    });
     const configTestKeySource = !configTest
         ? ''
         : configTest.used_runtime_key
@@ -1464,6 +1538,16 @@ const ApiConfigCard: React.FC<{
                             >
                                 {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
                                 测试 DB 配置
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onRealTestConfig(config)}
+                                disabled={realTestingConfig || !configHasKey || !config.config_id}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60 shrink-0"
+                                title="发起一次真实生成请求验证可用性，可能产生厂商费用"
+                            >
+                                {realTestingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                                真实生成测试
                             </button>
                             <button
                                 type="button"
@@ -1615,8 +1699,13 @@ const ApiConfigCard: React.FC<{
 
                     {configTest && (
                         <div className={`mt-2 rounded border px-3 py-2 text-[11px] break-words ${configTestClass}`}>
-                            <span className="font-semibold">DB 配置测试：</span>
+                            <span className="font-semibold">{configTestTitleText}</span>
                             <span>{configTestLabel}</span>
+                            {configTest.real_generation && configTest.billable && (
+                                <span className="ml-1 rounded border border-y200 bg-y50 px-1.5 py-0.5 text-[10px] font-semibold text-y400">
+                                    可能产生费用
+                                </span>
+                            )}
                             {configTestKeySource && (
                                 <span className="ml-1">；Key 来源：{configTestKeySource}</span>
                             )}
@@ -1665,6 +1754,7 @@ const ProviderQuickCard: React.FC<{
     checking: boolean;
     testingConfig: boolean;
     testingConfigMap: Record<string, boolean>;
+    realTestingConfigMap: Record<string, boolean>;
     onConfigure: (meta: ProviderMeta) => void;
     onAddConfig: (meta: ProviderMeta) => void;
     onEditConfig: (config: ApiConfig) => void;
@@ -1672,6 +1762,7 @@ const ProviderQuickCard: React.FC<{
     onToggle: (config: ApiConfig) => void;
     onDelete: (config: ApiConfig) => void;
     onTestConfig: (config: ApiConfig) => void;
+    onRealTestConfig: (config: ApiConfig) => void;
     onCheck: (provider: string, modelName?: string | null) => void;
 }> = ({
     meta,
@@ -1682,6 +1773,7 @@ const ProviderQuickCard: React.FC<{
     checking,
     testingConfig,
     testingConfigMap,
+    realTestingConfigMap,
     onConfigure,
     onAddConfig,
     onEditConfig,
@@ -1689,6 +1781,7 @@ const ProviderQuickCard: React.FC<{
     onToggle,
     onDelete,
     onTestConfig,
+    onRealTestConfig,
     onCheck,
 }) => {
     const provider = normalizeProvider(meta.provider);
@@ -1722,25 +1815,23 @@ const ProviderQuickCard: React.FC<{
     const dbKeyText = dbKeyStateText(hasSavedKey, runtimeHasKey);
     const dbKeyClass = dbKeyStateClass(hasSavedKey, runtimeHasKey);
     const quickConfigTestNoKey = isNoKeyTest(configTest);
+    const quickConfigTestUnsupported = isUnsupportedRealGenerationTest(configTest);
     const quickConfigTestRuntimeWarningText = configTest?.ok ? configTestRuntimeWarning(configTest) : '';
     const quickConfigTestUsesRuntimeKey = Boolean(configTest?.ok && (configTest.used_runtime_key || quickConfigTestRuntimeWarningText));
+    const quickConfigTestTitle = configTestTitle(configTest);
     const quickConfigTestClass = configTest?.ok
         ? quickConfigTestUsesRuntimeKey
             ? 'border-y200 bg-y50 text-y400'
             : 'border-g75 bg-g50 text-g400'
-        : quickConfigTestNoKey
+        : quickConfigTestNoKey || quickConfigTestUnsupported
             ? 'border-y200 bg-y50 text-y400'
         : 'border-r75 bg-r50 text-r400';
-    const quickConfigTestLabel = !configTest
-        ? ''
-        : configTest.ok
-            ? quickConfigTestRuntimeWarningText
-                || (configTest.used_runtime_key
-                ? '运行时连通正常；DB 仍未保存 Key'
-                : 'DB 配置可用')
-            : quickConfigTestNoKey
-                ? 'DB 配置未保存 Key'
-                : 'DB 配置异常';
+    const quickConfigTestLabel = configTestLabelText(configTest, quickConfigTestRuntimeWarningText, {
+        runtimeKeyOk: '运行时连通正常；DB 仍未保存 Key',
+        dbOk: 'DB 配置可用',
+        noKey: 'DB 配置未保存 Key',
+        error: 'DB 配置异常',
+    });
     const quickConfigTestKeySource = !configTest
         ? ''
         : configTest.used_runtime_key
@@ -1841,6 +1932,7 @@ const ProviderQuickCard: React.FC<{
                             const hasKey = Boolean(config.has_key ?? config.api_key_encrypted);
                             const active = config.config_id === activeConfigId;
                             const rowTesting = testingConfig || Boolean(testingConfigMap[config.config_id]);
+                            const rowRealTesting = Boolean(realTestingConfigMap[config.config_id]);
                             return (
                                 <div key={config.config_id} className="px-3 py-2">
                                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1876,16 +1968,26 @@ const ProviderQuickCard: React.FC<{
                                                     设为生效
                                                 </button>
                                             )}
-                            <button
-                                type="button"
-                                onClick={() => onTestConfig(config)}
-                                disabled={rowTesting || !config.config_id}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                                title="只测试这一条 Key 记录保存的 Key、Endpoint 和模型；不会把它设为生效"
-                            >
-                                {rowTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                                测试此 Key
-                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onTestConfig(config)}
+                                                disabled={rowTesting || !config.config_id}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                                title="只测试这一条 Key 记录保存的 Key、Endpoint 和模型；不会把它设为生效"
+                                            >
+                                                {rowTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                                测试此 Key
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onRealTestConfig(config)}
+                                                disabled={rowRealTesting || !hasKey || !config.config_id}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
+                                                title="使用这一条 Key 发起一次真实生成请求，可能产生厂商费用；不会把它设为生效"
+                                            >
+                                                {rowRealTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
+                                                真实生成测试
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => onEditConfig(config)}
@@ -1941,6 +2043,20 @@ const ProviderQuickCard: React.FC<{
                             {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
                             测试当前卡片 DB 配置
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => onRealTestConfig(primaryConfig)}
+                            disabled={
+                                Boolean(realTestingConfigMap[primaryConfig.config_id])
+                                || !Boolean(primaryConfig.has_key ?? primaryConfig.api_key_encrypted)
+                                || !primaryConfig.config_id
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
+                            title="使用当前卡片选中的 Key 发起一次真实生成请求，可能产生厂商费用"
+                        >
+                            {realTestingConfigMap[primaryConfig.config_id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                            真实生成测试（可能产生费用）
+                        </button>
                     </>
                 ) : (
                     <button
@@ -1978,8 +2094,13 @@ const ProviderQuickCard: React.FC<{
 
             {configTest && (
                 <div className={`mt-2 rounded border px-2 py-1.5 text-[11px] break-words ${quickConfigTestClass}`}>
-                    <span className="font-semibold">DB 配置测试：</span>
+                    <span className="font-semibold">{quickConfigTestTitle}</span>
                     <span>{quickConfigTestLabel}</span>
+                    {configTest.real_generation && configTest.billable && (
+                        <span className="ml-1 rounded border border-y200 bg-y50 px-1.5 py-0.5 text-[10px] font-semibold text-y400">
+                            可能产生费用
+                        </span>
+                    )}
                     {quickConfigTestKeySource && (
                         <span className="ml-1">Key 来源：{quickConfigTestKeySource}</span>
                     )}
@@ -2342,6 +2463,7 @@ const ApiConfigPanel: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [checking, setChecking] = useState<Record<string, boolean>>({});
     const [testingConfig, setTestingConfig] = useState<Record<string, boolean>>({});
+    const [realTestingConfig, setRealTestingConfig] = useState<Record<string, boolean>>({});
     const [error, setError] = useState<string>('');
     const [editingForm, setEditingForm] = useState<ApiConfigFormState | null>(null);
     const [saving, setSaving] = useState(false);
@@ -2581,6 +2703,49 @@ const ApiConfigPanel: React.FC = () => {
             crmMessage.error(`配置测试失败：${err?.message || 'unknown'}`);
         } finally {
             setTestingConfig(prev => ({ ...prev, [configId]: false }));
+        }
+    }, []);
+
+    const realTestConfig = useCallback(async (config: ApiConfig) => {
+        const configId = config.config_id;
+        if (!configId) return;
+        const displayName = config.name || config.provider || configId;
+        const ok = await crmConfirm({
+            title: '真实生成测试',
+            message: `将使用「${displayName}」向厂商发起一次真实生成请求。该操作可能产生费用，是否继续？`,
+            type: 'warning',
+            confirmText: '开始测试',
+        });
+        if (!ok) return;
+
+        setRealTestingConfig(prev => ({ ...prev, [configId]: true }));
+        try {
+            const startedAt = performance.now();
+            const result = await apiJson<ApiConfigTestResponse>(`/api/admin/api-configs/${encodeURIComponent(configId)}/real-test`, {
+                method: 'POST',
+                body: JSON.stringify({}),
+            });
+            const latencyMs = Math.round(performance.now() - startedAt);
+            const test: ApiConfigTest = {
+                ...(result.test || {}),
+                latency_ms: result.test?.latency_ms ?? latencyMs,
+                real_generation: true,
+                billable: result.test?.billable ?? true,
+            };
+            setConfigTestMap(prev => ({ ...prev, [configId]: test }));
+            if (test.ok) {
+                crmMessage.success(`${displayName} 真实生成测试通过${test.output_type ? `（${test.output_type}）` : ''}`);
+            } else if (isUnsupportedRealGenerationTest(test)) {
+                crmMessage.warning(`${displayName} 暂不支持后台真实生成测试，请到业务页面验证`);
+            } else if (isNoKeyTest(test)) {
+                crmMessage.warning(`${displayName} 缺少 API Key`);
+            } else {
+                crmMessage.error(`${displayName} 真实生成测试失败：${test.error || `HTTP ${test.status_code || '-'}`}`);
+            }
+        } catch (err: any) {
+            crmMessage.error(`真实生成测试失败：${err?.message || 'unknown'}`);
+        } finally {
+            setRealTestingConfig(prev => ({ ...prev, [configId]: false }));
         }
     }, []);
 
@@ -3116,7 +3281,7 @@ const ApiConfigPanel: React.FC = () => {
                         <Activity className="w-3.5 h-3.5 text-primary" />
                         测试按钮说明
                     </div>
-                    <div className="mt-2 grid gap-2 text-[11px] text-n100 md:grid-cols-3">
+                    <div className="mt-2 grid gap-2 text-[11px] text-n100 md:grid-cols-2 xl:grid-cols-4">
                         <div className="rounded border border-n40 bg-n20 px-3 py-2">
                             <div className="font-semibold text-n700">测试此 Key / 测试 DB 配置</div>
                             <p className="mt-1 leading-relaxed">
@@ -3127,6 +3292,12 @@ const ApiConfigPanel: React.FC = () => {
                             <div className="font-semibold text-n700">测试生效配置</div>
                             <p className="mt-1 leading-relaxed">
                                 测试实际生成调用当前会使用的运行时配置，也就是标记为“当前生效”的 Key 加上运行时 Endpoint 和模型。
+                            </p>
+                        </div>
+                        <div className="rounded border border-y200 bg-y50 px-3 py-2">
+                            <div className="font-semibold text-y400">真实生成测试</div>
+                            <p className="mt-1 leading-relaxed text-y400">
+                                发起一次最小真实生成请求，用来确认厂商实际可产出内容；可能产生费用，点击前会再次确认。
                             </p>
                         </div>
                         <div className="rounded border border-n40 bg-n20 px-3 py-2">
@@ -3175,6 +3346,7 @@ const ApiConfigPanel: React.FC = () => {
                                     checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                     testingConfig={testingAllConfigs || Boolean(primaryConfig && testingConfig[primaryConfig.config_id])}
                                     testingConfigMap={testingConfig}
+                                    realTestingConfigMap={realTestingConfig}
                                     onConfigure={openProviderConfig}
                                     onAddConfig={openAddProviderConfig}
                                     onEditConfig={openEdit}
@@ -3182,6 +3354,7 @@ const ApiConfigPanel: React.FC = () => {
                                     onToggle={toggleConfig}
                                     onDelete={deleteConfig}
                                     onTestConfig={testConfig}
+                                    onRealTestConfig={realTestConfig}
                                     onCheck={testProvider}
                                 />
                             );
@@ -3224,8 +3397,10 @@ const ApiConfigPanel: React.FC = () => {
                                                     configTest={configTestMap[config.config_id]}
                                                     checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                                     testingConfig={testingAllConfigs || Boolean(testingConfig[config.config_id])}
+                                                    realTestingConfig={Boolean(realTestingConfig[config.config_id])}
                                                     onCheck={testProvider}
                                                     onTestConfig={testConfig}
+                                                    onRealTestConfig={realTestConfig}
                                                     onEdit={openEdit}
                                                     onActivate={activateConfig}
                                                     onToggle={toggleConfig}

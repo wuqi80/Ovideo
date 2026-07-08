@@ -12,6 +12,7 @@ from services.api_config_health_cache_service import (
     invalidate_provider_health_for_items,
 )
 from services.api_config_health_service import test_api_config_health
+from services.api_config_health_service import test_api_config_real_generation
 from services.api_config_reload_service import (
     ApiConfigReloadFailed,
     ReloadCallback,
@@ -546,6 +547,14 @@ async def test_saved_api_config_health(config_id: str) -> Dict[str, Any]:
     if not row:
         raise ApiConfigNotFound("Config not found")
     return await _test_api_config_row_health(row)
+
+
+async def test_saved_api_config_real_generation(config_id: str) -> Dict[str, Any]:
+    row = await ApiConfigDAO.get_by_id(config_id)
+    if not row:
+        raise ApiConfigNotFound("Config not found")
+    key = await ApiConfigDAO.get_decrypted_key(config_id)
+    return await test_api_config_real_generation(_row_to_jsonable(row), key or "")
 
 
 def summarize_config_test_results(results: Iterable[Dict[str, Any]]) -> Dict[str, int]:
