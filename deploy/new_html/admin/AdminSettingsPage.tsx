@@ -12,6 +12,7 @@ import {
     Activity,
     AlertCircle,
     CheckCircle2,
+    Download,
     Edit3,
     ExternalLink,
     ImageIcon,
@@ -25,7 +26,7 @@ import {
     X,
 } from 'lucide-react';
 import { crmConfirm, crmMessage } from './crmUI';
-import { apiJson } from '../services/httpClient';
+import { apiBlob, apiJson } from '../services/httpClient';
 
 const LEGACY_VER = '20260701-qwen-agent-v2';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
@@ -271,6 +272,9 @@ interface TrashFile {
     restore_targets?: string[];
     restore_warnings?: string[];
     restore_visibility?: 'normal' | 'file_record_only' | 'missing_disk' | string;
+    download_available?: boolean;
+    download_url?: string;
+    preview_unavailable_reason?: string;
 }
 
 interface TrashRestoreResponse {
@@ -811,6 +815,18 @@ function isPreviewableTrashImage(item: TrashFile): boolean {
     const type = String(item.file_type || '').toLowerCase();
     const url = trashPreviewUrl(item).split('?', 1)[0].toLowerCase();
     return type === 'image' || /\.(webp|png|jpe?g|gif|bmp|svg)$/i.test(url);
+}
+
+function trashDownloadUrl(item: TrashFile): string {
+    if (item.download_url) return item.download_url;
+    if (!item.file_id) return '';
+    return `/api/admin/trash/files/${encodeURIComponent(item.file_id)}/download`;
+}
+
+function trashDownloadName(item: TrashFile): string {
+    const raw = String(item.media_name || item.file_name || item.file_url || item.file_path || item.file_id || 'download');
+    const tail = raw.split(/[\\/]/).filter(Boolean).pop() || raw;
+    return tail.replace(/[\\/:*?"<>|]+/g, '_') || 'download';
 }
 
 function restoreVisibilityClass(item: TrashFile): string {
@@ -1940,6 +1956,36 @@ const AdminRecycleBinPanel: React.FC = () => {
         }
     }, [loadTrash]);
 
+    const downloadTrashFile = useCallback(async (item: TrashFile) => {
+        if (!item.file_id || !item.download_available) {
+            crmMessage.warning(item.preview_unavailable_reason || '磁盘文件不存在，无法下载。');
+            return;
+        }
+        const url = trashDownloadUrl(item);
+        if (!url) {
+            crmMessage.warning('缺少下载地址。');
+            return;
+        }
+        setItemBusy(item.file_id, true);
+        try {
+            const blob = await apiBlob(url, { method: 'GET' }, '下载回收站文件', { includeContentType: false });
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = trashDownloadName(item);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            crmMessage.success('已开始下载。');
+        } catch (err: any) {
+            crmMessage.error(`下载失败：${err?.message || '文件不存在或无权限'}`);
+            await loadTrash();
+        } finally {
+            setItemBusy(item.file_id, false);
+        }
+    }, [loadTrash]);
+
     return (
         <section className="bg-n0 border border-n40 rounded-md shadow-card p-4 min-w-0">
             <div className="responsive-toolbar flex items-center justify-between gap-3">
@@ -2034,7 +2080,7 @@ const AdminRecycleBinPanel: React.FC = () => {
                                     ) : (
                                         <div className="flex w-16 h-16 flex-col items-center justify-center rounded border border-dashed border-n40 bg-n20 text-[10px] text-n100">
                                             <ImageIcon className="w-4 h-4 mb-1" />
-                                            无预览
+                                            {item.preview_unavailable_reason ? '文件缺失' : '无预览'}
                                         </div>
                                     )}
                                 </td>
@@ -2066,7 +2112,17 @@ const AdminRecycleBinPanel: React.FC = () => {
                                 </td>
                                 <td className="px-3 py-2 font-mono text-n700">{formatTime(item.deleted_at)}</td>
                                 <td className="px-3 py-2">
-                                    <div className="flex items-center justify-end gap-2">
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => downloadTrashFile(item)}
+                                            disabled={Boolean(busy[item.file_id]) || !item.download_available}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-50"
+                                            title={item.download_available ? '下载原文件' : (item.preview_unavailable_reason || '磁盘文件不存在，无法下载')}
+                                        >
+                                            <Download className="w-3.5 h-3.5" />
+                                            下载
+                                        </button>
                                         <button
                                             type="button"
                                             onClick={() => restoreFile(item)}

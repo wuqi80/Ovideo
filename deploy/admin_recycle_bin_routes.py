@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from db_manager import get_db_manager
@@ -11,6 +12,7 @@ from services.admin_recycle_bin_service import (
     RecycleBinNotFound,
     RecycleBinRiskNotAcknowledged,
     RecycleBinUnsafePath,
+    get_recycle_bin_download_info,
     list_recycle_bin_files,
     purge_recycle_bin_file,
     purge_recycle_bin_files,
@@ -63,6 +65,22 @@ async def admin_restore_trash_file(file_id: str):
     _require_db()
     try:
         return await restore_recycle_bin_file(file_id)
+    except RecycleBinNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/trash/files/{file_id}/download")
+async def admin_download_trash_file(file_id: str):
+    _require_db()
+    try:
+        download = await get_recycle_bin_download_info(file_id)
+        return FileResponse(
+            path=download["path"],
+            filename=download["filename"],
+            media_type=download["media_type"],
+        )
+    except RecycleBinUnsafePath as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RecycleBinNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

@@ -1,6 +1,7 @@
 """Admin recycle-bin service for soft-deleted files."""
 from __future__ import annotations
 
+import mimetypes
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -22,6 +23,11 @@ class RecycleBinRiskNotAcknowledged(RuntimeError):
 
 class RecycleBinUnsafePath(RuntimeError):
     pass
+
+
+def _download_filename(item: Dict[str, Any], path: Path) -> str:
+    name = str(item.get("media_name") or item.get("file_name") or path.name or item.get("file_id") or "download").strip()
+    return name or "download"
 
 
 def _jsonable_file(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -55,6 +61,9 @@ def _attach_disk_state(row: Dict[str, Any]) -> Dict[str, Any]:
         item["disk_exists"] = False
         item["purge_eligible"] = False
         item["purge_blocked_reason"] = "unsafe_path"
+        item["download_available"] = False
+        item["download_url"] = ""
+        item["preview_unavailable_reason"] = "文件路径不安全，已禁止预览或下载。"
         return item
 
     item["purge_eligible"] = bool(path)
@@ -62,9 +71,15 @@ def _attach_disk_state(row: Dict[str, Any]) -> Dict[str, Any]:
     if path and path.exists() and path.is_file():
         item["disk_exists"] = True
         item["disk_size_bytes"] = path.stat().st_size
+        if item.get("file_id"):
+            item["download_available"] = True
+            item["download_url"] = f"/api/admin/trash/files/{item['file_id']}/download"
     else:
         item["disk_exists"] = False
         item["disk_size_bytes"] = 0
+        item["download_available"] = False
+        item["download_url"] = ""
+        item["preview_unavailable_reason"] = "磁盘文件不存在，无法预览或下载。"
     return item
 
 
@@ -180,6 +195,25 @@ async def restore_recycle_bin_file(file_id: str) -> Dict[str, Any]:
         "restore_targets": item.get("restore_targets", []),
         "restore_warnings": item.get("restore_warnings", []),
         "restore_visibility": item.get("restore_visibility"),
+    }
+
+
+async def get_recycle_bin_download_info(file_id: str) -> Dict[str, Any]:
+    row = await AdminRecycleBinDAO.get_file_any(file_id)
+    if not row or row.get("is_deleted") is not True:
+        raise RecycleBinNotFound("Deleted file not found")
+
+    path = _resolve_purge_path(row.get("file_path"))
+    if not path or not path.exists() or not path.is_file():
+        raise RecycleBinNotFound("Disk file not found")
+
+    filename = _download_filename(row, path)
+    media_type = mimetypes.guess_type(filename or path.name)[0] or "application/octet-stream"
+    return {
+        "path": path,
+        "filename": filename,
+        "media_type": media_type,
+        "file_size": path.stat().st_size,
     }
 
 
