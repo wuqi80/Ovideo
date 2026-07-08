@@ -1876,15 +1876,16 @@ const ProviderQuickCard: React.FC<{
                                                     设为生效
                                                 </button>
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() => onTestConfig(config)}
-                                                disabled={rowTesting || !config.config_id}
-                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                                            >
-                                                {rowTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                                                测试
-                                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onTestConfig(config)}
+                                disabled={rowTesting || !config.config_id}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                title="只测试这一条 Key 记录保存的 Key、Endpoint 和模型；不会把它设为生效"
+                            >
+                                {rowTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                测试此 Key
+                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => onEditConfig(config)}
@@ -1938,7 +1939,7 @@ const ProviderQuickCard: React.FC<{
                             title="只测试这条数据库记录保存的 Key、Endpoint 和模型；结果不会覆盖生效配置健康状态"
                         >
                             {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测试 DB 配置
+                            测试当前卡片 DB 配置
                         </button>
                     </>
                 ) : (
@@ -1968,10 +1969,10 @@ const ProviderQuickCard: React.FC<{
                     onClick={() => onCheck(provider, model || null)}
                     disabled={checking || !provider}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                    title="测试实际生成调用会使用的生效 Key、Endpoint 和模型"
+                            title="测试实际生成调用会使用的生效 Key、Endpoint 和模型"
                 >
                     {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    测试生效配置
+                            测试生效配置
                 </button>
             </div>
 
@@ -3013,6 +3014,7 @@ const ApiConfigPanel: React.FC = () => {
                             onClick={sweepProviders}
                             disabled={sweeping || loading || configs.length === 0}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                            title="重新检测每个 provider 当前实际生效的运行时配置"
                         >
                             {sweeping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
                             刷新生效健康
@@ -3031,6 +3033,7 @@ const ApiConfigPanel: React.FC = () => {
                             onClick={testAllConfigs}
                             disabled={testingAllConfigs || loading || configs.length === 0}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                            title="逐条测试数据库中保存的每一条配置，不会切换生效 Key"
                         >
                             {testingAllConfigs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
                             批量测试 DB 配置
@@ -3107,6 +3110,33 @@ const ApiConfigPanel: React.FC = () => {
                         </button>
                     </section>
                 )}
+
+                <section className="rounded-md border border-n40 bg-n0 px-4 py-3 shadow-card">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-n800">
+                        <Activity className="w-3.5 h-3.5 text-primary" />
+                        测试按钮说明
+                    </div>
+                    <div className="mt-2 grid gap-2 text-[11px] text-n100 md:grid-cols-3">
+                        <div className="rounded border border-n40 bg-n20 px-3 py-2">
+                            <div className="font-semibold text-n700">测试此 Key / 测试 DB 配置</div>
+                            <p className="mt-1 leading-relaxed">
+                                测试某一条数据库配置保存的 Key、Endpoint、模型和代理设置；不切换生效 Key，也不代表当前生成一定会用这条。
+                            </p>
+                        </div>
+                        <div className="rounded border border-n40 bg-n20 px-3 py-2">
+                            <div className="font-semibold text-n700">测试生效配置</div>
+                            <p className="mt-1 leading-relaxed">
+                                测试实际生成调用当前会使用的运行时配置，也就是标记为“当前生效”的 Key 加上运行时 Endpoint 和模型。
+                            </p>
+                        </div>
+                        <div className="rounded border border-n40 bg-n20 px-3 py-2">
+                            <div className="font-semibold text-n700">批量测试 DB 配置</div>
+                            <p className="mt-1 leading-relaxed">
+                                逐条测试所有数据库配置，适合筛选坏 Key；不会自动切换当前生效 Key，切换仍需点击“设为生效”。
+                            </p>
+                        </div>
+                    </div>
+                </section>
 
                 <section className="space-y-2">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
