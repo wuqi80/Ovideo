@@ -68,6 +68,7 @@ export const ADMIN_MENU: MenuSection[] = [
     icon: 'ImageIcon',
     children: [
       { id: 'media', label: '素材库管理', to: '/admin/features?tab=media' },
+      { id: 'recyclebin', label: '文件回收站', to: '/admin/settings?item=recyclebin' },
       { id: 'results', label: '生成结果审计', to: '/admin/operations?tab=results' },
       { id: 'audit', label: '审计日志', to: '/admin/features?tab=audit' },
     ],

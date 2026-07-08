@@ -2734,8 +2734,6 @@ const ApiConfigPanel: React.FC = () => {
                     <div className="rounded-md border border-r75 bg-r50 px-3 py-2 text-sm text-danger">{error}</div>
                 )}
 
-                <AdminRecycleBinPanel />
-
                 {summary.runtimeOnlyKeyProviders.length > 0 && (
                     <section className="rounded-md border border-y200 bg-y50 px-3 py-2 shadow-card flex flex-wrap items-center justify-between gap-3">
                         <div className="min-w-0 text-xs text-y400">
@@ -2876,6 +2874,14 @@ export const AdminSettingsPage: React.FC = () => {
 
     if (raw === 'apiconfig' || raw === 'legacy-apiconfig') {
         return <ApiConfigPanel />;
+    }
+
+    if (raw === 'recyclebin') {
+        return (
+            <div className="p-6">
+                <AdminRecycleBinPanel />
+            </div>
+        );
     }
 
     const page = LEGACY_PAGE_BY_ITEM[raw];
