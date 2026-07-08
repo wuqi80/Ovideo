@@ -14,6 +14,7 @@ import {
     CheckCircle2,
     Edit3,
     ExternalLink,
+    ImageIcon,
     KeyRound,
     Loader2,
     Plus,
@@ -21,6 +22,7 @@ import {
     ServerCog,
     Timer,
     Trash2,
+    X,
 } from 'lucide-react';
 import { crmConfirm, crmMessage } from './crmUI';
 import { apiJson } from '../services/httpClient';
@@ -776,6 +778,25 @@ function formatBytes(bytes?: number): string {
         unit += 1;
     }
     return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+}
+
+function trashPreviewUrl(item: TrashFile): string {
+    const url = String(item.file_url || '').trim();
+    if (!url) return '';
+    if (url.startsWith('/storage/') || url.startsWith('/uploads/') || url.startsWith('/api/files/')) {
+        return url;
+    }
+    if (/^https?:\/\//i.test(url)) {
+        return url;
+    }
+    return '';
+}
+
+function isPreviewableTrashImage(item: TrashFile): boolean {
+    if (!item.disk_exists) return false;
+    const type = String(item.file_type || '').toLowerCase();
+    const url = trashPreviewUrl(item).split('?', 1)[0].toLowerCase();
+    return type === 'image' || /\.(webp|png|jpe?g|gif|bmp|svg)$/i.test(url);
 }
 
 const RUNTIME_ISSUE_LABELS: Record<string, string> = {
@@ -1804,6 +1825,7 @@ const AdminRecycleBinPanel: React.FC = () => {
     const [keyword, setKeyword] = useState('');
     const [loading, setLoading] = useState(false);
     const [busy, setBusy] = useState<Record<string, boolean>>({});
+    const [previewItem, setPreviewItem] = useState<TrashFile | null>(null);
 
     const loadTrash = useCallback(async () => {
         setLoading(true);
@@ -1837,6 +1859,7 @@ const AdminRecycleBinPanel: React.FC = () => {
                 method: 'POST',
                 body: JSON.stringify({}),
             });
+            setPreviewItem(null);
             crmMessage.success('文件已从回收站恢复');
             await loadTrash();
         } catch (err: any) {
@@ -1862,6 +1885,7 @@ const AdminRecycleBinPanel: React.FC = () => {
                 body: JSON.stringify({ risk_ack: true, delete_db_record: true }),
             });
             if (result.success) {
+                setPreviewItem(null);
                 crmMessage.success(`已释放 ${formatBytes(result.freed_bytes)}`);
             } else {
                 crmMessage.error(`释放失败：${result.errors?.[0]?.error || 'unknown'}`);
@@ -1924,6 +1948,7 @@ const AdminRecycleBinPanel: React.FC = () => {
                 <table className="min-w-full text-xs">
                     <thead className="bg-n20 text-n100">
                         <tr>
+                            <th className="text-left font-medium px-3 py-2">预览</th>
                             <th className="text-left font-medium px-3 py-2">文件</th>
                             <th className="text-left font-medium px-3 py-2">类型</th>
                             <th className="text-left font-medium px-3 py-2">磁盘</th>
@@ -1934,17 +1959,42 @@ const AdminRecycleBinPanel: React.FC = () => {
                     <tbody className="divide-y divide-n40">
                         {loading ? (
                             <tr>
-                                <td colSpan={5} className="px-3 py-8 text-center text-n100">
+                                <td colSpan={6} className="px-3 py-8 text-center text-n100">
                                     <Loader2 className="inline w-4 h-4 animate-spin mr-2" />
                                     加载中
                                 </td>
                             </tr>
                         ) : items.length === 0 ? (
                             <tr>
-                                <td colSpan={5} className="px-3 py-8 text-center text-n100">暂无回收站文件</td>
+                                <td colSpan={6} className="px-3 py-8 text-center text-n100">暂无回收站文件</td>
                             </tr>
                         ) : items.map(item => (
                             <tr key={item.file_id} className="bg-n0">
+                                <td className="px-3 py-2 w-[88px] align-top">
+                                    {isPreviewableTrashImage(item) ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => setPreviewItem(item)}
+                                            className="group relative block w-16 h-16 overflow-hidden rounded border border-n40 bg-n20 hover:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                            title="点击预览"
+                                        >
+                                            <img
+                                                src={trashPreviewUrl(item)}
+                                                alt={item.media_name || item.file_name || item.file_id}
+                                                className="w-full h-full object-cover"
+                                                loading="lazy"
+                                            />
+                                            <span className="absolute inset-x-0 bottom-0 hidden bg-n900/70 px-1 py-0.5 text-[10px] text-n0 group-hover:block">
+                                                预览
+                                            </span>
+                                        </button>
+                                    ) : (
+                                        <div className="flex w-16 h-16 flex-col items-center justify-center rounded border border-dashed border-n40 bg-n20 text-[10px] text-n100">
+                                            <ImageIcon className="w-4 h-4 mb-1" />
+                                            无预览
+                                        </div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2 min-w-[260px]">
                                     <div className="font-medium text-n800 break-words">{item.media_name || item.file_name || item.file_id}</div>
                                     <div className="mt-0.5 font-mono text-[11px] text-n100 break-all">{item.file_url || item.file_path || '-'}</div>
@@ -1983,6 +2033,44 @@ const AdminRecycleBinPanel: React.FC = () => {
                     </tbody>
                 </table>
             </div>
+
+            {previewItem && isPreviewableTrashImage(previewItem) && (
+                <div
+                    className="fixed inset-0 z-[10002] flex items-center justify-center bg-n900/70 p-4"
+                    onClick={() => setPreviewItem(null)}
+                >
+                    <div
+                        className="w-full max-w-5xl overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom"
+                        onClick={event => event.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between gap-3 border-b border-n40 px-4 py-3">
+                            <div className="min-w-0">
+                                <div className="text-sm font-semibold text-n800 truncate">
+                                    {previewItem.media_name || previewItem.file_name || previewItem.file_id}
+                                </div>
+                                <div className="mt-0.5 font-mono text-[11px] text-n100 truncate">
+                                    {previewItem.file_url || previewItem.file_path || '-'}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setPreviewItem(null)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded border border-n40 bg-n0 text-n700 hover:bg-n20"
+                                aria-label="关闭预览"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="max-h-[76vh] overflow-auto bg-n900/5 p-4">
+                            <img
+                                src={trashPreviewUrl(previewItem)}
+                                alt={previewItem.media_name || previewItem.file_name || previewItem.file_id}
+                                className="mx-auto max-h-[70vh] max-w-full rounded border border-n40 bg-n0 object-contain"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </section>
     );
 };
