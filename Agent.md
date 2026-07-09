@@ -8782,3 +8782,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Video finding:
   - Recent video generation failures are concentrated on DashScope models (`happyhorse_r2v`, `kling_i2v`).
   - Provider health returns DashScope `401 InvalidApiKey`, so those failures require replacing the effective DashScope / Alibaba Model Studio key or using healthy Seedance models for demo flows.
+  - DashScope `InvalidApiKey` / `MissingApiKey` / HTTP 401 errors are now treated as non-retryable in `deploy/core/worker.py` to avoid repeated failure notifications for the same invalid key.

@@ -2410,7 +2410,17 @@ class Worker:
 
         except Exception as e:
             logger.error(f"❌ DashScope 视频任务失败: {e}", exc_info=True)
-            await self.task_queue.fail_task(task.task_id, str(e))
+            code = str(getattr(e, "code", "") or "")
+            http_status = getattr(e, "http_status", None)
+            non_retryable = code in {"InvalidApiKey", "MissingApiKey"} or http_status == 401
+            if non_retryable:
+                logger.error(
+                    "DashScope non-retryable auth/config error: task=%s code=%s http_status=%s",
+                    task.task_id,
+                    code or "-",
+                    http_status or "-",
+                )
+            await self.task_queue.fail_task(task.task_id, str(e), retry=not non_retryable)
             return False
 
     # ────────────────────────────────────────────────────────────────────
