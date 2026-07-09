@@ -8787,3 +8787,18 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Runtime Seedance model resolution no longer lets `fast` silently borrow the generic standard-model env value.
   - `mecha.5kcrm.cn` was temporarily switched from Seedance 2.0 model ids to `doubao-seedance-1-0-pro-250528` because the current Ark account has not activated `doubao-seedance-2-0-260128`.
   - Verification after deploy: `drama.service` active and server-side smoke test passed 9/9.
+
+## 2026-07-09 Smoke Follow-Up And Task Status Cleanup
+
+- Fixed final task failure persistence in `deploy/core/task_queue.py`: when Redis reaches the final failed state, SQL `tasks.status` is now updated to `failed` with the error message.
+- This prevents `/api/tasks/active` from continuing to show old `pending` / `processing` rows after workers have already emitted failure notifications.
+- Updated `deploy/scripts/check_gpu_agent_readiness.py` so GPU Agent restart commands use `PUBLIC_BASE_URL` / `SERVER_BASE_URL` / `SMOKE_BASE_URL` before falling back to `https://mecha.one`.
+- Deployed the narrow fix to `mecha.5kcrm.cn`, restarted `drama.service`, and restored the public Agent script at `/storage/tools/comfyui_agent.py`.
+- Cleaned 27 stale task rows on the test server; active task samples are now 0.
+- Verification:
+  - Server-side `scripts/smoke_test.py http://127.0.0.1:6006` passed 9/9.
+  - `scripts/check_api_config_runtime_loader.py` passed.
+  - `scripts/check_provider_contract.py` passed.
+  - Recent service logs after restart show no new traceback/error stack.
+- Remaining runtime dependency:
+  - GPU Agent is still offline. The latest public script is downloadable, but local GPU / ComfyUI tasks require restarting the external GPU Agent with the admin token.

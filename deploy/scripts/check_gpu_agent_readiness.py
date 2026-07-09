@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,6 +47,21 @@ def public_script_versions() -> dict[str, str]:
 
 def print_json_line(prefix: str, payload: dict[str, Any]) -> None:
     print(prefix + "=" + json.dumps(payload, ensure_ascii=False, default=str))
+
+
+def public_base_url() -> str:
+    return (
+        os.getenv("PUBLIC_BASE_URL")
+        or os.getenv("SERVER_BASE_URL")
+        or os.getenv("SMOKE_BASE_URL")
+        or "https://mecha.one"
+    ).rstrip("/")
+
+
+def print_gpu_agent_restart_commands(base_url: str) -> None:
+    print("gpu_command=pkill -f comfyui_agent.py || true")
+    print(f"gpu_command=curl -fsSL {base_url}/storage/tools/comfyui_agent.py -o comfyui_agent.py")
+    print(f"gpu_command=python comfyui_agent.py --server {base_url} --token '<sk-agent token from admin>' --ports 8188")
 
 
 async def check_agents() -> list[dict[str, Any]]:
@@ -135,6 +151,7 @@ def run_prebuild_check() -> int:
 async def main_async(args: argparse.Namespace) -> int:
     versions = public_script_versions()
     print_json_line("agent_script_versions", versions)
+    base_url = public_base_url()
 
     agents = await check_agents()
     if not agents:
@@ -143,9 +160,7 @@ async def main_async(args: argparse.Namespace) -> int:
         for agent in await fetch_last_seen_agents():
             print_json_line("last_seen_agent", agent)
         print("next_step=Start or restart the GPU Agent with the latest public script")
-        print("gpu_command=pkill -f comfyui_agent.py || true")
-        print("gpu_command=curl -fsSL https://mecha.one/storage/tools/comfyui_agent.py -o comfyui_agent.py")
-        print("gpu_command=python comfyui_agent.py --server https://mecha.one --token '<sk-agent token from admin>' --ports 8188")
+        print_gpu_agent_restart_commands(base_url)
         return 2
 
     for agent in agents:
@@ -156,9 +171,7 @@ async def main_async(args: argparse.Namespace) -> int:
         print("ready=false")
         print("reason=Online GPU Agent is still legacy and cannot return detailed diagnostics")
         print("next_step=Restart the GPU Agent once with the latest public script")
-        print("gpu_command=pkill -f comfyui_agent.py || true")
-        print("gpu_command=curl -fsSL https://mecha.one/storage/tools/comfyui_agent.py -o comfyui_agent.py")
-        print("gpu_command=python comfyui_agent.py --server https://mecha.one --token '<sk-agent token from admin>' --ports 8188")
+        print_gpu_agent_restart_commands(base_url)
         return 2
 
     prebuild_code = 0

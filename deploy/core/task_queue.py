@@ -364,7 +364,22 @@ class TaskQueue:
                 task.status = TaskStatus.FAILED
                 task.completed_at = datetime.now().isoformat()
                 await self._save_task(task)
-                
+
+                # 同步到 SQL，避免 Redis 已终态但 /api/tasks/active 从 DB 继续读到 processing。
+                try:
+                    from dao_task import TaskDAO
+                    from db_manager import get_db_manager
+
+                    db = get_db_manager()
+                    if db:
+                        await TaskDAO.update_task_status(
+                            task_id=task_id,
+                            status='failed',
+                            error_message=error,
+                        )
+                except Exception as db_error:
+                    logger.warning(f"同步失败任务状态到数据库失败 {task_id}: {db_error}")
+
                 # 加入失败队列
                 await self.redis.zadd(
                     RedisConfig.FAILED_QUEUE_KEY,
@@ -711,4 +726,3 @@ class TaskQueue:
         
         except Exception as e:
             logger.error(f"清理旧任务失败: {e}")
-
