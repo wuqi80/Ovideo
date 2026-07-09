@@ -8769,3 +8769,16 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - `POST /api/admin/api-configs/{config_id}/activate`
 - Updated `new_html/admin/AdminSettingsPage.tsx` with batch-key input, active-key badge, key suffix preview, active-key switch button, and a file recycle-bin panel.
 - Deployment note: `deploy/scripts/live_deploy_mvc2.sh` now includes `admin_recycle_bin_routes.py`; it already syncs the full `services`, `dao`, and `utils` directories.
+
+## 2026-07-09 Storyboard And Video Generation Check
+
+- Hardened AI proxy reference helpers so `references=None` is treated as an empty list for Gemini Image, GPT Image, and Doubao image calls.
+- Added stack traces to the `/api/gemini/image` fallback error log for future production debugging.
+- Verification:
+  - Local `py_compile` passed for `deploy/routers/ai_proxy.py` and `deploy/services/ai_proxy_reference_service.py`.
+  - Local targeted tests passed: `tests/test_ai_proxy_reference_service.py` (6/6).
+  - Deployed the two backend files to `mecha.5kcrm.cn`; `drama.service` restarted and stayed active.
+  - Live `/api/gemini/image` minimal generation succeeded with 1 generated image and 1 persisted file.
+- Video finding:
+  - Recent video generation failures are concentrated on DashScope models (`happyhorse_r2v`, `kling_i2v`).
+  - Provider health returns DashScope `401 InvalidApiKey`, so those failures require replacing the effective DashScope / Alibaba Model Studio key or using healthy Seedance models for demo flows.

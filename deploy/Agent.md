@@ -9475,3 +9475,22 @@
 - For local-disk storage, "release disk" deletes the file and file row after confirmation.
 - If storage moves to OSS later, keep the admin API shape but change purge implementation according to bucket lifecycle/soft-delete policy.
 - `scripts/live_deploy_mvc2.sh` includes `admin_recycle_bin_routes.py` and syncs full `services`, `dao`, and `utils` directories.
+
+## 2026-07-09 Storyboard And Video Generation Check
+
+### Changes
+
+- Hardened AI proxy reference helpers so `references=None` is treated as an empty list for Gemini Image, GPT Image, and Doubao image calls.
+- Added stack traces to the `/api/gemini/image` fallback error log for future production debugging.
+
+### Verification
+
+- Local `py_compile` passed for `routers/ai_proxy.py` and `services/ai_proxy_reference_service.py`.
+- Local targeted tests passed: `tests/test_ai_proxy_reference_service.py` (6/6).
+- Deployed the two backend files to `mecha.5kcrm.cn`; `drama.service` restarted and stayed active.
+- Live `/api/gemini/image` minimal generation succeeded with 1 generated image and 1 persisted file.
+
+### Video Finding
+
+- Recent video generation failures are concentrated on DashScope models (`happyhorse_r2v`, `kling_i2v`).
+- Provider health returns DashScope `401 InvalidApiKey`, so those failures require replacing the effective DashScope / Alibaba Model Studio key or using healthy Seedance models for demo flows.

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
-from typing import Any, Callable, Iterable, List
+from typing import Any, Callable, Iterable, List, Optional
 
 from services.ai_proxy_types import GptImageReferenceInput
 from utils.image_reference import storage_path_safe, to_doubao_image_input
@@ -55,7 +55,7 @@ def enhance_reference_prompt(prompt: str, ref_count: int) -> str:
 def prepare_gemini_image_parts(
     *,
     prompt: str,
-    references: Iterable[str],
+    references: Optional[Iterable[str]],
     logger: Any,
     max_refs: int = 5,
     storage_path_resolver: StoragePathResolver = storage_path_safe,
@@ -64,7 +64,7 @@ def prepare_gemini_image_parts(
     parts: List[dict[str, Any]] = []
     ref_count = 0
 
-    for ref in list(references)[:max_refs]:
+    for ref in list(references or [])[:max_refs]:
         try:
             if ref.startswith("data:"):
                 mime_type = ref.split(";")[0].split(":")[1]
@@ -103,7 +103,7 @@ def _gpt_reference_extension_from_mime(mime: str) -> str:
 
 
 def prepare_gpt_image_reference_inputs(
-    references: Iterable[str],
+    references: Optional[Iterable[str]],
     *,
     logger: Any,
     max_refs: int = 8,
@@ -112,7 +112,7 @@ def prepare_gpt_image_reference_inputs(
     """Convert route reference strings into GPT Image multipart inputs."""
     reference_inputs: List[GptImageReferenceInput] = []
 
-    for idx, ref in enumerate(list(references)[:max_refs]):
+    for idx, ref in enumerate(list(references or [])[:max_refs]):
         img_bytes: bytes | None = None
         ext = "png"
 
@@ -148,9 +148,9 @@ def prepare_gpt_image_reference_inputs(
     return reference_inputs
 
 
-def prepare_doubao_reference_inputs(references: Iterable[str], *, max_refs: int = 14) -> List[str]:
+def prepare_doubao_reference_inputs(references: Optional[Iterable[str]], *, max_refs: int = 14) -> List[str]:
     ref_inputs: List[str] = []
-    for ref in list(references)[:max_refs]:
+    for ref in list(references or [])[:max_refs]:
         converted = to_doubao_image_input(ref)
         if converted:
             ref_inputs.append(converted)

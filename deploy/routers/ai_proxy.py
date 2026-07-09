@@ -209,7 +209,7 @@ def create_ai_proxy_router(
             logger.error("图像生成失败: %s | upstream: %s", e, e.upstream)
             raise HTTPException(status_code=e.status_code, detail=e.detail)
         except Exception as e:
-            logger.error("图像生成失败: %s", e)
+            logger.error("图像生成失败: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail="图像生成失败，请稍后重试")
 
     @router.post("/api/gpt-image/generate")
