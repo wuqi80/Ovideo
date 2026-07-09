@@ -28,6 +28,7 @@ from services.api_provider_registry import (
     get_provider_env_key,
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
+    is_seedance_fast_model,
     normalize_dashscope_sub_model,
     normalize_seedance_sub_model,
     normalize_provider,
@@ -385,9 +386,47 @@ def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None
     generic_model_env = get_model_env_key(provider_env) if provider_env else ""
     generic_model = (os.getenv(generic_model_env) or "").strip() if generic_model_env else ""
     if generic_model:
-        return generic_model
+        generic_is_fast = is_seedance_fast_model(generic_model)
+        if normalized_sub_model == "fast" and generic_is_fast:
+            return generic_model
+        if normalized_sub_model == "standard" and not generic_is_fast:
+            return generic_model
 
     return SEEDANCE_DEFAULT_MODEL_MAP[normalized_sub_model]
+
+
+def seedance_error_is_non_retryable(exc: Exception) -> bool:
+    """Return True for Seedance auth/config errors that retrying cannot fix."""
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    response_text = str(getattr(response, "text", "") or "")
+    error_text = f"{exc} {response_text}"
+    config_error_markers = (
+        "ModelNotOpen",
+        "not activated the model",
+        "InvalidApiKey",
+        "MissingApiKey",
+        "Unauthorized",
+        "Forbidden",
+    )
+    if any(marker in error_text for marker in config_error_markers):
+        return True
+    return status_code in (401, 403)
+
+
+def seedance_user_facing_error(exc: Exception) -> str:
+    """Translate common Seedance provider config failures into actionable text."""
+    response = getattr(exc, "response", None)
+    response_text = str(getattr(response, "text", "") or "")
+    error_text = f"{exc} {response_text}"
+    status_code = getattr(response, "status_code", None)
+    if "ModelNotOpen" in error_text or "not activated the model" in error_text:
+        return "Seedance 模型未开通：当前 API Key 对应账号未开通所配置的视频模型，请在火山方舟开通模型或切换到已开通模型。"
+    if "InvalidApiKey" in error_text or "MissingApiKey" in error_text or status_code in (401, 403):
+        return "Seedance API Key 无效或无权限，请在后台厂商 API 配置中切换有效 Key。"
+    if response_text:
+        return response_text[:500]
+    return str(exc)
 
 
 def resolve_dashscope_model_name(sub_model: str, model_name: Optional[str] = None) -> str:

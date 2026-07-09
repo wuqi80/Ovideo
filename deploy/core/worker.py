@@ -1286,7 +1286,25 @@ class Worker:
 
         except Exception as e:
             logger.error(f"❌ Seedance 任务处理失败: {e}", exc_info=True)
-            await self.task_queue.fail_task(task.task_id, str(e))
+            try:
+                from services.api_provider_runtime import (
+                    seedance_error_is_non_retryable,
+                    seedance_user_facing_error,
+                )
+
+                non_retryable = seedance_error_is_non_retryable(e)
+                task_error = seedance_user_facing_error(e)
+                if non_retryable:
+                    response = getattr(e, "response", None)
+                    logger.error(
+                        "Seedance non-retryable auth/config error: task=%s status=%s body=%s",
+                        task.task_id,
+                        getattr(response, "status_code", "-"),
+                        str(getattr(response, "text", "") or "")[:300],
+                    )
+                await self.task_queue.fail_task(task.task_id, task_error, retry=not non_retryable)
+            except Exception:
+                await self.task_queue.fail_task(task.task_id, str(e))
             return False
 
     async def _download_image_to_temp(self, image_path: str) -> str:

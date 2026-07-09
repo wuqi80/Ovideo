@@ -8783,3 +8783,7 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Recent video generation failures are concentrated on DashScope models (`happyhorse_r2v`, `kling_i2v`).
   - Provider health returns DashScope `401 InvalidApiKey`, so those failures require replacing the effective DashScope / Alibaba Model Studio key or using healthy Seedance models for demo flows.
   - DashScope `InvalidApiKey` / `MissingApiKey` / HTTP 401 errors are now treated as non-retryable in `deploy/core/worker.py` to avoid repeated failure notifications for the same invalid key.
+  - Seedance `ModelNotOpen` / auth errors are now treated as non-retryable and reported with an actionable user-facing message.
+  - Runtime Seedance model resolution no longer lets `fast` silently borrow the generic standard-model env value.
+  - `mecha.5kcrm.cn` was temporarily switched from Seedance 2.0 model ids to `doubao-seedance-1-0-pro-250528` because the current Ark account has not activated `doubao-seedance-2-0-260128`.
+  - Verification after deploy: `drama.service` active and server-side smoke test passed 9/9.
