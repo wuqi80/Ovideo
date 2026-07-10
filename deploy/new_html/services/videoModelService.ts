@@ -58,6 +58,25 @@ export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: 
   return 'seedance_multi';
 }
 
+/**
+ * 2026-07-11：Seedance 1.5-pro 仅支持单图或首尾帧，禁止多模态多输入。
+ * Drama 后端（seedance.py）会在 Agent Plan endpoint 上强制覆盖 model=1.5-pro，
+ * 1.5-pro 拒绝 video/audio kind 与 3+ 张图。前端拦截避免用户点了提交才报错、浪费扣费。
+ *
+ * 返回 null 表示可通过；返回 string 是禁用原因（同时也是按钮 tooltip）。
+ */
+export function validateSeedanceMediaInputs(media: SeedanceMediaInput[]): string | null {
+    if (!media) return null;
+    const hasVideoAudio = media.some((m) => m.kind === 'video' || m.kind === 'audio');
+    if (hasVideoAudio) {
+        return 'Seedance 1.5-pro 不支持视频/音频参考输入，请移除 @视频/@音频 引用';
+    }
+    if (media.length > 2) {
+        return 'Seedance 1.5-pro 最多支持 2 张图片（单图或首尾帧），请减少到 ≤2 张图';
+    }
+    return null;
+}
+
 export type KlingMode = 'std' | 'pro';
 export type KlingSubModel = 'standard' | 'omni';
 

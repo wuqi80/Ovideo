@@ -19,6 +19,7 @@ import {
     type SeedanceParams,
     type ShotType,
     type VideoModel,
+    validateSeedanceMediaInputs,
 } from '../services/videoModelService';
 import {
     clearProjectVideoTasks,
@@ -1560,6 +1561,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         // 飞升/渡劫 走多模态面板（params.media_inputs），完全跳过 prepareImage / submitTaskQueued
         if (group.model === 'Seedance2' || group.model === 'Seedance2Fast') {
             const rawParams = getSeedanceParams(group.uuid, group.model);
+            // 2026-07-11：Seedance 1.5-pro（Agent Plan 强制覆盖）仅支持单图/首尾帧。
+            // 后端 seedance.py 对视频/音频 kind 和 3+ 张图会抛 ModelNotOpen，
+            // 前端先拦截避免用户点了扣费再失败。
+            const seedanceBlock = validateSeedanceMediaInputs(rawParams.media_inputs);
+            if (seedanceBlock) {
+                showToast(seedanceBlock);
+                return;
+            }
             // Issue 4: in 首尾帧 mode (any image has role first_frame/last_frame),
             // the panel greys out videos/audios — strip them before submit so the
             // backend only receives first/last-frame images.
@@ -2377,14 +2386,23 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 {/* 操作按钮 */}
                 <div className="flex items-center gap-1 shrink-0">
-                    <button
-                        onClick={() => runTask(group.uuid)}
-                        disabled={status.state === 'running' || status.state === 'processing'}
-                        className="p-1.5 bg-n0 hover:bg-primary-hover text-n700 hover:text-white rounded transition-colors disabled:opacity-50"
-                        title={status.state === 'done' ? '重做' : '生成'}
-                    >
-                        {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                    </button>
+                    {/* 2026-07-11：Seedance 1.5-pro 限制多模态输入，前端禁用按钮防止扣费后再失败。 */}
+                    {(() => {
+                        const seedanceBlock = isSeedanceModel(group.model)
+                            ? validateSeedanceMediaInputs(getSeedanceParams(group.uuid, group.model).media_inputs)
+                            : null;
+                        const running = status.state === 'running' || status.state === 'processing';
+                        return (
+                            <button
+                                onClick={() => runTask(group.uuid)}
+                                disabled={running || !!seedanceBlock}
+                                className="p-1.5 bg-n0 hover:bg-primary-hover text-n700 hover:text-white rounded transition-colors disabled:opacity-50"
+                                title={seedanceBlock || (status.state === 'done' ? '重做' : '生成')}
+                            >
+                                {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                            </button>
+                        );
+                    })()}
                     
                     {status.state === 'done' && videos.length > 0 && (
                         <>
@@ -2639,14 +2657,23 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 {/* 操作按钮 */}
                 <div className="flex items-center gap-1 shrink-0">
-                    <button
-                        onClick={() => runTask(group.uuid)}
-                        disabled={status.state === 'running' || status.state === 'processing'}
-                        className="p-1.5 bg-n0 hover:bg-primary-hover text-n700 hover:text-white rounded transition-colors disabled:opacity-50"
-                        title={status.state === 'done' ? '重做' : '生成'}
-                    >
-                        {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                    </button>
+                    {/* 2026-07-11：Seedance 1.5-pro 限制多模态输入，前端禁用按钮防止扣费后再失败。 */}
+                    {(() => {
+                        const seedanceBlock = isSeedanceModel(group.model)
+                            ? validateSeedanceMediaInputs(getSeedanceParams(group.uuid, group.model).media_inputs)
+                            : null;
+                        const running = status.state === 'running' || status.state === 'processing';
+                        return (
+                            <button
+                                onClick={() => runTask(group.uuid)}
+                                disabled={running || !!seedanceBlock}
+                                className="p-1.5 bg-n0 hover:bg-primary-hover text-n700 hover:text-white rounded transition-colors disabled:opacity-50"
+                                title={seedanceBlock || (status.state === 'done' ? '重做' : '生成')}
+                            >
+                                {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                            </button>
+                        );
+                    })()}
                     
                     {status.state === 'done' && status.videos && status.videos.length > 0 && (
                         <>
