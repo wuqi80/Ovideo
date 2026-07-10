@@ -3828,14 +3828,6 @@ const ApiConfigPanel: React.FC = () => {
                     <div className="toolbar-actions">
                         <button
                             type="button"
-                            onClick={openCreate}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
-                        >
-                            <Plus className="w-3.5 h-3.5" />
-                            新增 / 修改厂商 API
-                        </button>
-                        <button
-                            type="button"
                             onClick={exportKeyBackup}
                             disabled={exportingKeys || loading || configs.length === 0}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"

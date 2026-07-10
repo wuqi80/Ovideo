@@ -3580,7 +3580,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",
-            "新增 / 修改厂商 API",
+            "新增 API 卡片",
         ),
         (
             root / "new_html" / "admin" / "AdminSettingsPage.tsx",

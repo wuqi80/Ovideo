@@ -63,6 +63,37 @@ def test_doubao_real_generation_uses_minimum_cost_image_payload() -> None:
     assert output_type == "image"
 
 
+def test_doubao_agent_plan_real_generation_uses_plan_endpoint_and_min_size() -> None:
+    url, body, output_type = _real_generation_request(
+        "doubao",
+        {
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations",
+            "model_name": "doubao-seedream-5.0-lite",
+        },
+    )
+
+    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
+    assert body["size"] == "1920x1920"
+    assert body["model"] == "doubao-seedream-5.0-lite"
+    assert body["response_format"] == "url"
+    assert body["watermark"] is False
+    assert output_type == "image"
+
+
+def test_doubao_agent_plan_real_generation_expands_short_endpoint() -> None:
+    url, body, _ = _real_generation_request(
+        "doubao",
+        {
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan",
+            "model_name": "doubao-seedream-5.0-lite",
+        },
+    )
+
+    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
+    assert body["model"] == "doubao-seedream-5.0-lite"
+    assert body["size"] == "1920x1920"
+
+
 def test_gpt_image_real_generation_uses_lowest_explicit_cost_profile() -> None:
     _, body, output_type = _real_generation_request(
         "laozhang-gpt-image",

@@ -1168,7 +1168,7 @@
 - Updated `services/api_config_service.py` so config-level connection tests use the DB-saved key first, then fall back to the runtime resolver key when the DB row has no key.
   - Returned diagnostics include `key_source`, `key_env`, and `used_runtime_key` only; API key values are never returned.
 - Updated `new_html/admin/AdminSettingsPage.tsx` to make the operational flow clearer:
-  - primary actions are now `新增 / 修改厂商 API` and `配置 / 修改 API Key`
+  - primary actions are now `新增 / 修改 API 卡片` and `配置 / 修改 API Key`
   - `测试连通性` checks the effective runtime provider config used by generation
   - `高级诊断` is reserved for testing a specific DB row
   - stale `no_key` health data no longer paints a provider red when runtime status already has a key

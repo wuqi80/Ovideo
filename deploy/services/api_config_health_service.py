@@ -12,10 +12,12 @@ from dao.admin.system_settings import SystemSettingsDAO
 from services.api_provider_endpoints import dedupe_urls, derive_models_health_urls
 from services.api_provider_registry import (
     PROVIDER_CATALOG,
+    doubao_image_access_mode,
     get_api_model_preset,
     get_api_provider_catalog,
     get_provider_api_path,
     get_provider_default_endpoint,
+    normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
     normalize_provider,
     normalize_seedance_endpoint,
@@ -358,10 +360,15 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
 
     if normalized in DOUBAO_IMAGE_TEST_PROVIDERS:
         model = normalize_doubao_image_model_for_endpoint(model, endpoint)
-        return endpoint, {
+        url = normalize_doubao_image_endpoint(endpoint)
+        # Seedream 5.0 Lite (and other Agent Plan Seedream models) require a
+        # minimum total pixel count of ~3.69M; pay-as-you-go allows 1024x1024.
+        # 1920x1920 = 3,686,400 pixels — the documented floor.
+        size = "1920x1920" if doubao_image_access_mode(endpoint) == "agent_plan" else "1024x1024"
+        return url, {
             "model": model,
             "prompt": "A simple blue square icon on a white background.",
-            "size": "1024x1024",
+            "size": size,
             "response_format": "url",
             "watermark": False,
         }, "image"
