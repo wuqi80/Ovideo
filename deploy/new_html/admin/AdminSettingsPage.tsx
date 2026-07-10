@@ -454,6 +454,65 @@ function buildProviderHealthMap(rows: ProviderHealth[] = []): Record<string, Pro
     return next;
 }
 
+function configTestFromProviderHealth(health: ProviderHealth): ApiConfigTest | undefined {
+    const inner = (health && typeof health.health === 'object' && health.health) || {};
+    if (!inner.real_generation) return undefined;
+    const provider = normalizeProvider(health.provider);
+    if (!provider) return undefined;
+    const modelName = health.model_name || null;
+    const statusCode = typeof inner.status_code === 'number' ? inner.status_code : null;
+    const isOk = health.status === 'ok' && Boolean(inner.ok);
+    const errorText = typeof inner.error === 'string' && inner.error ? inner.error : '';
+    let status: string;
+    if (isOk) {
+        status = 'generation_ok';
+    } else if (errorText === 'No API key configured') {
+        status = 'no_key';
+    } else {
+        status = 'error';
+    }
+    return {
+        ok: isOk,
+        status,
+        reachable: statusCode !== null,
+        auth_ok: statusCode !== null && statusCode !== 401 && statusCode !== 403,
+        status_code: statusCode,
+        url: inner.url || null,
+        error: errorText || null,
+        provider,
+        model_name: modelName,
+        method: inner.method || 'POST',
+        checked_at: health.checked_at || new Date().toISOString(),
+        real_generation: true,
+        billable: inner.billable !== false,
+        output_type: inner.output_type || null,
+        latency_ms: typeof health.latency_ms === 'number' ? health.latency_ms : null,
+    };
+}
+
+function buildConfigTestMapFromHealth(
+    rows: ApiConfig[],
+    healthRows: ProviderHealth[] = [],
+): Record<string, ApiConfigTest> {
+    const result: Record<string, ApiConfigTest> = {};
+    healthRows.forEach(health => {
+        const test = configTestFromProviderHealth(health);
+        if (!test) return;
+        const provider = normalizeProvider(health.provider);
+        const modelName = test.model_name || '';
+        const matched = rows.find(row => {
+            if (normalizeProvider(row.provider) !== provider) return false;
+            const rowModel = String(row.model_name || '').trim();
+            if (modelName) return rowModel === modelName;
+            return !rowModel;
+        });
+        if (matched?.config_id) {
+            result[matched.config_id] = test;
+        }
+    });
+    return result;
+}
+
 function providerHealthFrom(
     map: Record<string, ProviderHealth>,
     provider: string | undefined | null,
@@ -2682,6 +2741,12 @@ const ApiConfigPanel: React.FC = () => {
             setRuntimeStatus(data.runtime_status || []);
             setMonitorState(data.monitor_state || null);
             setHealthMap(buildProviderHealthMap(data.provider_health || []));
+            // 反向：把 provider_health 中 real_generation=true 的条目合并进 configTestMap，
+            // 解决"刷新页面后真实生成绿色状态丢失"的问题（test 结果在 Redis 缓存里，前端不主动取就丢）。
+            const persistedTests = buildConfigTestMapFromHealth(rows, data.provider_health || []);
+            if (Object.keys(persistedTests).length > 0) {
+                setConfigTestMap(prev => ({ ...prev, ...persistedTests }));
+            }
         } catch (err: any) {
             const message = err?.message || '加载 API 配置失败';
             setError(message);
