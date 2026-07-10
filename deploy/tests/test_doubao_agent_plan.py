@@ -156,4 +156,70 @@ def test_doubao_real_generation_test_uses_agent_plan_model() -> None:
 
     assert url == DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
     assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
-    assert output_type == "image"
+    assert output_type == "image_task"
+
+
+def test_doubao_agent_plan_task_response_parser_extracts_images() -> None:
+    images = doubao_service.parse_doubao_image_task_response(
+        {
+            "id": "cgt-test",
+            "status": "succeeded",
+            "content": {
+                "image_url": "https://cdn.example.test/seedream.png",
+                "images": [{"url": "https://cdn.example.test/seedream-2.png"}],
+            },
+        }
+    )
+
+    assert images == [
+        "https://cdn.example.test/seedream.png",
+        "https://cdn.example.test/seedream-2.png",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_doubao_agent_plan_generation_submits_task_and_polls(monkeypatch) -> None:
+    endpoint = DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
+    submitted = {}
+    queried = {}
+
+    config = SimpleNamespace(
+        api_key="test-agent-plan-key",
+        endpoint=endpoint,
+        model_name=DOUBAO_IMAGE_PAYG_MODEL,
+        url_for=lambda path="": endpoint if not path else f"{endpoint}/{path.strip('/')}",
+        url_for_operation=lambda operation, **params: f"{endpoint}/{params['task_id']}",
+        requests_kwargs=lambda: {},
+    )
+
+    async def fake_post(**kwargs):
+        submitted.update(kwargs)
+        return {"id": "cgt-test", "status": "queued"}
+
+    async def fake_get(**kwargs):
+        queried.update(kwargs)
+        return {
+            "id": "cgt-test",
+            "status": "succeeded",
+            "content": {"image_url": "https://cdn.example.test/seedream.png"},
+        }
+
+    monkeypatch.setattr(doubao_service, "resolve_provider", lambda provider, model=None: config)
+    monkeypatch.setattr(doubao_service, "_post_json_request_async", fake_post)
+    monkeypatch.setattr(doubao_service, "_get_json_request_async", fake_get)
+
+    images = await doubao_service.generate_doubao_images(
+        prompt="draw",
+        reference_inputs=[],
+        size="1024x1024",
+        sequential="disabled",
+        count=1,
+        model=DOUBAO_IMAGE_PAYG_MODEL,
+    )
+
+    assert images == ["https://cdn.example.test/seedream.png"]
+    assert submitted["url"] == endpoint
+    assert submitted["payload"]["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert submitted["payload"]["size"] == "1920x1920"
+    assert submitted["payload"]["response_format"] == "url"
+    assert queried["url"] == f"{endpoint}/cgt-test"

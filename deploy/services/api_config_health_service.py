@@ -1,6 +1,7 @@
 """Health-check helpers for admin API provider configurations."""
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from datetime import datetime
@@ -8,6 +9,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import aiohttp
 
+from services.ai_proxy_doubao_image_service import parse_doubao_image_task_response
 from dao.admin.system_settings import SystemSettingsDAO
 from services.api_provider_endpoints import dedupe_urls, derive_models_health_urls
 from services.api_provider_registry import (
@@ -58,6 +60,9 @@ TEXT_GENERATION_TEST_PROVIDERS = {"deepseek", "gemini-text"}
 GEMINI_GENERATION_TEST_PROVIDERS = {"gemini-image", "gemini-tts"}
 OPENAI_IMAGE_TEST_PROVIDERS = {"laozhang-gpt-image", "laozhang-sora2"}
 DOUBAO_IMAGE_TEST_PROVIDERS = {"doubao"}
+TASK_PENDING_STATUSES = {"queued", "pending", "running", "processing", "in_progress"}
+TASK_SUCCESS_STATUSES = {"succeeded", "success", "completed", "done"}
+TASK_FAILED_STATUSES = {"failed", "error", "cancelled", "canceled", "expired"}
 
 
 def _jsonb_to_python(value: Any) -> Any:
@@ -298,6 +303,54 @@ def _has_openai_image_data(payload: Any) -> bool:
     return isinstance(data, list) and len(data) > 0
 
 
+def _task_id_from_payload(payload: Any) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+    for key in ("id", "task_id"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    for key in ("data", "output", "result"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            task_id = _task_id_from_payload(nested)
+            if task_id:
+                return task_id
+    return None
+
+
+def _task_status_from_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("status", "task_status"):
+        value = payload.get(key)
+        if value:
+            return str(value).strip().lower()
+    for key in ("data", "output", "result"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            status = _task_status_from_payload(nested)
+            if status:
+                return status
+    return ""
+
+
+def _task_error_from_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return str(payload or "")[:500]
+    for key in ("error", "message", "status_message", "task_status_msg"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    for key in ("data", "output", "result"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            error = _task_error_from_payload(nested)
+            if error:
+                return error
+    return str(payload)[:500]
+
+
 def _has_chat_content(payload: Any) -> bool:
     if not isinstance(payload, dict):
         return False
@@ -371,7 +424,7 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             "size": size,
             "response_format": "url",
             "watermark": False,
-        }, "image"
+        }, "image_task" if doubao_image_access_mode(endpoint) == "agent_plan" else "image"
 
     if normalized in OPENAI_IMAGE_TEST_PROVIDERS:
         url = _join_api_url(endpoint, get_provider_api_path(normalized, "image_generations"))
@@ -395,7 +448,51 @@ def _real_generation_response_ok(output_type: str, payload: Any) -> bool:
         return _has_gemini_inline_data(payload)
     if output_type == "image":
         return _has_gemini_inline_data(payload) or _has_openai_image_data(payload)
+    if output_type == "image_task":
+        return bool(parse_doubao_image_task_response(payload if isinstance(payload, dict) else {}))
     return False
+
+
+async def _poll_real_generation_task(
+    *,
+    session: Any,
+    url: str,
+    headers: Dict[str, str],
+    proxy: Optional[str],
+    task_id: str,
+    max_wait: int = 180,
+    interval: float = 3.0,
+) -> tuple[bool, Optional[int], Optional[str]]:
+    task_url = f"{url.rstrip('/')}/{task_id}"
+    deadline = time.perf_counter() + max_wait
+    last_payload: Any = None
+    last_status_code: Optional[int] = None
+
+    while time.perf_counter() < deadline:
+        async with session.get(task_url, headers=headers, proxy=proxy, allow_redirects=True) as resp:
+            last_status_code = resp.status
+            text = await resp.text()
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                payload = None
+            last_payload = payload
+            if resp.status >= 400:
+                return False, resp.status, (text or f"HTTP {resp.status}")[:500]
+            if _real_generation_response_ok("image_task", payload):
+                return True, resp.status, None
+            status = _task_status_from_payload(payload)
+            if status in TASK_FAILED_STATUSES:
+                return False, resp.status, _task_error_from_payload(payload)
+            if status in TASK_SUCCESS_STATUSES:
+                return False, resp.status, "Generation task succeeded but no image output was returned"
+        await asyncio.sleep(interval)
+
+    return (
+        False,
+        last_status_code,
+        f"Generation task timeout: task_id={task_id}, status={_task_status_from_payload(last_payload) or 'unknown'}",
+    )
 
 
 async def test_api_config_real_generation(
@@ -479,13 +576,28 @@ async def test_api_config_real_generation(
                         output_type=output_type,
                     )
                 ok = _real_generation_response_ok(output_type, payload)
+                error = None if ok else "Generation response did not contain expected output"
+                status_code: Optional[int] = resp.status
+                if not ok and output_type == "image_task":
+                    task_id = _task_id_from_payload(payload)
+                    if task_id:
+                        ok, poll_status_code, poll_error = await _poll_real_generation_task(
+                            session=session,
+                            url=url,
+                            headers=headers,
+                            proxy=proxy,
+                            task_id=task_id,
+                        )
+                        status_code = poll_status_code or status_code
+                        error = poll_error
+                        latency_ms = int((time.perf_counter() - t0) * 1000)
                 return api_real_generation_result(
                     provider=provider,
                     model_name=model_name,
                     ok=ok,
-                    status_code=resp.status,
+                    status_code=status_code,
                     url=url,
-                    error=None if ok else "Generation response did not contain expected output",
+                    error=error,
                     latency_ms=latency_ms,
                     output_type=output_type,
                 )

@@ -67,17 +67,17 @@ def test_doubao_agent_plan_real_generation_uses_plan_endpoint_and_min_size() -> 
     url, body, output_type = _real_generation_request(
         "doubao",
         {
-            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations",
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks",
             "model_name": "doubao-seedream-5.0-lite",
         },
     )
 
-    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
+    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
     assert body["size"] == "1920x1920"
     assert body["model"] == "doubao-seedream-5.0-lite"
     assert body["response_format"] == "url"
     assert body["watermark"] is False
-    assert output_type == "image"
+    assert output_type == "image_task"
 
 
 def test_doubao_agent_plan_real_generation_expands_short_endpoint() -> None:
@@ -89,7 +89,7 @@ def test_doubao_agent_plan_real_generation_expands_short_endpoint() -> None:
         },
     )
 
-    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
+    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
     assert body["model"] == "doubao-seedream-5.0-lite"
     assert body["size"] == "1920x1920"
 

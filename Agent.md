@@ -8851,3 +8851,12 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
   - Recent service logs after restart show no new traceback/error stack.
 - Remaining runtime dependency:
   - GPU Agent is still offline. The latest public script is downloadable, but local GPU / ComfyUI tasks require restarting the external GPU Agent with the admin token.
+
+## 2026-07-11 Doubao SeedDream Agent Plan Task Endpoint
+
+- Updated Doubao SeedDream Agent Plan image generation to use `https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks`.
+- Existing short or old plan endpoints are normalized to the task endpoint during provider resolution.
+- Runtime generation now submits an Agent Plan task, polls `{task_endpoint}/{task_id}`, and extracts returned image URLs / base64 data from nested task payloads.
+- Admin real-generation tests for Doubao Agent Plan now treat the first response as an async task and poll for image output before marking the provider ready.
+- Added/updated tests for endpoint normalization, minimum Agent Plan size (`1920x1920`), task parsing, task polling, and health-check output type.
+- Cost note: no live paid image generation was triggered during this local verification; only mocked/unit tests were run before deployment.
