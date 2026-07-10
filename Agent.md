@@ -1,5 +1,10 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 Endpoint-Aware Provider Links
+
+- Admin provider console, API documentation, and key-help links now follow the effective endpoint hostname instead of the static model vendor.
+- LaoZhang-backed Gemini cards now open LaoZhang resources rather than Google AI Studio.
+
 ## 2026-07-10 Storyboard Timeline Audio Actions
 
 - The storyboard combined timeline now exposes BGM and sound-effect upload/AI-generation actions matching the dubbing timeline.

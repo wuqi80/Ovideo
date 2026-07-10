@@ -32,6 +32,7 @@ import {
     isConnectivityOnlyConfigTest,
     mergeConfigTestPreservingVerification,
 } from '../utils/apiConfigTestState';
+import { providerCredentialLinksForEndpoint } from '../utils/providerCredentialLinks';
 
 const LEGACY_VER = '20260701-qwen-agent-v2';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
@@ -1219,17 +1220,24 @@ const HealthBadge: React.FC<{ status: HealthStatus }> = ({ status }) => {
     );
 };
 
-const ProviderCredentialLinks: React.FC<{ meta?: ProviderMeta; compact?: boolean; showHelp?: boolean }> = ({
+const ProviderCredentialLinks: React.FC<{
+    meta?: ProviderMeta;
+    endpoint?: string;
+    compact?: boolean;
+    showHelp?: boolean;
+}> = ({
     meta,
+    endpoint,
     compact = false,
     showHelp = true,
 }) => {
-    if (!meta?.docs_url && !meta?.console_url && !meta?.key_help) return null;
+    const links = providerCredentialLinksForEndpoint(meta, endpoint);
+    if (!links?.docs_url && !links?.console_url && !links?.key_help) return null;
     return (
         <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] ${compact ? 'mt-1' : 'mt-2'}`}>
-            {meta.console_url && (
+            {links.console_url && (
                 <a
-                    href={meta.console_url}
+                    href={links.console_url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
@@ -1238,9 +1246,9 @@ const ProviderCredentialLinks: React.FC<{ meta?: ProviderMeta; compact?: boolean
                     控制台
                 </a>
             )}
-            {meta.docs_url && (
+            {links.docs_url && (
                 <a
-                    href={meta.docs_url}
+                    href={links.docs_url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1 text-primary hover:text-primary-hover"
@@ -1249,8 +1257,8 @@ const ProviderCredentialLinks: React.FC<{ meta?: ProviderMeta; compact?: boolean
                     API 文档
                 </a>
             )}
-            {showHelp && meta.key_help && (
-                <span className="text-n100 break-words">{meta.key_help}</span>
+            {showHelp && links.key_help && (
+                <span className="text-n100 break-words">{links.key_help}</span>
             )}
         </div>
     );
@@ -1446,7 +1454,7 @@ const ApiConfigEditorModal: React.FC<{
                     {selectedMeta && (
                         <div className="rounded border border-n40 bg-n20 px-3 py-2">
                             <div className="text-[11px] font-semibold text-n300 mb-1">Key 获取入口</div>
-                            <ProviderCredentialLinks meta={selectedMeta} compact />
+                            <ProviderCredentialLinks meta={selectedMeta} endpoint={form.endpoint} compact />
                         </div>
                     )}
 
@@ -2000,7 +2008,7 @@ const ApiConfigCard: React.FC<{
                         <div className="mt-2 text-[11px] text-n100 leading-relaxed break-words">{meta.notes}</div>
                     )}
                     <ProviderOperationPaths meta={meta} runtime={runtime} />
-                    <ProviderCredentialLinks meta={meta} />
+                    <ProviderCredentialLinks meta={meta} endpoint={runtimeEndpoint || dbEndpoint} />
                         </>
                     )}
                 </div>
@@ -2116,7 +2124,7 @@ const ProviderQuickCard: React.FC<{
                     <div className="mt-1 text-[11px] text-n100 break-words">
                         {meta.vendor || '-'} · {CATEGORY_LABELS[categoryFromProviderMeta(meta)] || '其他'}
                     </div>
-                    <ProviderCredentialLinks meta={meta} compact showHelp={false} />
+                    <ProviderCredentialLinks meta={meta} endpoint={endpoint} compact showHelp={false} />
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                     <span className="text-[10px] uppercase tracking-wider text-n100">生效配置状态</span>

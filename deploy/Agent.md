@@ -1,5 +1,14 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 Endpoint-Aware Provider Links
+
+### Changes
+
+- Centralized admin provider-link resolution by effective Endpoint hostname.
+- Added mappings for LaoZhang, Google, DeepSeek, Volcengine Ark, Alibaba Model Studio, and MiniMax endpoints.
+- Applied resolved console/documentation/key-help links to API cards, quick cards, and the API configuration editor.
+- Added focused tests for LaoZhang override, scheme-less endpoints, native Google endpoints, and unknown custom-gateway fallback.
+
 ## 2026-07-10 Storyboard Timeline Audio Actions
 
 ### Changes
