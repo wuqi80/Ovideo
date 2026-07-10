@@ -628,6 +628,7 @@ export const AudioStagePage: React.FC = () => {
         clipKeyFn={clipKey}
         onClickItem={(itemId) => dubbingRef.current?.scrollToItem(itemId)}
         episodeId={episodeId}
+        projectId={projectId}
         script={script}
         reload={reload}
       />
