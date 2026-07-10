@@ -23,12 +23,15 @@ from services.api_config_reload_service import ApiConfigReloadFailed, reload_api
 from services.api_config_service import (
     ApiConfigActivationFailed,
     ApiConfigCreateFailed,
+    ApiConfigImportFailed,
     ApiConfigNotFound,
     activate_api_config,
     create_api_config,
     create_api_config_key_batch,
     delete_api_config,
+    export_api_config_keys,
     get_api_config_presets,
+    import_api_config_keys,
     list_api_configs,
     repair_api_config_provider_conflicts,
     test_all_saved_api_config_health,
@@ -158,11 +161,14 @@ def _audit_result_summary(result: Dict[str, Any]) -> Dict[str, Any]:
         "env_keys_existing",
         "env_keys_skipped_provider_claimed",
         "updated_existing",
+        "updated",
         "enabled_existing",
         "total_conflicts",
         "total_disabled",
         "would_disable",
         "created",
+        "invalid",
+        "count",
         "active_config_id",
         "disabled_config_ids",
     )
@@ -269,6 +275,15 @@ class ApiConfigImportPresetsBody(BaseModel):
     copy_runtime_env_keys: bool = True
     update_existing_empty_keys: bool = True
     enable_copied_keys: bool = True
+    dry_run: bool = False
+
+
+class ApiConfigKeyImportBody(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
+    configs: List[Dict[str, Any]] = Field(default_factory=list)
+    overwrite_existing: bool = False
+    enable_imported: bool = True
     dry_run: bool = False
 
 
@@ -394,6 +409,41 @@ async def admin_import_preset_configs(request: Request, body: Optional[ApiConfig
         request,
         action="api_config_import_presets",
         target_id="presets",
+        after=_audit_result_summary(result),
+    )
+    return result
+
+
+@router.get("/api-configs/export-keys")
+async def admin_export_api_config_keys(request: Request):
+    _require_db()
+    result = await export_api_config_keys()
+    await _record_api_config_audit(
+        request,
+        action="api_config_export_keys",
+        target_id="api_config_keys",
+        after=_audit_result_summary(result),
+        notes="Exported plaintext API keys for admin backup",
+    )
+    return result
+
+
+@router.post("/api-configs/import-keys")
+async def admin_import_api_config_keys(body: ApiConfigKeyImportBody, request: Request):
+    _require_db()
+    try:
+        result = await import_api_config_keys(
+            body.model_dump(),
+            overwrite_existing=body.overwrite_existing,
+            enable_imported=body.enable_imported,
+            dry_run=body.dry_run,
+        )
+    except ApiConfigImportFailed as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await _record_api_config_audit(
+        request,
+        action="api_config_import_keys",
+        target_id="api_config_keys",
         after=_audit_result_summary(result),
     )
     return result

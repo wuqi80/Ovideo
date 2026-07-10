@@ -6,7 +6,7 @@
  * legacy console until they are migrated.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
     Activity,
@@ -23,6 +23,7 @@ import {
     ServerCog,
     Timer,
     Trash2,
+    Upload,
     X,
 } from 'lucide-react';
 import { crmConfirm, crmMessage } from './crmUI';
@@ -318,6 +319,9 @@ interface ApiConfigImportResponse {
     imported?: number;
     skipped?: number;
     total?: number;
+    created?: number;
+    updated?: number;
+    invalid?: number;
     updated_existing?: number;
     env_keys_imported?: number;
     env_keys_missing?: number;
@@ -2609,6 +2613,7 @@ const AdminRecycleBinPanel: React.FC = () => {
 };
 
 const ApiConfigPanel: React.FC = () => {
+    const importKeyFileInputRef = useRef<HTMLInputElement | null>(null);
     const [configs, setConfigs] = useState<ApiConfig[]>([]);
     const [providers, setProviders] = useState<ProviderMeta[]>([]);
     const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus[]>([]);
@@ -2628,6 +2633,8 @@ const ApiConfigPanel: React.FC = () => {
     const [reloadingEnv, setReloadingEnv] = useState(false);
     const [repairingConflicts, setRepairingConflicts] = useState(false);
     const [migratingRuntimeKeys, setMigratingRuntimeKeys] = useState(false);
+    const [exportingKeys, setExportingKeys] = useState(false);
+    const [importingKeys, setImportingKeys] = useState(false);
 
     const loadConfigs = useCallback(async (options?: { showLoading?: boolean }) => {
         const showLoading = options?.showLoading !== false;
@@ -3229,6 +3236,90 @@ const ApiConfigPanel: React.FC = () => {
         }
     }, [loadConfigs]);
 
+    const exportKeyBackup = useCallback(async () => {
+        if (configs.length === 0) {
+            crmMessage.warning('暂无可导出的 API 配置');
+            return;
+        }
+        const ok = await crmConfirm({
+            title: '导出 API 密钥',
+            message: '导出的 JSON 文件会包含明文 API Key，请只保存在可信位置。是否继续导出？',
+            type: 'warning',
+            confirmText: '导出',
+        });
+        if (!ok) return;
+
+        setExportingKeys(true);
+        try {
+            const blob = await apiBlob('/api/admin/api-configs/export-keys', { method: 'GET' }, '导出 API 密钥');
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = `mecha-api-keys-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            crmMessage.success('API 密钥备份已开始下载');
+        } catch (err: any) {
+            crmMessage.error(`导出失败：${err?.message || 'unknown'}`);
+        } finally {
+            setExportingKeys(false);
+        }
+    }, [configs.length]);
+
+    const openImportKeyBackup = useCallback(async () => {
+        const ok = await crmConfirm({
+            title: '导入 API 密钥备份',
+            message: '请选择由本页导出的 JSON 备份文件。默认跳过已存在的同名、同端点、同模型配置，不覆盖当前 Key。',
+            type: 'warning',
+            confirmText: '选择文件',
+        });
+        if (!ok) return;
+        importKeyFileInputRef.current?.click();
+    }, []);
+
+    const importKeyBackupFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        setImportingKeys(true);
+        try {
+            const text = await file.text();
+            const payload = JSON.parse(text);
+            const importConfigs = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.configs)
+                ? payload.configs
+                : Array.isArray(payload?.api_configs)
+                ? payload.api_configs
+                : null;
+            if (!Array.isArray(importConfigs) || importConfigs.length === 0) {
+                crmMessage.warning('导入文件里没有可用的 API 配置');
+                return;
+            }
+            const result = await apiJson<ApiConfigImportResponse>('/api/admin/api-configs/import-keys', {
+                method: 'POST',
+                body: JSON.stringify({
+                    configs: importConfigs,
+                    overwrite_existing: false,
+                    enable_imported: true,
+                    dry_run: false,
+                }),
+            });
+            const message = `导入完成：新增 ${result.created ?? 0}，更新 ${result.updated ?? 0}，跳过 ${result.skipped ?? 0}，无效 ${result.invalid ?? 0}`;
+            if (result.env_refreshed === false) crmMessage.warning(`${message}，但运行时刷新失败`);
+            else crmMessage.success(message);
+            setConfigTestMap({});
+            await loadConfigs();
+        } catch (err: any) {
+            crmMessage.error(`导入失败：${err?.message || '文件格式不正确'}`);
+        } finally {
+            setImportingKeys(false);
+        }
+    }, [loadConfigs]);
+
     const importPresets = useCallback(async () => {
         try {
             const result = await apiJson<ApiConfigImportResponse>('/api/admin/api-configs/import-presets', {
@@ -3289,6 +3380,13 @@ const ApiConfigPanel: React.FC = () => {
 
     return (
         <>
+        <input
+            ref={importKeyFileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={importKeyBackupFile}
+        />
         <div className="layout-safe h-full min-h-0 w-full overflow-auto bg-n20">
             <div className="mx-auto max-w-7xl p-5 space-y-4">
                 <header className="responsive-toolbar flex items-center justify-between gap-3">
@@ -3307,6 +3405,26 @@ const ApiConfigPanel: React.FC = () => {
                         >
                             <Plus className="w-3.5 h-3.5" />
                             新增 / 修改厂商 API
+                        </button>
+                        <button
+                            type="button"
+                            onClick={exportKeyBackup}
+                            disabled={exportingKeys || loading || configs.length === 0}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                            title="导出包含明文 API Key 的 JSON 备份文件"
+                        >
+                            {exportingKeys ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                            导出密钥
+                        </button>
+                        <button
+                            type="button"
+                            onClick={openImportKeyBackup}
+                            disabled={importingKeys || loading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                            title="导入由本页导出的 API Key JSON 备份"
+                        >
+                            {importingKeys ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                            导入密钥
                         </button>
                         <button
                             type="button"

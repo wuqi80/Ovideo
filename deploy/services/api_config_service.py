@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -50,6 +51,10 @@ class ApiConfigNotFound(ApiConfigServiceError):
 
 
 class ApiConfigCreateFailed(ApiConfigServiceError):
+    pass
+
+
+class ApiConfigImportFailed(ApiConfigServiceError):
     pass
 
 
@@ -295,6 +300,235 @@ def get_api_config_presets() -> Dict[str, Any]:
         "success": True,
         "presets": get_api_model_presets(),
         "providers": get_api_provider_catalog(),
+    }
+
+
+def _json_object(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return {}
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _bool_value(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"1", "true", "yes", "y", "on"}:
+            return True
+        if text in {"0", "false", "no", "n", "off"}:
+            return False
+    return bool(value)
+
+
+def _backup_match_key(data: Dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        normalize_provider(str(data.get("provider") or "")),
+        str(data.get("name") or "").strip().lower(),
+        _endpoint_key(data.get("endpoint")),
+        str(data.get("model_name") or "").strip().lower(),
+    )
+
+
+def _export_api_config_item(row: Any) -> Dict[str, Any]:
+    data = _row_to_jsonable(row)
+    encrypted_key = str(data.get("api_key_encrypted") or "")
+    api_key = ApiConfigDAO.decrypt_key(encrypted_key) if encrypted_key else ""
+    return {
+        "name": str(data.get("name") or ""),
+        "provider": str(data.get("provider") or ""),
+        "endpoint": str(data.get("endpoint") or ""),
+        "api_key": api_key,
+        "model_name": str(data.get("model_name") or ""),
+        "proxy_mode": str(data.get("proxy_mode") or "direct"),
+        "custom_proxy": str(data.get("custom_proxy") or ""),
+        "request_template": _json_object(data.get("request_template")),
+        "headers": _json_object(data.get("headers")),
+        "category": str(data.get("category") or ""),
+        "enabled": data.get("enabled") is not False,
+        "has_key": bool(encrypted_key),
+    }
+
+
+async def export_api_config_keys() -> Dict[str, Any]:
+    rows = list(await ApiConfigDAO.list_all())
+    configs = [_export_api_config_item(row) for row in rows]
+    return {
+        "success": True,
+        "schema": "mecha.api_config_keys",
+        "schema_version": 1,
+        "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "count": len(configs),
+        "configs": configs,
+    }
+
+
+def _extract_import_items(payload: Any) -> List[Dict[str, Any]]:
+    if isinstance(payload, list):
+        raw_items = payload
+    elif isinstance(payload, dict):
+        raw_items = payload.get("configs")
+        if raw_items is None:
+            raw_items = payload.get("api_configs")
+    else:
+        raw_items = None
+    if not isinstance(raw_items, list):
+        raise ApiConfigImportFailed("No configs found in API key backup")
+    return [item for item in raw_items if isinstance(item, dict)]
+
+
+def _clean_import_item(
+    item: Dict[str, Any],
+    *,
+    index: int,
+    enable_imported: bool,
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    provider = normalize_provider(str(item.get("provider") or "").strip())
+    name = str(item.get("name") or "").strip()
+    endpoint = str(item.get("endpoint") or "").strip()
+    api_key = str(item.get("api_key") or item.get("key") or "").strip()
+    model_name = str(item.get("model_name") or "").strip()
+    if not provider:
+        return None, f"item {index + 1}: missing provider"
+    if not name:
+        name = model_name or provider
+    if not endpoint:
+        return None, f"item {index + 1}: missing endpoint"
+    if not api_key:
+        return None, f"item {index + 1}: missing api_key"
+    return {
+        "name": name,
+        "provider": provider,
+        "endpoint": endpoint,
+        "api_key": api_key,
+        "model_name": model_name,
+        "proxy_mode": str(item.get("proxy_mode") or "direct").strip() or "direct",
+        "custom_proxy": str(item.get("custom_proxy") or "").strip(),
+        "request_template": _json_object(item.get("request_template")),
+        "headers": _json_object(item.get("headers")),
+        "category": str(item.get("category") or "").strip(),
+        "enabled": _bool_value(item.get("enabled"), enable_imported),
+    }, None
+
+
+async def import_api_config_keys(
+    payload: Any,
+    *,
+    overwrite_existing: bool = False,
+    enable_imported: bool = True,
+    dry_run: bool = False,
+    reload_api_env: Optional[ReloadCallback] = None,
+) -> Dict[str, Any]:
+    items = _extract_import_items(payload)
+    if not items:
+        raise ApiConfigImportFailed("No valid API config items found in backup")
+
+    existing_rows = list(await ApiConfigDAO.list_all())
+    existing_by_key = {
+        _backup_match_key(_row_to_jsonable(row)): row
+        for row in existing_rows
+    }
+
+    created = 0
+    updated = 0
+    skipped = 0
+    invalid = 0
+    details: List[Dict[str, Any]] = []
+    touched_rows: List[Any] = []
+    disabled_conflict_ids: List[str] = []
+    disabled_conflict_rows: List[Any] = []
+
+    for index, item in enumerate(items):
+        cleaned, error = _clean_import_item(
+            item,
+            index=index,
+            enable_imported=enable_imported,
+        )
+        if error or not cleaned:
+            invalid += 1
+            details.append({"index": index, "action": "invalid", "reason": error})
+            continue
+
+        item_key = _backup_match_key(cleaned)
+        existing = existing_by_key.get(item_key)
+        detail = {
+            "index": index,
+            "name": cleaned["name"],
+            "provider": cleaned["provider"],
+            "model_name": cleaned.get("model_name") or None,
+        }
+
+        if existing and not overwrite_existing:
+            skipped += 1
+            details.append({
+                **detail,
+                "action": "skipped",
+                "reason": "already_exists",
+                "config_id": _row_config_id(existing),
+            })
+            continue
+
+        if dry_run:
+            if existing:
+                updated += 1
+                details.append({**detail, "action": "would_update", "config_id": _row_config_id(existing)})
+            else:
+                created += 1
+                details.append({**detail, "action": "would_create"})
+            continue
+
+        try:
+            if existing:
+                row = await ApiConfigDAO.update(_row_config_id(existing), **cleaned)
+                if not row:
+                    raise ApiConfigImportFailed("Failed to update API config")
+                updated += 1
+                details.append({**detail, "action": "updated", "config_id": _row_config_id(row)})
+            else:
+                row = await ApiConfigDAO.create(**cleaned)
+                if not row:
+                    raise ApiConfigImportFailed("Failed to create API config")
+                created += 1
+                details.append({**detail, "action": "created", "config_id": _row_config_id(row)})
+
+            existing_by_key[item_key] = row
+            touched_rows.append(row)
+            disabled_ids, disabled_rows = await _disable_conflicting_provider_configs(row)
+            disabled_conflict_ids.extend(disabled_ids)
+            disabled_conflict_rows.extend(disabled_rows)
+        except Exception as exc:
+            logger.warning("API config key import item failed (index=%s): %s", index, exc, exc_info=True)
+            invalid += 1
+            details.append({**detail, "action": "invalid", "reason": str(exc)})
+
+    modified = created + updated
+    env_refreshed: Optional[bool] = None
+    if modified and not dry_run:
+        env_refreshed = await reload_api_env_after_config_change(reload_api_env)
+        await invalidate_provider_health_for_items([*touched_rows, *disabled_conflict_rows])
+
+    return {
+        "success": True,
+        "dry_run": dry_run,
+        "total": len(items),
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "invalid": invalid,
+        "env_refreshed": env_refreshed,
+        "disabled_conflicting_config_ids": list(dict.fromkeys(disabled_conflict_ids)),
+        "items": details,
     }
 
 
