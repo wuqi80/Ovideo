@@ -170,7 +170,7 @@ async def main() -> int:
     service.invalidate_provider_health_for_items = fake_invalidate_items
     try:
         presets = service.get_api_config_presets()
-        if len(presets.get("presets") or []) != 17:
+        if len(presets.get("presets") or []) != 18:
             fail(f"preset facade count changed: {len(presets.get('presets') or [])}")
         if len(presets.get("providers") or []) != 12:
             fail(f"provider facade count changed: {len(presets.get('providers') or [])}")
@@ -515,7 +515,7 @@ async def main() -> int:
 
     print("Admin API config CRUD contract OK")
     print("  list_masks_key=1")
-    print("  presets_facade=17/12")
+    print("  presets_facade=18/12")
     print("  create_update_delete_reload_calls=3")
     print("  empty_update_reload_calls=0")
     print("  same_provider_conflict_disabled=1")
