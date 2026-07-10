@@ -1,5 +1,17 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 DeepSeek Real Generation Verification
+
+### Changes
+
+- Fixed the admin real-generation test for `deepseek-reasoner` so a valid response containing `reasoning_content` is accepted even when the final `content` field is empty.
+- Increased the short DeepSeek Reasoner verification budget from 8 to 64 output tokens so the model can finish reasoning and return its final answer.
+- Added regression coverage for reasoning-only responses, empty responses, and the DeepSeek Reasoner verification request payload.
+
+### Verification
+
+- Run `python -m pytest tests/test_api_config_health_service.py -q` from `deploy/`.
+
 ## 2026-06-29 API Health Connectivity Semantics
 
 ### Changes

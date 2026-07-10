@@ -1,5 +1,10 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 DeepSeek Real Generation Verification
+
+- Fixed `deploy/services/api_config_health_service.py` so DeepSeek Reasoner real-generation tests accept `reasoning_content` and allow enough output tokens for reasoning plus a final answer.
+- Added `deploy/tests/test_api_config_health_service.py` regression coverage for the response parser and request payload.
+
 ## 2026-06-29 API Health Connectivity Semantics
 
 - Fixed a misleading admin API health result for gateway providers such as laozhang: a successful lightweight metadata request now reports `connectivity_ok` instead of green `ok` when real generation was not executed.

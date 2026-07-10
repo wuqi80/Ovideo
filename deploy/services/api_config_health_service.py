@@ -294,7 +294,7 @@ def _has_chat_content(payload: Any) -> bool:
     if not isinstance(choices, list) or not choices:
         return False
     message = (choices[0] or {}).get("message") or {}
-    return bool(message.get("content"))
+    return bool(message.get("content") or message.get("reasoning_content"))
 
 
 def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, Dict[str, Any], str]:
@@ -306,11 +306,16 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
 
     if normalized in TEXT_GENERATION_TEST_PROVIDERS:
         url = _join_api_url(endpoint, get_provider_api_path(normalized, "chat_completions"))
+        resolved_model = model or (
+            "deepseek-reasoner" if normalized == "deepseek" else "gemini-2.5-flash"
+        )
         return url, {
-            "model": model or ("deepseek-reasoner" if normalized == "deepseek" else "gemini-2.5-flash"),
+            "model": resolved_model,
             "messages": [{"role": "user", "content": "Reply with the single word: ok"}],
             "temperature": 0,
-            "max_tokens": 8,
+            # Reasoning models can spend the first tokens on reasoning_content
+            # before producing their final content field.
+            "max_tokens": 64 if resolved_model == "deepseek-reasoner" else 8,
         }, "text"
 
     if normalized == "gemini-image":
