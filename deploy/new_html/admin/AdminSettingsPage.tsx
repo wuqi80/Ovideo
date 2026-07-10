@@ -211,6 +211,7 @@ interface ApiConfigTest {
 interface ApiConfigTestResponse {
     success?: boolean;
     test?: ApiConfigTest;
+    provider_health?: ProviderHealth;
 }
 
 interface ApiConfigsResponse {
@@ -2733,6 +2734,12 @@ const ApiConfigPanel: React.FC = () => {
                 billable: result.test?.billable ?? true,
             };
             setConfigTestMap(prev => ({ ...prev, [configId]: test }));
+            if (result.provider_health) {
+                setHealthMap(prev => buildProviderHealthMap([
+                    ...Object.values(prev),
+                    result.provider_health as ProviderHealth,
+                ]));
+            }
             if (test.ok) {
                 crmMessage.success(`${displayName} 真实生成测试通过${test.output_type ? `（${test.output_type}）` : ''}`);
             } else if (isUnsupportedRealGenerationTest(test)) {

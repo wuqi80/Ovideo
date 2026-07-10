@@ -142,6 +142,15 @@ def _safe_health_payload(result: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
+def _is_verified_generation_ok(payload: Dict[str, Any]) -> bool:
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+    return (
+        str(payload.get("status") or "").strip().lower() == "ok"
+        and bool(health.get("ok"))
+        and bool(health.get("real_generation"))
+    )
+
+
 async def cache_provider_health_result(
     result: Dict[str, Any],
     *,
@@ -155,9 +164,21 @@ async def cache_provider_health_result(
     if not client or not provider:
         return payload
 
+    cache_key = provider_health_cache_key(provider, model_name)
+    if str(payload.get("status") or "").strip().lower() == "connectivity_ok":
+        try:
+            raw_existing = await client.get(cache_key)
+            if isinstance(raw_existing, bytes):
+                raw_existing = raw_existing.decode("utf-8", errors="ignore")
+            existing = json.loads(str(raw_existing)) if raw_existing else None
+        except Exception:
+            existing = None
+        if isinstance(existing, dict) and _is_verified_generation_ok(existing):
+            return _safe_health_payload(existing)
+
     ttl = ttl_seconds or int(provider_health_monitor_settings()["ttl_seconds"])
     data = json.dumps(payload, ensure_ascii=False)
-    await client.set(provider_health_cache_key(provider, model_name), data, ex=ttl)
+    await client.set(cache_key, data, ex=ttl)
     return payload
 
 

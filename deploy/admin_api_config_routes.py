@@ -13,7 +13,11 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from db_manager import get_db_manager
-from services.api_config_health_service import ProviderHealthNotFound, check_provider_health
+from services.api_config_health_service import (
+    ProviderHealthNotFound,
+    check_provider_health,
+    is_provider_region_blocked,
+)
 from services.api_config_import_service import ApiConfigImportOptions, import_preset_api_configs
 from services.api_config_reload_service import ApiConfigReloadFailed, reload_api_env_runtime
 from services.api_config_service import (
@@ -52,6 +56,46 @@ def _require_db() -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         )
+
+
+def _provider_health_from_real_generation_test(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    test = result.get("test") if isinstance(result, dict) else None
+    if not isinstance(test, dict):
+        return None
+    provider = str(test.get("provider") or "").strip()
+    if not provider:
+        return None
+    error_text = str(test.get("error") or "")
+    if test.get("ok"):
+        status_value = "ok"
+    elif error_text == "No API key configured":
+        status_value = "no_key"
+    elif is_provider_region_blocked(provider, error_text):
+        status_value = "blocked_region"
+    elif str(test.get("status") or "").strip().lower() == "unsupported":
+        return None
+    else:
+        status_value = "error"
+    return {
+        "success": True,
+        "provider": provider,
+        "model_name": test.get("model_name") or None,
+        "status": status_value,
+        "latency_ms": test.get("latency_ms"),
+        "checked_at": test.get("checked_at"),
+        "health": {
+            "ok": bool(test.get("ok")),
+            "reachable": bool(test.get("reachable")),
+            "auth_ok": bool(test.get("auth_ok")),
+            "status_code": test.get("status_code"),
+            "url": test.get("url"),
+            "error": test.get("error"),
+            "method": test.get("method") or "POST",
+            "real_generation": True,
+            "billable": bool(test.get("billable", True)),
+            "output_type": test.get("output_type"),
+        },
+    }
 
 
 def _audit_config_snapshot(config: Any) -> Dict[str, Any]:
@@ -433,6 +477,9 @@ async def admin_real_test_api_config(config_id: str, request: Request):
     try:
         result = await test_saved_api_config_real_generation(config_id)
         test = result.get("test") or {}
+        provider_health = _provider_health_from_real_generation_test(result)
+        if provider_health:
+            result["provider_health"] = await cache_provider_health_result(provider_health)
         await _record_api_config_audit(
             request,
             action="api_config_real_generation_test",

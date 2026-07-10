@@ -146,6 +146,47 @@ async def main() -> int:
     await monitor.cache_provider_health_result(
         {
             "success": True,
+            "provider": "gemini-tts",
+            "model_name": "gemini-3.1-flash-tts-preview",
+            "status": "ok",
+            "latency_ms": 88,
+            "checked_at": "2026-07-10T00:00:00Z",
+            "health": {
+                "ok": True,
+                "reachable": True,
+                "auth_ok": True,
+                "status_code": 200,
+                "method": "POST",
+                "real_generation": True,
+                "output_type": "audio",
+            },
+        },
+        redis_client=fake_redis,
+    )
+    preserved = await monitor.cache_provider_health_result(
+        {
+            "success": True,
+            "provider": "gemini-tts",
+            "model_name": "gemini-3.1-flash-tts-preview",
+            "status": "connectivity_ok",
+            "latency_ms": 3,
+            "checked_at": "2026-07-10T00:01:00Z",
+            "health": {
+                "ok": False,
+                "reachable": True,
+                "auth_ok": True,
+                "status_code": 200,
+                "method": "GET",
+                "error": "Metadata endpoint reachable, but generation is not verified.",
+            },
+        },
+        redis_client=fake_redis,
+    )
+    if preserved.get("status") != "ok" or not (preserved.get("health") or {}).get("real_generation"):
+        fail(f"Connectivity-only health downgraded verified generation health: {preserved}")
+    await monitor.cache_provider_health_result(
+        {
+            "success": True,
             "provider": "dashscope",
             "model_name": "custom-admin-model",
             "status": "ok",
@@ -250,9 +291,18 @@ async def main() -> int:
     if summary.get("total") != 2 or summary.get("ok") != 1 or summary.get("no_key") != 1:
         fail(f"Cached provider health summary changed: {summary}")
     cache_response = await admin_api_config_routes.admin_get_provider_health_cache()
-    if cache_response.get("summary") != summary:
+    full_summary = {
+        "total": 3,
+        "ok": 2,
+        "error": 0,
+        "no_key": 1,
+        "blocked_region": 0,
+        "connectivity_ok": 0,
+        "unknown": 0,
+    }
+    if cache_response.get("summary") != full_summary:
         fail(f"Admin health cache endpoint summary changed: {cache_response}")
-    if len(cache_response.get("provider_health") or []) != 2:
+    if len(cache_response.get("provider_health") or []) != 3:
         fail(f"Admin health cache endpoint did not return cached rows: {cache_response}")
     if "ttl_seconds" not in (cache_response.get("settings") or {}):
         fail(f"Admin health cache endpoint missing monitor settings: {cache_response}")
@@ -284,6 +334,10 @@ async def main() -> int:
 
     class FakeDAO:
         @staticmethod
+        def decrypt_key(_value):
+            return "secret"
+
+        @staticmethod
         async def list_all():
             return copy.deepcopy(rows)
 
@@ -296,7 +350,7 @@ async def main() -> int:
         monitor.set_provider_health_redis(None)
 
     provider_health = listed.get("provider_health") or []
-    if len(provider_health) != 2:
+    if len(provider_health) != 3:
         fail(f"list_api_configs did not include cached provider health: {provider_health}")
     if not (listed.get("monitor_state") or {}).get("last_sweep_completed_at"):
         fail(f"list_api_configs did not include provider monitor state: {listed.get('monitor_state')}")
@@ -307,10 +361,11 @@ async def main() -> int:
     print("  sweep_results=2")
     print("  sweep_target_model_checks=4")
     print("  exact_model_cache_delete_checks=2")
+    print("  verified_generation_not_downgraded=1")
     print("  global_cache_clear_checks=5")
     print("  admin_reload_cache_clear_checks=2")
     print("  default_model_sweep_checks=3")
-    print("  api_config_response_provider_health=2")
+    print("  api_config_response_provider_health=3")
     print("  provider_monitor_state=1")
     return 0
 

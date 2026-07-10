@@ -79,6 +79,7 @@ async def main() -> int:
         resolve_proxy_for_request,
         test_api_config_health,
     )
+    import admin_api_config_routes  # noqa: PLC0415
     from services.api_config_service import summarize_config_test_results  # noqa: PLC0415
     from services.api_provider_endpoints import derive_models_health_urls  # noqa: PLC0415
     from services import api_provider_registry as registry  # noqa: PLC0415
@@ -182,6 +183,29 @@ async def main() -> int:
     if batch_summary != {"total": 5, "ok": 1, "no_key": 1, "auth_error": 1, "connectivity_ok": 1, "error": 1}:
         fail(f"Batch config test summary changed: {batch_summary}")
 
+    provider_health = admin_api_config_routes._provider_health_from_real_generation_test(
+        {
+            "test": {
+                "ok": True,
+                "provider": "gemini-tts",
+                "model_name": "gemini-3.1-flash-tts-preview",
+                "status_code": 200,
+                "reachable": True,
+                "auth_ok": True,
+                "latency_ms": 321,
+                "checked_at": "2026-07-10T00:00:00Z",
+                "method": "POST",
+                "output_type": "audio",
+                "billable": True,
+            }
+        }
+    )
+    if not provider_health or provider_health.get("status") != "ok":
+        fail(f"Real generation result was not converted to ok provider health: {provider_health}")
+    health_detail = provider_health.get("health") or {}
+    if health_detail.get("real_generation") is not True or health_detail.get("output_type") != "audio":
+        fail(f"Real generation provider health lost verification detail: {provider_health}")
+
     async def proxy_loader():
         return {"proxy_https": "http://proxy.example.test:7890"}
 
@@ -258,6 +282,7 @@ async def main() -> int:
     print(f"  derived_health_url_cases={len(health_url_cases)}")
     print("  no_key_result_ok=1")
     print("  batch_summary_ok=1")
+    print("  real_generation_provider_health=1")
     print(f"  fake_http_calls={len(factory.calls)}")
     print("  laozhang_connectivity_only=2")
     print("  provider_runtime_health=3")
