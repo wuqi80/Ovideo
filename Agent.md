@@ -5,6 +5,7 @@
 - Added the missing Doubao image-generation API path metadata.
 - Changed lightweight Doubao health checks to `connectivity_ok`; only a successful real-generation test can establish green ready status.
 - Added admin health contract coverage for both behaviors.
+- Provider-level health checks now follow the runtime-effective model, preventing a disabled legacy preset from being probed instead.
 
 ## 2026-07-10 Preserve Verified Provider Health
 

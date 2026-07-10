@@ -614,8 +614,9 @@ async def check_provider_health(
     if provider not in PROVIDER_CATALOG:
         raise ProviderHealthNotFound(f"Unknown provider: {provider_id}")
 
-    preset = get_api_model_preset(provider, model_name) or {}
-    resolved_model = model_name or preset.get("model_name") or None
+    # A provider-level check must follow the runtime-effective model. Picking
+    # the first preset here can silently probe a disabled/legacy model.
+    resolved_model = str(model_name or "").strip() or None
     config = resolve_provider(provider, resolved_model)
     row = {
         "provider": provider,

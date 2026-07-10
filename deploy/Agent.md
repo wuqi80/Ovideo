@@ -8,6 +8,7 @@
 - Classified successful lightweight Doubao metadata checks as `connectivity_ok` instead of generation-ready `ok`.
 - Required a successful billable real-generation test before Doubao can display green `OK ready` status.
 - Added contract checks for the Doubao operation URL and connectivity-only health result.
+- Fixed provider-level health checks so they use the runtime-effective model instead of silently selecting the first preset model.
 
 ## 2026-07-10 Preserve Verified Provider Health
 

@@ -286,6 +286,19 @@ async def main() -> int:
         if runtime_model_ok.get("model_name") != "deepseek-chat":
             fail(f"Provider runtime health did not preserve model_name override: {runtime_model_ok}")
 
+        os.environ["ARK_API_KEY"] = "runtime-doubao-secret"
+        os.environ["ARK_ENDPOINT"] = "https://runtime.doubao.example.test/api/v3/images/generations"
+        os.environ["ARK_MODEL"] = "doubao-seedream-5-0-pro-260628"
+        runtime_doubao_factory = FakeSessionFactory([(200, '{"data": []}')])
+        runtime_doubao = await check_provider_health(
+            "doubao",
+            session_factory=runtime_doubao_factory,
+        )
+        if runtime_doubao.get("status") != "connectivity_ok":
+            fail(f"Doubao runtime metadata health should be connectivity_ok: {runtime_doubao}")
+        if runtime_doubao.get("model_name") != "doubao-seedream-5-0-pro-260628":
+            fail(f"Doubao provider-level health ignored runtime model: {runtime_doubao}")
+
         os.environ["GPT_IMAGE_API_KEY"] = "runtime-laozhang-secret"
         os.environ["GPT_IMAGE_ENDPOINT"] = "https://runtime.laozhang.example.test/v1"
         runtime_laozhang_factory = FakeSessionFactory([(200, '{"data": []}')])
@@ -310,6 +323,7 @@ async def main() -> int:
     print("  real_generation_provider_health=1")
     print("  doubao_connectivity_only=1")
     print("  doubao_operation_paths=1")
+    print("  doubao_runtime_model=1")
     print(f"  fake_http_calls={len(factory.calls)}")
     print("  laozhang_connectivity_only=2")
     print("  provider_runtime_health=3")
