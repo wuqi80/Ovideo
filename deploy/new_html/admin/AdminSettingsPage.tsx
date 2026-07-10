@@ -817,13 +817,13 @@ function conflictDisableSuffix(result: { disabled_conflicting_config_ids?: strin
 
 function activationDisableSuffix(result: { disabled_config_ids?: string[] }): string {
     const count = result.disabled_config_ids?.length || 0;
-    return count > 0 ? `锛屽凡鍏抽棴 ${count} 鏉″悓 provider 鏃?Key` : '';
+    return count > 0 ? `，已自动关闭 ${count} 条同 provider 旧 Key` : '';
 }
 
 function splitBulkApiKeys(value: string): string[] {
     return Array.from(new Set(
         String(value || '')
-            .split(/[\n,，;；]+/)
+            .split(/[\n,，；;]+/)
             .map(item => item.trim())
             .filter(Boolean)
     ));

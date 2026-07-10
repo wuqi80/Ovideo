@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from services.api_provider_registry import DOUBAO_IMAGE_DEFAULT_MODEL, normalize_doubao_image_model
 from services.api_provider_runtime import resolve_provider
 from services.ai_proxy_http_client import _post_json_request_async
 from services.ai_proxy_openai_image_service import parse_openai_image_response
@@ -47,9 +48,9 @@ async def _post_doubao_image_generation(
     payload: Dict[str, Any],
 ) -> List[str]:
     if not config.api_key:
-        raise AIProxyConfigError("未配置 ARK_API_KEY，无法调用豆包接口")
+        raise AIProxyConfigError("未配置 ARK_API_KEY，无法调用豆包图片接口")
     if not config.endpoint:
-        raise AIProxyConfigError("未配置豆包 endpoint，无法调用豆包接口")
+        raise AIProxyConfigError("未配置豆包 endpoint，无法调用豆包图片接口")
 
     result = await _post_json_request_async(
         label="Doubao image",
@@ -60,9 +61,9 @@ async def _post_doubao_image_generation(
         },
         payload=payload,
         timeout=120,
-        timeout_message="图像生成失败，请稍后重试",
+        timeout_message="图片生成超时，请稍后重试",
         timeout_status_code=500,
-        request_error_message="图像生成失败，请稍后重试",
+        request_error_message="图片生成失败，请稍后重试",
         parse_error_message="豆包响应格式异常",
         request_kwargs=config.requests_kwargs(),
         expected_status=200,
@@ -82,9 +83,10 @@ async def generate_doubao_images(
     model: Optional[str] = None,
 ) -> List[str]:
     config = resolve_provider("doubao", model)
+    resolved_model = normalize_doubao_image_model(config.model_name or model) or DOUBAO_IMAGE_DEFAULT_MODEL
     payload = build_doubao_image_payload(
         prompt=prompt,
-        model=config.model_name or model or "doubao-seedream-4-0-250828",
+        model=resolved_model,
         size=size,
         sequential=sequential,
         count=count,

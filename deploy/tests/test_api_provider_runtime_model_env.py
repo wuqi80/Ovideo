@@ -13,6 +13,7 @@ from services.ai_proxy_types import GptImageReferenceInput
 from services.api_provider_registry import (
     SEEDANCE_DEFAULT_MODEL_MAP,
     DASHSCOPE_DEFAULT_MODEL_MAP,
+    DOUBAO_IMAGE_DEFAULT_MODEL,
     MINIMAX_DEFAULT_VIDEO_MODEL,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
@@ -25,6 +26,7 @@ from services.api_provider_registry import (
     dashscope_vidu_startend_sub_model,
     minimax_runtime_model_override,
     normalize_minimax_video_model,
+    normalize_doubao_image_model,
     normalize_sora2_video_model,
     normalize_veo_video_model,
     sora2_runtime_model_override,
@@ -72,6 +74,14 @@ def test_minimax_sora2_and_veo_video_alias_helpers_live_in_registry():
     assert normalize_veo_video_model("veo-3") == VEO_DEFAULT_VIDEO_MODEL
     assert veo_runtime_model_override("veo-custom") == "veo-custom"
     assert normalize_veo_video_model("veo-custom") == "veo-custom"
+
+
+def test_doubao_image_model_alias_helpers_live_in_registry():
+    assert normalize_doubao_image_model(None) is None
+    assert normalize_doubao_image_model("Doubao-Seedream-5.0-pro") == "doubao-seedream-5-0-pro-260628"
+    assert normalize_doubao_image_model("seedream-5-0-pro") == "doubao-seedream-5-0-pro-260628"
+    assert normalize_doubao_image_model("Seedream-4.0") == DOUBAO_IMAGE_DEFAULT_MODEL
+    assert normalize_doubao_image_model("custom-doubao-endpoint") == "custom-doubao-endpoint"
 
 
 def test_dashscope_vidu_sub_model_helpers_live_in_registry():
@@ -401,7 +411,7 @@ async def test_doubao_image_uses_runtime_model_env_when_request_omits_model(monk
 
     monkeypatch.setenv(env_key, "test-ark-key")
     monkeypatch.setenv(endpoint_env, "https://doubao-runtime.example.test/api/v3/images/generations")
-    monkeypatch.setenv(model_env, "doubao-runtime-image-model")
+    monkeypatch.setenv(model_env, "Doubao-Seedream-5.0-pro")
 
     def fake_post(url, **kwargs):
         calls.append({"url": url, **kwargs})
@@ -419,7 +429,7 @@ async def test_doubao_image_uses_runtime_model_env_when_request_omits_model(monk
 
     assert images == ["data:image/png;base64,ZG91YmFv"]
     assert calls[0]["url"] == "https://doubao-runtime.example.test/api/v3/images/generations"
-    assert calls[0]["json"]["model"] == "doubao-runtime-image-model"
+    assert calls[0]["json"]["model"] == "doubao-seedream-5-0-pro-260628"
 
 
 @pytest.mark.asyncio

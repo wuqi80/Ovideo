@@ -91,6 +91,19 @@ PROVIDER_KEY_HELP: Dict[str, str] = {
 }
 
 
+DOUBAO_IMAGE_DEFAULT_MODEL = "doubao-seedream-4-0-250828"
+DOUBAO_IMAGE_MODEL_ALIASES: Dict[str, str] = {
+    "doubao-seedream-5.0-pro": "doubao-seedream-5-0-pro-260628",
+    "doubao-seedream-5-0-pro": "doubao-seedream-5-0-pro-260628",
+    "seedream-5.0-pro": "doubao-seedream-5-0-pro-260628",
+    "seedream-5-0-pro": "doubao-seedream-5-0-pro-260628",
+    "doubao-seedream-4.0": DOUBAO_IMAGE_DEFAULT_MODEL,
+    "doubao-seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
+    "seedream-4.0": DOUBAO_IMAGE_DEFAULT_MODEL,
+    "seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
+}
+
+
 SEEDANCE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     # Keep the currently opened-account fallback while allowing admin runtime
     # config to switch standard/fast to Seedance 2.0 without code changes.
@@ -454,9 +467,14 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": "gemini-3.1-flash-image-preview",
     },
     {
-        "name": "豆包 SeedDream",
+        "name": "Doubao SeedDream 4.0",
         "provider": "doubao",
-        "model_name": "doubao-seedream-4-0-250828",
+        "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
+    },
+    {
+        "name": "Doubao SeedDream 5.0 Pro",
+        "provider": "doubao",
+        "model_name": "doubao-seedream-5-0-pro-260628",
     },
     {
         "name": "MiniMax Hailuo",
@@ -546,6 +564,13 @@ def normalize_gemini_image_model(model: Optional[str]) -> Optional[str]:
     if not requested:
         return None
     return GEMINI_IMAGE_MODEL_ALIASES.get(requested, requested)
+
+
+def normalize_doubao_image_model(model: Optional[str]) -> Optional[str]:
+    requested = (model or "").strip()
+    if not requested:
+        return None
+    return DOUBAO_IMAGE_MODEL_ALIASES.get(requested.lower(), requested)
 
 
 def _runtime_model_override(

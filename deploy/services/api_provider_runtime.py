@@ -30,6 +30,7 @@ from services.api_provider_registry import (
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
     is_seedance_fast_model,
+    normalize_doubao_image_model,
     normalize_dashscope_sub_model,
     normalize_seedance_sub_model,
     normalize_provider,
@@ -478,6 +479,8 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     )
     runtime_model_name, model_env = _first_env(model_envs)
     resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
+    if provider_id == "doubao":
+        resolved_model_name = normalize_doubao_image_model(resolved_model_name) or resolved_model_name
 
     extra: Dict[str, str] = {}
     extra_sources: Dict[str, str] = {}

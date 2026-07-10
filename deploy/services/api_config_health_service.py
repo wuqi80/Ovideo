@@ -16,6 +16,7 @@ from services.api_provider_registry import (
     get_api_provider_catalog,
     get_provider_api_path,
     get_provider_default_endpoint,
+    normalize_doubao_image_model,
     normalize_provider,
 )
 from services.api_provider_runtime import resolve_provider
@@ -339,8 +340,9 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         }, "audio"
 
     if normalized in DOUBAO_IMAGE_TEST_PROVIDERS:
+        model = normalize_doubao_image_model(model) or "doubao-seedream-4-0-250828"
         return endpoint, {
-            "model": model or "doubao-seedream-4-0-250828",
+            "model": model,
             "prompt": "A simple blue square icon on a white background.",
             "size": "1024x1024",
             "response_format": "url",
