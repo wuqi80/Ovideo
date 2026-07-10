@@ -1245,6 +1245,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     const updateTaskModel = useCallback((uuid: string, model: VideoModel) => {
         setTaskGroups(prev => prev.map(g => g.uuid === uuid ? { ...g, model } : g));
+        if (model === 'Seedance2' || model === 'Seedance2Fast') {
+            const subModel: SeedanceParams['sub_model'] = model === 'Seedance2Fast' ? 'fast' : 'standard';
+            setSeedanceParamsByUuid(prev => {
+                const current = prev[uuid];
+                if (!current || current.sub_model === subModel) return prev;
+                return {
+                    ...prev,
+                    [uuid]: {
+                        ...current,
+                        sub_model: subModel,
+                        resolution: subModel === 'fast' && current.resolution === '1080p' ? '720p' : current.resolution,
+                    },
+                };
+            });
+        }
     }, []);
     
     const linkGroups = useCallback((index: number) => {

@@ -235,6 +235,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                     candidates={candidates}
                     disabled={disabled}
                     autoOpenOnMount={autoOpenMentionOnMount}
+                    rows={5}
                     placeholder="描述动作、镜头、声音；@ 选素材..."
                     onPreviewMedia={onPreviewMedia}
                 />

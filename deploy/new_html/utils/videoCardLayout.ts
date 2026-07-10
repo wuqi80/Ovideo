@@ -31,6 +31,10 @@ export const PARAMETRIC_CARD_HEIGHT_CLASS = DASHSCOPE_CARD_HEIGHT_CLASS;
 
 /** 左图预览 / 右侧 idle 原图 / 单视频预览 — 统一 112px */
 export const CARD_MEDIA_HEIGHT_CLASS = 'h-28 shrink-0';
+/** 右侧结果预览：比左侧输入图更高，便于检查成片画面 */
+export const RESULT_MEDIA_HEIGHT_CLASS = 'h-36 shrink-0';
+/** Seedance 右侧结果预览：多模态视频卡信息更长，预览区适当再放大 */
+export const SEEDANCE_RESULT_MEDIA_HEIGHT_CLASS = 'h-44 shrink-0';
 
 /** 卡片主体（prompt / Seedance / DashScope 参数）— 占满剩余高度并内部滚 */
 export const CARD_BODY_SCROLL_CLASS = 'flex-1 min-h-0 overflow-y-auto mt-2 pr-0.5';
@@ -45,7 +49,7 @@ export const PLACEHOLDER_PROMPT_TEXTAREA_CLASS =
 
 /** 右侧只读 prompt 展示 */
 export const RESULT_PROMPT_READONLY_CLASS =
-    'w-full h-full min-h-[56px] overflow-y-auto bg-black/20 border border-slate-700/50 rounded px-3 py-2 text-xs text-slate-400 border-l-2 border-l-slate-600 whitespace-pre-wrap break-words';
+    'w-full max-h-[220px] overflow-y-auto bg-n0 border border-n40 rounded px-3 py-2 text-[12px] leading-5 text-n700 border-l-2 border-l-primary/40 whitespace-pre-wrap break-words';
 
 export function isSeedanceModel(model: VideoModel): boolean {
     return model === 'Seedance2' || model === 'Seedance2Fast';
@@ -67,6 +71,6 @@ export function getPreviewImageHeightClass(model: VideoModel, isPair: boolean): 
 }
 
 /** 结果卡 idle/loading 视觉区 — 与左图预览同高 */
-export function getResultVisualHeightClass(_model: VideoModel): string {
-    return CARD_MEDIA_HEIGHT_CLASS;
+export function getResultVisualHeightClass(model: VideoModel): string {
+    return isSeedanceModel(model) ? SEEDANCE_RESULT_MEDIA_HEIGHT_CLASS : RESULT_MEDIA_HEIGHT_CLASS;
 }
