@@ -96,6 +96,56 @@ class TaskDAO:
                 WHERE task_id = $2
             """
             await db.execute(query, status, task_id)
+
+    @staticmethod
+    async def reconcile_terminal_task(
+        task_id: str,
+        status: str,
+        result_data: Optional[Dict] = None,
+        error_message: Optional[str] = None,
+        retries: Optional[int] = None,
+    ):
+        """Persist a terminal Redis task state back to SQL idempotently."""
+        db = get_db_manager()
+        import json
+
+        result_data_json = json.dumps(result_data) if isinstance(result_data, dict) else result_data
+        retry_count = max(0, int(retries or 0))
+
+        if status == 'completed':
+            query = """
+                UPDATE tasks
+                SET status = 'completed',
+                    result_data = $2::jsonb,
+                    error_message = NULL,
+                    completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                    retry_count = GREATEST(COALESCE(retry_count, 0), $3)
+                WHERE task_id = $1
+            """
+            await db.execute(query, task_id, result_data_json, retry_count)
+            return
+
+        if status in ('failed', 'timeout'):
+            query = """
+                UPDATE tasks
+                SET status = 'failed',
+                    error_message = $2,
+                    completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                    retry_count = GREATEST(COALESCE(retry_count, 0), $3)
+                WHERE task_id = $1
+            """
+            await db.execute(query, task_id, error_message or 'Task already failed in Redis', retry_count)
+            return
+
+        if status == 'cancelled':
+            query = """
+                UPDATE tasks
+                SET status = 'cancelled',
+                    completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                    retry_count = GREATEST(COALESCE(retry_count, 0), $2)
+                WHERE task_id = $1
+            """
+            await db.execute(query, task_id, retry_count)
     
     @staticmethod
     async def get_task(task_id: str) -> Optional[Dict[str, Any]]:

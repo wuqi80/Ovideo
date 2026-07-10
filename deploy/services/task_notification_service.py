@@ -40,6 +40,76 @@ def _since_ms_to_naive_utc(since: Optional[int]) -> Optional[datetime]:
     return datetime.fromtimestamp(since / 1000, tz=timezone.utc).replace(tzinfo=None)
 
 
+def _task_status_value(task: Any) -> str:
+    status = getattr(task, "status", "")
+    return getattr(status, "value", status) or ""
+
+
+async def _persist_terminal_task(task: Any, task_dao: Any) -> None:
+    status = _task_status_value(task)
+    if hasattr(task_dao, "reconcile_terminal_task"):
+        await task_dao.reconcile_terminal_task(
+            task_id=getattr(task, "task_id", ""),
+            status=status,
+            result_data=getattr(task, "result", None),
+            error_message=getattr(task, "error", None),
+            retries=getattr(task, "retries", None),
+        )
+        return
+
+    if status == "completed":
+        await task_dao.update_task_status(
+            task_id=getattr(task, "task_id", ""),
+            status="completed",
+            result_data=getattr(task, "result", None),
+        )
+    elif status in {"failed", "timeout"}:
+        await task_dao.update_task_status(
+            task_id=getattr(task, "task_id", ""),
+            status="failed",
+            error_message=getattr(task, "error", None) or "Task already failed in Redis",
+        )
+    elif status == "cancelled":
+        await task_dao.update_task_status(task_id=getattr(task, "task_id", ""), status="cancelled")
+
+
+async def _reconcile_active_tasks_with_queue(
+    tasks: list[Dict[str, Any]],
+    *,
+    task_queue: Any,
+    task_dao: Any,
+) -> list[Dict[str, Any]]:
+    if task_queue is None:
+        return tasks
+
+    active_tasks: list[Dict[str, Any]] = []
+    terminal_statuses = {"completed", "failed", "cancelled", "timeout"}
+
+    for task_row in tasks:
+        task_id = task_row.get("task_id")
+        if not task_id:
+            active_tasks.append(task_row)
+            continue
+
+        try:
+            redis_task = await task_queue.get_task(task_id)
+        except Exception:
+            active_tasks.append(task_row)
+            continue
+
+        if not redis_task:
+            active_tasks.append(task_row)
+            continue
+
+        if _task_status_value(redis_task) in terminal_statuses:
+            await _persist_terminal_task(redis_task, task_dao)
+            continue
+
+        active_tasks.append(task_row)
+
+    return active_tasks
+
+
 async def get_recent_tasks(
     *,
     user_id: str,
@@ -67,9 +137,15 @@ async def get_active_tasks(
     *,
     user_id: str,
     task_dao: Any,
+    task_queue: Any = None,
 ) -> Dict[str, Any]:
     tasks = await task_dao.get_active_tasks_for_user(user_id, limit=50)
-    return {"success": True, "tasks": _rows_to_dicts(tasks)}
+    active_tasks = await _reconcile_active_tasks_with_queue(
+        _rows_to_dicts(tasks),
+        task_queue=task_queue,
+        task_dao=task_dao,
+    )
+    return {"success": True, "tasks": active_tasks}
 
 
 async def get_task_notifications(

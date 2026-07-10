@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +12,7 @@ class FakeTaskDAO:
     recent_args = None
     active_args = None
     terminal_args = None
+    terminal_updates = []
     task_user_id = "user_1"
 
     @classmethod
@@ -32,6 +34,10 @@ class FakeTaskDAO:
     async def get_active_tasks_for_user(cls, user_id: str, limit: int):
         cls.active_args = {"user_id": user_id, "limit": limit}
         return [{"task_id": "active_1", "user_id": user_id}]
+
+    @classmethod
+    async def reconcile_terminal_task(cls, **kwargs):
+        cls.terminal_updates.append(kwargs)
 
     @classmethod
     async def get_terminal_tasks_for_notifications(cls, user_id: str, since_dt, limit: int):
@@ -85,6 +91,7 @@ def setup_function():
     FakeTaskDAO.recent_args = None
     FakeTaskDAO.active_args = None
     FakeTaskDAO.terminal_args = None
+    FakeTaskDAO.terminal_updates = []
     FakeTaskDAO.task_user_id = "user_1"
     FakeNotificationDAO.read = []
     FakeNotificationDAO.dismissed = []
@@ -105,6 +112,51 @@ async def test_get_recent_and_active_tasks_delegate_with_limits():
     assert active["tasks"] == [{"task_id": "active_1", "user_id": "user_1"}]
     assert FakeTaskDAO.recent_args == {"user_id": "user_1", "hours": 12}
     assert FakeTaskDAO.active_args == {"user_id": "user_1", "limit": 50}
+
+
+async def test_get_active_tasks_reconciles_terminal_redis_state():
+    class ActiveTaskDAO(FakeTaskDAO):
+        @classmethod
+        async def get_active_tasks_for_user(cls, user_id: str, limit: int):
+            return [
+                {"task_id": "stale_failed", "user_id": user_id, "status": "processing"},
+                {"task_id": "still_running", "user_id": user_id, "status": "processing"},
+            ]
+
+    class FakeTaskQueue:
+        async def get_task(self, task_id: str):
+            if task_id == "stale_failed":
+                return SimpleNamespace(
+                    task_id=task_id,
+                    status="failed",
+                    error="upstream 404",
+                    result=None,
+                    retries=3,
+                )
+            return SimpleNamespace(
+                task_id=task_id,
+                status="processing",
+                error=None,
+                result=None,
+                retries=0,
+            )
+
+    result = await task_notification_service.get_active_tasks(
+        user_id="user_1",
+        task_dao=ActiveTaskDAO,
+        task_queue=FakeTaskQueue(),
+    )
+
+    assert result["tasks"] == [{"task_id": "still_running", "user_id": "user_1", "status": "processing"}]
+    assert ActiveTaskDAO.terminal_updates == [
+        {
+            "task_id": "stale_failed",
+            "status": "failed",
+            "result_data": None,
+            "error_message": "upstream 404",
+            "retries": 3,
+        }
+    ]
 
 
 async def test_get_task_files_rejects_missing_or_foreign_task():

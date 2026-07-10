@@ -138,6 +138,7 @@ router.include_router(
         get_current_user_dependency=get_current_user,
         task_dao=TaskDAO,
         notification_dao=NotificationDAO,
+        get_task_queue=lambda: task_service.get_queue(),
     )
 )
 

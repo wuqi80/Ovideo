@@ -26,6 +26,7 @@ def create_task_notifications_router(
     get_current_user_dependency: Any,
     task_dao: Any,
     notification_dao: Any,
+    get_task_queue: Any = None,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
@@ -57,7 +58,8 @@ def create_task_notifications_router(
     @router.get("/api/tasks/active")
     async def get_active_tasks(user_id: str = Depends(get_current_user)):
         try:
-            return await get_active_tasks_service(user_id=user_id, task_dao=TaskDAO)
+            task_queue = get_task_queue() if callable(get_task_queue) else None
+            return await get_active_tasks_service(user_id=user_id, task_dao=TaskDAO, task_queue=task_queue)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
