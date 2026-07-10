@@ -95,6 +95,14 @@ async def main() -> int:
             return "decrypted-key"
 
         @staticmethod
+        def decrypt_key(encrypted):
+            if not encrypted:
+                return ""
+            if str(encrypted).startswith("encrypted:"):
+                return str(encrypted).split(":", 1)[1]
+            return "decrypted-key"
+
+        @staticmethod
         async def update(config_id, **fields):
             updates.append((config_id, dict(fields)))
             for row in rows:
@@ -315,16 +323,20 @@ async def main() -> int:
 
         if "async def _test_api_config_row_health(" not in service_source:
             fail("api_config_service must keep config health test shaping in _test_api_config_row_health()")
-        if service_source.count("await ApiConfigDAO.get_decrypted_key(") != 1:
-            fail("API config health tests should decrypt keys in one shared helper only")
         try:
+            shared_health_helper_source = service_source.split("async def _test_api_config_row_health", 1)[1].split(
+                "async def _disable_conflicting_provider_configs",
+                1,
+            )[0]
             single_health_source = service_source.split("async def test_saved_api_config_health", 1)[1].split(
-                "def summarize_config_test_results",
+                "async def test_saved_api_config_real_generation",
                 1,
             )[0]
             batch_health_source = service_source.split("async def test_all_saved_api_config_health", 1)[1]
         except IndexError:
             fail("Could not locate API config health test functions")
+        if shared_health_helper_source.count("await ApiConfigDAO.get_decrypted_key(") != 1:
+            fail("API config health tests should decrypt keys in one shared helper only")
         if "return await _test_api_config_row_health(row)" not in single_health_source:
             fail("test_saved_api_config_health must delegate to _test_api_config_row_health()")
         if "result = await _test_api_config_row_health(row" not in batch_health_source:

@@ -63,6 +63,7 @@ FILES=(
   tests/test_api_provider_runtime_model_env.py
   tests/test_admin_stats_logs.py
   tests/test_admin_compat_service.py
+  tests/test_api_config_key_backup.py
   tests/test_asset_service.py
   tests/test_audio_provider.py
   tests/test_audio_generation_service.py
