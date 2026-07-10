@@ -986,6 +986,8 @@ class Worker:
                         logger.info(f"⏳ MiniMax 任务处理中: {minimax_task_id}, 进度: {progress}%")
                     
                     await asyncio.sleep(poll_interval)
+                except RuntimeError:
+                    raise
                 except Exception as e:
                     logger.error(f"❌ MiniMax 轮询失败: {e}")
                     await asyncio.sleep(poll_interval)
@@ -1021,7 +1023,25 @@ class Worker:
         
         except Exception as e:
             logger.error(f"❌ MiniMax 任务处理失败: {e}", exc_info=True)
-            await self.task_queue.fail_task(task.task_id, str(e))
+            try:
+                from services.api_provider_runtime import (
+                    vendor_error_is_non_retryable,
+                    vendor_user_facing_error,
+                )
+
+                non_retryable = vendor_error_is_non_retryable(e, "minimax")
+                task_error = vendor_user_facing_error(e, "minimax")
+                if non_retryable:
+                    response = getattr(e, "response", None)
+                    logger.error(
+                        "MiniMax non-retryable auth/config error: task=%s status=%s body=%s",
+                        task.task_id,
+                        getattr(response, "status_code", "-"),
+                        str(getattr(response, "text", "") or "")[:300],
+                    )
+                await self.task_queue.fail_task(task.task_id, task_error, retry=not non_retryable)
+            except Exception:
+                await self.task_queue.fail_task(task.task_id, str(e))
             return False
     
     async def _process_sora2_task(self, task: Task) -> bool:
@@ -1164,7 +1184,25 @@ class Worker:
         
         except Exception as e:
             logger.error(f"❌ Sora2 任务处理失败: {e}", exc_info=True)
-            await self.task_queue.fail_task(task.task_id, str(e))
+            try:
+                from services.api_provider_runtime import (
+                    vendor_error_is_non_retryable,
+                    vendor_user_facing_error,
+                )
+
+                non_retryable = vendor_error_is_non_retryable(e, "sora2")
+                task_error = vendor_user_facing_error(e, "sora2")
+                if non_retryable:
+                    response = getattr(e, "response", None)
+                    logger.error(
+                        "Sora2 non-retryable auth/config error: task=%s status=%s body=%s",
+                        task.task_id,
+                        getattr(response, "status_code", "-"),
+                        str(getattr(response, "text", "") or "")[:300],
+                    )
+                await self.task_queue.fail_task(task.task_id, task_error, retry=not non_retryable)
+            except Exception:
+                await self.task_queue.fail_task(task.task_id, str(e))
             return False
 
     async def _process_seedance_task(self, task: Task) -> bool:
@@ -1496,7 +1534,25 @@ class Worker:
         
         except Exception as e:
             logger.error(f"❌ Veo 任务处理失败: {e}", exc_info=True)
-            await self.task_queue.fail_task(task.task_id, str(e))
+            try:
+                from services.api_provider_runtime import (
+                    vendor_error_is_non_retryable,
+                    vendor_user_facing_error,
+                )
+
+                non_retryable = vendor_error_is_non_retryable(e, "veo")
+                task_error = vendor_user_facing_error(e, "veo")
+                if non_retryable:
+                    response = getattr(e, "response", None)
+                    logger.error(
+                        "Veo non-retryable auth/config error: task=%s status=%s body=%s",
+                        task.task_id,
+                        getattr(response, "status_code", "-"),
+                        str(getattr(response, "text", "") or "")[:300],
+                    )
+                await self.task_queue.fail_task(task.task_id, task_error, retry=not non_retryable)
+            except Exception:
+                await self.task_queue.fail_task(task.task_id, str(e))
             return False
 
 
@@ -2114,7 +2170,25 @@ class Worker:
         
         except Exception as e:
             logger.error(f"❌ Wan2.6 任务处理失败: {e}", exc_info=True)
-            await self.task_queue.fail_task(task.task_id, str(e))
+            try:
+                from services.api_provider_runtime import (
+                    vendor_error_is_non_retryable,
+                    vendor_user_facing_error,
+                )
+
+                non_retryable = vendor_error_is_non_retryable(e, "wan26")
+                task_error = vendor_user_facing_error(e, "wan26")
+                if non_retryable:
+                    response = getattr(e, "response", None)
+                    logger.error(
+                        "Wan2.6 non-retryable auth/config error: task=%s status=%s body=%s",
+                        task.task_id,
+                        getattr(response, "status_code", "-"),
+                        str(getattr(response, "text", "") or "")[:300],
+                    )
+                await self.task_queue.fail_task(task.task_id, task_error, retry=not non_retryable)
+            except Exception:
+                await self.task_queue.fail_task(task.task_id, str(e))
             return False
 
     # ────────────────────────────────────────────────────────────────────
@@ -2571,7 +2645,23 @@ class Worker:
 
         except Exception as e:
             logger.error(f"❌ MiniMax TTS 任务失败: {e}", exc_info=True)
-            await self.task_queue.fail_task(task.task_id, str(e))
+            try:
+                from services.api_provider_runtime import (
+                    vendor_error_is_non_retryable,
+                    vendor_user_facing_error,
+                )
+
+                non_retryable = vendor_error_is_non_retryable(e, "minimax_tts")
+                task_error = vendor_user_facing_error(e, "minimax_tts")
+                if non_retryable:
+                    logger.error(
+                        "MiniMax TTS non-retryable auth/config error: task=%s err=%s",
+                        task.task_id,
+                        str(e)[:300],
+                    )
+                await self.task_queue.fail_task(task.task_id, task_error, retry=not non_retryable)
+            except Exception:
+                await self.task_queue.fail_task(task.task_id, str(e))
             return False
 
     async def _process_video_reverse_task(self, task) -> bool:

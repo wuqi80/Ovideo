@@ -53,8 +53,8 @@ async def test_process_minimax_tts_happy_path(mock_worker, tmp_path):
     fake_audio_path = tmp_path / 'tts_abc12345.mp3'
     fake_audio_path.write_bytes(fake_audio)
 
-    with patch('worker.get_minimax_audio_client') as mc, \
-         patch('worker.save_generated_file_to_db', new=AsyncMock(return_value={
+    with patch('core.worker.get_minimax_audio_client') as mc, \
+         patch('core.worker.save_generated_file_to_db', new=AsyncMock(return_value={
             'file_id': 'fid-1', 'file_url': '/storage/audio/tts_abc12345.mp3'
          })):
         client = mc.return_value
@@ -101,8 +101,8 @@ async def test_process_minimax_tts_writes_back_sample_audio_url(mock_worker, tmp
     fake_audio_path = tmp_path / 'tts_xyz.mp3'
     fake_audio_path.write_bytes(fake_audio)
 
-    with patch('worker.get_minimax_audio_client') as mc, \
-         patch('worker.save_generated_file_to_db', new=AsyncMock(return_value={
+    with patch('core.worker.get_minimax_audio_client') as mc, \
+         patch('core.worker.save_generated_file_to_db', new=AsyncMock(return_value={
             'file_id': 'fid-2', 'file_url': '/storage/audio/tts_xyz.mp3'
          })), \
          patch('worker.CharacterVoiceDAO.update_sample_audio_url', new=AsyncMock()) as upd:
@@ -135,7 +135,7 @@ async def test_process_minimax_tts_failure_calls_fail_task(mock_worker):
         data={'text': 'x', 'voice_id': 'female-shaonv'},
         priority=2, user_id='u1',
     )
-    with patch('worker.get_minimax_audio_client') as mc:
+    with patch('core.worker.get_minimax_audio_client') as mc:
         client = mc.return_value
         client.tts_async = AsyncMock(return_value={'task_id': 'mx-3'})
         client.tts_wait_and_download = AsyncMock()
@@ -147,7 +147,8 @@ async def test_process_minimax_tts_failure_calls_fail_task(mock_worker):
     assert ok is False
     mock_worker.task_queue.fail_task.assert_awaited_once()
     err_msg = mock_worker.task_queue.fail_task.call_args[0][1]
-    assert 'tts_sync' in err_msg or 'status_code' in err_msg
+    assert 'MiniMax TTS' in err_msg
+    assert 'Key' in err_msg
     mock_worker.task_queue.complete_task.assert_not_awaited()
     client.tts_sync.assert_awaited_once()
     assert client.tts_async.await_count == 0

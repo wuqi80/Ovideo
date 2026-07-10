@@ -7,6 +7,7 @@ call so key/endpoint updates can take effect without restarting the service.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -395,38 +396,8 @@ def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None
     return SEEDANCE_DEFAULT_MODEL_MAP[normalized_sub_model]
 
 
-def seedance_error_is_non_retryable(exc: Exception) -> bool:
-    """Return True for Seedance auth/config errors that retrying cannot fix."""
-    response = getattr(exc, "response", None)
-    status_code = getattr(response, "status_code", None)
-    response_text = str(getattr(response, "text", "") or "")
-    error_text = f"{exc} {response_text}"
-    config_error_markers = (
-        "ModelNotOpen",
-        "not activated the model",
-        "InvalidApiKey",
-        "MissingApiKey",
-        "Unauthorized",
-        "Forbidden",
-    )
-    if any(marker in error_text for marker in config_error_markers):
-        return True
-    return status_code in (401, 403)
-
-
-def seedance_user_facing_error(exc: Exception) -> str:
-    """Translate common Seedance provider config failures into actionable text."""
-    response = getattr(exc, "response", None)
-    response_text = str(getattr(response, "text", "") or "")
-    error_text = f"{exc} {response_text}"
-    status_code = getattr(response, "status_code", None)
-    if "ModelNotOpen" in error_text or "not activated the model" in error_text:
-        return "Seedance 模型未开通：当前 API Key 对应账号未开通所配置的视频模型，请在火山方舟开通模型或切换到已开通模型。"
-    if "InvalidApiKey" in error_text or "MissingApiKey" in error_text or status_code in (401, 403):
-        return "Seedance API Key 无效或无权限，请在后台厂商 API 配置中切换有效 Key。"
-    if response_text:
-        return response_text[:500]
-    return str(exc)
+# Seedance 兼容薄壳移至文件末尾（薄壳转调 vendor_error_is_non_retryable + vendor_user_facing_error，
+# 保持与原 seedance_error_is_non_retryable / seedance_user_facing_error 同等行为）。
 
 
 def resolve_dashscope_model_name(sub_model: str, model_name: Optional[str] = None) -> str:
@@ -643,3 +614,270 @@ def build_provider_runtime_status(
             }
         )
     return statuses
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 5 家视频/音频厂商的统一"非重试错误"识别 + 用户可读错误提示
+# 背景：Seedance (commit 8cee1dd7) 和 DashScope (commit 60ffec78) 已分别加固；
+# 这里把同样的能力抽到 1 个核心判断 + 5 套 vendor profile，5 家共用。
+# DashScope 路径走 e.code / e.http_status 属性，不经本 helper（worker.py:2429 独立）。
+# ──────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class VendorErrorProfile:
+    """配置驱动：识别一家厂商的"非重试错误"。
+
+    text_markers   — 错误文本（含 exc.response.text）出现任一即非重试
+    http_statuses  — exc.response.status_code 在此集合内即非重试
+    local_messages — 用于 RuntimeError 本地配置（如"MiniMax 未配置"）的文本标记
+    vendor_label   — 给用户的中文厂牌名（用于文案模板）
+    """
+
+    vendor: str
+    text_markers: Tuple[str, ...] = ()
+    http_statuses: Tuple[int, ...] = (401, 403)
+    non_retryable_business_codes: Tuple[int, ...] = ()
+    local_messages: Tuple[str, ...] = ()
+    vendor_label: str = ""
+
+
+_BUSINESS_STATUS_CODE_RE = re.compile(r"""["']?status_code["']?\s*[:=]\s*(\d+)""")
+
+
+def _extract_business_status_codes(error_text: str) -> Tuple[int, ...]:
+    codes: List[int] = []
+    for match in _BUSINESS_STATUS_CODE_RE.finditer(error_text):
+        try:
+            codes.append(int(match.group(1)))
+        except (TypeError, ValueError):
+            continue
+    return tuple(codes)
+
+
+def _http_error_matches(exc: BaseException, profile: VendorErrorProfile) -> bool:
+    """判断 exc 是否命中 profile 描述的非重试错误。"""
+    response = getattr(exc, "response", None)
+    response_text = str(getattr(response, "text", "") or "")
+    error_text = f"{exc} {response_text}"
+    normalized_error_text = error_text.casefold()
+
+    if any(marker.casefold() in normalized_error_text for marker in profile.text_markers):
+        return True
+    if any(marker.casefold() in normalized_error_text for marker in profile.local_messages):
+        return True
+    if any(code in profile.non_retryable_business_codes for code in _extract_business_status_codes(error_text)):
+        return True
+
+    status = getattr(response, "status_code", None)
+    if status in profile.http_statuses:
+        return True
+    return False
+
+
+# 5 套 vendor profile 常量。
+# Sora2 / Veo 走 laozhang 网关（实际是 OpenAI 兼容 + chat/completions 形态），
+# 鉴权错误串可能不固定，靠多组宽词覆盖。
+# 不加 "Fail"/"failed" 等宽词——避免误吞
+# RuntimeError("MiniMax 任务失败: 内容审核不通过")（内容问题，应可重试或换 prompt）。
+_VENDOR_ERROR_PROFILES: Dict[str, VendorErrorProfile] = {
+    "sora2": VendorErrorProfile(
+        vendor="sora2",
+        text_markers=(
+            "InvalidApiKey",
+            "invalid_api_key",
+            "Incorrect API key",
+            "API key",
+            "api_key",
+            "balance",
+            "quota",
+            "insufficient",
+            "model_not_found",
+            "Model does not exist",
+            "unauthorized",
+            "Forbidden",
+        ),
+        http_statuses=(401, 403, 404),
+        vendor_label="Sora2",
+    ),
+    "veo": VendorErrorProfile(
+        vendor="veo",
+        text_markers=(
+            "InvalidApiKey",
+            "invalid_api_key",
+            "API key",
+            "balance",
+            "quota",
+            "insufficient",
+            "model_not_found",
+            "unauthorized",
+            "Forbidden",
+        ),
+        http_statuses=(401, 403, 404),
+        vendor_label="Veo",
+    ),
+    "wan26": VendorErrorProfile(
+        vendor="wan26",
+        text_markers=(
+            "InvalidApiKey",
+            "MissingApiKey",
+            "InvalidParameter",
+            "ModelNotOpen",
+            "quota",
+            "balance",
+        ),
+        http_statuses=(401, 403),
+        vendor_label="Wan2.6",
+    ),
+    "minimax": VendorErrorProfile(
+        vendor="minimax",
+        text_markers=(
+            "balance",
+            "quota",
+            "InvalidApiKey",
+            "MissingApiKey",
+            "authorization",
+            "unauthorized",
+            "Forbidden",
+        ),
+        http_statuses=(401, 403),
+        non_retryable_business_codes=(1004, 1008, 2049, 2056),
+        local_messages=(
+            "MINIMAX_API_KEY 未设置",
+            "MiniMax 未配置",
+        ),
+        vendor_label="MiniMax",
+    ),
+    "minimax_tts": VendorErrorProfile(
+        vendor="minimax_tts",
+        non_retryable_business_codes=(1004, 1008, 2049, 2056),
+        text_markers=(
+            "balance",
+            "quota",
+            "MissingApiKey",
+            "InvalidApiKey",
+            "authorization",
+        ),
+        http_statuses=(),  # TTS 路径不抛 HTTPError；所有错都是 RuntimeError，靠文本识别
+        local_messages=(
+            "MiniMax 未配置",
+            "MINIMAX 未设置",
+            "未配置 MINIMAX_API_KEY",
+        ),
+        vendor_label="MiniMax TTS",
+    ),
+}
+
+
+def _get_vendor_profile(vendor: str) -> VendorErrorProfile:
+    """获取 vendor profile，未注册则返回兜底空 profile（永远不命中，全走默认重试）。"""
+    return _VENDOR_ERROR_PROFILES.get(
+        vendor,
+        VendorErrorProfile(
+            vendor=vendor,
+            text_markers=(),
+            http_statuses=(),
+            vendor_label=vendor or "Vendor",
+        ),
+    )
+
+
+def vendor_error_is_non_retryable(exc: BaseException, vendor: str) -> bool:
+    """返回 True 表示该错误属于"重试无意义"类（鉴权/模型未开通/余额不足）。"""
+    profile = _get_vendor_profile(vendor)
+    return _http_error_matches(exc, profile)
+
+
+def vendor_user_facing_error(exc: BaseException, vendor: str) -> str:
+    """把厂商错误翻译成可读的中文 actionable 提示。"""
+    profile = _get_vendor_profile(vendor)
+    response = getattr(exc, "response", None)
+    response_text = str(getattr(response, "text", "") or "")
+    error_text = f"{exc} {response_text}"
+    status_code = getattr(response, "status_code", None)
+    label = profile.vendor_label or vendor or "Vendor"
+    business_codes = set(_extract_business_status_codes(error_text))
+    normalized_error_text = error_text.casefold()
+
+    # 模型未开通（仅 wan26/seedance 这类有 model 概念的）
+    if "ModelNotOpen" in error_text or "not activated the model" in error_text:
+        return (
+            f"{label} 模型未开通：当前 API Key 对应账号未开通所配置的视频模型，"
+            f"请在厂商控制台开通模型或切换到已开通模型。"
+        )
+    # 余额/额度
+    if business_codes.intersection({1008, 2056}) or any(
+        m in normalized_error_text for m in ("balance", "quota", "insufficient")
+    ):
+        return (
+            f"{label} 账户余额不足或额度耗尽，"
+            f"请在后台厂商 API 配置中切换 Key 或充值。"
+        )
+    # 鉴权/Key 无效
+    if (
+        business_codes.intersection({1004, 2049})
+        or
+        "InvalidApiKey" in error_text
+        or "MissingApiKey" in error_text
+        or "authorization" in error_text.lower()
+        or "unauthorized" in error_text.lower()
+        or "Forbidden" in error_text
+        or status_code in profile.http_statuses
+    ):
+        return (
+            f"{label} API Key 无效或无权限，"
+            f"请在后台厂商 API 配置中切换有效 Key。"
+        )
+    # 本地配置问题（"未配置"类）
+    if any(m in error_text for m in profile.local_messages):
+        return f"{label} 客户端未配置：{error_text[:200]}"
+    # 兜底
+    if response_text:
+        return f"{label} 请求失败：{response_text[:500]}"
+    return f"{label} 请求失败：{str(exc)[:500]}"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Seedance 兼容薄壳：保留原函数名 + 签名，内部转调新通用 helper。
+# 已有调用点（worker.py:1287-1308）无需改动，行为完全等价。
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _get_seedance_profile() -> VendorErrorProfile:
+    """Seedance 单独走自己 profile，保留与原实现完全一致的 marker 集合。"""
+    return VendorErrorProfile(
+        vendor="seedance",
+        text_markers=(
+            "ModelNotOpen",
+            "not activated the model",
+            "InvalidApiKey",
+            "MissingApiKey",
+            "Unauthorized",
+            "Forbidden",
+        ),
+        http_statuses=(401, 403),
+        vendor_label="Seedance",
+    )
+
+
+def seedance_error_is_non_retryable(exc: BaseException) -> bool:
+    """[兼容薄壳] Seedance 鉴权/配置错误识别，等价于 vendor_error_is_non_retryable(exc, 'seedance')。"""
+    return _http_error_matches(exc, _get_seedance_profile())
+
+
+def seedance_user_facing_error(exc: BaseException) -> str:
+    """[兼容薄壳] Seedance 用户可读错误提示，保留与原实现文案一致。"""
+    response = getattr(exc, "response", None)
+    response_text = str(getattr(response, "text", "") or "")
+    error_text = f"{exc} {response_text}"
+    status_code = getattr(response, "status_code", None)
+    if "ModelNotOpen" in error_text or "not activated the model" in error_text:
+        return (
+            "Seedance 模型未开通：当前 API Key 对应账号未开通所配置的视频模型，"
+            "请在火山方舟开通模型或切换到已开通模型。"
+        )
+    if "InvalidApiKey" in error_text or "MissingApiKey" in error_text or status_code in (401, 403):
+        return "Seedance API Key 无效或无权限，请在后台厂商 API 配置中切换有效 Key。"
+    if response_text:
+        return response_text[:500]
+    return str(exc)
