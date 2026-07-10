@@ -163,6 +163,15 @@ async def main() -> int:
         },
         redis_client=fake_redis,
     )
+    real_generation_key = monitor.provider_health_cache_key(
+        "gemini-tts",
+        "gemini-3.1-flash-tts-preview",
+    )
+    if fake_redis.ttl.get(real_generation_key) != monitor.DEFAULT_REAL_GENERATION_HEALTH_TTL_SECONDS:
+        fail(
+            "Real generation health cache did not use the long TTL: "
+            f"{fake_redis.ttl.get(real_generation_key)}"
+        )
     preserved = await monitor.cache_provider_health_result(
         {
             "success": True,
@@ -184,6 +193,8 @@ async def main() -> int:
     )
     if preserved.get("status") != "ok" or not (preserved.get("health") or {}).get("real_generation"):
         fail(f"Connectivity-only health downgraded verified generation health: {preserved}")
+    if fake_redis.ttl.get(real_generation_key) != monitor.DEFAULT_REAL_GENERATION_HEALTH_TTL_SECONDS:
+        fail("Connectivity-only health shortened the verified generation cache TTL")
     await monitor.cache_provider_health_result(
         {
             "success": True,

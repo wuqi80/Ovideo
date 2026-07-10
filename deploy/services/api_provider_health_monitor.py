@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 HEALTH_CACHE_PREFIX = "provider:health:"
 DEFAULT_HEALTH_TTL_SECONDS = 900
+DEFAULT_REAL_GENERATION_HEALTH_TTL_SECONDS = 7 * 24 * 60 * 60
 
 ProviderHealthCheck = Callable[..., Awaitable[Dict[str, Any]]]
 
@@ -60,6 +61,11 @@ def provider_health_monitor_settings() -> Dict[str, int | bool]:
         "initial_delay_seconds": _env_int_at_least("API_PROVIDER_HEALTH_INITIAL_DELAY_SECONDS", 60, 0),
         "interval_seconds": _env_int_at_least("API_PROVIDER_HEALTH_INTERVAL_SECONDS", 300, 60),
         "ttl_seconds": _env_int_at_least("API_PROVIDER_HEALTH_TTL_SECONDS", DEFAULT_HEALTH_TTL_SECONDS, 60),
+        "real_generation_ttl_seconds": _env_int_at_least(
+            "API_PROVIDER_REAL_GENERATION_HEALTH_TTL_SECONDS",
+            DEFAULT_REAL_GENERATION_HEALTH_TTL_SECONDS,
+            60,
+        ),
         "concurrency": _env_int_at_least("API_PROVIDER_HEALTH_CONCURRENCY", 3, 1),
     }
 
@@ -151,6 +157,11 @@ def _is_verified_generation_ok(payload: Dict[str, Any]) -> bool:
     )
 
 
+def _is_real_generation_payload(payload: Dict[str, Any]) -> bool:
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+    return bool(health.get("real_generation"))
+
+
 async def cache_provider_health_result(
     result: Dict[str, Any],
     *,
@@ -176,7 +187,16 @@ async def cache_provider_health_result(
         if isinstance(existing, dict) and _is_verified_generation_ok(existing):
             return _safe_health_payload(existing)
 
-    ttl = ttl_seconds or int(provider_health_monitor_settings()["ttl_seconds"])
+    settings = provider_health_monitor_settings()
+    ttl = (
+        ttl_seconds
+        if ttl_seconds is not None
+        else int(
+            settings["real_generation_ttl_seconds"]
+            if _is_real_generation_payload(payload)
+            else settings["ttl_seconds"]
+        )
+    )
     data = json.dumps(payload, ensure_ascii=False)
     await client.set(cache_key, data, ex=ttl)
     return payload
