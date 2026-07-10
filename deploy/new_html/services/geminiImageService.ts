@@ -12,7 +12,7 @@ export interface GeneratedFileResult {
 }
 
 export interface GeminiImageOptions {
-    model: string;
+    model?: string;
     prompt: string;
     references?: string[];
     aspectRatio?: string;
@@ -49,7 +49,7 @@ export const generateGeminiImageViaProxy = async (options: GeminiImageOptions): 
             method: 'POST',
             body: JSON.stringify({
                 prompt,
-                model,
+                ...(model ? { model } : {}),
                 references,
                 aspectRatio,
                 imageSize,

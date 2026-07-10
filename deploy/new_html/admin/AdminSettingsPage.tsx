@@ -704,13 +704,41 @@ function categoryFromProviderMeta(meta: ProviderMeta): string {
     return 'text';
 }
 
-function bestConfigForProvider(configs: ApiConfig[], providerRaw: string): ApiConfig | undefined {
+function bestConfigForProvider(
+    configs: ApiConfig[],
+    providerRaw: string,
+    runtime?: RuntimeStatus,
+): ApiConfig | undefined {
     const provider = normalizeProvider(providerRaw);
     const matches = configs.filter(config => normalizeProvider(config.provider) === provider);
+    if (runtime?.db_effective_config_id) {
+        const runtimeConfig = matches.find(config => config.config_id === runtime.db_effective_config_id);
+        if (runtimeConfig) return runtimeConfig;
+    }
     return matches.find(config => config.enabled !== false && Boolean(config.has_key ?? config.api_key_encrypted))
         || matches.find(config => Boolean(config.has_key ?? config.api_key_encrypted))
         || matches.find(config => config.enabled !== false)
         || matches[0];
+}
+
+function providerQuickHealthFrom(
+    map: Record<string, ProviderHealth>,
+    provider: string | undefined | null,
+    modelName?: string | null,
+): ProviderHealth | undefined {
+    const providerKey = normalizeProvider(provider);
+    if (!providerKey) return undefined;
+    const exact = map[providerHealthKey(providerKey, modelName)];
+    const providerLevel = map[providerKey];
+    const providerLevelVerified = Boolean(
+        providerLevel?.status === 'ok'
+        && providerLevel?.health?.ok
+        && providerLevel?.health?.real_generation
+    );
+    if (providerLevelVerified && (!exact || exact.status === 'connectivity_ok' || exact.status === 'unknown')) {
+        return providerLevel;
+    }
+    return exact || providerLevel;
 }
 
 function jsonRecordFrom(value: ApiConfig['request_template']): JsonRecord {
@@ -1602,6 +1630,7 @@ const ApiConfigCard: React.FC<{
     checking: boolean;
     testingConfig: boolean;
     realTestingConfig: boolean;
+    compactInactive?: boolean;
     onCheck: (provider: string, modelName?: string | null) => void;
     onTestConfig: (config: ApiConfig) => void;
     onRealTestConfig: (config: ApiConfig) => void;
@@ -1618,6 +1647,7 @@ const ApiConfigCard: React.FC<{
     checking,
     testingConfig,
     realTestingConfig,
+    compactInactive = false,
     onCheck,
     onTestConfig,
     onRealTestConfig,
@@ -1768,6 +1798,14 @@ const ApiConfigCard: React.FC<{
                         </div>
                     </div>
 
+                    {compactInactive ? (
+                        <div className="mt-2 rounded bg-n20 border border-n40 px-3 py-2 text-[11px] text-n100">
+                            <span className="font-semibold text-n700">已折叠</span>
+                            <span className="ml-2">同一 provider 存在多个 Key，当前只展开生效 Key。</span>
+                            <div className="mt-1 font-mono text-n700 break-all">{formatEndpoint(dbEndpoint || runtimeEndpoint)}</div>
+                        </div>
+                    ) : (
+                        <>
                     <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
                         <div className="min-w-0 rounded bg-n20 border border-n40 px-3 py-2">
                             <div className="text-[10px] uppercase tracking-wider text-n100 mb-1">Runtime</div>
@@ -1951,6 +1989,8 @@ const ApiConfigCard: React.FC<{
                     )}
                     <ProviderOperationPaths meta={meta} runtime={runtime} />
                     <ProviderCredentialLinks meta={meta} />
+                        </>
+                    )}
                 </div>
             </div>
         </article>
@@ -1997,7 +2037,7 @@ const ProviderQuickCard: React.FC<{
     onCheck,
 }) => {
     const provider = normalizeProvider(meta.provider);
-    const primaryConfig = bestConfigForProvider(configs, provider);
+    const primaryConfig = bestConfigForProvider(configs, provider, runtime);
     const activeConfigId = runtime?.db_effective_config_id || primaryConfig?.config_id || '';
     const sortedConfigs = [...configs].sort((a, b) => {
         const aActive = a.config_id === activeConfigId ? 1 : 0;
@@ -2130,7 +2170,10 @@ const ProviderQuickCard: React.FC<{
             </div>
 
             {sortedConfigs.length > 0 && (
-                <div className="mt-3 rounded border border-n40 bg-n20 overflow-hidden">
+                <details className="mt-3 rounded border border-n40 bg-n20 overflow-hidden text-[11px]">
+                    <summary className="cursor-pointer select-none border-b border-n40 px-3 py-2 font-semibold text-n700">
+                        API Key ({sortedConfigs.length})
+                    </summary>
                     <div className="flex items-center justify-between gap-2 border-b border-n40 px-3 py-2">
                         <div className="text-[11px] font-semibold text-n700">API Key 列表</div>
                         <button
@@ -2210,10 +2253,13 @@ const ProviderQuickCard: React.FC<{
                             );
                         })}
                     </div>
-                </div>
+                </details>
             )}
 
-            <ProviderOperationPaths meta={meta} runtime={runtime} compact />
+            <details className="mt-3 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
+                <summary className="cursor-pointer select-none font-semibold text-n700">API Paths</summary>
+                <ProviderOperationPaths meta={meta} runtime={runtime} compact />
+            </details>
 
             <div className="mt-3 flex flex-wrap gap-2">
                 {primaryConfig ? (
@@ -3049,8 +3095,9 @@ const ApiConfigPanel: React.FC = () => {
     const sweepProviders = useCallback(async () => {
         const targets = Array.from(configsByProvider.entries())
             .map(([provider, providerConfigs]) => {
-                const primaryConfig = bestConfigForProvider(providerConfigs, provider);
-                const modelNameHint = primaryConfig?.model_name || providerMetaMap.get(provider)?.default_model_name || null;
+                const runtimeHint = runtimeMap.get(provider);
+                const primaryConfig = bestConfigForProvider(providerConfigs, provider, runtimeHint);
+                const modelNameHint = primaryConfig?.model_name || runtimeHint?.runtime_model_name || providerMetaMap.get(provider)?.default_model_name || null;
                 const runtime = runtimeForProviderModel(provider, modelNameHint);
                 return {
                     provider,
@@ -3082,7 +3129,7 @@ const ApiConfigPanel: React.FC = () => {
         } finally {
             setSweeping(false);
         }
-    }, [configsByProvider, loadConfigs, providerMetaMap, runtimeForProviderModel]);
+    }, [configsByProvider, loadConfigs, providerMetaMap, runtimeForProviderModel, runtimeMap]);
 
     const reloadRuntimeEnv = useCallback(async () => {
         setReloadingEnv(true);
@@ -3690,12 +3737,13 @@ const ApiConfigPanel: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-3">
                         {quickProviders.map(meta => {
                             const provider = normalizeProvider(meta.provider);
                             const providerConfigs = configsByProvider.get(provider) || [];
-                            const primaryConfig = bestConfigForProvider(providerConfigs, provider);
-                            const modelNameHint = primaryConfig?.model_name || meta.default_model_name || null;
+                            const runtimeHint = runtimeMap.get(provider);
+                            const primaryConfig = bestConfigForProvider(providerConfigs, provider, runtimeHint);
+                            const modelNameHint = primaryConfig?.model_name || runtimeHint?.runtime_model_name || meta.default_model_name || null;
                             const runtime = runtimeForProviderModel(provider, modelNameHint);
                             const modelName = modelNameHint || runtime?.runtime_model_name || null;
                             return (
@@ -3704,7 +3752,7 @@ const ApiConfigPanel: React.FC = () => {
                                     meta={meta}
                                     configs={providerConfigs}
                                     runtime={runtime}
-                                    health={providerHealthFrom(healthMap, provider, modelName)}
+                                    health={providerQuickHealthFrom(healthMap, provider, modelName)}
                                     configTest={primaryConfig ? configTestMap[primaryConfig.config_id] : undefined}
                                     checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                     testingConfig={testingAllConfigs || Boolean(primaryConfig && testingConfig[primaryConfig.config_id])}
@@ -3748,6 +3796,11 @@ const ApiConfigPanel: React.FC = () => {
                                     <div className="grid gap-3">
                                         {items.map(config => {
                                             const provider = normalizeProvider(config.provider);
+                                            const providerConfigs = configsByProvider.get(provider) || [];
+                                            const providerRuntime = runtimeMap.get(provider);
+                                            const activeConfigId = providerRuntime?.db_effective_config_id
+                                                || bestConfigForProvider(providerConfigs, provider, providerRuntime)?.config_id
+                                                || '';
                                             const runtime = runtimeForConfig(config);
                                             const modelName = config.model_name || runtime?.runtime_model_name || null;
                                             return (
@@ -3761,6 +3814,7 @@ const ApiConfigPanel: React.FC = () => {
                                                     checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                                     testingConfig={testingAllConfigs || Boolean(testingConfig[config.config_id])}
                                                     realTestingConfig={Boolean(realTestingConfig[config.config_id])}
+                                                    compactInactive={providerConfigs.length > 1 && Boolean(activeConfigId) && config.config_id !== activeConfigId}
                                                     onCheck={testProvider}
                                                     onTestConfig={testConfig}
                                                     onRealTestConfig={realTestConfig}

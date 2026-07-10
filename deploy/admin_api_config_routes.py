@@ -7,6 +7,7 @@ These handlers are included by ``admin_routes.py`` under the existing
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -530,6 +531,9 @@ async def admin_real_test_api_config(config_id: str, request: Request):
         provider_health = _provider_health_from_real_generation_test(result)
         if provider_health:
             result["provider_health"] = await cache_provider_health_result(provider_health)
+            provider_level_health = deepcopy(result["provider_health"])
+            provider_level_health["model_name"] = None
+            await cache_provider_health_result(provider_level_health)
         await _record_api_config_audit(
             request,
             action="api_config_real_generation_test",
