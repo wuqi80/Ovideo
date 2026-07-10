@@ -43,6 +43,7 @@ export async function submitTask(
         entity_type?: string;
         entity_id?: string;
         file_role?: string;
+        project_id?: string;
         episode_id?: string;
     }
 ): Promise<{ task_id: string }> {
@@ -192,6 +193,7 @@ export async function submitTask(
         requestData.entity_type = entityOptions.entity_type;
         requestData.entity_id = entityOptions.entity_id;
         requestData.file_role = entityOptions.file_role || 'video';
+        requestData.project_id = entityOptions.project_id;
         requestData.episode_id = entityOptions.episode_id;
     }
 
@@ -216,6 +218,7 @@ export async function submitUpscaleTask(
         entity_type?: string;
         entity_id?: string;
         file_role?: string;
+        project_id?: string;
         episode_id?: string;
     }
 ): Promise<{ task_id: string }> {
@@ -230,6 +233,7 @@ export async function submitUpscaleTask(
         requestData.entity_type = entityOptions.entity_type;
         requestData.entity_id = entityOptions.entity_id;
         requestData.file_role = entityOptions.file_role || 'video';
+        requestData.project_id = entityOptions.project_id;
         requestData.episode_id = entityOptions.episode_id;
     }
 
@@ -401,6 +405,7 @@ export async function submitTaskQueued(
         entity_type?: string;
         entity_id?: string;
         file_role?: string;
+        project_id?: string;
         episode_id?: string;
     }
 ): Promise<{ task_id: string }> {
@@ -428,6 +433,7 @@ export async function submitUpscaleTaskQueued(
         entity_type?: string;
         entity_id?: string;
         file_role?: string;
+        project_id?: string;
         episode_id?: string;
     }
 ): Promise<{ task_id: string }> {
@@ -467,6 +473,7 @@ export async function submitSeedanceTask(
         entity_type?: string;
         entity_id?: string;
         file_role?: string;
+        project_id?: string;
         episode_id?: string;
     },
     draftTaskId?: string,
@@ -496,6 +503,7 @@ export async function submitSeedanceTask(
         body.entity_type = entityOptions.entity_type;
         body.entity_id = entityOptions.entity_id;
         body.file_role = entityOptions.file_role || 'video';
+        body.project_id = entityOptions.project_id;
         body.episode_id = entityOptions.episode_id;
     }
 
@@ -527,6 +535,7 @@ export async function submitDashScopeVideoTask(
         entity_type?: string;
         entity_id?: string;
         file_role?: string;
+        project_id?: string;
         episode_id?: string;
     },
 ): Promise<{ task_id: string }> {
@@ -590,6 +599,7 @@ export async function submitDashScopeVideoTask(
         body.entity_type = entityOptions.entity_type;
         body.entity_id = entityOptions.entity_id;
         body.file_role = entityOptions.file_role || 'video';
+        body.project_id = entityOptions.project_id;
         body.episode_id = entityOptions.episode_id;
     }
 

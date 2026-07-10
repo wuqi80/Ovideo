@@ -35,6 +35,7 @@ export interface GenerateGptImageOptions {
   entityType?: string;
   entityId?: string;
   fileRole?: string;
+  projectId?: string;
   episodeId?: string;
 }
 
@@ -79,6 +80,7 @@ export async function generateGptImage(
     entity_type: opts.entityType,
     entity_id: opts.entityId,
     file_role: opts.fileRole,
+    project_id: opts.projectId,
     episode_id: opts.episodeId,
   };
 

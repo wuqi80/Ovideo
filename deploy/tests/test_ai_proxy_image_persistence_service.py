@@ -47,6 +47,7 @@ async def test_persist_generated_ai_images_saves_and_syncs_media_library():
         entity_type="storyboard",
         entity_id="shot_1",
         file_role=None,
+        project_id="proj_1",
         episode_id="ep_1",
         file_metadata={"prompt": "draw a city", "model": "gemini-image"},
         media_metadata={"prompt": "draw a city"},
@@ -69,9 +70,11 @@ async def test_persist_generated_ai_images_saves_and_syncs_media_library():
     assert save_calls[0]["source"] == "gemini"
     assert save_calls[0]["file_role"] == "generated_image"
     assert save_calls[0]["episode_id"] == "ep_1"
+    assert save_calls[0]["project_id"] == "proj_1"
     assert save_calls[0]["extra_metadata"] == {"prompt": "draw a city", "model": "gemini-image"}
     assert file_calls == ["file_1"]
     assert media_calls[0]["source"] == "generated_image_gemini"
+    assert media_calls[0]["project_id"] == "proj_1"
     assert media_calls[0]["source_task_id"] == "task_1"
     assert media_calls[0]["source_entity_type"] == "storyboard"
     assert media_calls[0]["source_entity_id"] == "shot_1"

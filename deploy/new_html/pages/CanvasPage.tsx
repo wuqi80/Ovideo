@@ -861,7 +861,7 @@ const CanvasInner: React.FC = () => {
           [],
           -1,
           undefined,
-          { entityType: 'canvas_node', entityId: imageNode.id, fileRole: 'canvas_image', episodeId },
+          { entityType: 'canvas_node', entityId: imageNode.id, fileRole: 'canvas_image', projectId, episodeId },
           {
             title: '画布 GPU 图片生成',
             kind: 'qwen-image',
@@ -885,6 +885,7 @@ const CanvasInner: React.FC = () => {
           entityType: 'canvas_node',
           entityId: imageNode.id,
           fileRole: 'canvas_image',
+          projectId,
           episodeId,
         });
         generatedUrl = results[0]?.fileUrl || results[0]?.url || '';
@@ -942,6 +943,7 @@ const CanvasInner: React.FC = () => {
         entity_type: 'canvas_node',
         entity_id: audioNode.id,
         file_role: 'canvas_audio',
+        project_id: projectId,
         episode_id: episodeId,
       });
       const audioUrl = result.audio_url || result.file_url || '';
@@ -971,7 +973,7 @@ const CanvasInner: React.FC = () => {
     } finally {
       setIsGenerating(false);
     }
-  }, [episodeId, nodes, persistGeneratedNodeData]);
+  }, [episodeId, nodes, persistGeneratedNodeData, projectId]);
 
   const generateCanvasVideoTarget = useCallback(async (target: Extract<CanvasGenerationTarget, { kind: 'video' }>) => {
     const nodeMap = new Map(nodes.map((node) => [node.id, node]));
@@ -1007,6 +1009,7 @@ const CanvasInner: React.FC = () => {
         entity_type: 'canvas_node',
         entity_id: videoNode.id,
         file_role: 'canvas_video',
+        project_id: projectId,
         episode_id: episodeId,
       });
 

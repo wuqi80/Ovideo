@@ -44,7 +44,7 @@ export const generateMaterialImage = async (
 export const generateFinalIllustration = async (
     prompt: string,
     referenceImages: string[],
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string },
+    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string },
     imageOptions?: { aspectRatio?: string; imageSize?: '1K' | '2K' | '4K' },
 ): Promise<string> => {
     return callWithRetry(async () => {
@@ -58,6 +58,7 @@ export const generateFinalIllustration = async (
                 entityType: entityOptions?.entityType,
                 entityId: entityOptions?.entityId,
                 fileRole: entityOptions?.fileRole,
+                projectId: entityOptions?.projectId,
                 episodeId: entityOptions?.episodeId,
             });
 

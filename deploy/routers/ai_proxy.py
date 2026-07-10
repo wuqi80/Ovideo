@@ -196,6 +196,7 @@ def create_ai_proxy_router(
                 entity_type=request.entity_type,
                 entity_id=request.entity_id,
                 file_role=request.file_role,
+                project_id=request.project_id,
                 episode_id=request.episode_id,
                 file_metadata={"prompt": request.prompt, "model": model},
                 media_metadata={"prompt": request.prompt, "model": model},
@@ -245,6 +246,7 @@ def create_ai_proxy_router(
                 entity_type=request.entity_type,
                 entity_id=request.entity_id,
                 file_role=request.file_role,
+                project_id=request.project_id,
                 episode_id=request.episode_id,
                 file_metadata={
                     "prompt": request.prompt,
@@ -309,6 +311,7 @@ def create_ai_proxy_router(
                 entity_type=request.entity_type,
                 entity_id=request.entity_id,
                 file_role=request.file_role,
+                project_id=request.project_id,
                 episode_id=request.episode_id,
                 file_metadata={"prompt": request.prompt, "model": "doubao"},
                 media_metadata={"prompt": request.prompt, "model": "doubao"},

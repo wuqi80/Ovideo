@@ -49,6 +49,7 @@ async def attach_local_generated_audio_file(
     title: Optional[str],
     logger: Any,
     save_generated_file_to_db: SaveGeneratedFile,
+    project_id: Optional[str] = None,
     create_media_library_item: Optional[CreateMediaLibraryItem] = None,
 ) -> MutableMapping[str, Any]:
     """Attach a DB file record for a provider-generated local audio URL.
@@ -83,6 +84,7 @@ async def attach_local_generated_audio_file(
             entity_id=entity_id,
             file_role=file_role,
             original_ext=audio_file_path.suffix,
+            project_id=project_id,
             episode_id=episode_id,
         )
         enriched["file_id"] = saved["file_id"]
@@ -96,6 +98,7 @@ async def attach_local_generated_audio_file(
         await media_library_creator(
             file_record=saved,
             source=media_source,
+            project_id=project_id,
             episode_id=episode_id,
             source_entity_type=entity_type,
             source_entity_id=entity_id,
@@ -160,6 +163,7 @@ async def generate_minimax_tts_sync_response(
         entity_id=data.entity_id,
         file_role=data.file_role or "dialogue_audio",
         original_ext=".mp3",
+        project_id=getattr(data, "project_id", None),
         episode_id=data.episode_id,
     )
     file_id = saved["file_id"]
@@ -170,6 +174,7 @@ async def generate_minimax_tts_sync_response(
         await media_library_creator(
             file_record=saved,
             source="generated_audio_minimax",
+            project_id=getattr(data, "project_id", None),
             episode_id=data.episode_id,
             source_entity_type=data.entity_type,
             source_entity_id=data.entity_id,

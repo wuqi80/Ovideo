@@ -51,6 +51,8 @@ def create_task_router(
                 task_data["entity_id"] = request.entity_id
             if request.file_role:
                 task_data["file_role"] = request.file_role
+            if request.project_id:
+                task_data["project_id"] = request.project_id
             if request.episode_id:
                 task_data["episode_id"] = request.episode_id
             prepare_workflow = _should_prepare_workflow(request.task_type)

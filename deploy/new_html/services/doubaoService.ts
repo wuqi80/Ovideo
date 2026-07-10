@@ -15,6 +15,7 @@ export interface DoubaoGenerationOptions {
     entityType?: string;
     entityId?: string;
     fileRole?: string;
+    projectId?: string;
     episodeId?: string;
 }
 
@@ -39,6 +40,7 @@ export const generateDoubaoImages = async (options: DoubaoGenerationOptions): Pr
             entity_type: options.entityType,
             entity_id: options.entityId,
             file_role: options.fileRole,
+            project_id: options.projectId,
             episode_id: options.episodeId,
         })
     }, '豆包图像生成');

@@ -51,6 +51,7 @@ async def persist_generated_ai_images(
     entity_type: Optional[str],
     entity_id: Optional[str],
     file_role: Optional[str],
+    project_id: Optional[str] = None,
     episode_id: Optional[str],
     file_metadata: Dict[str, Any],
     media_metadata: Optional[Dict[str, Any]] = None,
@@ -78,6 +79,7 @@ async def persist_generated_ai_images(
                 entity_id=entity_id,
                 file_role=file_role or "generated_image",
                 original_ext=".png",
+                project_id=project_id,
                 episode_id=episode_id,
                 extra_metadata=file_metadata,
             )
@@ -89,6 +91,7 @@ async def persist_generated_ai_images(
                     await create_media_library_item(
                         file_record=file_record,
                         source=media_source,
+                        project_id=project_id,
                         episode_id=episode_id,
                         source_task_id=source_task_id,
                         source_entity_type=entity_type,

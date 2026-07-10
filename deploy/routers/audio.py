@@ -111,6 +111,7 @@ def create_audio_router(
         entity_type: Optional[str] = None
         entity_id: Optional[str] = None
         file_role: Optional[str] = None
+        project_id: Optional[str] = None
         episode_id: Optional[str] = None
 
     class SFXGenRequest(BaseModel):
@@ -118,6 +119,7 @@ def create_audio_router(
         entity_type: Optional[str] = None
         entity_id: Optional[str] = None
         file_role: Optional[str] = None
+        project_id: Optional[str] = None
         episode_id: Optional[str] = None
 
     class MusicGenRequest(BaseModel):
@@ -126,6 +128,7 @@ def create_audio_router(
         entity_type: Optional[str] = None
         entity_id: Optional[str] = None
         file_role: Optional[str] = None
+        project_id: Optional[str] = None
         episode_id: Optional[str] = None
 
 
@@ -142,6 +145,7 @@ def create_audio_router(
                 entity_type=data.entity_type,
                 entity_id=data.entity_id,
                 file_role=data.file_role or 'dialogue_audio',
+                project_id=data.project_id,
                 episode_id=data.episode_id,
                 media_source='generated_audio_gemini_speech',
                 title=(getattr(data, 'text', '') or '')[:80] or None,
@@ -184,6 +188,7 @@ def create_audio_router(
                 entity_type=data.entity_type,
                 entity_id=data.entity_id,
                 file_role=data.file_role or 'sfx_audio',
+                project_id=data.project_id,
                 episode_id=data.episode_id,
                 media_source='generated_audio_minimax_sfx',
                 title=(getattr(data, 'description', '') or '')[:80] or None,
@@ -211,6 +216,7 @@ def create_audio_router(
                 entity_type=data.entity_type,
                 entity_id=data.entity_id,
                 file_role=data.file_role or 'background_music',
+                project_id=data.project_id,
                 episode_id=data.episode_id,
                 media_source='generated_audio_minimax_music',
                 title=(getattr(data, 'description', '') or '')[:80] or None,
@@ -250,6 +256,7 @@ def create_audio_router(
         entity_type: Optional[str] = None
         entity_id: Optional[str] = None
         file_role: Optional[str] = None
+        project_id: Optional[str] = None
         episode_id: Optional[str] = None
         # 2026-05-24 新增：试听场景透传，worker 完成后回写 character_voices.sample_audio_url，
         # 让用户下次打开 VoiceSidebar 直接复用同一段试听，避免重复付费。
@@ -262,6 +269,7 @@ def create_audio_router(
         entity_type: Optional[str] = None
         entity_id: Optional[str] = None
         file_role: Optional[str] = None
+        project_id: Optional[str] = None
         episode_id: Optional[str] = None
 
     class MinimaxLyricsRequest(BaseModel):
@@ -363,6 +371,7 @@ def create_audio_router(
             "entity_type": data.entity_type,
             "entity_id": data.entity_id,
             "file_role": data.file_role,
+            "project_id": data.project_id,
             "episode_id": data.episode_id,
         }
         # 可选：试听场景透传 bind_to_character_voice_id，

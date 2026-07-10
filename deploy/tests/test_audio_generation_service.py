@@ -49,6 +49,7 @@ class _TTSRequest:
         self.entity_type = kwargs.pop("entity_type", "storyboard")
         self.entity_id = kwargs.pop("entity_id", "shot_1")
         self.file_role = kwargs.pop("file_role", None)
+        self.project_id = kwargs.pop("project_id", "proj_1")
         self.episode_id = kwargs.pop("episode_id", "ep_1")
         self.bind_to_character_voice_id = kwargs.pop("bind_to_character_voice_id", None)
 
@@ -244,8 +245,10 @@ async def test_generate_minimax_tts_sync_response_saves_media_and_binds_voice():
     assert save_calls[0]["file_type"] == "audio"
     assert save_calls[0]["source"] == "minimax"
     assert save_calls[0]["file_role"] == "dialogue_audio"
+    assert save_calls[0]["project_id"] == "proj_1"
     assert save_calls[0]["original_ext"] == ".mp3"
     assert media_calls[0]["source"] == "generated_audio_minimax"
+    assert media_calls[0]["project_id"] == "proj_1"
     assert media_calls[0]["title"] == "hello world"
     assert _CharacterVoiceDAO.updates == [("voice_db_1", "/storage/audio/file_tts.mp3")]
     assert result == {

@@ -179,7 +179,7 @@ export const generateWithComfyUIWorkflow = async (
     mainImage: string,
     refImages: string[] = [],
     seed: number = -1,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
+    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string }
 ): Promise<{ taskId: string; status: string }> => {
     try {
         const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
@@ -214,6 +214,7 @@ export const generateWithComfyUIWorkflow = async (
             entity_type: entityOptions?.entityType,
             entity_id: entityOptions?.entityId,
             file_role: entityOptions?.fileRole,
+            project_id: entityOptions?.projectId,
             episode_id: entityOptions?.episodeId,
         }, `${workflowType}工作流生成`);
     } catch (error) {
@@ -262,7 +263,7 @@ export const generateWithComfyUIWorkflowQueued = async (
     refImages: string[] = [],
     seed: number = -1,
     onTaskId?: (taskId: string) => void,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string },
+    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string },
     registryMeta?: ComfyUITaskRegistryMeta,
 ): Promise<GeneratedImageResult[]> => {
     return enqueueComfyUITask(async (frontendKey) => {

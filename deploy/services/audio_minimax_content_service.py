@@ -45,6 +45,7 @@ async def generate_minimax_music_response(
             entity_type=data.entity_type,
             entity_id=data.entity_id,
             file_role=data.file_role or "background_music",
+            project_id=getattr(data, "project_id", None),
             episode_id=data.episode_id,
             media_source="generated_audio_minimax_music",
             title=(getattr(data, "lyrics", "") or "")[:80] or None,

@@ -34,6 +34,8 @@ def _attach_entity_fields(task_data: dict, request: Any) -> None:
         task_data["entity_id"] = request.entity_id
     if getattr(request, "file_role", None):
         task_data["file_role"] = request.file_role
+    if getattr(request, "project_id", None):
+        task_data["project_id"] = request.project_id
     if getattr(request, "episode_id", None):
         task_data["episode_id"] = request.episode_id
 
@@ -445,6 +447,7 @@ def create_generation_router(
                 entity_type=request.entity_type,
                 entity_id=request.entity_id,
                 file_role=request.file_role or "storyboard",
+                project_id=request.project_id,
                 episode_id=request.episode_id,
                 file_metadata=file_metadata,
                 media_metadata=file_metadata,

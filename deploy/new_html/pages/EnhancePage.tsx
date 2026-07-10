@@ -16,10 +16,12 @@ import { getStoryboardItems } from '../services/episodeDataService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
 import { secureApiUrl } from '../services/httpClient';
 import { syncTimelineAudioPlayback } from '../utils/enhanceTimelineAudio';
+import LazyVideo from '../components/LazyVideo';
 
 interface MediaClip {
   id: string;
   url: string;
+  thumbnailUrl?: string;
   startTime: number;
   duration: number;
   sourceOffset: number;
@@ -100,6 +102,7 @@ function buildEnhanceSourceClips(
     allClips.push({
       id: seg.segmentId || `vid_${i}`,
       url: secureMediaUrl(seg.videoUrl || ''),
+      thumbnailUrl: seg.thumbnailUrl ? secureMediaUrl(seg.thumbnailUrl) : undefined,
       startTime: videoTime,
       duration: dur,
       sourceOffset: 0,
@@ -877,8 +880,37 @@ export const EnhancePage: React.FC = () => {
                     }`}
                     style={{ left: `${clip.startTime * scale}px`, width: `${clip.duration * scale}px` }}
                   >
-                    <div className="absolute inset-0 p-1 text-[9px] text-n700 font-mono z-10 truncate pointer-events-none">
+                    <div className="absolute inset-0 bg-black">
+                      {clip.thumbnailUrl ? (
+                        <img
+                          src={clip.thumbnailUrl}
+                          alt="视频片段预览"
+                          loading="lazy"
+                          className="w-full h-full object-cover pointer-events-none"
+                        />
+                      ) : clip.url ? (
+                        <LazyVideo
+                          src={clip.url}
+                          aria-label="视频片段预览"
+                          className="w-full h-full object-cover pointer-events-none"
+                          preload="metadata"
+                          playsInline
+                          controls={false}
+                          hoverPreview={false}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-n100 bg-n20">
+                          <Film size={14} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-black/70 to-transparent pointer-events-none" />
+                    <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+                    <div className="absolute top-1 left-1 right-10 text-[9px] text-white font-mono z-10 truncate pointer-events-none drop-shadow">
                       {clip.id.slice(0, 12)}
+                    </div>
+                    <div className="absolute top-0.5 right-1 px-1 rounded bg-black/50 text-[9px] text-white/90 font-mono z-10 pointer-events-none">
+                      {clip.duration.toFixed(1)}s
                     </div>
                     <div className="absolute bottom-0.5 left-1 flex gap-0.5 z-10">
                       {clip.settings?.upscale && <MonitorPlay size={10} className="text-primary" />}

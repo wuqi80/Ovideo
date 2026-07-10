@@ -32,6 +32,7 @@ class GenerateRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
     # Seedance 2.0 (飞升/渡劫) 专用字段
     sub_model: Optional[str] = Field(None, description="Seedance 子型号: standard|fast")
@@ -60,6 +61,7 @@ class DoubaoImageRequest(BaseModel):
     entity_type: Optional[str] = Field(None)
     entity_id: Optional[str] = Field(None)
     file_role: Optional[str] = Field(None)
+    project_id: Optional[str] = Field(None)
     episode_id: Optional[str] = Field(None)
 
 
@@ -79,6 +81,7 @@ class GeminiImageRequest(BaseModel):
     entity_type: Optional[str] = Field(None)
     entity_id: Optional[str] = Field(None)
     file_role: Optional[str] = Field(None)
+    project_id: Optional[str] = Field(None)
     episode_id: Optional[str] = Field(None)
 
 
@@ -101,6 +104,7 @@ class GptImageRequest(BaseModel):
     entity_type: Optional[str] = Field(None)
     entity_id: Optional[str] = Field(None)
     file_role: Optional[str] = Field(None)
+    project_id: Optional[str] = Field(None)
     episode_id: Optional[str] = Field(None)
 
 
@@ -115,6 +119,7 @@ class ImageGenerationRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -127,6 +132,7 @@ class ComfyUIWorkflowRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -137,6 +143,7 @@ class AngleAdjustRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -146,6 +153,7 @@ class HumanMultiAngleRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -156,6 +164,7 @@ class AroundAngleRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -166,6 +175,7 @@ class MattingRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -178,6 +188,7 @@ class ImageFusionRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -188,6 +199,7 @@ class Panorama360Request(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -200,6 +212,7 @@ class PanoramaFusionRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -210,6 +223,7 @@ class AutoStoryboardRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
@@ -220,6 +234,7 @@ class MultiGridStoryboardRequest(BaseModel):
     entity_type: Optional[str] = Field(None)
     entity_id: Optional[str] = Field(None)
     file_role: Optional[str] = Field(None)
+    project_id: Optional[str] = Field(None)
     episode_id: Optional[str] = Field(None)
 
 
@@ -229,4 +244,5 @@ class MaterialProcessRequest(BaseModel):
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
+    project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")

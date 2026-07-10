@@ -267,7 +267,7 @@ async def save_generated_file_to_db(
 
     # 兜底：在文件保存的统一入口同步进素材库，避免各生成路径（视频/图片/混音等）
     # 各自漏调 create_from_file 导致"生成了却不在素材库"。幂等（按 file_id 去重）、
-    # best-effort 不影响主流程；project_id 由 episode_id 反查（素材库按项目过滤）。
+    # best-effort 不影响主流程；project_id 优先用调用方透传，缺失时仍可由 episode_id 反查。
     if db_record and file_type in ('image', 'video', 'audio'):
         try:
             import media_library_service
@@ -275,6 +275,7 @@ async def save_generated_file_to_db(
                 file_record={**db_record, 'user_id': user_id, 'file_type': file_type},
                 source=source or f'generated_{file_type}',
                 item_type=file_type,
+                project_id=project_id,
                 episode_id=episode_id,
                 source_entity_type=entity_type,
                 source_entity_id=entity_id,

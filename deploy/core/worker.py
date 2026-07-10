@@ -1601,6 +1601,7 @@ class Worker:
             entity_type = task_data.get('entity_type')
             entity_id = task_data.get('entity_id')
             file_role = task_data.get('file_role') or 'video'
+            project_id = task_data.get('project_id')
 
             # 保存到数据库
             file_record = None
@@ -1620,6 +1621,8 @@ class Worker:
                             'task_id': task_id,
                             'source': source,
                             'task_type': task.task_type if task else source,
+                            'project_id': project_id,
+                            'episode_id': task_data.get('episode_id'),
                         },
                         entity_type=entity_type,
                         entity_id=entity_id,
@@ -1658,6 +1661,7 @@ class Worker:
                         await media_library_service.create_from_file(
                             file_record=file_record,
                             source=mlib_source,
+                            project_id=project_id,
                             episode_id=task_data.get('episode_id'),
                             source_task_id=task_id,
                             source_entity_type=entity_type,
@@ -2599,6 +2603,7 @@ class Worker:
                 entity_id=td.get('entity_id'),
                 file_role=td.get('file_role') or 'dialogue_audio',
                 original_ext=ext_suffix,
+                project_id=td.get('project_id'),
                 episode_id=td.get('episode_id'),
             )
             file_id = saved['file_id']
@@ -2614,6 +2619,7 @@ class Worker:
                     await media_library_service.create_from_file(
                         file_record=_file_record,
                         source='generated_audio_minimax',
+                        project_id=td.get('project_id'),
                         episode_id=td.get('episode_id'),
                         source_task_id=task.task_id,
                         source_entity_type=td.get('entity_type'),

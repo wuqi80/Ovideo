@@ -13,7 +13,7 @@ export async function deleteAudioTrack(trackId: string) {
 
 export async function generateSpeech(data: {
     text: string; persona?: string; emotion?: string;
-    entity_type?: string; entity_id?: string; file_role?: string; episode_id?: string;
+    entity_type?: string; entity_id?: string; file_role?: string; project_id?: string; episode_id?: string;
 }) {
     return apiJson<any>('/api/audio/generate-speech', {
         method: 'POST',
@@ -97,7 +97,7 @@ export async function minimaxDeleteVoice(voiceId: string, voiceType = 'voice_clo
 export async function minimaxTTS(data: {
     text: string; voice_id: string; model?: string;
     speed?: number; pitch?: number; emotion?: string;
-    entity_type?: string; entity_id?: string; file_role?: string; episode_id?: string;
+    entity_type?: string; entity_id?: string; file_role?: string; project_id?: string; episode_id?: string;
     bind_to_character_voice_id?: string;
 }, signal?: AbortSignal): Promise<{ success: true; task_id: string }> {
     return apiJson<any>('/api/minimax/tts', {
@@ -117,6 +117,7 @@ export async function minimaxTTSSync(data: {
     entity_type?: string;
     entity_id?: string;
     file_role?: string;
+    project_id?: string;
     episode_id?: string;
     bind_to_character_voice_id?: string;
 }, signal?: AbortSignal): Promise<{
