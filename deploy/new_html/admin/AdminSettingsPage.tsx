@@ -2097,7 +2097,7 @@ const ProviderQuickCard: React.FC<{
     const quickConfigTestEndpoint = configTestEndpointText(configTest);
 
     return (
-        <article className={`bg-n0 border rounded-md shadow-card p-4 min-w-0 ${
+        <article className={`w-full bg-n0 border rounded-md shadow-card p-4 min-w-0 ${
             status === 'ok' ? 'border-g75' : status === 'no_key' || status === 'error' ? 'border-r75' : 'border-y200'
         }`}>
             <div className="flex items-start justify-between gap-3">
@@ -3737,7 +3737,7 @@ const ApiConfigPanel: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                    <div className="grid gap-3">
+                    <div className="flex flex-col gap-3">
                         {quickProviders.map(meta => {
                             const provider = normalizeProvider(meta.provider);
                             const providerConfigs = configsByProvider.get(provider) || [];
