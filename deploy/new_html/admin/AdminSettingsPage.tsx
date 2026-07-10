@@ -137,6 +137,7 @@ interface RuntimeStatus {
 }
 
 interface ProviderHealth {
+    [key: string]: any;
     success?: boolean;
     provider: string;
     model_name?: string | null;
@@ -151,6 +152,7 @@ interface ProviderHealth {
         url?: string | null;
         error?: string | null;
         urls_tried?: string[];
+        [key: string]: any;
     };
 }
 
@@ -944,6 +946,81 @@ function dbKeyStateClass(hasSavedKey: boolean, runtimeHasKey: boolean): string {
     return 'text-r400';
 }
 
+function firstFiniteNumber(source: JsonRecord, keys: string[]): number | undefined {
+    for (const key of keys) {
+        const raw = source[key];
+        const value = typeof raw === 'number'
+            ? raw
+            : typeof raw === 'string'
+                ? Number(raw.match(/-?\d+(?:\.\d+)?/)?.[0])
+                : NaN;
+        if (Number.isFinite(value)) return value;
+    }
+    return undefined;
+}
+
+function compactNumber(value: number, digits = 2): string {
+    return Number.isInteger(value) ? String(value) : value.toFixed(digits).replace(/\.?0+$/, '');
+}
+
+function normalizePercentValue(value: number): number {
+    const percent = Math.abs(value) <= 1 ? value * 100 : value;
+    return Math.max(0, Math.min(100, percent));
+}
+
+function providerUsageText(health?: ProviderHealth): string {
+    const source = { ...(health?.health || {}), ...(health || {}) } as JsonRecord;
+    const balance = firstFiniteNumber(source, [
+        'balance_cny',
+        'remaining_cny',
+        'credit_cny',
+        'balance',
+        'remaining_balance',
+        'credit_remaining',
+        'quota_balance',
+    ]);
+    if (typeof balance === 'number') {
+        const currency = String(source.currency || source.balance_currency || source.unit || 'CNY').toUpperCase();
+        return `剩余：${compactNumber(balance)} ${currency}`;
+    }
+
+    const hours = firstFiniteNumber(source, [
+        'remaining_hours',
+        'hours_remaining',
+        'hours_left',
+        'package_hours_remaining',
+    ]);
+    const remainingPercent = firstFiniteNumber(source, [
+        'remaining_percent',
+        'quota_percent',
+        'package_percent',
+        'plan_remaining_percent',
+        'traffic_percent',
+    ]);
+    const usedPercent = firstFiniteNumber(source, [
+        'usage_percent',
+        'used_percent',
+        'plan_usage_percent',
+    ]);
+    const percent = typeof remainingPercent === 'number'
+        ? normalizePercentValue(remainingPercent)
+        : typeof usedPercent === 'number'
+            ? 100 - normalizePercentValue(usedPercent)
+            : undefined;
+
+    if (typeof hours === 'number' && typeof percent === 'number') {
+        return `${compactNumber(hours)}小时：${compactNumber(percent, 1)}%`;
+    }
+    if (typeof percent === 'number') {
+        return `套餐余量：${compactNumber(percent, 1)}%`;
+    }
+
+    const tokens = firstFiniteNumber(source, ['remaining_tokens', 'tokens_remaining', 'token_balance']);
+    if (typeof tokens === 'number') return `剩余 Token：${compactNumber(tokens, 0)}`;
+
+    return '余量：暂无数据';
+}
+
 function isNoKeyTest(test?: ApiConfigTest): boolean {
     return test?.error === 'No API key configured';
 }
@@ -1435,7 +1512,23 @@ const ApiConfigCard: React.FC<{
     onActivate: (config: ApiConfig) => void;
     onToggle: (config: ApiConfig) => void;
     onDelete: (config: ApiConfig) => void;
-}> = ({ config, meta, runtime, health, configTest, checking, testingConfig, realTestingConfig, onCheck, onTestConfig, onRealTestConfig, onEdit, onActivate, onToggle, onDelete }) => {
+}> = ({
+    config,
+    meta,
+    runtime,
+    health,
+    configTest,
+    checking,
+    testingConfig,
+    realTestingConfig,
+    onCheck,
+    onTestConfig,
+    onRealTestConfig,
+    onEdit,
+    onActivate,
+    onToggle,
+    onDelete,
+}) => {
     const provider = normalizeProvider(config.provider);
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.has_key ?? config.api_key_encrypted);
     const configHasKey = Boolean(config.has_key ?? config.api_key_encrypted);
@@ -1444,6 +1537,7 @@ const ApiConfigCard: React.FC<{
     const healthError = health?.health?.error || runtime?.health_error || '';
     const healthLatency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const healthCheckedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
+    const usageText = providerUsageText(health);
     const runtimeIssue = runtimeIssueText(runtime?.issues);
     const runtimeEndpoint = runtime?.endpoint || '';
     const dbEndpoint = config.endpoint || '';
@@ -1532,33 +1626,13 @@ const ApiConfigCard: React.FC<{
                         <div className="toolbar-actions justify-end">
                             <button
                                 type="button"
-                                onClick={() => onTestConfig(config)}
-                                disabled={testingConfig || !config.config_id}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="只测试这条数据库记录保存的 Key、Endpoint 和模型；结果不会覆盖生效配置健康状态"
-                            >
-                                {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                                测试 DB 配置
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => onRealTestConfig(config)}
-                                disabled={realTestingConfig || !configHasKey || !config.config_id}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60 shrink-0"
-                                title="发起一次真实生成请求验证可用性，可能产生厂商费用"
-                            >
-                                {realTestingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                                真实生成测试
-                            </button>
-                            <button
-                                type="button"
                                 onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
-                                title="测试实际生成调用会使用的生效 Key、Endpoint 和模型"
+                                title="检测当前实际生效的 Key、Endpoint 和模型是否连通"
                             >
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                测试生效配置
+                                连通性检测
                             </button>
                             {!isRuntimeActive && (
                                 <button
@@ -1679,7 +1753,7 @@ const ApiConfigCard: React.FC<{
                                 <HealthBadge status={status} />
                                 <span className="text-[11px] text-n100 font-mono">{health?.health?.status_code || '-'}</span>
                             </div>
-                            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
                                 <div className="min-w-0">
                                     <div className="text-n100 flex items-center gap-1"><Timer className="w-3 h-3" /> 最近延迟</div>
                                     <div className="text-n700 font-mono">{typeof healthLatency === 'number' ? `${healthLatency} ms` : '-'}</div>
@@ -1687,6 +1761,10 @@ const ApiConfigCard: React.FC<{
                                 <div className="min-w-0">
                                     <div className="text-n100">最后检测</div>
                                     <div className="text-n700 font-mono break-words">{formatTime(healthCheckedAt)}</div>
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-n100">余量</div>
+                                    <div className="text-n700 font-mono break-words">{usageText}</div>
                                 </div>
                             </div>
                         </div>
@@ -1697,6 +1775,42 @@ const ApiConfigCard: React.FC<{
                             {healthError}
                         </div>
                     )}
+
+                    <details className="mt-2 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
+                        <summary className="cursor-pointer select-none font-semibold text-n700">高级测试</summary>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => onTestConfig(config)}
+                                disabled={testingConfig || !config.config_id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                title="只测试这条数据库记录保存的 Key、Endpoint 和模型；结果不会覆盖生效配置健康状态"
+                            >
+                                {testingConfig ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                测当前 DB
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onRealTestConfig(config)}
+                                disabled={realTestingConfig || !configHasKey || !config.config_id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
+                                title="发起一次真实生成请求验证可用性，可能产生厂商费用"
+                            >
+                                {realTestingConfig ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
+                                真实生成
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
+                                disabled={checking || !provider}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                title="检测实际生成调用会使用的生效 Key、Endpoint 和模型"
+                            >
+                                {checking ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                测运行时
+                            </button>
+                        </div>
+                    </details>
 
                     {configTest && (
                         <div className={`mt-2 rounded border px-3 py-2 text-[11px] break-words ${configTestClass}`}>
@@ -1802,10 +1916,11 @@ const ProviderQuickCard: React.FC<{
     });
     const hasSavedKey = configs.some(config => Boolean(config.has_key ?? config.api_key_encrypted));
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : hasSavedKey;
-    const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
+    const status = mergedHealthStatus(health, runtime, runtimeHasKey);
     const view = statusView(status);
     const latency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const checkedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
+    const usageText = providerUsageText(health);
     const endpoint = runtime?.endpoint || primaryConfig?.endpoint || meta.default_endpoint || '';
     const primaryDbEndpoint = primaryConfig?.endpoint || '';
     const runtimePrimaryEndpointMismatch = endpointMismatch(runtime?.endpoint, primaryDbEndpoint);
@@ -1905,6 +2020,9 @@ const ProviderQuickCard: React.FC<{
                 <div className="text-[11px] text-n100">
                     最后检测：<span className="font-mono text-n700 break-words">{formatTime(checkedAt)}</span>
                 </div>
+                <div className="text-[11px] text-n100">
+                    余量：<span className="font-mono text-n700 break-words">{usageText}</span>
+                </div>
                 {runtime?.issues?.length ? (
                     <div className="flex flex-wrap gap-1.5">
                         {runtimeIssueText(runtime.issues).split('，').map(issue => (
@@ -1932,8 +2050,6 @@ const ProviderQuickCard: React.FC<{
                         {sortedConfigs.map(config => {
                             const hasKey = Boolean(config.has_key ?? config.api_key_encrypted);
                             const active = config.config_id === activeConfigId;
-                            const rowTesting = testingConfig || Boolean(testingConfigMap[config.config_id]);
-                            const rowRealTesting = Boolean(realTestingConfigMap[config.config_id]);
                             return (
                                 <div key={config.config_id} className="px-3 py-2">
                                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1969,26 +2085,6 @@ const ProviderQuickCard: React.FC<{
                                                     设为生效
                                                 </button>
                                             )}
-                                            <button
-                                                type="button"
-                                                onClick={() => onTestConfig(config)}
-                                                disabled={rowTesting || !config.config_id}
-                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                                                title="只测试这一条 Key 记录保存的 Key、Endpoint 和模型；不会把它设为生效"
-                                            >
-                                                {rowTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
-                                                测试此 Key
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => onRealTestConfig(config)}
-                                                disabled={rowRealTesting || !hasKey || !config.config_id}
-                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
-                                                title="使用这一条 Key 发起一次真实生成请求，可能产生厂商费用；不会把它设为生效"
-                                            >
-                                                {rowRealTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
-                                                真实生成测试
-                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={() => onEditConfig(config)}
@@ -2034,30 +2130,6 @@ const ProviderQuickCard: React.FC<{
                             <KeyRound className="w-3.5 h-3.5" />
                             配置 / 修改 API Key
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => onTestConfig(primaryConfig)}
-                            disabled={testingConfig || !primaryConfig.config_id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                            title="只测试这条数据库记录保存的 Key、Endpoint 和模型；结果不会覆盖生效配置健康状态"
-                        >
-                            {testingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            测试当前卡片 DB 配置
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => onRealTestConfig(primaryConfig)}
-                            disabled={
-                                Boolean(realTestingConfigMap[primaryConfig.config_id])
-                                || !Boolean(primaryConfig.has_key ?? primaryConfig.api_key_encrypted)
-                                || !primaryConfig.config_id
-                            }
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
-                            title="使用当前卡片选中的 Key 发起一次真实生成请求，可能产生厂商费用"
-                        >
-                            {realTestingConfigMap[primaryConfig.config_id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                            真实生成测试（可能产生费用）
-                        </button>
                     </>
                 ) : (
                     <button
@@ -2086,12 +2158,94 @@ const ProviderQuickCard: React.FC<{
                     onClick={() => onCheck(provider, model || null)}
                     disabled={checking || !provider}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                            title="测试实际生成调用会使用的生效 Key、Endpoint 和模型"
+                    title="检测当前实际生效的 Key、Endpoint 和模型是否连通"
                 >
                     {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                            测试生效配置
+                    连通性检测
                 </button>
             </div>
+
+            <details className="mt-3 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
+                <summary className="cursor-pointer select-none font-semibold text-n700">高级测试</summary>
+                <div className="mt-2 space-y-2">
+                    {primaryConfig && (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-n100">当前卡片</span>
+                            <button
+                                type="button"
+                                onClick={() => onTestConfig(primaryConfig)}
+                                disabled={testingConfig || !primaryConfig.config_id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                title="只测试当前卡片选中的数据库记录，不切换生效 Key"
+                            >
+                                {testingConfig ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                测当前 DB
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onRealTestConfig(primaryConfig)}
+                                disabled={
+                                    Boolean(realTestingConfigMap[primaryConfig.config_id])
+                                    || !Boolean(primaryConfig.has_key ?? primaryConfig.api_key_encrypted)
+                                    || !primaryConfig.config_id
+                                }
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
+                                title="使用当前卡片选中的 Key 发起一次真实生成请求，可能产生厂商费用"
+                            >
+                                {realTestingConfigMap[primaryConfig.config_id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
+                                真实生成
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onCheck(provider, model || null)}
+                                disabled={checking || !provider}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                title="检测实际生成调用会使用的生效 Key、Endpoint 和模型"
+                            >
+                                {checking ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                测运行时
+                            </button>
+                        </div>
+                    )}
+
+                    {sortedConfigs.length > 0 && (
+                        <div className="space-y-1.5 border-t border-n40 pt-2">
+                            {sortedConfigs.map(config => {
+                                const hasKey = Boolean(config.has_key ?? config.api_key_encrypted);
+                                const rowTesting = testingConfig || Boolean(testingConfigMap[config.config_id]);
+                                const rowRealTesting = Boolean(realTestingConfigMap[config.config_id]);
+                                return (
+                                    <div key={`advanced-${config.config_id}`} className="flex flex-wrap items-center justify-between gap-2 rounded bg-n0 border border-n40 px-2 py-1.5">
+                                        <span className="min-w-0 font-mono text-n700 break-all">{config.name || config.config_id}</span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={() => onTestConfig(config)}
+                                                disabled={rowTesting || !config.config_id}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                                title="只测试这一条 Key 记录保存的 Key、Endpoint 和模型；不会把它设为生效"
+                                            >
+                                                {rowTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                                测试此 Key
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onRealTestConfig(config)}
+                                                disabled={rowRealTesting || !hasKey || !config.config_id}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
+                                                title="使用这一条 Key 发起一次真实生成请求，可能产生厂商费用；不会把它设为生效"
+                                            >
+                                                {rowRealTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
+                                                真实生成
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </details>
 
             {configTest && (
                 <div className={`mt-2 rounded border px-2 py-1.5 text-[11px] break-words ${quickConfigTestClass}`}>
@@ -3186,10 +3340,10 @@ const ApiConfigPanel: React.FC = () => {
                             onClick={sweepProviders}
                             disabled={sweeping || loading || configs.length === 0}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                            title="重新检测每个 provider 当前实际生效的运行时配置"
+                            title="重新检测每个 provider 当前实际生效的运行时配置是否连通"
                         >
                             {sweeping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            刷新生效健康
+                            全部连通性检测
                         </button>
                         <button
                             type="button"
@@ -3199,16 +3353,6 @@ const ApiConfigPanel: React.FC = () => {
                         >
                             {repairingConflicts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
                             修复冲突
-                        </button>
-                        <button
-                            type="button"
-                            onClick={testAllConfigs}
-                            disabled={testingAllConfigs || loading || configs.length === 0}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
-                            title="逐条测试数据库中保存的每一条配置，不会切换生效 Key"
-                        >
-                            {testingAllConfigs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            批量测试 DB 配置
                         </button>
                         <button
                             type="button"
@@ -3286,34 +3430,26 @@ const ApiConfigPanel: React.FC = () => {
                 <section className="rounded-md border border-n40 bg-n0 px-4 py-3 shadow-card">
                     <div className="flex items-center gap-2 text-xs font-semibold text-n800">
                         <Activity className="w-3.5 h-3.5 text-primary" />
-                        测试按钮说明
+                        连通性与余量
                     </div>
-                    <div className="mt-2 grid gap-2 text-[11px] text-n100 md:grid-cols-2 xl:grid-cols-4">
-                        <div className="rounded border border-n40 bg-n20 px-3 py-2">
-                            <div className="font-semibold text-n700">测试此 Key / 测试 DB 配置</div>
-                            <p className="mt-1 leading-relaxed">
-                                测试某一条数据库配置保存的 Key、Endpoint、模型和代理设置；不切换生效 Key，也不代表当前生成一定会用这条。
-                            </p>
+                    <p className="mt-2 text-[11px] leading-relaxed text-n100">
+                        每张厂商卡只保留一个连通性检测入口，检测当前实际生效的 Key、Endpoint 和模型。面板会优先展示厂商返回的余额、套餐余量或小时比例；厂商未返回时显示“暂无数据”。
+                    </p>
+                    <details className="mt-2 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
+                        <summary className="cursor-pointer select-none font-semibold text-n700">全局高级测试</summary>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={testAllConfigs}
+                                disabled={testingAllConfigs || loading || configs.length === 0}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                title="逐条测试数据库中保存的每一条配置，不会切换生效 Key"
+                            >
+                                {testingAllConfigs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                批量测试 DB 配置
+                            </button>
                         </div>
-                        <div className="rounded border border-n40 bg-n20 px-3 py-2">
-                            <div className="font-semibold text-n700">测试生效配置</div>
-                            <p className="mt-1 leading-relaxed">
-                                测试实际生成调用当前会使用的运行时配置，也就是标记为“当前生效”的 Key 加上运行时 Endpoint 和模型。
-                            </p>
-                        </div>
-                        <div className="rounded border border-y200 bg-y50 px-3 py-2">
-                            <div className="font-semibold text-y400">真实生成测试</div>
-                            <p className="mt-1 leading-relaxed text-y400">
-                                发起一次最小真实生成请求，用来确认厂商实际可产出内容；可能产生费用，点击前会再次确认。
-                            </p>
-                        </div>
-                        <div className="rounded border border-n40 bg-n20 px-3 py-2">
-                            <div className="font-semibold text-n700">批量测试 DB 配置</div>
-                            <p className="mt-1 leading-relaxed">
-                                逐条测试所有数据库配置，适合筛选坏 Key；不会自动切换当前生效 Key，切换仍需点击“设为生效”。
-                            </p>
-                        </div>
-                    </div>
+                    </details>
                 </section>
 
                 <section className="space-y-2">
