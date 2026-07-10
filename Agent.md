@@ -1,5 +1,11 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 Storyboard Timeline Audio Actions
+
+- The storyboard combined timeline now exposes BGM and sound-effect upload/AI-generation actions matching the dubbing timeline.
+- Existing episode audio tracks are rendered and played through the same shared data source.
+- Added `TimelineTrack.actions.test.tsx` coverage for the four new controls.
+
 ## 2026-07-10 Minimum-Cost Real Generation Tests
 
 - Admin image verification now uses explicit minimum-cost payloads: one SeedDream 1024x1024 image, Gemini 3.1 at 512, and one GPT Image 1024x1024 low-quality image.

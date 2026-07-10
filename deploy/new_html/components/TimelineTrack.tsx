@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Square, SkipBack } from 'lucide-react';
+import { Play, Pause, Plus, Sparkles, Square, SkipBack, Wand2 } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────
 export interface TimelineClip {
   id: string;
   label: string;
-  track: 'narration' | 'dialogue' | 'bgm' | 'image';
+  track: 'narration' | 'dialogue' | 'bgm' | 'sfx' | 'image';
   audioUrl?: string;
   imageUrl?: string;
   durationMs: number;
@@ -19,6 +19,10 @@ export interface TimelineTrackProps {
   totalDurationMs: number;
   onClipClick?: (clip: TimelineClip) => void;
   showPreview?: boolean;
+  onAddBgm?: () => void;
+  onGenerateBgm?: () => void;
+  onAddSfx?: () => void;
+  onGenerateSfx?: () => void;
 }
 
 // ─── Color Palette ─────────────────────────────────────────────────
@@ -26,6 +30,7 @@ const TRACK_COLORS: Record<string, string> = {
   narration: 'bg-amber-500/60',
   dialogue: 'bg-sky-500/60',
   bgm: 'bg-emerald-500/40',
+  sfx: 'bg-blue-500/40',
   image: 'bg-violet-500/50',
 };
 
@@ -33,6 +38,7 @@ const TRACK_LABELS: Record<string, string> = {
   narration: '旁白',
   dialogue: '台词',
   bgm: 'BGM',
+  sfx: '音效',
   image: '分镜',
 };
 
@@ -48,6 +54,7 @@ function fmtTime(ms: number): string {
 // ─── Component ─────────────────────────────────────────────────────
 export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   mode, clips, totalDurationMs, onClipClick, showPreview = false,
+  onAddBgm, onGenerateBgm, onAddSfx, onGenerateSfx,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
@@ -61,10 +68,46 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
 
   const tracks = useMemo(() => {
     const order = mode === 'combined'
-      ? ['image', 'narration', 'dialogue', 'bgm']
-      : ['narration', 'dialogue', 'bgm'];
-    return order.filter(t => clips.some(c => c.track === t));
-  }, [clips, mode]);
+      ? ['image', 'narration', 'dialogue', 'bgm', 'sfx']
+      : ['narration', 'dialogue', 'bgm', 'sfx'];
+    return order.filter(t => (
+      clips.some(c => c.track === t)
+      || (t === 'bgm' && Boolean(onAddBgm || onGenerateBgm))
+      || (t === 'sfx' && Boolean(onAddSfx || onGenerateSfx))
+    ));
+  }, [clips, mode, onAddBgm, onAddSfx, onGenerateBgm, onGenerateSfx]);
+
+  const renderTrackActions = (trackId: string) => {
+    if (trackId !== 'bgm' && trackId !== 'sfx') return null;
+    const onAdd = trackId === 'bgm' ? onAddBgm : onAddSfx;
+    const onGenerate = trackId === 'bgm' ? onGenerateBgm : onGenerateSfx;
+    return (
+      <div className="flex items-center gap-1">
+        {onAdd && (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex h-6 items-center gap-0.5 rounded border border-n40 bg-n0 px-1.5 text-[9px] font-semibold text-n700 hover:bg-n30"
+            title={trackId === 'bgm' ? '添加本地 BGM' : '添加本地音效'}
+          >
+            <Plus size={10} /> 添加
+          </button>
+        )}
+        {onGenerate && (
+          <button
+            type="button"
+            onClick={onGenerate}
+            className={`inline-flex h-6 items-center gap-0.5 rounded px-1.5 text-[9px] font-semibold text-white ${
+              trackId === 'bgm' ? 'bg-success hover:bg-success' : 'bg-primary hover:bg-primary-hover'
+            }`}
+            title={trackId === 'bgm' ? 'AI 音乐制作' : 'AI 音效制作'}
+          >
+            {trackId === 'bgm' ? <Wand2 size={10} /> : <Sparkles size={10} />} AI 生成
+          </button>
+        )}
+      </div>
+    );
+  };
 
   const clipsByTrack = useMemo(() => {
     const m = new Map<string, TimelineClip[]>();
@@ -215,41 +258,47 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
           </div>
 
           {/* Tracks */}
-          <div
-            ref={containerRef}
-            className="relative cursor-pointer select-none"
-            onClick={handleSeek}
-          >
-            {/* Playhead */}
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
-              style={{ left: `${playheadPct}%` }}
-            >
-              <div className="w-2.5 h-2.5 bg-red-500 rounded-full -ml-1 -mt-1" />
-            </div>
-
-            {/* Time ruler */}
-            <div className="h-5 relative mb-1 border-b border-n40">
-              {[0, 0.25, 0.5, 0.75, 1].map(pct => (
-                <span
-                  key={pct}
-                  className="absolute text-[9px] text-n100 -translate-x-1/2"
-                  style={{ left: `${pct * 100}%` }}
-                >
-                  {fmtTime(pct * effectiveTotal)}
-                </span>
+          <div className="flex min-w-[640px] select-none">
+            <div className="w-48 shrink-0 pr-2">
+              <div className="h-5 mb-1 border-b border-n40" />
+              {tracks.map(trackId => (
+                <div key={`label-${trackId}`} className="mb-1 flex h-10 items-center justify-between gap-1 text-[9px] text-n100">
+                  <span className="font-medium">{TRACK_LABELS[trackId] || trackId}</span>
+                  {renderTrackActions(trackId)}
+                </div>
               ))}
             </div>
+            <div
+              ref={containerRef}
+              className="relative min-w-0 flex-1 cursor-pointer"
+              onClick={handleSeek}
+            >
+              {/* Playhead */}
+              <div
+                className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+                style={{ left: `${playheadPct}%` }}
+              >
+                <div className="w-2.5 h-2.5 bg-red-500 rounded-full -ml-1 -mt-1" />
+              </div>
 
-            {/* Track rows */}
-            {tracks.map(trackId => {
-              const trackClips = clipsByTrack.get(trackId) || [];
-              return (
-                <div key={trackId} className="flex items-center h-10 relative mb-1">
-                  <span className="absolute -left-0 text-[9px] text-n100 w-10 text-right pr-1 z-10">
-                    {TRACK_LABELS[trackId] || trackId}
+              {/* Time ruler */}
+              <div className="h-5 relative mb-1 border-b border-n40">
+                {[0, 0.25, 0.5, 0.75, 1].map(pct => (
+                  <span
+                    key={pct}
+                    className="absolute text-[9px] text-n100 -translate-x-1/2"
+                    style={{ left: `${pct * 100}%` }}
+                  >
+                    {fmtTime(pct * effectiveTotal)}
                   </span>
-                  <div className="ml-11 flex-1 relative h-full bg-n30 rounded overflow-hidden">
+                ))}
+              </div>
+
+              {/* Track rows */}
+              {tracks.map(trackId => {
+                const trackClips = clipsByTrack.get(trackId) || [];
+                return (
+                  <div key={trackId} className="mb-1 h-10 rounded bg-n30 relative overflow-hidden">
                     {trackClips.map(clip => {
                       const leftPct = (clip.startMs / effectiveTotal) * 100;
                       const widthPct = (clip.durationMs / effectiveTotal) * 100;
@@ -272,9 +321,9 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                       );
                     })}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

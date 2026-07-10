@@ -1,5 +1,15 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 Storyboard Timeline Audio Actions
+
+### Changes
+
+- Added persistent BGM and sound-effect rows to the storyboard page's combined image/audio timeline.
+- Added local-upload and AI-generation actions beside both rows, reusing the existing `MusicModal`, `SfxModal`, and episode audio-track persistence APIs.
+- Loaded and rendered existing episode BGM/SFX tracks in the combined timeline and refreshed them immediately after creation.
+- Kept the timeline available before media exists so users can add audio without first generating an image or voice clip.
+- Added a focused component test covering all four timeline actions.
+
 ## 2026-07-10 Minimum-Cost Real Generation Tests
 
 ### Changes

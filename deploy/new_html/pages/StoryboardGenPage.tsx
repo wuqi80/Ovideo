@@ -14,13 +14,21 @@ import { fetchEntityFiles } from '../services/entityFileService';
 import { useSelectFileMutation, useDeleteFileMutation } from '../hooks/useFilesMutation';
 import { LayoutGrid, Loader, ChevronDown, ChevronRight, GripHorizontal } from 'lucide-react';
 import { TimelineTrack, type TimelineClip } from '../components/TimelineTrack';
-import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary } from '../types';
+import { MusicModal } from '../components/audio/MusicModal';
+import { SfxModal } from '../components/audio/SfxModal';
+import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary, AudioTrack } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { runWhenIdle } from '../utils/idleScheduler';
 import { getImageThumbnailUrl } from '../services/imageLoaderService';
 
 const STORYBOARD_INITIAL_SHOT_COUNT = 10;
 const GenerationPage = React.lazy(() => import('../components/GenerationPage').then(m => ({ default: m.GenerationPage })));
+
+function resolveMediaUrl(path: string): string {
+  if (!path) return '';
+  if (path.startsWith('http') || path.startsWith('blob:') || path.startsWith('/')) return path;
+  return `/${path}`;
+}
 
 const WorkflowChunkFallback: React.FC<{ label: string }> = ({ label }) => (
   <div className="h-full min-h-[240px] flex items-center justify-center text-n300">
@@ -43,7 +51,7 @@ export const StoryboardGenPage: React.FC = () => {
   const navigate = useNavigate();
   const {
     episodeId, projectId, selectedScriptId,
-    script, storyboardItems, assets,
+    script, storyboardItems, assets, audioTracks,
     assetScopeMode, setAssetScopeMode,
     storyboardTotalCount,
     isLoading, error,
@@ -62,7 +70,7 @@ export const StoryboardGenPage: React.FC = () => {
       forceReloadSlices('script'),
     ]).then(() => {
       if (!active) return;
-      const run = () => loadSlicesQuiet('assets');
+      const run = () => loadSlicesQuiet('assets', 'audioTracks');
       cancelIdle = runWhenIdle(run, { timeout: 1500 });
     });
     return () => {
@@ -72,6 +80,8 @@ export const StoryboardGenPage: React.FC = () => {
   }, [forceReloadSlices, loadSlicesQuiet, loadStoryboardItemsPage, selectedScriptId]);
 
   const [visibleEntityShotCount, setVisibleEntityShotCount] = useState(STORYBOARD_INITIAL_SHOT_COUNT);
+  const [showMusicModal, setShowMusicModal] = useState(false);
+  const [showSfxModal, setShowSfxModal] = useState(false);
   const handleVisibleShotCountChange = useCallback((count: number) => {
     setVisibleEntityShotCount(count);
     if (count > STORYBOARD_INITIAL_SHOT_COUNT && count > storyboardItems.length) {
@@ -313,12 +323,13 @@ export const StoryboardGenPage: React.FC = () => {
     const sorted = [...storyboardItems].sort((a, b) => a.sortOrder - b.sortOrder);
     const visibleItems = sorted.slice(0, visibleEntityShotCount);
     const result: TimelineClip[] = [];
+    const itemStartMs = new Map<string, number>();
     let cursorMs = 0;
     for (const item of visibleItems) {
+      itemStartMs.set(item.itemId, cursorMs);
       const hasImage = !!item.generatedImageUrl;
       const hasAudio = !!(item.dialogueAudioUrl || item.narrationAudioUrl);
-      if (!hasImage && !hasAudio) continue;
-      const durMs = item.audioDurationMs || 3000;
+      const durMs = item.audioDurationMs || item.plannedDurationMs || 3000;
 
       if (hasImage) {
         const imgUrl = item.generatedImageUrl!.startsWith('/') ? item.generatedImageUrl! : `/${item.generatedImageUrl}`;
@@ -355,15 +366,46 @@ export const StoryboardGenPage: React.FC = () => {
       }
       cursorMs += durMs;
     }
-    return result;
-  }, [storyboardItems, visibleEntityShotCount]);
 
-  const timelineTotalMs = useMemo(
-    () => timelineClips.reduce((m, c) => Math.max(m, c.startMs + c.durationMs), 0),
-    [timelineClips],
+    for (const rawTrack of audioTracks) {
+      const track = rawTrack as AudioTrack & Record<string, unknown>;
+      const trackType = String(track.trackType ?? track.track_type ?? '');
+      if (trackType !== 'bgm' && trackType !== 'sfx_global') continue;
+      const audioUrlRaw = String(track.audioUrl ?? track.audio_url ?? '');
+      if (!audioUrlRaw) continue;
+      const startItemId = String(track.startItemId ?? track.start_item_id ?? '');
+      const startMs = startItemId ? (itemStartMs.get(startItemId) ?? 0) : 0;
+      const durationMsRaw = Number(track.durationMs ?? track.duration_ms ?? 0);
+      const durationMs = durationMsRaw > 0 ? durationMsRaw : Math.max(cursorMs - startMs, 1000);
+      result.push({
+        id: `track_${track.trackId ?? track.track_id}`,
+        label: String(track.name || (trackType === 'bgm' ? 'BGM' : '音效')),
+        track: trackType === 'bgm' ? 'bgm' : 'sfx',
+        audioUrl: resolveMediaUrl(audioUrlRaw),
+        durationMs,
+        startMs,
+      });
+    }
+    return result;
+  }, [audioTracks, storyboardItems, visibleEntityShotCount]);
+
+  const timelineStoryboardTotalMs = useMemo(
+    () => [...storyboardItems]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .slice(0, visibleEntityShotCount)
+      .reduce((sum, item) => sum + (item.audioDurationMs || item.plannedDurationMs || 3000), 0),
+    [storyboardItems, visibleEntityShotCount],
   );
 
-  const showTimeline = timelineClips.length > 0;
+  const timelineTotalMs = useMemo(
+    () => Math.max(
+      timelineStoryboardTotalMs,
+      timelineClips.reduce((m, c) => Math.max(m, c.startMs + c.durationMs), 0),
+    ),
+    [timelineClips, timelineStoryboardTotalMs],
+  );
+
+  const showTimeline = storyboardItems.length > 0;
   const [timelinePanel, setTimelinePanel] = usePersistedPageState<{ collapsed: boolean; heightPx: number }>({
     page: 'StoryboardGenPage:timelinePanel',
     episodeId: 'global', // 面板尺寸是全局视觉偏好，不按剧集隔离
@@ -505,15 +547,48 @@ export const StoryboardGenPage: React.FC = () => {
               图 + 音联合时间轴
             </h4>
             <span className="text-[10px] text-n100">
-              {fmtTimeSimple(timelineTotalMs)} | {timelineClips.filter(c => c.track === 'image').length} 个镜头
+              {fmtTimeSimple(timelineTotalMs)} | {Math.min(visibleEntityShotCount, storyboardItems.length)} 个镜头
             </span>
           </div>
           {!timelineCollapsed && (
             <div className="px-4 pb-4 overflow-y-auto" style={{ height: timelineVisibleHeightPx }}>
-              <TimelineTrack mode="combined" clips={timelineClips} totalDurationMs={timelineTotalMs} showPreview />
+              <TimelineTrack
+                mode="combined"
+                clips={timelineClips}
+                totalDurationMs={timelineTotalMs}
+                showPreview
+                onAddBgm={() => setShowMusicModal(true)}
+                onGenerateBgm={() => setShowMusicModal(true)}
+                onAddSfx={() => setShowSfxModal(true)}
+                onGenerateSfx={() => setShowSfxModal(true)}
+              />
             </div>
           )}
         </div>
+      )}
+      {showMusicModal && (
+        <MusicModal
+          episodeId={episodeId}
+          projectId={projectId}
+          script={script}
+          onClose={() => setShowMusicModal(false)}
+          onCreated={async () => {
+            await forceReloadSlices('audioTracks');
+            setShowMusicModal(false);
+          }}
+        />
+      )}
+      {showSfxModal && (
+        <SfxModal
+          episodeId={episodeId}
+          projectId={projectId}
+          script={script}
+          onClose={() => setShowSfxModal(false)}
+          onCreated={async () => {
+            await forceReloadSlices('audioTracks');
+            setShowSfxModal(false);
+          }}
+        />
       )}
     </div>
   );
