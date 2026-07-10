@@ -464,6 +464,33 @@ function providerHealthFrom(
     return map[providerHealthKey(providerKey, modelName)] || map[providerKey];
 }
 
+function providerHealthFromRealGenerationTest(config: ApiConfig, test?: ApiConfigTest): ProviderHealth | undefined {
+    if (!test?.real_generation) return undefined;
+    const provider = normalizeProvider(test.provider || config.provider);
+    if (!provider) return undefined;
+    const status = healthStatusFromConfigTest(test) || 'unknown';
+    return {
+        success: true,
+        provider,
+        model_name: test.model_name || config.model_name || null,
+        status,
+        latency_ms: test.latency_ms ?? null,
+        checked_at: test.checked_at || new Date().toISOString(),
+        health: {
+            ok: Boolean(test.ok),
+            reachable: Boolean(test.reachable),
+            auth_ok: Boolean(test.auth_ok),
+            status_code: test.status_code ?? null,
+            url: test.url || null,
+            error: test.error || null,
+            method: test.method || 'POST',
+            real_generation: true,
+            billable: test.billable ?? true,
+            output_type: test.output_type || null,
+        },
+    };
+}
+
 function formatEndpoint(endpoint?: string): string {
     if (!endpoint) return '-';
     return endpoint.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -972,8 +999,8 @@ function normalizePercentValue(value: number): number {
     return Math.max(0, Math.min(100, percent));
 }
 
-function providerUsageText(health?: ProviderHealth): string {
-    const source = { ...(health?.health || {}), ...(health || {}) } as JsonRecord;
+function providerUsageText(health?: ProviderHealth, configTest?: ApiConfigTest): string {
+    const source = { ...(configTest || {}), ...(health?.health || {}), ...(health || {}) } as JsonRecord;
     const balance = firstFiniteNumber(source, [
         'balance_cny',
         'remaining_cny',
@@ -1021,6 +1048,13 @@ function providerUsageText(health?: ProviderHealth): string {
 
     const tokens = firstFiniteNumber(source, ['remaining_tokens', 'tokens_remaining', 'token_balance']);
     if (typeof tokens === 'number') return `剩余 Token：${compactNumber(tokens, 0)}`;
+
+    const verifiedByGeneration = Boolean(
+        (health?.status === 'ok' && health?.health?.real_generation)
+        || (health?.health?.ok && health?.health?.real_generation)
+        || (configTest?.ok && configTest.real_generation)
+    );
+    if (verifiedByGeneration) return '真实生成已验证，余量未返回';
 
     return '余量：暂无数据';
 }
@@ -1541,7 +1575,7 @@ const ApiConfigCard: React.FC<{
     const healthError = health?.health?.error || runtime?.health_error || '';
     const healthLatency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const healthCheckedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
-    const usageText = providerUsageText(health);
+    const usageText = providerUsageText(health, configTest);
     const runtimeIssue = runtimeIssueText(runtime?.issues);
     const runtimeEndpoint = runtime?.endpoint || '';
     const dbEndpoint = config.endpoint || '';
@@ -1920,11 +1954,11 @@ const ProviderQuickCard: React.FC<{
     });
     const hasSavedKey = configs.some(config => Boolean(config.has_key ?? config.api_key_encrypted));
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : hasSavedKey;
-    const status = mergedHealthStatus(health, runtime, runtimeHasKey);
+    const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
     const view = statusView(status);
     const latency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const checkedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
-    const usageText = providerUsageText(health);
+    const usageText = providerUsageText(health, configTest);
     const endpoint = runtime?.endpoint || primaryConfig?.endpoint || meta.default_endpoint || '';
     const primaryDbEndpoint = primaryConfig?.endpoint || '';
     const runtimePrimaryEndpointMismatch = endpointMismatch(runtime?.endpoint, primaryDbEndpoint);
@@ -2895,12 +2929,15 @@ const ApiConfigPanel: React.FC = () => {
                 billable: result.test?.billable ?? true,
             };
             setConfigTestMap(prev => ({ ...prev, [configId]: test }));
-            if (result.provider_health) {
-                setHealthMap(prev => buildProviderHealthMap([
-                    ...Object.values(prev),
-                    result.provider_health as ProviderHealth,
-                ]));
+            const providerHealth = result.provider_health || providerHealthFromRealGenerationTest(config, test);
+            if (providerHealth) {
+                setHealthMap(prev => {
+                    const next = { ...prev };
+                    putProviderHealth(next, providerHealth, test.model_name || config.model_name || null);
+                    return next;
+                });
             }
+            await loadConfigs({ showLoading: false });
             if (test.ok) {
                 crmMessage.success(`${displayName} 真实生成测试通过${test.output_type ? `（${test.output_type}）` : ''}`);
             } else if (isUnsupportedRealGenerationTest(test)) {
@@ -2915,7 +2952,7 @@ const ApiConfigPanel: React.FC = () => {
         } finally {
             setRealTestingConfig(prev => ({ ...prev, [configId]: false }));
         }
-    }, []);
+    }, [loadConfigs]);
 
     const testAllConfigs = useCallback(async () => {
         if (!configs.length) return;
@@ -3551,7 +3588,7 @@ const ApiConfigPanel: React.FC = () => {
                         连通性与余量
                     </div>
                     <p className="mt-2 text-[11px] leading-relaxed text-n100">
-                        每张厂商卡只保留一个连通性检测入口，检测当前实际生效的 Key、Endpoint 和模型。面板会优先展示厂商返回的余额、套餐余量或小时比例；厂商未返回时显示“暂无数据”。
+                        每张厂商卡只保留一个连通性检测入口，检测当前实际生效的 Key、Endpoint 和模型。面板会优先展示厂商返回的余额、套餐余量或小时比例；真实生成已通过但厂商未返回余额时，会显示“真实生成已验证，余量未返回”。
                     </p>
                     <details className="mt-2 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
                         <summary className="cursor-pointer select-none font-semibold text-n700">全局高级测试</summary>
