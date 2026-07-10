@@ -6,6 +6,7 @@ import {
     canonicalizePrompt,
     shouldEnableWebSearch,
     parseArkAssetId,
+    TOKEN_PREFIX,
 } from '../../utils/seedanceMedia';
 import type { SeedanceParams } from '../../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../../utils/seedanceMedia';
@@ -67,6 +68,27 @@ describe('insertMention (image)', () => {
         expect(next.media_inputs).toHaveLength(2);
         expect(next.prompt).toMatch(/图片1/);
         expect(next.prompt).toMatch(/图片2/);
+    });
+    it('reuses the existing media_input when the same image is inserted again', () => {
+        const token = `${TOKEN_PREFIX.image}1`;
+        const v = baseParams({
+            prompt: `scene ${token}`,
+            media_inputs: [{ kind: 'image', url: '/storage/assets/hero.png' }],
+        });
+        const next = insertMention(v, imgCandidate());
+        expect(next.media_inputs).toHaveLength(1);
+        expect(next.media_inputs[0].url).toBe('/storage/assets/hero.png');
+        expect(next.prompt).toBe(`scene ${token}`);
+    });
+    it('reuses the existing media_input in caret mode', () => {
+        const token = `${TOKEN_PREFIX.image}1`;
+        const v = baseParams({
+            prompt: 'look @hero now',
+            media_inputs: [{ kind: 'image', url: '/storage/assets/hero.png' }],
+        });
+        const next = insertMention(v, imgCandidate(), { atPos: 5, caretPos: 10 });
+        expect(next.media_inputs).toHaveLength(1);
+        expect(next.prompt).toBe(`look ${token} now`);
     });
 });
 

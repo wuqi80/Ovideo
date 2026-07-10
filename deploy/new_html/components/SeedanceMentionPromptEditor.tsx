@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react';
 import type { SeedanceParams, SeedanceMediaInput } from '../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
-import { insertMention, parseArkAssetId, removeMediaInput, TOKEN_PREFIX } from '../utils/seedanceMedia';
+import { hasMediaTokenReference, insertMention, parseArkAssetId, removeMediaInput, TOKEN_PREFIX } from '../utils/seedanceMedia';
 import { SeedanceMentionTokensRow } from './SeedanceMentionTokensRow';
 import { AIRewritePromptModal } from './AIRewritePromptModal';
 import { splitPromptSegments, TOKEN_KIND_OVERLAY_CLASS } from '../utils/promptHighlight';
@@ -208,12 +208,10 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
                             if (targetAbsIdx === undefined || targetAbsIdx < 0) {
                                 // No backing media (orphan token) — just strip text
                                 onChange({ ...value, prompt: promptStripped });
+                            } else if (hasMediaTokenReference(promptStripped, kind, tokenN)) {
+                                onChange({ ...value, prompt: promptStripped });
                             } else {
-                                // removeMediaInput operates on the full SeedanceParams (renumbers
-                                // remaining tokens automatically). We then overlay our stripped
-                                // prompt because removeMediaInput preserves text around the token.
-                                const after = removeMediaInput(value, targetAbsIdx);
-                                onChange({ ...after, prompt: removeMediaInput({ ...value, prompt: promptStripped }, targetAbsIdx).prompt });
+                                onChange(removeMediaInput({ ...value, prompt: promptStripped }, targetAbsIdx));
                             }
                             return;
                         }

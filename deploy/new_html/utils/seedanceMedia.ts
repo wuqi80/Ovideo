@@ -60,7 +60,40 @@ export function nextTokenIndex(
 }
 
 function tokenRegex(kind: SeedanceMediaKind, n: number | '\\d+'): RegExp {
-    return new RegExp(`${TOKEN_PREFIX[kind]}${n}`, 'g');
+    if (n === '\\d+') return new RegExp(`${TOKEN_PREFIX[kind]}(\\d+)`, 'g');
+    return new RegExp(`${TOKEN_PREFIX[kind]}${n}(?!\\d)`, 'g');
+}
+
+function normalizedMediaUrl(url: string): string {
+    return (url || '').trim();
+}
+
+function findExistingMediaIndex(
+    value: Pick<SeedanceParams, 'media_inputs'>,
+    kind: SeedanceMediaKind,
+    url: string,
+): number {
+    const normalizedUrl = normalizedMediaUrl(url);
+    return value.media_inputs.findIndex(m =>
+        m.kind === kind && normalizedMediaUrl(m.url) === normalizedUrl,
+    );
+}
+
+function tokenIndexForMediaInput(value: Pick<SeedanceParams, 'media_inputs'>, absIdx: number): number {
+    const media = value.media_inputs[absIdx];
+    if (!media) return 0;
+    return value.media_inputs
+        .slice(0, absIdx + 1)
+        .filter(m => m.kind === media.kind)
+        .length;
+}
+
+export function hasMediaTokenReference(
+    prompt: string,
+    kind: SeedanceMediaKind,
+    tokenIndex: number,
+): boolean {
+    return tokenRegex(kind, tokenIndex).test(prompt || '');
 }
 
 /**
@@ -99,8 +132,13 @@ export function insertMention(
     if (!url) return value;
 
     const newInput: SeedanceMediaInput = { kind, url };
-    const idx = nextTokenIndex(value, kind);
+    const existingIdx = findExistingMediaIndex(value, kind, url);
+    const hasExistingInput = existingIdx >= 0;
+    const idx = hasExistingInput
+        ? tokenIndexForMediaInput(value, existingIdx)
+        : nextTokenIndex(value, kind);
     const token = `${TOKEN_PREFIX[kind]}${idx}`;
+    const mediaInputs = hasExistingInput ? value.media_inputs : [...value.media_inputs, newInput];
 
     if (useCaret) {
         const before = (value.prompt || '').slice(0, opts!.atPos);
@@ -109,7 +147,7 @@ export function insertMention(
         const trail = after === '' || /^\s/.test(after) ? '' : ' ';
         return {
             ...value,
-            media_inputs: [...value.media_inputs, newInput],
+            media_inputs: mediaInputs,
             prompt: before + token + trail + after,
         };
     }
@@ -123,7 +161,7 @@ export function insertMention(
 
     return {
         ...value,
-        media_inputs: [...value.media_inputs, newInput],
+        media_inputs: mediaInputs,
         prompt: newPrompt,
     };
 }
