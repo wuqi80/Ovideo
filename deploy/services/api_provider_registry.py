@@ -405,6 +405,9 @@ PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
         "interactions": "interactions",
         "models": "models",
     },
+    "doubao": {
+        "image_generations": "images/generations",
+    },
     "minimax": {
         "video_generation": "video_generation",
         "query_video_generation": "query/video_generation",

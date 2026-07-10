@@ -171,6 +171,31 @@ async def main() -> int:
     if not laozhang_test.get("reachable") or not laozhang_test.get("auth_ok"):
         fail(f"Laozhang connectivity result lost reachability/auth: {laozhang_test}")
 
+    doubao_row = {
+        "provider": "doubao",
+        "model_name": "doubao-seedream-5-0-pro-260628",
+        "endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+        "proxy_mode": "direct",
+        "custom_proxy": "",
+    }
+    doubao_factory = FakeSessionFactory([(200, '{"data": []}')])
+    doubao_health = await test_api_config_health(
+        doubao_row,
+        "doubao-secret",
+        session_factory=doubao_factory,
+    )
+    doubao_test = doubao_health.get("test") or {}
+    if doubao_test.get("ok") is not False or doubao_test.get("status") != "connectivity_ok":
+        fail(f"Doubao metadata-only health should not report generation ok: {doubao_test}")
+    if registry.get_provider_api_path("doubao", "image_generations") != "images/generations":
+        fail("Doubao image generation operation path is missing")
+    doubao_urls = registry.build_provider_operation_url_templates(
+        "doubao",
+        doubao_row["endpoint"],
+    )
+    if doubao_urls.get("image_generations") != doubao_row["endpoint"]:
+        fail(f"Unexpected Doubao image generation URL: {doubao_urls}")
+
     batch_summary = summarize_config_test_results(
         [
             {"test": {"ok": True, "auth_ok": True}},
@@ -283,6 +308,8 @@ async def main() -> int:
     print("  no_key_result_ok=1")
     print("  batch_summary_ok=1")
     print("  real_generation_provider_health=1")
+    print("  doubao_connectivity_only=1")
+    print("  doubao_operation_paths=1")
     print(f"  fake_http_calls={len(factory.calls)}")
     print("  laozhang_connectivity_only=2")
     print("  provider_runtime_health=3")

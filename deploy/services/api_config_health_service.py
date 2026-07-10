@@ -40,6 +40,7 @@ REAL_GENERATION_UNSUPPORTED_ERROR = (
     "Use the business workflow page to verify actual generation."
 )
 GENERATION_SENSITIVE_PROVIDERS = {
+    "doubao",
     "gemini-tts",
     "gemini-text",
     "gemini-image",

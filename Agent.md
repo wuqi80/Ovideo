@@ -1,5 +1,11 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 Doubao Provider Health Semantics
+
+- Added the missing Doubao image-generation API path metadata.
+- Changed lightweight Doubao health checks to `connectivity_ok`; only a successful real-generation test can establish green ready status.
+- Added admin health contract coverage for both behaviors.
+
 ## 2026-07-10 Preserve Verified Provider Health
 
 - Updated the API provider admin UI so DB connectivity tests cannot downgrade a successful real-generation verification.

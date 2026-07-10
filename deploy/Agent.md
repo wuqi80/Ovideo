@@ -1,5 +1,14 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 Doubao Provider Health Semantics
+
+### Changes
+
+- Registered the Doubao `image_generations` operation path so the admin provider card displays its API path and resolved generation URL.
+- Classified successful lightweight Doubao metadata checks as `connectivity_ok` instead of generation-ready `ok`.
+- Required a successful billable real-generation test before Doubao can display green `OK ready` status.
+- Added contract checks for the Doubao operation URL and connectivity-only health result.
+
 ## 2026-07-10 Preserve Verified Provider Health
 
 ### Changes
