@@ -1,5 +1,15 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 Minimum-Cost Real Generation Tests
+
+### Changes
+
+- Standardized admin image verification on one simple output using each provider's lowest safe test profile.
+- Kept SeedDream at one 1024x1024 image, set Gemini 3.1 Flash Image to 512 output, and set GPT Image to one 1024x1024 low-quality image.
+- Shortened the Gemini TTS verification phrase to `OK.`.
+- Kept admin video real-generation tests disabled until each provider has an explicit minimum-duration and minimum-resolution contract, preventing accidental billable video tasks.
+- Added focused payload tests for Doubao, Gemini Image, GPT Image, and video non-submission.
+
 ## 2026-07-10 Doubao Provider Health Semantics
 
 ### Changes

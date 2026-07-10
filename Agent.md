@@ -1,5 +1,11 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 Minimum-Cost Real Generation Tests
+
+- Admin image verification now uses explicit minimum-cost payloads: one SeedDream 1024x1024 image, Gemini 3.1 at 512, and one GPT Image 1024x1024 low-quality image.
+- Gemini TTS verification uses the short phrase `OK.`.
+- Admin video verification remains non-billable/unsupported until provider-specific minimum task contracts are implemented.
+
 ## 2026-07-10 Doubao Provider Health Semantics
 
 - Added the missing Doubao image-generation API path metadata.

@@ -322,11 +322,14 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
     if normalized == "gemini-image":
         model = model or "gemini-2.5-flash-image"
         url = _join_api_url(endpoint, get_provider_api_path(normalized, "generate_content", model=model))
+        image_config: Dict[str, Any] = {"aspectRatio": "1:1"}
+        if model.startswith("gemini-3.1-flash-image"):
+            image_config["imageSize"] = "512"
         return url, {
             "contents": [{"parts": [{"text": "Generate a very simple 1:1 blue square icon."}]}],
             "generationConfig": {
                 "responseModalities": ["IMAGE"],
-                "imageConfig": {"aspectRatio": "1:1"},
+                "imageConfig": image_config,
             },
         }, "image"
 
@@ -334,7 +337,7 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         model = model or "gemini-3.1-flash-tts-preview"
         url = _join_api_url(endpoint, f"models/{model}:generateContent")
         return url, {
-            "contents": [{"parts": [{"text": "Read aloud: API test."}]}],
+            "contents": [{"parts": [{"text": "OK."}]}],
             "generationConfig": {
                 "responseModalities": ["AUDIO"],
                 "speechConfig": {
@@ -361,10 +364,12 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             "model": model or "gpt-image-2",
             "prompt": "A simple blue square icon on a white background.",
             "n": 1,
-            "size": "auto",
-            "quality": "auto",
+            "size": "1024x1024",
+            "quality": "low",
         }, "image"
 
+    # Video providers intentionally remain unsupported here. A generic video
+    # probe could create a costly task with the wrong duration or resolution.
     raise ProviderHealthNotFound(REAL_GENERATION_UNSUPPORTED_ERROR)
 
 
