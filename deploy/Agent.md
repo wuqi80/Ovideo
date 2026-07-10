@@ -1,5 +1,14 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 Preserve Verified Provider Health
+
+### Changes
+
+- Changed DB connectivity-only results from a red configuration error to a yellow successful-connectivity warning with explicit wording that real generation is still unverified.
+- Prevented single and batch DB connectivity tests from replacing an existing successful real-generation result in the admin UI.
+- Kept real-generation results authoritative until another real-generation test runs or the configuration is edited.
+- Added focused frontend tests for verified-result preservation and connectivity-only classification.
+
 ## 2026-07-10 DeepSeek Real Generation Verification
 
 ### Changes

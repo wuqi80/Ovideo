@@ -28,6 +28,10 @@ import {
 } from 'lucide-react';
 import { crmConfirm, crmMessage } from './crmUI';
 import { apiBlob, apiJson } from '../services/httpClient';
+import {
+    isConnectivityOnlyConfigTest,
+    mergeConfigTestPreservingVerification,
+} from '../utils/apiConfigTestState';
 
 const LEGACY_VER = '20260701-qwen-agent-v2';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
@@ -651,12 +655,11 @@ function healthStatusFromConfigTest(test?: ApiConfigTest): HealthStatus | undefi
     if (test.ok) return 'ok';
     if (isNoKeyTest(test)) return 'no_key';
     if (isUnsupportedRealGenerationTest(test)) return 'connectivity_ok';
+    if (isConnectivityOnlyConfigTest(test)) return 'connectivity_ok';
     const status = String(test.status || '').toLowerCase();
-    if (status === 'connectivity_ok') return 'connectivity_ok';
     if (status === 'blocked_region') return 'blocked_region';
     const errorText = String(test.error || '').toLowerCase();
     if (errorText.includes('user location is not supported')) return 'blocked_region';
-    if (test.reachable && test.auth_ok && errorText.includes('generation is not verified')) return 'connectivity_ok';
     return 'error';
 }
 
@@ -1158,6 +1161,20 @@ function configTestTitle(test?: ApiConfigTest): string {
     return test?.real_generation ? '真实生成测试（可能产生费用）：' : 'DB 配置测试：';
 }
 
+function configTestResultClass(test: ApiConfigTest | undefined, hasRuntimeWarning: boolean): string {
+    if (!test) return '';
+    if (test.ok) {
+        return hasRuntimeWarning
+            ? 'border-y200 bg-y50 text-y400'
+            : 'border-g75 bg-g50 text-g400';
+    }
+    const status = healthStatusFromConfigTest(test);
+    if (status === 'connectivity_ok' || status === 'blocked_region' || status === 'no_key') {
+        return 'border-y200 bg-y50 text-y400';
+    }
+    return 'border-r75 bg-r50 text-r400';
+}
+
 function configTestLabelText(
     test: ApiConfigTest | undefined,
     runtimeWarningText: string,
@@ -1185,6 +1202,9 @@ function configTestLabelText(
         return runtimeWarningText || (test.used_runtime_key ? messages.runtimeKeyOk : messages.dbOk);
     }
     if (isNoKeyTest(test)) return messages.noKey;
+    if (isConnectivityOnlyConfigTest(test)) {
+        return 'DB 配置连接成功，Key 与 Endpoint 可用；尚未验证真实生成能力';
+    }
     return messages.error;
 }
 
@@ -1686,18 +1706,10 @@ const ApiConfigCard: React.FC<{
         runtime?.failover_selected_model_name,
     ].filter(Boolean).join(' / ');
     const failoverActive = Boolean(runtime?.failover_active);
-    const configTestNoKey = isNoKeyTest(configTest);
-    const configTestUnsupported = isUnsupportedRealGenerationTest(configTest);
     const configTestRuntimeWarningText = configTest?.ok ? configTestRuntimeWarning(configTest) : '';
     const configTestUsesRuntimeKey = Boolean(configTest?.ok && (configTest.used_runtime_key || configTestRuntimeWarningText));
     const configTestTitleText = configTestTitle(configTest);
-    const configTestClass = configTest?.ok
-        ? configTestUsesRuntimeKey
-            ? 'border-y200 bg-y50 text-y400'
-            : 'border-g75 bg-g50 text-g400'
-        : configTestNoKey || configTestUnsupported
-            ? 'border-y200 bg-y50 text-y400'
-        : 'border-r75 bg-r50 text-r400';
+    const configTestClass = configTestResultClass(configTest, configTestUsesRuntimeKey);
     const configTestLabel = configTestLabelText(configTest, configTestRuntimeWarningText, {
         runtimeKeyOk: '运行时连通正常；此条 DB 记录仍未保存 Key',
         dbOk: '此条记录连通正常',
@@ -2067,18 +2079,10 @@ const ProviderQuickCard: React.FC<{
     const keySourceClass = runtimeHasKey || hasSavedKey ? 'text-g400' : 'text-r400';
     const dbKeyText = dbKeyStateText(hasSavedKey, runtimeHasKey);
     const dbKeyClass = dbKeyStateClass(hasSavedKey, runtimeHasKey);
-    const quickConfigTestNoKey = isNoKeyTest(configTest);
-    const quickConfigTestUnsupported = isUnsupportedRealGenerationTest(configTest);
     const quickConfigTestRuntimeWarningText = configTest?.ok ? configTestRuntimeWarning(configTest) : '';
     const quickConfigTestUsesRuntimeKey = Boolean(configTest?.ok && (configTest.used_runtime_key || quickConfigTestRuntimeWarningText));
     const quickConfigTestTitle = configTestTitle(configTest);
-    const quickConfigTestClass = configTest?.ok
-        ? quickConfigTestUsesRuntimeKey
-            ? 'border-y200 bg-y50 text-y400'
-            : 'border-g75 bg-g50 text-g400'
-        : quickConfigTestNoKey || quickConfigTestUnsupported
-            ? 'border-y200 bg-y50 text-y400'
-        : 'border-r75 bg-r50 text-r400';
+    const quickConfigTestClass = configTestResultClass(configTest, quickConfigTestUsesRuntimeKey);
     const quickConfigTestLabel = configTestLabelText(configTest, quickConfigTestRuntimeWarningText, {
         runtimeKeyOk: '运行时连通正常；DB 仍未保存 Key',
         dbOk: 'DB 配置可用',
@@ -2987,7 +2991,10 @@ const ApiConfigPanel: React.FC = () => {
             });
             const latencyMs = Math.round(performance.now() - startedAt);
             const test = { ...(result.test || {}), latency_ms: latencyMs };
-            setConfigTestMap(prev => ({ ...prev, [configId]: test }));
+            setConfigTestMap(prev => ({
+                ...prev,
+                [configId]: mergeConfigTestPreservingVerification(prev[configId], test),
+            }));
             if (test.ok) {
                 const runtimeWarning = configTestRuntimeWarning(test);
                 if (runtimeWarning) {
@@ -3077,7 +3084,12 @@ const ApiConfigPanel: React.FC = () => {
             setConfigTestMap(prev => {
                 const next = { ...prev };
                 rows.forEach(item => {
-                    if (item.config_id && item.test) next[item.config_id] = item.test;
+                    if (item.config_id && item.test) {
+                        next[item.config_id] = mergeConfigTestPreservingVerification(
+                            next[item.config_id],
+                            item.test,
+                        );
+                    }
                 });
                 return next;
             });

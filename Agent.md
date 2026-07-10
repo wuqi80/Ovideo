@@ -1,5 +1,11 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 Preserve Verified Provider Health
+
+- Updated the API provider admin UI so DB connectivity tests cannot downgrade a successful real-generation verification.
+- Connectivity-only DB tests now render as a warning that Key and Endpoint are reachable, not as a configuration error.
+- Added frontend regression coverage in `deploy/new_html/__tests__/utils/apiConfigTestState.test.ts`.
+
 ## 2026-07-10 DeepSeek Real Generation Verification
 
 - Fixed `deploy/services/api_config_health_service.py` so DeepSeek Reasoner real-generation tests accept `reasoning_content` and allow enough output tokens for reasoning plus a final answer.
