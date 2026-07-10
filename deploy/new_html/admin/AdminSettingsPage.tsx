@@ -44,6 +44,12 @@ const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
 type HealthStatus = 'ok' | 'error' | 'no_key' | 'blocked_region' | 'connectivity_ok' | 'unknown';
 type JsonRecord = Record<string, any>;
 
+interface ApiModelBinding {
+    operation: string;
+    label?: string;
+    model_name: string;
+}
+
 interface ApiConfig {
     config_id: string;
     name: string;
@@ -53,6 +59,7 @@ interface ApiConfig {
     has_key?: boolean;
     api_key_preview?: string;
     model_name?: string;
+    model_bindings?: ApiModelBinding[];
     proxy_mode?: string;
     custom_proxy?: string;
     request_template?: JsonRecord | string | null;
@@ -72,6 +79,8 @@ interface ProviderMeta {
     key_help?: string;
     capabilities?: string[];
     extra_fields?: ProviderExtraField[];
+    model_binding_options?: ApiModelBinding[];
+    access_modes?: ProviderAccessMode[];
     default_config_name?: string;
     default_endpoint?: string;
     default_model_name?: string;
@@ -81,6 +90,14 @@ interface ProviderMeta {
     preset_categories?: string[];
     operation_paths?: Record<string, string>;
     default_operation_url_templates?: Record<string, string>;
+}
+
+interface ProviderAccessMode {
+    mode: string;
+    label?: string;
+    endpoint: string;
+    console_url?: string;
+    model_map?: Record<string, string>;
 }
 
 interface ProviderExtraField {
@@ -243,6 +260,7 @@ interface ApiConfigFormState {
     bulk_api_keys: string;
     bulk_mode: boolean;
     model_name: string;
+    model_bindings: ApiModelBinding[];
     proxy_mode: string;
     custom_proxy: string;
     request_template: string;
@@ -257,6 +275,7 @@ interface ApiConfigWriteResponse {
     api_config?: ApiConfig;
     api_configs?: ApiConfig[];
     created?: number;
+    skipped_existing?: number;
     active_config_id?: string;
     deleted?: boolean;
     env_refreshed?: boolean | null;
@@ -406,6 +425,12 @@ interface ApiConfigRepairConflictsResponse {
     total_conflicts?: number;
     total_disabled?: number;
     would_disable?: number;
+    total_merged_cards?: number;
+    would_merge?: number;
+    deleted_duplicate_config_ids?: string[];
+    total_absorbed_placeholder_groups?: number;
+    would_absorb_placeholders?: number;
+    deleted_placeholder_config_ids?: string[];
     env_refreshed?: boolean | null;
 }
 
@@ -558,6 +583,13 @@ function providerHealthFromRealGenerationTest(config: ApiConfig, test?: ApiConfi
 function formatEndpoint(endpoint?: string): string {
     if (!endpoint) return '-';
     return endpoint.replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+function providerAccessMode(endpoint?: string): string {
+    const value = String(endpoint || '').trim().replace(/\/+$/, '').toLowerCase();
+    return value.endsWith('/api/plan') || value.includes('/api/plan/')
+        ? 'agent_plan'
+        : 'standard';
 }
 
 function endpointIdentity(endpoint?: string): string {
@@ -837,6 +869,47 @@ function applyExtraValuesToRecords(
     });
 }
 
+function normalizeApiModelBindings(
+    bindings: ApiModelBinding[] | undefined,
+    legacyModelName: string = '',
+    options: ApiModelBinding[] = [],
+): ApiModelBinding[] {
+    const source = Array.isArray(bindings) && bindings.length
+        ? bindings
+        : legacyModelName
+            ? [{
+                operation: options.find(item => item.model_name === legacyModelName)?.operation || 'default',
+                label: options.find(item => item.model_name === legacyModelName)?.label || '默认操作',
+                model_name: legacyModelName,
+            }]
+            : [];
+    const normalized = new Map<string, ApiModelBinding>();
+    source.forEach(item => {
+        const modelName = String(item?.model_name || '').trim();
+        const operation = String(item?.operation || '').trim().toLowerCase();
+        if (!modelName || !operation) return;
+        const option = options.find(candidate => candidate.operation === operation);
+        normalized.set(operation, {
+            operation,
+            label: String(item.label || option?.label || operation),
+            model_name: modelName,
+        });
+    });
+    return Array.from(normalized.values());
+}
+
+function defaultModelBindings(meta?: ProviderMeta): ApiModelBinding[] {
+    return normalizeApiModelBindings(meta?.model_binding_options, meta?.default_model_name || '', meta?.model_binding_options || []);
+}
+
+function apiConfigModelBindings(config: ApiConfig, meta?: ProviderMeta): ApiModelBinding[] {
+    return normalizeApiModelBindings(
+        config.model_bindings,
+        config.model_name || '',
+        meta?.model_binding_options || [],
+    );
+}
+
 function emptyConfigForm(): ApiConfigFormState {
     return {
         name: '',
@@ -848,6 +921,7 @@ function emptyConfigForm(): ApiConfigFormState {
         bulk_api_keys: '',
         bulk_mode: false,
         model_name: '',
+        model_bindings: [],
         proxy_mode: 'direct',
         custom_proxy: '',
         request_template: '',
@@ -866,12 +940,17 @@ function providerMetaToForm(meta: ProviderMeta): ApiConfigFormState {
         provider,
         endpoint: meta.default_endpoint || '',
         model_name: meta.default_model_name || '',
+        model_bindings: defaultModelBindings(meta),
         proxy_mode: meta.default_proxy_mode || 'direct',
         category: categoryFromProviderMeta(meta),
     };
 }
 
-function configToForm(config: ApiConfig, extraFields: ProviderExtraField[] = []): ApiConfigFormState {
+function configToForm(
+    config: ApiConfig,
+    extraFields: ProviderExtraField[] = [],
+    bindingOptions: ApiModelBinding[] = [],
+): ApiConfigFormState {
     const requestTemplate = jsonRecordFrom(config.request_template);
     const headers = jsonRecordFrom(config.headers);
     return {
@@ -885,6 +964,11 @@ function configToForm(config: ApiConfig, extraFields: ProviderExtraField[] = [])
         bulk_api_keys: '',
         bulk_mode: false,
         model_name: config.model_name || '',
+        model_bindings: normalizeApiModelBindings(
+            config.model_bindings,
+            config.model_name || '',
+            bindingOptions,
+        ),
         proxy_mode: config.proxy_mode || 'direct',
         custom_proxy: config.custom_proxy || '',
         request_template: jsonTextFrom(config.request_template),
@@ -1375,9 +1459,43 @@ const ApiConfigEditorModal: React.FC<{
     const selectedProvider = normalizeProvider(form.provider);
     const selectedMeta = providers.find(item => normalizeProvider(item.provider) === selectedProvider);
     const extraFields = selectedMeta?.extra_fields || [];
+    const bindingOptions = selectedMeta?.model_binding_options || [];
+    const accessModes = selectedMeta?.access_modes || [];
+    const activeAccessMode = accessModes.length > 0 ? providerAccessMode(form.endpoint) : '';
+    const activeAccessModeMeta = accessModes.find(mode => mode.mode === activeAccessMode);
     const lockGeneratedFields = isEdit && Boolean(selectedMeta);
     const lockedInputClass = 'bg-n20 text-n100 cursor-not-allowed';
     const normalInputClass = 'bg-n0 text-n800 focus:border-primary focus:outline-none';
+    const updateBinding = (index: number, next: ApiModelBinding) => {
+        patch({
+            model_bindings: form.model_bindings.map((item, itemIndex) => itemIndex === index ? next : item),
+            model_name: index === 0 ? next.model_name : form.model_name,
+        });
+    };
+    const addBinding = () => {
+        const used = new Set(form.model_bindings.map(item => item.operation));
+        const option = bindingOptions.find(item => !used.has(item.operation));
+        const next = option
+            ? { ...option }
+            : { operation: `operation-${form.model_bindings.length + 1}`, label: '自定义操作', model_name: '' };
+        patch({ model_bindings: [...form.model_bindings, next] });
+    };
+    const removeBinding = (index: number) => {
+        const next = form.model_bindings.filter((_, itemIndex) => itemIndex !== index);
+        patch({ model_bindings: next, model_name: next[0]?.model_name || '' });
+    };
+    const selectAccessMode = (mode: ProviderAccessMode) => {
+        const source = form.model_bindings.length ? form.model_bindings : defaultModelBindings(selectedMeta);
+        const nextBindings = source.map(binding => ({
+            ...binding,
+            model_name: mode.model_map?.[binding.operation] || binding.model_name,
+        }));
+        patch({
+            endpoint: mode.endpoint,
+            model_bindings: nextBindings,
+            model_name: nextBindings[0]?.model_name || form.model_name,
+        });
+    };
 
     return (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-n900/40 backdrop-blur-sm p-4">
@@ -1423,7 +1541,17 @@ const ApiConfigEditorModal: React.FC<{
                                 required
                                 value={form.provider}
                                 disabled={lockGeneratedFields}
-                                onChange={event => patch({ provider: event.target.value })}
+                                onChange={event => {
+                                    const provider = normalizeProvider(event.target.value);
+                                    const nextMeta = providers.find(item => normalizeProvider(item.provider) === provider);
+                                    patch({
+                                        provider,
+                                        endpoint: nextMeta?.default_endpoint || form.endpoint,
+                                        model_name: nextMeta?.default_model_name || '',
+                                        model_bindings: defaultModelBindings(nextMeta),
+                                        category: nextMeta ? categoryFromProviderMeta(nextMeta) : form.category,
+                                    });
+                                }}
                                 className={`w-full rounded border border-n40 px-3 py-2 text-sm ${lockGeneratedFields ? lockedInputClass : normalInputClass}`}
                             >
                                 <option value="">选择 provider</option>
@@ -1438,6 +1566,42 @@ const ApiConfigEditorModal: React.FC<{
                             )}
                         </label>
                     </div>
+
+                    {accessModes.length > 0 && (
+                        <section className="border-y border-n40 py-3">
+                            <div className="text-xs font-medium text-n300 mb-2">厂商调用通道</div>
+                            <div className="inline-flex max-w-full rounded border border-n40 bg-n20 p-0.5" role="group" aria-label="厂商调用通道">
+                                {accessModes.map(mode => {
+                                    const active = activeAccessMode === mode.mode;
+                                    return (
+                                        <button
+                                            key={mode.mode}
+                                            type="button"
+                                            onClick={() => selectAccessMode(mode)}
+                                            className={`px-3 py-1.5 text-xs font-medium rounded-sm ${active ? 'bg-primary text-white' : 'bg-transparent text-n700 hover:bg-n0'}`}
+                                        >
+                                            {mode.label || mode.mode}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <div className="mt-2 text-[11px] text-n100">
+                                {activeAccessMode === 'agent_plan'
+                                    ? '使用 Agent Plan 专属 Key，并从套餐燃料值扣除。'
+                                    : '使用火山方舟按量付费 API Key。'}
+                                {activeAccessModeMeta?.console_url && (
+                                    <a
+                                        href={activeAccessModeMeta.console_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="ml-2 font-medium text-primary hover:underline"
+                                    >
+                                        打开对应控制台
+                                    </a>
+                                )}
+                            </div>
+                        </section>
+                    )}
 
                     <label className="block min-w-0">
                         <span className="block text-xs font-medium text-n300 mb-1">Endpoint</span>
@@ -1469,16 +1633,7 @@ const ApiConfigEditorModal: React.FC<{
                         </label>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <label className="block min-w-0">
-                            <span className="block text-xs font-medium text-n300 mb-1">模型名</span>
-                            <input
-                                value={form.model_name}
-                                onChange={event => patch({ model_name: event.target.value })}
-                                className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
-                                placeholder="model-name"
-                            />
-                        </label>
+                    <div className="grid grid-cols-1 gap-4">
                         <label className="block min-w-0">
                             <span className="block text-xs font-medium text-n300 mb-1">API Key</span>
                             {isEdit && (
@@ -1514,9 +1669,92 @@ const ApiConfigEditorModal: React.FC<{
                                 className="w-full min-h-[120px] resize-y rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono leading-relaxed break-all focus:border-primary focus:outline-none"
                                 placeholder="每行一个 Key，或用逗号分隔。第一个 Key 默认生效。"
                             />
-                            <span className="mt-1 block text-[11px] text-n100">保存后会生成多条 Key 记录，第一条自动设为当前生效 Key。</span>
+                            <span className="mt-1 block text-[11px] text-n100">每个 Key 生成一张独立 API 卡片；第一张卡默认生效，所有卡片使用下方相同的操作绑定。</span>
                         </label>
                     )}
+
+                    <section className="border-y border-n40 py-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <div className="text-xs font-semibold text-n700">前台操作与模型绑定</div>
+                                <div className="mt-0.5 text-[11px] text-n100">一张 API 卡可以绑定多个操作；同一个操作只能对应一个模型。</div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={addBinding}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-n40 bg-n0 text-xs font-medium text-n700 hover:bg-n20"
+                            >
+                                <Plus className="w-3.5 h-3.5" />
+                                添加绑定
+                            </button>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                            {form.model_bindings.map((binding, index) => {
+                                const selectedOption = bindingOptions.find(item => item.operation === binding.operation);
+                                return (
+                                    <div key={`${binding.operation}-${index}`} className="grid grid-cols-1 gap-2 border border-n40 bg-n20 p-3 md:grid-cols-[minmax(180px,0.8fr)_minmax(0,1.4fr)_32px]">
+                                        <label className="block min-w-0">
+                                            <span className="block text-[11px] font-medium text-n300 mb-1">前台操作</span>
+                                            {selectedOption ? (
+                                                <select
+                                                    value={binding.operation}
+                                                    onChange={event => {
+                                                        const operation = event.target.value;
+                                                        const option = bindingOptions.find(item => item.operation === operation);
+                                                        updateBinding(index, {
+                                                            operation,
+                                                            label: option?.label || operation,
+                                                            model_name: option?.model_name || binding.model_name,
+                                                        });
+                                                    }}
+                                                    className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
+                                                >
+                                                    {bindingOptions.map(option => (
+                                                        <option key={option.operation} value={option.operation}>{option.label || option.operation}</option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    required
+                                                    value={binding.operation}
+                                                    onChange={event => updateBinding(index, {
+                                                        ...binding,
+                                                        operation: event.target.value.trim().toLowerCase(),
+                                                        label: event.target.value,
+                                                    })}
+                                                    className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
+                                                    placeholder="operation-code"
+                                                />
+                                            )}
+                                            <span className="mt-1 block font-mono text-[10px] text-n100">{binding.operation}</span>
+                                        </label>
+                                        <label className="block min-w-0">
+                                            <span className="block text-[11px] font-medium text-n300 mb-1">模型名</span>
+                                            <input
+                                                required
+                                                value={binding.model_name}
+                                                onChange={event => updateBinding(index, { ...binding, model_name: event.target.value })}
+                                                className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
+                                                placeholder="model-name"
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeBinding(index)}
+                                            className="mt-5 inline-flex h-8 w-8 items-center justify-center rounded border border-r75 bg-r50 text-danger hover:bg-r50"
+                                            title="删除绑定"
+                                            aria-label="删除绑定"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                            {form.model_bindings.length === 0 && (
+                                <div className="border border-dashed border-n40 px-3 py-4 text-center text-xs text-n100">尚未绑定前台操作，请添加至少一条绑定。</div>
+                            )}
+                        </div>
+                    </section>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <label className="block min-w-0">
@@ -1685,17 +1923,29 @@ const ApiConfigCard: React.FC<{
     onDelete,
 }) => {
     const provider = normalizeProvider(config.provider);
+    const modelBindings = apiConfigModelBindings(config, meta);
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.has_key ?? config.api_key_encrypted);
     const configHasKey = Boolean(config.has_key ?? config.api_key_encrypted);
     const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
     const view = statusView(status);
-    const healthError = health?.health?.error || runtime?.health_error || '';
+    // A model-specific health record is newer and more precise than the
+    // runtime summary. Do not fall back to a stale runtime error when that
+    // record exists and reports no error.
+    const healthError = health?.health
+        ? String(health.health.error || '')
+        : String(runtime?.health_error || '');
     const healthLatency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
     const healthCheckedAt = health?.checked_at || runtime?.health_checked_at || runtime?.health_cached_at;
     const usageText = providerUsageText(health, configTest);
-    const runtimeIssue = runtimeIssueText(runtime?.issues);
+    const runtimeIssues = status === 'ok'
+        ? (runtime?.issues || []).filter(issue => issue !== 'health_error')
+        : runtime?.issues;
+    const runtimeIssue = runtimeIssueText(runtimeIssues);
     const runtimeEndpoint = runtime?.endpoint || '';
     const dbEndpoint = config.endpoint || '';
+    const accessMode = (meta?.access_modes || []).length > 0
+        ? providerAccessMode(dbEndpoint || runtimeEndpoint)
+        : '';
     const runtimeDbEndpointMismatch = endpointMismatch(runtimeEndpoint, dbEndpoint);
     const effectiveConfig = runtime?.db_effective_config_name || runtime?.db_effective_config_id || '';
     const isRuntimeActive = Boolean(
@@ -1747,6 +1997,11 @@ const ApiConfigCard: React.FC<{
                                 {isRuntimeActive && (
                                     <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">当前生效 Key</span>
                                 )}
+                                {accessMode && (
+                                    <span className="rounded border border-n40 bg-n20 px-1.5 py-0.5 text-[10px] font-semibold text-n700">
+                                        {accessMode === 'agent_plan' ? 'Agent Plan' : '按量付费'}
+                                    </span>
+                                )}
                                 {config.api_key_preview && (
                                     <span className="rounded bg-n20 text-n300 px-1.5 py-0.5 text-[10px] font-mono">{config.api_key_preview}</span>
                                 )}
@@ -1765,7 +2020,7 @@ const ApiConfigCard: React.FC<{
                             </div>
                             <div className="mt-1 flex items-center gap-2 text-[11px] text-n100 flex-wrap">
                                 <span className="font-mono">{provider}</span>
-                                <span className="font-mono">{config.model_name || '-'}</span>
+                                <span>{modelBindings.length} 个操作绑定</span>
                                 <span>{meta?.vendor || '-'}</span>
                             </div>
                         </div>
@@ -1823,9 +2078,27 @@ const ApiConfigCard: React.FC<{
                             <span className="font-semibold text-n700">已折叠</span>
                             <span className="ml-2">同一 provider 存在多个 Key，当前只展开生效 Key。</span>
                             <div className="mt-1 font-mono text-n700 break-all">{formatEndpoint(dbEndpoint || runtimeEndpoint)}</div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                {modelBindings.map(binding => (
+                                    <span key={binding.operation} className="rounded border border-n40 bg-n0 px-1.5 py-0.5 text-n700">
+                                        {binding.label || binding.operation} → <span className="font-mono">{binding.model_name}</span>
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     ) : (
                         <>
+                    <section className="mt-3 border-y border-n40 py-3">
+                        <div className="text-[10px] uppercase tracking-wider text-n100">前台操作与模型绑定</div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                            {modelBindings.map(binding => (
+                                <div key={binding.operation} className="min-w-0 border-l-2 border-primary pl-2">
+                                    <div className="text-xs font-medium text-n700">{binding.label || binding.operation}</div>
+                                    <div className="mt-0.5 font-mono text-[11px] text-n100 break-all">{binding.model_name}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
                     <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
                         <div className="min-w-0 rounded bg-n20 border border-n40 px-3 py-2">
                             <div className="text-[10px] uppercase tracking-wider text-n100 mb-1">Runtime</div>
@@ -2143,8 +2416,8 @@ const ProviderQuickCard: React.FC<{
                     )}
                 </div>
                 <div className="min-w-0">
-                    <div className="text-n100">Model</div>
-                    <div className="font-mono text-n700 break-all">{model || '-'}</div>
+                    <div className="text-n100">操作绑定</div>
+                    <div className="font-mono text-n700 break-all">{primaryConfig ? apiConfigModelBindings(primaryConfig, meta).length : 0}</div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                     <div>
@@ -2202,6 +2475,7 @@ const ProviderQuickCard: React.FC<{
                         {sortedConfigs.map(config => {
                             const hasKey = Boolean(config.has_key ?? config.api_key_encrypted);
                             const active = config.config_id === activeConfigId;
+                            const bindings = apiConfigModelBindings(config, meta);
                             return (
                                 <div key={config.config_id} className="px-3 py-2">
                                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -2222,7 +2496,14 @@ const ProviderQuickCard: React.FC<{
                                                 )}
                                             </div>
                                             <div className="mt-1 font-mono text-[10px] text-n100 break-all">
-                                                {formatEndpoint(config.endpoint || endpoint)} / {config.model_name || model || '-'}
+                                                {formatEndpoint(config.endpoint || endpoint)}
+                                            </div>
+                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                {bindings.map(binding => (
+                                                    <span key={binding.operation} className="rounded border border-n40 bg-n0 px-1.5 py-0.5 text-[10px] text-n700">
+                                                        {binding.label || binding.operation} → <span className="font-mono">{binding.model_name}</span>
+                                                    </span>
+                                                ))}
                                             </div>
                                         </div>
                                         <div className="flex flex-wrap justify-end gap-1.5">
@@ -2894,30 +3175,6 @@ const ApiConfigPanel: React.FC = () => {
         return out;
     }, [configs]);
 
-    const quickProviders = useMemo(() => {
-        const known = new Set<string>();
-        const rows = providers
-            .filter(item => normalizeProvider(item.provider) && normalizeProvider(item.provider) !== 'comfyui')
-            .map(item => {
-                known.add(normalizeProvider(item.provider));
-                return item;
-            });
-        configs.forEach(config => {
-            const provider = normalizeProvider(config.provider);
-            if (!provider || provider === 'comfyui' || known.has(provider)) return;
-            known.add(provider);
-            rows.push({
-                provider,
-                label: provider,
-                default_endpoint: config.endpoint,
-                default_model_name: config.model_name,
-                default_category: groupCategory(config),
-                default_proxy_mode: config.proxy_mode || 'direct',
-            });
-        });
-        return rows.sort((a, b) => categoryFromProviderMeta(a).localeCompare(categoryFromProviderMeta(b)) || normalizeProvider(a.provider).localeCompare(normalizeProvider(b.provider)));
-    }, [configs, providers]);
-
     const summary = useMemo(() => {
         const providerIds = Array.from(new Set(configs.map(item => normalizeProvider(item.provider)).filter(Boolean)));
         const dbKeyedProviders = Array.from(new Set(
@@ -3179,17 +3436,18 @@ const ApiConfigPanel: React.FC = () => {
                 body: JSON.stringify({ dry_run: true }),
             });
             const wouldDisable = dryRun.would_disable ?? 0;
-            const conflictCount = dryRun.total_conflicts ?? dryRun.conflicts?.length ?? 0;
-            if (!wouldDisable) {
-                crmMessage.success('没有发现需要修复的重复启用配置');
+            const wouldMerge = dryRun.would_merge ?? 0;
+            const wouldAbsorb = dryRun.would_absorb_placeholders ?? 0;
+            if (!wouldDisable && !wouldMerge && !wouldAbsorb) {
+                crmMessage.success('API 卡片结构正常，没有重复凭证或生效冲突');
                 return;
             }
 
             const ok = await crmConfirm({
-                title: '修复 API 配置冲突',
-                message: `检测到 ${conflictCount} 个 provider 存在重复启用 Key，将关闭 ${wouldDisable} 条旧配置，并保留当前运行时生效配置。是否继续？`,
+                title: '整理 API 卡片',
+                message: `将合并 ${wouldMerge} 组相同 API Key 卡片、吸收 ${wouldAbsorb} 组旧模型占位卡，并关闭 ${wouldDisable} 条同厂商重复生效卡。操作与模型绑定会被汇总保留。是否继续？`,
                 type: 'warning',
-                confirmText: '修复',
+                confirmText: '整理',
             });
             if (!ok) return;
 
@@ -3198,13 +3456,15 @@ const ApiConfigPanel: React.FC = () => {
                 body: JSON.stringify({ dry_run: false }),
             });
             const disabled = result.total_disabled ?? 0;
-            const message = `已关闭 ${disabled} 条重复配置`;
+            const merged = result.total_merged_cards ?? 0;
+            const absorbed = result.total_absorbed_placeholder_groups ?? 0;
+            const message = `已合并 ${merged} 组重复 API 卡、吸收 ${absorbed} 组旧模型占位卡，关闭 ${disabled} 条生效冲突`;
             if (result.env_refreshed === false) crmMessage.warning(`${message}，但运行时刷新失败`);
             else crmMessage.success(`${message}并刷新运行时`);
             setConfigTestMap({});
             await loadConfigs();
         } catch (err: any) {
-            crmMessage.error(`修复冲突失败：${err?.message || 'unknown'}`);
+            crmMessage.error(`整理 API 卡片失败：${err?.message || 'unknown'}`);
         } finally {
             setRepairingConflicts(false);
         }
@@ -3216,30 +3476,9 @@ const ApiConfigPanel: React.FC = () => {
 
     const openEdit = useCallback((config: ApiConfig) => {
         const provider = normalizeProvider(config.provider);
-        const extraFields = providerMetaMap.get(provider)?.extra_fields || [];
-        setEditingForm(configToForm(config, extraFields));
+        const meta = providerMetaMap.get(provider);
+        setEditingForm(configToForm(config, meta?.extra_fields || [], meta?.model_binding_options || []));
     }, [providerMetaMap]);
-
-    const openProviderConfig = useCallback((meta: ProviderMeta) => {
-        const provider = normalizeProvider(meta.provider);
-        const existing = bestConfigForProvider(configsByProvider.get(provider) || [], provider);
-        if (existing) {
-            const extraFields = providerMetaMap.get(provider)?.extra_fields || [];
-            setEditingForm(configToForm(existing, extraFields));
-            return;
-        }
-        setEditingForm(providerMetaToForm(meta));
-    }, [configsByProvider, providerMetaMap]);
-
-    const openAddProviderConfig = useCallback((meta: ProviderMeta) => {
-        const form = providerMetaToForm(meta);
-        setEditingForm({
-            ...form,
-            name: `${form.name || form.provider} Key`,
-            bulk_mode: true,
-            enabled: true,
-        });
-    }, []);
 
     const saveConfig = useCallback(async () => {
         if (!editingForm) return;
@@ -3248,6 +3487,11 @@ const ApiConfigPanel: React.FC = () => {
         const endpoint = editingForm.endpoint.trim();
         const apiKey = editingForm.api_key.trim();
         const bulkApiKeys = splitBulkApiKeys(editingForm.bulk_api_keys);
+        const modelBindings = normalizeApiModelBindings(
+            editingForm.model_bindings,
+            editingForm.model_name,
+            providerMetaMap.get(provider)?.model_binding_options || [],
+        );
         if (!name || !provider || !endpoint) {
             crmMessage.warning('请填写名称、provider 和 endpoint');
             return;
@@ -3258,6 +3502,17 @@ const ApiConfigPanel: React.FC = () => {
         }
         if (!editingForm.config_id && !editingForm.bulk_mode && !apiKey) {
             crmMessage.warning('新增 API 配置需要填写 API Key');
+            return;
+        }
+        if (modelBindings.length === 0) {
+            crmMessage.warning('请至少添加一条前台操作与模型绑定');
+            return;
+        }
+        const rawOperations = editingForm.model_bindings
+            .map(item => item.operation.trim().toLowerCase())
+            .filter(Boolean);
+        if (new Set(rawOperations).size !== rawOperations.length) {
+            crmMessage.warning('同一张 API 卡中，一个前台操作只能绑定一次');
             return;
         }
 
@@ -3287,7 +3542,8 @@ const ApiConfigPanel: React.FC = () => {
                 name,
                 provider,
                 endpoint,
-                model_name: editingForm.model_name.trim(),
+                model_name: modelBindings[0]?.model_name || '',
+                model_bindings: modelBindings,
                 proxy_mode: editingForm.proxy_mode || 'direct',
                 custom_proxy: editingForm.proxy_mode === 'custom' ? editingForm.custom_proxy.trim() : '',
                 request_template: requestTemplate,
@@ -3318,7 +3574,10 @@ const ApiConfigPanel: React.FC = () => {
                     body: JSON.stringify({ ...body, api_key: apiKey }),
                 });
 
-            const message = `${envRefreshMessage(result, isEdit ? '配置' : '新配置')}${conflictDisableSuffix(result)}`;
+            const skippedSuffix = result.skipped_existing
+                ? `，已跳过 ${result.skipped_existing} 个已有 API Key`
+                : '';
+            const message = `${envRefreshMessage(result, isEdit ? '配置' : '新配置')}${conflictDisableSuffix(result)}${skippedSuffix}`;
             if (result.env_refreshed === false) crmMessage.warning(message);
             else crmMessage.success(message);
             setEditingForm(null);
@@ -3639,7 +3898,7 @@ const ApiConfigPanel: React.FC = () => {
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
                         >
                             {repairingConflicts ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                            修复冲突
+                            整理 API 卡片
                         </button>
                         <button
                             type="button"
@@ -3720,7 +3979,7 @@ const ApiConfigPanel: React.FC = () => {
                         连通性与余量
                     </div>
                     <p className="mt-2 text-[11px] leading-relaxed text-n100">
-                        每张厂商卡只保留一个连通性检测入口，检测当前实际生效的 Key、Endpoint 和模型。面板会优先展示厂商返回的余额、套餐余量或小时比例；真实生成已通过但厂商未返回余额时，会显示“真实生成已验证，余量未返回”。
+                        每张 API 卡对应一个 Key，并可绑定多个前台操作和模型。连通性检测使用当前生效卡的 Key 与 Endpoint；真实生成测试使用卡内主模型。
                     </p>
                     <details className="mt-2 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
                         <summary className="cursor-pointer select-none font-semibold text-n700">全局高级测试</summary>
@@ -3739,58 +3998,19 @@ const ApiConfigPanel: React.FC = () => {
                     </details>
                 </section>
 
-                <section className="space-y-2">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <div>
-                            <h2 className="text-sm font-semibold text-n800">厂商快速配置</h2>
-                            <p className="mt-0.5 text-xs text-n100">每张卡片都可以直接配置或修改 API Key、Endpoint 和模型；状态以实际生效配置为准。</p>
-                        </div>
-                        <div className="toolbar-actions">
-                            <span className="text-xs text-n100 font-mono">{quickProviders.length} providers</span>
-                            <button
-                                type="button"
-                                onClick={openCreate}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
-                            >
-                                <Plus className="w-3.5 h-3.5" />
-                                新增自定义 API
-                            </button>
-                        </div>
+                <section className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <h2 className="text-sm font-semibold text-n800">API 卡片</h2>
+                        <p className="mt-0.5 text-xs text-n100">一个 API Key 对应一张卡片；卡片内维护前台操作与模型绑定。</p>
                     </div>
-                    <div className="flex flex-col gap-3">
-                        {quickProviders.map(meta => {
-                            const provider = normalizeProvider(meta.provider);
-                            const providerConfigs = configsByProvider.get(provider) || [];
-                            const runtimeHint = runtimeMap.get(provider);
-                            const primaryConfig = bestConfigForProvider(providerConfigs, provider, runtimeHint);
-                            const modelNameHint = primaryConfig?.model_name || runtimeHint?.runtime_model_name || meta.default_model_name || null;
-                            const runtime = runtimeForProviderModel(provider, modelNameHint);
-                            const modelName = modelNameHint || runtime?.runtime_model_name || null;
-                            return (
-                                <ProviderQuickCard
-                                    key={provider}
-                                    meta={meta}
-                                    configs={providerConfigs}
-                                    runtime={runtime}
-                                    health={providerQuickHealthFrom(healthMap, provider, modelName)}
-                                    configTest={primaryConfig ? configTestMap[primaryConfig.config_id] : undefined}
-                                    checking={Boolean(checking[providerHealthKey(provider, modelName)])}
-                                    testingConfig={testingAllConfigs || Boolean(primaryConfig && testingConfig[primaryConfig.config_id])}
-                                    testingConfigMap={testingConfig}
-                                    realTestingConfigMap={realTestingConfig}
-                                    onConfigure={openProviderConfig}
-                                    onAddConfig={openAddProviderConfig}
-                                    onEditConfig={openEdit}
-                                    onActivate={activateConfig}
-                                    onToggle={toggleConfig}
-                                    onDelete={deleteConfig}
-                                    onTestConfig={testConfig}
-                                    onRealTestConfig={realTestConfig}
-                                    onCheck={testProvider}
-                                />
-                            );
-                        })}
-                    </div>
+                    <button
+                        type="button"
+                        onClick={openCreate}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        新增 API 卡片
+                    </button>
                 </section>
 
                 {loading ? (
@@ -3800,7 +4020,7 @@ const ApiConfigPanel: React.FC = () => {
                     </div>
                 ) : configs.length === 0 ? (
                     <div className="bg-n0 border border-n40 rounded-md p-10 text-center text-n100">
-                        暂无 API 配置记录，可在上方选择厂商新增配置
+                        暂无 API 卡片，请点击“新增 API 卡片”开始配置
                     </div>
                 ) : (
                     <div className="space-y-5">

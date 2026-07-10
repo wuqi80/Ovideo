@@ -89,6 +89,23 @@ async def test_create_api_config_body_accepts_template_and_headers():
     assert body.headers == {"X-Test": "yes"}
 
 
+async def test_create_api_config_body_accepts_multiple_model_bindings():
+    import admin_api_config_routes
+
+    body = admin_api_config_routes.ApiConfigCreateBody(
+        name="Seedance API",
+        provider="seedance",
+        endpoint="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+        api_key="k",
+        model_bindings=[
+            {"operation": "standard", "label": "飞升", "model_name": "seedance-standard"},
+            {"operation": "fast", "label": "渡劫", "model_name": "seedance-fast"},
+        ],
+    )
+
+    assert [item["operation"] for item in body.model_bindings] == ["standard", "fast"]
+
+
 def test_api_config_audit_update_details_redacts_sensitive_values():
     import admin_api_config_routes
 

@@ -31,9 +31,15 @@ from services.api_provider_registry import (
     get_seedance_sub_model_env_key,
     is_seedance_fast_model,
     normalize_doubao_image_model,
+    normalize_doubao_image_endpoint,
+    normalize_doubao_image_model_for_endpoint,
     normalize_dashscope_sub_model,
+    normalize_model_bindings,
     normalize_seedance_sub_model,
+    normalize_seedance_endpoint,
+    normalize_seedance_model_for_endpoint,
     normalize_provider,
+    seedance_access_mode,
 )
 from utils.config_helpers import _config_get
 
@@ -327,11 +333,18 @@ def _config_has_encrypted_key(config: Any) -> bool:
 
 
 def _safe_config_source(config: Any) -> Dict[str, Any]:
+    provider = normalize_provider(_config_get(config, "provider", ""))
+    model_name = _config_get(config, "model_name", "") or ""
     return {
         "config_id": _config_get(config, "config_id", ""),
         "name": _config_get(config, "name", ""),
-        "provider": normalize_provider(_config_get(config, "provider", "")),
-        "model_name": _config_get(config, "model_name", "") or "",
+        "provider": provider,
+        "model_name": model_name,
+        "model_bindings": normalize_model_bindings(
+            provider,
+            _config_get(config, "model_bindings", []),
+            model_name,
+        ),
         "endpoint": (_config_get(config, "endpoint", "") or "").strip(),
         "proxy_mode": (_config_get(config, "proxy_mode", "") or "").strip() or "direct",
         "category": _config_get(config, "category", "") or "",
@@ -359,7 +372,14 @@ def build_effective_provider_config_sources(configs: Optional[List[Any]]) -> Dic
     for provider, rows in grouped.items():
         effective = rows[-1]
         endpoints = sorted({row["endpoint"] for row in rows if row.get("endpoint")})
-        models = sorted({row["model_name"] for row in rows if row.get("model_name")})
+        models = sorted(
+            {
+                str(binding.get("model_name") or "")
+                for row in rows
+                for binding in row.get("model_bindings", [])
+                if binding.get("model_name")
+            }
+        )
         sources[provider] = {
             "provider": provider,
             "effective": effective,
@@ -375,26 +395,36 @@ def build_effective_provider_config_sources(configs: Optional[List[Any]]) -> Dic
 def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None) -> str:
     """Resolve Seedance standard/fast model names without import-time env caching."""
     normalized_sub_model = normalize_seedance_sub_model(sub_model)
+    provider_env = get_provider_env_key("seedance")
+    endpoint_env = get_endpoint_env_key(provider_env) if provider_env else ""
+    endpoint = (os.getenv(endpoint_env) or "").strip() if endpoint_env else ""
     explicit_model = (model_name or "").strip()
     if explicit_model:
-        return explicit_model
+        return normalize_seedance_model_for_endpoint(
+            explicit_model,
+            endpoint,
+            normalized_sub_model,
+        )
 
     sub_model_env = get_seedance_sub_model_env_key(normalized_sub_model)
     sub_model_value = (os.getenv(sub_model_env) or "").strip()
     if sub_model_value:
-        return sub_model_value
+        return normalize_seedance_model_for_endpoint(
+            sub_model_value,
+            endpoint,
+            normalized_sub_model,
+        )
 
-    provider_env = get_provider_env_key("seedance")
     generic_model_env = get_model_env_key(provider_env) if provider_env else ""
     generic_model = (os.getenv(generic_model_env) or "").strip() if generic_model_env else ""
     if generic_model:
         generic_is_fast = is_seedance_fast_model(generic_model)
         if normalized_sub_model == "fast" and generic_is_fast:
-            return generic_model
+            return normalize_seedance_model_for_endpoint(generic_model, endpoint, normalized_sub_model)
         if normalized_sub_model == "standard" and not generic_is_fast:
-            return generic_model
+            return normalize_seedance_model_for_endpoint(generic_model, endpoint, normalized_sub_model)
 
-    return SEEDANCE_DEFAULT_MODEL_MAP[normalized_sub_model]
+    return normalize_seedance_model_for_endpoint("", endpoint, normalized_sub_model)
 
 
 # Seedance 兼容薄壳移至文件末尾（薄壳转调 vendor_error_is_non_retryable + vendor_user_facing_error，
@@ -451,6 +481,10 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     endpoint, endpoint_env = _first_env(endpoint_envs)
     if not endpoint:
         endpoint = (preset.get("endpoint") or "").strip()
+    if provider_id == "doubao":
+        endpoint = normalize_doubao_image_endpoint(endpoint)
+    elif provider_id == "seedance":
+        endpoint = normalize_seedance_endpoint(endpoint)
 
     proxy_mode_envs = _unique(
         [
@@ -480,7 +514,15 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     runtime_model_name, model_env = _first_env(model_envs)
     resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
     if provider_id == "doubao":
-        resolved_model_name = normalize_doubao_image_model(resolved_model_name) or resolved_model_name
+        resolved_model_name = normalize_doubao_image_model_for_endpoint(
+            normalize_doubao_image_model(resolved_model_name),
+            endpoint,
+        )
+    elif provider_id == "seedance":
+        resolved_model_name = normalize_seedance_model_for_endpoint(
+            resolved_model_name,
+            endpoint,
+        )
 
     extra: Dict[str, str] = {}
     extra_sources: Dict[str, str] = {}
@@ -539,8 +581,12 @@ def build_provider_runtime_status(
             model_name,
             provider_health=health_map,
         )
-        health = provider_health_entry(provider, health_map, model_name=model_name) or {}
-        health_status = provider_health_status(provider, health_map, model_name=model_name)
+        # Endpoint-specific aliases (notably Seedance Agent Plan) resolve to a
+        # different model id than the pay-as-you-go catalog preset. Match the
+        # health cache with the model the runtime will actually send.
+        health_model_name = resolved.model_name or model_name
+        health = provider_health_entry(provider, health_map, model_name=health_model_name) or {}
+        health_status = provider_health_status(provider, health_map, model_name=health_model_name)
         health_payload = health.get("health") if isinstance(health.get("health"), dict) else {}
         db_source = db_sources.get(provider)
         db_effective = db_source.get("effective") if db_source else None
@@ -874,12 +920,23 @@ def seedance_user_facing_error(exc: BaseException) -> str:
     response_text = str(getattr(response, "text", "") or "")
     error_text = f"{exc} {response_text}"
     status_code = getattr(response, "status_code", None)
+    plan_mode = seedance_access_mode(resolve_provider("seedance").endpoint) == "agent_plan"
     if "ModelNotOpen" in error_text or "not activated the model" in error_text:
+        if plan_mode:
+            return (
+                "Seedance 模型未开通：Agent Plan 模型不可用，请确认套餐包含所选模型且仍有燃料值；"
+                "系统已自动使用 Agent Plan 对应的模型名。"
+            )
         return (
             "Seedance 模型未开通：当前 API Key 对应账号未开通所配置的视频模型，"
             "请在火山方舟开通模型或切换到已开通模型。"
         )
     if "InvalidApiKey" in error_text or "MissingApiKey" in error_text or status_code in (401, 403):
+        if plan_mode:
+            return (
+                "Seedance API Key 无效或无权限；当前使用 Agent Plan 通道，请确认使用的是订阅页生成的专属 Key，"
+                "并重新保存后再试。"
+            )
         return "Seedance API Key 无效或无权限，请在后台厂商 API 配置中切换有效 Key。"
     if response_text:
         return response_text[:500]

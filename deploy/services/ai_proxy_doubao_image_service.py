@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from services.api_provider_registry import DOUBAO_IMAGE_DEFAULT_MODEL, normalize_doubao_image_model
+from services.api_provider_registry import (
+    DOUBAO_IMAGE_DEFAULT_MODEL,
+    normalize_doubao_image_model_for_endpoint,
+)
 from services.api_provider_runtime import resolve_provider
 from services.ai_proxy_http_client import _post_json_request_async
 from services.ai_proxy_openai_image_service import parse_openai_image_response
@@ -83,7 +86,10 @@ async def generate_doubao_images(
     model: Optional[str] = None,
 ) -> List[str]:
     config = resolve_provider("doubao", model)
-    resolved_model = normalize_doubao_image_model(config.model_name or model) or DOUBAO_IMAGE_DEFAULT_MODEL
+    resolved_model = normalize_doubao_image_model_for_endpoint(
+        config.model_name or model or DOUBAO_IMAGE_DEFAULT_MODEL,
+        config.endpoint,
+    )
     payload = build_doubao_image_payload(
         prompt=prompt,
         model=resolved_model,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-REMOTE="${REMOTE:-Administrator@34.92.234.111}"
+REMOTE="${REMOTE:-root@43.98.197.227}"
 REMOTE_DIR="${REMOTE_DIR:-/home/Administrator/deploy}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)

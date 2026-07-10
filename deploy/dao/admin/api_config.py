@@ -79,6 +79,7 @@ class ApiConfigDAO:
         endpoint: str,
         api_key: str,
         model_name: str = "",
+        model_bindings: Optional[List[Dict[str, str]]] = None,
         proxy_mode: str = "direct",
         request_template: Optional[dict] = None,
         headers: Optional[dict] = None,
@@ -96,13 +97,14 @@ class ApiConfigDAO:
             ensure_ascii=False,
         )
         hd = json.dumps(headers if headers is not None else {}, ensure_ascii=False)
+        mb = json.dumps(model_bindings if model_bindings is not None else [], ensure_ascii=False)
         # 2026-05-24：加 category 列。CHECK 约束在 schema 里强制 ('','text','image','video','audio')。
         query = """
             INSERT INTO api_configurations (
                 config_id, name, provider, endpoint, api_key_encrypted,
-                model_name, request_template, headers, proxy_mode, custom_proxy, category, enabled
+                model_name, model_bindings, request_template, headers, proxy_mode, custom_proxy, category, enabled
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, $12, $13)
             RETURNING *
         """
         return await db.fetchrow(
@@ -113,6 +115,7 @@ class ApiConfigDAO:
             endpoint,
             enc,
             model_name,
+            mb,
             rt,
             hd,
             proxy_mode,
@@ -183,7 +186,7 @@ class ApiConfigDAO:
         db = get_db_manager()
         if not db:
             return None
-        allowed_json = {"request_template", "headers"}
+        allowed_json = {"model_bindings", "request_template", "headers"}
         # 2026-05-24：把 category 列入可更新字段，admin UI 编辑表单可改分类。
         allowed_plain = {
             "name",

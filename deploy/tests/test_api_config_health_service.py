@@ -2,6 +2,7 @@ from services.api_config_health_service import (
     ProviderHealthNotFound,
     _has_chat_content,
     _real_generation_request,
+    api_config_health_urls,
 )
 
 import pytest
@@ -100,3 +101,17 @@ def test_video_real_generation_does_not_create_billable_task() -> None:
                 "model_name": "doubao-seedance-2-0-260128",
             },
         )
+
+
+def test_seedance_agent_plan_health_uses_plan_v3_routes() -> None:
+    urls = api_config_health_urls(
+        {
+            "provider": "seedance",
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/",
+            "model_name": "doubao-seedance-2-0-260128",
+        }
+    )
+
+    assert urls[0] == "https://ark.cn-beijing.volces.com/api/plan/v3/models"
+    assert "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks" in urls
+    assert all("/api/plan/" in url for url in urls)

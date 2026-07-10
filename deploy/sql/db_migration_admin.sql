@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS api_configurations (
     endpoint TEXT NOT NULL DEFAULT '',
     api_key_encrypted TEXT,
     model_name VARCHAR(255) DEFAULT '',
+    model_bindings JSONB NOT NULL DEFAULT '[]'::jsonb,
     request_template JSONB DEFAULT '{}'::jsonb,
     headers JSONB DEFAULT '{}'::jsonb,
     proxy_mode VARCHAR(20) NOT NULL DEFAULT 'direct'

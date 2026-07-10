@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 from datetime import date, datetime, timezone
@@ -28,7 +29,13 @@ from services.api_provider_health_monitor import (
 from services.api_provider_registry import (
     get_api_model_presets,
     get_api_provider_catalog,
+    normalize_doubao_image_endpoint,
+    normalize_doubao_image_model_for_endpoint,
+    normalize_model_bindings,
     normalize_provider,
+    normalize_seedance_endpoint,
+    normalize_seedance_model_for_endpoint,
+    primary_model_name_for_bindings,
     summarize_api_provider_configs,
 )
 from services.api_provider_runtime import (
@@ -82,6 +89,23 @@ def _row_to_jsonable(row: Any) -> Dict[str, Any]:
 
 def mask_api_config_row(row: Any) -> Dict[str, Any]:
     data = _row_to_jsonable(row)
+    provider = str(data.get("provider") or "")
+    endpoint = str(data.get("endpoint") or "")
+    provider_id = normalize_provider(provider)
+    if provider_id == "doubao":
+        endpoint = normalize_doubao_image_endpoint(endpoint)
+        data["endpoint"] = endpoint
+    elif provider_id == "seedance":
+        endpoint = normalize_seedance_endpoint(endpoint)
+        data["endpoint"] = endpoint
+    bindings, primary_model = _normalized_model_fields(
+        provider,
+        data.get("model_bindings"),
+        str(data.get("model_name") or ""),
+        endpoint=endpoint,
+    )
+    data["model_bindings"] = bindings
+    data["model_name"] = primary_model
     encrypted_key = data.get("api_key_encrypted")
     if "api_key_encrypted" in data:
         data["has_key"] = bool(encrypted_key)
@@ -106,6 +130,16 @@ def _row_model_name(row: Any) -> str:
     return str(_config_get(row, "model_name", "") or "").strip()
 
 
+def _row_model_bindings(row: Any) -> List[Dict[str, str]]:
+    bindings, _ = _normalized_model_fields(
+        _row_provider(row),
+        _config_get(row, "model_bindings", []),
+        _row_model_name(row),
+        endpoint=str(_config_get(row, "endpoint", "") or ""),
+    )
+    return bindings
+
+
 def _row_config_id(row: Any) -> str:
     if not row:
         return ""
@@ -122,6 +156,83 @@ def _row_has_key(row: Any) -> bool:
     if not row:
         return False
     return bool(_config_get(row, "api_key_encrypted", ""))
+
+
+def _row_plaintext_key(row: Any) -> str:
+    encrypted = str(_config_get(row, "api_key_encrypted", "") or "")
+    return ApiConfigDAO.decrypt_key(encrypted) if encrypted else ""
+
+
+async def _find_duplicate_api_card(
+    provider: str,
+    api_key: str,
+    *,
+    exclude_config_id: str = "",
+) -> Optional[Any]:
+    provider_id = normalize_provider(provider)
+    candidate_key = str(api_key or "").strip()
+    if not provider_id or not candidate_key:
+        return None
+    for row in await ApiConfigDAO.list_all():
+        if exclude_config_id and _row_config_id(row) == exclude_config_id:
+            continue
+        if normalize_provider(_row_provider(row)) != provider_id:
+            continue
+        existing_key = _row_plaintext_key(row)
+        if existing_key and hmac.compare_digest(existing_key, candidate_key):
+            return row
+    return None
+
+
+def _normalized_model_fields(
+    provider: str,
+    model_bindings: Any,
+    model_name: str = "",
+    *,
+    endpoint: str = "",
+) -> tuple[List[Dict[str, str]], str]:
+    bindings = normalize_model_bindings(provider, model_bindings, model_name)
+    provider_id = normalize_provider(provider)
+    if provider_id == "doubao":
+        bindings = normalize_model_bindings(
+            provider,
+            [
+                {
+                    **binding,
+                    "model_name": normalize_doubao_image_model_for_endpoint(
+                        binding.get("model_name"),
+                        endpoint,
+                    ),
+                }
+                for binding in bindings
+            ],
+        )
+    elif provider_id == "seedance":
+        bindings = normalize_model_bindings(
+            provider,
+            [
+                {
+                    **binding,
+                    "model_name": normalize_seedance_model_for_endpoint(
+                        binding.get("model_name"),
+                        endpoint,
+                        binding.get("operation"),
+                    ),
+                }
+                for binding in bindings
+            ],
+        )
+    return bindings, primary_model_name_for_bindings(bindings, model_name)
+
+
+def _normalized_endpoint(provider: str, endpoint: Any) -> str:
+    value = str(endpoint or "").strip()
+    provider_id = normalize_provider(provider)
+    if provider_id == "doubao":
+        return normalize_doubao_image_endpoint(value)
+    if provider_id == "seedance":
+        return normalize_seedance_endpoint(value)
+    return value
 
 
 def _endpoint_key(value: Any) -> str:
@@ -269,9 +380,10 @@ async def list_api_configs() -> Dict[str, Any]:
     provider_health_targets = [
         {
             "provider": _row_provider(row),
-            "model_name": _row_model_name(row) or None,
+            "model_name": binding.get("model_name") or None,
         }
         for row in rows
+        for binding in (_row_model_bindings(row) or [{"model_name": _row_model_name(row)}])
         if _row_provider(row)
     ]
     provider_health_by_key: Dict[str, Dict[str, Any]] = {}
@@ -332,13 +444,8 @@ def _bool_value(value: Any, default: bool) -> bool:
     return bool(value)
 
 
-def _backup_match_key(data: Dict[str, Any]) -> tuple[str, str, str, str]:
-    return (
-        normalize_provider(str(data.get("provider") or "")),
-        str(data.get("name") or "").strip().lower(),
-        _endpoint_key(data.get("endpoint")),
-        str(data.get("model_name") or "").strip().lower(),
-    )
+def _backup_credential_key(provider: Any, api_key: Any) -> tuple[str, str]:
+    return normalize_provider(str(provider or "")), str(api_key or "").strip()
 
 
 def _export_api_config_item(row: Any) -> Dict[str, Any]:
@@ -351,6 +458,11 @@ def _export_api_config_item(row: Any) -> Dict[str, Any]:
         "endpoint": str(data.get("endpoint") or ""),
         "api_key": api_key,
         "model_name": str(data.get("model_name") or ""),
+        "model_bindings": normalize_model_bindings(
+            str(data.get("provider") or ""),
+            data.get("model_bindings"),
+            str(data.get("model_name") or ""),
+        ),
         "proxy_mode": str(data.get("proxy_mode") or "direct"),
         "custom_proxy": str(data.get("custom_proxy") or ""),
         "request_template": _json_object(data.get("request_template")),
@@ -367,7 +479,7 @@ async def export_api_config_keys() -> Dict[str, Any]:
     return {
         "success": True,
         "schema": "mecha.api_config_keys",
-        "schema_version": 1,
+        "schema_version": 2,
         "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "count": len(configs),
         "configs": configs,
@@ -405,14 +517,22 @@ def _clean_import_item(
         name = model_name or provider
     if not endpoint:
         return None, f"item {index + 1}: missing endpoint"
+    endpoint = _normalized_endpoint(provider, endpoint)
     if not api_key:
         return None, f"item {index + 1}: missing api_key"
+    model_bindings, primary_model = _normalized_model_fields(
+        provider,
+        item.get("model_bindings"),
+        model_name,
+        endpoint=endpoint,
+    )
     return {
         "name": name,
         "provider": provider,
         "endpoint": endpoint,
         "api_key": api_key,
-        "model_name": model_name,
+        "model_name": primary_model,
+        "model_bindings": model_bindings,
         "proxy_mode": str(item.get("proxy_mode") or "direct").strip() or "direct",
         "custom_proxy": str(item.get("custom_proxy") or "").strip(),
         "request_template": _json_object(item.get("request_template")),
@@ -436,8 +556,9 @@ async def import_api_config_keys(
 
     existing_rows = list(await ApiConfigDAO.list_all())
     existing_by_key = {
-        _backup_match_key(_row_to_jsonable(row)): row
+        _backup_credential_key(_row_provider(row), _row_plaintext_key(row)): row
         for row in existing_rows
+        if _row_plaintext_key(row)
     }
 
     created = 0
@@ -460,7 +581,7 @@ async def import_api_config_keys(
             details.append({"index": index, "action": "invalid", "reason": error})
             continue
 
-        item_key = _backup_match_key(cleaned)
+        item_key = _backup_credential_key(cleaned.get("provider"), cleaned.get("api_key"))
         existing = existing_by_key.get(item_key)
         detail = {
             "index": index,
@@ -469,20 +590,34 @@ async def import_api_config_keys(
             "model_name": cleaned.get("model_name") or None,
         }
 
-        if existing and not overwrite_existing:
-            skipped += 1
-            details.append({
-                **detail,
-                "action": "skipped",
-                "reason": "already_exists",
-                "config_id": _row_config_id(existing),
-            })
-            continue
+        if existing:
+            merge_endpoint = (
+                cleaned.get("endpoint", "")
+                if overwrite_existing
+                else str(_config_get(existing, "endpoint", "") or "")
+            )
+            merged_bindings, merged_primary = _normalized_model_fields(
+                cleaned["provider"],
+                [*_row_model_bindings(existing), *cleaned.get("model_bindings", [])],
+                cleaned.get("model_name") or _row_model_name(existing),
+                endpoint=merge_endpoint,
+            )
+            if overwrite_existing:
+                cleaned = {
+                    **cleaned,
+                    "model_bindings": merged_bindings,
+                    "model_name": merged_primary,
+                }
+            else:
+                cleaned = {
+                    "model_bindings": merged_bindings,
+                    "model_name": merged_primary,
+                }
 
         if dry_run:
             if existing:
                 updated += 1
-                details.append({**detail, "action": "would_update", "config_id": _row_config_id(existing)})
+                details.append({**detail, "action": "would_merge", "config_id": _row_config_id(existing)})
             else:
                 created += 1
                 details.append({**detail, "action": "would_create"})
@@ -494,7 +629,7 @@ async def import_api_config_keys(
                 if not row:
                     raise ApiConfigImportFailed("Failed to update API config")
                 updated += 1
-                details.append({**detail, "action": "updated", "config_id": _row_config_id(row)})
+                details.append({**detail, "action": "merged", "config_id": _row_config_id(row)})
             else:
                 row = await ApiConfigDAO.create(**cleaned)
                 if not row:
@@ -539,6 +674,7 @@ async def create_api_config(
     endpoint: str,
     api_key: str,
     model_name: str = "",
+    model_bindings: Optional[List[Dict[str, Any]]] = None,
     proxy_mode: str = "direct",
     custom_proxy: str = "",
     request_template: Optional[Dict[str, Any]] = None,
@@ -547,12 +683,27 @@ async def create_api_config(
     enabled: bool = True,
     reload_api_env: Optional[ReloadCallback] = None,
 ) -> Dict[str, Any]:
+    provider_id = provider.strip()
+    normalized_endpoint = _normalized_endpoint(provider_id, endpoint)
+    duplicate = await _find_duplicate_api_card(provider_id, api_key)
+    if duplicate:
+        raise ApiConfigCreateFailed(
+            f"This API key already has a card for provider {normalize_provider(provider_id)}: "
+            f"{_row_config_id(duplicate)}"
+        )
+    normalized_bindings, primary_model = _normalized_model_fields(
+        provider_id,
+        model_bindings,
+        model_name,
+        endpoint=normalized_endpoint,
+    )
     row = await ApiConfigDAO.create(
         name=name.strip(),
-        provider=provider.strip(),
-        endpoint=endpoint.strip(),
+        provider=provider_id,
+        endpoint=normalized_endpoint,
         api_key=api_key,
-        model_name=model_name,
+        model_name=primary_model,
+        model_bindings=normalized_bindings,
         proxy_mode=proxy_mode,
         custom_proxy=custom_proxy,
         request_template=request_template,
@@ -580,6 +731,7 @@ async def create_api_config_key_batch(
     api_keys: List[str],
     name_prefix: str = "",
     model_name: str = "",
+    model_bindings: Optional[List[Dict[str, Any]]] = None,
     proxy_mode: str = "direct",
     custom_proxy: str = "",
     request_template: Optional[Dict[str, Any]] = None,
@@ -593,16 +745,38 @@ async def create_api_config_key_batch(
     if not deduped_keys:
         raise ApiConfigCreateFailed("No API keys provided")
 
-    active_index = max(0, min(int(activate_index or 0), len(deduped_keys) - 1))
-    prefix = name_prefix.strip() or f"{provider.strip()} key"
+    provider_id = provider.strip()
+    normalized_endpoint = _normalized_endpoint(provider_id, endpoint)
+    duplicate_rows: List[Any] = []
+    new_keys: List[str] = []
+    for api_key in deduped_keys:
+        duplicate = await _find_duplicate_api_card(provider_id, api_key)
+        if duplicate:
+            duplicate_rows.append(duplicate)
+        else:
+            new_keys.append(api_key)
+    if not new_keys:
+        duplicate_ids = ", ".join(_row_config_id(row) for row in duplicate_rows if _row_config_id(row))
+        raise ApiConfigCreateFailed(f"All provided API keys already have cards: {duplicate_ids}")
+
+    normalized_bindings, primary_model = _normalized_model_fields(
+        provider_id,
+        model_bindings,
+        model_name,
+        endpoint=normalized_endpoint,
+    )
+
+    active_index = max(0, min(int(activate_index or 0), len(new_keys) - 1))
+    prefix = name_prefix.strip() or f"{provider_id} key"
     created_rows: List[Any] = []
-    for index, api_key in enumerate(deduped_keys):
+    for index, api_key in enumerate(new_keys):
         row = await ApiConfigDAO.create(
             name=f"{prefix} #{index + 1}",
-            provider=provider.strip(),
-            endpoint=endpoint.strip(),
+            provider=provider_id,
+            endpoint=normalized_endpoint,
             api_key=api_key,
-            model_name=model_name,
+            model_name=primary_model,
+            model_bindings=normalized_bindings,
             proxy_mode=proxy_mode,
             custom_proxy=custom_proxy,
             request_template=request_template,
@@ -621,6 +795,8 @@ async def create_api_config_key_batch(
     return {
         "success": True,
         "created": len(created_rows),
+        "skipped_existing": len(duplicate_rows),
+        "existing_config_ids": [_row_config_id(row) for row in duplicate_rows if _row_config_id(row)],
         "active_config_id": _row_config_id(active_row),
         "api_configs": [mask_api_config_row(row) for row in created_rows],
         "env_refreshed": env_refreshed,
@@ -686,6 +862,51 @@ async def update_api_config(
         return {"success": True, "api_config": mask_api_config_row(row)}
 
     before = await ApiConfigDAO.get_by_id(config_id)
+    provider = str(fields.get("provider") or _row_provider(before)).strip()
+    if "endpoint" in fields:
+        fields = {
+            **fields,
+            "endpoint": _normalized_endpoint(provider, fields.get("endpoint")),
+        }
+    effective_endpoint = str(
+        fields.get("endpoint") or _config_get(before, "endpoint", "") or ""
+    )
+    replacement_key = str(fields.get("api_key") or "").strip()
+    if replacement_key:
+        duplicate = await _find_duplicate_api_card(
+            provider,
+            replacement_key,
+            exclude_config_id=config_id,
+        )
+        if duplicate:
+            raise ApiConfigCreateFailed(
+                f"This API key already has a card for provider {normalize_provider(provider)}: "
+                f"{_row_config_id(duplicate)}"
+            )
+
+    if (
+        "model_bindings" in fields
+        or "model_name" in fields
+        or "provider" in fields
+        or "endpoint" in fields
+    ):
+        raw_bindings = fields.get("model_bindings")
+        if raw_bindings is None and "model_name" not in fields:
+            raw_bindings = _config_get(before, "model_bindings", [])
+        legacy_model = str(fields.get("model_name") or "")
+        if "model_name" not in fields:
+            legacy_model = _row_model_name(before)
+        normalized_bindings, primary_model = _normalized_model_fields(
+            provider,
+            raw_bindings,
+            legacy_model,
+            endpoint=effective_endpoint,
+        )
+        fields = {
+            **fields,
+            "model_bindings": normalized_bindings,
+            "model_name": primary_model,
+        }
     updated = await ApiConfigDAO.update(config_id, **fields)
     if not updated:
         raise ApiConfigNotFound("Config not found")
@@ -719,15 +940,125 @@ async def repair_api_config_provider_conflicts(
     reload_api_env: Optional[ReloadCallback] = None,
     dry_run: bool = False,
 ) -> Dict[str, Any]:
-    """Disable historical duplicate enabled keyed rows per provider.
-
-    This preserves the row that currently wins runtime projection. DAO list_all()
-    is ordered the same way as list_enabled(), and load_api_configs_to_env()
-    projects rows in that order, so the last enabled keyed row for a provider is
-    kept active.
-    """
+    """Merge legacy cards into real credential cards, then resolve active conflicts."""
     all_rows = list(await ApiConfigDAO.list_all())
     rows = list(all_rows)
+    credential_groups: Dict[tuple[str, str], List[Any]] = {}
+    for row in rows:
+        provider = normalize_provider(_row_provider(row))
+        api_key = _row_plaintext_key(row)
+        if provider and api_key:
+            credential_groups.setdefault((provider, api_key), []).append(row)
+
+    merged_cards: List[Dict[str, Any]] = []
+    deleted_duplicate_ids: set[str] = set()
+    touched_items: List[Any] = []
+    for (provider, _), duplicate_rows in credential_groups.items():
+        if len(duplicate_rows) <= 1:
+            continue
+        enabled_rows = [row for row in duplicate_rows if _row_enabled(row)]
+        keep = (enabled_rows or duplicate_rows)[-1]
+        keep_id = _row_config_id(keep)
+        merged_binding_input = [
+            binding
+            for row in duplicate_rows
+            for binding in _row_model_bindings(row)
+        ]
+        merged_bindings, primary_model = _normalized_model_fields(
+            provider,
+            merged_binding_input,
+            _row_model_name(keep),
+            endpoint=str(_config_get(keep, "endpoint", "") or ""),
+        )
+        duplicate_ids = [
+            _row_config_id(row)
+            for row in duplicate_rows
+            if _row_config_id(row) and _row_config_id(row) != keep_id
+        ]
+        merged_cards.append(
+            {
+                "provider": provider,
+                "kept_config_id": keep_id,
+                "deleted_config_ids": duplicate_ids,
+                "model_bindings": merged_bindings,
+                "dry_run": dry_run,
+            }
+        )
+        touched_items.extend(duplicate_rows)
+        deleted_duplicate_ids.update(duplicate_ids)
+        if not dry_run:
+            await ApiConfigDAO.update(
+                keep_id,
+                model_bindings=merged_bindings,
+                model_name=primary_model,
+            )
+            for duplicate_id in duplicate_ids:
+                await ApiConfigDAO.delete(duplicate_id)
+
+    rows = [row for row in rows if _row_config_id(row) not in deleted_duplicate_ids]
+
+    # Older preset imports created one keyless row per model. Under the current
+    # one-credential/one-card model those rows are not cards: their bindings
+    # belong on every real credential card for the provider.
+    provider_rows: Dict[str, List[Any]] = {}
+    for row in rows:
+        provider = normalize_provider(_row_provider(row))
+        if provider:
+            provider_rows.setdefault(provider, []).append(row)
+
+    absorbed_placeholder_groups: List[Dict[str, Any]] = []
+    deleted_placeholder_ids: set[str] = set()
+    for provider, candidates in provider_rows.items():
+        keyed_rows = [row for row in candidates if _row_has_key(row)]
+        placeholder_rows = [row for row in candidates if not _row_has_key(row)]
+        if not keyed_rows or not placeholder_rows:
+            continue
+
+        placeholder_bindings = [
+            binding
+            for row in placeholder_rows
+            for binding in _row_model_bindings(row)
+        ]
+        placeholder_ids = [
+            _row_config_id(row)
+            for row in placeholder_rows
+            if _row_config_id(row)
+        ]
+        target_ids: List[str] = []
+        for keyed_row in keyed_rows:
+            target_id = _row_config_id(keyed_row)
+            if not target_id:
+                continue
+            target_ids.append(target_id)
+            endpoint = str(_config_get(keyed_row, "endpoint", "") or "")
+            merged_bindings, primary_model = _normalized_model_fields(
+                provider,
+                [*_row_model_bindings(keyed_row), *placeholder_bindings],
+                _row_model_name(keyed_row),
+                endpoint=endpoint,
+            )
+            if not dry_run:
+                await ApiConfigDAO.update(
+                    target_id,
+                    model_bindings=merged_bindings,
+                    model_name=primary_model,
+                )
+
+        absorbed_placeholder_groups.append(
+            {
+                "provider": provider,
+                "target_config_ids": target_ids,
+                "deleted_config_ids": placeholder_ids,
+                "dry_run": dry_run,
+            }
+        )
+        touched_items.extend([*keyed_rows, *placeholder_rows])
+        deleted_placeholder_ids.update(placeholder_ids)
+        if not dry_run:
+            for placeholder_id in placeholder_ids:
+                await ApiConfigDAO.delete(placeholder_id)
+
+    rows = [row for row in rows if _row_config_id(row) not in deleted_placeholder_ids]
     grouped: Dict[str, List[Any]] = {}
     for row in rows:
         provider = normalize_provider(_row_provider(row))
@@ -736,7 +1067,6 @@ async def repair_api_config_provider_conflicts(
         grouped.setdefault(provider, []).append(row)
 
     conflicts: List[Dict[str, Any]] = []
-    touched_items: List[Any] = []
     total_disabled = 0
     for provider, provider_rows in grouped.items():
         if len(provider_rows) <= 1:
@@ -760,7 +1090,8 @@ async def repair_api_config_provider_conflicts(
         )
 
     env_refreshed = None
-    if total_disabled and not dry_run:
+    changed = bool(total_disabled or deleted_duplicate_ids or deleted_placeholder_ids)
+    if changed and not dry_run:
         env_refreshed = await reload_api_env_after_config_change(reload_api_env)
     if touched_items and not dry_run:
         await invalidate_provider_health_for_items(touched_items)
@@ -769,6 +1100,14 @@ async def repair_api_config_provider_conflicts(
         "success": True,
         "dry_run": dry_run,
         "conflicts": conflicts,
+        "merged_cards": merged_cards,
+        "total_merged_cards": len(merged_cards),
+        "would_merge": len(merged_cards),
+        "deleted_duplicate_config_ids": sorted(deleted_duplicate_ids),
+        "absorbed_placeholder_groups": absorbed_placeholder_groups,
+        "total_absorbed_placeholder_groups": len(absorbed_placeholder_groups),
+        "would_absorb_placeholders": len(absorbed_placeholder_groups),
+        "deleted_placeholder_config_ids": sorted(deleted_placeholder_ids),
         "total_conflicts": len(conflicts),
         "total_disabled": total_disabled if not dry_run else 0,
         "would_disable": total_disabled,

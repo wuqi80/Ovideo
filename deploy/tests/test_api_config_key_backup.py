@@ -33,12 +33,20 @@ async def test_export_api_config_keys_decrypts_key_and_omits_encrypted_field(mon
 
     assert result["success"] is True
     assert result["schema"] == "mecha.api_config_keys"
+    assert result["schema_version"] == 2
     assert result["count"] == 1
     exported = result["configs"][0]
     assert exported["api_key"] == "sk-backup-secret"
     assert exported["request_template"] == {"voice": "Kore"}
     assert exported["headers"] == {"X-Test": "yes"}
     assert exported["has_key"] is True
+    assert exported["model_bindings"] == [
+        {
+            "operation": "default",
+            "label": "default",
+            "model_name": "gemini-3.1-flash-tts-preview",
+        }
+    ]
     assert "api_key_encrypted" not in exported
 
 
@@ -93,8 +101,8 @@ async def test_import_api_config_keys_dry_run_skips_existing_and_counts_invalid(
     assert result["dry_run"] is True
     assert result["total"] == 3
     assert result["created"] == 1
-    assert result["updated"] == 0
-    assert result["skipped"] == 1
+    assert result["updated"] == 1
+    assert result["skipped"] == 0
     assert result["invalid"] == 1
     assert result["env_refreshed"] is None
 

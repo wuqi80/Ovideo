@@ -7,7 +7,9 @@ It is the first step toward a unified API management surface.
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from services.api_provider_endpoints import derive_models_health_urls
 from utils.config_helpers import _config_get
@@ -81,7 +83,10 @@ PROVIDER_KEY_HELP: Dict[str, str] = {
     "gemini-image": "Create a Google AI Studio API key and paste it as GEMINI_IMAGE_API_KEY.",
     "gemini-tts": "Create a Google AI Studio API key and paste it as GEMINI_API_KEY.",
     "doubao": "Create a Volcengine Ark API key and paste it as ARK_API_KEY.",
-    "seedance": "Create a Volcengine Ark API key and paste it as SEEDANCE_API_KEY; ARK_API_KEY remains a fallback.",
+    "seedance": (
+        "Create a Volcengine Ark pay-as-you-go or Agent Plan API key, select the matching "
+        "Seedance channel, and paste it as SEEDANCE_API_KEY; ARK_API_KEY remains a fallback."
+    ),
     "dashscope": "Create an Alibaba Cloud Model Studio / DashScope API key and paste it as DASHSCOPE_API_KEY.",
     "minimax": "Create a MiniMax API key and paste it as MINIMAX_API_KEY. Group ID is configured separately when needed.",
     "sora2": "Create a LaoZhang API token and paste it as SORA2_API_KEY.",
@@ -92,6 +97,8 @@ PROVIDER_KEY_HELP: Dict[str, str] = {
 
 
 DOUBAO_IMAGE_DEFAULT_MODEL = "doubao-seedream-4-0-250828"
+DOUBAO_IMAGE_PAYG_MODEL = "doubao-seedream-5-0-pro-260628"
+DOUBAO_IMAGE_AGENT_PLAN_MODEL = "doubao-seedream-5.0-lite"
 DOUBAO_IMAGE_MODEL_ALIASES: Dict[str, str] = {
     "doubao-seedream-5.0-pro": "doubao-seedream-5-0-pro-260628",
     "doubao-seedream-5-0-pro": "doubao-seedream-5-0-pro-260628",
@@ -101,15 +108,71 @@ DOUBAO_IMAGE_MODEL_ALIASES: Dict[str, str] = {
     "doubao-seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
     "seedream-4.0": DOUBAO_IMAGE_DEFAULT_MODEL,
     "seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
+    "doubao-seedream-5.0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    "doubao-seedream-5-0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    "seedream-5.0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    "seedream-5-0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
 }
+
+DOUBAO_IMAGE_STANDARD_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
+DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT = "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
+DOUBAO_IMAGE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
+    {
+        "operation": "generate",
+        "label": "豆包图像生成",
+        "model_name": DOUBAO_IMAGE_PAYG_MODEL,
+    },
+]
+DOUBAO_IMAGE_ACCESS_MODES: List[Dict[str, Any]] = [
+    {
+        "mode": "standard",
+        "label": "按量付费",
+        "endpoint": DOUBAO_IMAGE_STANDARD_ENDPOINT,
+        "console_url": "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey",
+        "model_map": {"generate": DOUBAO_IMAGE_PAYG_MODEL},
+    },
+    {
+        "mode": "agent_plan",
+        "label": "Agent Plan",
+        "endpoint": DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT,
+        "console_url": "https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan",
+        "model_map": {"generate": DOUBAO_IMAGE_AGENT_PLAN_MODEL},
+    },
+]
 
 
 SEEDANCE_DEFAULT_MODEL_MAP: Dict[str, str] = {
-    # Keep the currently opened-account fallback while allowing admin runtime
-    # config to switch standard/fast to Seedance 2.0 without code changes.
-    "standard": "doubao-seedance-1-0-pro-250528",
-    "fast": "doubao-seedance-1-0-pro-250528",
+    "standard": "doubao-seedance-2-0-260128",
+    "fast": "doubao-seedance-2-0-fast-260128",
 }
+
+SEEDANCE_AGENT_PLAN_MODEL_MAP: Dict[str, str] = {
+    "standard": "doubao-seedance-1.5-pro",
+    "fast": "doubao-seedance-1.5-pro",
+}
+SEEDANCE_LEGACY_AGENT_PLAN_MODELS = frozenset(
+    {"doubao-seedance-2.0", "doubao-seedance-2.0-fast"}
+)
+
+SEEDANCE_STANDARD_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
+SEEDANCE_AGENT_PLAN_ENDPOINT = "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
+
+SEEDANCE_ACCESS_MODES: List[Dict[str, Any]] = [
+    {
+        "mode": "standard",
+        "label": "按量付费",
+        "endpoint": SEEDANCE_STANDARD_ENDPOINT,
+        "console_url": "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey",
+        "model_map": deepcopy(SEEDANCE_DEFAULT_MODEL_MAP),
+    },
+    {
+        "mode": "agent_plan",
+        "label": "Agent Plan",
+        "endpoint": SEEDANCE_AGENT_PLAN_ENDPOINT,
+        "console_url": "https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan",
+        "model_map": deepcopy(SEEDANCE_AGENT_PLAN_MODEL_MAP),
+    },
+]
 
 SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "standard": "SEEDANCE_MODEL_STANDARD",
@@ -172,6 +235,44 @@ DASHSCOPE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "happyhorse": "DASHSCOPE_MODEL_HAPPYHORSE",
 }
 
+SEEDANCE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
+    {
+        "operation": "standard",
+        "label": "飞升 (Seedance 2.0)",
+        "model_name": SEEDANCE_DEFAULT_MODEL_MAP["standard"],
+    },
+    {
+        "operation": "fast",
+        "label": "渡劫 (Seedance 2.0 Fast)",
+        "model_name": SEEDANCE_DEFAULT_MODEL_MAP["fast"],
+    },
+]
+
+DASHSCOPE_MODEL_BINDING_LABELS: Dict[str, str] = {
+    "wan26": "大能 (Wan2.6)",
+    "kling-standard": "合体 (Kling Standard)",
+    "kling-omni": "合体 (Kling Omni)",
+    "vidu-reference-q3-mix": "大乘 (Vidu Q3 Mix 参考生视频)",
+    "vidu-reference-q3": "大乘 (Vidu Q3 参考生视频)",
+    "vidu-reference-q3-turbo": "大乘 (Vidu Q3 Turbo 参考生视频)",
+    "vidu-reference-q2-pro": "大乘 (Vidu Q2 Pro 参考生视频)",
+    "vidu-reference-q2": "大乘 (Vidu Q2 参考生视频)",
+    "vidu-startend-q3-pro": "大乘 (Vidu Q3 Pro 首尾帧)",
+    "vidu-startend-q3-turbo": "大乘 (Vidu Q3 Turbo 首尾帧)",
+    "vidu-startend-q2-pro": "大乘 (Vidu Q2 Pro 首尾帧)",
+    "vidu-startend-q2-turbo": "大乘 (Vidu Q2 Turbo 首尾帧)",
+    "happyhorse": "炼虚 (HappyHorse)",
+}
+
+DASHSCOPE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
+    {
+        "operation": operation,
+        "label": DASHSCOPE_MODEL_BINDING_LABELS[operation],
+        "model_name": model_name,
+    }
+    for operation, model_name in DASHSCOPE_DEFAULT_MODEL_MAP.items()
+]
+
 
 def normalize_seedance_sub_model(sub_model: Optional[str]) -> str:
     normalized = (sub_model or "standard").strip().lower()
@@ -186,6 +287,131 @@ def get_seedance_sub_model_env_key(sub_model: Optional[str]) -> str:
 
 def is_seedance_fast_model(model_name: Optional[str]) -> bool:
     return "fast" in (model_name or "").strip().lower()
+
+
+def doubao_image_access_mode(endpoint: Optional[str]) -> str:
+    """Identify the Ark billing surface from a Doubao image endpoint."""
+    value = str(endpoint or "").strip()
+    try:
+        path = urlsplit(value).path.rstrip("/").lower()
+    except ValueError:
+        path = value.rstrip("/").lower()
+    return "agent_plan" if path == "/api/plan" or path.startswith("/api/plan/") else "standard"
+
+
+def normalize_doubao_image_endpoint(endpoint: Optional[str]) -> str:
+    """Expand official Ark base URLs to the matching image-generation endpoint."""
+    value = str(endpoint or "").strip().rstrip("/")
+    if not value:
+        return value
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return value
+    if parsed.netloc.lower() != "ark.cn-beijing.volces.com":
+        return value
+
+    path = parsed.path.rstrip("/").lower()
+    if path in {"/api/plan", "/api/plan/v3"}:
+        target_path = "/api/plan/v3/images/generations"
+    elif path in {"/api", "/api/v3"}:
+        target_path = "/api/v3/images/generations"
+    elif path in {
+        "/api/plan/v3/images/generations",
+        "/api/v3/images/generations",
+    }:
+        target_path = parsed.path.rstrip("/")
+    else:
+        return value
+    return urlunsplit((parsed.scheme or "https", parsed.netloc, target_path, "", ""))
+
+
+def normalize_doubao_image_model_for_endpoint(
+    model_name: Optional[str],
+    endpoint: Optional[str],
+) -> str:
+    """Use the Agent Plan Seedream model while preserving pay-as-you-go choices."""
+    value = normalize_doubao_image_model(model_name) or ""
+    if doubao_image_access_mode(endpoint) == "agent_plan":
+        known_models = {
+            DOUBAO_IMAGE_DEFAULT_MODEL.lower(),
+            DOUBAO_IMAGE_PAYG_MODEL.lower(),
+            DOUBAO_IMAGE_AGENT_PLAN_MODEL.lower(),
+            *(item.lower() for item in DOUBAO_IMAGE_MODEL_ALIASES.values()),
+        }
+        if not value or value.lower() in known_models:
+            return DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    elif value.lower() == DOUBAO_IMAGE_AGENT_PLAN_MODEL.lower():
+        return DOUBAO_IMAGE_PAYG_MODEL
+    return value or DOUBAO_IMAGE_DEFAULT_MODEL
+
+
+def seedance_access_mode(endpoint: Optional[str]) -> str:
+    """Identify the Ark billing surface from a Seedance endpoint."""
+    value = str(endpoint or "").strip()
+    try:
+        path = urlsplit(value).path.rstrip("/").lower()
+    except ValueError:
+        path = value.rstrip("/").lower()
+    return "agent_plan" if path == "/api/plan" or path.startswith("/api/plan/") else "standard"
+
+
+def normalize_seedance_endpoint(endpoint: Optional[str]) -> str:
+    """Expand Ark base URLs to the native Seedance task endpoint.
+
+    Custom gateways are intentionally left untouched. Only the official Ark
+    host is normalized so an admin can still configure a compatible proxy.
+    """
+    value = str(endpoint or "").strip().rstrip("/")
+    if not value:
+        return value
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return value
+    if parsed.netloc.lower() != "ark.cn-beijing.volces.com":
+        return value
+
+    path = parsed.path.rstrip("/").lower()
+    if path in {"/api/plan", "/api/plan/v3"}:
+        target_path = "/api/plan/v3/contents/generations/tasks"
+    elif path in {"/api", "/api/v3"}:
+        target_path = "/api/v3/contents/generations/tasks"
+    elif path in {
+        "/api/plan/v3/contents/generations/tasks",
+        "/api/v3/contents/generations/tasks",
+    }:
+        target_path = parsed.path.rstrip("/")
+    else:
+        return value
+    return urlunsplit((parsed.scheme or "https", parsed.netloc, target_path, "", ""))
+
+
+def seedance_model_map_for_endpoint(endpoint: Optional[str]) -> Dict[str, str]:
+    if seedance_access_mode(endpoint) == "agent_plan":
+        return SEEDANCE_AGENT_PLAN_MODEL_MAP
+    return SEEDANCE_DEFAULT_MODEL_MAP
+
+
+def normalize_seedance_model_for_endpoint(
+    model_name: Optional[str],
+    endpoint: Optional[str],
+    sub_model: Optional[str] = None,
+) -> str:
+    """Translate built-in Seedance model IDs between pay-as-you-go and Plan."""
+    value = str(model_name or "").strip()
+    operation = normalize_seedance_sub_model(
+        sub_model or ("fast" if is_seedance_fast_model(value) else "standard")
+    )
+    known_models = {
+        item.lower()
+        for model_map in (SEEDANCE_DEFAULT_MODEL_MAP, SEEDANCE_AGENT_PLAN_MODEL_MAP)
+        for item in model_map.values()
+    }
+    known_models.update(item.lower() for item in SEEDANCE_LEGACY_AGENT_PLAN_MODELS)
+    if not value or value.lower() in known_models:
+        return seedance_model_map_for_endpoint(endpoint)[operation]
+    return value
 
 
 def normalize_dashscope_sub_model(sub_model: Optional[str]) -> str:
@@ -299,13 +525,15 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "label": "Volcengine Ark / Doubao",
         "vendor": "volcengine",
         "capabilities": ["image"],
-        "notes": "Ark-compatible image generation provider.",
+        "notes": "Ark-compatible image generation provider, including Agent Plan.",
+        "access_modes": DOUBAO_IMAGE_ACCESS_MODES,
     },
     "seedance": {
         "label": "Seedance 2.0",
         "vendor": "volcengine",
         "capabilities": ["video"],
-        "notes": "Volcengine Ark Seedance video generation.",
+        "notes": "Volcengine Ark Seedance video generation, including Agent Plan.",
+        "access_modes": SEEDANCE_ACCESS_MODES,
     },
     "dashscope": {
         "label": "DashScope / Model Studio",
@@ -380,12 +608,12 @@ PROVIDER_DEFAULT_ENDPOINTS: Dict[str, str] = {
     "gemini-text": "https://api.laozhang.ai/v1",
     "deepseek": "https://api.deepseek.com",
     "gemini-image": "https://api.laozhang.ai/v1beta",
-    "doubao": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+    "doubao": DOUBAO_IMAGE_STANDARD_ENDPOINT,
     "minimax": "https://api.minimaxi.com/v1",
     "sora2": "https://api.laozhang.ai/v1",
     "veo": "https://api.laozhang.ai/v1",
     "dashscope": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
-    "seedance": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+    "seedance": SEEDANCE_STANDARD_ENDPOINT,
     "laozhang-gpt-image": "https://api.laozhang.ai/v1",
     "laozhang-sora2": "https://api.laozhang.ai/v1",
     "gemini-tts": "https://generativelanguage.googleapis.com/v1beta",
@@ -772,6 +1000,118 @@ def get_api_model_preset(provider: str, model_name: Optional[str] = None) -> Opt
     return matches[0] if matches else None
 
 
+def get_provider_model_binding_options(provider: str) -> List[Dict[str, str]]:
+    """Return the front-end operation/model choices supported by one API card."""
+    provider_id = normalize_provider(provider)
+    if provider_id == "doubao":
+        return deepcopy(DOUBAO_IMAGE_MODEL_BINDING_OPTIONS)
+    if provider_id == "seedance":
+        return deepcopy(SEEDANCE_MODEL_BINDING_OPTIONS)
+    if provider_id == "dashscope":
+        return deepcopy(DASHSCOPE_MODEL_BINDING_OPTIONS)
+
+    options: List[Dict[str, str]] = []
+    seen: set[str] = set()
+    for preset in API_MODEL_PRESETS:
+        if normalize_provider(str(preset.get("provider") or "")) != provider_id:
+            continue
+        model_name = str(preset.get("model_name") or "").strip()
+        if not model_name:
+            continue
+        operation = str(preset.get("operation") or model_name).strip().lower()
+        if not operation or operation in seen:
+            continue
+        seen.add(operation)
+        options.append(
+            {
+                "operation": operation,
+                "label": str(preset.get("operation_label") or preset.get("name") or operation).strip(),
+                "model_name": model_name,
+            }
+        )
+    return options
+
+
+def infer_model_binding_operation(provider: str, model_name: Optional[str]) -> str:
+    provider_id = normalize_provider(provider)
+    normalized_model = str(model_name or "").strip()
+    if provider_id == "doubao":
+        return "generate"
+    if provider_id == "seedance":
+        return "fast" if is_seedance_fast_model(normalized_model) else "standard"
+    if provider_id == "dashscope":
+        return dashscope_sub_model_for_model(normalized_model) or "default"
+    for option in get_provider_model_binding_options(provider_id):
+        if option["model_name"].lower() == normalized_model.lower():
+            return option["operation"]
+    return "default"
+
+
+def normalize_model_bindings(
+    provider: str,
+    bindings: Any,
+    legacy_model_name: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """Normalize one-card/many-model bindings and enforce one model per operation."""
+    provider_id = normalize_provider(provider)
+    raw_bindings = bindings
+    if isinstance(raw_bindings, str):
+        try:
+            raw_bindings = json.loads(raw_bindings) if raw_bindings.strip() else []
+        except json.JSONDecodeError:
+            raw_bindings = []
+    if not isinstance(raw_bindings, list):
+        raw_bindings = []
+
+    option_labels = {
+        item["operation"]: item["label"]
+        for item in get_provider_model_binding_options(provider)
+    }
+    normalized: Dict[str, Dict[str, str]] = {}
+    for item in raw_bindings:
+        if not isinstance(item, dict):
+            continue
+        model_name = str(item.get("model_name") or "").strip()
+        if not model_name:
+            continue
+        operation = str(item.get("operation") or "").strip().lower()
+        inferred_operation = infer_model_binding_operation(provider, model_name)
+        if provider_id == "doubao":
+            operation = "generate"
+        elif not operation or (operation == "default" and inferred_operation != "default"):
+            operation = inferred_operation
+        label = str(
+            option_labels.get(operation)
+            if provider_id == "doubao"
+            else item.get("label") or option_labels.get(operation) or operation
+        ).strip()
+        normalized[operation] = {
+            "operation": operation,
+            "label": label,
+            "model_name": model_name,
+        }
+
+    fallback_model = str(legacy_model_name or "").strip()
+    if not normalized and fallback_model:
+        operation = infer_model_binding_operation(provider, fallback_model)
+        normalized[operation] = {
+            "operation": operation,
+            "label": option_labels.get(operation) or operation,
+            "model_name": fallback_model,
+        }
+    return list(normalized.values())
+
+
+def primary_model_name_for_bindings(bindings: Any, fallback: Optional[str] = None) -> str:
+    if isinstance(bindings, list):
+        for item in bindings:
+            if isinstance(item, dict):
+                model_name = str(item.get("model_name") or "").strip()
+                if model_name:
+                    return model_name
+    return str(fallback or "").strip()
+
+
 def normalize_gpt_image_tier(tier: Optional[str]) -> str:
     normalized = (tier or "vip").strip().lower()
     if normalized not in GPT_IMAGE_TIERS:
@@ -824,6 +1164,8 @@ def get_api_provider_catalog() -> List[dict]:
                 if provider in PROVIDER_ENV_MAP
                 else None,
                 "extra_fields": get_provider_extra_fields(provider),
+                "model_binding_options": get_provider_model_binding_options(provider),
+                "access_modes": deepcopy(item.get("access_modes") or []),
                 "operation_paths": get_provider_operation_paths(provider),
                 "default_operation_url_templates": build_provider_operation_url_templates(
                     provider,
@@ -883,22 +1225,23 @@ def summarize_api_provider_configs(configs: List[Any]) -> List[dict]:
         missing_key_rows = [r for r in rows if not _config_has_key(r)]
         disabled_rows = [r for r in rows if _config_get(r, "enabled", True) is False]
 
-        model_counts: Dict[str, int] = {}
         active_model_counts: Dict[str, int] = {}
         enabled_endpoints = set()
         for row in enabled_rows:
-            model_name = str(_config_get(row, "model_name", "") or "")
-            if model_name:
+            bindings = normalize_model_bindings(
+                provider,
+                _config_get(row, "model_bindings", []),
+                str(_config_get(row, "model_name", "") or ""),
+            )
+            for binding in bindings:
+                model_name = binding["model_name"]
                 active_model_counts[model_name] = active_model_counts.get(model_name, 0) + 1
             endpoint = str(_config_get(row, "endpoint", "") or "").strip()
             if endpoint:
                 enabled_endpoints.add(endpoint)
-        for row in rows:
-            model_name = str(_config_get(row, "model_name", "") or "")
-            if model_name:
-                model_counts[model_name] = model_counts.get(model_name, 0) + 1
-
-        duplicate_models = sorted([m for m, count in model_counts.items() if count > 1])
+        # Different credential cards are expected to expose the same operations
+        # and models. Only simultaneous active cards are a runtime conflict.
+        duplicate_models: List[str] = []
         duplicate_enabled_models = sorted([m for m, count in active_model_counts.items() if count > 1])
 
         issues: List[str] = []
@@ -909,8 +1252,6 @@ def summarize_api_provider_configs(configs: List[Any]) -> List[dict]:
             status = "ready"
             if missing_key_rows:
                 issues.append("some_configs_missing_key")
-            if disabled_rows:
-                issues.append("some_configs_disabled")
         elif keyed_rows and not enabled_rows:
             status = "disabled"
             issues.append("all_keyed_configs_disabled")
@@ -918,8 +1259,6 @@ def summarize_api_provider_configs(configs: List[Any]) -> List[dict]:
             status = "missing_key"
             issues.append("missing_key")
 
-        if duplicate_models:
-            issues.append("duplicate_models")
         if duplicate_enabled_models:
             issues.append("duplicate_enabled_models")
         if env_key and len(ready_rows) > 1:

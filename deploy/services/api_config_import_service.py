@@ -7,7 +7,14 @@ from typing import Any, Dict, List, Optional
 from dao.admin.api_config import ApiConfigDAO
 from services.api_config_health_cache_service import invalidate_provider_health_for_items
 from services.api_config_reload_service import ReloadCallback, reload_api_env_after_config_change
-from services.api_provider_registry import get_api_model_presets
+from services.api_provider_registry import (
+    get_api_model_presets,
+    get_provider_model_binding_options,
+    infer_model_binding_operation,
+    normalize_model_bindings,
+    normalize_provider,
+    primary_model_name_for_bindings,
+)
 from services.api_provider_runtime import resolve_provider
 from utils.config_helpers import _config_get
 
@@ -52,16 +59,19 @@ async def import_preset_api_configs(
     """
     options = options or ApiConfigImportOptions()
     preset_models = presets or get_api_model_presets()
-    existing = await ApiConfigDAO.list_all()
-    existing_by_key = {
-        (_config_get(r, "provider", ""), _config_get(r, "model_name", "")): r
-        for r in existing
-    }
-    keyed_provider_sources: Dict[str, Any] = {}
+    presets_by_provider: Dict[str, List[dict]] = {}
+    for preset in preset_models:
+        provider = normalize_provider(str(preset.get("provider") or ""))
+        model_name = str(preset.get("model_name") or "").strip()
+        if provider and model_name:
+            presets_by_provider.setdefault(provider, []).append(preset)
+
+    existing = list(await ApiConfigDAO.list_all())
+    existing_by_provider: Dict[str, List[Any]] = {}
     for row in existing:
-        provider = _config_get(row, "provider", "")
-        if provider and _config_get(row, "api_key_encrypted", "") and provider not in keyed_provider_sources:
-            keyed_provider_sources[provider] = row
+        provider = normalize_provider(str(_config_get(row, "provider", "") or ""))
+        if provider:
+            existing_by_provider.setdefault(provider, []).append(row)
 
     imported = 0
     skipped = 0
@@ -74,20 +84,36 @@ async def import_preset_api_configs(
     planned_actions: List[Dict[str, Any]] = []
     touched_items: List[Dict[str, Any]] = []
 
-    for preset in preset_models:
-        key = (preset["provider"], preset["model_name"])
-        provider = preset["provider"]
-        existing_row = existing_by_key.get(key)
-        resolved = resolve_provider(preset["provider"], preset["model_name"])
-        provider_already_has_key = provider in keyed_provider_sources
-        should_copy_runtime_key = bool(
-            options.copy_runtime_env_keys
-            and resolved.has_key
-            and not provider_already_has_key
+    for provider, provider_presets in presets_by_provider.items():
+        first_preset = provider_presets[0]
+        preset_bindings = normalize_model_bindings(
+            provider,
+            get_provider_model_binding_options(provider)
+            or [
+                {
+                    "operation": preset.get("operation")
+                    or infer_model_binding_operation(provider, preset.get("model_name")),
+                    "label": preset.get("operation_label") or preset.get("name") or "",
+                    "model_name": preset.get("model_name") or "",
+                }
+                for preset in provider_presets
+            ],
         )
+        primary_model = primary_model_name_for_bindings(
+            preset_bindings,
+            str(first_preset.get("model_name") or ""),
+        )
+        provider_rows = existing_by_provider.get(provider, [])
+        existing_row = next(
+            (row for row in provider_rows if _config_get(row, "api_key_encrypted", "")),
+            provider_rows[0] if provider_rows else None,
+        )
+        resolved = resolve_provider(provider, primary_model)
+        has_db_key = bool(existing_row and _config_get(existing_row, "api_key_encrypted", ""))
+        should_copy_runtime_key = bool(options.copy_runtime_env_keys and resolved.has_key and not has_db_key)
         runtime_key = resolved.api_key if should_copy_runtime_key else ""
-        endpoint = resolved.endpoint or preset["endpoint"]
-        proxy_mode = resolved.proxy_config.get("mode") or preset["proxy_mode"] or "direct"
+        endpoint = resolved.endpoint or str(first_preset.get("endpoint") or "")
+        proxy_mode = resolved.proxy_config.get("mode") or first_preset.get("proxy_mode") or "direct"
         custom_proxy = (resolved.proxy_config.get("custom_proxy") or "") if options.copy_runtime_env_keys else ""
         runtime_request_template = (
             _runtime_request_template(provider, resolved)
@@ -96,144 +122,93 @@ async def import_preset_api_configs(
         )
 
         if existing_row:
-            has_db_key = bool(_config_get(existing_row, "api_key_encrypted", ""))
-            if options.copy_runtime_env_keys:
-                if has_db_key:
-                    env_keys_existing += 1
-                    planned_actions.append(
-                        {
-                            "action": "skip_existing_key",
-                            "provider": provider,
-                            "model_name": preset["model_name"],
-                            "config_id": _config_get(existing_row, "config_id", ""),
-                            "name": _config_get(existing_row, "name", ""),
-                        }
-                    )
-                elif should_copy_runtime_key and options.update_existing_empty_keys:
-                    update_fields: Dict[str, Any] = {
+            existing_bindings = normalize_model_bindings(
+                provider,
+                _config_get(existing_row, "model_bindings", []),
+                str(_config_get(existing_row, "model_name", "") or ""),
+            )
+            merged_bindings = normalize_model_bindings(provider, [*existing_bindings, *preset_bindings])
+            update_fields: Dict[str, Any] = {
+                "model_bindings": merged_bindings,
+                "model_name": primary_model_name_for_bindings(merged_bindings, primary_model),
+            }
+            action = "merge_model_bindings"
+            if has_db_key:
+                env_keys_existing += 1
+            elif should_copy_runtime_key and options.update_existing_empty_keys:
+                update_fields.update(
+                    {
                         "api_key": runtime_key,
                         "endpoint": endpoint,
                         "proxy_mode": proxy_mode,
                         "custom_proxy": custom_proxy,
-                        "category": preset.get("category", ""),
+                        "category": first_preset.get("category", ""),
                     }
-                    if runtime_request_template:
-                        update_fields["request_template"] = _merge_request_template(
-                            existing_row,
-                            runtime_request_template,
-                        )
-                    if options.enable_copied_keys:
-                        update_fields["enabled"] = True
-                        if _config_get(existing_row, "enabled", True) is False:
-                            enabled_existing += 1
-                    planned_actions.append(
-                        {
-                            "action": "update_existing_empty_key",
-                            "provider": provider,
-                            "model_name": preset["model_name"],
-                            "config_id": _config_get(existing_row, "config_id", ""),
-                            "name": _config_get(existing_row, "name", ""),
-                            "endpoint": endpoint,
-                            "will_enable": bool(update_fields.get("enabled")),
-                            "will_copy_key": True,
-                            "will_copy_extra_fields": sorted(runtime_request_template),
-                        }
-                    )
-                    if not options.dry_run:
-                        await ApiConfigDAO.update(_config_get(existing_row, "config_id", ""), **update_fields)
-                    touched_items.append(
-                        {
-                            "provider": provider,
-                            "model_name": preset["model_name"],
-                        }
-                    )
-                    keyed_provider_sources[provider] = existing_row
-                    env_keys_imported += 1
-                    updated_existing += 1
-                elif resolved.has_key and provider_already_has_key:
-                    env_keys_skipped_provider_claimed += 1
-                    planned_actions.append(
-                        {
-                            "action": "skip_provider_key_already_claimed",
-                            "provider": provider,
-                            "model_name": preset["model_name"],
-                            "config_id": _config_get(existing_row, "config_id", ""),
-                            "name": _config_get(existing_row, "name", ""),
-                        }
-                    )
-                else:
-                    env_keys_missing += 1
-                    planned_actions.append(
-                        {
-                            "action": "skip_missing_runtime_key",
-                            "provider": provider,
-                            "model_name": preset["model_name"],
-                            "config_id": _config_get(existing_row, "config_id", ""),
-                            "name": _config_get(existing_row, "name", ""),
-                        }
-                    )
+                )
+                if runtime_request_template:
+                    update_fields["request_template"] = _merge_request_template(existing_row, runtime_request_template)
+                if options.enable_copied_keys:
+                    update_fields["enabled"] = True
+                    if _config_get(existing_row, "enabled", True) is False:
+                        enabled_existing += 1
+                env_keys_imported += 1
+                action = "update_existing_api_card"
+            elif options.copy_runtime_env_keys and not resolved.has_key:
+                env_keys_missing += 1
+
+            planned_actions.append(
+                {
+                    "action": action,
+                    "provider": provider,
+                    "config_id": _config_get(existing_row, "config_id", ""),
+                    "model_binding_count": len(merged_bindings),
+                    "will_copy_key": bool(update_fields.get("api_key")),
+                }
+            )
+            if not options.dry_run:
+                updated_row = await ApiConfigDAO.update(
+                    _config_get(existing_row, "config_id", ""),
+                    **update_fields,
+                )
+                touched_items.append(updated_row or existing_row)
+            updated_existing += 1
             skipped += 1
             continue
 
-        if options.copy_runtime_env_keys and resolved.has_key and provider_already_has_key:
-            env_keys_skipped_provider_claimed += 1
-            planned_actions.append(
-                {
-                    "action": "create_placeholder_provider_key_already_claimed",
-                    "provider": provider,
-                    "model_name": preset["model_name"],
-                    "name": preset["name"],
-                    "endpoint": endpoint,
-                    "will_copy_key": False,
-                    "will_copy_extra_fields": sorted(runtime_request_template),
-                }
-            )
-        elif options.copy_runtime_env_keys and not runtime_key:
+        if options.copy_runtime_env_keys and not runtime_key:
             env_keys_missing += 1
-            planned_actions.append(
-                {
-                    "action": "create_placeholder_missing_runtime_key",
-                    "provider": provider,
-                    "model_name": preset["model_name"],
-                    "name": preset["name"],
-                    "endpoint": endpoint,
-                    "will_copy_key": False,
-                    "will_copy_extra_fields": sorted(runtime_request_template),
-                }
-            )
-        else:
-            planned_actions.append(
-                {
-                    "action": "create_config",
-                    "provider": provider,
-                    "model_name": preset["model_name"],
-                    "name": preset["name"],
-                    "endpoint": endpoint,
-                    "will_copy_key": bool(runtime_key),
-                    "will_copy_extra_fields": sorted(runtime_request_template),
-                }
-            )
+        planned_actions.append(
+            {
+                "action": "create_api_card",
+                "provider": provider,
+                "name": first_preset.get("name") or provider,
+                "endpoint": endpoint,
+                "model_binding_count": len(preset_bindings),
+                "will_copy_key": bool(runtime_key),
+                "will_copy_extra_fields": sorted(runtime_request_template),
+            }
+        )
         if not options.dry_run:
             created_row = await ApiConfigDAO.create(
-                name=preset["name"],
-                provider=preset["provider"],
+                name=first_preset.get("name") or provider,
+                provider=provider,
                 endpoint=endpoint,
                 api_key=runtime_key,
-                model_name=preset["model_name"],
+                model_name=primary_model,
+                model_bindings=preset_bindings,
                 proxy_mode=proxy_mode,
                 custom_proxy=custom_proxy,
-                category=preset.get("category", ""),
+                category=first_preset.get("category", ""),
                 request_template=runtime_request_template or None,
             )
             touched_items.append(
                 created_row
                 or {
                     "provider": provider,
-                    "model_name": preset["model_name"],
+                    "model_name": primary_model,
                 }
             )
         if options.copy_runtime_env_keys and runtime_key:
-            keyed_provider_sources[provider] = {"provider": provider}
             env_keys_imported += 1
         imported += 1
 
@@ -250,7 +225,8 @@ async def import_preset_api_configs(
         "dry_run": options.dry_run,
         "imported": imported,
         "skipped": skipped,
-        "total": len(preset_models),
+        "total": len(presets_by_provider),
+        "preset_total": len(preset_models),
         "copy_runtime_env_keys": options.copy_runtime_env_keys,
         "env_keys_imported": env_keys_imported,
         "env_keys_missing": env_keys_missing,

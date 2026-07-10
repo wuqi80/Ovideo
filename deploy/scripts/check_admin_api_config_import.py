@@ -152,10 +152,15 @@ async def main() -> int:
         ]
         if len(dashscope_keyed_creates) != 1:
             fail(f"Expected exactly one keyed DashScope row, got {len(dashscope_keyed_creates)}")
+        dashscope_cards = [item for item in creates if item.get("provider") == "dashscope"]
+        if len(dashscope_cards) != 1:
+            fail(f"Expected one DashScope API card, got {len(dashscope_cards)}")
+        if len(dashscope_cards[0].get("model_bindings") or []) != len(registry.DASHSCOPE_DEFAULT_MODEL_MAP):
+            fail(f"DashScope API card did not receive all model bindings: {dashscope_cards[0]}")
         if copied["env_keys_imported"] != 1:
             fail(f"Expected one imported env key, got {copied['env_keys_imported']}")
-        if copied["env_keys_skipped_provider_claimed"] < 3:
-            fail("Expected multi-preset DashScope rows to skip duplicate provider key copies")
+        if copied["env_keys_skipped_provider_claimed"] != 0:
+            fail("Provider-grouped import should not create duplicate key claims")
         if reload_calls != 1:
             fail(f"Expected reload once after copied import, got {reload_calls}")
         if copied.get("env_refreshed") is not True:

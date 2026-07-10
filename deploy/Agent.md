@@ -1,5 +1,16 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 Doubao SeedDream Agent Plan
+
+### Changes
+
+- Added `standard` and `agent_plan` access-mode metadata to the `doubao` provider.
+- Normalized official Agent Plan base URLs to `/api/plan/v3/images/generations`.
+- Agent Plan cards and requests always use `doubao-seedream-5.0-lite`; pay-as-you-go cards preserve their configured SeedDream model.
+- Applied the same endpoint-aware normalization in API config CRUD, DB-to-env hot reload, runtime resolution, health real-generation tests, and production image generation.
+- Generalized the admin access-mode control so both Seedance and Doubao cards can switch channels.
+- Added focused contract tests for registry, runtime env projection, real-generation probes, and production payloads.
+
 ## 2026-07-10 Seedance Plan Guard And Stale Tasks
 
 ### Changes

@@ -11,6 +11,8 @@ from external_api.video import wan2 as wan2_video
 from services import ai_proxy_http_client, ai_proxy_service, video_reverse_service
 from services.ai_proxy_types import GptImageReferenceInput
 from services.api_provider_registry import (
+    SEEDANCE_AGENT_PLAN_ENDPOINT,
+    SEEDANCE_AGENT_PLAN_MODEL_MAP,
     SEEDANCE_DEFAULT_MODEL_MAP,
     DASHSCOPE_DEFAULT_MODEL_MAP,
     DOUBAO_IMAGE_DEFAULT_MODEL,
@@ -33,12 +35,11 @@ from services.api_provider_registry import (
     veo_runtime_model_override,
 )
 from services.api_provider_runtime import (
+    build_provider_runtime_status,
     resolve_dashscope_default_model_name,
     resolve_dashscope_model_name,
     resolve_provider,
 )
-
-
 def test_resolve_provider_uses_runtime_model_env(monkeypatch):
     env_key = get_provider_env_key("gemini-text")
     assert env_key
@@ -52,6 +53,38 @@ def test_resolve_provider_uses_runtime_model_env(monkeypatch):
     assert config.model_name == "gemini-runtime-model"
     assert config.model_env == model_env
     assert config.source["model"] == model_env
+
+
+def test_runtime_status_matches_seedance_plan_health_to_resolved_model(monkeypatch):
+    api_key_env = get_provider_env_key("seedance")
+    endpoint_env = get_endpoint_env_key(api_key_env)
+    assert api_key_env and endpoint_env
+
+    monkeypatch.setenv(api_key_env, "test-seedance-key")
+    monkeypatch.setenv(endpoint_env, SEEDANCE_AGENT_PLAN_ENDPOINT)
+
+    health = [{
+        "provider": "seedance",
+        "model_name": SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"],
+        "status": "ok",
+        "health": {
+            "ok": True,
+            "auth_ok": True,
+            "status_code": 200,
+            "error": None,
+        },
+    }]
+    statuses = build_provider_runtime_status(provider_health=health)
+    status = next(
+        item
+        for item in statuses
+        if item["provider"] == "seedance"
+        and item["model_name"] == SEEDANCE_DEFAULT_MODEL_MAP["standard"]
+    )
+
+    assert status["runtime_model_name"] == SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"]
+    assert status["health_status"] == "ok"
+    assert "health_error" not in status["issues"]
 
 
 def test_minimax_sora2_and_veo_video_alias_helpers_live_in_registry():
@@ -866,6 +899,34 @@ def test_seedance_video_uses_callable_default_when_runtime_model_missing(monkeyp
     assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
     assert calls[0]["json"]["model"] == SEEDANCE_DEFAULT_MODEL_MAP["standard"]
+
+
+def test_seedance_agent_plan_expands_endpoint_and_uses_plan_model(monkeypatch):
+    env_key = get_provider_env_key("seedance")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    standard_env = get_seedance_sub_model_env_key("standard")
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-agent-plan-key")
+    monkeypatch.setenv(endpoint_env, "https://ark.cn-beijing.volces.com/api/plan/")
+    monkeypatch.setenv(standard_env, SEEDANCE_DEFAULT_MODEL_MAP["standard"])
+
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return _SeedanceTaskResponse()
+
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
+
+    client = seedance_video.SeedanceClient()
+    task_id = client.create_video_task("standard", [{"type": "text", "text": "move gently"}])
+    client.query_task(task_id)
+
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"] == SEEDANCE_AGENT_PLAN_ENDPOINT
+    assert calls[0]["json"]["model"] == SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"]
+    assert calls[1]["method"] == "GET"
+    assert calls[1]["url"] == f"{SEEDANCE_AGENT_PLAN_ENDPOINT}/{task_id}"
 
 
 def test_wan26_video_uses_runtime_sub_model_env(monkeypatch):

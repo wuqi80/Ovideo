@@ -371,7 +371,7 @@ async def main() -> int:
                 "name": "A MiniMax old",
                 "provider": "minimax",
                 "endpoint": "https://minimax-old.example.test/v1",
-                "api_key_encrypted": "encrypted-old",
+                "api_key_encrypted": "encrypted:old-secret",
                 "model_name": "MiniMax-Hailuo-02",
                 "proxy_mode": "direct",
                 "custom_proxy": "",
@@ -384,7 +384,7 @@ async def main() -> int:
                 "name": "Z MiniMax winner",
                 "provider": "minimax",
                 "endpoint": "https://minimax-winner.example.test/v1",
-                "api_key_encrypted": "encrypted-winner",
+                "api_key_encrypted": "encrypted:winner-secret",
                 "model_name": "MiniMax-Hailuo-02",
                 "proxy_mode": "direct",
                 "custom_proxy": "",
@@ -424,7 +424,12 @@ async def main() -> int:
             reload_api_env=fake_reload,
             dry_run=True,
         )
-        if dry.get("total_conflicts") != 1 or dry.get("would_disable") != 1 or dry.get("total_disabled") != 0:
+        if (
+            dry.get("total_conflicts") != 1
+            or dry.get("would_disable") != 1
+            or dry.get("total_disabled") != 0
+            or dry.get("would_absorb_placeholders") != 1
+        ):
             fail(f"repair dry_run summary changed: {dry}")
         if any(row["config_id"] == "dup_old" and row.get("enabled") is False for row in rows):
             fail("repair dry_run disabled a row")
@@ -432,7 +437,11 @@ async def main() -> int:
             fail("repair dry_run should not reload API env")
 
         repaired = await service.repair_api_config_provider_conflicts(reload_api_env=fake_reload)
-        if repaired.get("total_conflicts") != 1 or repaired.get("total_disabled") != 1:
+        if (
+            repaired.get("total_conflicts") != 1
+            or repaired.get("total_disabled") != 1
+            or repaired.get("total_absorbed_placeholder_groups") != 1
+        ):
             fail(f"repair summary changed: {repaired}")
         conflict = repaired.get("conflicts", [{}])[0]
         if conflict.get("kept_config_id") != "dup_winner" or conflict.get("disabled_config_ids") != ["dup_old"]:
@@ -441,8 +450,10 @@ async def main() -> int:
             fail("repair did not disable old duplicate")
         if next(row for row in rows if row["config_id"] == "dup_winner").get("enabled") is not True:
             fail("repair disabled winning duplicate")
-        if next(row for row in rows if row["config_id"] == "dup_empty").get("enabled") is not True:
-            fail("repair should ignore enabled rows without keys")
+        if any(row["config_id"] == "dup_empty" for row in rows):
+            fail("repair should absorb and delete keyless model placeholders")
+        if repaired.get("deleted_placeholder_config_ids") != ["dup_empty"]:
+            fail(f"repair should report deleted placeholders: {repaired}")
         if reload_calls != reload_before_repair + 1:
             fail("repair should reload API env exactly once")
         if invalidations[-1] != ("minimax",):

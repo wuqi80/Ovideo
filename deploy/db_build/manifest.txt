@@ -48,6 +48,7 @@ db_migration_media_library_folders.sql  # REF projects; ALTER media_library_item
 # ---- 6. 管理后台表 ----
 db_migration_admin.sql                  # 建 comfyui_agents/workflow_templates/api_configurations/system_settings
 db_migration_api_config_category.sql    # ALTER api_configurations
+db_migration_api_config_model_bindings.sql # ALTER api_configurations
 db_migration_gpt_image_providers.sql    # INSERT api_configurations 预置
 
 # ---- 7. 跨切扩展（需多张前面建好的表）----

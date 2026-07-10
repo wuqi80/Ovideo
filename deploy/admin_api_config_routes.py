@@ -167,6 +167,8 @@ def _audit_result_summary(result: Dict[str, Any]) -> Dict[str, Any]:
         "total_conflicts",
         "total_disabled",
         "would_disable",
+        "total_absorbed_placeholder_groups",
+        "would_absorb_placeholders",
         "created",
         "invalid",
         "count",
@@ -232,6 +234,7 @@ class ApiConfigCreateBody(BaseModel):
     endpoint: str = Field(..., min_length=1)
     api_key: str = Field(..., min_length=1)
     model_name: str = ""
+    model_bindings: List[Dict[str, str]] = Field(default_factory=list)
     proxy_mode: str = "direct"
     custom_proxy: str = ""
     request_template: Dict[str, Any] = Field(default_factory=dict)
@@ -248,6 +251,7 @@ class ApiConfigBulkKeysBody(BaseModel):
     api_keys: List[str] = Field(..., min_length=1)
     name_prefix: str = ""
     model_name: str = ""
+    model_bindings: List[Dict[str, str]] = Field(default_factory=list)
     proxy_mode: str = "direct"
     custom_proxy: str = ""
     request_template: Dict[str, Any] = Field(default_factory=dict)
@@ -264,6 +268,7 @@ class ApiConfigUpdateBody(BaseModel):
     endpoint: Optional[str] = None
     api_key: Optional[str] = None
     model_name: Optional[str] = None
+    model_bindings: Optional[List[Dict[str, str]]] = None
     proxy_mode: Optional[str] = None
     custom_proxy: Optional[str] = None
     request_template: Optional[Dict[str, Any]] = None
@@ -320,6 +325,7 @@ async def admin_create_api_config(body: ApiConfigCreateBody, request: Request):
             endpoint=body.endpoint,
             api_key=body.api_key,
             model_name=body.model_name,
+            model_bindings=body.model_bindings,
             proxy_mode=body.proxy_mode,
             custom_proxy=body.custom_proxy,
             request_template=body.request_template,
@@ -335,8 +341,8 @@ async def admin_create_api_config(body: ApiConfigCreateBody, request: Request):
             after=_audit_result_summary(result),
         )
         return result
-    except ApiConfigCreateFailed:
-        raise HTTPException(status_code=500, detail="Failed to create API config")
+    except ApiConfigCreateFailed as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/api-configs/bulk-keys", status_code=status.HTTP_201_CREATED)
@@ -349,6 +355,7 @@ async def admin_create_api_config_key_batch(body: ApiConfigBulkKeysBody, request
             api_keys=body.api_keys,
             name_prefix=body.name_prefix,
             model_name=body.model_name,
+            model_bindings=body.model_bindings,
             proxy_mode=body.proxy_mode,
             custom_proxy=body.custom_proxy,
             request_template=body.request_template,
@@ -600,6 +607,8 @@ async def admin_update_api_config(config_id: str, body: ApiConfigUpdateBody, req
         return result
     except ApiConfigNotFound:
         raise HTTPException(status_code=404, detail="Config not found")
+    except ApiConfigCreateFailed as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.delete("/api-configs/{config_id}")

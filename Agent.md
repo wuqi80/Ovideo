@@ -1,5 +1,11 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 Doubao SeedDream Agent Plan
+
+- Added pay-as-you-go and Agent Plan access modes to the Doubao image provider card.
+- Agent Plan normalizes the endpoint to `/api/plan/v3/images/generations` and always submits `doubao-seedream-5.0-lite`.
+- Existing pay-as-you-go SeedDream models remain unchanged; admin tests and production generation share the same endpoint-aware model resolver.
+
 ## 2026-07-10 Seedance Plan Guard And Stale Tasks
 
 - Confirmed historical successful `seedance_i2v` tasks used Seedance 1.0 Pro on the standard pay-as-you-go endpoint, not Seedance 2.0.

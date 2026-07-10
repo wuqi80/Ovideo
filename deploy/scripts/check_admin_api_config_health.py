@@ -249,10 +249,10 @@ async def main() -> int:
     factory = FakeSessionFactory([(401, "bad token"), (200, '{"data": []}')])
     result = await test_api_config_health(deepseek_row, "secret-key", session_factory=factory)
     test = result.get("test") or {}
-    if test.get("ok") is not True or test.get("status_code") != 200:
-        fail(f"Expected second fake URL to succeed: {test}")
-    if len(factory.calls) != 2:
-        fail(f"Expected two health calls, got {len(factory.calls)}")
+    if test.get("ok") is not False or test.get("status_code") != 401:
+        fail(f"Configured endpoint auth failure should not fall back to provider default: {test}")
+    if len(factory.calls) != 1:
+        fail(f"Expected only the configured endpoint health call, got {len(factory.calls)}")
     first_call = factory.calls[0]
     if first_call["headers"].get("Authorization") != "Bearer secret-key":
         fail("Health check did not add bearer Authorization header")
