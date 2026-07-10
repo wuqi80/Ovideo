@@ -413,7 +413,7 @@ class TaskDAO:
         )
 
     @staticmethod
-    async def cleanup_stale(hours: int = 24, limit: int = 50) -> int:
+    async def cleanup_stale(hours: int = 1, limit: int = 50) -> int:
         """将超时的 pending/queued/processing 任务标记为 failed"""
         db = get_db_manager()
         if not db:

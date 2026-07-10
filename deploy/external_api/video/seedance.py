@@ -3,12 +3,52 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from external_api.video.base import download_streaming_video, request_json
-from services.api_provider_registry import SEEDANCE_DEFAULT_MODEL_MAP, normalize_seedance_sub_model
+from services.api_provider_registry import (
+    SEEDANCE_DEFAULT_MODEL_MAP,
+    normalize_seedance_sub_model,
+)
 from services.api_provider_runtime import resolve_provider, resolve_seedance_model_name
 
 logger = logging.getLogger(__name__)
+
+SEEDANCE_AGENT_PLAN_MODEL = "doubao-seedance-1.5-pro"
+SEEDANCE_PAYG_MODELS = frozenset(
+    {
+        "doubao-seedance-2-0-260128",
+        "doubao-seedance-2-0-fast-260128",
+        "doubao-seedance-2.0",
+        "doubao-seedance-2.0-fast",
+    }
+)
+SEEDANCE_MODEL_AVAILABILITY_MARKERS = (
+    "unsupportedmodel",
+    "modelnotopen",
+    "does not support",
+    "model does not exist",
+    "model not found",
+    "not activated the model",
+    "do not have access to it",
+)
+
+
+def _is_agent_plan_endpoint(endpoint: str) -> bool:
+    try:
+        return "/api/plan/" in urlsplit(endpoint).path.lower()
+    except ValueError:
+        return "/api/plan/" in (endpoint or "").lower()
+
+
+def _provider_error_text(exc: BaseException) -> str:
+    response = getattr(exc, "response", None)
+    return f"{exc} {getattr(response, 'text', '')}".casefold()
+
+
+def _is_model_availability_error(exc: BaseException) -> bool:
+    error_text = _provider_error_text(exc)
+    return any(marker in error_text for marker in SEEDANCE_MODEL_AVAILABILITY_MARKERS)
 
 
 class SeedanceClient:
@@ -64,6 +104,15 @@ class SeedanceClient:
         normalized_sub_model = normalize_seedance_sub_model(sub_model)
         model_name = resolve_seedance_model_name(normalized_sub_model)
         self._refresh_runtime_config(model_name)
+        if _is_agent_plan_endpoint(self.base_url):
+            if model_name != SEEDANCE_AGENT_PLAN_MODEL:
+                logger.info(
+                    "Seedance Agent Plan model override: sub_model=%s requested=%s selected=%s",
+                    normalized_sub_model,
+                    model_name,
+                    SEEDANCE_AGENT_PLAN_MODEL,
+                )
+            model_name = SEEDANCE_AGENT_PLAN_MODEL
 
         payload: Dict[str, Any] = {
             "model": model_name,
@@ -90,24 +139,49 @@ class SeedanceClient:
             len(contents),
         )
         try:
-            data = request_json(
-                "POST",
-                self.base_url,
-                headers=self.headers,
-                json=payload,
-                timeout=180,
-                request_kwargs=self._request_kwargs,
-                logger=logger,
-                label="Seedance create",
-            )
+            try:
+                data = self._submit_create_request(payload)
+            except Exception as exc:
+                should_fallback = (
+                    not _is_agent_plan_endpoint(self.base_url)
+                    and model_name in SEEDANCE_PAYG_MODELS
+                    and _is_model_availability_error(exc)
+                )
+                if not should_fallback:
+                    raise
+                logger.warning(
+                    "Seedance pay-as-you-go model unavailable; retrying with %s: requested=%s error=%s",
+                    SEEDANCE_AGENT_PLAN_MODEL,
+                    model_name,
+                    exc,
+                )
+                model_name = SEEDANCE_AGENT_PLAN_MODEL
+                payload["model"] = model_name
+                data = self._submit_create_request(payload)
             task_id = data.get("id")
             if not task_id:
                 raise ValueError(f"Seedance response missing task id: {data}")
-            logger.info("Seedance task created: %s", task_id)
+            logger.info("Seedance task created: %s model=%s", task_id, model_name)
             return task_id
         except Exception as exc:
             logger.error("Seedance task create failed: %s", exc)
+            if _is_model_availability_error(exc):
+                raise RuntimeError(
+                    "ModelNotOpen: the configured Seedance model is not supported by the active channel."
+                ) from exc
             raise
+
+    def _submit_create_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return request_json(
+            "POST",
+            self.base_url,
+            headers=self.headers,
+            json=payload,
+            timeout=180,
+            request_kwargs=self._request_kwargs,
+            logger=logger,
+            label="Seedance create",
+        )
 
     def query_task(self, task_id: str) -> Dict[str, Any]:
         """Poll a Seedance task status."""

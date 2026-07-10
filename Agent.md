@@ -1,5 +1,13 @@
 # Agent.md - 本地部署记录
 
+## 2026-07-10 Seedance Plan Guard And Stale Tasks
+
+- Confirmed historical successful `seedance_i2v` tasks used Seedance 1.0 Pro on the standard pay-as-you-go endpoint, not Seedance 2.0.
+- Agent Plan now maps both Seedance Standard and Fast operations to the supported `doubao-seedance-1.5-pro` model; pay-as-you-go keeps Seedance 2.0.
+- Pay-as-you-go retries once with `doubao-seedance-1.5-pro` only when Seedance 2.0 or 2.0 Fast returns a model-availability error.
+- Unsupported channel/model responses are converted to the existing non-retryable `ModelNotOpen` error.
+- Active tasks stuck for one hour are now marked failed; four existing stale server tasks were cleaned.
+
 ## 2026-07-10 Endpoint-Aware Provider Links
 
 - Admin provider console, API documentation, and key-help links now follow the effective endpoint hostname instead of the static model vendor.

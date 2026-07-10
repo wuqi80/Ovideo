@@ -24,7 +24,7 @@ const COMPLETED_RETAIN_MS = 30 * 60 * 1000;
 // 2026-06-14：active（pending/queued/running）任务超过此时长仍未完成，视为僵尸/超时，
 // rehydrate 时自动判失败清出「运行中」。否则卡死的任务（如无 GPU agent 的 qwen 出图）
 // 会永远显示「运行中 0%」幽灵在通知面板里。
-const STALE_ACTIVE_MS = 120 * 60 * 1000;
+const STALE_ACTIVE_MS = 60 * 60 * 1000;
 // listTasks 默认排序时，已完成 / 失败保留前 N 条（避免 store 无限增长）
 const MAX_COMPLETED_KEEP = 50;
 const FRONTEND_QUEUE_TASK_ID_RE = /^comfyui_\d+_\d+$/;

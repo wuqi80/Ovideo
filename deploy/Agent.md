@@ -1,5 +1,17 @@
 # MECHA Deploy Agent Notes
 
+## 2026-07-10 Seedance Plan Guard And Stale Tasks
+
+### Changes
+
+- Agent Plan now maps both Seedance Standard and Fast operations to the supported `doubao-seedance-1.5-pro` model; the pay-as-you-go endpoint keeps Seedance 2.0 and 2.0 Fast.
+- Pay-as-you-go falls back once to `doubao-seedance-1.5-pro` only for explicit model unsupported, unavailable, or not-open errors; authentication, quota, and transport failures are not masked.
+- Unsupported channel/model responses are converted to the existing non-retryable `ModelNotOpen` marker so tasks fail immediately instead of making three identical provider attempts.
+- Reduced backend stale-task cleanup from 24 hours to 1 hour, with a 60-second startup delay and five-minute sweep interval.
+- Aligned the browser task registry's stale threshold to one hour.
+- Added focused tests for both Agent Plan operation mappings, unsupported-model handling, and the one-hour DAO cleanup default.
+- Manually marked four existing server tasks older than one hour as failed so they no longer appear as running at 0%.
+
 ## 2026-07-10 Endpoint-Aware Provider Links
 
 ### Changes

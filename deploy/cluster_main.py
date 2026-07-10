@@ -140,9 +140,9 @@ def _env_int_at_least(name: str, default: int, minimum: int) -> int:
 def task_stale_reaper_settings() -> dict[str, int | bool]:
     return {
         "enabled": _env_bool("TASK_STALE_REAPER_ENABLED", True),
-        "hours": _env_int_at_least("TASK_STALE_REAPER_HOURS", 24, 1),
-        "initial_delay_seconds": _env_int_at_least("TASK_STALE_REAPER_INITIAL_DELAY_SECONDS", 900, 0),
-        "interval_seconds": _env_int_at_least("TASK_STALE_REAPER_INTERVAL_SECONDS", 3600, 60),
+        "hours": _env_int_at_least("TASK_STALE_REAPER_HOURS", 1, 1),
+        "initial_delay_seconds": _env_int_at_least("TASK_STALE_REAPER_INITIAL_DELAY_SECONDS", 60, 0),
+        "interval_seconds": _env_int_at_least("TASK_STALE_REAPER_INTERVAL_SECONDS", 300, 60),
     }
 
 
