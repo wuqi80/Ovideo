@@ -1,7 +1,5 @@
 import { generateGeminiImageViaProxy, GeminiImageOptions, GeneratedFileResult } from './geminiImageService';
 
-const MODEL_IMAGE_NANO2 = 'gemini-3.1-flash-image-preview';
-
 const callWithRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> => {
     try {
         return await fn();
@@ -33,7 +31,6 @@ export const generateMaterialImage = async (
         Style: Anime/Manga style, high detail, character sheet or environment concept art.
     `;
     const results = await generateGeminiImageVariant({
-        model: MODEL_IMAGE_NANO2,
         prompt,
         aspectRatio: '1:1',
         imageSize: '2K',
@@ -50,7 +47,6 @@ export const generateFinalIllustration = async (
     return callWithRetry(async () => {
         try {
             const results = await generateGeminiImageVariant({
-                model: MODEL_IMAGE_NANO2,
                 prompt: `${prompt}\n\nStyle: High quality Anime/Manga screenshot, detailed background, cinematic lighting.`,
                 references: referenceImages,
                 aspectRatio: imageOptions?.aspectRatio ?? '16:9',

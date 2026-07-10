@@ -428,7 +428,7 @@ def create_generation_router(
 
             images, model = await generate_gemini_images(
                 parts=parts,
-                requested_model="gemini-3.1-flash-image-preview",
+                requested_model=None,
                 aspect_ratio="16:9",
             )
 
