@@ -9,6 +9,21 @@ import type { ComfyUITaskRegistryMeta, GeneratedImageResult } from './comfyuiTas
 
 type GenerationTaskResponse = { task_id: string };
 
+type ComfyUIEntityOptions = {
+    entityType?: string;
+    entityId?: string;
+    fileRole?: string;
+    projectId?: string;
+    episodeId?: string;
+    preferredAgentId?: string;
+    preferredNodeId?: string;
+};
+
+const comfyuiRoutingPayload = (entityOptions?: ComfyUIEntityOptions) => ({
+    preferred_agent_id: entityOptions?.preferredAgentId || entityOptions?.preferredNodeId,
+    preferred_node_id: entityOptions?.preferredNodeId || entityOptions?.preferredAgentId,
+});
+
 const toQueuedTask = (data: GenerationTaskResponse): { taskId: string; status: string } => ({
     taskId: data.task_id,
     status: 'queued',
@@ -179,7 +194,7 @@ export const generateWithComfyUIWorkflow = async (
     mainImage: string,
     refImages: string[] = [],
     seed: number = -1,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string }
+    entityOptions?: ComfyUIEntityOptions
 ): Promise<{ taskId: string; status: string }> => {
     try {
         const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
@@ -216,6 +231,7 @@ export const generateWithComfyUIWorkflow = async (
             file_role: entityOptions?.fileRole,
             project_id: entityOptions?.projectId,
             episode_id: entityOptions?.episodeId,
+            ...comfyuiRoutingPayload(entityOptions),
         }, `${workflowType}工作流生成`);
     } catch (error) {
         console.error(`${workflowType} Generation Error:`, error);
@@ -263,7 +279,7 @@ export const generateWithComfyUIWorkflowQueued = async (
     refImages: string[] = [],
     seed: number = -1,
     onTaskId?: (taskId: string) => void,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string },
+    entityOptions?: ComfyUIEntityOptions,
     registryMeta?: ComfyUITaskRegistryMeta,
 ): Promise<GeneratedImageResult[]> => {
     return enqueueComfyUITask(async (frontendKey) => {

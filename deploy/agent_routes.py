@@ -127,6 +127,17 @@ async def _verify_agent_token(authorization: str = Header(...)) -> dict:
     return agent
 
 
+def _preferred_agent_id_from_task_info(task_info: dict) -> str:
+    data = task_info.get("data") if isinstance(task_info, dict) else {}
+    if not isinstance(data, dict):
+        return ""
+    for key in ("preferred_agent_id", "preferred_node_id", "target_agent_id", "target_node_id"):
+        value = data.get(key)
+        if value:
+            return str(value).strip()
+    return ""
+
+
 @router.post("/register")
 async def register_agent(request: RegisterRequest, authorization: str = Header(...)):
     token = authorization.replace("Bearer ", "").strip()
@@ -222,6 +233,20 @@ async def agent_poll(authorization: str = Header(...)):
             "task_type": task_hash.get("task_type", "comfyui"),
             "data": data_parsed,
         }
+
+    preferred_agent_id = _preferred_agent_id_from_task_info(task_info)
+    if preferred_agent_id and preferred_agent_id != str(agent["agent_id"]):
+        score = members[0][1] if isinstance(members[0], (list, tuple)) and len(members[0]) > 1 else 0
+        retry_score = max(float(score) + 0.001, datetime.now().timestamp())
+        await redis_client.zadd(RedisConfig.TASK_QUEUE_KEY, {raw_member: retry_score})
+        logger.info(
+            "poll: task=%s pinned to %s, current agent=%s, requeued with score=%s",
+            task_info.get("task_id"),
+            preferred_agent_id,
+            agent["agent_id"],
+            retry_score,
+        )
+        return {"task": None}
 
     task_id = task_info.get("task_id")
 
