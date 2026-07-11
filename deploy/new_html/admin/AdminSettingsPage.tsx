@@ -1348,10 +1348,16 @@ const ProviderCredentialLinks: React.FC<{
     );
 };
 
-const ProviderOperationPaths: React.FC<{ meta?: ProviderMeta; runtime?: RuntimeStatus; compact?: boolean }> = ({
+const ProviderOperationPaths: React.FC<{
+    meta?: ProviderMeta;
+    runtime?: RuntimeStatus;
+    compact?: boolean;
+    collapsed?: boolean;
+}> = ({
     meta,
     runtime,
     compact = false,
+    collapsed = false,
 }) => {
     const operationUrls = runtime?.operation_urls || meta?.default_operation_url_templates || {};
     const entries = Object.entries(meta?.operation_paths || operationUrls)
@@ -1360,12 +1366,46 @@ const ProviderOperationPaths: React.FC<{ meta?: ProviderMeta; runtime?: RuntimeS
         .sort(([left], [right]) => left.localeCompare(right));
     if (!entries.length) return null;
 
-    const visible = compact ? entries.slice(0, 3) : entries;
+    const renderRows = () => (
+        <div className="grid gap-1">
+            {entries.map(([operation, path, url]) => (
+                <div key={operation} className="grid gap-1 sm:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]">
+                    <span className="font-mono text-n700 break-all">{operation}</span>
+                    <span className="font-mono text-n300 break-all">{url || path}</span>
+                    {url && path && url !== path && (
+                        <span className="font-mono text-n100 break-all sm:col-start-2">{path}</span>
+                    )}
+                </div>
+            ))}
+        </div>
+    );
+
+    if (collapsed) {
+        return (
+            <details className={`rounded border border-n40 bg-n20 px-3 py-2 text-[11px] text-n100 ${compact ? 'mt-2' : 'mt-3'}`}>
+                <summary className="flex cursor-pointer select-none items-center justify-between gap-3 font-semibold text-n700">
+                    <span className="uppercase tracking-wider">API Paths</span>
+                    <span className="rounded bg-n0 px-1.5 py-0.5 font-mono text-[10px] text-n100">
+                        {entries.length}
+                    </span>
+                </summary>
+                <div className="mt-2">
+                    {renderRows()}
+                </div>
+            </details>
+        );
+    }
+
     return (
         <div className={`rounded border border-n40 bg-n20 px-3 py-2 text-[11px] text-n100 ${compact ? 'mt-2' : 'mt-3'}`}>
-            <div className="mb-1 font-semibold uppercase tracking-wider text-n100">API Paths</div>
+            <div className="mb-1 flex items-center justify-between gap-3 font-semibold uppercase tracking-wider text-n100">
+                <span>API Paths</span>
+                <span className="rounded bg-n0 px-1.5 py-0.5 font-mono text-[10px] normal-case tracking-normal text-n100">
+                    {entries.length}
+                </span>
+            </div>
             <div className="grid gap-1">
-                {visible.map(([operation, path, url]) => (
+                {entries.map(([operation, path, url]) => (
                     <div key={operation} className="grid gap-1 sm:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)]">
                         <span className="font-mono text-n700 break-all">{operation}</span>
                         <span className="font-mono text-n300 break-all">{url || path}</span>
@@ -1375,9 +1415,6 @@ const ProviderOperationPaths: React.FC<{ meta?: ProviderMeta; runtime?: RuntimeS
                     </div>
                 ))}
             </div>
-            {compact && entries.length > visible.length && (
-                <div className="mt-1 font-mono text-n100">+{entries.length - visible.length} more</div>
-            )}
         </div>
     );
 };
@@ -2280,7 +2317,7 @@ const ApiConfigCard: React.FC<{
                     {meta?.notes && (
                         <div className="mt-2 text-[11px] text-n100 leading-relaxed break-words">{meta.notes}</div>
                     )}
-                    <ProviderOperationPaths meta={meta} runtime={runtime} />
+                    <ProviderOperationPaths meta={meta} runtime={runtime} collapsed />
                     <ProviderCredentialLinks meta={meta} endpoint={runtimeEndpoint || dbEndpoint} />
                         </>
                     )}
@@ -2549,10 +2586,7 @@ const ProviderQuickCard: React.FC<{
                 </details>
             )}
 
-            <details className="mt-3 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
-                <summary className="cursor-pointer select-none font-semibold text-n700">API Paths</summary>
-                <ProviderOperationPaths meta={meta} runtime={runtime} compact />
-            </details>
+            <ProviderOperationPaths meta={meta} runtime={runtime} compact collapsed />
 
             <div className="mt-3 flex flex-wrap gap-2">
                 {primaryConfig ? (
