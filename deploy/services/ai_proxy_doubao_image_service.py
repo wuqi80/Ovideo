@@ -208,6 +208,42 @@ def _normalize_agent_plan_size(size: str) -> str:
     return value
 
 
+def build_doubao_agent_plan_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    prompt = str(payload.get("prompt") or "").strip()
+    content: List[Dict[str, Any]] = []
+    if prompt:
+        content.append({"type": "text", "text": prompt})
+
+    reference_inputs = payload.get("image")
+    if isinstance(reference_inputs, str):
+        reference_values = [reference_inputs]
+    elif isinstance(reference_inputs, list):
+        reference_values = [item for item in reference_inputs if isinstance(item, str) and item.strip()]
+    else:
+        reference_values = []
+
+    for image_url in reference_values:
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": image_url},
+                "role": "reference_image",
+            }
+        )
+
+    if not content:
+        content.append({"type": "text", "text": "Generate a simple image."})
+
+    task_payload: Dict[str, Any] = {
+        "model": payload.get("model"),
+        "content": content,
+        "size": _normalize_agent_plan_size(str(payload.get("size") or "")),
+        "response_format": "url",
+        "watermark": bool(payload.get("watermark", False)),
+    }
+    return {key: value for key, value in task_payload.items() if value is not None}
+
+
 async def _poll_doubao_image_task(
     *,
     config: Any,
@@ -288,9 +324,7 @@ async def _post_doubao_image_generation(
         raise AIProxyConfigError("未配置豆包 endpoint，无法调用豆包图片接口")
 
     if doubao_image_access_mode(config.endpoint) == "agent_plan":
-        task_payload = dict(payload)
-        task_payload["response_format"] = "url"
-        task_payload["size"] = _normalize_agent_plan_size(str(task_payload.get("size") or ""))
+        task_payload = build_doubao_agent_plan_payload(payload)
         return await _post_doubao_image_task_generation(config=config, payload=task_payload)
 
     result = await _post_json_request_async(

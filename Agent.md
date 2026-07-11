@@ -8860,3 +8860,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Admin real-generation tests for Doubao Agent Plan now treat the first response as an async task and poll for image output before marking the provider ready.
 - Added/updated tests for endpoint normalization, minimum Agent Plan size (`1920x1920`), task parsing, task polling, and health-check output type.
 - Cost note: no live paid image generation was triggered during this local verification; only mocked/unit tests were run before deployment.
+- Follow-up fix: Agent Plan task payload now sends `content` blocks instead of the legacy image API `prompt` field, fixing Volcengine `MissingParameter: content` responses.

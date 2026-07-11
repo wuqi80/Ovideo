@@ -9615,6 +9615,7 @@
 - Existing short or old plan endpoints are normalized to the task endpoint during provider resolution.
 - Runtime image generation now submits an Agent Plan task, polls `{task_endpoint}/{task_id}`, and extracts returned image URLs / base64 data from nested task payloads.
 - Admin real-generation tests for Doubao Agent Plan now treat the first response as an async task and poll for image output before marking the provider ready.
+- Follow-up fix: Agent Plan task payload now sends `content` blocks instead of the legacy image API `prompt` field, fixing Volcengine `MissingParameter: content` responses.
 
 ### Verification
 

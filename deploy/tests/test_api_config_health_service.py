@@ -75,6 +75,10 @@ def test_doubao_agent_plan_real_generation_uses_plan_endpoint_and_min_size() -> 
     assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
     assert body["size"] == "1920x1920"
     assert body["model"] == "doubao-seedream-5.0-lite"
+    assert body["content"] == [
+        {"type": "text", "text": "A simple blue square icon on a white background."}
+    ]
+    assert "prompt" not in body
     assert body["response_format"] == "url"
     assert body["watermark"] is False
     assert output_type == "image_task"
