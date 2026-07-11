@@ -8861,3 +8861,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Added/updated tests for endpoint normalization, minimum Agent Plan size (`1920x1920`), task parsing, task polling, and health-check output type.
 - Cost note: no live paid image generation was triggered during this local verification; only mocked/unit tests were run before deployment.
 - Follow-up fix: Agent Plan task payload now sends `content` blocks instead of the legacy image API `prompt` field, fixing Volcengine `MissingParameter: content` responses.
+- Follow-up hardening: Agent Plan send boundary now always overwrites the upstream model with `doubao-seedream-5.0-lite`, so stale DB rows or frontend payloads such as `doubao-seedream-5-0` cannot leak into content-generation requests.

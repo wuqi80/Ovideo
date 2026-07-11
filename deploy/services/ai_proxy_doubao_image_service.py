@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from services.api_provider_registry import (
+    DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     DOUBAO_IMAGE_DEFAULT_MODEL,
     doubao_image_access_mode,
     normalize_doubao_image_model_for_endpoint,
@@ -326,10 +327,10 @@ async def _post_doubao_image_generation(
     if doubao_image_access_mode(config.endpoint) == "agent_plan":
         payload = {
             **payload,
-            "model": normalize_doubao_image_model_for_endpoint(
-                payload.get("model"),
-                config.endpoint,
-            ),
+            # Agent Plan content generation only supports the lite model. Force this
+            # at the final send boundary so stale DB rows or UI payloads cannot leak
+            # a non-compatible SeedDream model into the upstream request.
+            "model": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
         }
         task_payload = build_doubao_agent_plan_payload(payload)
         return await _post_doubao_image_task_generation(config=config, payload=task_payload)

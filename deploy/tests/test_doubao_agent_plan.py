@@ -203,6 +203,35 @@ async def test_doubao_generation_normalizes_bare_seedream_5_agent_plan_model(mon
     assert captured["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
 
 
+@pytest.mark.asyncio
+async def test_doubao_agent_plan_send_boundary_forces_lite_model(monkeypatch) -> None:
+    config = SimpleNamespace(
+        api_key="test-agent-plan-key",
+        endpoint=DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT,
+    )
+    captured = {}
+
+    async def fake_task_post(*, config, payload):
+        captured.update(payload)
+        return ["https://cdn.example.test/seedream.png"]
+
+    monkeypatch.setattr(doubao_service, "_post_doubao_image_task_generation", fake_task_post)
+
+    images = await doubao_service._post_doubao_image_generation(
+        config=config,
+        payload={
+            "model": "doubao-seedream-5-0",
+            "prompt": "draw",
+            "size": "1024x1024",
+            "watermark": False,
+        },
+    )
+
+    assert images == ["https://cdn.example.test/seedream.png"]
+    assert captured["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert captured["content"] == [{"type": "text", "text": "draw"}]
+
+
 def test_doubao_real_generation_test_uses_agent_plan_model() -> None:
     url, body, output_type = _real_generation_request(
         "doubao",

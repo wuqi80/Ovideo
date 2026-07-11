@@ -9625,3 +9625,4 @@
   - `tests/test_api_config_health_service.py`
   - `tests/test_api_provider_runtime_model_env.py`
 - Cost note: no live paid image generation was triggered during local verification; only mocked/unit tests were run before deployment.
+- Follow-up hardening: Agent Plan send boundary now always overwrites the upstream model with `doubao-seedream-5.0-lite`, so stale DB rows or frontend payloads such as `doubao-seedream-5-0` cannot leak into content-generation requests.
