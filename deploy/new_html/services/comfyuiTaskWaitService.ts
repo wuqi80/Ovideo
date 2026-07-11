@@ -87,27 +87,27 @@ export function normalizeComfyUITaskError(error: unknown, context?: ErrorNormali
     const message = raw.trim();
 
     if (!message) {
-        return 'ComfyUI task failed. Please check the GPU agent and local ComfyUI logs.';
+        return 'ComfyUI 任务失败。请检查所选 GPU 集群节点 / Agent 日志。';
     }
 
     if (/400\s+Client Error|Bad Request/i.test(message) && /127\.0\.0\.1:8188\/prompt|\/prompt/i.test(message)) {
         const label = workflowLabelFromContext(message, context);
         const detail = sanitizeComfyUIErrorDetail(message);
-        return `本地 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查 GPU 机器是否安装该工作流所需节点和模型，然后重试。详情：${detail}`;
+        return `GPU 集群节点的 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查该节点是否安装工作流所需节点和模型，然后重试。详情：${detail}`;
     }
 
     if (/ComfyUI\s+\/prompt\s+failed:\s*HTTP\s+400/i.test(message)) {
         const label = workflowLabelFromContext(message, context);
         const detail = sanitizeComfyUIErrorDetail(message);
-        return `本地 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查 GPU 机器是否安装该工作流所需节点和模型，然后重试。详情：${detail}`;
+        return `GPU 集群节点的 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查该节点是否安装工作流所需节点和模型，然后重试。详情：${detail}`;
     }
 
     if (/Task timed out/i.test(message)) {
-        return 'ComfyUI 等待超时。GPU 首次加载模型可能较慢，请检查本地 GPU Agent 和 ComfyUI 队列后再重试。';
+        return 'ComfyUI 等待超时。GPU 首次加载模型可能较慢，请检查 GPU 集群节点 / Agent 和 ComfyUI 队列后再重试。';
     }
 
     if (/Auto-cleanup:\s*stale task exceeded timeout/i.test(message)) {
-        return '任务长时间未被 GPU Agent 接走，已被系统自动清理。请确认本地 GPU Agent 在线后再重试。';
+        return '任务长时间未被 GPU 集群节点接走，已被系统自动清理。请确认目标 Agent 在线后再重试。';
     }
 
     return sanitizeComfyUIErrorDetail(message);

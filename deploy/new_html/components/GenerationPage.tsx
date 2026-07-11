@@ -27,6 +27,7 @@ import { loadShotImages, clearImageCache, getCachedBlobUrl, setCachedBlobUrl, re
 import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../services/taskRecovery';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
+import { fetchClusterNodes, isClusterNodeUsable, type ClusterNodeOption } from '../services/clusterNodeService';
 
 const MattingModal = React.lazy(() => import('./MattingModal'));
 const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
@@ -416,13 +417,48 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     version: 2,
     defaultValue: 'nanobanana',
   });
-  // 2026-06-14：需 GPU agent 的 ComfyUI 档位（本机未接 agent 会永远卡 0% 超时）。
+  // ComfyUI 档位需要 GPU 集群节点；节点可由后端自动分配，也可在页面里手动指定。
   const COMFYUI_MODELS = React.useMemo(() => new Set<string>(['qwen', 'qwen_lora', 'qwenN', 'qwenN_lora', 'kontext']), []);
-  // 持久化里若残留 ComfyUI 模型（旧默认/手动选过），自动纠正到「化神」，避免一进来就是卡死的档。
+  const [clusterNodes, setClusterNodes] = useState<ClusterNodeOption[]>([]);
+  const [clusterNodesLoading, setClusterNodesLoading] = useState(false);
+  const [clusterNodeMessage, setClusterNodeMessage] = useState('');
+  const [selectedClusterNodeId, setSelectedClusterNodeId] = usePersistedPageState<string>({
+    page: 'GenerationPage:selectedClusterNodeId',
+    episodeId,
+    version: 1,
+    defaultValue: 'auto',
+  });
+  const usableClusterNodes = useMemo(
+    () => clusterNodes.filter(isClusterNodeUsable),
+    [clusterNodes],
+  );
+  const selectedClusterNode = useMemo(
+    () => usableClusterNodes.find((node) => node.id === selectedClusterNodeId || node.agentId === selectedClusterNodeId),
+    [selectedClusterNodeId, usableClusterNodes],
+  );
+  const loadClusterNodeOptions = useCallback(async () => {
+    setClusterNodesLoading(true);
+    try {
+      const result = await fetchClusterNodes();
+      setClusterNodes(result.nodes);
+      setClusterNodeMessage(result.message);
+      if (
+        selectedClusterNodeId !== 'auto'
+        && !result.nodes.some((node) => isClusterNodeUsable(node) && (node.id === selectedClusterNodeId || node.agentId === selectedClusterNodeId))
+      ) {
+        setSelectedClusterNodeId('auto');
+      }
+    } catch (error) {
+      console.warn('[GenerationPage] cluster nodes unavailable:', error);
+      setClusterNodes([]);
+      setClusterNodeMessage('GPU 集群节点状态暂时不可用，任务会按系统默认队列处理。');
+    } finally {
+      setClusterNodesLoading(false);
+    }
+  }, [selectedClusterNodeId, setSelectedClusterNodeId]);
   useEffect(() => {
-    if (COMFYUI_MODELS.has(globalModel)) setGlobalModel('nanobanana' as GenerationModel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadClusterNodeOptions();
+  }, [loadClusterNodeOptions]);
   const [shotModels, setShotModels] = usePersistedPageState<Record<string, GenerationModel>>({
     page: 'GenerationPage:shotModels',
     episodeId,
@@ -1013,6 +1049,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               
               // 确保至少有一张参考图（使用第一张或默认图）
               const mainImage = refImages.length > 0 ? refImages[0] : 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+              const preferredClusterNode = selectedClusterNodeId !== 'auto' ? selectedClusterNode : undefined;
+              const preferredAgentId = preferredClusterNode?.agentId || (preferredClusterNode?.kind === 'agent' ? preferredClusterNode.id : undefined);
+              const preferredNodeId = preferredClusterNode?.nodeId || preferredClusterNode?.id;
               
               let currentTaskId = '';
               const resultUrls = await generateWithComfyUIWorkflowQueued(
@@ -1025,7 +1064,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       currentTaskId = taskId;
                       saveRunningTask({ taskId, shotId: shot.id, fileId: selectedFileId || '', model: modelToUse, startedAt: Date.now() });
                   },
-                  { entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId },
+                  {
+                      entityType: 'storyboard_item',
+                      entityId: shot.id,
+                      fileRole: 'generated_image',
+                      episodeId,
+                      preferredAgentId,
+                      preferredNodeId,
+                  },
                   buildRegistryMeta(
                       shot,
                       workflowType === 'qwen_lora'
@@ -2369,11 +2415,52 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             天劫二阶
                         </button>
                     </div>
-                    {/* 2026-06-14：ComfyUI 档位需 GPU Agent，本机未接会卡死——选中即醒目提示 */}
+                    {/* ComfyUI 档位走 GPU 集群节点；可指定具体 Agent，默认由队列自动分配。 */}
                     {COMFYUI_MODELS.has(globalModel) && (
-                        <div className="mt-2 flex items-start gap-1.5 text-[10px] text-danger bg-r50 border border-danger/30 rounded px-2 py-1.5 leading-relaxed">
-                            <span className="shrink-0 font-bold">⚠</span>
-                            <span>此档走 <b>ComfyUI，需 GPU Agent</b>。本机未接 Agent，生成会一直卡 0% 超时。请改用 <b>化神</b> 或 <b>天劫一阶 / 二阶</b>（走 API 网关，开箱即用）。</span>
+                        <div className={`mt-2 rounded border px-2 py-2 text-[10px] leading-relaxed ${
+                            usableClusterNodes.length > 0
+                                ? 'bg-g50 text-g400 border-g200'
+                                : 'bg-y50 text-y400 border-y200'
+                        }`}>
+                            <div className="flex items-start justify-between gap-2">
+                                <span>
+                                    {usableClusterNodes.length > 0
+                                        ? <>此档走 <b>ComfyUI GPU 集群</b>。可调用在线集群节点处理；未指定时系统自动分配。</>
+                                        : <>此档走 <b>ComfyUI GPU 集群</b>。当前未检测到在线节点，任务会等待 Agent 上线。</>}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={loadClusterNodeOptions}
+                                    disabled={clusterNodesLoading}
+                                    className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-current/20 bg-n0/70 hover:bg-n0 disabled:opacity-60"
+                                    title="刷新 GPU 集群节点"
+                                >
+                                    <RefreshCw className={`w-3 h-3 ${clusterNodesLoading ? 'animate-spin' : ''}`} />
+                                    刷新
+                                </button>
+                            </div>
+                            <div className="mt-2 grid grid-cols-[48px,1fr] items-center gap-2">
+                                <span className="text-n300">处理节点</span>
+                                <select
+                                    value={selectedClusterNodeId}
+                                    onChange={(e) => setSelectedClusterNodeId(e.target.value)}
+                                    disabled={clusterNodesLoading || usableClusterNodes.length === 0 || isGenerating}
+                                    className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none disabled:bg-n20 disabled:text-n100"
+                                >
+                                    <option value="auto">自动分配（推荐）</option>
+                                    {usableClusterNodes.map((node) => (
+                                        <option key={node.id} value={node.agentId || node.id}>
+                                            {node.name} · {node.status}{node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="mt-1 text-[9px] text-n300">
+                                {selectedClusterNodeId === 'auto'
+                                    ? `当前可用 ${usableClusterNodes.length} 个节点，生成时自动选择。`
+                                    : `当前指定：${selectedClusterNode?.name || selectedClusterNodeId}`}
+                                {clusterNodeMessage ? ` · ${clusterNodeMessage}` : ''}
+                            </div>
                         </div>
                     )}
                     <p className="text-[9px] text-n100 mt-2">

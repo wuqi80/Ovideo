@@ -366,7 +366,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 const nodesList = normalizeClusterNodeRows(data.nodes).map(mapClusterNode);
                 setNodes(nodesList);
                 setClusterNodeMessage(data.agent_only_mode
-                    ? (data.message || 'Agent-Only 模式：当前没有本地 ComfyUI 节点。')
+                    ? (data.message || 'Agent-Only 模式：当前没有在线 GPU Agent 节点。')
                     : (nodesList.length === 0 ? '当前没有已注册的集群节点。' : '')
                 );
                 console.log('✅ 加载了', nodesList.length, '个集群节点');

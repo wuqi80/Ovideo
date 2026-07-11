@@ -20,8 +20,8 @@ type ComfyUIEntityOptions = {
 };
 
 const comfyuiRoutingPayload = (entityOptions?: ComfyUIEntityOptions) => ({
-    preferred_agent_id: entityOptions?.preferredAgentId || entityOptions?.preferredNodeId,
-    preferred_node_id: entityOptions?.preferredNodeId || entityOptions?.preferredAgentId,
+    preferred_agent_id: entityOptions?.preferredAgentId,
+    preferred_node_id: entityOptions?.preferredNodeId,
 });
 
 const toQueuedTask = (data: GenerationTaskResponse): { taskId: string; status: string } => ({

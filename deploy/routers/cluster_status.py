@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from cluster_config import SystemConfig
 import task_service
+from services.cluster_node_service import list_agent_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -62,19 +63,26 @@ def create_cluster_status_router(
 
     @router.get("/api/cluster/nodes")
     async def list_nodes(username: str = Depends(require_auth_dependency)):
-        """Return cluster node list; agent-only mode has no local nodes."""
+        """Return local cluster nodes plus online external GPU agents."""
         cluster_manager = get_cluster_manager()
+        agent_nodes = await list_agent_nodes()
         if cluster_manager is None:
+            message = (
+                f"已检测到 {len(agent_nodes)} 个在线 GPU Agent，可由集群节点处理 ComfyUI 任务。"
+                if agent_nodes
+                else "Agent-Only 模式：当前没有在线 GPU Agent，ComfyUI 任务会等待 Agent 上线。"
+            )
             return {
                 "success": True,
-                "nodes": [],
+                "nodes": agent_nodes,
                 "agent_only_mode": True,
-                "message": "Agent-Only 模式：本地无 ComfyUI 集群节点，任务由外部 Agent 处理",
+                "message": message,
             }
         stats = cluster_manager.get_cluster_stats()
         return {
             "success": True,
-            "nodes": stats["nodes"],
+            "nodes": [*(stats.get("nodes") or []), *agent_nodes],
+            "agent_only_mode": False,
         }
 
     @router.get("/health")

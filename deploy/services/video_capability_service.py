@@ -5,6 +5,7 @@ import logging
 from typing import Dict
 
 from services.api_provider_runtime import resolve_seedance_model_name
+from services.cluster_node_service import list_agent_nodes
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +17,7 @@ def _is_seedance_omni_model(model_name: str) -> bool:
 
 async def _has_online_comfyui_agent() -> bool:
     try:
-        from dao_agent import AgentDAO
-
-        online = await AgentDAO.get_online_agents()
-        return bool(online)
+        return bool(await list_agent_nodes())
     except Exception as exc:
         logger.debug("video capability ComfyUI agent probe failed: %s", exc)
         return False

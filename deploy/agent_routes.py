@@ -131,7 +131,7 @@ def _preferred_agent_id_from_task_info(task_info: dict) -> str:
     data = task_info.get("data") if isinstance(task_info, dict) else {}
     if not isinstance(data, dict):
         return ""
-    for key in ("preferred_agent_id", "preferred_node_id", "target_agent_id", "target_node_id"):
+    for key in ("preferred_agent_id", "target_agent_id"):
         value = data.get(key)
         if value:
             return str(value).strip()

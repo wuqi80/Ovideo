@@ -2483,7 +2483,7 @@ def check_video_capabilities_routes_extracted(root: Path) -> int:
         (router_text, "from services.video_capability_service import get_video_capabilities", video_capabilities_path),
         (router_text, "return await get_video_capabilities()", video_capabilities_path),
         (service_text, 'resolve_seedance_model_name("standard")', video_capability_service_path),
-        (service_text, "AgentDAO.get_online_agents()", video_capability_service_path),
+        (service_text, "list_agent_nodes()", video_capability_service_path),
     ]
     forbidden_snippets = [
         (router_text, "from dao_agent import AgentDAO", video_capabilities_path),
@@ -5481,7 +5481,7 @@ def check_service_mapper_purity_contract(root: Path) -> int:
         (root / "services" / "episode_video_service.py", "episode_dao.get_project_id("),
         (root / "routers" / "episode_video.py", "start_episode_compose("),
         (root / "routers" / "video_capabilities.py", "get_video_capabilities("),
-        (root / "services" / "video_capability_service.py", "AgentDAO.get_online_agents("),
+        (root / "services" / "video_capability_service.py", "list_agent_nodes("),
         (root / "routers" / "prompts.py", "get_prompt_template_service("),
         (root / "services" / "prompt_service.py", "prompt_template_dao.load_template("),
         (root / "routers" / "tasks.py", "get_task_status_response("),

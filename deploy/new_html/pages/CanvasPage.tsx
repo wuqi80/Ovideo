@@ -842,7 +842,7 @@ const CanvasInner: React.FC = () => {
     }
 
     setIsGenerating(true);
-    setStatusText(generationMode === 'gpu' ? '正在提交本地GPU生成任务...' : '正在通过 API 生成图片...');
+    setStatusText(generationMode === 'gpu' ? '正在提交 GPU 集群生成任务...' : '正在通过 API 生成图片...');
 
     try {
       let generatedUrl = '';
@@ -851,7 +851,7 @@ const CanvasInner: React.FC = () => {
       if (generationMode === 'gpu') {
         const comfyuiAvailable = await fetchComfyuiAvailable();
         if (!comfyuiAvailable) {
-          throw new Error('当前没有在线 GPU Agent，请在后台“集群节点监控”确认节点在线，或切回 API 生成');
+          throw new Error('当前没有可用 GPU 集群节点，请在后台“集群节点监控”确认 Agent 在线，或切回 API 生成');
         }
 
         const gpuResults = await generateWithComfyUIWorkflowQueued(
@@ -1308,14 +1308,14 @@ const CanvasInner: React.FC = () => {
             >
               {([
                 { mode: 'api' as const, label: 'API', icon: <Sparkles size={13} /> },
-                { mode: 'gpu' as const, label: '本地GPU', icon: <Zap size={13} /> },
+                { mode: 'gpu' as const, label: 'GPU集群', icon: <Zap size={13} /> },
               ]).map((item) => (
                 <button
                   key={item.mode}
                   type="button"
                   onClick={() => setGenerationMode(item.mode)}
                   disabled={isGenerating}
-                  title={item.mode === 'gpu' ? '使用 ComfyUI GPU Agent 生成' : '使用外部图像 API 生成'}
+                  title={item.mode === 'gpu' ? '使用 ComfyUI GPU 集群节点生成' : '使用外部图像 API 生成'}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
