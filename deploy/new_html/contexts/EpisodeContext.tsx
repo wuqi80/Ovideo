@@ -57,6 +57,7 @@ function normalizeAsset(r: any): AssetItem {
     assetId: String(r.asset_id ?? r.assetId ?? ''),
     projectId: String(r.project_id ?? r.projectId ?? ''),
     episodeId: r.episode_id ?? r.episodeId ?? null,
+    scriptId: r.script_id ?? r.scriptId ?? null,
     assetType: (r.asset_type ?? r.assetType ?? 'character') as AssetItem['assetType'],
     name: String(r.name ?? ''),
     description: String(r.description ?? ''),
@@ -285,7 +286,8 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       assets: async () => {
         const scopeMode = assetScopeModeRef.current;
         const queryEpisodeId = scopeMode === 'project' ? undefined : episodeId;
-        const res = await getAssets(projectId, queryEpisodeId).catch(() => ({ success: false, assets: [] }));
+        const queryScriptId = scopeMode === 'project' ? undefined : (selectedScriptIdRef.current || undefined);
+        const res = await getAssets(projectId, queryEpisodeId, undefined, queryScriptId).catch(() => ({ success: false, assets: [] }));
         if (res.success) {
           const normalized = (res.assets || []).map(normalizeAsset);
           setAssets(filterAssetsForEpisodeScope(normalized, episodeId, scopeMode));

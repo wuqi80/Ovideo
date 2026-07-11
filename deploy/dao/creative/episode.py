@@ -118,6 +118,10 @@ class EpisodeDAO:
         if not db:
             return False
         await db.execute(
+            "DELETE FROM assets WHERE episode_id=$1",
+            episode_id
+        )
+        await db.execute(
             "DELETE FROM episodes WHERE episode_id=$1",
             episode_id
         )

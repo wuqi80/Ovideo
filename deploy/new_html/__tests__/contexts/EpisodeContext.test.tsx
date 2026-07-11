@@ -19,4 +19,10 @@ describe('EpisodeContext storyboard fallback behavior', () => {
   it('reloads loaded script scoped slices after stale storyboard fallback clears selection', () => {
     expect(source).toContain('void fetchSlices({ quiet: true }, ...slicesToReload)');
   });
+
+  it('requests script scoped assets in episode scope', () => {
+    expect(source).toContain('scriptId: r.script_id ?? r.scriptId ?? null');
+    expect(source).toContain("const queryScriptId = scopeMode === 'project' ? undefined : (selectedScriptIdRef.current || undefined)");
+    expect(source).toContain('getAssets(projectId, queryEpisodeId, undefined, queryScriptId)');
+  });
 });

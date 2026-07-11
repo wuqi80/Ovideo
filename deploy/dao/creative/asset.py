@@ -64,27 +64,30 @@ class AssetDAO:
         db = get_db_manager()
         if not db:
             return []
-        conditions = ["project_id = $1"]
+        conditions = [
+            "a.project_id = $1",
+            "(a.episode_id IS NULL OR EXISTS (SELECT 1 FROM episodes e WHERE e.episode_id = a.episode_id))",
+        ]
         args: list = [project_id]
         idx = 2
 
         if episode_id:
-            conditions.append(f"(episode_id IS NULL OR episode_id = ${idx})")
+            conditions.append(f"(a.episode_id IS NULL OR a.episode_id = ${idx})")
             args.append(episode_id)
             idx += 1
 
         if script_id:
-            conditions.append(f"script_id = ${idx}")
+            conditions.append(f"a.script_id = ${idx}")
             args.append(script_id)
             idx += 1
 
         if asset_type:
-            conditions.append(f"asset_type = ${idx}")
+            conditions.append(f"a.asset_type = ${idx}")
             args.append(asset_type)
             idx += 1
 
         where = " AND ".join(conditions)
-        query = f"SELECT * FROM assets WHERE {where} ORDER BY created_at DESC"
+        query = f"SELECT a.* FROM assets a WHERE {where} ORDER BY a.created_at DESC"
         return await db.fetch(query, *args)
 
     @staticmethod

@@ -19,6 +19,7 @@ import type { AssetItem } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 import { isAssetImageFileRole } from '../utils/assetImageRoles';
+import { filterAssetsForDesignScope } from '../utils/assetScope';
 
 type AssetTab = 'character' | 'scene' | 'prop';
 type MaterialAIEngine = 'nanobanana' | 'doubao';
@@ -226,11 +227,23 @@ export const DesignPage: React.FC = () => {
   const [processModal, setProcessModal] = useState<{ asset: AssetItem; materials: ModalMaterial[]; workflow: 'upscale_hd' | 'remove_watermark' } | null>(null);
   const [batchModal, setBatchModal] = useState(false);
 
-  const filtered = useMemo(() => assets.filter(a => a.assetType === tab), [assets, tab]);
+  const designAssets = useMemo(
+    () => filterAssetsForDesignScope(assets, episodeId, selectedScriptId),
+    [assets, episodeId, selectedScriptId],
+  );
+  const filtered = useMemo(() => designAssets.filter(a => a.assetType === tab), [designAssets, tab]);
   const assetHasDesign = (a: AssetItem) => assetHasDesignImages(a);
-  const totalDesignedCount = assets.filter(assetHasDesign).length;
+  const totalDesignedCount = designAssets.filter(assetHasDesign).length;
   const tabDesignedCount = filtered.filter(assetHasDesign).length;
   const scriptText = script?.adaptedScript || script?.originalContent || '';
+
+  useEffect(() => {
+    const visibleIds = new Set(designAssets.map(asset => asset.assetId));
+    setSelectedIds(prev => {
+      const next = new Set(Array.from(prev).filter(id => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [designAssets]);
 
   const toggleSelect = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectAllFiltered = () => setSelectedIds(new Set(filtered.map(a => a.assetId)));
@@ -289,7 +302,7 @@ export const DesignPage: React.FC = () => {
       } catch (err) { console.error('删除图片失败:', err); }
       return;
     }
-    const asset = assets.find(a => a.assetId === assetId);
+    const asset = designAssets.find(a => a.assetId === assetId);
     if (!asset) return;
     const newRefs = (asset.referenceImages || []).filter(u => u !== imageUrl);
     const newThumb = asset.thumbnailUrl === imageUrl ? (newRefs[0] || '') : asset.thumbnailUrl;
@@ -297,7 +310,7 @@ export const DesignPage: React.FC = () => {
       await updateAsset(assetId, { reference_images: newRefs, thumbnail_url: newThumb });
       await forceReloadSlices('assets');
     } catch (err) { console.error('删除图片失败:', err); }
-  }, [assets, forceReloadSlices]);
+  }, [designAssets, forceReloadSlices]);
 
   /* ---- AI Generation (from modal) ---- */
   const handleAIGeneration = useCallback(async (payload: {
@@ -386,7 +399,7 @@ export const DesignPage: React.FC = () => {
   }) => {
     setBatchModal(false);
     savePrefs({ engine: config.engine, geminiModel: config.geminiModel, style: config.style, aspect: config.aspectRatio, resolution: config.resolution, refineModel: config.refineModel });
-    const targets = assets.filter(a => config.assetIds.includes(a.assetId));
+    const targets = designAssets.filter(a => config.assetIds.includes(a.assetId));
     let okCount = 0;
     const errors: string[] = [];
     for (let i = 0; i < targets.length; i++) {
@@ -439,7 +452,7 @@ export const DesignPage: React.FC = () => {
     } else {
       crmMessage.error(`批量生成全部失败（${errors.length} 项）。原因 → ${errors[0]}`);
     }
-  }, [assets, scriptText, episodeId, forceReloadSlices]);
+  }, [designAssets, scriptText, episodeId, forceReloadSlices]);
 
   const tabLabel = tab === 'character' ? '人物' : tab === 'scene' ? '场景' : '道具';
 
@@ -450,7 +463,7 @@ export const DesignPage: React.FC = () => {
           <h1 className="text-xl font-bold tracking-tight">资产设计工作台</h1>
           <p className="text-sm text-n100 mt-1">
             AI 辅助设计人物、场景、道具 ·
-            <span className="text-success ml-1">共 {totalDesignedCount}/{assets.length} 已设计</span>
+            <span className="text-success ml-1">共 {totalDesignedCount}/{designAssets.length} 已设计</span>
             {filtered.length - tabDesignedCount > 0 && <span className="text-warning ml-2">当前分类 {tabDesignedCount}/{filtered.length}</span>}
           </p>
         </div>
@@ -474,7 +487,7 @@ export const DesignPage: React.FC = () => {
 
       <div className="flex gap-2 mb-4 flex-wrap items-center" role="tablist">
         {TAB_CONFIG.map(({ key, label, Icon }) => {
-          const active = tab === key; const count = assets.filter(a => a.assetType === key).length;
+          const active = tab === key; const count = designAssets.filter(a => a.assetType === key).length;
           return (<button key={key} role="tab" aria-selected={active} onClick={() => { setTab(key); setSelectedIds(new Set()); }}
             className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border ${active ? 'bg-primary-light border-primary text-primary' : 'bg-n0 border-n40 text-n100 hover:text-n700 hover:border-n40'}`}>
             <Icon size={16} /> {label} {count > 0 && <span className="text-xs bg-n0 px-1.5 py-0.5 rounded">{count}</span>}
@@ -593,7 +606,7 @@ export const DesignPage: React.FC = () => {
       {aiModal && <UnifiedAIModal asset={aiModal.asset} scriptText={scriptText} onClose={() => setAiModal(null)} onSubmit={handleAIGeneration} />}
       {cameraModal && <CameraModal asset={cameraModal.asset} materials={cameraModal.materials} onClose={() => setCameraModal(null)} onSubmit={(p) => handleCameraGenerate({ ...p, assetId: cameraModal.asset.assetId })} />}
       {processModal && <ProcessModal asset={processModal.asset} materials={processModal.materials} workflow={processModal.workflow} onClose={() => setProcessModal(null)} onSubmit={handleProcessSubmit} />}
-      {batchModal && <BatchGenerateModal assets={assets} selectedIds={selectedIds} scriptText={scriptText} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
+      {batchModal && <BatchGenerateModal assets={designAssets} selectedIds={selectedIds} scriptText={scriptText} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
     </div>
   );
 };

@@ -505,6 +505,7 @@ export interface AssetItem {
   assetId: string;
   projectId: string;
   episodeId: string | null;
+  scriptId?: string | null;
   assetType: 'character' | 'scene' | 'prop';
   name: string;
   description: string;

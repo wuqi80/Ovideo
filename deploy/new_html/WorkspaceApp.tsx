@@ -29,6 +29,25 @@ const LegacyMaterialPage = React.lazy(() => import('./components/MaterialPage').
 const LegacyGenerationPage = React.lazy(() => import('./components/GenerationPage').then(m => ({ default: m.GenerationPage })));
 const LegacyVideoPage = React.lazy(() => import('./components/VideoPage').then(m => ({ default: m.VideoPage })));
 const LegacyAdminPage = React.lazy(() => import('./components/AdminPage').then(m => ({ default: m.AdminPage })));
+
+function summarizePipelineError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error || '未知错误');
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '未知错误';
+  return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+}
+
+function buildScriptSegmentPayload(segments: ScriptSegment[]) {
+  return segments.map((s, idx) => ({
+    segment_id: s.id && !s.id.startsWith('seg_local_') ? s.id : undefined,
+    segment_order: idx,
+    source_text: s.sourceText || '',
+    estimated_duration_sec: s.estimatedDurationSec,
+    video_script: s.videoScript || '',
+    status: s.status || 'pending',
+    error_message: s.errorMessage || '',
+  }));
+}
 const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
 
 function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
@@ -2009,7 +2028,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
     const file = filesRef.current.find(f => f.id === (targetFileId || selectedFileId));
     if (!file) return;
     const segs = file.scriptSegments || [];
-    if (segs.length === 0) { alert('请先拆分剧本'); return; }
+    if (segs.length === 0) { alert('请先拆分剧本'); return false; }
 
     setStage(file.id, 'videoScript', { status: 'running', total: segs.length, completed: 0, errorMessage: '' });
     const ordered = [...segs].sort((a, b) => a.order - b.order);
@@ -2026,12 +2045,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           completed++;
           setStage(file.id, 'videoScript', { status: 'running', completed });
         } catch (segErr) {
-          updated[i] = { ...seg, status: 'error', errorMessage: (segErr as Error).message };
-          const applyErr = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, scriptSegments: updated } : f);
+          const errorSummary = summarizePipelineError(segErr);
+          updated[i] = { ...seg, status: 'error', errorMessage: errorSummary };
+          const partialScript = updated.map(s => s.videoScript || '').filter(Boolean).join('\n\n');
+          const applyErr = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
+            ? { ...f, scriptSegments: updated, scriptContent: partialScript }
+            : f);
           setFiles(applyErr);
           filesRef.current = applyErr(filesRef.current);
-          setStage(file.id, 'videoScript', { status: 'error', completed, errorMessage: `第 ${i + 1} 段失败` });
-          return; // 保留已完成，下次从失败段继续
+          setStage(file.id, 'videoScript', { status: 'error', completed, errorMessage: `第 ${i + 1} 段失败：${errorSummary}` });
+          await updateEpisodeScriptById(propEpisodeId, file.id, { adapted_script: partialScript }).catch(() => {});
+          await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
+          return false; // 保留已完成，下次从失败段继续
         }
       }
       const fullScript = updated.map(s => s.videoScript || '').filter(Boolean).join('\n\n');
@@ -2042,22 +2067,20 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
       filesRef.current = applyDone(filesRef.current); // 同步镜像，供 Stage3 立即读取
       setStage(file.id, 'videoScript', { status: 'done', completed });
       await updateEpisodeScriptById(propEpisodeId, file.id, { adapted_script: fullScript }).catch(() => {});
-      await batchSaveScriptSegments(propEpisodeId, file.id, updated.map((s, idx) => ({
-        segment_order: idx, source_text: s.sourceText,
-        estimated_duration_sec: s.estimatedDurationSec,
-        video_script: s.videoScript || '', status: s.status || 'done',
-      }))).catch(() => {});
+      await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
+      return true;
     } catch (e) {
-      setStage(file.id, 'videoScript', { status: 'error', errorMessage: (e as Error).message });
+      setStage(file.id, 'videoScript', { status: 'error', errorMessage: summarizePipelineError(e) });
+      return false;
     }
   }, [selectedFileId, aiModel, propEpisodeId, setStage]);
 
   /** Stage 3：对每个视频镜头块提取分镜提示词 → StoryboardItem[] */
   const handleExtractStoryboardPrompts = useCallback(async (targetFileId?: string) => {
     const file = filesRef.current.find(f => f.id === (targetFileId || selectedFileId));
-    if (!file) return;
+    if (!file) return false;
     const segs = (file.scriptSegments || []).filter(s => s.videoScript);
-    if (segs.length === 0) { alert('请先生成视频脚本'); return; }
+    if (segs.length === 0) { alert('请先生成视频脚本'); return false; }
 
     // 收集所有镜头块（带 segmentId 关联）
     const shots: Array<{ segmentId: string; block: VideoScriptBlock }> = [];
@@ -2066,7 +2089,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         shots.push({ segmentId: seg.id, block });
       }
     }
-    if (shots.length === 0) { alert('未能从视频脚本解析出镜头'); return; }
+    if (shots.length === 0) { alert('未能从视频脚本解析出镜头'); return false; }
 
     // total = 视频镜头数（AI 调用次数）；一个视频镜头可拆成多个分镜 item
     setStage(file.id, 'storyboardPrompt', { status: 'running', total: shots.length, completed: 0, errorMessage: '' });
@@ -2079,6 +2102,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         // 单个视频镜头 → 一个或多个更细的分镜
         const { aiExtractStoryboardPromptFromVideoShot } = await loadAiModelService();
         const exList = await aiExtractStoryboardPromptFromVideoShot(aiModel, block.rawBlock);
+        if (exList.length === 0) {
+          throw new Error('AI 返回内容未解析出分镜提示词');
+        }
         for (const ex of exList) {
           items.push({
             id: uuidv4(),
@@ -2105,16 +2131,21 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         }
         setStage(file.id, 'storyboardPrompt', { status: 'running', completed: i + 1 });
       } catch (shotErr) {
+        const errorSummary = summarizePipelineError(shotErr);
         setFiles(applyItems);
         filesRef.current = applyItems(filesRef.current);
-        setStage(file.id, 'storyboardPrompt', { status: 'error', completed: i, errorMessage: `第 ${i + 1} 个镜头失败` });
-        return; // 保留已提取
+        setStage(file.id, 'storyboardPrompt', { status: 'error', completed: i, errorMessage: `第 ${i + 1} 个镜头失败：${errorSummary}` });
+        if (items.length > 0) {
+          await saveEpisodeToBackend().catch(() => {});
+        }
+        return false; // 保留已提取
       }
     }
     setFiles(applyItems);
     filesRef.current = applyItems(filesRef.current); // 关键：保证下面的 save 读到刚生成的 items
     setStage(file.id, 'storyboardPrompt', { status: 'done', completed: shots.length });
     await saveEpisodeToBackend();
+    return true;
   }, [selectedFileId, aiModel, propEpisodeId, setStage, saveEpisodeToBackend]);
 
   /** 主按钮：按三步顺序执行，从未完成的阶段开始 */
@@ -2131,7 +2162,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
     // 各阶段内部已改为读取 filesRef.current，并在 setFiles 后同步镜像，
     // 因此同一异步运行内 Stage1→2→3 能看到上一阶段写入的 scriptSegments / videoScript。
     if (!hasSegments) await handleSplitScript(file.id);
-    await handleGenerateVideoScript(file.id);
+    const videoScriptOk = await handleGenerateVideoScript(file.id);
+    if (!videoScriptOk) return;
     await handleExtractStoryboardPrompts(file.id);
   }, [selectedFileId, handleSplitScript, handleGenerateVideoScript, handleExtractStoryboardPrompts]);
 

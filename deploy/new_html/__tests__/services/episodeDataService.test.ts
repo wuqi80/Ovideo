@@ -35,6 +35,13 @@ describe('getAssets', () => {
     expect(opts.headers['Authorization']).toBe('Bearer test-token');
   });
 
+  it('supports script scoped asset queries', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, assets: [] }));
+    await getAssets('proj_1', 'ep_1', undefined, 'script_1');
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/projects/proj_1/assets?episode_id=ep_1&script_id=script_1');
+  });
+
   it('works without optional params', async () => {
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, assets: [] }));
     await getAssets('proj_1');

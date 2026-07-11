@@ -7,6 +7,11 @@ function assetEpisodeId(asset: AssetItem | Record<string, any>): string | null {
   return value ? String(value) : null;
 }
 
+function assetScriptId(asset: AssetItem | Record<string, any>): string | null {
+  const value = (asset as any).scriptId ?? (asset as any).script_id ?? null;
+  return value ? String(value) : null;
+}
+
 export function isSharedAsset(asset: AssetItem | Record<string, any>): boolean {
   return assetEpisodeId(asset) === null;
 }
@@ -20,5 +25,19 @@ export function filterAssetsForEpisodeScope<T extends AssetItem | Record<string,
   return assets.filter(asset => {
     const id = assetEpisodeId(asset);
     return id === null || id === episodeId;
+  });
+}
+
+export function filterAssetsForDesignScope<T extends AssetItem | Record<string, any>>(
+  assets: T[],
+  episodeId: string | null | undefined,
+  scriptId: string | null | undefined,
+): T[] {
+  return assets.filter(asset => {
+    const assetEpisode = assetEpisodeId(asset);
+    if (episodeId && assetEpisode !== episodeId) return false;
+    const assetScript = assetScriptId(asset);
+    if (scriptId && assetScript !== scriptId) return false;
+    return true;
   });
 }
