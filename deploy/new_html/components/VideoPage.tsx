@@ -72,7 +72,7 @@ import { MediaBadges } from './video/MediaBadges';
 // Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoModelService.ts，
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
 // DashScopeVideoCard 不再直接 import — 走 DashScopeCardWithCandidates 包装器以注入 mention candidates。
-import { createVideoSegment } from '../services/videoWorkflowService';
+import { createVideoSegment, fetchSeedanceOmni, updateVideoSegment } from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
@@ -190,6 +190,18 @@ const InsertEmptyCardSpacer: React.FC = () => (
 const normVideoKey = (u: any): any =>
     typeof u === 'string' ? u.split('?')[0].replace(/^https?:\/\/[^/]+/, '') : u;
 
+const toPersistedVideoUrl = (url: string): string => {
+    const clean = (url || '').split('?')[0];
+    if (!clean) return clean;
+    try {
+        const parsed = new URL(clean, window.location.origin);
+        if (parsed.pathname.startsWith('/storage/')) return parsed.pathname;
+    } catch {
+        // Keep custom/proxy URLs as-is after removing transient query params.
+    }
+    return clean;
+};
+
 // 对 videos 与并行的 videoGenerateTimes 同步去重（保留首次），修复同一视频被
 // onComplete/DB兜底/会话恢复重复追加导致"一个镜头两个一模一样"的问题。
 function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; times: any[] } {
@@ -236,6 +248,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         defaultValue: 'card',
     });
     const [isLoading, setIsLoading] = useState(true);
+    const [seedanceOmniEnabled, setSeedanceOmniEnabled] = useState(false);
+    useEffect(() => {
+        let cancelled = false;
+        void fetchSeedanceOmni().then((enabled) => {
+            if (!cancelled) setSeedanceOmniEnabled(enabled);
+        });
+        return () => { cancelled = true; };
+    }, []);
     const [globalModel, setGlobalModel] = usePersistedPageState<VideoModel>({
         page: 'VideoPage:globalModel',
         episodeId: sessionScope ?? null,
@@ -266,6 +286,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const [cropStartTime, setCropStartTime] = useState(0);
     const [cropEndTime, setCropEndTime] = useState(5);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [beautifyApplyingKey, setBeautifyApplyingKey] = useState<string | null>(null);
     
     // Toast消息
     const [toast, setToast] = useState<string | null>(null);
@@ -1441,6 +1462,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 删除单个视频（从多视频数组中）
     const deleteVideo = useCallback((uuid: string, videoIndex: number) => {
         if (!confirm('确定要删除这个视频吗？')) return;
+        const deletedUrl = tasksStatus[uuid]?.videos?.[videoIndex];
+        const wasBeautifyVideo = !!deletedUrl
+            && !!tasksStatus[uuid]?.result
+            && normVideoKey(tasksStatus[uuid]?.result) === normVideoKey(deletedUrl);
         
         setTasksStatus(prev => {
             const status = prev[uuid];
@@ -1469,16 +1494,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     ...status,
                     videos: newVideos,
                     videoGenerateTimes: newTimes,
-                    result: newVideos[newVideos.length - 1]  // 最新视频作为result
+                    result: wasBeautifyVideo
+                        ? ''
+                        : (newVideos.some(url => normVideoKey(url) === normVideoKey(status.result))
+                            ? status.result
+                            : '')
                 }
             };
         });
         
-        showToast('视频已删除');
+        showToast(wasBeautifyVideo ? '视频已删除，请重新选择美化使用' : '视频已删除');
         
         // 🔧 删除视频后立即保存会话
         setTimeout(() => saveSession(), 100);
-    }, [showToast, saveSession]);
+    }, [tasksStatus, showToast, saveSession]);
     
     const clearAll = useCallback(() => {
         if (!confirm('确定要清空所有任务吗？')) return;
@@ -1549,6 +1578,46 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return null;
     }, [episodeId, taskGroups]);
 
+    const setVideoForBeautify = useCallback(async (group: TaskGroup, videoUrl: string, videoIndex: number) => {
+        const applyKey = `${group.uuid}:${videoIndex}`;
+        const persistedUrl = toPersistedVideoUrl(videoUrl);
+        if (!persistedUrl) {
+            showToast('视频地址无效，无法设为美化使用');
+            return;
+        }
+
+        setBeautifyApplyingKey(applyKey);
+        try {
+            const segmentId = await ensureVideoSegmentId(group);
+            if (!segmentId) {
+                throw new Error('没有找到当前分镜的视频片段，请先确认分集已绑定');
+            }
+            await updateVideoSegment(segmentId, {
+                video_url: persistedUrl,
+                model: group.model,
+                status: 'completed',
+            });
+            segmentIdByGroupRef.current[group.uuid] = segmentId;
+            setTasksStatus(prev => ({
+                ...prev,
+                [group.uuid]: {
+                    ...(prev[group.uuid] || {}),
+                    state: 'done',
+                    progress: 100,
+                    result: videoUrl,
+                    keepResult: true,
+                },
+            }));
+            setTimeout(() => { try { saveSessionRef.current?.(); } catch {} }, 250);
+            showToast('已设为美化使用');
+        } catch (error: any) {
+            console.error('设为美化使用失败:', error);
+            showToast('设为美化使用失败: ' + (error?.message || '未知错误'));
+        } finally {
+            setBeautifyApplyingKey(current => (current === applyKey ? null : current));
+        }
+    }, [ensureVideoSegmentId, showToast]);
+
     const runTask = useCallback(async (uuid: string) => {
         const group = taskGroups.find(g => g.uuid === uuid);
         if (!group) return;
@@ -1564,7 +1633,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             // 2026-07-11：Seedance 1.5-pro（Agent Plan 强制覆盖）仅支持单图/首尾帧。
             // 后端 seedance.py 对视频/音频 kind 和 3+ 张图会抛 ModelNotOpen，
             // 前端先拦截避免用户点了扣费再失败。
-            const seedanceBlock = validateSeedanceMediaInputs(rawParams.media_inputs);
+            const seedanceBlock = validateSeedanceMediaInputs(
+                rawParams.media_inputs,
+                seedanceOmniEnabled,
+            );
             if (seedanceBlock) {
                 showToast(seedanceBlock);
                 return;
@@ -1679,7 +1751,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
         
         // 判断是否为外部API模型
-        const isExternalAPI = ['Sora2', 'Veo', 'MINI', '大能'].includes(group.model);
+        const isExternalAPI = ['Sora2', 'Veo', 'MINI', 'MINIFast', '大能'].includes(group.model);
         
         console.log('📋 任务执行信息:', {
             uuid,
@@ -2389,7 +2461,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 2026-07-11：Seedance 1.5-pro 限制多模态输入，前端禁用按钮防止扣费后再失败。 */}
                     {(() => {
                         const seedanceBlock = isSeedanceModel(group.model)
-                            ? validateSeedanceMediaInputs(getSeedanceParams(group.uuid, group.model).media_inputs)
+                            ? validateSeedanceMediaInputs(
+                                getSeedanceParams(group.uuid, group.model).media_inputs,
+                                seedanceOmniEnabled,
+                            )
                             : null;
                         const running = status.state === 'running' || status.state === 'processing';
                         return (
@@ -2660,7 +2735,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 2026-07-11：Seedance 1.5-pro 限制多模态输入，前端禁用按钮防止扣费后再失败。 */}
                     {(() => {
                         const seedanceBlock = isSeedanceModel(group.model)
-                            ? validateSeedanceMediaInputs(getSeedanceParams(group.uuid, group.model).media_inputs)
+                            ? validateSeedanceMediaInputs(
+                                getSeedanceParams(group.uuid, group.model).media_inputs,
+                                seedanceOmniEnabled,
+                            )
                             : null;
                         const running = status.state === 'running' || status.state === 'processing';
                         return (
@@ -3031,6 +3109,31 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const videoCount = videos.length;
             const isPair = group.ids.length === 2;
             const isRunning = status.state === 'running' || status.state === 'processing';
+            const isBeautifyVideo = (videoUrl: string) =>
+                !!status.result && normVideoKey(status.result) === normVideoKey(videoUrl);
+            const renderBeautifyButton = (videoUrl: string, idx: number) => {
+                const active = isBeautifyVideo(videoUrl);
+                const applying = beautifyApplyingKey === `${group.uuid}:${idx}`;
+                return (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (!active && !applying) void setVideoForBeautify(group, videoUrl, idx);
+                        }}
+                        disabled={active || applying}
+                        className={`absolute bottom-1 right-1 z-20 flex items-center gap-1 max-w-[calc(100%-8px)] rounded px-1.5 py-0.5 text-[9px] font-semibold shadow-sm backdrop-blur transition-colors ${
+                            active
+                                ? 'bg-success text-white opacity-100'
+                                : 'bg-n900/75 text-white opacity-80 hover:bg-primary hover:opacity-100'
+                        } disabled:cursor-default`}
+                        title={active ? '美化使用中' : '设为美化使用'}
+                    >
+                        {applying ? <Loader2 className="w-3 h-3 animate-spin shrink-0" /> : <Check className="w-3 h-3 shrink-0" />}
+                        <span className="truncate">{active ? '美化使用中' : '设为美化'}</span>
+                    </button>
+                );
+            };
             
             // 完成状态或运行中（显示旧视频）：显示视频
             if ((status.state === 'done' || isRunning) && videoCount > 0) {
@@ -3039,38 +3142,44 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     return (
                         <div className="w-full">
                             <div className="grid grid-cols-3 gap-2 max-h-[140px] overflow-y-auto shrink-0">
-                                {videos.map((videoUrl, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="relative bg-n800 rounded border border-n40 group/video overflow-hidden aspect-video"
-                                    >
-                                        <LazyVideo
-                                            src={videoUrl}
-                                            preload="none"
-                                            className="w-full h-full object-contain cursor-pointer"
-                                            onClick={() => { setLightboxUrl(videoUrl); setLightboxType('video'); }}
-                                        />
-                                        {/* 视频编号 - 左上角 */}
-                                        <span className="absolute top-1 left-1 bg-primary/90 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
-                                            #{idx + 1}
-                                        </span>
-                                        {/* 生成时间 - 左下角 */}
-                                        {status.videoGenerateTimes && status.videoGenerateTimes[idx] && (
-                                            <span className="absolute bottom-1 left-1 bg-success/80 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
-                                                {status.videoGenerateTimes[idx]}s
+                                {videos.map((videoUrl, idx) => {
+                                    const active = isBeautifyVideo(videoUrl);
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={`relative bg-n800 rounded border group/video overflow-hidden aspect-video ${
+                                                active ? 'border-success ring-2 ring-success/40' : 'border-n40'
+                                            }`}
+                                        >
+                                            <LazyVideo
+                                                src={videoUrl}
+                                                preload="none"
+                                                className="w-full h-full object-contain cursor-pointer"
+                                                onClick={() => { setLightboxUrl(videoUrl); setLightboxType('video'); }}
+                                            />
+                                            {/* 视频编号 - 左上角 */}
+                                            <span className="absolute top-1 left-1 bg-primary/90 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
+                                                #{idx + 1}
                                             </span>
-                                        )}
-                                        {!isRunning && (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); deleteVideo(group.uuid, idx); }}
-                                                className="absolute top-1 right-1 w-5 h-5 bg-danger hover:bg-danger text-white rounded-full flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity z-10"
-                                                title="删除此视频"
-                                            >
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
+                                            {/* 生成时间 - 左下角 */}
+                                            {status.videoGenerateTimes && status.videoGenerateTimes[idx] && (
+                                                <span className="absolute bottom-1 left-1 bg-success/80 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
+                                                    {status.videoGenerateTimes[idx]}s
+                                                </span>
+                                            )}
+                                            {!isRunning && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); deleteVideo(group.uuid, idx); }}
+                                                    className="absolute top-1 right-1 w-5 h-5 bg-danger hover:bg-danger text-white rounded-full flex items-center justify-center opacity-0 group-hover/video:opacity-100 transition-opacity z-10"
+                                                    title="删除此视频"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                            {renderBeautifyButton(videoUrl, idx)}
+                                        </div>
+                                    );
+                                })}
                                 {/* 运行中时显示loading网格 */}
                                 {isRunning && (
                                     <div className="bg-gradient-to-br from-n30 to-n20 rounded border border-n40 flex flex-col items-center justify-center">
@@ -3094,9 +3203,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 // 单视频显示（仅在不运行时）- 根据任务类型调整高度
                 const videoHeight = resultVisualHeight;
+                const active = isBeautifyVideo(videos[0]);
                 return (
                     <div 
-                        className={`relative w-full bg-n800 rounded-lg overflow-hidden border border-n40 ${videoHeight} group/video`}
+                        className={`relative w-full bg-n800 rounded-lg overflow-hidden border ${videoHeight} group/video ${
+                            active ? 'border-success ring-2 ring-success/40' : 'border-n40'
+                        }`}
                     >
                         <LazyVideo
                             src={videos[0]}
@@ -3112,6 +3224,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <div className="absolute inset-0 flex items-center justify-center bg-n900/50 opacity-0 group-hover/video:opacity-100 transition-opacity pointer-events-none">
                             <Maximize2 className="w-5 h-5 text-white" />
                         </div>
+                        {renderBeautifyButton(videos[0], 0)}
                     </div>
                 );
             }
