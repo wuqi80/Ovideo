@@ -38,6 +38,10 @@ def _attach_entity_fields(task_data: dict, request: Any) -> None:
         task_data["project_id"] = request.project_id
     if getattr(request, "episode_id", None):
         task_data["episode_id"] = request.episode_id
+    if getattr(request, "preferred_agent_id", None):
+        task_data["preferred_agent_id"] = request.preferred_agent_id
+    if getattr(request, "preferred_node_id", None):
+        task_data["preferred_node_id"] = request.preferred_node_id
 
 
 def create_generation_router(

@@ -34,6 +34,8 @@ class GenerateRequest(BaseModel):
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
+    preferred_agent_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的 GPU Agent")
+    preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
     # Seedance 2.0 (飞升/渡劫) 专用字段
     sub_model: Optional[str] = Field(None, description="Seedance 子型号: standard|fast")
     media_inputs: Optional[List[Dict[str, Any]]] = Field(None, description="Seedance 多模态输入: [{kind:image|video|audio, url, role?, file_id?}]")
@@ -121,6 +123,8 @@ class ImageGenerationRequest(BaseModel):
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
+    preferred_agent_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的 GPU Agent")
+    preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
 
 
 class ComfyUIWorkflowRequest(BaseModel):
@@ -134,6 +138,8 @@ class ComfyUIWorkflowRequest(BaseModel):
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
+    preferred_agent_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的 GPU Agent")
+    preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
 
 
 class AngleAdjustRequest(BaseModel):
