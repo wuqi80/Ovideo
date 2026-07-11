@@ -22,6 +22,7 @@ from services.api_provider_registry import (
     SORA2_LEGACY_VIDEO_MODELS,
     VEO_DEFAULT_VIDEO_MODEL,
     VEO_LEGACY_VIDEO_MODELS,
+    dashscope_sub_model_for_model,
     get_api_model_preset,
     get_custom_proxy_env_key,
     get_dashscope_sub_model_env_key,
@@ -246,9 +247,15 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                 if not operation or not bound_model:
                     continue
                 if provider_id == "seedance" and operation in SEEDANCE_SUB_MODEL_ENV_MAP:
-                    new_env[get_seedance_sub_model_env_key(operation)] = bound_model
-                if provider.strip().lower() == "dashscope" and operation in DASHSCOPE_SUB_MODEL_ENV_MAP:
-                    new_env[get_dashscope_sub_model_env_key(operation)] = bound_model
+                    sub_model = operation
+                    new_env[get_seedance_sub_model_env_key(sub_model)] = bound_model
+                if provider.strip().lower() == "dashscope":
+                    model_name = bound_model
+                    dashscope_sub_model = dashscope_sub_model_for_model(model_name)
+                    if not dashscope_sub_model and operation in DASHSCOPE_SUB_MODEL_ENV_MAP:
+                        dashscope_sub_model = operation
+                    if dashscope_sub_model:
+                        new_env[get_dashscope_sub_model_env_key(dashscope_sub_model)] = bound_model
 
         reset_managed_api_env_to_baseline()
         for key, value in new_env.items():

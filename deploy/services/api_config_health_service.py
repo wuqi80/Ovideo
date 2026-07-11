@@ -22,6 +22,7 @@ from services.api_provider_registry import (
     get_api_provider_catalog,
     get_provider_api_path,
     get_provider_default_endpoint,
+    is_google_generative_language_endpoint,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
     normalize_provider,
@@ -169,7 +170,7 @@ def uses_google_api_key_header(provider: str, endpoint: str) -> bool:
     normalized = normalize_provider(provider)
     if normalized not in {"gemini-tts", "gemini-image"}:
         return False
-    return "generativelanguage.googleapis.com" in (endpoint or "").strip().lower()
+    return is_google_generative_language_endpoint(endpoint)
 
 
 def api_health_result(

@@ -159,7 +159,7 @@ class AdminRecycleBinDAO:
     @staticmethod
     async def clear_legacy_references(file_url: str) -> None:
         if not file_url:
-            return
+            return None
         db = get_db_manager()
         if not db:
             return

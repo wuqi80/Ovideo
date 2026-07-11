@@ -631,7 +631,7 @@ export const EnhancePage: React.FC = () => {
                 <video
                   ref={previewVideoRef}
                   src={videoUnderPlayhead.url}
-                  preload="metadata"
+                  preload="none"
                   controls={false}
                   muted
                   className="w-full h-full object-contain"
@@ -893,7 +893,7 @@ export const EnhancePage: React.FC = () => {
                           src={clip.url}
                           aria-label="视频片段预览"
                           className="w-full h-full object-cover pointer-events-none"
-                          preload="metadata"
+                          preload="none"
                           playsInline
                           controls={false}
                           hoverPreview={false}

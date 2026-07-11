@@ -5,8 +5,8 @@ import { useEpisode } from '../contexts/EpisodeContext';
 import {
   getStoryboardItems,
   syncStoryboardItems,
-  updateStoryboardItem as apiUpdateStoryboardItem,
 } from '../services/episodeDataService';
+import { updateStoryboardItem as apiUpdateStoryboardItem } from '../services/storyboardMutationService';
 import { minimaxTTS } from '../services/audioGenerationService';
 import { crmMessage } from '../admin/crmUI';
 
@@ -154,14 +154,13 @@ export const AudioStagePage: React.FC = () => {
       }));
       const res: any = await syncStoryboardItems(episodeId, payload, selectedScriptId || undefined);
       crmMessage.success(`已同步分镜：更新 ${res?.updated || 0}，新增 ${res?.created || 0}，未变化 ${res?.skipped || 0}`);
-      forceReloadSlices('storyboardItems').catch(err => console.warn('同步后刷新分镜失败:', err));
       navigate(`/projects/${projectId}/ep/${episodeId}/workflow/storyboard`);
     } catch (e: any) {
       crmMessage.error(`同步到分镜失败：${e?.message || e}`);
     } finally {
       setExporting(false);
     }
-  }, [exporting, storyboardItems, episodeId, selectedScriptId, projectId, navigate, forceReloadSlices]);
+  }, [exporting, storyboardItems, episodeId, selectedScriptId, projectId, navigate]);
 
   const updateAudioStageStoryboardItem = useCallback(async (itemId: string, data: Record<string, any>) => {
     await apiUpdateStoryboardItem(itemId, data);

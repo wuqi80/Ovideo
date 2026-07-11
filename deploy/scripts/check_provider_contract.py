@@ -324,7 +324,14 @@ def check_registry_shape(registry) -> None:
         default_endpoint = registry.get_provider_default_endpoint(provider)
         url_templates = registry.build_provider_operation_url_templates(provider, default_endpoint)
         for operation, path in operations.items():
-            expected_url = f"{default_endpoint.rstrip('/')}/{path.strip('/')}" if path else default_endpoint.rstrip("/")
+            base = default_endpoint.rstrip("/")
+            suffix = path.strip("/") if path else ""
+            if not suffix:
+                expected_url = base
+            elif base.endswith(f"/{suffix}"):
+                expected_url = base
+            else:
+                expected_url = f"{base}/{suffix}"
             if url_templates.get(operation) != expected_url:
                 fail(f"{provider}.{operation} default operation URL mismatch: {url_templates.get(operation)} != {expected_url}")
     for preset in getattr(registry, "API_MODEL_PRESETS", []):

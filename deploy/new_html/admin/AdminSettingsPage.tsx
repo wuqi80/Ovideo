@@ -27,7 +27,8 @@ import {
     X,
 } from 'lucide-react';
 import { crmConfirm, crmMessage } from './crmUI';
-import { apiBlob, apiJson } from '../services/httpClient';
+import { apiBlob } from '../services/httpClient';
+import { apiJson } from '../services/httpClient';
 import {
     isConnectivityOnlyConfigTest,
     mergeConfigTestPreservingVerification,
@@ -2391,7 +2392,9 @@ const ProviderQuickCard: React.FC<{
     const endpoint = runtime?.endpoint || primaryConfig?.endpoint || meta.default_endpoint || '';
     const primaryDbEndpoint = primaryConfig?.endpoint || '';
     const runtimePrimaryEndpointMismatch = endpointMismatch(runtime?.endpoint, primaryDbEndpoint);
-    const model = primaryConfig?.model_name || runtime?.runtime_model_name || meta.default_model_name || '';
+    const modelNameHint = primaryConfig?.model_name || meta.default_model_name || null;
+    const modelName = modelNameHint || runtime?.runtime_model_name || null;
+    const model = modelName || '';
     const enabledCount = configs.filter(config => config.enabled !== false).length;
     const keySource = keySourceText(runtime, hasSavedKey);
     const keySourceClass = runtimeHasKey || hasSavedKey ? 'text-g400' : 'text-r400';
@@ -3508,6 +3511,10 @@ const ApiConfigPanel: React.FC = () => {
         setEditingForm(emptyConfigForm());
     }, []);
 
+    const openCreateForProvider = useCallback((meta: ProviderMeta) => {
+        setEditingForm(providerMetaToForm(meta));
+    }, []);
+
     const openEdit = useCallback((config: ApiConfig) => {
         const provider = normalizeProvider(config.provider);
         const meta = providerMetaMap.get(provider);
@@ -3915,7 +3922,7 @@ const ApiConfigPanel: React.FC = () => {
                             title="重新检测每个 provider 当前实际生效的运行时配置是否连通"
                         >
                             {sweeping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-                            全部连通性检测
+                            刷新生效健康
                         </button>
                         <button
                             type="button"
@@ -4020,13 +4027,23 @@ const ApiConfigPanel: React.FC = () => {
                                 {testingAllConfigs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
                                 批量测试 DB 配置
                             </button>
+                            <button
+                                type="button"
+                                onClick={sweepProviders}
+                                disabled={sweeping || loading || configs.length === 0}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
+                                title="测试当前实际生效的 Key、Endpoint 和模型，不会逐条切换数据库配置"
+                            >
+                                {sweeping ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                测试生效配置
+                            </button>
                         </div>
                     </details>
                 </section>
 
                 <section className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
-                        <h2 className="text-sm font-semibold text-n800">API 卡片</h2>
+                        <h2 className="text-sm font-semibold text-n800">厂商快速配置</h2>
                         <p className="mt-0.5 text-xs text-n100">一个 API Key 对应一张卡片；卡片内维护前台操作与模型绑定。</p>
                     </div>
                     <button

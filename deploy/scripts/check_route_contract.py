@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 231
-DEFAULT_EXPECTED_OPERATIONS = 287
+DEFAULT_EXPECTED_PATHS = 242
+DEFAULT_EXPECTED_OPERATIONS = 298
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -2518,6 +2518,7 @@ def check_storyboard_routes_extracted(root: Path) -> int:
         ("/api/episodes/{episode_id}/storyboard-items/reorder", "post"),
         ("/api/storyboard/mix-audio", "post"),
         ("/api/episodes/{episode_id}/storyboard-items/batch", "post"),
+        ("/api/episodes/{episode_id}/storyboard-items/sync", "post"),
         ("/api/episodes/{episode_id}/extract-to-assets", "post"),
     }
 
@@ -2557,8 +2558,8 @@ def check_storyboard_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 10:
-        fail(f"routers/storyboard.py should own 10 storyboard route registrations, found {route_count}")
+    if route_count != 11:
+        fail(f"routers/storyboard.py should own 11 storyboard route registrations, found {route_count}")
 
     router_text = storyboard_path.read_text(encoding="utf-8")
     service_text = storyboard_service_path.read_text(encoding="utf-8")
@@ -2573,6 +2574,7 @@ def check_storyboard_routes_extracted(root: Path) -> int:
         (router_text, "reorder_storyboard_items_service(", storyboard_path),
         (router_text, "mix_storyboard_audio_service(", storyboard_path),
         (router_text, "batch_create_storyboard_items_service(", storyboard_path),
+        (router_text, "sync_storyboard_items_service(", storyboard_path),
         (router_text, "extract_to_assets_service(", storyboard_path),
         (service_text, "storyboard_dao.get_by_episode(", storyboard_service_path),
         (service_text, "storyboard_dao.count_by_episode(", storyboard_service_path),

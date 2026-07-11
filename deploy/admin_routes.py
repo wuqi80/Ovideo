@@ -360,21 +360,6 @@ def _workflow_is_executable(workflow_json: Any) -> bool:
     return _workflow_executable_node_count(workflow_json) > 0
 
 
-async def _get_workflow_template_by_key(workflow_key: str) -> Optional[Dict[str, Any]]:
-    db = get_db_manager()
-    if not db or not workflow_key:
-        return None
-    return await db.fetchrow(
-        """
-        SELECT * FROM workflow_templates
-        WHERE workflow_key = $1
-        ORDER BY updated_at DESC
-        LIMIT 1
-        """,
-        workflow_key,
-    )
-
-
 # --- Agents ---
 
 
@@ -602,7 +587,7 @@ async def admin_import_workflows():
             errors.append(f"{name}: read/parse error: {e}")
             continue
 
-        existing = await _get_workflow_template_by_key(str(category_key))
+        existing = await WorkflowTemplateDAO.get_by_key(str(category_key))
         if not existing:
             existing = await WorkflowTemplateDAO.get_by_name(name)
         if existing:
@@ -651,7 +636,7 @@ async def admin_import_workflows():
         if path.name in configured_files:
             continue
         key = path.stem
-        existing = await _get_workflow_template_by_key(key)
+        existing = await WorkflowTemplateDAO.get_by_key(key)
         if not existing:
             existing = await WorkflowTemplateDAO.get_by_name(key)
         if existing:

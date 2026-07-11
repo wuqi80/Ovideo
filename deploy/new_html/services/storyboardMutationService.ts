@@ -11,6 +11,13 @@ export async function deleteStoryboardItem(itemId: string) {
   return apiJson<any>(`/api/storyboard-items/${itemId}`, { method: 'DELETE' }, 'deleteStoryboardItem');
 }
 
+export async function updateStoryboardItem(itemId: string, data: any) {
+  return apiJson<any>(`/api/storyboard-items/${itemId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }, 'updateStoryboardItem');
+}
+
 export async function deleteAllStoryboardItems(episodeId: string, scriptId?: string) {
   const params = new URLSearchParams();
   if (scriptId) params.set('script_id', scriptId);

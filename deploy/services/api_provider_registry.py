@@ -951,6 +951,12 @@ def get_provider_default_endpoint(provider: str) -> str:
     return PROVIDER_DEFAULT_ENDPOINTS.get(normalize_provider(provider), "")
 
 
+def is_google_generative_language_endpoint(endpoint: Optional[str]) -> bool:
+    default_endpoint = get_provider_default_endpoint("gemini-tts").strip().rstrip("/").lower()
+    value = str(endpoint or "").strip().rstrip("/").lower()
+    return bool(default_endpoint and value.startswith(default_endpoint))
+
+
 def get_provider_api_path(provider: str, operation: str, **path_params: Any) -> str:
     template = PROVIDER_API_PATHS.get(normalize_provider(provider), {}).get((operation or "").strip(), "")
     if not template:
