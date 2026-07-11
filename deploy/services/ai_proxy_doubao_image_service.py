@@ -324,6 +324,13 @@ async def _post_doubao_image_generation(
         raise AIProxyConfigError("未配置豆包 endpoint，无法调用豆包图片接口")
 
     if doubao_image_access_mode(config.endpoint) == "agent_plan":
+        payload = {
+            **payload,
+            "model": normalize_doubao_image_model_for_endpoint(
+                payload.get("model"),
+                config.endpoint,
+            ),
+        }
         task_payload = build_doubao_agent_plan_payload(payload)
         return await _post_doubao_image_task_generation(config=config, payload=task_payload)
 

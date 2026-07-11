@@ -37,6 +37,10 @@ def test_doubao_agent_plan_normalizes_endpoint_and_model() -> None:
         endpoint,
     ) == DOUBAO_IMAGE_AGENT_PLAN_MODEL
     assert normalize_doubao_image_model_for_endpoint(
+        "doubao-seedream-5-0",
+        endpoint,
+    ) == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert normalize_doubao_image_model_for_endpoint(
         DOUBAO_IMAGE_AGENT_PLAN_MODEL,
         DOUBAO_IMAGE_STANDARD_ENDPOINT,
     ) == DOUBAO_IMAGE_PAYG_MODEL
@@ -168,6 +172,34 @@ async def test_doubao_generation_forces_agent_plan_model(monkeypatch) -> None:
     )
 
     assert images == ["data:image/png;base64,dGVzdA=="]
+    assert captured["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+
+
+@pytest.mark.asyncio
+async def test_doubao_generation_normalizes_bare_seedream_5_agent_plan_model(monkeypatch) -> None:
+    config = SimpleNamespace(
+        api_key="test-agent-plan-key",
+        endpoint=DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT,
+        model_name=DOUBAO_IMAGE_PAYG_MODEL,
+    )
+    captured = {}
+
+    async def fake_post(*, config, payload):
+        captured.update(payload)
+        return ["data:image/png;base64,dGVzdA=="]
+
+    monkeypatch.setattr(doubao_service, "resolve_provider", lambda provider, model=None: config)
+    monkeypatch.setattr(doubao_service, "_post_doubao_image_generation", fake_post)
+
+    await doubao_service.generate_doubao_images(
+        prompt="draw",
+        reference_inputs=[],
+        size="1024x1024",
+        sequential="disabled",
+        count=1,
+        model="doubao-seedream-5-0",
+    )
+
     assert captured["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
 
 
