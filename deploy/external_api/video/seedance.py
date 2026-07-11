@@ -32,6 +32,11 @@ SEEDANCE_MODEL_AVAILABILITY_MARKERS = (
     "not activated the model",
     "do not have access to it",
 )
+SEEDANCE_DURATION_ERROR_MARKERS = (
+    "parameter duration",
+    "duration specified",
+    "duration is not valid",
+)
 
 
 def _is_agent_plan_endpoint(endpoint: str) -> bool:
@@ -49,6 +54,32 @@ def _provider_error_text(exc: BaseException) -> str:
 def _is_model_availability_error(exc: BaseException) -> bool:
     error_text = _provider_error_text(exc)
     return any(marker in error_text for marker in SEEDANCE_MODEL_AVAILABILITY_MARKERS)
+
+
+def _is_duration_parameter_error(exc: BaseException) -> bool:
+    error_text = _provider_error_text(exc)
+    return any(marker in error_text for marker in SEEDANCE_DURATION_ERROR_MARKERS)
+
+
+def _has_content_type(contents: List[Dict[str, Any]], content_type: str) -> bool:
+    if not isinstance(contents, list):
+        return False
+    return any(isinstance(item, dict) and item.get("type") == content_type for item in contents)
+
+
+def _apply_model_payload_compatibility(payload: Dict[str, Any]) -> None:
+    model_name = payload.get("model")
+    contents = payload.get("content") or []
+    if (
+        model_name == SEEDANCE_AGENT_PLAN_MODEL
+        and "duration" in payload
+        and _has_content_type(contents, "image_url")
+    ):
+        logger.info(
+            "Seedance Agent Plan i2v compatibility: omitting unsupported duration=%s",
+            payload.get("duration"),
+        )
+        payload.pop("duration", None)
 
 
 class SeedanceClient:
@@ -131,6 +162,7 @@ class SeedanceClient:
         payload["camera_fixed"] = camera_fixed
         if tools:
             payload["tools"] = tools
+        _apply_model_payload_compatibility(payload)
 
         logger.info(
             "Seedance create task: sub_model=%s model=%s contents=%s",
@@ -157,6 +189,7 @@ class SeedanceClient:
                 )
                 model_name = SEEDANCE_AGENT_PLAN_MODEL
                 payload["model"] = model_name
+                _apply_model_payload_compatibility(payload)
                 data = self._submit_create_request(payload)
             task_id = data.get("id")
             if not task_id:
@@ -172,16 +205,37 @@ class SeedanceClient:
             raise
 
     def _submit_create_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        return request_json(
-            "POST",
-            self.base_url,
-            headers=self.headers,
-            json=payload,
-            timeout=180,
-            request_kwargs=self._request_kwargs,
-            logger=logger,
-            label="Seedance create",
-        )
+        try:
+            return request_json(
+                "POST",
+                self.base_url,
+                headers=self.headers,
+                json=payload,
+                timeout=180,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Seedance create",
+            )
+        except Exception as exc:
+            if "duration" not in payload or not _is_duration_parameter_error(exc):
+                raise
+            retry_payload = dict(payload)
+            removed_duration = retry_payload.pop("duration", None)
+            logger.warning(
+                "Seedance provider rejected duration=%s for model=%s; retrying without duration",
+                removed_duration,
+                retry_payload.get("model"),
+            )
+            return request_json(
+                "POST",
+                self.base_url,
+                headers=self.headers,
+                json=retry_payload,
+                timeout=180,
+                request_kwargs=self._request_kwargs,
+                logger=logger,
+                label="Seedance create",
+            )
 
     def query_task(self, task_id: str) -> Dict[str, Any]:
         """Poll a Seedance task status."""

@@ -74,6 +74,63 @@ def test_seedance_unsupported_model_is_non_retryable(monkeypatch):
         client.create_video_task("standard", [{"type": "text", "text": "test"}])
 
 
+def test_seedance_agent_plan_i2v_omits_unsupported_duration(monkeypatch):
+    monkeypatch.setattr(seedance_module, "resolve_provider", lambda provider, model=None: _ResolvedConfig())
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-260128",
+    )
+    request_payload = {}
+
+    def fake_request_json(*args, **kwargs):
+        request_payload.update(kwargs["json"])
+        return {"id": "agent-plan-i2v-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    task_id = client.create_video_task(
+        "standard",
+        [
+            {"type": "text", "text": "move gently"},
+            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
+        ],
+        duration=5,
+    )
+
+    assert task_id == "agent-plan-i2v-task"
+    assert request_payload["model"] == "doubao-seedance-1.5-pro"
+    assert "duration" not in request_payload
+
+
+def test_seedance_agent_plan_t2v_keeps_duration(monkeypatch):
+    monkeypatch.setattr(seedance_module, "resolve_provider", lambda provider, model=None: _ResolvedConfig())
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-260128",
+    )
+    request_payload = {}
+
+    def fake_request_json(*args, **kwargs):
+        request_payload.update(kwargs["json"])
+        return {"id": "agent-plan-t2v-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    task_id = client.create_video_task(
+        "standard",
+        [{"type": "text", "text": "move gently"}],
+        duration=5,
+    )
+
+    assert task_id == "agent-plan-t2v-task"
+    assert request_payload["model"] == "doubao-seedance-1.5-pro"
+    assert request_payload["duration"] == 5
+
+
 @pytest.mark.parametrize(
     ("sub_model", "resolved_model"),
     [
@@ -118,6 +175,96 @@ def test_seedance_payg_falls_back_to_15_for_model_availability_errors(
 
     assert task_id == "payg-fallback-task"
     assert submitted_models == [resolved_model, "doubao-seedance-1.5-pro"]
+
+
+def test_seedance_payg_fallback_to_agent_plan_i2v_omits_duration(monkeypatch):
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_provider",
+        lambda provider, model=None: _PayAsYouGoResolvedConfig(),
+    )
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-260128",
+    )
+    submitted_payloads = []
+
+    class UnsupportedModelError(RuntimeError):
+        response = type(
+            "Response",
+            (),
+            {"text": '{"error":{"code":"UnsupportedModel","message":"model does not exist"}}'},
+        )()
+
+    def fake_request_json(*args, **kwargs):
+        submitted_payloads.append(dict(kwargs["json"]))
+        if len(submitted_payloads) == 1:
+            raise UnsupportedModelError("400 Client Error")
+        return {"id": "payg-fallback-i2v-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    task_id = client.create_video_task(
+        "standard",
+        [
+            {"type": "text", "text": "move gently"},
+            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
+        ],
+        duration=5,
+    )
+
+    assert task_id == "payg-fallback-i2v-task"
+    assert submitted_payloads[0]["model"] == "doubao-seedance-2-0-260128"
+    assert submitted_payloads[0]["duration"] == 5
+    assert submitted_payloads[1]["model"] == "doubao-seedance-1.5-pro"
+    assert "duration" not in submitted_payloads[1]
+
+
+def test_seedance_retries_without_duration_when_provider_rejects_it(monkeypatch):
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_provider",
+        lambda provider, model=None: _PayAsYouGoResolvedConfig(),
+    )
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-260128",
+    )
+    submitted_payloads = []
+
+    class InvalidDurationError(RuntimeError):
+        response = type(
+            "Response",
+            (),
+            {
+                "text": (
+                    '{"error":{"code":"InvalidParameter",'
+                    '"message":"the parameter duration specified in the request is not valid"}}'
+                )
+            },
+        )()
+
+    def fake_request_json(*args, **kwargs):
+        submitted_payloads.append(dict(kwargs["json"]))
+        if len(submitted_payloads) == 1:
+            raise InvalidDurationError("400 Client Error")
+        return {"id": "retry-without-duration-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    task_id = client.create_video_task(
+        "standard",
+        [{"type": "text", "text": "move gently"}],
+        duration=5,
+    )
+
+    assert task_id == "retry-without-duration-task"
+    assert submitted_payloads[0]["duration"] == 5
+    assert "duration" not in submitted_payloads[1]
 
 
 def test_seedance_payg_does_not_fallback_for_transport_errors(monkeypatch):
