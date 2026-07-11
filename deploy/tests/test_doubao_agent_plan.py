@@ -10,6 +10,9 @@ from services.api_provider_registry import (
     DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     DOUBAO_IMAGE_PAYG_MODEL,
     DOUBAO_IMAGE_STANDARD_ENDPOINT,
+    SEEDANCE_AGENT_PLAN_ENDPOINT,
+    SEEDANCE_AGENT_PLAN_MODEL_MAP,
+    SEEDANCE_DEFAULT_MODEL_MAP,
     get_endpoint_env_key,
     get_model_env_key,
     get_provider_env_key,
@@ -17,6 +20,8 @@ from services.api_provider_registry import (
     normalize_model_bindings,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
+    normalize_seedance_endpoint,
+    normalize_seedance_model_for_endpoint,
 )
 from services.api_provider_runtime import resolve_provider
 
@@ -35,6 +40,27 @@ def test_doubao_agent_plan_normalizes_endpoint_and_model() -> None:
         DOUBAO_IMAGE_AGENT_PLAN_MODEL,
         DOUBAO_IMAGE_STANDARD_ENDPOINT,
     ) == DOUBAO_IMAGE_PAYG_MODEL
+
+
+def test_ark_endpoint_normalization_accepts_missing_scheme() -> None:
+    doubao_endpoint = normalize_doubao_image_endpoint(
+        "ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
+    )
+    seedance_endpoint = normalize_seedance_endpoint(
+        "ark.cn-beijing.volces.com/api/plan/"
+    )
+
+    assert doubao_endpoint == DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
+    assert normalize_doubao_image_model_for_endpoint(
+        DOUBAO_IMAGE_PAYG_MODEL,
+        doubao_endpoint,
+    ) == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert seedance_endpoint == SEEDANCE_AGENT_PLAN_ENDPOINT
+    assert normalize_seedance_model_for_endpoint(
+        SEEDANCE_DEFAULT_MODEL_MAP["standard"],
+        seedance_endpoint,
+        "standard",
+    ) == SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"]
 
 
 def test_doubao_exposes_one_image_operation_binding() -> None:

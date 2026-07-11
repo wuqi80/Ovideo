@@ -298,6 +298,19 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   echo "⚠️ 部署失败，已回滚: frontend build failed"
   exit 1
 fi
+
+if [ -n "$DIST_BACKUP_PATH" ]; then
+echo "Preserving previous frontend assets..."
+if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+  if [ -d '$DIST_BACKUP_PATH'/assets ] && [ -d '$REMOTE_DIR'/dist/assets ]; then
+    find '$DIST_BACKUP_PATH'/assets -maxdepth 1 -type f -exec cp -n {} '$REMOTE_DIR'/dist/assets/ \;
+  fi
+"; then
+  rollback_remote
+  echo "preserving frontend assets failed"
+  exit 1
+fi
+fi
 fi
 
 echo "Restarting $SERVICE..."

@@ -179,6 +179,8 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "fast": "SEEDANCE_MODEL_FAST",
 }
 
+ARK_OFFICIAL_HOST = "ark.cn-beijing.volces.com"
+
 MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
 MINIMAX_DEFAULT_PROVIDER_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL
 MINIMAX_LEGACY_VIDEO_MODELS = frozenset()
@@ -291,7 +293,7 @@ def is_seedance_fast_model(model_name: Optional[str]) -> bool:
 
 def doubao_image_access_mode(endpoint: Optional[str]) -> str:
     """Identify the Ark billing surface from a Doubao image endpoint."""
-    value = str(endpoint or "").strip()
+    value = _with_default_https_for_host(str(endpoint or "").strip(), ARK_OFFICIAL_HOST)
     try:
         path = urlsplit(value).path.rstrip("/").lower()
     except ValueError:
@@ -299,9 +301,20 @@ def doubao_image_access_mode(endpoint: Optional[str]) -> str:
     return "agent_plan" if path == "/api/plan" or path.startswith("/api/plan/") else "standard"
 
 
+def _with_default_https_for_host(value: str, host: str) -> str:
+    """Allow admins to paste official API hosts without the URL scheme."""
+    trimmed = (value or "").strip()
+    if "://" in trimmed:
+        return trimmed
+    normalized = trimmed.lower()
+    if normalized == host or normalized.startswith(f"{host}/"):
+        return f"https://{trimmed}"
+    return trimmed
+
+
 def normalize_doubao_image_endpoint(endpoint: Optional[str]) -> str:
     """Expand official Ark base URLs to the matching image-generation endpoint."""
-    value = str(endpoint or "").strip().rstrip("/")
+    value = _with_default_https_for_host(str(endpoint or "").strip(), ARK_OFFICIAL_HOST).rstrip("/")
     if not value:
         return value
     try:
@@ -349,7 +362,7 @@ def normalize_doubao_image_model_for_endpoint(
 
 def seedance_access_mode(endpoint: Optional[str]) -> str:
     """Identify the Ark billing surface from a Seedance endpoint."""
-    value = str(endpoint or "").strip()
+    value = _with_default_https_for_host(str(endpoint or "").strip(), ARK_OFFICIAL_HOST)
     try:
         path = urlsplit(value).path.rstrip("/").lower()
     except ValueError:
@@ -363,7 +376,7 @@ def normalize_seedance_endpoint(endpoint: Optional[str]) -> str:
     Custom gateways are intentionally left untouched. Only the official Ark
     host is normalized so an admin can still configure a compatible proxy.
     """
-    value = str(endpoint or "").strip().rstrip("/")
+    value = _with_default_https_for_host(str(endpoint or "").strip(), ARK_OFFICIAL_HOST).rstrip("/")
     if not value:
         return value
     try:
