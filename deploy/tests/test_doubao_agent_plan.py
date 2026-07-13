@@ -41,6 +41,14 @@ def test_doubao_agent_plan_normalizes_endpoint_and_model() -> None:
         endpoint,
     ) == DOUBAO_IMAGE_AGENT_PLAN_MODEL
     assert normalize_doubao_image_model_for_endpoint(
+        "doubao-seedream-5.0-lite",
+        endpoint,
+    ) == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert normalize_doubao_image_model_for_endpoint(
+        "doubao-seedream-5-0-lite-260128",
+        endpoint,
+    ) == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert normalize_doubao_image_model_for_endpoint(
         DOUBAO_IMAGE_AGENT_PLAN_MODEL,
         DOUBAO_IMAGE_STANDARD_ENDPOINT,
     ) == DOUBAO_IMAGE_PAYG_MODEL

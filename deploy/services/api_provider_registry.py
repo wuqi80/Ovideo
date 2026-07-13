@@ -98,24 +98,30 @@ PROVIDER_KEY_HELP: Dict[str, str] = {
 
 DOUBAO_IMAGE_DEFAULT_MODEL = "doubao-seedream-4-0-250828"
 DOUBAO_IMAGE_PAYG_MODEL = "doubao-seedream-5-0-pro-260628"
-DOUBAO_IMAGE_AGENT_PLAN_MODEL = "doubao-seedream-5.0-lite"
+DOUBAO_IMAGE_AGENT_PLAN_MODEL = "doubao-seedream-5-0-lite-260128"
 DOUBAO_IMAGE_MODEL_ALIASES: Dict[str, str] = {
     "doubao-seedream-5.0-pro": "doubao-seedream-5-0-pro-260628",
     "doubao-seedream-5-0-pro": "doubao-seedream-5-0-pro-260628",
+    "doubao-seedream-5-0-pro-260628": "doubao-seedream-5-0-pro-260628",
     "seedream-5.0-pro": "doubao-seedream-5-0-pro-260628",
     "seedream-5-0-pro": "doubao-seedream-5-0-pro-260628",
     "doubao-seedream-5.0": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "doubao-seedream-5-0": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    "doubao-seedream-5-0-260128": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "seedream-5.0": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "seedream-5-0": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    "seedream-5-0-260128": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "doubao-seedream-4.0": DOUBAO_IMAGE_DEFAULT_MODEL,
     "doubao-seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
+    "doubao-seedream-4-0-250828": DOUBAO_IMAGE_DEFAULT_MODEL,
     "seedream-4.0": DOUBAO_IMAGE_DEFAULT_MODEL,
     "seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
     "doubao-seedream-5.0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "doubao-seedream-5-0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    "doubao-seedream-5-0-lite-260128": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "seedream-5.0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "seedream-5-0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    "seedream-5-0-lite-260128": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
 }
 
 DOUBAO_IMAGE_STANDARD_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/images/generations"

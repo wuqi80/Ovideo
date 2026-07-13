@@ -7,6 +7,7 @@ from services.api_config_health_service import (
     _real_generation_response_ok,
     api_config_health_urls,
 )
+from services.api_provider_registry import DOUBAO_IMAGE_AGENT_PLAN_MODEL
 
 import pytest
 
@@ -95,7 +96,7 @@ def test_doubao_agent_plan_real_generation_uses_plan_endpoint_and_min_size() -> 
 
     assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
     assert body["size"] == "1920x1920"
-    assert body["model"] == "doubao-seedream-5.0-lite"
+    assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
     assert body["content"] == [
         {"type": "text", "text": "A simple blue square icon on a white background."}
     ]
@@ -114,7 +115,7 @@ def test_doubao_agent_plan_real_generation_normalizes_legacy_model_alias() -> No
         },
     )
 
-    assert body["model"] == "doubao-seedream-5.0-lite"
+    assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
     assert output_type == "image_task"
 
 
@@ -128,7 +129,7 @@ def test_doubao_agent_plan_real_generation_expands_short_endpoint() -> None:
     )
 
     assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
-    assert body["model"] == "doubao-seedream-5.0-lite"
+    assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
     assert body["size"] == "1920x1920"
 
 
