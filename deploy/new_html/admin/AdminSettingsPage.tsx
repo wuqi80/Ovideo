@@ -451,6 +451,8 @@ const CATEGORY_LABELS: Record<string, string> = {
     other: '其他',
 };
 
+const API_CONFIG_CATEGORY_ORDER = ['text', 'image', 'video', 'audio', 'other'];
+
 const RUNTIME_KEY_IMPORT_BODY = {
     copy_runtime_env_keys: true,
     update_existing_empty_keys: true,
@@ -1929,7 +1931,7 @@ const ApiConfigCard: React.FC<{
     compactInactive?: boolean;
     onCheck: (provider: string, modelName?: string | null) => void;
     onTestConfig: (config: ApiConfig) => void;
-    onRealTestConfig: (config: ApiConfig) => void;
+    onRealTestConfig: (config: ApiConfig, categoryView?: string) => void;
     onEdit: (config: ApiConfig) => void;
     onActivate: (config: ApiConfig) => void;
     onToggle: (config: ApiConfig) => void;
@@ -2254,7 +2256,7 @@ const ApiConfigCard: React.FC<{
                             </button>
                             <button
                                 type="button"
-                                onClick={() => onRealTestConfig(config)}
+                                onClick={() => onRealTestConfig(config, categoryView)}
                                 disabled={realTestingConfig || !configHasKey || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
                                 title="发起一次真实生成请求验证可用性，可能产生厂商费用"
@@ -2344,7 +2346,7 @@ const ProviderQuickCard: React.FC<{
     onToggle: (config: ApiConfig) => void;
     onDelete: (config: ApiConfig) => void;
     onTestConfig: (config: ApiConfig) => void;
-    onRealTestConfig: (config: ApiConfig) => void;
+    onRealTestConfig: (config: ApiConfig, categoryView?: string) => void;
     onCheck: (provider: string, modelName?: string | null) => void;
 }> = ({
     meta,
@@ -3103,6 +3105,15 @@ const ApiConfigPanel: React.FC = () => {
     const [migratingRuntimeKeys, setMigratingRuntimeKeys] = useState(false);
     const [exportingKeys, setExportingKeys] = useState(false);
     const [importingKeys, setImportingKeys] = useState(false);
+    const [activeCategory, setActiveCategory] = useState<string>(() => {
+        try {
+            if (typeof window === 'undefined') return 'text';
+            const saved = window.localStorage.getItem('admin_api_config_category');
+            return saved && CATEGORY_LABELS[saved] ? saved : 'text';
+        } catch {
+            return 'text';
+        }
+    });
 
     const loadConfigs = useCallback(async (options?: { showLoading?: boolean }) => {
         const showLoading = options?.showLoading !== false;
@@ -3200,6 +3211,32 @@ const ApiConfigPanel: React.FC = () => {
         });
         return out;
     }, [configs, providerMetaMap]);
+
+    const categoryTabs = useMemo(() => {
+        return API_CONFIG_CATEGORY_ORDER
+            .filter(category => category !== 'other' || (grouped.other || []).length > 0)
+            .map(category => ({
+                key: category,
+                label: CATEGORY_LABELS[category] || category,
+                count: (grouped[category] || []).length,
+            }));
+    }, [grouped]);
+
+    const activeCategoryItems = grouped[activeCategory] || [];
+
+    const selectCategory = useCallback((category: string) => {
+        setActiveCategory(category);
+        try {
+            if (typeof window !== 'undefined') {
+                window.localStorage.setItem('admin_api_config_category', category);
+            }
+        } catch {}
+    }, []);
+
+    useEffect(() => {
+        if (categoryTabs.some(tab => tab.key === activeCategory)) return;
+        selectCategory('text');
+    }, [activeCategory, categoryTabs, selectCategory]);
 
     const configsByProvider = useMemo(() => {
         const out = new Map<string, ApiConfig[]>();
@@ -3328,7 +3365,7 @@ const ApiConfigPanel: React.FC = () => {
         }
     }, []);
 
-    const realTestConfig = useCallback(async (config: ApiConfig) => {
+    const realTestConfig = useCallback(async (config: ApiConfig, categoryView?: string) => {
         const configId = config.config_id;
         if (!configId) return;
         const displayName = config.name || config.provider || configId;
@@ -3345,7 +3382,7 @@ const ApiConfigPanel: React.FC = () => {
             const startedAt = performance.now();
             const result = await apiJson<ApiConfigTestResponse>(`/api/admin/api-configs/${encodeURIComponent(configId)}/real-test`, {
                 method: 'POST',
-                body: JSON.stringify({}),
+                body: JSON.stringify({ category: categoryView || '' }),
             });
             const latencyMs = Math.round(performance.now() - startedAt);
             const test: ApiConfigTest = {
@@ -3856,8 +3893,6 @@ const ApiConfigPanel: React.FC = () => {
         }
     }, [loadConfigs]);
 
-    const categoryOrder = ['text', 'image', 'video', 'audio', 'other'];
-
     return (
         <>
         <input
@@ -4077,53 +4112,73 @@ const ApiConfigPanel: React.FC = () => {
                         暂无 API 卡片，请点击“新增 API 卡片”开始配置
                     </div>
                 ) : (
-                    <div className="space-y-5">
-                        {categoryOrder.map(category => {
-                            const items = grouped[category] || [];
-                            if (!items.length) return null;
-                            return (
-                                <section key={category} className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <h2 className="text-sm font-semibold text-n800">{CATEGORY_LABELS[category] || category}</h2>
-                                        <span className="text-xs text-n100 font-mono">{items.length}</span>
-                                    </div>
-                                    <div className="grid gap-3">
-                                        {items.map(config => {
-                                            const provider = normalizeProvider(config.provider);
-                                            const providerConfigs = configsByProvider.get(provider) || [];
-                                            const providerRuntime = runtimeMap.get(provider);
-                                            const activeConfigId = providerRuntime?.db_effective_config_id
-                                                || bestConfigForProvider(providerConfigs, provider, providerRuntime)?.config_id
-                                                || '';
-                                            const runtime = runtimeForConfig(config);
-                                            const modelName = config.model_name || runtime?.runtime_model_name || null;
-                                            return (
-                                                <ApiConfigCard
-                                                    key={`${category}:${config.config_id}`}
-                                                    config={config}
-                                                    categoryView={category}
-                                                    meta={providerMetaMap.get(provider)}
-                                                    runtime={runtime}
-                                                    health={providerHealthFrom(healthMap, provider, modelName)}
-                                                    configTest={configTestMap[config.config_id]}
-                                                    checking={Boolean(checking[providerHealthKey(provider, modelName)])}
-                                                    testingConfig={testingAllConfigs || Boolean(testingConfig[config.config_id])}
-                                                    realTestingConfig={Boolean(realTestingConfig[config.config_id])}
-                                                    compactInactive={providerConfigs.length > 1 && Boolean(activeConfigId) && config.config_id !== activeConfigId}
-                                                    onCheck={testProvider}
-                                                    onTestConfig={testConfig}
-                                                    onRealTestConfig={realTestConfig}
-                                                    onEdit={openEdit}
-                                                    onActivate={activateConfig}
-                                                    onToggle={toggleConfig}
-                                                    onDelete={deleteConfig}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                </section>
-                            );
-                        })}
+                    <div className="space-y-3">
+                        <section className="rounded-md border border-n40 bg-n0 shadow-card">
+                            <div className="flex flex-wrap items-center gap-1 border-b border-n40 px-3 py-2">
+                                {categoryTabs.map(tab => {
+                                    const active = tab.key === activeCategory;
+                                    return (
+                                        <button
+                                            key={tab.key}
+                                            type="button"
+                                            onClick={() => selectCategory(tab.key)}
+                                            className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition ${
+                                                active
+                                                    ? 'bg-primary text-white shadow-sm'
+                                                    : 'text-n500 hover:bg-n20'
+                                            }`}
+                                        >
+                                            <span>{tab.label}</span>
+                                            <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                                                active ? 'bg-white/20 text-white' : 'bg-n20 text-n100'
+                                            }`}>
+                                                {tab.count}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {activeCategoryItems.length === 0 ? (
+                                <div className="px-4 py-10 text-center text-sm text-n100">
+                                    暂无{CATEGORY_LABELS[activeCategory] || activeCategory} API 卡片
+                                </div>
+                            ) : (
+                                <div className="grid gap-3 p-3">
+                                    {activeCategoryItems.map(config => {
+                                        const provider = normalizeProvider(config.provider);
+                                        const providerConfigs = configsByProvider.get(provider) || [];
+                                        const providerRuntime = runtimeMap.get(provider);
+                                        const activeConfigId = providerRuntime?.db_effective_config_id
+                                            || bestConfigForProvider(providerConfigs, provider, providerRuntime)?.config_id
+                                            || '';
+                                        const runtime = runtimeForConfig(config);
+                                        const modelName = config.model_name || runtime?.runtime_model_name || null;
+                                        return (
+                                            <ApiConfigCard
+                                                key={`${activeCategory}:${config.config_id}`}
+                                                config={config}
+                                                categoryView={activeCategory}
+                                                meta={providerMetaMap.get(provider)}
+                                                runtime={runtime}
+                                                health={providerHealthFrom(healthMap, provider, modelName)}
+                                                configTest={configTestMap[config.config_id]}
+                                                checking={Boolean(checking[providerHealthKey(provider, modelName)])}
+                                                testingConfig={testingAllConfigs || Boolean(testingConfig[config.config_id])}
+                                                realTestingConfig={Boolean(realTestingConfig[config.config_id])}
+                                                compactInactive={providerConfigs.length > 1 && Boolean(activeConfigId) && config.config_id !== activeConfigId}
+                                                onCheck={testProvider}
+                                                onTestConfig={testConfig}
+                                                onRealTestConfig={realTestConfig}
+                                                onEdit={openEdit}
+                                                onActivate={activateConfig}
+                                                onToggle={toggleConfig}
+                                                onDelete={deleteConfig}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </section>
                     </div>
                 )}
             </div>

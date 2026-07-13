@@ -22,6 +22,14 @@ describe('API config presentation helpers', () => {
     }, ['video', 'audio'])).toEqual(['video', 'audio']);
   });
 
+  it('does not project a speech-only MiniMax card into video just because the provider can do video', () => {
+    expect(apiConfigCategories({
+      provider: 'minimax',
+      category: 'video',
+      model_bindings: minimaxBindings.filter(binding => binding.operation.startsWith('tts')),
+    }, ['video', 'audio'])).toEqual(['audio']);
+  });
+
   it('shows only the bindings belonging to the current category card', () => {
     expect(bindingsForCategory(minimaxBindings, 'minimax', 'video')).toHaveLength(2);
     expect(bindingsForCategory(minimaxBindings, 'minimax', 'audio')).toHaveLength(2);

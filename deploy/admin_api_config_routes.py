@@ -309,6 +309,10 @@ class ApiConfigRepairConflictsBody(BaseModel):
     dry_run: bool = False
 
 
+class ApiConfigRealTestBody(BaseModel):
+    category: str = ""
+
+
 @router.get("/api-configs")
 async def admin_list_api_configs():
     _require_db()
@@ -530,10 +534,15 @@ async def admin_test_api_config(config_id: str):
 
 
 @router.post("/api-configs/{config_id}/real-test")
-async def admin_real_test_api_config(config_id: str, request: Request):
+async def admin_real_test_api_config(
+    config_id: str,
+    request: Request,
+    body: Optional[ApiConfigRealTestBody] = None,
+):
     _require_db()
+    body = body or ApiConfigRealTestBody()
     try:
-        result = await test_saved_api_config_real_generation(config_id)
+        result = await test_saved_api_config_real_generation(config_id, category=body.category)
         test = result.get("test") or {}
         provider_health = _provider_health_from_real_generation_test(result)
         if provider_health:

@@ -6,6 +6,7 @@ import json
 import time
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
+from urllib.parse import urlencode
 
 import aiohttp
 
@@ -365,7 +366,92 @@ def _has_chat_content(payload: Any) -> bool:
     return bool(message.get("content") or message.get("reasoning_content"))
 
 
+def _has_minimax_audio_data(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    base_resp = payload.get("base_resp") or {}
+    if isinstance(base_resp, dict) and base_resp.get("status_code") not in (None, 0):
+        return False
+    data = payload.get("data") or {}
+    return isinstance(data, dict) and bool(data.get("audio"))
+
+
+def _api_binding_category(binding: Dict[str, Any], provider: str = "") -> str:
+    haystack = " ".join(
+        str(binding.get(key) or "").strip().lower()
+        for key in ("operation", "label", "model_name")
+    )
+    if any(token in haystack for token in ("tts", "speech", "voice", "audio", "music", "语音", "声音", "配音", "音频", "音乐")):
+        return "audio"
+    if any(token in haystack for token in ("video", "hailuo", "seedance", "sora", "veo", "wan", "kling", "vidu", "happyhorse", "视频", "图生视频", "首尾帧")):
+        return "video"
+    if any(token in haystack for token in ("image", "seedream", "picture", "photo", "图像", "图片", "生图")):
+        return "image"
+    if any(token in haystack for token in ("text", "chat", "reason", "language", "文本", "推理", "对话")):
+        return "text"
+
+    provider_id = normalize_provider(provider)
+    if "tts" in provider_id:
+        return "audio"
+    if provider_id in {"seedance", "sora2", "veo", "dashscope"}:
+        return "video"
+    if "image" in provider_id or provider_id == "doubao":
+        return "image"
+    return ""
+
+
+def _model_for_generation_category(row: Dict[str, Any], provider: str, category: str) -> str:
+    normalized_category = (category or "").strip().lower()
+    if normalized_category not in {"text", "image", "video", "audio"}:
+        return str(row.get("model_name") or "").strip()
+    bindings = _jsonb_to_python(row.get("model_bindings")) or []
+    if not isinstance(bindings, list):
+        bindings = []
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
+        if _api_binding_category(binding, provider) == normalized_category:
+            model_name = str(binding.get("model_name") or "").strip()
+            if model_name:
+                return model_name
+    return str(row.get("model_name") or "").strip()
+
+
+def _apply_generation_category_hint(row: Dict[str, Any]) -> Dict[str, Any]:
+    category = str(row.get("_test_category") or row.get("category") or "").strip().lower()
+    if not category:
+        return row
+    provider = str(row.get("provider") or "")
+    model_name = _model_for_generation_category(row, provider, category)
+    if model_name:
+        next_row = dict(row)
+        next_row["model_name"] = model_name
+        next_row["_test_category"] = category
+        return next_row
+    return row
+
+
+def _minimax_group_id(row: Dict[str, Any]) -> str:
+    raw = _jsonb_to_python(row.get("request_template")) or {}
+    if not isinstance(raw, dict):
+        return ""
+    for key in ("group_id", "minimax_group_id", "GroupId"):
+        value = str(raw.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _append_query_param(url: str, params: Dict[str, str]) -> str:
+    clean_params = {key: value for key, value in params.items() if value}
+    if not clean_params:
+        return url
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{urlencode(clean_params)}"
+
+
 def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, Dict[str, Any], str]:
+    row = _apply_generation_category_hint(dict(row))
     normalized = normalize_provider(provider)
     endpoint = str(row.get("endpoint") or "").strip()
     model_name = str(row.get("model_name") or "").strip()
@@ -415,6 +501,30 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             },
         }, "audio"
 
+    if normalized == "minimax":
+        if str(row.get("_test_category") or row.get("category") or "").strip().lower() != "audio":
+            raise ProviderHealthNotFound(REAL_GENERATION_UNSUPPORTED_ERROR)
+        model = model if model.lower().startswith("speech-") else "speech-2.8-hd"
+        url = _join_api_url(endpoint, get_provider_api_path(normalized, "tts_sync"))
+        url = _append_query_param(url, {"GroupId": _minimax_group_id(row)})
+        return url, {
+            "model": model,
+            "text": "OK.",
+            "stream": False,
+            "output_format": "hex",
+            "voice_setting": {
+                "voice_id": "presenter_male",
+                "speed": 1.0,
+                "pitch": 0,
+            },
+            "audio_setting": {
+                "format": "mp3",
+                "sample_rate": 32000,
+                "bitrate": 128000,
+            },
+            "language_boost": "auto",
+        }, "audio"
+
     if normalized in DOUBAO_IMAGE_TEST_PROVIDERS:
         model = normalize_doubao_image_model_for_endpoint(model, endpoint)
         url = normalize_doubao_image_endpoint(endpoint)
@@ -453,7 +563,7 @@ def _real_generation_response_ok(output_type: str, payload: Any) -> bool:
     if output_type == "text":
         return _has_chat_content(payload)
     if output_type == "audio":
-        return _has_gemini_inline_data(payload)
+        return _has_gemini_inline_data(payload) or _has_minimax_audio_data(payload)
     if output_type == "image":
         return _has_gemini_inline_data(payload) or _has_openai_image_data(payload)
     if output_type == "image_task":
@@ -510,6 +620,7 @@ async def test_api_config_real_generation(
     proxy_settings_loader: Optional[ProxySettingsLoader] = None,
     session_factory: Optional[SessionFactory] = None,
 ) -> Dict[str, Any]:
+    row = _apply_generation_category_hint(dict(row))
     provider = str(row.get("provider") or "")
     normalized = normalize_provider(provider)
     model_name = str(row.get("model_name") or "")

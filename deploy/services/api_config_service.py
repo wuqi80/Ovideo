@@ -1122,12 +1122,15 @@ async def test_saved_api_config_health(config_id: str) -> Dict[str, Any]:
     return await _test_api_config_row_health(row)
 
 
-async def test_saved_api_config_real_generation(config_id: str) -> Dict[str, Any]:
+async def test_saved_api_config_real_generation(config_id: str, category: str = "") -> Dict[str, Any]:
     row = await ApiConfigDAO.get_by_id(config_id)
     if not row:
         raise ApiConfigNotFound("Config not found")
     key = await ApiConfigDAO.get_decrypted_key(config_id)
-    return await test_api_config_real_generation(_row_to_jsonable(row), key or "")
+    test_row = _row_to_jsonable(row)
+    if category:
+        test_row["_test_category"] = category
+    return await test_api_config_real_generation(test_row, key or "")
 
 
 def summarize_config_test_results(results: Iterable[Dict[str, Any]]) -> Dict[str, int]:

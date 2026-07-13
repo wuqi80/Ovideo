@@ -127,6 +127,31 @@ def test_gemini_31_image_real_generation_uses_512_resolution() -> None:
     assert output_type == "image"
 
 
+def test_minimax_audio_real_generation_uses_tts_sync_and_group_id() -> None:
+    url, body, output_type = _real_generation_request(
+        "minimax",
+        {
+            "endpoint": "https://api.minimaxi.com/v1",
+            "model_name": "MiniMax-Hailuo-02",
+            "category": "audio",
+            "request_template": {"group_id": "group-1"},
+            "model_bindings": [
+                {
+                    "operation": "tts-hd",
+                    "label": "语音生成 (Speech 2.8 HD)",
+                    "model_name": "speech-2.8-hd",
+                },
+            ],
+        },
+    )
+
+    assert url == "https://api.minimaxi.com/v1/t2a_v2?GroupId=group-1"
+    assert body["model"] == "speech-2.8-hd"
+    assert body["text"] == "OK."
+    assert body["voice_setting"]["voice_id"] == "presenter_male"
+    assert output_type == "audio"
+
+
 def test_video_real_generation_does_not_create_billable_task() -> None:
     with pytest.raises(ProviderHealthNotFound):
         _real_generation_request(
@@ -134,6 +159,18 @@ def test_video_real_generation_does_not_create_billable_task() -> None:
             {
                 "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
                 "model_name": "doubao-seedance-2-0-260128",
+            },
+        )
+
+
+def test_minimax_video_real_generation_still_requires_business_page() -> None:
+    with pytest.raises(ProviderHealthNotFound):
+        _real_generation_request(
+            "minimax",
+            {
+                "endpoint": "https://api.minimaxi.com/v1",
+                "model_name": "MiniMax-Hailuo-02",
+                "category": "video",
             },
         )
 
