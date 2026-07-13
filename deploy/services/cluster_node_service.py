@@ -38,30 +38,43 @@ def _agent_node(row: Dict[str, Any]) -> Dict[str, Any]:
         or "GPU Agent"
     )
     port = first_instance.get("port")
+    status = str(row.get("status") or "offline").lower()
+    current_tasks = int(
+        row.get("active_tasks")
+        or system_info.get("current_tasks")
+        or stats.get("current_tasks")
+        or 0
+    )
+    if current_tasks > 0:
+        status = "busy"
+    elif status == "busy":
+        current_tasks = max(1, current_tasks)
+
     return {
         "id": agent_id,
         "node_id": agent_id,
         "agent_id": agent_id,
         "name": row.get("name") or agent_id,
-        "status": row.get("status") or "online",
+        "status": status,
         "kind": "agent",
         "type": "agent",
         "enabled": bool(row.get("enabled", True)),
         "host": host,
         "url": first_instance.get("url") or (f"http://{host}:{port}" if port else ""),
         "last_heartbeat": str(row.get("last_heartbeat") or ""),
-        "tasks": int(system_info.get("current_tasks") or stats.get("current_tasks") or 0),
-        "max_concurrent": max(1, len(instances) if isinstance(instances, list) and instances else 1),
+        "tasks": current_tasks,
+        # The current Agent loop executes one task at a time even when it monitors multiple ports.
+        "max_concurrent": 1,
         "gpu_usage": stats.get("gpu_usage") or system_info.get("gpu_usage"),
     }
 
 
-async def list_agent_nodes() -> List[Dict[str, Any]]:
-    """Return enabled online/busy GPU agents in the same shape as cluster nodes."""
+async def list_agent_nodes(*, include_offline: bool = False) -> List[Dict[str, Any]]:
+    """Return enabled GPU agents in the same shape as cluster nodes."""
     try:
         from dao_agent import AgentDAO
 
-        rows = await AgentDAO.list_all()
+        rows = await AgentDAO.list_all_with_active_task_counts()
     except Exception as exc:
         logger.warning("list cluster agent nodes failed: %s", exc)
         return []
@@ -72,7 +85,7 @@ async def list_agent_nodes() -> List[Dict[str, Any]]:
         status = str(data.get("status") or "").lower()
         if not data.get("enabled", True):
             continue
-        if status not in {"online", "busy", "healthy"}:
+        if not include_offline and status not in {"online", "busy", "healthy"}:
             continue
         nodes.append(_agent_node(data))
     return nodes

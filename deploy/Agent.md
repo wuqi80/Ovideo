@@ -9626,3 +9626,25 @@
   - `tests/test_api_provider_runtime_model_env.py`
 - Cost note: no live paid image generation was triggered during local verification; only mocked/unit tests were run before deployment.
 - Follow-up hardening: Agent Plan send boundary now always overwrites the upstream model with `doubao-seedream-5.0-lite`, so stale DB rows or frontend payloads such as `doubao-seedream-5-0` cannot leak into content-generation requests.
+
+## 2026-07-13 GPU2 Windows Node Integration
+
+### Changes
+
+- Added Windows diagnostics, portable ComfyUI installation, secure Agent runner, and Agent registration helpers under `scripts/`; the node root is `E:\MECHA-GPU`.
+- Registered the production Agent as `GPU2`. Its token is stored only in a protected local file and is never embedded in scripts, source control, or process arguments.
+- GPU routing is now a persistent user choice with `GPU1` as the default and `GPU2` as an explicit alternative. Offline selections fail clearly instead of silently routing to another Agent.
+- Added preferred Agent/node fields to all ComfyUI generation request schemas and frontend submission paths, including material processing, video, upscale, and voice tasks.
+- Browser preprocessing/submission keeps concurrency 4. External Agents execute serially; GPU2 therefore pulls one server task at a time while later tasks remain queued in Redis.
+- Cluster node presentation now includes enabled offline Agents and derives active task counts from the task table, allowing the UI to show online/busy/offline state and queue messaging accurately.
+
+### Verification
+
+- Backend targeted tests: 7 passed.
+- Frontend routing and submission-queue tests: 4 passed.
+- Python compilation and `git diff --check` passed.
+
+### Remaining Deployment Work
+
+- The Windows administrator account is temporarily locked. After it unlocks, run the installer, register startup tasks, and verify ComfyUI/Agent heartbeats from `GPU2`.
+- Phase-one installation includes SeedVR2 3B FP8 for the RTX 3060 12GB node. Qwen angle/edit workflows still require their exact custom nodes and model files before those specific frontend actions can be declared operational on GPU2.

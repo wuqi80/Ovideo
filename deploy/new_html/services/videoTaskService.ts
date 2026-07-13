@@ -11,6 +11,7 @@ import {
     type VideoModel,
 } from './videoModelService';
 import type { VideoTask } from './videoTaskTypes';
+import { resolveGpuTaskRouting } from './clusterNodeService';
 
 export type { VideoTask } from './videoTaskTypes';
 export { cancelTask, deleteTask } from './taskControlService';
@@ -45,6 +46,8 @@ export async function submitTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
     }
 ): Promise<{ task_id: string }> {
     let taskType = imageFilenameEnd ? 'morph' : 'i2v';
@@ -197,6 +200,14 @@ export async function submitTask(
         requestData.episode_id = entityOptions.episode_id;
     }
 
+    if (isComfyUIModel(model)) {
+        const routing = await resolveGpuTaskRouting(
+            entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id,
+        );
+        requestData.preferred_agent_id = entityOptions?.preferred_agent_id || routing.preferredAgentId;
+        requestData.preferred_node_id = entityOptions?.preferred_node_id || routing.preferredNodeId;
+    }
+
     const response = await apiFetch('/api/generate', {
         method: 'POST',
         body: JSON.stringify(requestData)
@@ -220,6 +231,8 @@ export async function submitUpscaleTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
     }
 ): Promise<{ task_id: string }> {
     const requestData: Record<string, any> = {
@@ -236,6 +249,13 @@ export async function submitUpscaleTask(
         requestData.project_id = entityOptions.project_id;
         requestData.episode_id = entityOptions.episode_id;
     }
+
+
+    const routing = await resolveGpuTaskRouting(
+        entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id,
+    );
+    requestData.preferred_agent_id = entityOptions?.preferred_agent_id || routing.preferredAgentId;
+    requestData.preferred_node_id = entityOptions?.preferred_node_id || routing.preferredNodeId;
 
     const response = await apiFetch('/api/generate', {
         method: 'POST',
@@ -259,6 +279,7 @@ export async function submitVoiceTask(
     prompt: string,
     model: VideoModel = 'Wan2'
 ): Promise<{ task_id: string }> {
+    const routing = await resolveGpuTaskRouting();
     return await apiJson<{ task_id: string }>('/api/generate', {
         method: 'POST',
         body: JSON.stringify({
@@ -269,7 +290,9 @@ export async function submitVoiceTask(
             prompt_AU: prompt,
             model: model,
             seed: -1,
-            priority: 2
+            priority: 2,
+            preferred_agent_id: routing.preferredAgentId,
+            preferred_node_id: routing.preferredNodeId,
         })
     }, 'submitVoiceTask');
 }

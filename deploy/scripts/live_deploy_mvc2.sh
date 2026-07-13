@@ -56,6 +56,12 @@ FILES=(
   "scripts/build_clean_migration_package.py"
   "scripts/package_storage_orphans.py"
   "scripts/restructure_storage_manifest.py"
+  "scripts/register_gpu_agent.py"
+  "scripts/windows_gpu_agent_runner.py"
+  "scripts/windows_gpu_node_diagnose.cmd"
+  "scripts/windows_gpu_node_diagnose.ps1"
+  "scripts/windows_gpu_node_install.cmd"
+  "scripts/windows_gpu_node_install.ps1"
   scripts/check_*.py
   tests/test_ai_proxy_image_persistence_service.py
   tests/test_ai_proxy_reference_service.py

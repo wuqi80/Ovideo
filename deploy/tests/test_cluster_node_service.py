@@ -9,7 +9,7 @@ from services import cluster_node_service
 async def test_list_agent_nodes_filters_and_normalizes(monkeypatch):
     class FakeAgentDAO:
         @staticmethod
-        async def list_all():
+        async def list_all_with_active_task_counts():
             return [
                 {
                     "agent_id": "agent_online",
@@ -32,14 +32,43 @@ async def test_list_agent_nodes_filters_and_normalizes(monkeypatch):
     assert nodes[0]["name"] == "GPU1"
     assert nodes[0]["url"] == "http://10.0.0.2:8188"
     assert nodes[0]["tasks"] == 1
+    assert nodes[0]["max_concurrent"] == 1
+    assert nodes[1]["status"] == "busy"
+    assert nodes[1]["tasks"] == 1
+    assert nodes[1]["max_concurrent"] == 1
 
 
 async def test_list_agent_nodes_degrades_safely(monkeypatch):
     class BrokenAgentDAO:
         @staticmethod
-        async def list_all():
+        async def list_all_with_active_task_counts():
             raise RuntimeError("db unavailable")
 
     monkeypatch.setitem(sys.modules, "dao_agent", SimpleNamespace(AgentDAO=BrokenAgentDAO))
 
     assert await cluster_node_service.list_agent_nodes() == []
+
+
+async def test_list_agent_nodes_can_include_offline(monkeypatch):
+    class FakeAgentDAO:
+        @staticmethod
+        async def list_all_with_active_task_counts():
+            return [
+                {"agent_id": "agent_gpu1", "name": "GPU1", "status": "offline", "enabled": True},
+                {
+                    "agent_id": "agent_gpu2",
+                    "name": "GPU2",
+                    "status": "online",
+                    "enabled": True,
+                    "active_tasks": 1,
+                },
+            ]
+
+    monkeypatch.setitem(sys.modules, "dao_agent", SimpleNamespace(AgentDAO=FakeAgentDAO))
+
+    nodes = await cluster_node_service.list_agent_nodes(include_offline=True)
+
+    assert [node["name"] for node in nodes] == ["GPU1", "GPU2"]
+    assert nodes[0]["status"] == "offline"
+    assert nodes[1]["status"] == "busy"
+    assert nodes[1]["tasks"] == 1

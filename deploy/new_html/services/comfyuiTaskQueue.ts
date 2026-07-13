@@ -70,6 +70,8 @@ export interface QueueEvent {
 class ComfyUITaskQueue {
     private queue: QueuedTask<any>[] = [];
     private runningCount = 0;
+    // Browser-side preprocessing/submission may run in parallel. GPU2 still executes
+    // one task at a time because its Agent only pulls the next server task after completion.
     private maxConcurrent = 4;
     private currentTaskId: string | null = null;
     private currentTaskName: string | null = null;

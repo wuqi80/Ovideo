@@ -6,6 +6,7 @@ import {
     waitForComfyUITaskAllImages,
 } from './comfyuiTaskWaitService';
 import type { ComfyUITaskRegistryMeta, GeneratedImageResult } from './comfyuiTaskWaitService';
+import { resolveGpuTaskRouting } from './clusterNodeService';
 
 type GenerationTaskResponse = { task_id: string };
 
@@ -34,11 +35,19 @@ const postGenerationTask = async (
     payload: Record<string, any>,
     apiName: string,
 ): Promise<{ taskId: string; status: string }> => {
+    const routing = await resolveGpuTaskRouting(
+        payload.preferred_agent_id || payload.preferred_node_id,
+    );
+    const routedPayload = {
+        ...payload,
+        preferred_agent_id: payload.preferred_agent_id || routing.preferredAgentId,
+        preferred_node_id: payload.preferred_node_id || routing.preferredNodeId,
+    };
     const data = await apiJson<GenerationTaskResponse>(
         url,
         {
             method: 'POST',
-            body: JSON.stringify(payload),
+            body: JSON.stringify(routedPayload),
         },
         apiName,
     );

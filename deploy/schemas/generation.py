@@ -142,7 +142,12 @@ class ComfyUIWorkflowRequest(BaseModel):
     preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
 
 
-class AngleAdjustRequest(BaseModel):
+class ComfyUIRoutedRequest(BaseModel):
+    preferred_agent_id: Optional[str] = Field(None, description="Preferred GPU Agent")
+    preferred_node_id: Optional[str] = Field(None, description="Preferred cluster node")
+
+
+class AngleAdjustRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="ComfyUI中的图片文件名")
     prompt: str = Field(..., description="角度调整提示词")
     seed: int = Field(default=-1, description="随机种子")
@@ -153,7 +158,7 @@ class AngleAdjustRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class HumanMultiAngleRequest(BaseModel):
+class HumanMultiAngleRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="ComfyUI中的图片文件名")
     seed: int = Field(default=-1, description="随机种子")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
@@ -163,7 +168,7 @@ class HumanMultiAngleRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class AroundAngleRequest(BaseModel):
+class AroundAngleRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="ComfyUI中的图片文件名")
     prompt: str = Field(..., description="角度描述提示词，如：front view, eye-level shot, medium shot")
     seed: int = Field(default=-1, description="随机种子")
@@ -174,7 +179,7 @@ class AroundAngleRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class MattingRequest(BaseModel):
+class MattingRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="ComfyUI中的图片文件名")
     matting_type: str = Field(..., description="抠图类型: subject(主体脱离)/split(主体背景分离)")
     seed: int = Field(default=-1, description="随机种子")
@@ -185,7 +190,7 @@ class MattingRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class ImageFusionRequest(BaseModel):
+class ImageFusionRequest(ComfyUIRoutedRequest):
     fusion_type: str = Field(..., description="融合类型: fusion(图像融合)/transfer(迁移学习)/imitation(模仿学习)")
     image_bk: str = Field(..., description="底图/背景图文件名")
     image_hu: str = Field(..., description="人物图文件名")
@@ -198,7 +203,7 @@ class ImageFusionRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class Panorama360Request(BaseModel):
+class Panorama360Request(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="场景素材图片文件名")
     prompt: str = Field(default="", description="全景描述提示词")
     seed: int = Field(default=-1, description="随机种子")
@@ -209,7 +214,7 @@ class Panorama360Request(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class PanoramaFusionRequest(BaseModel):
+class PanoramaFusionRequest(ComfyUIRoutedRequest):
     image_1: str = Field(..., description="人物/场景图1文件名")
     image_2: Optional[str] = Field(default=None, description="人物图2文件名（可选）")
     image_3: str = Field(..., description="全景截图背景文件名")
@@ -222,7 +227,7 @@ class PanoramaFusionRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class AutoStoryboardRequest(BaseModel):
+class AutoStoryboardRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="输入图片文件名")
     prompt: str = Field(..., description="分镜描述提示词")
     seed: int = Field(default=-1, description="随机种子")
@@ -233,7 +238,7 @@ class AutoStoryboardRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
 
 
-class MultiGridStoryboardRequest(BaseModel):
+class MultiGridStoryboardRequest(ComfyUIRoutedRequest):
     mode: str = Field(..., description="模式: multi_shot(多镜头分镜) / story(故事分镜)")
     user_prompt: str = Field(..., description="用户输入的提示词")
     reference_image: str = Field(..., description="参考图像（Base64格式，必须传入一张）")
@@ -244,7 +249,7 @@ class MultiGridStoryboardRequest(BaseModel):
     episode_id: Optional[str] = Field(None)
 
 
-class MaterialProcessRequest(BaseModel):
+class MaterialProcessRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="ComfyUI中的图片文件名")
     workflow_type: str = Field(..., description="工作流类型: upscale_hd/remove_watermark/three_view")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")

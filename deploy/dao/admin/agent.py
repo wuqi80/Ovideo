@@ -107,6 +107,26 @@ class AgentDAO:
         )
 
     @staticmethod
+    async def list_all_with_active_task_counts() -> List[Dict[str, Any]]:
+        """Return agents with the number of GPU tasks currently assigned to each one."""
+        db = get_db_manager()
+        if not db:
+            return []
+        return await db.fetch(
+            """
+            SELECT a.*,
+                   COALESCE((
+                       SELECT COUNT(*)::int
+                       FROM tasks t
+                       WHERE t.node_id = a.agent_id
+                         AND t.status IN ('processing', 'running')
+                   ), 0) AS active_tasks
+            FROM comfyui_agents a
+            ORDER BY a.created_at DESC
+            """
+        )
+
+    @staticmethod
     async def get_online_agents() -> List[Dict[str, Any]]:
         db = get_db_manager()
         if not db:

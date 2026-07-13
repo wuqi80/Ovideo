@@ -1,4 +1,5 @@
 import { apiBlob, apiJson, getAuthToken, publicBlob, secureApiUrl } from './httpClient';
+import { resolveGpuTaskRouting } from './clusterNodeService';
 
 export type MaterialWorkflowType = 'upscale_hd' | 'remove_watermark' | 'three_view';
 
@@ -7,6 +8,8 @@ export interface MaterialEntityOptions {
   entityId?: string;
   fileRole?: string;
   episodeId?: string;
+  preferredAgentId?: string;
+  preferredNodeId?: string;
 }
 
 function normalizeImageSourceUrl(imageUrl: string): string {
@@ -99,6 +102,10 @@ export async function processMaterial(
     throw new Error('Not logged in.');
   }
 
+  const routing = await resolveGpuTaskRouting(
+    entityOptions?.preferredAgentId || entityOptions?.preferredNodeId,
+  );
+
   return apiJson<any>('/api/materials/process', {
     method: 'POST',
     body: JSON.stringify({
@@ -108,6 +115,8 @@ export async function processMaterial(
       entity_id: entityOptions?.entityId,
       file_role: entityOptions?.fileRole,
       episode_id: entityOptions?.episodeId,
+      preferred_agent_id: entityOptions?.preferredAgentId || routing.preferredAgentId,
+      preferred_node_id: entityOptions?.preferredNodeId || routing.preferredNodeId,
     }),
   }, 'processMaterial');
 }

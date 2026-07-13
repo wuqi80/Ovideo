@@ -65,11 +65,15 @@ def create_cluster_status_router(
     async def list_nodes(username: str = Depends(require_auth_dependency)):
         """Return local cluster nodes plus online external GPU agents."""
         cluster_manager = get_cluster_manager()
-        agent_nodes = await list_agent_nodes()
+        agent_nodes = await list_agent_nodes(include_offline=True)
+        online_agent_nodes = [
+            node for node in agent_nodes
+            if str(node.get("status") or "").lower() in {"online", "busy", "healthy"}
+        ]
         if cluster_manager is None:
             message = (
-                f"已检测到 {len(agent_nodes)} 个在线 GPU Agent，可由集群节点处理 ComfyUI 任务。"
-                if agent_nodes
+                f"已检测到 {len(online_agent_nodes)} 个在线 GPU Agent，可由集群节点处理 ComfyUI 任务。"
+                if online_agent_nodes
                 else "Agent-Only 模式：当前没有在线 GPU Agent，ComfyUI 任务会等待 Agent 上线。"
             )
             return {

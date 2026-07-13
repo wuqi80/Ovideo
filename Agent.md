@@ -8862,3 +8862,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Cost note: no live paid image generation was triggered during this local verification; only mocked/unit tests were run before deployment.
 - Follow-up fix: Agent Plan task payload now sends `content` blocks instead of the legacy image API `prompt` field, fixing Volcengine `MissingParameter: content` responses.
 - Follow-up hardening: Agent Plan send boundary now always overwrites the upstream model with `doubao-seedream-5.0-lite`, so stale DB rows or frontend payloads such as `doubao-seedream-5-0` cannot leak into content-generation requests.
+
+## 2026-07-13 GPU2 Windows 节点接入
+
+- 新增 Windows 10 GPU 节点的诊断、便携安装和安全启动脚本，安装根目录固定为 `E:\MECHA-GPU`。
+- 新节点已在生产数据库注册并统一命名为 `GPU2`；Agent 密钥只落在受 ACL 保护的本机配置文件，不写入脚本、仓库或进程参数。
+- 前端 GPU 选择改为用户固定选择：默认 `GPU1`，可切换 `GPU2`，选择结果跨页面保留；所选节点离线时明确拦截，不再静默改派。
+- 所有 ComfyUI 图像、素材处理、视频、高清化和配音提交统一附带 `preferred_agent_id` / `preferred_node_id`，由后端目标 Agent 领取。
+- 浏览器侧保留最多 4 项并行预处理/提交；GPU Agent 仍为单任务执行。节点忙碌时，后续任务保留在服务端 Redis 队列，页面提示正在排队。
+- 集群节点接口会返回启用但离线的 Agent，并从任务表补充实际处理中数量，后台和前端均可看到 `GPU1` / `GPU2` 的在线、忙碌和离线状态。
+- 已完成验证：后端 GPU 路由/Agent 队列测试 7 项通过，前端节点选择/提交队列测试 4 项通过。
+- 待完成部署项：Windows 管理账号当前处于临时锁定，解除后需运行安装脚本，完成 ComfyUI、SeedVR2 3B FP8、自启动任务和 Agent 在线验证；Qwen 角度调整等工作流仍需逐项安装其专用模型与自定义节点后才能在 12GB 显存节点上验收。

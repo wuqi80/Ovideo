@@ -1,4 +1,5 @@
 import { apiJson } from './httpClient';
+import { crmMessage } from '../admin/crmUI';
 
 export type ClusterNodeStatus = 'online' | 'busy' | 'healthy' | 'offline' | 'maintenance' | 'unknown';
 
@@ -15,6 +16,15 @@ export interface ClusterNodeOption {
   maxConcurrent?: number;
   lastHeartbeat?: string;
 }
+
+export interface GpuTaskRouting {
+  preferredAgentId?: string;
+  preferredNodeId?: string;
+  node?: ClusterNodeOption;
+}
+
+const PREFERRED_GPU_NODE_KEY = 'mecha:preferred-gpu-node-id';
+export const DEFAULT_GPU_NODE_NAME = 'GPU1';
 
 interface ClusterNodesResponse {
   success?: boolean;
@@ -66,6 +76,23 @@ export function isClusterNodeUsable(node: ClusterNodeOption): boolean {
   return node.status === 'online' || node.status === 'busy' || node.status === 'healthy';
 }
 
+export function setPreferredGpuNodeId(nodeId: string): void {
+  try {
+    if (!nodeId) localStorage.removeItem(PREFERRED_GPU_NODE_KEY);
+    else localStorage.setItem(PREFERRED_GPU_NODE_KEY, nodeId);
+  } catch {
+    // Storage may be unavailable in private/restricted browser contexts.
+  }
+}
+
+export function getPreferredGpuNodeId(): string {
+  try {
+    return localStorage.getItem(PREFERRED_GPU_NODE_KEY) || DEFAULT_GPU_NODE_NAME;
+  } catch {
+    return DEFAULT_GPU_NODE_NAME;
+  }
+}
+
 export async function fetchClusterNodes(): Promise<{ nodes: ClusterNodeOption[]; message: string; agentOnlyMode: boolean }> {
   const data = await apiJson<ClusterNodesResponse>(
     '/api/cluster/nodes',
@@ -77,5 +104,34 @@ export async function fetchClusterNodes(): Promise<{ nodes: ClusterNodeOption[];
     nodes,
     message: data.message || '',
     agentOnlyMode: Boolean(data.agent_only_mode),
+  };
+}
+
+export async function resolveGpuTaskRouting(explicitNodeId?: string): Promise<GpuTaskRouting> {
+  const result = await fetchClusterNodes();
+  const requested = explicitNodeId || getPreferredGpuNodeId();
+  const requestedKey = requested.trim().toLowerCase();
+  const node = result.nodes.find((item) => (
+    [item.id, item.nodeId, item.agentId, item.name]
+      .filter(Boolean)
+      .some((value) => String(value).trim().toLowerCase() === requestedKey)
+  ));
+
+  if (!node || !isClusterNodeUsable(node)) {
+    const message = `GPU 节点「${requested}」当前不可用，请在节点选择器中切换到在线节点。`;
+    crmMessage.warning(message);
+    throw new Error(message);
+  }
+
+  const active = node.tasks ?? (node.status === 'busy' ? 1 : 0);
+  const capacity = node.maxConcurrent ?? 1;
+  if (node.status === 'busy' || active >= capacity) {
+    crmMessage.info(`GPU 节点「${node.name}」正在处理任务，本次任务已进入服务端队列等待。`);
+  }
+
+  return {
+    preferredAgentId: node.agentId || (node.kind === 'agent' ? node.id : undefined),
+    preferredNodeId: node.nodeId || node.id,
+    node,
   };
 }
