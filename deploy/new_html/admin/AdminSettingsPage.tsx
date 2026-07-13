@@ -792,6 +792,8 @@ function apiConfigDisplayItemsForCategory(
 
 function apiConfigCardTitle(config: ApiConfig, meta?: ProviderMeta, category?: string): string {
     const provider = normalizeProvider(config.provider);
+    const configuredName = String(config.name || '').trim();
+    if (configuredName) return configuredName;
     if (category === 'image' && provider === 'gemini-image') return 'Laozhang.ai / Gemini 图像';
     if (category === 'image' && provider === 'doubao') return '火山引擎 / 豆包图像';
     return config.name || meta?.label || provider;
