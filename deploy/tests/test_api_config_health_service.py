@@ -4,6 +4,7 @@ from services.api_config_health_service import (
     _headers_for_generation,
     _minimax_error_from_payload,
     _real_generation_request,
+    _real_generation_response_ok,
     api_config_health_urls,
 )
 
@@ -150,9 +151,65 @@ def test_minimax_audio_real_generation_uses_tts_sync_and_group_id() -> None:
     assert url == "https://api.minimaxi.com/v1/t2a_v2?GroupId=group-1"
     assert body["model"] == "speech-2.8-hd"
     assert body["text"] == "OK."
-    assert body["voice_setting"]["voice_id"] == "presenter_male"
+    assert body["voice_setting"]["voice_id"] == "male-qn-qingse"
     assert body["voice_setting"]["vol"] == 1.0
+    assert body["audio_setting"]["channel"] == 1
+    assert "output_format" not in body
     assert output_type == "audio"
+
+
+def test_minimax_token_plan_audio_real_generation_omits_legacy_group_id() -> None:
+    url, body, output_type = _real_generation_request(
+        "minimax",
+        {
+            "endpoint": "https://api.minimaxi.com/v1",
+            "model_name": "speech-2.8-hd",
+            "category": "audio",
+            "request_template": {
+                "group_id": "admin",
+                "provider_access_mode": "domestic_token_plan",
+            },
+        },
+    )
+
+    assert url == "https://api.minimaxi.com/v1/t2a_v2"
+    assert body["model"] == "speech-2.8-hd"
+    assert output_type == "audio"
+
+
+def test_minimax_video_real_generation_creates_video_task() -> None:
+    url, body, output_type = _real_generation_request(
+        "minimax",
+        {
+            "endpoint": "https://api.minimaxi.com/v1",
+            "model_name": "MiniMax-Hailuo-2.3",
+            "category": "video",
+            "model_bindings": [
+                {
+                    "operation": "video-standard",
+                    "label": "金丹 (Hailuo 2.3)",
+                    "model_name": "MiniMax-Hailuo-2.3",
+                },
+            ],
+        },
+    )
+
+    assert url == "https://api.minimaxi.com/v1/video_generation"
+    assert body["model"] == "MiniMax-Hailuo-2.3"
+    assert body["duration"] == 6
+    assert body["resolution"] == "768P"
+    assert output_type == "video_task"
+
+
+def test_minimax_audio_and_video_generation_response_detection() -> None:
+    assert _real_generation_response_ok(
+        "audio",
+        {"data": {"audio": "494433"}, "base_resp": {"status_code": 0}},
+    )
+    assert _real_generation_response_ok(
+        "video_task",
+        {"task_id": "106916112212032", "base_resp": {"status_code": 0}},
+    )
 
 
 def test_generation_headers_replace_stale_authorization() -> None:
@@ -191,18 +248,6 @@ def test_video_real_generation_does_not_create_billable_task() -> None:
             {
                 "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
                 "model_name": "doubao-seedance-2-0-260128",
-            },
-        )
-
-
-def test_minimax_video_real_generation_still_requires_business_page() -> None:
-    with pytest.raises(ProviderHealthNotFound):
-        _real_generation_request(
-            "minimax",
-            {
-                "endpoint": "https://api.minimaxi.com/v1",
-                "model_name": "MiniMax-Hailuo-02",
-                "category": "video",
             },
         )
 

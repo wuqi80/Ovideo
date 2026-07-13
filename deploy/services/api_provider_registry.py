@@ -185,9 +185,12 @@ SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
 
 ARK_OFFICIAL_HOST = "ark.cn-beijing.volces.com"
 
-MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
+MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-2.3"
 MINIMAX_DEFAULT_PROVIDER_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL
-MINIMAX_LEGACY_VIDEO_MODELS = frozenset()
+MINIMAX_FAST_VIDEO_MODEL = "MiniMax-Hailuo-2.3-Fast"
+MINIMAX_LEGACY_VIDEO_MODELS = frozenset({"MiniMax-Hailuo-02"})
+MINIMAX_TTS_HD_MODEL = "speech-2.8-hd"
+MINIMAX_TTS_TURBO_MODEL = "speech-2.8-turbo"
 MINIMAX_DOMESTIC_ENDPOINT = "https://api.minimaxi.com/v1"
 MINIMAX_INTERNATIONAL_ENDPOINT = "https://api.minimax.io/v1"
 MINIMAX_ACCESS_MODES: List[Dict[str, Any]] = [
@@ -297,6 +300,29 @@ DASHSCOPE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
         "model_name": model_name,
     }
     for operation, model_name in DASHSCOPE_DEFAULT_MODEL_MAP.items()
+]
+
+MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
+    {
+        "operation": "video-standard",
+        "label": "金丹 (Hailuo 2.3)",
+        "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
+    },
+    {
+        "operation": "video-fast",
+        "label": "金丹 Fast (Hailuo 2.3 Fast)",
+        "model_name": MINIMAX_FAST_VIDEO_MODEL,
+    },
+    {
+        "operation": "speech-hd",
+        "label": "语音生成 (Speech 2.8 HD)",
+        "model_name": MINIMAX_TTS_HD_MODEL,
+    },
+    {
+        "operation": "speech-turbo",
+        "label": "语音生成 (Speech 2.8 Turbo)",
+        "model_name": MINIMAX_TTS_TURBO_MODEL,
+    },
 ]
 
 
@@ -749,9 +775,36 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": "doubao-seedream-5-0-pro-260628",
     },
     {
-        "name": "MiniMax Hailuo",
+        "name": "MiniMax Hailuo 2.3",
         "provider": "minimax",
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
+        "operation": "video-standard",
+        "operation_label": "金丹 (Hailuo 2.3)",
+        "category": "video",
+    },
+    {
+        "name": "MiniMax Hailuo 2.3 Fast",
+        "provider": "minimax",
+        "model_name": MINIMAX_FAST_VIDEO_MODEL,
+        "operation": "video-fast",
+        "operation_label": "金丹 Fast (Hailuo 2.3 Fast)",
+        "category": "video",
+    },
+    {
+        "name": "MiniMax Speech 2.8 HD",
+        "provider": "minimax",
+        "model_name": MINIMAX_TTS_HD_MODEL,
+        "operation": "speech-hd",
+        "operation_label": "语音生成 (Speech 2.8 HD)",
+        "category": "audio",
+    },
+    {
+        "name": "MiniMax Speech 2.8 Turbo",
+        "provider": "minimax",
+        "model_name": MINIMAX_TTS_TURBO_MODEL,
+        "operation": "speech-turbo",
+        "operation_label": "语音生成 (Speech 2.8 Turbo)",
+        "category": "audio",
     },
     {
         "name": "Sora2",
@@ -1056,6 +1109,8 @@ def get_provider_model_binding_options(provider: str) -> List[Dict[str, str]]:
         return deepcopy(SEEDANCE_MODEL_BINDING_OPTIONS)
     if provider_id == "dashscope":
         return deepcopy(DASHSCOPE_MODEL_BINDING_OPTIONS)
+    if provider_id == "minimax":
+        return deepcopy(MINIMAX_MODEL_BINDING_OPTIONS)
 
     options: List[Dict[str, str]] = []
     seen: set[str] = set()

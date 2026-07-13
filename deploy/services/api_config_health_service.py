@@ -24,6 +24,7 @@ from services.api_provider_registry import (
     get_provider_api_path,
     get_provider_default_endpoint,
     is_google_generative_language_endpoint,
+    normalize_minimax_video_model,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
     normalize_provider,
@@ -373,10 +374,34 @@ def _has_minimax_audio_data(payload: Any) -> bool:
     if not isinstance(payload, dict):
         return False
     base_resp = payload.get("base_resp") or {}
-    if isinstance(base_resp, dict) and base_resp.get("status_code") not in (None, 0):
+    if isinstance(base_resp, dict) and str(base_resp.get("status_code", 0)) != "0":
         return False
     data = payload.get("data") or {}
     return isinstance(data, dict) and bool(data.get("audio"))
+
+
+def _has_minimax_task_id(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    base_resp = payload.get("base_resp") or {}
+    if isinstance(base_resp, dict) and str(base_resp.get("status_code", 0)) != "0":
+        return False
+    return bool(_task_id_from_payload(payload))
+
+
+def _minimax_response_hint(payload: Dict[str, Any]) -> Optional[str]:
+    data = payload.get("data")
+    if isinstance(data, dict):
+        status = data.get("status")
+        if status is not None:
+            trace_id = payload.get("trace_id")
+            suffix = f"; trace_id={trace_id}" if trace_id else ""
+            return f"MiniMax response did not include expected output: data.status={status}{suffix}"
+    for key in ("message", "msg", "error_message", "status_msg"):
+        value = payload.get(key)
+        if value:
+            return f"MiniMax message: {value}"
+    return None
 
 
 def _minimax_error_from_payload(payload: Any) -> Optional[str]:
@@ -401,6 +426,13 @@ def _minimax_error_from_payload(payload: Any) -> Optional[str]:
                 )
             return "; ".join(parts)
 
+    code = payload.get("status_code") or payload.get("code") or payload.get("err_code")
+    msg = payload.get("status_msg") or payload.get("message") or payload.get("msg") or payload.get("error_message")
+    if code and str(code) not in {"0", "success"}:
+        return f"MiniMax status_code={code}" + (f"; status_msg={msg}" if msg else "")
+    if msg and str(msg).lower() not in {"success", "ok"}:
+        return f"MiniMax message: {msg}"
+
     error = payload.get("error")
     if isinstance(error, dict):
         msg = error.get("message") or error.get("type")
@@ -410,7 +442,7 @@ def _minimax_error_from_payload(payload: Any) -> Optional[str]:
             return f"{prefix}: {msg}"
     elif error:
         return f"MiniMax error: {error}"
-    return None
+    return _minimax_response_hint(payload)
 
 
 def _real_generation_error(provider: str, output_type: str, payload: Any) -> Optional[str]:
@@ -474,10 +506,26 @@ def _apply_generation_category_hint(row: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
-def _minimax_group_id(row: Dict[str, Any]) -> str:
+def _minimax_request_template(row: Dict[str, Any]) -> Dict[str, Any]:
     raw = _jsonb_to_python(row.get("request_template")) or {}
     if not isinstance(raw, dict):
+        return {}
+    return raw
+
+
+def _minimax_access_mode(row: Dict[str, Any]) -> str:
+    return str(_minimax_request_template(row).get("provider_access_mode") or "").strip().lower()
+
+
+def _minimax_is_token_plan(row: Dict[str, Any]) -> bool:
+    access_mode = _minimax_access_mode(row)
+    return "token_plan" in access_mode or "tokenplan" in access_mode
+
+
+def _minimax_group_id(row: Dict[str, Any]) -> str:
+    if _minimax_is_token_plan(row):
         return ""
+    raw = _minimax_request_template(row)
     for key in ("group_id", "minimax_group_id", "GroupId"):
         value = str(raw.get(key) or "").strip()
         if value:
@@ -545,7 +593,19 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         }, "audio"
 
     if normalized == "minimax":
-        if str(row.get("_test_category") or row.get("category") or "").strip().lower() != "audio":
+        category = str(row.get("_test_category") or row.get("category") or "").strip().lower()
+        if category == "video":
+            model = normalize_minimax_video_model(model)
+            url = _join_api_url(endpoint, get_provider_api_path(normalized, "video_generation"))
+            return url, {
+                "model": model,
+                "prompt": "A simple blue square slowly fades in and out.",
+                "duration": 6,
+                "resolution": "768P",
+                "prompt_optimizer": False,
+                "aigc_watermark": False,
+            }, "video_task"
+        if category != "audio":
             raise ProviderHealthNotFound(REAL_GENERATION_UNSUPPORTED_ERROR)
         model = model if model.lower().startswith("speech-") else "speech-2.8-hd"
         url = _join_api_url(endpoint, get_provider_api_path(normalized, "tts_sync"))
@@ -554,9 +614,8 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             "model": model,
             "text": "OK.",
             "stream": False,
-            "output_format": "hex",
             "voice_setting": {
-                "voice_id": "presenter_male",
+                "voice_id": "male-qn-qingse",
                 "speed": 1.0,
                 "vol": 1.0,
                 "pitch": 0,
@@ -565,8 +624,9 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
                 "format": "mp3",
                 "sample_rate": 32000,
                 "bitrate": 128000,
+                "channel": 1,
             },
-            "language_boost": "auto",
+            "subtitle_enable": False,
         }, "audio"
 
     if normalized in DOUBAO_IMAGE_TEST_PROVIDERS:
@@ -612,6 +672,8 @@ def _real_generation_response_ok(output_type: str, payload: Any) -> bool:
         return _has_gemini_inline_data(payload) or _has_openai_image_data(payload)
     if output_type == "image_task":
         return bool(parse_doubao_image_task_response(payload if isinstance(payload, dict) else {}))
+    if output_type == "video_task":
+        return _has_minimax_task_id(payload)
     return False
 
 
