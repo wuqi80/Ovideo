@@ -1,5 +1,4 @@
 """Seedance video API client for Volcengine Ark content-generation tasks."""
-from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
@@ -67,7 +66,45 @@ def _has_content_type(contents: List[Dict[str, Any]], content_type: str) -> bool
     return any(isinstance(item, dict) and item.get("type") == content_type for item in contents)
 
 
+def _image_contents(contents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not isinstance(contents, list):
+        return []
+    return [
+        item
+        for item in contents
+        if isinstance(item, dict) and item.get("type") == "image_url"
+    ]
+
+
+def _normalize_agent_plan_image_roles(payload: Dict[str, Any]) -> None:
+    if payload.get("model") != SEEDANCE_AGENT_PLAN_MODEL:
+        return
+    contents = payload.get("content") or []
+    if _has_content_type(contents, "video_url") or _has_content_type(contents, "audio_url"):
+        return
+
+    images = _image_contents(contents)
+    if len(images) == 1:
+        current_role = images[0].get("role")
+        if current_role != "first_frame":
+            logger.info(
+                "Seedance Agent Plan compatibility: mapping single image role=%s to first_frame",
+                current_role or "-",
+            )
+            images[0]["role"] = "first_frame"
+        return
+
+    if len(images) == 2:
+        has_first = any(item.get("role") == "first_frame" for item in images)
+        has_last = any(item.get("role") == "last_frame" for item in images)
+        if not (has_first and has_last):
+            logger.info("Seedance Agent Plan compatibility: mapping two images to first/last frame")
+            images[0]["role"] = "first_frame"
+            images[1]["role"] = "last_frame"
+
+
 def _apply_model_payload_compatibility(payload: Dict[str, Any]) -> None:
+    _normalize_agent_plan_image_roles(payload)
     model_name = payload.get("model")
     contents = payload.get("content") or []
     if (

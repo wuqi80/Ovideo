@@ -102,6 +102,80 @@ def test_seedance_agent_plan_i2v_omits_unsupported_duration(monkeypatch):
     assert task_id == "agent-plan-i2v-task"
     assert request_payload["model"] == "doubao-seedance-1.5-pro"
     assert "duration" not in request_payload
+    assert request_payload["content"][1]["role"] == "first_frame"
+
+
+def test_seedance_agent_plan_maps_single_reference_image_to_i2v(monkeypatch):
+    monkeypatch.setattr(seedance_module, "resolve_provider", lambda provider, model=None: _ResolvedConfig())
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-260128",
+    )
+    request_payload = {}
+
+    def fake_request_json(*args, **kwargs):
+        request_payload.update(kwargs["json"])
+        return {"id": "agent-plan-reference-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    task_id = client.create_video_task(
+        "standard",
+        [
+            {"type": "text", "text": "move gently"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://cdn.example.test/frame.png"},
+                "role": "reference_image",
+            },
+        ],
+        duration=3,
+    )
+
+    assert task_id == "agent-plan-reference-task"
+    assert request_payload["model"] == "doubao-seedance-1.5-pro"
+    assert "duration" not in request_payload
+    assert request_payload["content"][1]["role"] == "first_frame"
+
+
+def test_seedance_agent_plan_maps_two_reference_images_to_morph(monkeypatch):
+    monkeypatch.setattr(seedance_module, "resolve_provider", lambda provider, model=None: _ResolvedConfig())
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-260128",
+    )
+    request_payload = {}
+
+    def fake_request_json(*args, **kwargs):
+        request_payload.update(kwargs["json"])
+        return {"id": "agent-plan-morph-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    task_id = client.create_video_task(
+        "standard",
+        [
+            {"type": "text", "text": "move gently"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://cdn.example.test/start.png"},
+                "role": "reference_image",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://cdn.example.test/end.png"},
+                "role": "reference_image",
+            },
+        ],
+    )
+
+    assert task_id == "agent-plan-morph-task"
+    assert request_payload["content"][1]["role"] == "first_frame"
+    assert request_payload["content"][2]["role"] == "last_frame"
 
 
 def test_seedance_agent_plan_t2v_keeps_duration(monkeypatch):

@@ -1673,7 +1673,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     entity_id: entityId,
                     file_role: 'video',
                     episode_id: episodeId,
-                });
+                }, undefined, !seedanceOmniEnabled);
                 console.log('Seedance 任务提交成功:', result.task_id);
                 showToast('任务已提交');
                 startPolling(uuid, result.task_id);

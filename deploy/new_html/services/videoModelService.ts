@@ -58,6 +58,30 @@ export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: 
   return 'seedance_multi';
 }
 
+export function normalizeSeedanceMediaForSubmission(
+  media: SeedanceMediaInput[] = [],
+  agentPlanCompat: boolean = true,
+): SeedanceMediaInput[] {
+  if (!agentPlanCompat || !media.length) return media;
+  if (media.some((m) => m.kind !== 'image')) return media;
+
+  const images = media.filter((m) => m.kind === 'image');
+  if (images.length === 1) {
+    return media.map((m) => (
+      m.kind === 'image' ? { ...m, role: 'first_frame' } : m
+    ));
+  }
+  if (images.length === 2) {
+    let imageIndex = 0;
+    return media.map((m) => {
+      if (m.kind !== 'image') return m;
+      imageIndex += 1;
+      return { ...m, role: imageIndex === 1 ? 'first_frame' : 'last_frame' };
+    });
+  }
+  return media;
+}
+
 /**
  * 2026-07-11：Seedance 1.5-pro 仅支持单图或首尾帧，禁止多模态多输入。
  * Drama 后端（seedance.py）会在 Agent Plan endpoint 上强制覆盖 model=1.5-pro，
@@ -65,7 +89,11 @@ export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: 
  *
  * 返回 null 表示可通过；返回 string 是禁用原因（同时也是按钮 tooltip）。
  */
-export function validateSeedanceMediaInputs(media: SeedanceMediaInput[]): string | null {
+export function validateSeedanceMediaInputs(
+    media: SeedanceMediaInput[],
+    seedanceOmniEnabled: boolean = false,
+): string | null {
+    if (seedanceOmniEnabled) return null;
     if (!media) return null;
     const hasVideoAudio = media.some((m) => m.kind === 'video' || m.kind === 'audio');
     if (hasVideoAudio) {

@@ -4,6 +4,7 @@ import {
     inferDashScopeTaskType,
     inferSeedanceTaskType,
     isComfyUIModel,
+    normalizeSeedanceMediaForSubmission,
     type DashScopeVideoParams,
     type SeedanceMediaInput,
     type SeedanceParams,
@@ -510,18 +511,20 @@ export async function submitSeedanceTask(
         episode_id?: string;
     },
     draftTaskId?: string,
+    agentPlanCompat: boolean = true,
 ): Promise<{ task_id: string }> {
     // fast 子型号不支持 1080p：前端兜底降级，配合后端二次校验
     const resolution = (params.sub_model === 'fast' && params.resolution === '1080p')
         ? '720p'
         : params.resolution;
 
-    const taskType = inferSeedanceTaskType(params.media_inputs, !!draftTaskId);
+    const mediaInputs = normalizeSeedanceMediaForSubmission(params.media_inputs, agentPlanCompat);
+    const taskType = inferSeedanceTaskType(mediaInputs, !!draftTaskId);
     const body: Record<string, any> = {
         task_type: taskType,
         sub_model: params.sub_model,
         prompt: params.prompt,
-        media_inputs: params.media_inputs,
+        media_inputs: mediaInputs,
         resolution,
         ratio: params.ratio || 'adaptive',
         duration: params.duration,
