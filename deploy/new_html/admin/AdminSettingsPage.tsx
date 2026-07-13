@@ -1918,7 +1918,7 @@ const ApiConfigEditorModal: React.FC<{
     );
 };
 
-const API_CARD_ACTION_BUTTON_BASE = 'inline-flex h-8 w-36 shrink-0 items-center justify-center gap-1.5 rounded px-3 text-xs font-medium';
+const API_CARD_ACTION_BUTTON_BASE = 'inline-flex h-8 w-36 shrink-0 items-center justify-center gap-1.5 rounded px-3 text-[11px] font-medium leading-none whitespace-nowrap';
 const API_CARD_ACTION_BUTTON_SECONDARY = `${API_CARD_ACTION_BUTTON_BASE} border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60`;
 const API_CARD_ACTION_BUTTON_SUCCESS = `${API_CARD_ACTION_BUTTON_BASE} border border-g75 bg-g50 text-g400 hover:bg-g50 disabled:opacity-60`;
 const API_CARD_ACTION_BUTTON_PRIMARY = `${API_CARD_ACTION_BUTTON_BASE} text-white bg-primary hover:bg-primary-hover disabled:opacity-60`;
