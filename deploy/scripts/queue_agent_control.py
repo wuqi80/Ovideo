@@ -51,6 +51,16 @@ def _load_service_env() -> dict[str, str]:
     if env.get("DB_PASSWORD") or not shutil.which("systemctl"):
         return env
 
+    def merge_env_file(path: Path) -> None:
+        if not path.exists():
+            return
+        for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            env.setdefault(key.strip(), value.strip().strip("\"'"))
+
     try:
         output = subprocess.check_output(
             ["systemctl", "show", "drama.service", "-p", "Environment", "--value"],
@@ -64,6 +74,8 @@ def _load_service_env() -> dict[str, str]:
                 env.setdefault(key, value)
     except Exception:
         pass
+    if not env.get("DB_PASSWORD"):
+        merge_env_file(ROOT / "configs" / "runtime.env")
     return env
 
 
