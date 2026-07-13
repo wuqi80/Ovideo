@@ -6,6 +6,7 @@ from services.api_config_health_service import (
     _real_generation_request,
     _real_generation_response_ok,
     api_config_health_urls,
+    test_api_config_real_generation as run_api_config_real_generation,
 )
 from services.api_provider_registry import DOUBAO_IMAGE_AGENT_PLAN_MODEL
 
@@ -129,6 +130,45 @@ def test_doubao_agent_plan_real_generation_expands_short_endpoint() -> None:
     assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
     assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
     assert body["size"] == "2048x2048"
+
+
+@pytest.mark.asyncio
+async def test_doubao_agent_plan_real_generation_reports_effective_model_name() -> None:
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def text(self):
+            return '{"data":[{"url":"https://cdn.example.test/seedream.png"}]}'
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    result = await run_api_config_real_generation(
+        {
+            "provider": "doubao",
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks",
+            "model_name": "doubao-seedream-5.0-lite",
+        },
+        "test-key",
+        session_factory=lambda **_kwargs: FakeSession(),
+    )
+
+    assert result["test"]["ok"] is True
+    assert result["test"]["model_name"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert result["test"]["url"] == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
 
 
 def test_gpt_image_real_generation_uses_lowest_explicit_cost_profile() -> None:

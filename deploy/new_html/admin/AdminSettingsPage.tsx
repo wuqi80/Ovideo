@@ -563,7 +563,20 @@ function providerHealthFrom(
 ): ProviderHealth | undefined {
     const providerKey = normalizeProvider(provider);
     if (!providerKey) return undefined;
-    return map[providerHealthKey(providerKey, modelName)] || map[providerKey];
+    const exact = map[providerHealthKey(providerKey, modelName)];
+    const providerLevel = map[providerKey];
+    const providerLevelVerified = Boolean(
+        providerLevel?.status === 'ok'
+        && providerLevel?.health?.ok
+        && providerLevel?.health?.real_generation
+    );
+    const exactVerified = Boolean(
+        exact?.status === 'ok'
+        && exact?.health?.ok
+        && exact?.health?.real_generation
+    );
+    if (providerLevelVerified && !exactVerified) return providerLevel;
+    return exact || providerLevel;
 }
 
 function providerHealthFromRealGenerationTest(config: ApiConfig, test?: ApiConfigTest): ProviderHealth | undefined {
@@ -2057,7 +2070,13 @@ const ApiConfigCard: React.FC<{
     const runtimeIssue = runtimeIssueText(runtimeIssues);
     const runtimeEndpoint = runtime?.endpoint || '';
     const dbEndpoint = config.endpoint || '';
-    const healthError = apiConfigErrorMessage(provider, dbEndpoint || runtimeEndpoint, rawHealthError);
+    const verifiedByGeneration = Boolean(
+        (configTest?.ok && configTest.real_generation)
+        || (health?.status === 'ok' && health?.health?.ok && health?.health?.real_generation)
+    );
+    const healthError = verifiedByGeneration
+        ? ''
+        : apiConfigErrorMessage(provider, dbEndpoint || runtimeEndpoint, rawHealthError);
     const accessModeMeta = providerAccessModeForEndpoint(meta?.access_modes || [], dbEndpoint || runtimeEndpoint);
     const accessMode = accessModeMeta?.mode || '';
     const runtimeDbEndpointMismatch = endpointMismatch(runtimeEndpoint, dbEndpoint);
@@ -3458,6 +3477,7 @@ const ApiConfigPanel: React.FC = () => {
         if (!ok) return;
 
         setRealTestingConfig(prev => ({ ...prev, [configId]: true }));
+        crmMessage.info(`${displayName} 真实生成测试已开始，火山引擎可能需要 10-30 秒返回`);
         try {
             const startedAt = performance.now();
             const result = await apiJson<ApiConfigTestResponse>(`/api/admin/api-configs/${encodeURIComponent(configId)}/real-test`, {

@@ -766,6 +766,7 @@ async def test_api_config_real_generation(
             output_type=None,
             status="unsupported",
         )
+    effective_model_name = str(body.get("model") or model_name) if isinstance(body, dict) else model_name
 
     headers = _headers_for_generation(normalized, endpoint, api_key, row.get("headers"))
     proxy = await resolve_proxy_for_request(
@@ -789,7 +790,7 @@ async def test_api_config_real_generation(
                 if resp.status >= 400:
                     return api_real_generation_result(
                         provider=provider,
-                        model_name=model_name,
+                        model_name=effective_model_name,
                         ok=False,
                         status_code=resp.status,
                         url=url,
@@ -818,7 +819,7 @@ async def test_api_config_real_generation(
                         latency_ms = int((time.perf_counter() - t0) * 1000)
                 return api_real_generation_result(
                     provider=provider,
-                    model_name=model_name,
+                    model_name=effective_model_name,
                     ok=ok,
                     status_code=status_code,
                     url=url,
@@ -830,7 +831,7 @@ async def test_api_config_real_generation(
         latency_ms = int((time.perf_counter() - t0) * 1000)
         return api_real_generation_result(
             provider=provider,
-            model_name=model_name,
+            model_name=effective_model_name,
             ok=False,
             status_code=None,
             url=url,
