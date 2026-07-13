@@ -1918,6 +1918,12 @@ const ApiConfigEditorModal: React.FC<{
     );
 };
 
+const API_CARD_ACTION_BUTTON_BASE = 'inline-flex h-8 w-36 shrink-0 items-center justify-center gap-1.5 rounded px-3 text-xs font-medium';
+const API_CARD_ACTION_BUTTON_SECONDARY = `${API_CARD_ACTION_BUTTON_BASE} border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60`;
+const API_CARD_ACTION_BUTTON_SUCCESS = `${API_CARD_ACTION_BUTTON_BASE} border border-g75 bg-g50 text-g400 hover:bg-g50 disabled:opacity-60`;
+const API_CARD_ACTION_BUTTON_PRIMARY = `${API_CARD_ACTION_BUTTON_BASE} text-white bg-primary hover:bg-primary-hover disabled:opacity-60`;
+const API_CARD_ACTION_BUTTON_DANGER = `${API_CARD_ACTION_BUTTON_BASE} border border-danger/30 bg-r50 text-danger hover:bg-r50 disabled:opacity-60`;
+
 const ApiConfigCard: React.FC<{
     config: ApiConfig;
     categoryView?: string;
@@ -2027,7 +2033,7 @@ const ApiConfigCard: React.FC<{
             <div className="flex items-start gap-3 min-w-0">
                 <div className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${view.dot}`} title={view.text} />
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3 min-w-0">
+                    <div className="flex flex-col gap-3 min-w-0 xl:flex-row xl:items-start xl:justify-between">
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
                                 <h3 className="text-sm font-semibold text-n800 leading-snug break-words">{config.name || meta?.label || provider}</h3>
@@ -2062,12 +2068,12 @@ const ApiConfigCard: React.FC<{
                             </div>
                         </div>
 
-                        <div className="toolbar-actions justify-end">
+                        <div className="grid w-full grid-cols-2 justify-end gap-2 sm:w-auto sm:grid-cols-[repeat(2,9rem)] 2xl:grid-cols-[repeat(4,9rem)]">
                             <button
                                 type="button"
                                 onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
                                 disabled={checking || !provider}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60 shrink-0"
+                                className={API_CARD_ACTION_BUTTON_SECONDARY}
                                 title="检测当前实际生效的 Key、Endpoint 和模型是否连通"
                             >
                                 {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -2078,7 +2084,7 @@ const ApiConfigCard: React.FC<{
                                     type="button"
                                     onClick={() => onActivate(config)}
                                     disabled={!configHasKey || !config.config_id}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-g75 bg-g50 text-g400 hover:bg-g50 disabled:opacity-60 shrink-0"
+                                    className={API_CARD_ACTION_BUTTON_SUCCESS}
                                 >
                                     <KeyRound className="w-3.5 h-3.5" />
                                     设为生效
@@ -2087,7 +2093,7 @@ const ApiConfigCard: React.FC<{
                             <button
                                 type="button"
                                 onClick={() => onEdit(config)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-white bg-primary hover:bg-primary-hover"
+                                className={API_CARD_ACTION_BUTTON_PRIMARY}
                             >
                                 <Edit3 className="w-3.5 h-3.5" />
                                 配置 / 修改 API Key
@@ -2095,14 +2101,14 @@ const ApiConfigCard: React.FC<{
                             <button
                                 type="button"
                                 onClick={() => onToggle(config)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-n40 bg-n0 text-n700 hover:bg-n20"
+                                className={API_CARD_ACTION_BUTTON_SECONDARY}
                             >
                                 {config.enabled === false ? '启用' : '禁用'}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => onDelete(config)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-danger/30 bg-r50 text-danger hover:bg-r50"
+                                className={API_CARD_ACTION_BUTTON_DANGER}
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 删除
