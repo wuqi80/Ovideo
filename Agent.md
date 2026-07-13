@@ -8897,3 +8897,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - GPU2 已安装 ComfyUI-VideoHelperSuite 与 ffmpeg；视频高清化使用 `VHS_LoadVideo -> SeedVR2 3B FP8 -> VHS_VideoCombine`，batch size 为 1，VAE 分块并允许 CPU 卸载，Agent 超时放宽到 6 小时。
 - 本地验收：Qwen 直接生成 PNG 成功；SeedVR2 视频高清化及 H.264 MP4 合成成功；后端定向测试 26/26、前端测试 306 项通过、生产构建通过。
 - 尚需部署至 `mecha.one` 并完成指定 GPU2 的生产端到端任务，才可完成最终验收。
+- 部署脚本已加固：`scp` 后恢复 `/home/Administrator/deploy` 的属主与 `0755` 权限；回滚会清除前端源码哈希；服务状态最长轮询 60 秒，避免 `activating` 被误判为失败。

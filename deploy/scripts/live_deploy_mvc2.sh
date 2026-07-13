@@ -165,6 +165,9 @@ rollback_remote() {
       rm -rf '$REMOTE_DIR'/dist
       cp -a '${DIST_BACKUP_PATH:-}' '$REMOTE_DIR'/dist
     fi
+    rm -f '$FRONTEND_HASH_REMOTE'
+    chown Administrator:Administrator '$REMOTE_DIR'
+    chmod 755 '$REMOTE_DIR'
     sudo systemctl restart '$SERVICE'
   " || true
 }
@@ -254,6 +257,17 @@ echo "Uploading MVC/API management files..."
 if ! scp -r "${SSH_OPTS[@]}" "$STAGING_DIR"/. "$REMOTE:$REMOTE_DIR/"; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: backend upload failed"
+  exit 1
+fi
+
+# scp preserves the 0700 mode of mktemp's staging root when copying `.`.
+# Restore the application root traversal permission required by the service user.
+if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+  chown Administrator:Administrator '$REMOTE_DIR'
+  chmod 755 '$REMOTE_DIR'
+"; then
+  rollback_remote
+  echo "⚠️ 部署失败，已回滚: application root permissions failed"
   exit 1
 fi
 
@@ -355,8 +369,14 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "sudo systemctl restart '$SERVICE'"; then
 fi
 
 echo "Waiting for service..."
-sleep 8
-ACTIVE=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "systemctl is-active '$SERVICE' || true")
+ACTIVE=""
+for _ in $(seq 1 20); do
+  sleep 3
+  ACTIVE=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "systemctl is-active '$SERVICE' || true")
+  if [ "$ACTIVE" = "active" ]; then
+    break
+  fi
+done
 echo "Service status: $ACTIVE"
 
 if [ "$ACTIVE" != "active" ]; then
