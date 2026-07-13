@@ -94,16 +94,14 @@ def test_doubao_agent_plan_real_generation_uses_plan_endpoint_and_min_size() -> 
         },
     )
 
-    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
-    assert body["size"] == "1920x1920"
+    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
+    assert body["size"] == "2048x2048"
     assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
-    assert body["content"] == [
-        {"type": "text", "text": "A simple blue square icon on a white background."}
-    ]
-    assert "prompt" not in body
+    assert body["prompt"] == "A simple blue square icon on a white background."
+    assert "content" not in body
     assert body["response_format"] == "url"
     assert body["watermark"] is False
-    assert output_type == "image_task"
+    assert output_type == "image"
 
 
 def test_doubao_agent_plan_real_generation_normalizes_legacy_model_alias() -> None:
@@ -116,7 +114,7 @@ def test_doubao_agent_plan_real_generation_normalizes_legacy_model_alias() -> No
     )
 
     assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
-    assert output_type == "image_task"
+    assert output_type == "image"
 
 
 def test_doubao_agent_plan_real_generation_expands_short_endpoint() -> None:
@@ -128,9 +126,9 @@ def test_doubao_agent_plan_real_generation_expands_short_endpoint() -> None:
         },
     )
 
-    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
+    assert url == "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
     assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
-    assert body["size"] == "1920x1920"
+    assert body["size"] == "2048x2048"
 
 
 def test_gpt_image_real_generation_uses_lowest_explicit_cost_profile() -> None:

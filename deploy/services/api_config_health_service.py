@@ -11,7 +11,6 @@ from urllib.parse import urlencode
 import aiohttp
 
 from services.ai_proxy_doubao_image_service import (
-    build_doubao_agent_plan_payload,
     parse_doubao_image_task_response,
 )
 from dao.admin.system_settings import SystemSettingsDAO
@@ -635,10 +634,8 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         model = normalize_doubao_image_model_for_endpoint(model, endpoint)
         url = normalize_doubao_image_endpoint(endpoint)
         is_agent_plan = doubao_image_access_mode(endpoint) == "agent_plan"
-        # Seedream 5.0 Lite (and other Agent Plan Seedream models) require a
-        # minimum total pixel count of ~3.69M; pay-as-you-go allows 1024x1024.
-        # 1920x1920 = 3,686,400 pixels — the documented floor.
-        size = "1920x1920" if is_agent_plan else "1024x1024"
+        # Agent Plan uses the image generation endpoint and requires 2K+.
+        size = "2048x2048" if is_agent_plan else "1024x1024"
         payload = {
             "model": model,
             "prompt": "A simple blue square icon on a white background.",
@@ -646,13 +643,7 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             "response_format": "url",
             "watermark": False,
         }
-        if is_agent_plan:
-            payload = build_doubao_agent_plan_payload(payload)
-            payload["model"] = normalize_doubao_image_model_for_endpoint(
-                payload.get("model"),
-                url,
-            )
-        return url, payload, "image_task" if is_agent_plan else "image"
+        return url, payload, "image"
 
     if normalized in OPENAI_IMAGE_TEST_PROVIDERS:
         url = _join_api_url(endpoint, get_provider_api_path(normalized, "image_generations"))

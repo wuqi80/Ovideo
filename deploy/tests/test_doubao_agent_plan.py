@@ -216,14 +216,16 @@ async def test_doubao_agent_plan_send_boundary_forces_lite_model(monkeypatch) ->
     config = SimpleNamespace(
         api_key="test-agent-plan-key",
         endpoint=DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT,
+        url_for=lambda path="": DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT,
+        requests_kwargs=lambda: {},
     )
     captured = {}
 
-    async def fake_task_post(*, config, payload):
-        captured.update(payload)
-        return ["https://cdn.example.test/seedream.png"]
+    async def fake_post(**kwargs):
+        captured.update(kwargs)
+        return {"data": [{"url": "https://cdn.example.test/seedream.png"}]}
 
-    monkeypatch.setattr(doubao_service, "_post_doubao_image_task_generation", fake_task_post)
+    monkeypatch.setattr(doubao_service, "_post_json_request_async", fake_post)
 
     images = await doubao_service._post_doubao_image_generation(
         config=config,
@@ -236,8 +238,11 @@ async def test_doubao_agent_plan_send_boundary_forces_lite_model(monkeypatch) ->
     )
 
     assert images == ["https://cdn.example.test/seedream.png"]
-    assert captured["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
-    assert captured["content"] == [{"type": "text", "text": "draw"}]
+    assert captured["url"] == DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
+    assert captured["payload"]["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+    assert captured["payload"]["prompt"] == "draw"
+    assert captured["payload"]["size"] == "2048x2048"
+    assert "content" not in captured["payload"]
 
 
 def test_doubao_real_generation_test_uses_agent_plan_model() -> None:
@@ -251,11 +256,10 @@ def test_doubao_real_generation_test_uses_agent_plan_model() -> None:
 
     assert url == DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
     assert body["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
-    assert body["content"] == [
-        {"type": "text", "text": "A simple blue square icon on a white background."}
-    ]
-    assert "prompt" not in body
-    assert output_type == "image_task"
+    assert body["prompt"] == "A simple blue square icon on a white background."
+    assert "content" not in body
+    assert body["size"] == "2048x2048"
+    assert output_type == "image"
 
 
 def test_doubao_agent_plan_task_response_parser_extracts_images() -> None:
@@ -277,10 +281,9 @@ def test_doubao_agent_plan_task_response_parser_extracts_images() -> None:
 
 
 @pytest.mark.asyncio
-async def test_doubao_agent_plan_generation_submits_task_and_polls(monkeypatch) -> None:
+async def test_doubao_agent_plan_generation_posts_image_payload(monkeypatch) -> None:
     endpoint = DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
     submitted = {}
-    queried = {}
 
     config = SimpleNamespace(
         api_key="test-agent-plan-key",
@@ -293,19 +296,10 @@ async def test_doubao_agent_plan_generation_submits_task_and_polls(monkeypatch) 
 
     async def fake_post(**kwargs):
         submitted.update(kwargs)
-        return {"id": "cgt-test", "status": "queued"}
-
-    async def fake_get(**kwargs):
-        queried.update(kwargs)
-        return {
-            "id": "cgt-test",
-            "status": "succeeded",
-            "content": {"image_url": "https://cdn.example.test/seedream.png"},
-        }
+        return {"data": [{"url": "https://cdn.example.test/seedream.png"}]}
 
     monkeypatch.setattr(doubao_service, "resolve_provider", lambda provider, model=None: config)
     monkeypatch.setattr(doubao_service, "_post_json_request_async", fake_post)
-    monkeypatch.setattr(doubao_service, "_get_json_request_async", fake_get)
 
     images = await doubao_service.generate_doubao_images(
         prompt="draw",
@@ -319,11 +313,10 @@ async def test_doubao_agent_plan_generation_submits_task_and_polls(monkeypatch) 
     assert images == ["https://cdn.example.test/seedream.png"]
     assert submitted["url"] == endpoint
     assert submitted["payload"]["model"] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
-    assert submitted["payload"]["content"] == [{"type": "text", "text": "draw"}]
-    assert "prompt" not in submitted["payload"]
-    assert submitted["payload"]["size"] == "1920x1920"
+    assert submitted["payload"]["prompt"] == "draw"
+    assert "content" not in submitted["payload"]
+    assert submitted["payload"]["size"] == "2048x2048"
     assert submitted["payload"]["response_format"] == "url"
-    assert queried["url"] == f"{endpoint}/cgt-test"
 
 
 @pytest.mark.asyncio
@@ -342,18 +335,10 @@ async def test_doubao_agent_plan_generation_maps_reference_images_to_content(mon
 
     async def fake_post(**kwargs):
         submitted.update(kwargs)
-        return {"id": "cgt-test", "status": "queued"}
-
-    async def fake_get(**kwargs):
-        return {
-            "id": "cgt-test",
-            "status": "succeeded",
-            "content": {"image_url": "https://cdn.example.test/seedream.png"},
-        }
+        return {"data": [{"url": "https://cdn.example.test/seedream.png"}]}
 
     monkeypatch.setattr(doubao_service, "resolve_provider", lambda provider, model=None: config)
     monkeypatch.setattr(doubao_service, "_post_json_request_async", fake_post)
-    monkeypatch.setattr(doubao_service, "_get_json_request_async", fake_get)
 
     await doubao_service.generate_doubao_images(
         prompt="redraw",
@@ -364,11 +349,6 @@ async def test_doubao_agent_plan_generation_maps_reference_images_to_content(mon
         model=DOUBAO_IMAGE_PAYG_MODEL,
     )
 
-    assert submitted["payload"]["content"] == [
-        {"type": "text", "text": "redraw"},
-        {
-            "type": "image_url",
-            "image_url": {"url": "https://cdn.example.test/ref.png"},
-            "role": "reference_image",
-        },
-    ]
+    assert submitted["payload"]["prompt"] == "redraw"
+    assert submitted["payload"]["image"] == "https://cdn.example.test/ref.png"
+    assert "content" not in submitted["payload"]

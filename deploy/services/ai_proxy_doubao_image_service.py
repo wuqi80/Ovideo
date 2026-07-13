@@ -197,15 +197,15 @@ async def _get_json_request_async(**kwargs: Any) -> Dict[str, Any]:
 def _normalize_agent_plan_size(size: str) -> str:
     value = (size or "").strip()
     if "x" not in value.lower():
-        return value or "1920x1920"
+        return value or "2048x2048"
     try:
         width_text, height_text = value.lower().split("x", 1)
         width = int(width_text.strip())
         height = int(height_text.strip())
     except ValueError:
-        return "1920x1920"
-    if width * height < 1920 * 1920:
-        return "1920x1920"
+        return "2048x2048"
+    if width * height < 2048 * 2048:
+        return "2048x2048"
     return value
 
 
@@ -344,13 +344,13 @@ async def _post_doubao_image_generation(
     if doubao_image_access_mode(config.endpoint) == "agent_plan":
         payload = {
             **payload,
-            # Agent Plan content generation only supports the lite model. Force this
+            # Agent Plan image generation only supports the lite model. Force this
             # at the final send boundary so stale DB rows or UI payloads cannot leak
             # a non-compatible SeedDream model into the upstream request.
             "model": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+            "size": _normalize_agent_plan_size(str(payload.get("size") or "")),
+            "response_format": "url",
         }
-        task_payload = build_doubao_agent_plan_payload(payload)
-        return await _post_doubao_image_task_generation(config=config, payload=task_payload)
 
     result = await _post_json_request_async(
         label="Doubao image",
@@ -387,10 +387,15 @@ async def generate_doubao_images(
         config.model_name or model or DOUBAO_IMAGE_DEFAULT_MODEL,
         config.endpoint,
     )
+    resolved_size = (
+        _normalize_agent_plan_size(size)
+        if doubao_image_access_mode(config.endpoint) == "agent_plan"
+        else size
+    )
     payload = build_doubao_image_payload(
         prompt=prompt,
         model=resolved_model,
-        size=size,
+        size=resolved_size,
         sequential=sequential,
         count=count,
         reference_inputs=reference_inputs,

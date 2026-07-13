@@ -125,7 +125,7 @@ DOUBAO_IMAGE_MODEL_ALIASES: Dict[str, str] = {
 }
 
 DOUBAO_IMAGE_STANDARD_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
-DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT = "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
+DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT = "https://ark.cn-beijing.volces.com/api/plan/v3/images/generations"
 DOUBAO_IMAGE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "generate",
@@ -382,7 +382,7 @@ def normalize_doubao_image_endpoint(endpoint: Optional[str]) -> str:
 
     path = parsed.path.rstrip("/").lower()
     if path in {"/api/plan", "/api/plan/v3"}:
-        target_path = "/api/plan/v3/contents/generations/tasks"
+        target_path = "/api/plan/v3/images/generations"
     elif path in {"/api", "/api/v3"}:
         target_path = "/api/v3/images/generations"
     elif path in {
@@ -390,7 +390,7 @@ def normalize_doubao_image_endpoint(endpoint: Optional[str]) -> str:
         "/api/plan/v3/images/generations",
         "/api/v3/images/generations",
     }:
-        target_path = "/api/plan/v3/contents/generations/tasks" if path.startswith("/api/plan/") else parsed.path.rstrip("/")
+        target_path = "/api/plan/v3/images/generations" if path.startswith("/api/plan/") else parsed.path.rstrip("/")
     else:
         return value
     return urlunsplit((parsed.scheme or "https", parsed.netloc, target_path, "", ""))
