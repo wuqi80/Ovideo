@@ -282,9 +282,12 @@ def _headers_for_generation(provider: str, endpoint: str, api_key: str, extra_he
         headers.update({str(k): str(v) for k, v in raw.items()})
     headers.setdefault("Content-Type", "application/json")
     if uses_google_api_key_header(provider, endpoint):
-        headers.setdefault("x-goog-api-key", api_key)
+        headers["x-goog-api-key"] = api_key
     else:
-        headers.setdefault("Authorization", f"Bearer {api_key}")
+        for key in list(headers.keys()):
+            if key.lower() == "authorization":
+                del headers[key]
+        headers["Authorization"] = f"Bearer {api_key}"
     return headers
 
 
@@ -374,6 +377,46 @@ def _has_minimax_audio_data(payload: Any) -> bool:
         return False
     data = payload.get("data") or {}
     return isinstance(data, dict) and bool(data.get("audio"))
+
+
+def _minimax_error_from_payload(payload: Any) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+
+    base_resp = payload.get("base_resp") or {}
+    if isinstance(base_resp, dict):
+        code = base_resp.get("status_code")
+        msg = base_resp.get("status_msg")
+        if code not in (None, 0, "0"):
+            parts = [f"MiniMax status_code={code}"]
+            if msg:
+                parts.append(f"status_msg={msg}")
+            trace_id = payload.get("trace_id")
+            if trace_id:
+                parts.append(f"trace_id={trace_id}")
+            if str(code) == "1004":
+                parts.append(
+                    "Hint: for Token Plan, paste the full Subscription Key from Billing > Token Plan; "
+                    "Subscription Keys and pay-as-you-go API keys are not interchangeable."
+                )
+            return "; ".join(parts)
+
+    error = payload.get("error")
+    if isinstance(error, dict):
+        msg = error.get("message") or error.get("type")
+        if msg:
+            code = error.get("http_code") or error.get("code")
+            prefix = f"MiniMax error {code}" if code else "MiniMax error"
+            return f"{prefix}: {msg}"
+    elif error:
+        return f"MiniMax error: {error}"
+    return None
+
+
+def _real_generation_error(provider: str, output_type: str, payload: Any) -> Optional[str]:
+    if normalize_provider(provider) == "minimax":
+        return _minimax_error_from_payload(payload)
+    return None
 
 
 def _api_binding_category(binding: Dict[str, Any], provider: str = "") -> str:
@@ -515,6 +558,7 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             "voice_setting": {
                 "voice_id": "presenter_male",
                 "speed": 1.0,
+                "vol": 1.0,
                 "pitch": 0,
             },
             "audio_setting": {
@@ -695,7 +739,10 @@ async def test_api_config_real_generation(
                         output_type=output_type,
                     )
                 ok = _real_generation_response_ok(output_type, payload)
-                error = None if ok else "Generation response did not contain expected output"
+                error = None if ok else (
+                    _real_generation_error(normalized, output_type, payload)
+                    or "Generation response did not contain expected output"
+                )
                 status_code: Optional[int] = resp.status
                 if not ok and output_type == "image_task":
                     task_id = _task_id_from_payload(payload)

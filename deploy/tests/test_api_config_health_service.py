@@ -1,6 +1,8 @@
 from services.api_config_health_service import (
     ProviderHealthNotFound,
     _has_chat_content,
+    _headers_for_generation,
+    _minimax_error_from_payload,
     _real_generation_request,
     api_config_health_urls,
 )
@@ -149,7 +151,37 @@ def test_minimax_audio_real_generation_uses_tts_sync_and_group_id() -> None:
     assert body["model"] == "speech-2.8-hd"
     assert body["text"] == "OK."
     assert body["voice_setting"]["voice_id"] == "presenter_male"
+    assert body["voice_setting"]["vol"] == 1.0
     assert output_type == "audio"
+
+
+def test_generation_headers_replace_stale_authorization() -> None:
+    headers = _headers_for_generation(
+        "minimax",
+        "https://api.minimaxi.com/v1",
+        "fresh-key",
+        {"Authorization": "", "X-Custom": "1"},
+    )
+
+    assert headers["Authorization"] == "Bearer fresh-key"
+    assert headers["X-Custom"] == "1"
+    assert "authorization" not in {key.lower(): key for key in headers if key != "Authorization"}
+
+
+def test_minimax_base_resp_error_is_actionable_for_token_plan() -> None:
+    error = _minimax_error_from_payload(
+        {
+            "base_resp": {
+                "status_code": 1004,
+                "status_msg": "login fail: Please carry the API secret key in the 'Authorization' field",
+            }
+        }
+    )
+
+    assert "MiniMax status_code=1004" in error
+    assert "Authorization" in error
+    assert "Token Plan" in error
+    assert "Subscription Key" in error
 
 
 def test_video_real_generation_does_not_create_billable_task() -> None:
