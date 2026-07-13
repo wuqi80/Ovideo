@@ -34,3 +34,15 @@ export async function shareAsset(assetId: string, targetEpisodeId: string, targe
     body: JSON.stringify({ target_episode_id: targetEpisodeId, target_script_id: targetScriptId }),
   }, 'shareAsset');
 }
+
+export async function syncExistingAssetDesigns(projectId: string, data: {
+  episode_id: string;
+  script_id?: string;
+  asset_types?: string[];
+  overwrite?: boolean;
+}) {
+  return apiJson<any>(`/api/projects/${projectId}/assets/sync-existing-designs`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, 'syncExistingAssetDesigns');
+}

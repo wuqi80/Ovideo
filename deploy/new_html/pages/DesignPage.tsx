@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   User, Mountain, Sword, Plus, Trash2, Loader, Palette, ArrowRight, Check,
   Upload, ZoomIn, X, Sparkles, Camera, Maximize, Grid3X3,
-  Wand2, Scissors, CheckCircle, Layers, Square, CheckSquare,
+  Wand2, Scissors, CheckCircle, Layers, Square, CheckSquare, RefreshCw,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { createAsset, deleteAsset, updateAsset } from '../services/assetMutationService';
+import { createAsset, deleteAsset, syncExistingAssetDesigns, updateAsset } from '../services/assetMutationService';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle, processMaterialImage, generateHumanMultiAngleQueued } from '../services/comfyuiGenerationService';
 import { waitForComfyUITask } from '../services/comfyuiTaskWaitService';
@@ -221,6 +221,7 @@ export const DesignPage: React.FC = () => {
   const [busyAssetId, setBusyAssetId] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [syncingExisting, setSyncingExisting] = useState(false);
 
   const [aiModal, setAiModal] = useState<{ asset: AssetItem } | null>(null);
   const [cameraModal, setCameraModal] = useState<{ asset: AssetItem; materials: ModalMaterial[] } | null>(null);
@@ -249,6 +250,36 @@ export const DesignPage: React.FC = () => {
   const selectAllFiltered = () => setSelectedIds(new Set(filtered.map(a => a.assetId)));
   const selectUndesigned = () => setSelectedIds(new Set(filtered.filter(a => !assetHasDesign(a)).map(a => a.assetId)));
   const isBusy = (id: string) => busyAssetId === id || uploadingId === id || deletingId === id;
+
+  const handleSyncExistingDesigns = useCallback(async () => {
+    if (!projectId || !episodeId) {
+      crmMessage.error('缺少当前项目或分集信息');
+      return;
+    }
+    setSyncingExisting(true);
+    try {
+      const result = await syncExistingAssetDesigns(projectId, {
+        episode_id: episodeId,
+        script_id: selectedScriptId || undefined,
+        asset_types: ['character', 'scene', 'prop'],
+      });
+      await forceReloadSlices('assets');
+      const synced = Number(result?.synced || 0);
+      const copiedFiles = Number(result?.copied_files || 0);
+      if (synced > 0) {
+        crmMessage.success(`已同步 ${synced} 个已有设计${copiedFiles ? `，复制 ${copiedFiles} 个文件` : ''}`);
+      } else if (Number(result?.skipped_existing || 0) > 0) {
+        crmMessage.info('当前资产已有设计，无需同步');
+      } else {
+        crmMessage.warning('未找到可同步的同名设计');
+      }
+    } catch (err: any) {
+      console.error('同步已有设计失败:', err);
+      crmMessage.error(`同步已有设计失败：${err?.message || String(err)}`);
+    } finally {
+      setSyncingExisting(false);
+    }
+  }, [projectId, episodeId, selectedScriptId, forceReloadSlices]);
 
   /* ---- CRUD ---- */
   const handleCreate = useCallback(async () => {
@@ -468,6 +499,14 @@ export const DesignPage: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleSyncExistingDesigns}
+            disabled={syncingExisting || !projectId || !episodeId}
+            className="flex items-center gap-2 px-4 py-2 bg-n0 hover:bg-n20 text-n700 text-sm rounded-lg transition-colors border border-n40 disabled:opacity-50"
+          >
+            {syncingExisting ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            同步已有设计
+          </button>
           {selectedIds.size > 0 && (
             <button onClick={() => setBatchModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors">
               <Layers size={14} /> 批量生成 ({selectedIds.size})

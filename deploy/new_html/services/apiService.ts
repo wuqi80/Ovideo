@@ -65,6 +65,7 @@ export {
     updateAsset,
     deleteAsset,
     shareAsset,
+    syncExistingAssetDesigns,
     type CreateAssetPayload,
 } from './assetMutationService';
 export {

@@ -14,6 +14,7 @@ from services.asset_service import (
     delete_asset as delete_asset_service,
     list_assets,
     share_asset as share_asset_service,
+    sync_existing_designs as sync_existing_designs_service,
     update_asset as update_asset_service,
 )
 
@@ -51,6 +52,12 @@ def create_assets_router(
     class AssetShareRequest(BaseModel):
         target_episode_id: str
         target_script_id: str
+
+    class AssetSyncExistingDesignsRequest(BaseModel):
+        episode_id: str
+        script_id: Optional[str] = None
+        asset_types: Optional[list[str]] = None
+        overwrite: bool = False
 
     @router.get("/api/projects/{project_id}/assets")
     async def get_assets(
@@ -119,5 +126,23 @@ def create_assets_router(
             )
         except AssetNotFound as exc:
             raise HTTPException(status_code=404, detail="源资产不存在") from exc
+
+    @router.post("/api/projects/{project_id}/assets/sync-existing-designs")
+    async def sync_existing_designs(
+        project_id: str,
+        data: AssetSyncExistingDesignsRequest,
+        user_id: str = Depends(get_current_user),
+    ):
+        """Sync same-name character/scene/prop designs from other episodes into the current episode."""
+        return await sync_existing_designs_service(
+            project_id=project_id,
+            episode_id=data.episode_id,
+            script_id=data.script_id,
+            asset_types=data.asset_types,
+            overwrite=data.overwrite,
+            asset_dao=AssetDAO,
+            entity_file_dao=EntityFileDAO,
+            logger=logger,
+        )
 
     return router

@@ -8,12 +8,14 @@ from services import asset_service
 
 
 class FakeAssetDAO:
-    rows = [
+    default_rows = [
         {"asset_id": "asset_1", "project_id": "proj_1", "asset_type": "character", "name": "主角"},
         {"asset_id": "asset_2", "project_id": "proj_1", "asset_type": "scene", "name": "教室"},
     ]
+    rows = list(default_rows)
     created = None
     updated = None
+    updates = []
     deleted = []
     copied = None
 
@@ -34,6 +36,7 @@ class FakeAssetDAO:
     @classmethod
     async def update(cls, asset_id, **kwargs):
         cls.updated = {"asset_id": asset_id, **kwargs}
+        cls.updates.append(cls.updated)
         if asset_id == "missing":
             return None
         return cls.updated
@@ -59,11 +62,16 @@ class FakeAssetDAO:
 class FakeEntityFileDAO:
     copied = []
     raise_on_get = False
+    files_map = {
+        "asset_1": [{"file_id": "file_1", "entity_type": "asset"}],
+    }
 
     @classmethod
     async def get_files_for_entities(cls, entity_type, entity_ids):
         return {
-            "asset_1": [{"file_id": "file_1", "entity_type": entity_type}],
+            entity_id: [dict(file, entity_type=file.get("entity_type", entity_type)) for file in cls.files_map.get(entity_id, [])]
+            for entity_id in entity_ids
+            if entity_id in cls.files_map
         }
 
     @classmethod
@@ -91,12 +99,17 @@ class FakeEntityFileDAO:
 
 
 def setup_function():
+    FakeAssetDAO.rows = list(FakeAssetDAO.default_rows)
     FakeAssetDAO.created = None
     FakeAssetDAO.updated = None
+    FakeAssetDAO.updates = []
     FakeAssetDAO.deleted = []
     FakeAssetDAO.copied = None
     FakeEntityFileDAO.copied = []
     FakeEntityFileDAO.raise_on_get = False
+    FakeEntityFileDAO.files_map = {
+        "asset_1": [{"file_id": "file_1", "entity_type": "asset"}],
+    }
 
 
 async def test_list_assets_attaches_entity_files():
@@ -203,3 +216,107 @@ async def test_share_asset_raises_when_source_missing():
             asset_dao=FakeAssetDAO,
             entity_file_dao=FakeEntityFileDAO,
         )
+
+
+async def test_sync_existing_designs_copies_same_name_design_to_current_episode():
+    FakeAssetDAO.rows = [
+        {
+            "asset_id": "target_char",
+            "project_id": "proj_1",
+            "episode_id": "ep_2",
+            "script_id": "script_2",
+            "asset_type": "character",
+            "name": "主角",
+            "description": "",
+            "reference_images": [],
+            "style_params": {},
+            "tags": [],
+        },
+        {
+            "asset_id": "source_char",
+            "project_id": "proj_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "asset_type": "character",
+            "name": "主角",
+            "description": "第一集角色设定",
+            "thumbnail_url": "/thumb.png",
+            "reference_images": ["/ref.png"],
+            "style_params": {"ai_prompt": "hero prompt"},
+            "tags": ["hero"],
+        },
+    ]
+    FakeEntityFileDAO.files_map = {
+        "source_char": [{"file_id": "file_src", "file_role": "reference_image", "file_url": "/entity-ref.png"}],
+        "target_char": [],
+    }
+
+    result = await asset_service.sync_existing_designs(
+        project_id="proj_1",
+        episode_id="ep_2",
+        script_id="script_2",
+        asset_types=["character", "scene", "prop"],
+        overwrite=False,
+        asset_dao=FakeAssetDAO,
+        entity_file_dao=FakeEntityFileDAO,
+    )
+
+    assert result["success"] is True
+    assert result["matched"] == 1
+    assert result["synced"] == 1
+    assert result["copied_files"] == 1
+    assert FakeAssetDAO.updated == {
+        "asset_id": "target_char",
+        "thumbnail_url": "/thumb.png",
+        "reference_images": ["/ref.png"],
+        "style_params": {"ai_prompt": "hero prompt"},
+        "tags": ["hero"],
+        "description": "第一集角色设定",
+    }
+    assert FakeEntityFileDAO.copied == [
+        {
+            "source_file_id": "file_src",
+            "target_entity_type": "asset",
+            "target_entity_id": "target_char",
+            "file_role": "reference_image",
+        }
+    ]
+
+
+async def test_sync_existing_designs_keeps_current_design_without_overwrite():
+    FakeAssetDAO.rows = [
+        {
+            "asset_id": "target_scene",
+            "project_id": "proj_1",
+            "episode_id": "ep_2",
+            "script_id": "script_2",
+            "asset_type": "scene",
+            "name": "教室",
+            "reference_images": ["/current.png"],
+        },
+        {
+            "asset_id": "source_scene",
+            "project_id": "proj_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "asset_type": "scene",
+            "name": "教室",
+            "reference_images": ["/old.png"],
+        },
+    ]
+    FakeEntityFileDAO.files_map = {}
+
+    result = await asset_service.sync_existing_designs(
+        project_id="proj_1",
+        episode_id="ep_2",
+        script_id="script_2",
+        asset_types=["scene"],
+        overwrite=False,
+        asset_dao=FakeAssetDAO,
+        entity_file_dao=FakeEntityFileDAO,
+    )
+
+    assert result["synced"] == 0
+    assert result["skipped_existing"] == 1
+    assert FakeAssetDAO.updates == []
+    assert FakeEntityFileDAO.copied == []

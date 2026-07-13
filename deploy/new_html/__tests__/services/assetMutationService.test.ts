@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createAsset, updateAsset, deleteAsset, shareAsset } from '../../services/assetMutationService';
+import { createAsset, updateAsset, deleteAsset, shareAsset, syncExistingAssetDesigns } from '../../services/assetMutationService';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -63,6 +63,25 @@ describe('asset mutation service', () => {
     expect(JSON.parse(opts.body)).toEqual({
       target_episode_id: 'ep_2',
       target_script_id: 'script_3',
+    });
+  });
+
+  it('syncs existing designs by project and episode', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, synced: 1 }));
+
+    await syncExistingAssetDesigns('proj_1', {
+      episode_id: 'ep_2',
+      script_id: 'script_2',
+      asset_types: ['character', 'scene', 'prop'],
+    });
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/projects/proj_1/assets/sync-existing-designs');
+    expect(opts.method).toBe('POST');
+    expect(JSON.parse(opts.body)).toEqual({
+      episode_id: 'ep_2',
+      script_id: 'script_2',
+      asset_types: ['character', 'scene', 'prop'],
     });
   });
 });
