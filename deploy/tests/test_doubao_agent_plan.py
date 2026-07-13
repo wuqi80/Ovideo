@@ -71,7 +71,7 @@ def test_doubao_exposes_one_image_operation_binding() -> None:
     assert get_provider_model_binding_options("doubao") == [
         {
             "operation": "generate",
-            "label": "豆包图像生成",
+            "label": "筑基境界",
             "model_name": DOUBAO_IMAGE_PAYG_MODEL,
         }
     ]
@@ -90,7 +90,7 @@ def test_doubao_legacy_model_binding_is_migrated_to_generate_operation() -> None
     ) == [
         {
             "operation": "generate",
-            "label": "豆包图像生成",
+            "label": "筑基境界",
             "model_name": DOUBAO_IMAGE_PAYG_MODEL,
         }
     ]

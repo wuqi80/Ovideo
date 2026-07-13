@@ -452,6 +452,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const API_CONFIG_CATEGORY_ORDER = ['text', 'image', 'video', 'audio', 'other'];
+const FRONTEND_IMAGE_PROVIDER_ORDER = ['gemini-image', 'doubao'];
+const FRONTEND_IMAGE_PROVIDER_SET = new Set(FRONTEND_IMAGE_PROVIDER_ORDER);
 
 const RUNTIME_KEY_IMPORT_BODY = {
     copy_runtime_env_keys: true,
@@ -750,6 +752,32 @@ function bestConfigForProvider(
         || matches[0];
 }
 
+function apiConfigDisplayItemsForCategory(
+    category: string,
+    items: ApiConfig[],
+    runtimeByProvider: Map<string, RuntimeStatus>,
+): ApiConfig[] {
+    if (category !== 'image') return items;
+
+    const byProvider = new Map<string, ApiConfig[]>();
+    items.forEach(config => {
+        const provider = normalizeProvider(config.provider);
+        if (!FRONTEND_IMAGE_PROVIDER_SET.has(provider)) return;
+        byProvider.set(provider, [...(byProvider.get(provider) || []), config]);
+    });
+
+    return FRONTEND_IMAGE_PROVIDER_ORDER
+        .map(provider => bestConfigForProvider(byProvider.get(provider) || [], provider, runtimeByProvider.get(provider)))
+        .filter((config): config is ApiConfig => Boolean(config));
+}
+
+function apiConfigCardTitle(config: ApiConfig, meta?: ProviderMeta, category?: string): string {
+    const provider = normalizeProvider(config.provider);
+    if (category === 'image' && provider === 'gemini-image') return 'Laozhang.ai / Gemini 图像';
+    if (category === 'image' && provider === 'doubao') return '火山引擎 / 豆包图像';
+    return config.name || meta?.label || provider;
+}
+
 function providerQuickHealthFrom(
     map: Record<string, ProviderHealth>,
     provider: string | undefined | null,
@@ -879,9 +907,13 @@ function normalizeApiModelBindings(
     const normalized = new Map<string, ApiModelBinding>();
     source.forEach(item => {
         const modelName = String(item?.model_name || '').trim();
-        const operation = String(item?.operation || '').trim().toLowerCase();
-        if (!modelName || !operation) return;
-        const option = options.find(candidate => candidate.operation === operation);
+        const rawOperation = String(item?.operation || '').trim().toLowerCase();
+        if (!modelName || !rawOperation) return;
+        const optionByOperation = options.find(candidate => candidate.operation === rawOperation);
+        const optionByModel = options.find(candidate => candidate.model_name.toLowerCase() === modelName.toLowerCase());
+        const option = optionByOperation || (!optionByOperation ? optionByModel : undefined);
+        const operation = option && (rawOperation === 'default' || !optionByOperation) ? option.operation : rawOperation;
+        if (!operation) return;
         normalized.set(operation, {
             operation,
             label: String(item.label || option?.label || operation),
@@ -891,16 +923,33 @@ function normalizeApiModelBindings(
     return Array.from(normalized.values());
 }
 
+function mergeMissingKnownModelBindings(
+    bindings: ApiModelBinding[],
+    options: ApiModelBinding[] = [],
+): ApiModelBinding[] {
+    if (!options.length) return bindings;
+    const byOperation = new Map(bindings.map(binding => [binding.operation, binding]));
+    options.forEach(option => {
+        if (!byOperation.has(option.operation)) byOperation.set(option.operation, option);
+    });
+    return Array.from(byOperation.values());
+}
+
 function defaultModelBindings(meta?: ProviderMeta): ApiModelBinding[] {
     return normalizeApiModelBindings(meta?.model_binding_options, meta?.default_model_name || '', meta?.model_binding_options || []);
 }
 
 function apiConfigModelBindings(config: ApiConfig, meta?: ProviderMeta): ApiModelBinding[] {
-    return normalizeApiModelBindings(
+    const bindings = normalizeApiModelBindings(
         config.model_bindings,
         config.model_name || '',
         meta?.model_binding_options || [],
     );
+    const provider = normalizeProvider(config.provider);
+    if (provider === 'gemini-image') {
+        return mergeMissingKnownModelBindings(bindings, meta?.model_binding_options || []);
+    }
+    return bindings;
 }
 
 function emptyConfigForm(): ApiConfigFormState {
@@ -1962,6 +2011,7 @@ const ApiConfigCard: React.FC<{
     onDelete,
 }) => {
     const provider = normalizeProvider(config.provider);
+    const cardTitle = apiConfigCardTitle(config, meta, categoryView);
     const modelBindings = bindingsForCategory(
         apiConfigModelBindings(config, meta),
         config.provider,
@@ -2036,7 +2086,7 @@ const ApiConfigCard: React.FC<{
                     <div className="flex flex-col gap-3 min-w-0 xl:flex-row xl:items-start xl:justify-between">
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                <h3 className="text-sm font-semibold text-n800 leading-snug break-words">{config.name || meta?.label || provider}</h3>
+                                <h3 className="text-sm font-semibold text-n800 leading-snug break-words">{cardTitle}</h3>
                                 {isRuntimeActive && (
                                     <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">当前生效 Key</span>
                                 )}
@@ -3224,11 +3274,14 @@ const ApiConfigPanel: React.FC = () => {
             .map(category => ({
                 key: category,
                 label: CATEGORY_LABELS[category] || category,
-                count: (grouped[category] || []).length,
+                count: apiConfigDisplayItemsForCategory(category, grouped[category] || [], runtimeMap).length,
             }));
-    }, [grouped]);
+    }, [grouped, runtimeMap]);
 
-    const activeCategoryItems = grouped[activeCategory] || [];
+    const activeCategoryItems = useMemo(
+        () => apiConfigDisplayItemsForCategory(activeCategory, grouped[activeCategory] || [], runtimeMap),
+        [activeCategory, grouped, runtimeMap],
+    );
 
     const selectCategory = useCallback((category: string) => {
         setActiveCategory(category);

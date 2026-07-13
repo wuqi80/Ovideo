@@ -75,7 +75,62 @@ def test_legacy_default_binding_is_recovered_to_known_model_operation():
         [{"operation": "default", "model_name": "gemini-3.1-flash-image-preview"}],
     )
 
-    assert bindings[0]["operation"] == "gemini-3.1-flash-image-preview"
+    assert bindings[0]["operation"] == "gemini-3-pro-image-preview"
+    assert {item["operation"] for item in bindings} == {
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image-preview",
+    }
+
+
+def test_gemini_image_binding_options_match_frontend_image_controls():
+    from services.api_provider_registry import get_provider_model_binding_options
+
+    options = get_provider_model_binding_options("gemini-image")
+
+    assert options == [
+        {
+            "operation": "gemini-2.5-flash-image",
+            "label": "化神1阶（快速）",
+            "model_name": "gemini-2.5-flash-image",
+        },
+        {
+            "operation": "gemini-3-pro-image-preview",
+            "label": "化神2阶（高质量）",
+            "model_name": "gemini-3.1-flash-image-preview",
+        },
+    ]
+
+
+def test_gemini_image_legacy_operation_is_recovered_by_model_name():
+    from services.api_provider_registry import normalize_model_bindings
+
+    bindings = normalize_model_bindings(
+        "gemini-image",
+        [
+            {
+                "operation": "gemini-3.1-flash-image-preview",
+                "label": "Gemini 3.1 Flash (图像)",
+                "model_name": "gemini-3.1-flash-image-preview",
+            }
+        ],
+    )
+
+    assert {item["operation"] for item in bindings} == {
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image-preview",
+    }
+
+
+def test_doubao_binding_label_matches_frontend_image_control():
+    from services.api_provider_registry import DOUBAO_IMAGE_PAYG_MODEL, get_provider_model_binding_options
+
+    assert get_provider_model_binding_options("doubao") == [
+        {
+            "operation": "generate",
+            "label": "筑基境界",
+            "model_name": DOUBAO_IMAGE_PAYG_MODEL,
+        }
+    ]
 
 
 def test_standby_api_card_with_same_bindings_is_not_reported_as_model_conflict():

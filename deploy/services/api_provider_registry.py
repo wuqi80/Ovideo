@@ -123,7 +123,7 @@ DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT = "https://ark.cn-beijing.volces.com/api/plan/v
 DOUBAO_IMAGE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "generate",
-        "label": "豆包图像生成",
+        "label": "筑基境界",
         "model_name": DOUBAO_IMAGE_PAYG_MODEL,
     },
 ]
@@ -755,17 +755,21 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": "deepseek-reasoner",
     },
     {
-        "name": "Gemini 2.5 Flash (图像)",
+        "name": "化神1阶（快速）",
         "provider": "gemini-image",
+        "operation": "gemini-2.5-flash-image",
+        "operation_label": "化神1阶（快速）",
         "model_name": "gemini-2.5-flash-image",
     },
     {
-        "name": "Gemini 3.1 Flash (图像)",
+        "name": "化神2阶（高质量）",
         "provider": "gemini-image",
+        "operation": "gemini-3-pro-image-preview",
+        "operation_label": "化神2阶（高质量）",
         "model_name": "gemini-3.1-flash-image-preview",
     },
     {
-        "name": "Doubao SeedDream 4.0",
+        "name": "筑基境界",
         "provider": "doubao",
         "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
     },
@@ -1180,6 +1184,8 @@ def normalize_model_bindings(
         inferred_operation = infer_model_binding_operation(provider, model_name)
         if provider_id == "doubao":
             operation = "generate"
+        elif provider_id == "gemini-image" and inferred_operation != "default" and operation not in option_labels:
+            operation = inferred_operation
         elif not operation or (operation == "default" and inferred_operation != "default"):
             operation = inferred_operation
         label = str(
@@ -1201,6 +1207,11 @@ def normalize_model_bindings(
             "label": option_labels.get(operation) or operation,
             "model_name": fallback_model,
         }
+    if provider_id == "gemini-image" and normalized:
+        for option in get_provider_model_binding_options(provider_id):
+            operation = option["operation"]
+            if operation not in normalized:
+                normalized[operation] = deepcopy(option)
     return list(normalized.values())
 
 
