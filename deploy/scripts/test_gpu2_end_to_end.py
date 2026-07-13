@@ -52,7 +52,7 @@ def _submit_workflow(
             "task_type": "upscale",
             "video_filename": filename,
             "seed": 20260713,
-            "resolution": 360,
+            "resolution": "360P",
             "priority": 2,
             **routing,
         }

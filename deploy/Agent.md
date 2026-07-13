@@ -9715,3 +9715,4 @@
 - Python compilation passed for the changed router and acceptance script.
 - Route contract passed with 244 OpenAPI paths and 300 operations.
 - Production acceptance remains required for `three_view`, `upscale_hd`, and `video_upscale` after deployment.
+- GPU2 video resolution parsing now accepts frontend labels (`360P`, `720P`, `1080P`, `2K`, `4K`), caps the SeedVR2 target at 1080 for 12GB VRAM, and falls back to 720 for unknown labels.

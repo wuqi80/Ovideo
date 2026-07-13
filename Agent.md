@@ -8912,3 +8912,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - `scripts/test_gpu2_end_to_end.py` 已覆盖图像与视频链路，其中视频验收使用一秒钟低分辨率样本，必须完成上传、排队、GPU2 处理并返回视频文件。
 - 本地验证：定向测试 11/11、Python 编译通过、路由契约保持 244 paths / 300 operations。
 - 部署后必须完成指定 GPU2 的 `three_view`、`upscale_hd`、`video_upscale` 真实任务验收。
+- 视频验收发现并修复前端分辨率标签契约：GPU2 现在接受 `360P`、`720P`、`1080P`、`2K`、`4K`，并按 12GB 显存策略限制到最高 1080；无法识别的值安全回退到 720。

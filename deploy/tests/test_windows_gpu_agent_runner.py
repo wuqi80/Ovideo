@@ -4,6 +4,7 @@ from scripts.windows_gpu_agent_runner import (
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
     is_gpu2_qwen_compatible_task,
+    normalize_gpu2_video_resolution,
     prepare_gpu2_task,
     tune_gpu2_qwen_workflow,
 )
@@ -58,6 +59,14 @@ def test_gpu2_video_upscale_uses_serial_seedvr2_and_preserves_audio():
     assert workflow["5"]["inputs"]["audio"] == ["1", 2]
     assert workflow["5"]["inputs"]["format"] == "video/h264-mp4"
     assert prepared["workflow_name"] == "gpu2_video_upscale_seedvr2"
+
+
+def test_gpu2_video_resolution_accepts_frontend_labels_and_caps_large_targets():
+    assert normalize_gpu2_video_resolution("360P") == 360
+    assert normalize_gpu2_video_resolution("1080P") == 1080
+    assert normalize_gpu2_video_resolution("2K") == 1080
+    assert normalize_gpu2_video_resolution("4K") == 1080
+    assert normalize_gpu2_video_resolution("unexpected") == 720
 
 
 def test_gpu2_qwen_compatibility_covers_frontend_image_workflows():

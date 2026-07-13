@@ -123,13 +123,33 @@ def _gpu2_input_video_name(task: Dict[str, Any]) -> str:
     raise RuntimeError("GPU2 video upscale task is missing an input video filename")
 
 
+def normalize_gpu2_video_resolution(value: Any) -> int:
+    """Normalize frontend resolution labels before applying the GPU2 safety cap."""
+    normalized = str(value or "720P").strip().upper()
+    aliases = {
+        "HD": 720,
+        "FHD": 1080,
+        "2K": 1440,
+        "4K": 2160,
+    }
+    if normalized in aliases:
+        resolution = aliases[normalized]
+    else:
+        if normalized.endswith("P"):
+            normalized = normalized[:-1]
+        try:
+            resolution = int(float(normalized))
+        except (TypeError, ValueError):
+            resolution = 720
+    return max(360, min(1080, resolution))
+
+
 def build_gpu2_video_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
     """Build a serial, CPU-offloaded SeedVR2 graph for video enhancement."""
     params = _gpu2_task_params(task)
     video_name = _gpu2_input_video_name(task)
     seed = int(params.get("seed") or params.get("seed_0") or 42)
-    target_resolution = int(params.get("resolution") or 720)
-    target_resolution = max(360, min(1080, target_resolution))
+    target_resolution = normalize_gpu2_video_resolution(params.get("resolution"))
     return {
         "1": {
             "class_type": "VHS_LoadVideo",
