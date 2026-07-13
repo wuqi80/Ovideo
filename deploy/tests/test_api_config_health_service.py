@@ -48,6 +48,24 @@ def test_deepseek_reasoner_generation_test_allows_reasoning_budget() -> None:
     assert url == "https://api.deepseek.com/chat/completions"
     assert body["model"] == "deepseek-reasoner"
     assert body["max_tokens"] == 64
+    assert body["stream"] is False
+    assert output_type == "text"
+
+
+def test_gemini_text_real_generation_uses_stable_probe_prompt() -> None:
+    url, body, output_type = _real_generation_request(
+        "gemini-text",
+        {
+            "endpoint": "https://api.laozhang.ai/v1",
+            "model_name": "gemini-2.5-flash",
+        },
+    )
+
+    assert url == "https://api.laozhang.ai/v1/chat/completions"
+    assert body["model"] == "gemini-2.5-flash"
+    assert body["messages"] == [{"role": "user", "content": "Please reply with the word OK only."}]
+    assert body["stream"] is False
+    assert body["max_tokens"] == 32
     assert output_type == "text"
 
 
@@ -84,6 +102,19 @@ def test_doubao_agent_plan_real_generation_uses_plan_endpoint_and_min_size() -> 
     assert "prompt" not in body
     assert body["response_format"] == "url"
     assert body["watermark"] is False
+    assert output_type == "image_task"
+
+
+def test_doubao_agent_plan_real_generation_normalizes_legacy_model_alias() -> None:
+    _, body, output_type = _real_generation_request(
+        "doubao",
+        {
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks",
+            "model_name": "doubao-seedream-5-0",
+        },
+    )
+
+    assert body["model"] == "doubao-seedream-5.0-lite"
     assert output_type == "image_task"
 
 

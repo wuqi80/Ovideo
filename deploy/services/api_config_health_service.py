@@ -554,13 +554,15 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         resolved_model = model or (
             "deepseek-reasoner" if normalized == "deepseek" else "gemini-2.5-flash"
         )
+        max_tokens = 64 if resolved_model == "deepseek-reasoner" else 32
         return url, {
             "model": resolved_model,
-            "messages": [{"role": "user", "content": "Reply with the single word: ok"}],
+            "messages": [{"role": "user", "content": "Please reply with the word OK only."}],
             "temperature": 0,
+            "stream": False,
             # Reasoning models can spend the first tokens on reasoning_content
             # before producing their final content field.
-            "max_tokens": 64 if resolved_model == "deepseek-reasoner" else 8,
+            "max_tokens": max_tokens,
         }, "text"
 
     if normalized == "gemini-image":
@@ -646,6 +648,10 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         }
         if is_agent_plan:
             payload = build_doubao_agent_plan_payload(payload)
+            payload["model"] = normalize_doubao_image_model_for_endpoint(
+                payload.get("model"),
+                url,
+            )
         return url, payload, "image_task" if is_agent_plan else "image"
 
     if normalized in OPENAI_IMAGE_TEST_PROVIDERS:
