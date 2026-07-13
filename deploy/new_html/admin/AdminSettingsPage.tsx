@@ -760,15 +760,34 @@ function apiConfigDisplayItemsForCategory(
     if (category !== 'image') return items;
 
     const byProvider = new Map<string, ApiConfig[]>();
-    items.forEach(config => {
+    const imageItems = items.filter(config => {
         const provider = normalizeProvider(config.provider);
-        if (!FRONTEND_IMAGE_PROVIDER_SET.has(provider)) return;
+        if (!FRONTEND_IMAGE_PROVIDER_SET.has(provider)) return false;
         byProvider.set(provider, [...(byProvider.get(provider) || []), config]);
+        return true;
     });
 
-    return FRONTEND_IMAGE_PROVIDER_ORDER
-        .map(provider => bestConfigForProvider(byProvider.get(provider) || [], provider, runtimeByProvider.get(provider)))
-        .filter((config): config is ApiConfig => Boolean(config));
+    return [...imageItems].sort((a, b) => {
+        const providerA = normalizeProvider(a.provider);
+        const providerB = normalizeProvider(b.provider);
+        const providerOrder = FRONTEND_IMAGE_PROVIDER_ORDER.indexOf(providerA) - FRONTEND_IMAGE_PROVIDER_ORDER.indexOf(providerB);
+        if (providerOrder !== 0) return providerOrder;
+
+        const activeId = bestConfigForProvider(
+            byProvider.get(providerA) || [],
+            providerA,
+            runtimeByProvider.get(providerA),
+        )?.config_id;
+        const activeA = a.config_id === activeId;
+        const activeB = b.config_id === activeId;
+        if (activeA !== activeB) return activeA ? -1 : 1;
+
+        const enabledA = a.enabled !== false;
+        const enabledB = b.enabled !== false;
+        if (enabledA !== enabledB) return enabledA ? -1 : 1;
+
+        return String(a.name || a.config_id || '').localeCompare(String(b.name || b.config_id || ''));
+    });
 }
 
 function apiConfigCardTitle(config: ApiConfig, meta?: ProviderMeta, category?: string): string {
