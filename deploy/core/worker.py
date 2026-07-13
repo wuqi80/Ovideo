@@ -939,6 +939,7 @@ class Worker:
         """处理 MiniMax API 任务"""
         try:
             from minimax_api import get_minimax_client
+            from external_api.video.minimax import normalize_minimax_duration, normalize_minimax_status
             
             minimax_client = get_minimax_client()
             
@@ -947,6 +948,9 @@ class Worker:
             prompt = task.data.get('prompt', '')
             last_frame_image = task.data.get('last_frame_image')  # 仅morph模式有此参数
             
+            requested_model = task.data.get('minimax_model') or task.data.get('model_name') or None
+            requested_duration = normalize_minimax_duration(task.data.get('duration'))
+
             if not first_frame_image:
                 raise ValueError("缺少 first_frame_image 参数")
             
@@ -956,8 +960,8 @@ class Worker:
                 first_frame_image=first_frame_image,
                 prompt=prompt,
                 last_frame_image=last_frame_image,
-                model="MiniMax-Hailuo-02",
-                duration=6,
+                model=requested_model,
+                duration=requested_duration,
                 # 2026-06-10：原 "720P" 是无效值，MiniMax-Hailuo-02 仅支持 768P/1080P，
                 # 导致 API 不返回 task_id（实测 720P 失败、768P 成功）。
                 resolution="768P",
@@ -979,13 +983,15 @@ class Worker:
             while time.time() - start_time < max_wait:
                 try:
                     result = minimax_client.query_task(minimax_task_id)
-                    status = result.get('status', '').lower()
+                    status = normalize_minimax_status(result)
                     
-                    if status == 'success':
+                    if status in {'success', 'succeeded'}:
                         logger.info(f"✅ MiniMax 任务完成: {minimax_task_id}")
                         complete_result = result
                         break
-                    elif status == 'failed':
+                    elif status in {'fail', 'failed', 'expired'}:
+                        if result.get('error_message'):
+                            raise RuntimeError(f"MiniMax task failed: {result.get('error_message')}")
                         error_msg = result.get('base_resp', {}).get('status_msg', '未知错误')
                         raise RuntimeError(f"MiniMax 任务失败: {error_msg}")
                     elif status == 'processing':

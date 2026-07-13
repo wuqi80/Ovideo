@@ -48,6 +48,10 @@ export async function submitTask(
         episode_id?: string;
         preferred_agent_id?: string;
         preferred_node_id?: string;
+    },
+    generationOptions?: {
+        duration?: number;
+        minimax_model?: string;
     }
 ): Promise<{ task_id: string }> {
     let taskType = imageFilenameEnd ? 'morph' : 'i2v';
@@ -61,6 +65,8 @@ export async function submitTask(
             task_type: taskType,
             first_frame_image: imageUrl,
             prompt: prompt,
+            duration: generationOptions?.duration,
+            minimax_model: generationOptions?.minimax_model,
             priority: 2
         };
         if (imageFilenameEnd) {
@@ -430,12 +436,16 @@ export async function submitTaskQueued(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+    },
+    generationOptions?: {
+        duration?: number;
+        minimax_model?: string;
     }
 ): Promise<{ task_id: string }> {
     // 外部API模型不需要排队，直接提交
     if (!isComfyUIModel(model)) {
         console.log(`🌐 外部API模型 ${model} 不需要排队，直接提交`);
-        return submitTask(imageFilename, imageFilenameEnd, prompt, model, videoFilename, audioFilename, shotType, entityOptions);
+        return submitTask(imageFilename, imageFilenameEnd, prompt, model, videoFilename, audioFilename, shotType, entityOptions, generationOptions);
     }
 
     // ComfyUI模型需要排队
@@ -443,7 +453,7 @@ export async function submitTaskQueued(
     // 2026-05-20 (M6)：videoService 这 3 处只提交任务、不等待 — 不连 taskRegistry，
     // 等待由 VideoPage 的 videoTaskPoller 单独负责。无需传 registryMeta。
     return enqueueComfyUITask(async (_frontendKey) => {
-        return submitTask(imageFilename, imageFilenameEnd, prompt, model, videoFilename, audioFilename, shotType, entityOptions);
+        return submitTask(imageFilename, imageFilenameEnd, prompt, model, videoFilename, audioFilename, shotType, entityOptions, generationOptions);
     }, taskName);
 }
 

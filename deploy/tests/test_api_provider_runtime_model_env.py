@@ -398,6 +398,28 @@ class _MinimaxTaskResponse:
         return {"task_id": "minimax-task-1"}
 
 
+class _MinimaxNestedTaskResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {"data": {"task_id": "minimax-nested-task-1"}, "base_resp": {"status_code": 0}}
+
+
+class _MinimaxBusinessErrorResponse:
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return {
+            "base_resp": {
+                "status_code": 1008,
+                "status_msg": "insufficient balance",
+            },
+            "trace_id": "trace-minimax-1",
+        }
+
+
 class _Sora2TaskResponse:
     def raise_for_status(self):
         return None
@@ -630,6 +652,85 @@ def test_minimax_video_explicit_non_default_model_overrides_runtime_model(monkey
     assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == "https://minimax-runtime.example.test/v1/video_generation"
     assert calls[0]["json"]["model"] == "minimax-explicit-video-model"
+
+
+def test_minimax_video_accepts_nested_task_id_and_normalizes_duration(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-minimax-key")
+    monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
+
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return _MinimaxNestedTaskResponse()
+
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
+
+    client = minimax_video.MinimaxClient()
+    result = client.generate_video(
+        first_frame_image="https://cdn.example.test/frame.png",
+        prompt="move gently",
+        duration=3,
+    )
+
+    assert result["task_id"] == "minimax-nested-task-1"
+    assert calls[0]["json"]["duration"] == 6
+
+
+def test_minimax_video_business_error_is_actionable(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+
+    monkeypatch.setenv(env_key, "test-minimax-key")
+    monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
+
+    def fake_request(method, url, **kwargs):
+        return _MinimaxBusinessErrorResponse()
+
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
+
+    client = minimax_video.MinimaxClient()
+    with pytest.raises(RuntimeError) as exc:
+        client.generate_video(
+            first_frame_image="https://cdn.example.test/frame.png",
+            prompt="move gently",
+        )
+
+    message = str(exc.value)
+    assert "MiniMax create failed" in message
+    assert "status_code=1008" in message
+    assert "insufficient balance" in message
+    assert "trace-minimax-1" in message
+
+
+def test_minimax_video_ignores_runtime_audio_model(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-minimax-key")
+    monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "speech-2.8-hd")
+
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return _MinimaxTaskResponse()
+
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
+
+    client = minimax_video.MinimaxClient()
+    client.generate_video(
+        first_frame_image="https://cdn.example.test/frame.png",
+        prompt="move gently",
+    )
+
+    assert calls[0]["json"]["model"] == MINIMAX_DEFAULT_VIDEO_MODEL
 
 
 def test_sora2_video_uses_runtime_model_env_when_request_omits_model(monkeypatch):

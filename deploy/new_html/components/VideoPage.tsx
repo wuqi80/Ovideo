@@ -1805,6 +1805,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     entity_id: entityId,
                     file_role: 'video',
                     episode_id: episodeId,
+                },
+                {
+                    duration: group.duration,
                 }
             );
             

@@ -185,3 +185,34 @@ async def test_minimax_terminal_failed_status_fails_without_retry(mock_worker):
     kwargs = mock_worker.task_queue.fail_task.call_args[1]
     assert args[0] == 'm-2'
     assert kwargs['retry'] is False
+
+
+async def test_minimax_task_uses_model_name_duration_and_success_status(mock_worker):
+    task = Task(
+        task_id='m-3',
+        task_type='minimax_i2v',
+        data={
+            'first_frame_image': 'https://cdn.example.test/frame.png',
+            'prompt': 'hello',
+            'model_name': 'MiniMax-Hailuo-2.3-Fast',
+            'duration': 10,
+        },
+        priority=2,
+        user_id='u1',
+    )
+    fake_client = MagicMock()
+    fake_client.generate_video = MagicMock(return_value={'task_id': 'remote-3'})
+    fake_client.query_task = MagicMock(return_value={'status': 'Success', 'file_id': 'file-3'})
+    fake_client.download_video = MagicMock(return_value=b'video-bytes')
+    mock_worker._save_external_video = AsyncMock(return_value={'url': '/videos/minimax.mp4'})
+
+    with patch('minimax_api.get_minimax_client', return_value=fake_client):
+        ok = await mock_worker._process_minimax_task(task)
+
+    assert ok is True
+    _, kwargs = fake_client.generate_video.call_args
+    assert kwargs['model'] == 'MiniMax-Hailuo-2.3-Fast'
+    assert kwargs['duration'] == 10
+    fake_client.query_task.assert_called_once_with('remote-3')
+    fake_client.download_video.assert_called_once_with('file-3')
+    mock_worker.task_queue.complete_task.assert_awaited_once()
