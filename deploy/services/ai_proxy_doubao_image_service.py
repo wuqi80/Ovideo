@@ -235,8 +235,19 @@ def build_doubao_agent_plan_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not content:
         content.append({"type": "text", "text": "Generate a simple image."})
 
+    requested_model = str(payload.get("model") or "").strip()
+    if requested_model and requested_model != DOUBAO_IMAGE_AGENT_PLAN_MODEL:
+        logger.info(
+            "Doubao Agent Plan image model forced: requested=%s effective=%s",
+            requested_model,
+            DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+        )
+
     task_payload: Dict[str, Any] = {
-        "model": payload.get("model"),
+        # Agent Plan content generation only supports the lite model. Keep this
+        # guard inside the payload builder so stale DB rows or direct callers
+        # cannot submit an incompatible SeedDream model.
+        "model": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
         "content": content,
         "size": _normalize_agent_plan_size(str(payload.get("size") or "")),
         "response_format": "url",
@@ -290,6 +301,12 @@ async def _post_doubao_image_task_generation(
         "Content-Type": "application/json",
         "Authorization": f"Bearer {config.api_key}",
     }
+    logger.info(
+        "Doubao image task create: endpoint=%s model=%s content_items=%s",
+        config.url_for(),
+        payload.get("model"),
+        len(payload.get("content", [])) if isinstance(payload.get("content"), list) else 0,
+    )
     result = await _post_json_request_async(
         label="Doubao image task create",
         url=config.url_for(),

@@ -184,6 +184,30 @@ class Worker:
         except Exception as e:
             logger.error(f"发送心跳失败: {e}")
     
+    async def _enqueue_for_gpu_agent(self, task: Task) -> None:
+        """Requeue a ComfyUI workflow as an agent-only queue member."""
+        task.status = TaskStatus.QUEUED
+        task.started_at = None
+        task.data = task.data or {}
+        await self.task_queue._save_task(task)
+
+        member = json.dumps(
+            {
+                "task_id": task.task_id,
+                "task_type": task.task_type,
+                "data": task.data,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        priority_score = task.priority * 1000000 + int(time.time())
+        await self.redis.zadd(RedisConfig.TASK_QUEUE_KEY, {member: priority_score})
+        logger.info(
+            "Lite worker handed ComfyUI task %s to GPU agent queue member (type=%s)",
+            task.task_id,
+            task.task_type,
+        )
+
     def _get_cluster_manager_for_task(self, task: Task) -> ClusterManager:
         """
         根据任务类型选择集群管理器
@@ -243,33 +267,18 @@ class Worker:
                 # 「弹回队列→3s 后又自己取回」无限循环（刷爆日志、空耗 CPU）。这里给任务
                 # 记弹回次数，超过阈值（≈60s 仍无 agent 接管）即判失败并给可执行提示，
                 # 而不是无限重投。有 agent 时它会在前几次 poll 内取走，计数到不了阈值。
-                MAX_LITE_BOUNCE = 20  # 20 次 × 3s ≈ 60s
                 task.data = task.data or {}
                 bounces = int(task.data.get('_lite_bounce', 0)) + 1
                 try:
                     await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task.task_id)
                 except Exception as e:
                     logger.warning(f"清理 processing 队列残留失败 {task.task_id}: {e}")
-                if bounces >= MAX_LITE_BOUNCE:
-                    logger.warning(
-                        f"⚠️ ComfyUI 任务 {task.task_id} (type={task.task_type}) 被弹回 "
-                        f"{bounces} 次仍无 agent 接管，判失败（避免无限重投）"
-                    )
-                    await self.task_queue.fail_task(
-                        task.task_id,
-                        f"无可用 ComfyUI 节点处理「{task.task_type}」：当前为 Agent-Only 模式且无 GPU "
-                        f"agent 在线。请连接 ComfyUI agent，或改用外部 API 模型（如出图用 Gemini/豆包、"
-                        f"视频用 Seedance/Kling/Vidu）。",
-                        retry=False,
-                    )
-                    return True
                 task.data['_lite_bounce'] = bounces
                 logger.info(
                     f"🪶 lite Worker {self.worker_id} 跳过非外部 API 任务 {task.task_id} "
-                    f"(type={task.task_type})，丢回队列由 ComfyUI agent 接管 [{bounces}/{MAX_LITE_BOUNCE}]"
+                    f"(type={task.task_type})，丢回队列由 ComfyUI agent 接管 [{bounces}]"
                 )
-                # 用 task_queue.enqueue 走标准路径，会重置 task.status=QUEUED + zadd 回队列
-                await self.task_queue.enqueue(task)
+                await self._enqueue_for_gpu_agent(task)
                 # 给 agent 留出 poll 窗口（agent 3s 间隔 poll）；避免 worker 抢回同一个任务造成抖动
                 await asyncio.sleep(3)
                 return True
