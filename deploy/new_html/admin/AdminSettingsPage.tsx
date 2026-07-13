@@ -34,6 +34,12 @@ import {
     mergeConfigTestPreservingVerification,
 } from '../utils/apiConfigTestState';
 import { providerCredentialLinksForEndpoint } from '../utils/providerCredentialLinks';
+import {
+    apiConfigErrorMessage,
+    apiConfigCategories,
+    bindingsForCategory,
+    providerAccessModeForEndpoint,
+} from '../utils/apiConfigPresentation';
 
 const LEGACY_VER = '20260701-qwen-agent-v2';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
@@ -98,6 +104,8 @@ interface ProviderAccessMode {
     label?: string;
     endpoint: string;
     console_url?: string;
+    docs_url?: string;
+    description?: string;
     model_map?: Record<string, string>;
 }
 
@@ -586,13 +594,6 @@ function formatEndpoint(endpoint?: string): string {
     return endpoint.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
-function providerAccessMode(endpoint?: string): string {
-    const value = String(endpoint || '').trim().replace(/\/+$/, '').toLowerCase();
-    return value.endsWith('/api/plan') || value.includes('/api/plan/')
-        ? 'agent_plan'
-        : 'standard';
-}
-
 function endpointIdentity(endpoint?: string): string {
     return String(endpoint || '').trim().replace(/\/+$/, '').toLowerCase();
 }
@@ -714,17 +715,6 @@ function mergedHealthStatus(
     if (hasEffectiveKey) return runtimeStatus;
     if (runtimeStatus === 'no_key' && configStatus === 'error') return 'error';
     return runtimeStatus;
-}
-
-function groupCategory(config: ApiConfig): string {
-    const category = String(config.category || '').toLowerCase();
-    if (CATEGORY_LABELS[category]) return category;
-    const provider = normalizeProvider(config.provider);
-    const model = String(config.model_name || '').toLowerCase();
-    if (provider.includes('tts') || provider.includes('minimax') || model.startsWith('speech-')) return 'audio';
-    if (provider.includes('seedance') || provider.includes('sora') || provider.includes('veo') || provider.includes('dashscope')) return 'video';
-    if (provider.includes('image') || provider.includes('doubao') || model.includes('image') || model.includes('seedream')) return 'image';
-    return 'text';
 }
 
 function categoryFromProviderMeta(meta: ProviderMeta): string {
@@ -1499,8 +1489,8 @@ const ApiConfigEditorModal: React.FC<{
     const extraFields = selectedMeta?.extra_fields || [];
     const bindingOptions = selectedMeta?.model_binding_options || [];
     const accessModes = selectedMeta?.access_modes || [];
-    const activeAccessMode = accessModes.length > 0 ? providerAccessMode(form.endpoint) : '';
-    const activeAccessModeMeta = accessModes.find(mode => mode.mode === activeAccessMode);
+    const activeAccessModeMeta = providerAccessModeForEndpoint(accessModes, form.endpoint);
+    const activeAccessMode = activeAccessModeMeta?.mode || '';
     const lockGeneratedFields = isEdit && Boolean(selectedMeta);
     const lockedInputClass = 'bg-n20 text-n100 cursor-not-allowed';
     const normalInputClass = 'bg-n0 text-n800 focus:border-primary focus:outline-none';
@@ -1624,9 +1614,10 @@ const ApiConfigEditorModal: React.FC<{
                                 })}
                             </div>
                             <div className="mt-2 text-[11px] text-n100">
-                                {activeAccessMode === 'agent_plan'
-                                    ? '使用 Agent Plan 专属 Key，并从套餐燃料值扣除。'
-                                    : '使用火山方舟按量付费 API Key。'}
+                                {activeAccessModeMeta?.description
+                                    || (activeAccessMode === 'agent_plan'
+                                        ? '使用 Agent Plan 专属 Key，并从套餐燃料值扣除。'
+                                        : '使用厂商对应通道创建的 API Key。')}
                                 {activeAccessModeMeta?.console_url && (
                                     <a
                                         href={activeAccessModeMeta.console_url}
@@ -1927,6 +1918,7 @@ const ApiConfigEditorModal: React.FC<{
 
 const ApiConfigCard: React.FC<{
     config: ApiConfig;
+    categoryView?: string;
     meta?: ProviderMeta;
     runtime?: RuntimeStatus;
     health?: ProviderHealth;
@@ -1944,6 +1936,7 @@ const ApiConfigCard: React.FC<{
     onDelete: (config: ApiConfig) => void;
 }> = ({
     config,
+    categoryView,
     meta,
     runtime,
     health,
@@ -1961,7 +1954,11 @@ const ApiConfigCard: React.FC<{
     onDelete,
 }) => {
     const provider = normalizeProvider(config.provider);
-    const modelBindings = apiConfigModelBindings(config, meta);
+    const modelBindings = bindingsForCategory(
+        apiConfigModelBindings(config, meta),
+        config.provider,
+        categoryView,
+    ) as ApiModelBinding[];
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.has_key ?? config.api_key_encrypted);
     const configHasKey = Boolean(config.has_key ?? config.api_key_encrypted);
     const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
@@ -1969,7 +1966,7 @@ const ApiConfigCard: React.FC<{
     // A model-specific health record is newer and more precise than the
     // runtime summary. Do not fall back to a stale runtime error when that
     // record exists and reports no error.
-    const healthError = health?.health
+    const rawHealthError = health?.health
         ? String(health.health.error || '')
         : String(runtime?.health_error || '');
     const healthLatency = typeof health?.latency_ms === 'number' ? health.latency_ms : runtime?.health_latency_ms;
@@ -1981,9 +1978,9 @@ const ApiConfigCard: React.FC<{
     const runtimeIssue = runtimeIssueText(runtimeIssues);
     const runtimeEndpoint = runtime?.endpoint || '';
     const dbEndpoint = config.endpoint || '';
-    const accessMode = (meta?.access_modes || []).length > 0
-        ? providerAccessMode(dbEndpoint || runtimeEndpoint)
-        : '';
+    const healthError = apiConfigErrorMessage(provider, dbEndpoint || runtimeEndpoint, rawHealthError);
+    const accessModeMeta = providerAccessModeForEndpoint(meta?.access_modes || [], dbEndpoint || runtimeEndpoint);
+    const accessMode = accessModeMeta?.mode || '';
     const runtimeDbEndpointMismatch = endpointMismatch(runtimeEndpoint, dbEndpoint);
     const effectiveConfig = runtime?.db_effective_config_name || runtime?.db_effective_config_id || '';
     const isRuntimeActive = Boolean(
@@ -2035,9 +2032,9 @@ const ApiConfigCard: React.FC<{
                                 {isRuntimeActive && (
                                     <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">当前生效 Key</span>
                                 )}
-                                {accessMode && (
+                                {accessModeMeta && (
                                     <span className="rounded border border-n40 bg-n20 px-1.5 py-0.5 text-[10px] font-semibold text-n700">
-                                        {accessMode === 'agent_plan' ? 'Agent Plan' : '按量付费'}
+                                        {accessModeMeta.label || accessMode}
                                     </span>
                                 )}
                                 {config.api_key_preview && (
@@ -2058,7 +2055,7 @@ const ApiConfigCard: React.FC<{
                             </div>
                             <div className="mt-1 flex items-center gap-2 text-[11px] text-n100 flex-wrap">
                                 <span className="font-mono">{provider}</span>
-                                <span>{modelBindings.length} 个操作绑定</span>
+                                <span>{modelBindings.length} 个{categoryView ? `${CATEGORY_LABELS[categoryView] || categoryView}` : '操作'}绑定</span>
                                 <span>{meta?.vendor || '-'}</span>
                             </div>
                         </div>
@@ -2310,7 +2307,9 @@ const ApiConfigCard: React.FC<{
                                 </div>
                             )}
                             {configTest.error && (
-                                <div className="mt-1">{configTest.error}</div>
+                                <div className="mt-1 whitespace-pre-line">
+                                    {apiConfigErrorMessage(provider, dbEndpoint || runtimeEndpoint, configTest.error)}
+                                </div>
                             )}
                         </div>
                     )}
@@ -3193,12 +3192,14 @@ const ApiConfigPanel: React.FC = () => {
     const grouped = useMemo(() => {
         const out: Record<string, ApiConfig[]> = {};
         configs.forEach(config => {
-            const category = groupCategory(config);
-            if (!out[category]) out[category] = [];
-            out[category].push(config);
+            const meta = providerMetaMap.get(normalizeProvider(config.provider));
+            apiConfigCategories(config, meta?.capabilities || []).forEach(category => {
+                if (!out[category]) out[category] = [];
+                out[category].push(config);
+            });
         });
         return out;
-    }, [configs]);
+    }, [configs, providerMetaMap]);
 
     const configsByProvider = useMemo(() => {
         const out = new Map<string, ApiConfig[]>();
@@ -3313,7 +3314,12 @@ const ApiConfigPanel: React.FC = () => {
             } else if (healthStatusFromConfigTest(test) === 'blocked_region') {
                 crmMessage.warning(`${config.name || config.provider} 地区受限：${test.error || `HTTP ${test.status_code || '-'}`}`);
             } else {
-                crmMessage.error(`${config.name || config.provider} 配置异常：${test.error || `HTTP ${test.status_code || '-'}`}`);
+                const errorMessage = apiConfigErrorMessage(
+                    config.provider,
+                    config.endpoint,
+                    test.error || `HTTP ${test.status_code || '-'}`,
+                );
+                crmMessage.error(`${config.name || config.provider} 配置异常：${errorMessage}`);
             }
         } catch (err: any) {
             crmMessage.error(`配置测试失败：${err?.message || 'unknown'}`);
@@ -3365,7 +3371,12 @@ const ApiConfigPanel: React.FC = () => {
             } else if (isNoKeyTest(test)) {
                 crmMessage.warning(`${displayName} 缺少 API Key`);
             } else {
-                crmMessage.error(`${displayName} 真实生成测试失败：${test.error || `HTTP ${test.status_code || '-'}`}`);
+                const errorMessage = apiConfigErrorMessage(
+                    config.provider,
+                    config.endpoint,
+                    test.error || `HTTP ${test.status_code || '-'}`,
+                );
+                crmMessage.error(`${displayName} 真实生成测试失败：${errorMessage}`);
             }
         } catch (err: any) {
             crmMessage.error(`真实生成测试失败：${err?.message || 'unknown'}`);
@@ -4088,8 +4099,9 @@ const ApiConfigPanel: React.FC = () => {
                                             const modelName = config.model_name || runtime?.runtime_model_name || null;
                                             return (
                                                 <ApiConfigCard
-                                                    key={config.config_id}
+                                                    key={`${category}:${config.config_id}`}
                                                     config={config}
+                                                    categoryView={category}
                                                     meta={providerMetaMap.get(provider)}
                                                     runtime={runtime}
                                                     health={providerHealthFrom(healthMap, provider, modelName)}

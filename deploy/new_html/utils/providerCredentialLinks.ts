@@ -40,10 +40,16 @@ const ENDPOINT_CREDENTIAL_SOURCES: EndpointCredentialSource[] = [
     key_help: 'Create an Alibaba Cloud Model Studio API key for this endpoint.',
   },
   {
-    domains: ['minimax.io', 'minimaxi.com'],
+    domains: ['minimaxi.com'],
+    console_url: 'https://platform.minimaxi.com/',
+    docs_url: 'https://platform.minimaxi.com/document/',
+    key_help: '请使用 MiniMax 国内站创建的 API Key；国内 Key 仅用于 api.minimaxi.com。',
+  },
+  {
+    domains: ['minimax.io'],
     console_url: 'https://platform.minimax.io/',
     docs_url: 'https://platform.minimax.io/docs/guides/quickstart-preparation',
-    key_help: 'Create a MiniMax API key for this endpoint.',
+    key_help: '请使用 MiniMax 国际站创建的 API Key；国际 Key 仅用于 api.minimax.io。',
   },
 ];
 

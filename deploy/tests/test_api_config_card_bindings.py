@@ -55,6 +55,18 @@ def test_seedance_provider_catalog_exposes_both_billing_channels():
     assert [item["mode"] for item in seedance["access_modes"]] == ["standard", "agent_plan"]
 
 
+def test_minimax_provider_catalog_exposes_domestic_and_international_channels():
+    from services.api_provider_registry import get_api_provider_catalog
+
+    minimax = next(item for item in get_api_provider_catalog() if item["provider"] == "minimax")
+
+    assert [item["mode"] for item in minimax["access_modes"]] == ["domestic", "international"]
+    assert [item["endpoint"] for item in minimax["access_modes"]] == [
+        "https://api.minimaxi.com/v1",
+        "https://api.minimax.io/v1",
+    ]
+
+
 def test_legacy_default_binding_is_recovered_to_known_model_operation():
     from services.api_provider_registry import normalize_model_bindings
 

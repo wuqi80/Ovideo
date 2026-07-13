@@ -188,6 +188,26 @@ ARK_OFFICIAL_HOST = "ark.cn-beijing.volces.com"
 MINIMAX_DEFAULT_VIDEO_MODEL = "MiniMax-Hailuo-02"
 MINIMAX_DEFAULT_PROVIDER_MODEL = MINIMAX_DEFAULT_VIDEO_MODEL
 MINIMAX_LEGACY_VIDEO_MODELS = frozenset()
+MINIMAX_DOMESTIC_ENDPOINT = "https://api.minimaxi.com/v1"
+MINIMAX_INTERNATIONAL_ENDPOINT = "https://api.minimax.io/v1"
+MINIMAX_ACCESS_MODES: List[Dict[str, Any]] = [
+    {
+        "mode": "domestic",
+        "label": "国内站",
+        "endpoint": MINIMAX_DOMESTIC_ENDPOINT,
+        "console_url": "https://platform.minimaxi.com/",
+        "docs_url": "https://platform.minimaxi.com/document/",
+        "description": "使用 MiniMax 国内站创建的 API Key。",
+    },
+    {
+        "mode": "international",
+        "label": "国际站",
+        "endpoint": MINIMAX_INTERNATIONAL_ENDPOINT,
+        "console_url": "https://platform.minimax.io/",
+        "docs_url": "https://platform.minimax.io/docs/guides/quickstart-preparation",
+        "description": "使用 MiniMax 国际站创建的 API Key；国际 Key 不能用于国内 Endpoint。",
+    },
+]
 GEMINI_TTS_DEFAULT_MODEL = "gemini-3.1-flash-tts-preview"
 SORA2_DEFAULT_VIDEO_MODEL = "sora_video2-landscape-15s"
 SORA2_LEGACY_VIDEO_MODELS = frozenset({"sora-2"})
@@ -564,6 +584,7 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "vendor": "minimax",
         "capabilities": ["video", "audio"],
         "notes": "Video generation plus TTS, voice design, and voice clone.",
+        "access_modes": MINIMAX_ACCESS_MODES,
     },
     "sora2": {
         "label": "Sora2 Gateway",
@@ -627,7 +648,7 @@ PROVIDER_DEFAULT_ENDPOINTS: Dict[str, str] = {
     "deepseek": "https://api.deepseek.com",
     "gemini-image": "https://api.laozhang.ai/v1beta",
     "doubao": DOUBAO_IMAGE_STANDARD_ENDPOINT,
-    "minimax": "https://api.minimaxi.com/v1",
+    "minimax": MINIMAX_DOMESTIC_ENDPOINT,
     "sora2": "https://api.laozhang.ai/v1",
     "veo": "https://api.laozhang.ai/v1",
     "dashscope": "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",

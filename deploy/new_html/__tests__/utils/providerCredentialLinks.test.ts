@@ -36,4 +36,14 @@ describe('providerCredentialLinksForEndpoint', () => {
 
     expect(links).toEqual(googleMeta);
   });
+
+  it('separates MiniMax domestic and international credential portals', () => {
+    const domestic = providerCredentialLinksForEndpoint(undefined, 'https://api.minimaxi.com/v1');
+    const international = providerCredentialLinksForEndpoint(undefined, 'https://api.minimax.io/v1');
+
+    expect(domestic?.console_url).toBe('https://platform.minimaxi.com/');
+    expect(domestic?.key_help).toContain('国内');
+    expect(international?.console_url).toBe('https://platform.minimax.io/');
+    expect(international?.key_help).toContain('国际');
+  });
 });
