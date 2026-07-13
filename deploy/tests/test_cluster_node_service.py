@@ -16,7 +16,7 @@ async def test_list_agent_nodes_filters_and_normalizes(monkeypatch):
                     "name": "GPU1",
                     "status": "online",
                     "enabled": True,
-                    "comfyui_instances": [{"host": "10.0.0.2", "port": 8188}],
+                    "comfyui_instances": [{"host": "10.0.0.2", "port": 8188, "status": "healthy"}],
                     "system_info": {"current_tasks": 1},
                 },
                 {"agent_id": "agent_busy", "status": "busy", "enabled": True},
@@ -36,6 +36,27 @@ async def test_list_agent_nodes_filters_and_normalizes(monkeypatch):
     assert nodes[1]["status"] == "busy"
     assert nodes[1]["tasks"] == 1
     assert nodes[1]["max_concurrent"] == 1
+
+
+async def test_list_agent_nodes_hides_agent_when_comfyui_is_unhealthy(monkeypatch):
+    class FakeAgentDAO:
+        @staticmethod
+        async def list_all_with_active_task_counts():
+            return [
+                {
+                    "agent_id": "agent_gpu2",
+                    "name": "GPU2",
+                    "status": "online",
+                    "enabled": True,
+                    "comfyui_instances": [{"port": 8188, "status": "unhealthy"}],
+                }
+            ]
+
+    monkeypatch.setitem(sys.modules, "dao_agent", SimpleNamespace(AgentDAO=FakeAgentDAO))
+
+    assert await cluster_node_service.list_agent_nodes() == []
+    nodes = await cluster_node_service.list_agent_nodes(include_offline=True)
+    assert nodes[0]["status"] == "unavailable"
 
 
 async def test_list_agent_nodes_degrades_safely(monkeypatch):

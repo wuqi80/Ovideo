@@ -8873,3 +8873,27 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - 集群节点接口会返回启用但离线的 Agent，并从任务表补充实际处理中数量，后台和前端均可看到 `GPU1` / `GPU2` 的在线、忙碌和离线状态。
 - 已完成验证：后端 GPU 路由/Agent 队列测试 7 项通过，前端节点选择/提交队列测试 4 项通过。
 - 待完成部署项：Windows 管理账号当前处于临时锁定，解除后需运行安装脚本，完成 ComfyUI、SeedVR2 3B FP8、自启动任务和 Agent 在线验证；Qwen 角度调整等工作流仍需逐项安装其专用模型与自定义节点后才能在 12GB 显存节点上验收。
+
+## 2026-07-13 GPU2 部署与高清化验收完成
+
+- Windows 节点已完成安装并以 `GPU2` 注册到 `mecha.one`；ComfyUI 与 Agent 均由 SYSTEM 计划任务自启动，Agent token 仅保存在受 ACL 保护的本机文件中。
+- 运行环境：ComfyUI 0.27.0、PyTorch 2.12.0+cu126、RTX 3060 12GB、SeedVR2 Video Upscaler 2.5.24、Transformers 固定为 4.57.6。
+- 已安装并校验 SeedVR2 3B FP8 DiT 与 FP16 VAE；安装脚本包含模型下载、依赖固定、VC++ Runtime、状态检查和本地推理冒烟工具。
+- GPU2 对 `upscale_hd` 使用专用精简工作流，避开 GPU1 模板中的多余切片插件依赖；流程为 LoadImage -> SeedVR2 3B FP8 -> SaveImage。
+- 正式性能参数：DiT 不做块级 CPU 卸载，VAE 启用 512px 分块，模型缓存在 128GB 系统内存，CPU 数学库限制 16 线程；GPU2 仍严格单任务执行，浏览器可并发提交 4 项，后续任务在 Redis 排队。
+- 节点状态增加 ComfyUI 实例健康校验：只有 Agent 心跳和至少一个 `healthy` ComfyUI 实例同时成立，节点才可被前端选择。
+- 验证结果：
+  - 64px 本地 SeedVR2 冒烟成功，约 21.37 秒。
+  - 512px 调优冒烟成功，约 9.10 秒。
+  - 1080p 零块卸载冒烟成功，约 12.14 秒；GPU 峰值 100%，显存峰值约 4.8GB。
+  - mecha.one 端到端任务成功：上传 -> 服务端队列 -> 指定 GPU2 -> 推理 -> 回传 1 张结果。
+- 仍缺能力：GPU2 尚未安装 Qwen 角度调整、三视图、去水印等工作流需要的完整模型和私有 LoRA；这些操作在 GPU2 上不能标记为已验收，需取得与 GPU1 一致的模型文件后逐项部署。
+
+## 2026-07-13 GPU2 Qwen 与视频工作流补齐
+
+- GPU2 已安装 Qwen Image Edit 2509 FP8 扩散模型、Qwen 2.5 VL FP8 文本编码器、Qwen Image VAE、Lightning LoRA 及所需自定义节点。
+- GPU2 Agent 增加 12GB 显存适配图，覆盖角度调整、多角度/三视图、去水印、Kontext、`qwen*` 和 `qwen_lora*` 任务；固定单张 768px 输出并严格串行执行。
+- 仓库中的 `qwenN_1..6` 是空 JSON，`qwenN_lora_1..6` 是占位图。生成路由会在入队前把 `qwenN` 映射到可执行的 `qwen`，把 `qwenN_lora` 映射到可执行的 `qwen_lora`，GPU1/GPU2 均不再收到空工作流；受保护的 `workflows/*.json` 未修改。
+- GPU2 已安装 ComfyUI-VideoHelperSuite 与 ffmpeg；视频高清化使用 `VHS_LoadVideo -> SeedVR2 3B FP8 -> VHS_VideoCombine`，batch size 为 1，VAE 分块并允许 CPU 卸载，Agent 超时放宽到 6 小时。
+- 本地验收：Qwen 直接生成 PNG 成功；SeedVR2 视频高清化及 H.264 MP4 合成成功；后端定向测试 26/26、前端测试 306 项通过、生产构建通过。
+- 尚需部署至 `mecha.one` 并完成指定 GPU2 的生产端到端任务，才可完成最终验收。

@@ -202,6 +202,7 @@ router.include_router(
         get_current_user_dependency=get_current_user,
         asset_dao=AssetDAO,
         entity_file_dao=EntityFileDAO,
+        episode_dao=EpisodeDAO,
         logger=logger,
     )
 )

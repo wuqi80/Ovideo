@@ -39,6 +39,13 @@ def _agent_node(row: Dict[str, Any]) -> Dict[str, Any]:
     )
     port = first_instance.get("port")
     status = str(row.get("status") or "offline").lower()
+    instance_states = {
+        str(instance.get("status") or "").lower()
+        for instance in instances
+        if isinstance(instance, dict)
+    }
+    if instances and "healthy" not in instance_states:
+        status = "unavailable"
     current_tasks = int(
         row.get("active_tasks")
         or system_info.get("current_tasks")
@@ -82,10 +89,10 @@ async def list_agent_nodes(*, include_offline: bool = False) -> List[Dict[str, A
     nodes: List[Dict[str, Any]] = []
     for row in rows or []:
         data = dict(row)
-        status = str(data.get("status") or "").lower()
         if not data.get("enabled", True):
             continue
-        if not include_offline and status not in {"online", "busy", "healthy"}:
+        node = _agent_node(data)
+        if not include_offline and node["status"] not in {"online", "busy", "healthy"}:
             continue
-        nodes.append(_agent_node(data))
+        nodes.append(node)
     return nodes

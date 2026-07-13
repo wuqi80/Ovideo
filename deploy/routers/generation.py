@@ -27,6 +27,21 @@ from services.ai_proxy_types import AIProxyError
 from utils.image_reference import storage_path_safe
 
 
+COMFYUI_WORKFLOW_FALLBACKS = {
+    "qwenN": "qwen",
+    "qwenN_lora": "qwen_lora",
+}
+
+
+def resolve_executable_comfyui_workflow_type(requested_type: str, image_count: int) -> tuple[str, bool]:
+    """Resolve legacy placeholder workflow families to executable graphs."""
+    effective_type = COMFYUI_WORKFLOW_FALLBACKS.get(requested_type, requested_type)
+    if effective_type in {"qwen", "qwen_lora"}:
+        total_images = max(1, min(6, image_count))
+        return f"{effective_type}_{total_images}", effective_type != requested_type
+    return effective_type, effective_type != requested_type
+
+
 def _attach_entity_fields(task_data: dict, request: Any) -> None:
     if getattr(request, "entity_type", None):
         task_data["entity_type"] = request.entity_type
@@ -102,13 +117,23 @@ def create_generation_router(
             if request.workflow_type not in ["qwen", "qwen_lora", "kontext", "qwenN", "qwenN_lora"]:
                 raise HTTPException(status_code=400, detail=f"不支持的工作流类型: {request.workflow_type}")
 
-            actual_workflow_type = request.workflow_type
-            if request.workflow_type in ["qwen", "qwen_lora", "qwenN", "qwenN_lora"]:
-                total_images = len(request.image_filenames)
-                total_images = max(1, min(6, total_images))
-                actual_workflow_type = f"{request.workflow_type}_{total_images}"
-
-                logger.info("📊 %s工作流: 共%s张参考图，使用 %s", request.workflow_type, total_images, actual_workflow_type)
+            actual_workflow_type, fallback_applied = resolve_executable_comfyui_workflow_type(
+                request.workflow_type,
+                len(request.image_filenames),
+            )
+            if fallback_applied:
+                logger.warning(
+                    "工作流 %s 当前仅有空/占位模板，自动降级到可执行工作流 %s",
+                    request.workflow_type,
+                    actual_workflow_type,
+                )
+            else:
+                logger.info(
+                    "📊 %s工作流: 共%s张参考图，使用 %s",
+                    request.workflow_type,
+                    max(1, min(6, len(request.image_filenames))),
+                    actual_workflow_type,
+                )
 
             task_data = {
                 "prompt": request.prompt,
@@ -131,6 +156,8 @@ def create_generation_router(
                 "success": True,
                 "task_id": task_id,
                 "workflow_type": actual_workflow_type,
+                "requested_workflow_type": request.workflow_type,
+                "fallback_applied": fallback_applied,
                 "message": f"{request.workflow_type}工作流任务已提交",
             }
 

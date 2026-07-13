@@ -1,7 +1,7 @@
 import { apiJson } from './httpClient';
 import { crmMessage } from '../admin/crmUI';
 
-export type ClusterNodeStatus = 'online' | 'busy' | 'healthy' | 'offline' | 'maintenance' | 'unknown';
+export type ClusterNodeStatus = 'online' | 'busy' | 'healthy' | 'offline' | 'maintenance' | 'unavailable' | 'unknown';
 
 export interface ClusterNodeOption {
   id: string;
@@ -35,7 +35,7 @@ interface ClusterNodesResponse {
 
 function normalizeStatus(value: unknown): ClusterNodeStatus {
   const status = String(value || '').toLowerCase();
-  if (status === 'online' || status === 'busy' || status === 'healthy' || status === 'offline' || status === 'maintenance') {
+  if (status === 'online' || status === 'busy' || status === 'healthy' || status === 'offline' || status === 'maintenance' || status === 'unavailable') {
     return status;
   }
   return 'unknown';

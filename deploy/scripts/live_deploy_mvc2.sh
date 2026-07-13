@@ -57,11 +57,36 @@ FILES=(
   "scripts/package_storage_orphans.py"
   "scripts/restructure_storage_manifest.py"
   "scripts/register_gpu_agent.py"
+  "scripts/test_gpu2_end_to_end.py"
   "scripts/windows_gpu_agent_runner.py"
   "scripts/windows_gpu_node_diagnose.cmd"
   "scripts/windows_gpu_node_diagnose.ps1"
   "scripts/windows_gpu_node_install.cmd"
   "scripts/windows_gpu_node_install.ps1"
+  "scripts/windows_gpu_node_schedule_install.cmd"
+  "scripts/windows_gpu_node_status.cmd"
+  "scripts/windows_gpu_node_verify.cmd"
+  "scripts/windows_gpu_node_install_vc_runtime.cmd"
+  "scripts/windows_gpu_node_fix_seedvr.cmd"
+  "scripts/windows_gpu_seedvr_smoke.py"
+  "scripts/windows_gpu_seedvr_smoke.cmd"
+  "scripts/windows_gpu_seedvr_smoke_schedule.cmd"
+  "scripts/windows_gpu_seedvr_tuning_smoke.cmd"
+  "scripts/windows_gpu_seedvr_tuning_schedule.cmd"
+  "scripts/windows_gpu_monitor.cmd"
+  "scripts/windows_gpu_start_comfyui.cmd"
+  "scripts/windows_gpu_start_agent.cmd"
+  "scripts/windows_gpu_enable_lan.cmd"
+  "scripts/windows_gpu_qwen_setup.ps1"
+  "scripts/windows_gpu_qwen_setup.cmd"
+  "scripts/windows_gpu_qwen_schedule.cmd"
+  "scripts/windows_gpu_qwen_smoke.py"
+  "scripts/windows_gpu_qwen_smoke.cmd"
+  "scripts/windows_gpu_video_setup.ps1"
+  "scripts/windows_gpu_video_setup.cmd"
+  "scripts/windows_gpu_video_schedule.cmd"
+  "scripts/windows_gpu_video_smoke.py"
+  "scripts/windows_gpu_video_smoke.cmd"
   scripts/check_*.py
   tests/test_ai_proxy_image_persistence_service.py
   tests/test_ai_proxy_reference_service.py
@@ -79,6 +104,7 @@ FILES=(
   tests/test_auth_user_service.py
   tests/test_canvas_service.py
   tests/test_comfyui_file_service.py
+  tests/test_cluster_node_service.py
   tests/test_content_file_dao.py
   tests/test_content_version_service.py
   tests/test_dao_api_config_category.py
@@ -108,6 +134,8 @@ FILES=(
   tests/test_video_client_base.py
   tests/test_video_crop_service.py
   tests/test_video_capability_service.py
+  tests/test_windows_gpu_agent_runner.py
+  tests/test_generation_workflow_fallback.py
   "new_html/.env.example"
   "new_html/README.md"
   "new_html/GEMINI_API_CONFIG.md"

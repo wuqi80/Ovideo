@@ -218,6 +218,162 @@ async def test_share_asset_raises_when_source_missing():
         )
 
 
+async def test_list_sync_existing_design_candidates_uses_other_episode_assets_when_current_empty():
+    class FakeEpisodeDAO:
+        @classmethod
+        async def get_episodes(cls, project_id):
+            return [
+                {"episode_id": "ep_1", "episode_number": 1, "episode_name": "第一集"},
+                {"episode_id": "ep_2", "episode_number": 2, "episode_name": "第二集"},
+            ]
+
+    FakeAssetDAO.rows = [
+        {
+            "asset_id": "source_char",
+            "project_id": "proj_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "asset_type": "character",
+            "name": "小悟",
+            "description": "第一集角色设计",
+            "thumbnail_url": "/thumb.png",
+            "reference_images": ["/ref.png"],
+        },
+        {
+            "asset_id": "shared_char",
+            "project_id": "proj_1",
+            "episode_id": None,
+            "asset_type": "character",
+            "name": "共享角色",
+            "thumbnail_url": "/shared.png",
+        },
+    ]
+    FakeEntityFileDAO.files_map = {
+        "source_char": [{"file_id": "file_src", "file_role": "reference_image", "file_url": "/entity-ref.png"}],
+    }
+
+    result = await asset_service.list_sync_existing_design_candidates(
+        project_id="proj_1",
+        episode_id="ep_2",
+        script_id="script_2",
+        asset_types=["character", "scene", "prop"],
+        asset_dao=FakeAssetDAO,
+        entity_file_dao=FakeEntityFileDAO,
+        episode_dao=FakeEpisodeDAO,
+    )
+
+    assert result["success"] is True
+    assert result["candidate_count"] == 1
+    candidate = result["candidates"][0]
+    assert candidate["asset_id"] == "source_char"
+    assert candidate["source_episode_label"] == "第一集"
+    assert candidate["exists_in_target"] is False
+    assert candidate["has_design"] is True
+    assert candidate["image_count"] == 3
+
+
+async def test_sync_existing_designs_copies_selected_asset_into_current_episode():
+    FakeAssetDAO.rows = [
+        {
+            "asset_id": "source_char",
+            "project_id": "proj_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "asset_type": "character",
+            "name": "小悟",
+            "description": "第一集角色设计",
+            "thumbnail_url": "/thumb.png",
+            "reference_images": ["/ref.png"],
+            "style_params": {"ai_prompt": "hero prompt"},
+            "tags": ["hero"],
+        },
+    ]
+    FakeEntityFileDAO.files_map = {
+        "source_char": [{"file_id": "file_src", "file_role": "reference_image", "file_url": "/entity-ref.png"}],
+    }
+
+    result = await asset_service.sync_existing_designs(
+        project_id="proj_1",
+        episode_id="ep_2",
+        script_id="script_2",
+        asset_types=["character", "scene", "prop"],
+        overwrite=False,
+        source_asset_ids=["source_char"],
+        user_id="user_2",
+        asset_dao=FakeAssetDAO,
+        entity_file_dao=FakeEntityFileDAO,
+    )
+
+    assert result["success"] is True
+    assert result["created"] == 1
+    assert result["updated"] == 0
+    assert result["synced"] == 1
+    assert FakeAssetDAO.copied == {
+        "asset_id": "source_char",
+        "target_episode_id": "ep_2",
+        "target_script_id": "script_2",
+        "created_by": "user_2",
+    }
+    assert FakeEntityFileDAO.copied == [
+        {
+            "source_file_id": "file_src",
+            "target_entity_type": "asset",
+            "target_entity_id": "asset_copy",
+            "file_role": "reference_image",
+        }
+    ]
+
+
+async def test_sync_existing_designs_fills_selected_same_name_empty_asset():
+    FakeAssetDAO.rows = [
+        {
+            "asset_id": "target_char",
+            "project_id": "proj_1",
+            "episode_id": "ep_2",
+            "script_id": "script_2",
+            "asset_type": "character",
+            "name": "小悟",
+            "description": "",
+            "reference_images": [],
+            "style_params": {},
+            "tags": [],
+        },
+        {
+            "asset_id": "source_char",
+            "project_id": "proj_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "asset_type": "character",
+            "name": "小悟",
+            "description": "第一集角色设计",
+            "thumbnail_url": "/thumb.png",
+            "reference_images": ["/ref.png"],
+        },
+    ]
+    FakeEntityFileDAO.files_map = {
+        "source_char": [{"file_id": "file_src", "file_role": "reference_image", "file_url": "/entity-ref.png"}],
+        "target_char": [],
+    }
+
+    result = await asset_service.sync_existing_designs(
+        project_id="proj_1",
+        episode_id="ep_2",
+        script_id="script_2",
+        asset_types=["character"],
+        overwrite=False,
+        source_asset_ids=["source_char"],
+        user_id="user_2",
+        asset_dao=FakeAssetDAO,
+        entity_file_dao=FakeEntityFileDAO,
+    )
+
+    assert result["created"] == 0
+    assert result["updated"] == 1
+    assert FakeAssetDAO.updated["asset_id"] == "target_char"
+    assert FakeAssetDAO.updated["thumbnail_url"] == "/thumb.png"
+    assert FakeEntityFileDAO.copied[0]["target_entity_id"] == "target_char"
+
+
 async def test_sync_existing_designs_copies_same_name_design_to_current_episode():
     FakeAssetDAO.rows = [
         {

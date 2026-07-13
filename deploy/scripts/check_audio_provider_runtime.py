@@ -129,8 +129,8 @@ def main() -> int:
         minimax_audio.resolve_provider = original_minimax
 
     if minimax_calls != [
-        ("minimax", "MiniMax-Hailuo-02"),
-        ("minimax", "MiniMax-Hailuo-02"),
+        ("minimax", minimax_audio.MINIMAX_DEFAULT_PROVIDER_MODEL),
+        ("minimax", minimax_audio.MINIMAX_DEFAULT_PROVIDER_MODEL),
     ]:
         fail(f"MinimaxAudioClient did not resolve minimax runtime config: {minimax_calls}")
     if minimax_client.api_key != "minimax-runtime-key":

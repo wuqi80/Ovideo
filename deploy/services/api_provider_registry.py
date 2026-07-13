@@ -790,7 +790,6 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
         "operation": "video-standard",
         "operation_label": "金丹 (Hailuo 2.3)",
-        "category": "video",
     },
     {
         "name": "MiniMax Hailuo 2.3 Fast",
@@ -798,7 +797,6 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": MINIMAX_FAST_VIDEO_MODEL,
         "operation": "video-fast",
         "operation_label": "金丹 Fast (Hailuo 2.3 Fast)",
-        "category": "video",
     },
     {
         "name": "MiniMax Speech 2.8 HD",

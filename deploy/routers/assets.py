@@ -12,6 +12,7 @@ from services.asset_service import (
     AssetNotFound,
     create_asset as create_asset_service,
     delete_asset as delete_asset_service,
+    list_sync_existing_design_candidates,
     list_assets,
     share_asset as share_asset_service,
     sync_existing_designs as sync_existing_designs_service,
@@ -25,11 +26,13 @@ def create_assets_router(
     asset_dao: Any,
     entity_file_dao: Any,
     logger: logging.Logger,
+    episode_dao: Any = None,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
     AssetDAO = asset_dao
     EntityFileDAO = entity_file_dao
+    EpisodeDAO = episode_dao
 
     class AssetCreate(BaseModel):
         project_id: str
@@ -58,6 +61,7 @@ def create_assets_router(
         script_id: Optional[str] = None
         asset_types: Optional[list[str]] = None
         overwrite: bool = False
+        source_asset_ids: Optional[list[str]] = None
 
     @router.get("/api/projects/{project_id}/assets")
     async def get_assets(
@@ -140,9 +144,30 @@ def create_assets_router(
             script_id=data.script_id,
             asset_types=data.asset_types,
             overwrite=data.overwrite,
+            source_asset_ids=data.source_asset_ids,
+            user_id=user_id,
             asset_dao=AssetDAO,
             entity_file_dao=EntityFileDAO,
             logger=logger,
+        )
+
+    @router.get("/api/projects/{project_id}/assets/sync-existing-designs/candidates")
+    async def get_sync_existing_design_candidates(
+        project_id: str,
+        episode_id: str,
+        script_id: Optional[str] = None,
+        asset_types: Optional[str] = None,
+        user_id: str = Depends(get_current_user),
+    ):
+        requested_types = [item.strip() for item in asset_types.split(",") if item.strip()] if asset_types else None
+        return await list_sync_existing_design_candidates(
+            project_id=project_id,
+            episode_id=episode_id,
+            script_id=script_id,
+            asset_types=requested_types,
+            asset_dao=AssetDAO,
+            entity_file_dao=EntityFileDAO,
+            episode_dao=EpisodeDAO,
         )
 
     return router

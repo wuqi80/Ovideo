@@ -65,4 +65,16 @@ describe('GPU cluster routing', () => {
 
     await expect(resolveGpuTaskRouting()).rejects.toThrow('GPU1');
   });
+
+  it('does not route to an agent whose ComfyUI instance is unavailable', async () => {
+    setPreferredGpuNodeId('GPU2');
+    mockFetch.mockResolvedValueOnce(response({
+      success: true,
+      nodes: [
+        { id: 'agent_gpu2', agent_id: 'agent_gpu2', name: 'GPU2', status: 'unavailable' },
+      ],
+    }));
+
+    await expect(resolveGpuTaskRouting()).rejects.toThrow('GPU2');
+  });
 });

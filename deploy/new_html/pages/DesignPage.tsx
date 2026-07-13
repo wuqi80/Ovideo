@@ -6,7 +6,14 @@ import {
   Wand2, Scissors, CheckCircle, Layers, Square, CheckSquare, RefreshCw,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
-import { createAsset, deleteAsset, syncExistingAssetDesigns, updateAsset } from '../services/assetMutationService';
+import {
+  createAsset,
+  deleteAsset,
+  listSyncExistingAssetDesignCandidates,
+  syncExistingAssetDesigns,
+  updateAsset,
+  type SyncExistingAssetCandidate,
+} from '../services/assetMutationService';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle, processMaterialImage, generateHumanMultiAngleQueued } from '../services/comfyuiGenerationService';
 import { waitForComfyUITask } from '../services/comfyuiTaskWaitService';
@@ -222,6 +229,9 @@ export const DesignPage: React.FC = () => {
   const [busyLabel, setBusyLabel] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [syncingExisting, setSyncingExisting] = useState(false);
+  const [syncSubmitting, setSyncSubmitting] = useState(false);
+  const [syncCandidates, setSyncCandidates] = useState<SyncExistingAssetCandidate[]>([]);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
 
   const [aiModal, setAiModal] = useState<{ asset: AssetItem } | null>(null);
   const [cameraModal, setCameraModal] = useState<{ asset: AssetItem; materials: ModalMaterial[] } | null>(null);
@@ -278,6 +288,73 @@ export const DesignPage: React.FC = () => {
       crmMessage.error(`同步已有设计失败：${err?.message || String(err)}`);
     } finally {
       setSyncingExisting(false);
+    }
+  }, [projectId, episodeId, selectedScriptId, forceReloadSlices]);
+
+  const handleOpenSyncExistingDesigns = useCallback(async () => {
+    if (!projectId || !episodeId) {
+      crmMessage.error('缺少当前项目或分集信息');
+      return;
+    }
+    setSyncingExisting(true);
+    try {
+      const result = await listSyncExistingAssetDesignCandidates(projectId, {
+        episode_id: episodeId,
+        script_id: selectedScriptId || undefined,
+        asset_types: ['character', 'scene', 'prop'],
+      });
+      const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+      if (!candidates.length) {
+        crmMessage.warning('未找到其他分集可同步的资产');
+        return;
+      }
+      setSyncCandidates(candidates);
+      setSyncModalOpen(true);
+    } catch (err: any) {
+      console.error('加载可同步资产失败:', err);
+      crmMessage.error(`加载可同步资产失败：${err?.message || String(err)}`);
+    } finally {
+      setSyncingExisting(false);
+    }
+  }, [projectId, episodeId, selectedScriptId]);
+
+  const handleConfirmSyncExistingDesigns = useCallback(async (sourceAssetIds: string[], overwrite: boolean) => {
+    if (!projectId || !episodeId) {
+      crmMessage.error('缺少当前项目或分集信息');
+      return;
+    }
+    if (!sourceAssetIds.length) {
+      crmMessage.error('请至少选择一个要同步的资产');
+      return;
+    }
+    setSyncSubmitting(true);
+    try {
+      const result = await syncExistingAssetDesigns(projectId, {
+        episode_id: episodeId,
+        script_id: selectedScriptId || undefined,
+        asset_types: ['character', 'scene', 'prop'],
+        source_asset_ids: sourceAssetIds,
+        overwrite,
+      });
+      await forceReloadSlices('assets');
+      setSyncModalOpen(false);
+      setSyncCandidates([]);
+      const created = Number(result?.created || 0);
+      const updated = Number(result?.updated || 0);
+      const copiedFiles = Number(result?.copied_files || 0);
+      const skippedExisting = Number(result?.skipped_existing || 0);
+      if (created || updated || copiedFiles) {
+        crmMessage.success(`已同步资产：新增 ${created}，更新 ${updated}${copiedFiles ? `，复制文件 ${copiedFiles}` : ''}`);
+      } else if (skippedExisting > 0) {
+        crmMessage.info('所选资产在当前集已有设计，未覆盖；如需替换请勾选覆盖同名设计');
+      } else {
+        crmMessage.warning('所选资产没有完成同步，请检查是否仍在其他分集中');
+      }
+    } catch (err: any) {
+      console.error('同步已有设计失败:', err);
+      crmMessage.error(`同步已有设计失败：${err?.message || String(err)}`);
+    } finally {
+      setSyncSubmitting(false);
     }
   }, [projectId, episodeId, selectedScriptId, forceReloadSlices]);
 
@@ -500,7 +577,7 @@ export const DesignPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleSyncExistingDesigns}
+            onClick={handleOpenSyncExistingDesigns}
             disabled={syncingExisting || !projectId || !episodeId}
             className="flex items-center gap-2 px-4 py-2 bg-n0 hover:bg-n20 text-n700 text-sm rounded-lg transition-colors border border-n40 disabled:opacity-50"
           >
@@ -646,6 +723,145 @@ export const DesignPage: React.FC = () => {
       {cameraModal && <CameraModal asset={cameraModal.asset} materials={cameraModal.materials} onClose={() => setCameraModal(null)} onSubmit={(p) => handleCameraGenerate({ ...p, assetId: cameraModal.asset.assetId })} />}
       {processModal && <ProcessModal asset={processModal.asset} materials={processModal.materials} workflow={processModal.workflow} onClose={() => setProcessModal(null)} onSubmit={handleProcessSubmit} />}
       {batchModal && <BatchGenerateModal assets={designAssets} selectedIds={selectedIds} scriptText={scriptText} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
+      {syncModalOpen && (
+        <SyncExistingDesignModal
+          candidates={syncCandidates}
+          submitting={syncSubmitting}
+          onClose={() => { if (!syncSubmitting) setSyncModalOpen(false); }}
+          onSubmit={handleConfirmSyncExistingDesigns}
+        />
+      )}
+    </div>
+  );
+};
+
+/* ======================== Sync Existing Design Modal ======================== */
+const syncTypeLabel = (type: string) => type === 'character' ? '人物' : type === 'scene' ? '场景' : '道具';
+
+const SyncExistingDesignModal: React.FC<{
+  candidates: SyncExistingAssetCandidate[];
+  submitting: boolean;
+  onClose: () => void;
+  onSubmit: (sourceAssetIds: string[], overwrite: boolean) => void;
+}> = ({ candidates, submitting, onClose, onSubmit }) => {
+  const [checked, setChecked] = useState<Set<string>>(() => {
+    const preferred = candidates.filter(c => c.has_design && !c.target_has_design).map(c => c.asset_id);
+    return new Set(preferred.length ? preferred : candidates.map(c => c.asset_id));
+  });
+  const [overwrite, setOverwrite] = useState(false);
+
+  const grouped = useMemo(() => {
+    const result: Record<'character' | 'scene' | 'prop', SyncExistingAssetCandidate[]> = {
+      character: [],
+      scene: [],
+      prop: [],
+    };
+    candidates.forEach(candidate => {
+      if (candidate.asset_type === 'character' || candidate.asset_type === 'scene' || candidate.asset_type === 'prop') {
+        result[candidate.asset_type].push(candidate);
+      }
+    });
+    return result;
+  }, [candidates]);
+
+  const selectedCount = checked.size;
+  const designedCount = candidates.filter(c => c.has_design).length;
+  const toggle = (assetId: string) => setChecked(prev => {
+    const next = new Set(prev);
+    next.has(assetId) ? next.delete(assetId) : next.add(assetId);
+    return next;
+  });
+
+  const selectDesigned = () => setChecked(new Set(candidates.filter(c => c.has_design).map(c => c.asset_id)));
+  const selectAll = () => setChecked(new Set(candidates.map(c => c.asset_id)));
+
+  return (
+    <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[140] p-6" onClick={onClose}>
+      <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-n40 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-n800">同步其他分集资产</h3>
+            <p className="text-xs text-n100 mt-1">从项目其他分集中选择人物、场景或道具，确认后复制到当前分集。</p>
+          </div>
+          <button onClick={onClose} disabled={submitting} className="text-n300 hover:text-n800 disabled:opacity-40"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="px-6 py-3 border-b border-n40 flex flex-wrap items-center gap-3 text-xs">
+          <span className="text-n100">候选 {candidates.length} 个</span>
+          <span className="text-success">已设计 {designedCount}</span>
+          <span className="text-primary font-semibold">已选 {selectedCount}</span>
+          <button onClick={selectDesigned} className="px-2.5 py-1 rounded border border-n40 hover:bg-n20 text-n700">只选已设计</button>
+          <button onClick={selectAll} className="px-2.5 py-1 rounded border border-n40 hover:bg-n20 text-n700">全选</button>
+          <button onClick={() => setChecked(new Set())} className="px-2.5 py-1 rounded border border-n40 hover:bg-n20 text-n700">清空</button>
+          <label className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg border border-warning/40 bg-warning/10 text-warning">
+            <input type="checkbox" checked={overwrite} onChange={e => setOverwrite(e.target.checked)} className="accent-orange-500" />
+            覆盖当前集同名已有设计
+          </label>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+          {(['character', 'scene', 'prop'] as const).map(type => {
+            const items = grouped[type];
+            if (!items.length) return null;
+            return (
+              <section key={type} className="space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-n700">
+                  <span>{syncTypeLabel(type)}</span>
+                  <span className="text-n100 font-normal">{items.length}</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {items.map(candidate => {
+                    const selected = checked.has(candidate.asset_id);
+                    const preview = secureMediaUrl(candidate.preview_url || candidate.thumbnail_url || null);
+                    return (
+                      <button
+                        key={candidate.asset_id}
+                        type="button"
+                        onClick={() => toggle(candidate.asset_id)}
+                        className={`w-full text-left rounded-lg border p-3 transition-all flex gap-3 ${selected ? 'border-primary bg-primary-light' : 'border-n40 bg-n0 hover:bg-n20'}`}
+                      >
+                        <div className="pt-1 shrink-0">
+                          {selected ? <CheckSquare size={16} className="text-primary" /> : <Square size={16} className="text-n100" />}
+                        </div>
+                        <div className="w-14 h-14 rounded-md overflow-hidden border border-n40 bg-n30 shrink-0 flex items-center justify-center">
+                          {preview ? <img src={preview} alt="" className="w-full h-full object-cover" /> : <Palette size={18} className="text-n100" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm font-bold text-n800 truncate">{candidate.name}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${candidate.has_design ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>
+                              {candidate.has_design ? `已设计 ${candidate.image_count || 0}` : '待设计'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-n100 mt-1 truncate">来源：{candidate.source_episode_label || candidate.source_episode_id || '其他分集'}</div>
+                          {candidate.description && <div className="text-[11px] text-n300 mt-1 line-clamp-2">{candidate.description}</div>}
+                          {candidate.exists_in_target && (
+                            <div className={`text-[11px] mt-1 ${candidate.target_has_design ? 'text-warning' : 'text-primary'}`}>
+                              当前集已有同名资产{candidate.target_has_design ? '，默认不覆盖' : '，将补齐设计'}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <div className="px-6 py-4 border-t border-n40 flex justify-end gap-3">
+          <button onClick={onClose} disabled={submitting} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20 disabled:opacity-50">取消</button>
+          <button
+            onClick={() => onSubmit(Array.from(checked), overwrite)}
+            disabled={submitting || selectedCount === 0}
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 flex items-center gap-2"
+          >
+            {submitting && <Loader size={14} className="animate-spin" />}
+            同步到当前集 ({selectedCount})
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

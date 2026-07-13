@@ -9648,3 +9648,48 @@
 
 - The Windows administrator account is temporarily locked. After it unlocks, run the installer, register startup tasks, and verify ComfyUI/Agent heartbeats from `GPU2`.
 - Phase-one installation includes SeedVR2 3B FP8 for the RTX 3060 12GB node. Qwen angle/edit workflows still require their exact custom nodes and model files before those specific frontend actions can be declared operational on GPU2.
+
+## 2026-07-13 GPU2 Deployment And Upscale Acceptance
+
+### Completed
+
+- Installed ComfyUI 0.27.0 and PyTorch 2.12.0+cu126 under `E:\MECHA-GPU`; SYSTEM startup tasks run ComfyUI and the MECHA Agent without exposing credentials in process arguments.
+- Installed SeedVR2 Video Upscaler 2.5.24, pinned Transformers 4.57.6 for Windows compatibility, and verified the official 3B FP8 DiT and FP16 VAE checksums.
+- Added a GPU2-only `upscale_hd` workflow reducer in `scripts/windows_gpu_agent_runner.py`. The reduced workflow uses only core Load/Save nodes plus SeedVR2, so GPU2 does not depend on GPU1's TTP, LayerStyle, Impact, Easy-Use, KJNodes, or pysssss utility packs.
+- Kept browser preprocessing/submission concurrency at 4 while the external Agent remains serial. The selected Agent is attached to every task, and queued tasks stay in Redis until GPU2 finishes the current task.
+- Added an instance-health guard: an Agent with no healthy ComfyUI instance is exposed as `unavailable` and cannot receive frontend work.
+- Tuned the dual-Xeon/128GB machine for GPU-first execution: no DiT block swapping, tiled VAE, CPU model cache, and 16-thread OMP/MKL/OpenBLAS limits.
+
+### Verification
+
+- CUDA verification: RTX 3060 detected, CUDA available, SeedVR2 node classes present in `/object_info`.
+- Local SeedVR2 inference passed at 64px, 512px, and 1080p.
+- 1080p tuning result: 12.14 seconds, 100% peak GPU utilization, about 4.8GB peak VRAM.
+- Production end-to-end smoke passed through `https://mecha.one`: upload, task preparation, Redis queue, preferred GPU2 Agent pickup, ComfyUI inference, and result upload all completed.
+
+### Remaining
+
+- Qwen angle/edit, three-view, watermark removal, and private-LoRA workflows are not yet installed on GPU2. Keep these capabilities marked unavailable for GPU2 until the exact GPU1 model/custom-node inventory is copied and separately tested.
+
+## 2026-07-13 GPU2 Qwen And Video Workflow Completion
+
+### Runtime Changes
+
+- Installed the Qwen Image Edit 2509 FP8 diffusion model, Qwen 2.5 VL FP8 text encoder, Qwen image VAE, Lightning LoRA, and required custom nodes on `GPU2`.
+- `scripts/windows_gpu_agent_runner.py` now builds a 12GB-VRAM Qwen graph for angle adjustment, multi-angle/three-view, watermark removal, Kontext, `qwen*`, and `qwen_lora*` tasks.
+- `routers/generation.py` maps empty `qwenN_1..6` workflows to `qwen_1..6` and placeholder `qwenN_lora_1..6` workflows to `qwen_lora_1..6` before queue submission. Protected `workflows/*.json` files remain unchanged.
+- Installed ComfyUI-VideoHelperSuite and ffmpeg on GPU2. Video enhancement uses a serial, CPU-offloaded SeedVR2 graph and an extended six-hour Agent timeout.
+- Added Windows setup/smoke scripts for Qwen and video dependencies, plus `scripts/test_gpu2_end_to_end.py` for preferred-node production validation.
+
+### Verification
+
+- Direct GPU2 Qwen smoke passed and produced a PNG result.
+- Direct GPU2 SeedVR2 video smoke passed and produced an H.264 MP4 result.
+- Backend targeted tests passed: 26/26.
+- Frontend tests passed: 306 passed, 1 file skipped, 3 todo.
+- Frontend production build passed.
+
+### Deployment Note
+
+- `scripts/live_deploy_mvc2.sh` includes the new GPU2 setup, smoke, runtime, and fallback-contract files.
+- Production acceptance is not complete until `mecha.one` is deployed and preferred `GPU2` tasks pass through upload, queue, Agent execution, and result upload.

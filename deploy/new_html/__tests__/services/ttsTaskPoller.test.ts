@@ -23,8 +23,9 @@ describe('pollTtsTaskUntilDone', () => {
       status: 'failed', result: { error: 'TTS 任务超时: mx-1' },
     });
     const promise = pollTtsTaskUntilDone('task-2', { intervalMs: 100, timeoutMs: 60000, getStatus });
+    const rejection = expect(promise).rejects.toThrow(/TTS 任务超时/);
     await vi.advanceTimersByTimeAsync(150);
-    await expect(promise).rejects.toThrow(/TTS 任务超时/);
+    await rejection;
   });
 
   it('AbortSignal 取消时抛 AbortError', async () => {
@@ -33,15 +34,17 @@ describe('pollTtsTaskUntilDone', () => {
     const promise = pollTtsTaskUntilDone('task-3', {
       intervalMs: 100, timeoutMs: 60000, getStatus, signal: ctrl.signal,
     });
+    const rejection = expect(promise).rejects.toThrow(/abort/i);
     setTimeout(() => ctrl.abort(), 50);
     await vi.advanceTimersByTimeAsync(200);
-    await expect(promise).rejects.toThrow(/abort/i);
+    await rejection;
   });
 
   it('timeout 抛 TtsTimeoutError', async () => {
     const getStatus = vi.fn().mockResolvedValue({ status: 'processing' });
     const promise = pollTtsTaskUntilDone('task-4', { intervalMs: 100, timeoutMs: 300, getStatus });
+    const rejection = expect(promise).rejects.toThrow(/超时|timeout/i);
     await vi.advanceTimersByTimeAsync(400);
-    await expect(promise).rejects.toThrow(/超时|timeout/i);
+    await rejection;
   });
 });
