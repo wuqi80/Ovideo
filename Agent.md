@@ -8898,3 +8898,9 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - 本地验收：Qwen 直接生成 PNG 成功；SeedVR2 视频高清化及 H.264 MP4 合成成功；后端定向测试 26/26、前端测试 306 项通过、生产构建通过。
 - 尚需部署至 `mecha.one` 并完成指定 GPU2 的生产端到端任务，才可完成最终验收。
 - 部署脚本已加固：`scp` 后恢复 `/home/Administrator/deploy` 的属主与 `0755` 权限；回滚会清除前端源码哈希；服务状态最长轮询 60 秒，避免 `activating` 被误判为失败。
+
+## 2026-07-13 部署契约同步
+
+- MiniMax 视频请求通过客户端薄封装统一进入共享 HTTP helper，业务响应和错误校验行为不变。
+- 路由契约已纳入两条跨分集资产同步接口，当前基线为 244 个 OpenAPI paths、300 个 operations、7 条资产路由。
+- 本地验证：完整路由契约通过，资产、Provider 和视频相关测试 62 项通过。

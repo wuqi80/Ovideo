@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 242
-DEFAULT_EXPECTED_OPERATIONS = 298
+DEFAULT_EXPECTED_PATHS = 244
+DEFAULT_EXPECTED_OPERATIONS = 300
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -2631,6 +2631,8 @@ def check_asset_routes_extracted(root: Path) -> int:
         ("/api/assets/{asset_id}", "put"),
         ("/api/assets/{asset_id}", "delete"),
         ("/api/assets/{asset_id}/share", "post"),
+        ("/api/projects/{project_id}/assets/sync-existing-designs", "post"),
+        ("/api/projects/{project_id}/assets/sync-existing-designs/candidates", "get"),
     }
 
     api_tree = parse_py_file(api_routes_path)
@@ -2669,8 +2671,8 @@ def check_asset_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 5:
-        fail(f"routers/assets.py should own 5 asset route registrations, found {route_count}")
+    if route_count != 7:
+        fail(f"routers/assets.py should own 7 asset route registrations, found {route_count}")
 
     router_text = assets_path.read_text(encoding="utf-8")
     service_text = asset_service_path.read_text(encoding="utf-8")
@@ -2681,6 +2683,8 @@ def check_asset_routes_extracted(root: Path) -> int:
         (router_text, "update_asset_service(", assets_path),
         (router_text, "delete_asset_service(", assets_path),
         (router_text, "share_asset_service(", assets_path),
+        (router_text, "sync_existing_designs_service(", assets_path),
+        (router_text, "list_sync_existing_design_candidates(", assets_path),
         (service_text, "asset_dao.get_by_project(", asset_service_path),
         (service_text, "entity_file_dao.get_files_for_entities(", asset_service_path),
         (service_text, "asset_dao.create(", asset_service_path),

@@ -9694,3 +9694,9 @@
 - `scripts/live_deploy_mvc2.sh` includes the new GPU2 setup, smoke, runtime, and fallback-contract files.
 - Production acceptance is not complete until `mecha.one` is deployed and preferred `GPU2` tasks pass through upload, queue, Agent execution, and result upload.
 - Deployment hardening restores the remote application root owner/mode after `scp`, clears the frontend source hash on rollback, and polls service readiness for up to 60 seconds instead of treating a transient `activating` state as failure.
+
+## 2026-07-13 Deployment Contract Alignment
+
+- MiniMax video requests now enter the shared video HTTP helper through a client-local wrapper; request behavior and provider error validation are unchanged.
+- The route contract baseline now includes the two intentional cross-episode asset synchronization endpoints: 244 OpenAPI paths, 300 operations, and 7 asset routes.
+- Local verification passed: route contract and 62 related asset/provider/video tests.

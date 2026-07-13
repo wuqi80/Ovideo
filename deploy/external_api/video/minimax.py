@@ -123,6 +123,17 @@ class MinimaxClient:
             self._refresh_runtime_config()
         return self._runtime_config.url_for_operation(operation, **path_params)
 
+    def _request_json(self, method: str, url: str, *, label: str, **kwargs: Any) -> Any:
+        return request_json(
+            method,
+            url,
+            headers=self.headers,
+            request_kwargs=self._request_kwargs,
+            logger=logger,
+            label=label,
+            **kwargs,
+        )
+
     def generate_video(
         self,
         first_frame_image: str,
@@ -152,13 +163,10 @@ class MinimaxClient:
 
         try:
             logger.info("MiniMax create task: model=%s duration=%ss resolution=%s", resolved_model, resolved_duration, resolution)
-            result = request_json(
+            result = self._request_json(
                 "POST",
                 url,
-                headers=self.headers,
                 json=payload,
-                request_kwargs=self._request_kwargs,
-                logger=logger,
                 label="MiniMax create",
             )
             _raise_for_minimax_error("MiniMax create", result)
@@ -181,13 +189,10 @@ class MinimaxClient:
         params = {"task_id": task_id}
 
         try:
-            result = request_json(
+            result = self._request_json(
                 "GET",
                 url,
-                headers=self.headers,
                 params=params,
-                request_kwargs=self._request_kwargs,
-                logger=logger,
                 label="MiniMax query",
             )
             _raise_for_minimax_error("MiniMax query", result)
@@ -202,13 +207,10 @@ class MinimaxClient:
         params = {"file_id": file_id}
 
         try:
-            result = request_json(
+            result = self._request_json(
                 "GET",
                 url,
-                headers=self.headers,
                 params=params,
-                request_kwargs=self._request_kwargs,
-                logger=logger,
                 label="MiniMax retrieve file",
             )
             _raise_for_minimax_error("MiniMax retrieve file", result)
