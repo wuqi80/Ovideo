@@ -403,7 +403,7 @@ def _minimax_response_hint(payload: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def _minimax_error_from_payload(payload: Any) -> Optional[str]:
+def _minimax_error_from_payload(payload: Any, output_type: Optional[str] = None) -> Optional[str]:
     if not isinstance(payload, dict):
         return None
 
@@ -422,6 +422,11 @@ def _minimax_error_from_payload(payload: Any) -> Optional[str]:
                 parts.append(
                     "Hint: for Token Plan, paste the full Subscription Key from Billing > Token Plan; "
                     "Subscription Keys and pay-as-you-go API keys are not interchangeable."
+                )
+            if str(code) == "2056" and output_type == "video_task":
+                parts.append(
+                    "Hint: Token Plan Plus does not include MiniMax video generation; "
+                    "use Token Plan Max/Ultra or a pay-as-you-go/points key for Hailuo video."
                 )
             return "; ".join(parts)
 
@@ -446,7 +451,7 @@ def _minimax_error_from_payload(payload: Any) -> Optional[str]:
 
 def _real_generation_error(provider: str, output_type: str, payload: Any) -> Optional[str]:
     if normalize_provider(provider) == "minimax":
-        return _minimax_error_from_payload(payload)
+        return _minimax_error_from_payload(payload, output_type)
     return None
 
 

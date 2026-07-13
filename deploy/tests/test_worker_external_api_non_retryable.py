@@ -56,7 +56,8 @@ async def test_minimax_task_401_fails_without_retry(mock_worker):
     fake_client.generate_video = MagicMock(side_effect=_http_error(401, '{"error": "unauthorized"}'))
     # 4 家（minimax/sora2/veo/wan26）在 worker.py 里是 lazy import，
     # patch 模块路径而非 worker 符号表
-    with patch('minimax_api.get_minimax_client', return_value=fake_client):
+    with patch('minimax_api.get_minimax_client', return_value=fake_client), \
+         patch.object(mock_worker, '_file_id_to_dashscope_url', AsyncMock(return_value='data:image/png;base64,AAA')):
         ok = await mock_worker._process_minimax_task(task)
     assert ok is False
     mock_worker.task_queue.fail_task.assert_awaited_once()
@@ -178,7 +179,8 @@ async def test_minimax_terminal_failed_status_fails_without_retry(mock_worker):
         'status': 'failed',
         'base_resp': {'status_msg': 'insufficient balance'},
     })
-    with patch('minimax_api.get_minimax_client', return_value=fake_client):
+    with patch('minimax_api.get_minimax_client', return_value=fake_client), \
+         patch.object(mock_worker, '_file_id_to_dashscope_url', AsyncMock(return_value='data:image/png;base64,AAA')):
         ok = await mock_worker._process_minimax_task(task)
     assert ok is False
     args = mock_worker.task_queue.fail_task.call_args[0]
@@ -206,13 +208,29 @@ async def test_minimax_task_uses_model_name_duration_and_success_status(mock_wor
     fake_client.download_video = MagicMock(return_value=b'video-bytes')
     mock_worker._save_external_video = AsyncMock(return_value={'url': '/videos/minimax.mp4'})
 
-    with patch('minimax_api.get_minimax_client', return_value=fake_client):
+    with patch('minimax_api.get_minimax_client', return_value=fake_client), \
+         patch.object(mock_worker, '_file_id_to_dashscope_url', AsyncMock(return_value='data:image/png;base64,AAA')):
         ok = await mock_worker._process_minimax_task(task)
 
     assert ok is True
     _, kwargs = fake_client.generate_video.call_args
+    assert kwargs['first_frame_image'] == 'data:image/png;base64,AAA'
     assert kwargs['model'] == 'MiniMax-Hailuo-2.3-Fast'
     assert kwargs['duration'] == 10
     fake_client.query_task.assert_called_once_with('remote-3')
     fake_client.download_video.assert_called_once_with('file-3')
     mock_worker.task_queue.complete_task.assert_awaited_once()
+
+
+def test_minimax_video_token_plan_2056_message_is_actionable():
+    from services.api_provider_runtime import vendor_user_facing_error
+
+    message = vendor_user_facing_error(
+        RuntimeError("MiniMax create failed: status_code=2056 status_msg=已达到 Token Plan 用量上限"),
+        "minimax",
+    )
+
+    assert "Token Plan" in message
+    assert "Plus" in message
+    assert "Max" in message
+    assert "Ultra" in message

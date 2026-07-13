@@ -311,6 +311,21 @@ def test_minimax_base_resp_error_is_actionable_for_token_plan() -> None:
     assert "Subscription Key" in error
 
 
+def test_minimax_video_2056_mentions_token_plan_video_limit() -> None:
+    error = _minimax_error_from_payload(
+        {
+            "base_resp": {
+                "status_code": 2056,
+                "status_msg": "已达到 Token Plan 用量上限",
+            }
+        },
+        "video_task",
+    )
+
+    assert "MiniMax status_code=2056" in error
+    assert "Token Plan Plus does not include MiniMax video generation" in error
+
+
 def test_video_real_generation_does_not_create_billable_task() -> None:
     with pytest.raises(ProviderHealthNotFound):
         _real_generation_request(

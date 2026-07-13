@@ -855,6 +855,12 @@ def vendor_user_facing_error(exc: BaseException, vendor: str) -> str:
             f"请在厂商控制台开通模型或切换到已开通模型。"
         )
     # 余额/额度
+    if vendor == "minimax" and 2056 in business_codes and "token plan" in normalized_error_text:
+        return (
+            "MiniMax Token Plan 当前套餐不支持视频生成或每日视频额度已用尽："
+            "Plus 不含视频生成，Max 为 3 条/日，Ultra 为 5 条/日。"
+            "请升级 Token Plan，或切换到支持视频生成的按量/积分 Key。"
+        )
     if business_codes.intersection({1008, 2056}) or any(
         m in normalized_error_text for m in ("balance", "quota", "insufficient")
     ):

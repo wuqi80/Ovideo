@@ -953,6 +953,16 @@ class Worker:
 
             if not first_frame_image:
                 raise ValueError("缺少 first_frame_image 参数")
+
+            first_frame_image = await self._file_id_to_dashscope_url(
+                first_frame_image,
+                label="minimax_first_frame",
+            )
+            if last_frame_image:
+                last_frame_image = await self._file_id_to_dashscope_url(
+                    last_frame_image,
+                    label="minimax_last_frame",
+                )
             
             # 创建视频生成任务
             logger.info(f"🎬 创建 MiniMax 任务: {task.task_type}")
