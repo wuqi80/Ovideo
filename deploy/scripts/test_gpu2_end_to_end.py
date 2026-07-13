@@ -4,7 +4,10 @@ from __future__ import annotations
 import argparse
 import io
 import os
+from pathlib import Path
+import subprocess
 import sys
+import tempfile
 import time
 
 import requests
@@ -23,6 +26,7 @@ WORKFLOWS = {
     "i2i_fj",
     "i2i_human",
     "i2i_around",
+    "video_upscale",
 }
 
 
@@ -42,7 +46,17 @@ def _submit_workflow(
     agent_id: str,
 ) -> requests.Response:
     routing = {"preferred_agent_id": agent_id, "preferred_node_id": agent_id}
-    if workflow in {"upscale_hd", "remove_watermark", "three_view"}:
+    if workflow == "video_upscale":
+        endpoint = "/api/generate"
+        payload = {
+            "task_type": "upscale",
+            "video_filename": filename,
+            "seed": 20260713,
+            "resolution": 360,
+            "priority": 2,
+            **routing,
+        }
+    elif workflow in {"upscale_hd", "remove_watermark", "three_view"}:
         endpoint = "/api/materials/process"
         payload = {"image_filename": filename, "workflow_type": workflow, **routing}
     elif workflow in {"qwen", "qwen_lora", "qwenN", "qwenN_lora", "kontext"}:
@@ -72,6 +86,57 @@ def _submit_workflow(
     )
 
 
+def _build_smoke_video() -> bytes:
+    with tempfile.TemporaryDirectory(prefix="mecha-gpu2-e2e-") as temp_dir:
+        output_path = Path(temp_dir) / "gpu2-e2e-smoke.mp4"
+        command = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x2a5ba8:s=64x64:r=2:d=1",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(output_path),
+        ]
+        subprocess.run(command, check=True, timeout=60)
+        return output_path.read_bytes()
+
+
+def _upload_input(
+    session: requests.Session,
+    base_url: str,
+    headers: dict[str, str],
+    workflow: str,
+) -> dict:
+    if workflow == "video_upscale":
+        upload = session.post(
+            f"{base_url}/api/upload",
+            headers=headers,
+            files={"file": ("gpu2-e2e-smoke.mp4", _build_smoke_video(), "video/mp4")},
+            timeout=60,
+        )
+    else:
+        image = Image.new("RGB", (64, 64), color=(42, 91, 168))
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format="PNG")
+        upload = session.post(
+            f"{base_url}/api/comfyui/upload",
+            headers=headers,
+            files={"image": ("gpu2-e2e-smoke.png", image_bytes.getvalue(), "image/png")},
+            data={"node_type": "image"},
+            timeout=60,
+        )
+    upload.raise_for_status()
+    return upload.json()
+
+
 def main() -> int:
     args = _parse_args()
     base_url = os.environ.get("MECHA_BASE_URL", "https://mecha.one").rstrip("/")
@@ -92,18 +157,7 @@ def main() -> int:
         raise RuntimeError("Login did not return a token")
     headers = {"Authorization": f"Bearer {token}"}
 
-    image = Image.new("RGB", (64, 64), color=(42, 91, 168))
-    image_bytes = io.BytesIO()
-    image.save(image_bytes, format="PNG")
-    upload = session.post(
-        f"{base_url}/api/comfyui/upload",
-        headers=headers,
-        files={"image": ("gpu2-e2e-smoke.png", image_bytes.getvalue(), "image/png")},
-        data={"node_type": "image"},
-        timeout=60,
-    )
-    upload.raise_for_status()
-    uploaded = upload.json()
+    uploaded = _upload_input(session, base_url, headers, args.workflow)
 
     submit = _submit_workflow(
         session,
@@ -113,7 +167,10 @@ def main() -> int:
         args.workflow,
         agent_id,
     )
-    submit.raise_for_status()
+    if not submit.ok:
+        raise RuntimeError(
+            f"Task submission failed ({submit.status_code}): {submit.text[:1000]}"
+        )
     task_id = submit.json().get("task_id")
     if not task_id:
         raise RuntimeError(f"Task submission did not return task_id: {submit.text[:500]}")
@@ -125,16 +182,18 @@ def main() -> int:
         status = status_response.json()
         if status.get("status") == "completed":
             result = status.get("result") or {}
-            images = result.get("images") or []
-            if not images:
-                raise RuntimeError(f"GPU2 task completed without images: {status}")
+            result_key = "videos" if args.workflow == "video_upscale" else "images"
+            outputs = result.get(result_key) or []
+            if not outputs:
+                raise RuntimeError(f"GPU2 task completed without {result_key}: {status}")
             print(
                 {
                     "success": True,
                     "task_id": task_id,
                     "workflow": args.workflow,
                     "input_file_id": uploaded.get("file_id"),
-                    "result_count": len(images),
+                    "result_type": result_key,
+                    "result_count": len(outputs),
                     "node_id": status.get("node_id"),
                 }
             )

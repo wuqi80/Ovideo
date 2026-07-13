@@ -9700,3 +9700,18 @@
 - MiniMax video requests now enter the shared video HTTP helper through a client-local wrapper; request behavior and provider error validation are unchanged.
 - The route contract baseline now includes the two intentional cross-episode asset synchronization endpoints: 244 OpenAPI paths, 300 operations, and 7 asset routes.
 - Local verification passed: route contract and 62 related asset/provider/video tests.
+
+## 2026-07-13 GPU Placeholder Workflow Completion
+
+### Runtime Changes
+
+- Empty `qwenN*` and placeholder `qwenN_lora*` definitions are resolved to executable Qwen workflow families before queue submission.
+- The placeholder-only `three_view` material workflow resolves to `qwen_1` with a dedicated front/side/back turnaround prompt, so GPU1 and GPU2 receive a real node graph without modifying protected `workflows/*.json` files.
+- `scripts/test_gpu2_end_to_end.py` now supports `video_upscale`: it creates a one-second low-resolution H.264 input, uploads through the frontend API path, routes to GPU2, and requires a returned video result.
+
+### Verification
+
+- Targeted backend tests passed: 11/11.
+- Python compilation passed for the changed router and acceptance script.
+- Route contract passed with 244 OpenAPI paths and 300 operations.
+- Production acceptance remains required for `three_view`, `upscale_hd`, and `video_upscale` after deployment.

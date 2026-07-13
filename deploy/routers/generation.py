@@ -30,7 +30,15 @@ from utils.image_reference import storage_path_safe
 COMFYUI_WORKFLOW_FALLBACKS = {
     "qwenN": "qwen",
     "qwenN_lora": "qwen_lora",
+    "three_view": "qwen",
 }
+
+THREE_VIEW_PROMPT = (
+    "Create a professional three-view turnaround sheet from the reference image. "
+    "Show the same subject in front, side, and back views, aligned at equal scale "
+    "on a clean neutral background. Preserve identity, clothing, colors, proportions, "
+    "and design details. Do not add text, labels, borders, or unrelated objects."
+)
 
 
 def resolve_executable_comfyui_workflow_type(requested_type: str, image_count: int) -> tuple[str, bool]:
@@ -509,6 +517,11 @@ def create_generation_router(
             if request.workflow_type not in ["upscale_hd", "remove_watermark", "three_view"]:
                 raise HTTPException(status_code=400, detail=f"不支持的工作流类型: {request.workflow_type}")
 
+            actual_workflow_type, fallback_applied = resolve_executable_comfyui_workflow_type(
+                request.workflow_type,
+                1,
+            )
+
             if request.workflow_type == "upscale_hd":
                 seed = random.randint(100000, 999999)
                 seed_key = "seed_0"
@@ -516,9 +529,20 @@ def create_generation_router(
                 seed = random.randint(100000000000000, 999999999999999)
                 seed_key = "seed"
 
-            task_data = {"image_path": request.image_filename, seed_key: seed}
+            if request.workflow_type == "three_view":
+                task_data = {
+                    "image_path_1": request.image_filename,
+                    "prompt": THREE_VIEW_PROMPT,
+                    seed_key: seed,
+                }
+                logger.warning(
+                    "Workflow three_view is a placeholder; routing to executable workflow %s",
+                    actual_workflow_type,
+                )
+            else:
+                task_data = {"image_path": request.image_filename, seed_key: seed}
             _attach_entity_fields(task_data, request)
-            task_id = await task_service_module.get().submit(request.workflow_type, task_data, username)
+            task_id = await task_service_module.get().submit(actual_workflow_type, task_data, username)
 
             workflow_names = {
                 "upscale_hd": "高清放大",
@@ -531,6 +555,9 @@ def create_generation_router(
             return {
                 "success": True,
                 "task_id": task_id,
+                "workflow_type": actual_workflow_type,
+                "requested_workflow_type": request.workflow_type,
+                "fallback_applied": fallback_applied,
                 "message": f"{workflow_names[request.workflow_type]}任务已提交",
             }
 

@@ -8904,3 +8904,11 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - MiniMax 视频请求通过客户端薄封装统一进入共享 HTTP helper，业务响应和错误校验行为不变。
 - 路由契约已纳入两条跨分集资产同步接口，当前基线为 244 个 OpenAPI paths、300 个 operations、7 条资产路由。
 - 本地验证：完整路由契约通过，资产、Provider 和视频相关测试 62 项通过。
+
+## 2026-07-13 GPU 占位工作流收口
+
+- 仓库占位定义不会再作为可执行 ComfyUI 图提交；`qwenN*` 继续在入队前映射到对应的可执行 `qwen*` 系列。
+- 仅含占位元数据的 `three_view.json` 现在映射为可执行的 `qwen_1`，并注入正面、侧面、背面三视图拼版提示词；GPU1/GPU2 均可执行，受保护的 `workflows/*.json` 未修改。
+- `scripts/test_gpu2_end_to_end.py` 已覆盖图像与视频链路，其中视频验收使用一秒钟低分辨率样本，必须完成上传、排队、GPU2 处理并返回视频文件。
+- 本地验证：定向测试 11/11、Python 编译通过、路由契约保持 244 paths / 300 operations。
+- 部署后必须完成指定 GPU2 的 `three_view`、`upscale_hd`、`video_upscale` 真实任务验收。
