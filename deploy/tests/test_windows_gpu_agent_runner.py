@@ -34,6 +34,7 @@ def test_gpu2_wan_i2v_uses_one_scaled_fp8_model_and_aggressive_ram_offload():
     prepared = prepare_gpu2_task(task)
 
     assert is_gpu2_wan_i2v_task(task)
+    assert workflow["10"]["inputs"]["precision"] == "bf16"
     assert workflow["12"]["inputs"]["blocks_to_swap"] == GPU2_WAN_BLOCKS_TO_SWAP
     assert workflow["12"]["inputs"]["offload_img_emb"] is True
     assert workflow["14"]["inputs"]["model"] == GPU2_WAN_MODEL_FILES["diffusion"]
