@@ -1,5 +1,6 @@
 import type {
   DashScopeVideoParams,
+  MiniMaxVideoParams,
   SeedanceParams,
   ShotType,
   VideoModel,
@@ -32,6 +33,7 @@ export interface TaskGroup {
   shotType?: ShotType;
   duration?: number;
   durationUserOverride?: boolean;
+  minimaxParams?: MiniMaxVideoParams;
   mergedFrom?: MergedCardSnapshot[];
 }
 

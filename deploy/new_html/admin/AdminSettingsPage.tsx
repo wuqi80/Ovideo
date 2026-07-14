@@ -2045,6 +2045,8 @@ const ApiConfigCard: React.FC<{
     onDelete,
 }) => {
     const provider = normalizeProvider(config.provider);
+    const realGenerationBlocked = categoryView === 'video'
+        || (!categoryView && Boolean(meta && categoryFromProviderMeta(meta) === 'video'));
     const cardTitle = apiConfigCardTitle(config, meta, categoryView);
     const modelBindings = bindingsForCategory(
         apiConfigModelBindings(config, meta),
@@ -2353,12 +2355,14 @@ const ApiConfigCard: React.FC<{
                             <button
                                 type="button"
                                 onClick={() => onRealTestConfig(config, categoryView)}
-                                disabled={realTestingConfig || !configHasKey || !config.config_id}
+                                disabled={realGenerationBlocked || realTestingConfig || !configHasKey || !config.config_id}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
-                                title="发起一次真实生成请求验证可用性，可能产生厂商费用"
+                                title={realGenerationBlocked
+                                    ? '视频生成会创建付费任务，请到业务页面验证'
+                                    : '发起一次真实生成请求验证可用性，可能产生厂商费用'}
                             >
                                 {realTestingConfig ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
-                                真实生成
+                                {realGenerationBlocked ? '视频测试已阻止' : '真实生成'}
                             </button>
                             <button
                                 type="button"
@@ -2465,6 +2469,7 @@ const ProviderQuickCard: React.FC<{
     onCheck,
 }) => {
     const provider = normalizeProvider(meta.provider);
+    const realGenerationBlocked = categoryFromProviderMeta(meta) === 'video';
     const primaryConfig = bestConfigForProvider(configs, provider, runtime);
     const activeConfigId = runtime?.db_effective_config_id || primaryConfig?.config_id || '';
     const sortedConfigs = [...configs].sort((a, b) => {
@@ -2755,15 +2760,19 @@ const ProviderQuickCard: React.FC<{
                                 type="button"
                                 onClick={() => onRealTestConfig(primaryConfig)}
                                 disabled={
+                                    realGenerationBlocked
+                                    ||
                                     Boolean(realTestingConfigMap[primaryConfig.config_id])
                                     || !Boolean(primaryConfig.has_key ?? primaryConfig.api_key_encrypted)
                                     || !primaryConfig.config_id
                                 }
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
-                                title="使用当前卡片选中的 Key 发起一次真实生成请求，可能产生厂商费用"
+                                title={realGenerationBlocked
+                                    ? '视频生成会创建付费任务，请到业务页面验证'
+                                    : '使用当前卡片选中的 Key 发起一次真实生成请求，可能产生厂商费用'}
                             >
                                 {realTestingConfigMap[primaryConfig.config_id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
-                                真实生成
+                                {realGenerationBlocked ? '视频测试已阻止' : '真实生成'}
                             </button>
                             <button
                                 type="button"
@@ -2801,12 +2810,14 @@ const ProviderQuickCard: React.FC<{
                                             <button
                                                 type="button"
                                                 onClick={() => onRealTestConfig(config)}
-                                                disabled={rowRealTesting || !hasKey || !config.config_id}
+                                                disabled={realGenerationBlocked || rowRealTesting || !hasKey || !config.config_id}
                                                 className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border border-y200 bg-y50 text-y400 hover:bg-y50 disabled:opacity-60"
-                                                title="使用这一条 Key 发起一次真实生成请求，可能产生厂商费用；不会把它设为生效"
+                                                title={realGenerationBlocked
+                                                    ? '视频生成会创建付费任务，请到业务页面验证'
+                                                    : '使用这一条 Key 发起一次真实生成请求，可能产生厂商费用；不会把它设为生效'}
                                             >
                                                 {rowRealTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3" />}
-                                                真实生成
+                                                {realGenerationBlocked ? '视频测试已阻止' : '真实生成'}
                                             </button>
                                         </div>
                                     </div>

@@ -680,6 +680,35 @@ def test_minimax_video_accepts_nested_task_id_and_normalizes_duration(monkeypatc
     assert calls[0]["json"]["duration"] == 6
 
 
+def test_minimax_video_enforces_supported_resolution_duration_pair(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-minimax-key")
+    monkeypatch.setenv(endpoint_env, "https://minimax-runtime.example.test/v1")
+
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return _MinimaxTaskResponse()
+
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
+
+    client = minimax_video.MinimaxClient()
+    client.generate_video(
+        first_frame_image="https://cdn.example.test/frame.png",
+        prompt="move gently",
+        duration=10,
+        resolution="1080P",
+        prompt_optimizer=False,
+    )
+
+    assert calls[0]["json"]["duration"] == 6
+    assert calls[0]["json"]["resolution"] == "1080P"
+    assert calls[0]["json"]["prompt_optimizer"] is False
+
+
 def test_minimax_video_business_error_is_actionable(monkeypatch):
     env_key = get_provider_env_key("minimax")
     assert env_key

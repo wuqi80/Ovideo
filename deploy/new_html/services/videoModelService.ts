@@ -8,6 +8,41 @@ export type VideoModel =
   | 'Seedance2' | 'Seedance2Fast'
   | 'Kling' | 'Vidu' | 'HappyHorse';
 
+export type MiniMaxVideoModelName = 'MiniMax-Hailuo-2.3' | 'MiniMax-Hailuo-2.3-Fast';
+export type MiniMaxVideoDuration = 6 | 10;
+export type MiniMaxVideoResolution = '768P' | '1080P';
+
+export interface MiniMaxVideoParams {
+  model: MiniMaxVideoModelName;
+  duration: MiniMaxVideoDuration;
+  resolution: MiniMaxVideoResolution;
+  promptOptimizer: boolean;
+}
+
+export const DEFAULT_MINIMAX_VIDEO_PARAMS: MiniMaxVideoParams = {
+  model: 'MiniMax-Hailuo-2.3',
+  duration: 6,
+  resolution: '768P',
+  promptOptimizer: true,
+};
+
+export function normalizeMiniMaxVideoParams(
+  params?: Partial<MiniMaxVideoParams> | null,
+): MiniMaxVideoParams {
+  const model = params?.model === 'MiniMax-Hailuo-2.3-Fast'
+    ? params.model
+    : DEFAULT_MINIMAX_VIDEO_PARAMS.model;
+  const resolution: MiniMaxVideoResolution = params?.resolution === '1080P' ? '1080P' : '768P';
+  const requestedDuration: MiniMaxVideoDuration = Number(params?.duration) === 10 ? 10 : 6;
+
+  return {
+    model,
+    duration: resolution === '1080P' ? 6 : requestedDuration,
+    resolution,
+    promptOptimizer: params?.promptOptimizer !== false,
+  };
+}
+
 export type DashScopeVideoModel = 'Kling' | 'Vidu' | 'HappyHorse';
 
 export function isComfyUIModel(model: VideoModel): boolean {

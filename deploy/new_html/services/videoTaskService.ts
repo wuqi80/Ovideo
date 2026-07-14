@@ -17,6 +17,13 @@ import { resolveGpuTaskRouting } from './clusterNodeService';
 export type { VideoTask } from './videoTaskTypes';
 export { cancelTask, deleteTask } from './taskControlService';
 
+export interface VideoGenerationOptions {
+    duration?: number;
+    minimax_model?: string;
+    minimax_resolution?: '768P' | '1080P';
+    minimax_prompt_optimizer?: boolean;
+}
+
 function hasAuthHeader(): boolean {
     const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
     return Object.keys(headers).some(key => key.toLowerCase() === 'authorization');
@@ -65,10 +72,7 @@ export async function submitTask(
         preferred_agent_id?: string;
         preferred_node_id?: string;
     },
-    generationOptions?: {
-        duration?: number;
-        minimax_model?: string;
-    }
+    generationOptions?: VideoGenerationOptions
 ): Promise<{ task_id: string }> {
     let taskType = imageFilenameEnd ? 'morph' : 'i2v';
     let requestData: Record<string, any> = {};
@@ -83,6 +87,8 @@ export async function submitTask(
             prompt: prompt,
             duration: generationOptions?.duration,
             minimax_model: generationOptions?.minimax_model,
+            minimax_resolution: generationOptions?.minimax_resolution,
+            minimax_prompt_optimizer: generationOptions?.minimax_prompt_optimizer,
             priority: 2
         };
         if (imageFilenameEnd) {
@@ -505,10 +511,7 @@ export async function submitTaskQueued(
         project_id?: string;
         episode_id?: string;
     },
-    generationOptions?: {
-        duration?: number;
-        minimax_model?: string;
-    }
+    generationOptions?: VideoGenerationOptions
 ): Promise<{ task_id: string }> {
     // 外部API模型不需要排队，直接提交
     if (!isComfyUIModel(model)) {

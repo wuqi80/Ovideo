@@ -23,7 +23,6 @@ from services.api_provider_registry import (
     get_provider_api_path,
     get_provider_default_endpoint,
     is_google_generative_language_endpoint,
-    normalize_minimax_video_model,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
     normalize_provider,
@@ -601,16 +600,7 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
     if normalized == "minimax":
         category = str(row.get("_test_category") or row.get("category") or "").strip().lower()
         if category == "video":
-            model = normalize_minimax_video_model(model)
-            url = _join_api_url(endpoint, get_provider_api_path(normalized, "video_generation"))
-            return url, {
-                "model": model,
-                "prompt": "A simple blue square slowly fades in and out.",
-                "duration": 6,
-                "resolution": "768P",
-                "prompt_optimizer": False,
-                "aigc_watermark": False,
-            }, "video_task"
+            raise ProviderHealthNotFound(REAL_GENERATION_UNSUPPORTED_ERROR)
         if category != "audio":
             raise ProviderHealthNotFound(REAL_GENERATION_UNSUPPORTED_ERROR)
         model = model if model.lower().startswith("speech-") else "speech-2.8-hd"
@@ -674,8 +664,6 @@ def _real_generation_response_ok(output_type: str, payload: Any) -> bool:
         return _has_gemini_inline_data(payload) or _has_openai_image_data(payload)
     if output_type == "image_task":
         return bool(parse_doubao_image_task_response(payload if isinstance(payload, dict) else {}))
-    if output_type == "video_task":
-        return _has_minimax_task_id(payload)
     return False
 
 

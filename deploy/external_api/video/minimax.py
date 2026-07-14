@@ -80,6 +80,21 @@ def normalize_minimax_duration(duration: Optional[int]) -> int:
     return 10 if value > 6 else 6
 
 
+def normalize_minimax_resolution(resolution: Optional[str]) -> str:
+    return "1080P" if str(resolution or "").strip().upper() == "1080P" else "768P"
+
+
+def normalize_minimax_generation_options(
+    duration: Optional[int],
+    resolution: Optional[str],
+) -> tuple[int, str]:
+    resolved_duration = normalize_minimax_duration(duration)
+    resolved_resolution = normalize_minimax_resolution(resolution)
+    if resolved_resolution == "1080P":
+        resolved_duration = 6
+    return resolved_duration, resolved_resolution
+
+
 def normalize_minimax_status(payload: Dict[str, Any]) -> str:
     return str(payload.get("status") or "").strip().lower()
 
@@ -141,12 +156,12 @@ class MinimaxClient:
         last_frame_image: Optional[str] = None,
         model: Optional[str] = None,
         duration: int = 6,
-        resolution: str = "720P",
+        resolution: str = "768P",
         prompt_optimizer: bool = True,
     ) -> Dict[str, Any]:
         self._refresh_runtime_config(model)
         resolved_model = self.model_name or DEFAULT_MINIMAX_VIDEO_MODEL
-        resolved_duration = normalize_minimax_duration(duration)
+        resolved_duration, resolved_resolution = normalize_minimax_generation_options(duration, resolution)
         url = self._url_for_operation("video_generation")
 
         payload = {
@@ -154,15 +169,15 @@ class MinimaxClient:
             "first_frame_image": first_frame_image,
             "prompt": prompt,
             "duration": resolved_duration,
-            "resolution": resolution,
-            "prompt_optimizer": prompt_optimizer,
+            "resolution": resolved_resolution,
+            "prompt_optimizer": bool(prompt_optimizer),
             "aigc_watermark": False,
         }
         if last_frame_image:
             payload["last_frame_image"] = last_frame_image
 
         try:
-            logger.info("MiniMax create task: model=%s duration=%ss resolution=%s", resolved_model, resolved_duration, resolution)
+            logger.info("MiniMax create task: model=%s duration=%ss resolution=%s", resolved_model, resolved_duration, resolved_resolution)
             result = self._request_json(
                 "POST",
                 url,

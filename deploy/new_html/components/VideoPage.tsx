@@ -13,8 +13,10 @@ import {
     getModelDisplayName,
     isDashScopeVideoModel,
     makeDefaultDashScopeParams,
+    normalizeMiniMaxVideoParams,
     type DashScopeVideoModel,
     type DashScopeVideoParams,
+    type MiniMaxVideoParams,
     type SeedanceMediaInput,
     type SeedanceParams,
     type ShotType,
@@ -68,6 +70,7 @@ import {
     DurationFieldForGroup,
     AudioBadgesRow,
 } from './video/VideoCard';
+import { MiniMaxVideoPanel } from './video/MiniMaxVideoPanel';
 import { MediaBadges } from './video/MediaBadges';
 // 2026-05-24 — DashScope 共享 API：合体(Kling) / 大乘(Vidu) / 炼虚(HappyHorse)
 // Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoModelService.ts，
@@ -1400,7 +1403,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }, []);
     
     const updateTaskModel = useCallback((uuid: string, model: VideoModel) => {
-        setTaskGroups(prev => prev.map(g => g.uuid === uuid ? { ...g, model } : g));
+        setTaskGroups(prev => prev.map(g => {
+            if (g.uuid !== uuid) return g;
+            return model === 'MINI'
+                ? { ...g, model, minimaxParams: normalizeMiniMaxVideoParams(g.minimaxParams) }
+                : { ...g, model };
+        }));
         if (model === 'Seedance2' || model === 'Seedance2Fast') {
             const subModel: SeedanceParams['sub_model'] = model === 'Seedance2Fast' ? 'fast' : 'standard';
             setSeedanceParamsByUuid(prev => {
@@ -2066,6 +2074,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }
             
             const prompt = imagePrompts[group.ids[0]] || '';
+            const minimaxParams = group.model === 'MINI'
+                ? normalizeMiniMaxVideoParams(group.minimaxParams)
+                : undefined;
             
             console.log('📤 提交任务:', { filename1, filename2, prompt: prompt.substring(0, 50), model: group.model });
             
@@ -2085,7 +2096,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     episode_id: episodeId,
                 },
                 {
-                    duration: group.duration,
+                    duration: minimaxParams?.duration ?? group.duration,
+                    minimax_model: minimaxParams?.model,
+                    minimax_resolution: minimaxParams?.resolution,
+                    minimax_prompt_optimizer: minimaxParams?.promptOptimizer,
                 }
             );
             
@@ -3067,6 +3081,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 </>
                             );
                         })()
+                    ) : group.model === 'MINI' ? (
+                        <MiniMaxVideoPanel
+                            compact
+                            value={normalizeMiniMaxVideoParams(group.minimaxParams)}
+                            prompt={promptText}
+                            onChange={(next: MiniMaxVideoParams) => patchTaskGroup(group.uuid, { minimaxParams: next })}
+                            onPromptChange={(next) => updatePrompt(group.ids[0], next)}
+                        />
                     ) : (
                         <textarea
                             value={promptText}
@@ -3428,6 +3450,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 }}
                             />
                         </React.Suspense>
+                    ) : group.model === 'MINI' ? (
+                        <MiniMaxVideoPanel
+                            value={normalizeMiniMaxVideoParams(group.minimaxParams)}
+                            prompt={imagePrompts[group.ids[0]] || ''}
+                            onChange={(next: MiniMaxVideoParams) => patchTaskGroup(group.uuid, { minimaxParams: next })}
+                            onPromptChange={(next) => updatePrompt(group.ids[0], next)}
+                        />
                     ) : (
                         <textarea
                             value={imagePrompts[group.ids[0]] || ''}

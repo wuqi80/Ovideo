@@ -198,6 +198,8 @@ async def test_minimax_task_uses_model_name_duration_and_success_status(mock_wor
             'prompt': 'hello',
             'model_name': 'MiniMax-Hailuo-2.3-Fast',
             'duration': 10,
+            'minimax_resolution': '768P',
+            'minimax_prompt_optimizer': False,
         },
         priority=2,
         user_id='u1',
@@ -217,6 +219,8 @@ async def test_minimax_task_uses_model_name_duration_and_success_status(mock_wor
     assert kwargs['first_frame_image'] == 'data:image/png;base64,AAA'
     assert kwargs['model'] == 'MiniMax-Hailuo-2.3-Fast'
     assert kwargs['duration'] == 10
+    assert kwargs['resolution'] == '768P'
+    assert kwargs['prompt_optimizer'] is False
     fake_client.query_task.assert_called_once_with('remote-3')
     fake_client.download_video.assert_called_once_with('file-3')
     mock_worker.task_queue.complete_task.assert_awaited_once()
