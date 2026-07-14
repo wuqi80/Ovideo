@@ -24,6 +24,13 @@ import { runWhenIdle } from '../utils/idleScheduler';
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 const VideoPage = React.lazy(() => import('../components/VideoPage').then(m => ({ default: m.VideoPage })));
 
+function hasImportedWorkspaceContent(session: any): boolean {
+  return Boolean(
+    session
+    && (((session.task_groups || []).length > 0) || ((session.uploaded_images || []).length > 0))
+  );
+}
+
 const WorkflowChunkFallback: React.FC<{ label: string }> = ({ label }) => (
   <div className="h-full min-h-[240px] flex items-center justify-center text-n300">
     <div className="flex items-center gap-2 text-sm">
@@ -61,6 +68,8 @@ export const VideoGenPage: React.FC = () => {
   const [showImportPanel, setShowImportPanel] = useState(true);
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);
+  const [workspaceChecked, setWorkspaceChecked] = useState(false);
+  const [hasWorkspaceImport, setHasWorkspaceImport] = useState(false);
   const [importMsg, setImportMsg] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
   const autoImported = useRef(false);
   // 分镜图改了之后，视频页用的是缓存会话里的旧图——这里检测差异并提供"非破坏性同步"
@@ -279,7 +288,10 @@ export const VideoGenPage: React.FC = () => {
         return;
       }
       setImportDone(true);
+      setWorkspaceChecked(true);
+      setHasWorkspaceImport(true);
       setShowImportPanel(false);
+      setSyncNonce(n => n + 1);
 
       // 2) 后台批量混音：对有音轨但没有 mixedAudio 的 item 调用 mix-audio
       const itemsToMix = Object.entries(meta).filter(([, m]) =>
@@ -334,26 +346,44 @@ export const VideoGenPage: React.FC = () => {
     }
   }, [ensureAllStoryboardItemsForImport, importing, sessionScope, totalStoryboardCount]);
 
+  const handleReimportAll = useCallback(() => {
+    if (importing) return;
+    const confirmed = window.confirm(
+      '再次导入会覆盖当前视频工作区已经导入的卡片、模型参数和任务状态。确定要覆盖并重新导入全部分镜吗？'
+    );
+    if (!confirmed) return;
+    handleImportAll();
+  }, [handleImportAll, importing]);
+
   useEffect(() => {
     autoImported.current = false;
     setImportDone(false);
+    setWorkspaceChecked(false);
+    setHasWorkspaceImport(false);
     setShowImportPanel(true);
   }, [sessionScope]);
 
   useEffect(() => {
     if (autoImported.current || importing || importDone || isLoading) return;
     if (allStoryboardItems.length === 0) return;
+    let alive = true;
     (async () => {
       try {
         const existing = await loadWorkspaceSession(sessionScope);
         const sess: any = existing.session;
-        const groupCount = sess?.task_groups?.length || 0;
-        // 真实图（非占位、有 url）数量。某些旧会话在分镜图生成前导入，全是占位符（url 空），
-        // 换设备/账号打开就只剩"点击上传图片"空卡 —— 此时自动重建以拉入最新分镜图，自愈。
-        const realImgCount = (sess?.uploaded_images || [])
-          .filter((i: any) => i.url && !i.isPlaceholder).length;
-        const placeholderBroken = groupCount > 0 && realImgCount === 0 && itemsWithImages.length > 0;
-        if (!existing.success || !groupCount || placeholderBroken) {
+        const hasImported = existing.success && hasImportedWorkspaceContent(sess);
+        if (!alive) return;
+        setWorkspaceChecked(true);
+        setHasWorkspaceImport(hasImported);
+
+        if (hasImported) {
+          autoImported.current = true;
+          setImportDone(true);
+          setShowImportPanel(false);
+          return;
+        }
+
+        if (!existing.success || !hasImported) {
           if (isStoryboardPagePartial) {
             setImportMsg({
               kind: 'info',
@@ -364,12 +394,14 @@ export const VideoGenPage: React.FC = () => {
           autoImported.current = true;
           handleImportAll();
         }
-      } catch {}
+      } catch {
+        if (alive) setWorkspaceChecked(true);
+      }
     })();
+    return () => { alive = false; };
   }, [
     isLoading,
     allStoryboardItems,
-    itemsWithImages,
     importing,
     importDone,
     handleImportAll,
@@ -439,6 +471,7 @@ export const VideoGenPage: React.FC = () => {
       }
       await patchWorkspaceSession(sessionScope, () => ({ uploaded_images: newImages, seedance_params: newSP }));
       setChangedCount(0);
+      setHasWorkspaceImport(true);
       setSyncNonce(n => n + 1); // 重挂载 VideoPage，从更新后的会话重新加载
       setImportMsg({ kind: 'info', text: '已同步最新分镜图（保留已生成的视频）' });
     } catch {
@@ -459,7 +492,7 @@ export const VideoGenPage: React.FC = () => {
   return (
     <div className="layout-safe h-full flex flex-col bg-n20">
       {/* Import panel */}
-      {showImportPanel && !importDone && (
+      {workspaceChecked && showImportPanel && !importDone && (
         <div className="shrink-0 border-b border-n40 bg-n0 px-4 py-3">
           {importMsg && (
             <div
@@ -533,6 +566,17 @@ export const VideoGenPage: React.FC = () => {
       {/* Navigation + 同步最新分镜图 */}
       <div className="responsive-toolbar shrink-0 flex justify-between items-center px-4 py-1.5 border-b border-n40">
         <div className="toolbar-group">
+          {hasWorkspaceImport && (
+            <button
+              onClick={handleReimportAll}
+              disabled={importing || totalStoryboardCount === 0}
+              title="再次导入会覆盖当前视频工作区已经导入的卡片、模型参数和任务状态"
+              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border border-n40 bg-n0 text-n300 hover:text-n700 transition-colors disabled:opacity-50"
+            >
+              {importing ? <Loader size={12} className="animate-spin" /> : <Upload size={12} />}
+              再次导入全部分镜到视频工作区
+            </button>
+          )}
           {changedCount > 0 && (
             <span className="text-[11px] text-amber-600">⚠ {changedCount} 个分镜图已在分镜页更新</span>
           )}
