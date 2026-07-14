@@ -5,6 +5,7 @@ import argparse
 import io
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -149,8 +150,16 @@ def _submit_workflow(
 def _build_smoke_video() -> bytes:
     with tempfile.TemporaryDirectory(prefix="mecha-gpu2-e2e-") as temp_dir:
         output_path = Path(temp_dir) / "gpu2-e2e-smoke.mp4"
+        ffmpeg_exe = shutil.which("ffmpeg")
+        if not ffmpeg_exe:
+            try:
+                import imageio_ffmpeg
+
+                ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            except (ImportError, RuntimeError) as exc:
+                raise RuntimeError("ffmpeg is required to build the GPU2 video smoke input") from exc
         command = [
-            "ffmpeg",
+            ffmpeg_exe,
             "-hide_banner",
             "-loglevel",
             "error",
