@@ -171,6 +171,13 @@ async def prepare_video_voice_task(
     audio_filename = task_data.get("audio_filename")
     if not video_filename or not audio_filename:
         raise ValueError("video_filename and audio_filename are required for voice")
+    try:
+        normalized_seed = int(task_data.get("seed", -1))
+    except (TypeError, ValueError):
+        normalized_seed = -1
+    if normalized_seed < 0:
+        normalized_seed = random.randint(100000, 999999)
+    task_data["seed"] = normalized_seed
     task_data["workflow_json"] = build_video_voice_workflow(
         video_filename,
         audio_filename,

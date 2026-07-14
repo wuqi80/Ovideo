@@ -103,6 +103,21 @@ def test_gpu2_infinitetalk_uses_short_window_and_direct_audio_without_separation
     assert prepared["workflow_name"] == "gpu2_infinitetalk_wan21_low_vram"
 
 
+def test_gpu2_infinitetalk_normalizes_random_seed_sentinel():
+    workflow = build_gpu2_infinitetalk_workflow(
+        {
+            "task_type": "voice",
+            "params": {
+                "video_filename": "speaker.mp4",
+                "audio_filename": "speech.wav",
+                "seed": -1,
+            },
+        }
+    )
+
+    assert workflow["39"]["inputs"]["seed"] >= 0
+
+
 def test_gpu2_upscale_workflow_uses_low_vram_seedvr2_nodes():
     workflow = build_gpu2_upscale_workflow(
         {

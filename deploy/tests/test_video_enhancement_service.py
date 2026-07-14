@@ -78,3 +78,4 @@ async def test_prepare_voice_resolves_video_audio_and_reference_image():
     }
     assert data["workflow_json"]["271"]["inputs"]["video"] == "resolved-video_filename"
     assert data["workflow_json"]["288"]["inputs"]["audio"] == "resolved-audio_filename"
+    assert data["seed"] >= 0

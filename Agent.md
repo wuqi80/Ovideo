@@ -8954,3 +8954,5 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - 分镜练气/筑基模型默认保持用户明确选择，不再自动切换为其他 provider；缺少手工参考图时优先使用当前分镜已选生成结果，没有任何参考图时返回明确提示。
 - 部署必须同时包含 `routers/tasks.py`、`services/video_enhancement_service.py`、Enhance/Generation 前端源码和重新生成的 `dist/`。
 - 本地验证：GPU 路由与工作流定向测试 46 项通过，Vite 生产构建通过；全量 TypeScript 检查仍有 Admin/Workspace 历史类型错误，本轮文件没有新增报错。
+- 2026-07-14：美化页配音真实任务复测发现 GPU2 的 WanVideoSampler 不接受前端随机种子哨兵 `-1`。服务端 `prepare_video_voice_task()` 和 Windows GPU2 runner 现均把负数或非法 seed 转为非负随机整数，避免任务在 ComfyUI `/prompt` 校验阶段直接失败。
+- 2026-07-14：GPU1 的视频/音频/T5/VAE/Wav2Vec/CLIP 节点探测正常，但当前 Wan/InfiniteTalk 模型及 LoRA 清单与仓库旧模板不一致，且 GPU1 仍运行不回传 `/prompt` 响应体的 legacy Agent。未将猜测模型名上线；待取得 GPU1 主机访问权限后更新 Agent 并按实际 `object_info` 清单修复。GPU2 配音链路可独立验收。

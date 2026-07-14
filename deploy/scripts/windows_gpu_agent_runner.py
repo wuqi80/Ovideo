@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import random
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -568,9 +569,10 @@ def _gpu2_input_file_name(
 def _gpu2_seed(task: Dict[str, Any]) -> int:
     params = _gpu2_task_params(task)
     try:
-        return int(params.get("seed") or params.get("seed_0") or 42)
+        seed = int(params.get("seed") or params.get("seed_0") or 42)
     except (TypeError, ValueError):
-        return 42
+        seed = -1
+    return seed if seed >= 0 else random.randint(0, 2**63 - 1)
 
 
 def is_gpu2_wan_i2v_task(task: Dict[str, Any]) -> bool:
