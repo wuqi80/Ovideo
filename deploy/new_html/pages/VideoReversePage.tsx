@@ -75,7 +75,7 @@ export const VideoReversePage: React.FC = () => {
     }
   }, [projectId, selectedTaskId]);
 
-  const loadDetail = useCallback(async (rid: string, isPolling = false) => {
+  const loadDetail = useCallback(async (rid: string) => {
     try {
       const r = await getVideoReverseTask(rid);
       setSelectedTask(r.task);
@@ -84,9 +84,9 @@ export const VideoReversePage: React.FC = () => {
       setPollError(null);
     } catch (e: any) {
       detailPollFailuresRef.current += 1;
-      if (!isPolling || detailPollFailuresRef.current >= 3) {
+      if (detailPollFailuresRef.current >= 3) {
         const detail = e?.message || String(e);
-        setPollError(isPolling ? `任务详情连接暂时中断，正在自动重试：${detail}` : detail);
+        setPollError(`任务详情连接暂时中断，正在自动重试：${detail}`);
       }
     }
   }, []);
@@ -99,11 +99,11 @@ export const VideoReversePage: React.FC = () => {
 
   // 轮询：选中的任务若在进行中，每 3s 拉一次详情；同时刷新列表
   useEffect(() => {
-    if (!selectedTask) return;
-    const inProgress = !['completed', 'failed', 'cancelled'].includes(selectedTask.status);
+    if (!selectedTaskId) return;
+    const inProgress = !selectedTask || !['completed', 'failed', 'cancelled'].includes(selectedTask.status);
     if (!inProgress) return;
     const timer = setInterval(() => {
-      if (selectedTaskId) loadDetail(selectedTaskId, true);
+      loadDetail(selectedTaskId);
       reload();
     }, 3000);
     return () => clearInterval(timer);
