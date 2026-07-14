@@ -32,6 +32,8 @@ def create_projects_router(
     file_dao: Any,
     version_dao: Any,
     logger: logging.Logger,
+    storyboard_dao: Any = None,
+    entity_file_dao: Any = None,
 ) -> APIRouter:
     router = APIRouter()
     ProjectDAO = project_dao
@@ -39,6 +41,8 @@ def create_projects_router(
     UserDAO = user_dao
     FileDAO = file_dao
     VersionDAO = version_dao
+    StoryboardDAO = storyboard_dao
+    EntityFileDAO = entity_file_dao
 
     @router.post("/api/projects/save")
     async def save_project(project: ProjectData, username: str = Depends(require_auth_dependency)):
@@ -183,6 +187,8 @@ def create_projects_router(
                 version_dao=VersionDAO,
                 file_dao=FileDAO,
                 logger=logger,
+                storyboard_dao=StoryboardDAO,
+                entity_file_dao=EntityFileDAO,
             )
         except ProjectVideoTaskNotFound as exc:
             raise HTTPException(status_code=404, detail="\u9879\u76ee\u4e0d\u5b58\u5728") from exc

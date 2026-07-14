@@ -67,6 +67,8 @@ from video_reverse_routes import router as video_reverse_router
 from dao.admin.admin_stats import AdminStatsDAO
 from dao_task import TaskDAO
 from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO, ProjectMemberDAO
+from dao_entity_file import EntityFileDAO
+from dao_storyboard import StoryboardDAO
 from dao_user import UserDAO
 from dao_organization import OrganizationDAO, OrganizationMemberDAO
 
@@ -940,6 +942,8 @@ app.include_router(
         file_dao=FileDAO,
         version_dao=VersionDAO,
         logger=logger,
+        storyboard_dao=StoryboardDAO,
+        entity_file_dao=EntityFileDAO,
     )
 )
 logger.info("Project API routes registered (/api/projects/*)")

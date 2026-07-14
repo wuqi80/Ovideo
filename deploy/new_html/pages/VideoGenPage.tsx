@@ -46,6 +46,51 @@ function secureMediaUrl(url: string | null): string | null {
   return secureApiUrl(url, { absolute: true, requireAuth: false });
 }
 
+function getStoryboardItemId(item: any): string {
+  return (item?.item_id ?? item?.itemId ?? '').toString();
+}
+
+function looksLikeStoryboardId(value: any): boolean {
+  return typeof value === 'string' && value.startsWith('sb_');
+}
+
+function getWorkspaceImageStoryboardId(image: any): string {
+  const explicit = image?.storyboardItemId;
+  if (explicit) return explicit.toString();
+  const id = image?.id;
+  return looksLikeStoryboardId(id) ? id.toString() : '';
+}
+
+function collectWorkspaceStoryboardIds(session: any): Set<string> {
+  const ids = new Set<string>();
+  for (const image of session?.uploaded_images || []) {
+    const id = getWorkspaceImageStoryboardId(image);
+    if (id) ids.add(id);
+  }
+  for (const group of session?.task_groups || []) {
+    for (const id of group?.ids || []) {
+      if (looksLikeStoryboardId(id)) ids.add(id.toString());
+    }
+  }
+  return ids;
+}
+
+function isWorkspaceForDifferentStoryboard(session: any, storyboardItems: any[]): boolean {
+  const currentIds = new Set(storyboardItems.map(getStoryboardItemId).filter(Boolean));
+  const workspaceIds = collectWorkspaceStoryboardIds(session);
+  if (currentIds.size === 0 || workspaceIds.size === 0) return false;
+  for (const id of workspaceIds) {
+    if (currentIds.has(id)) return false;
+  }
+  return true;
+}
+
+function isPrimaryStoryboardImageMedia(media: any): boolean {
+  if (!media || media.kind !== 'image') return false;
+  const role = media.role || 'reference_image';
+  return role === 'reference_image' || role === 'first_frame';
+}
+
 export const VideoGenPage: React.FC = () => {
   const navigate = useNavigate();
   const {
@@ -132,7 +177,7 @@ export const VideoGenPage: React.FC = () => {
 
       for (const item of storyboardItemsForImport) {
         const rawUrl = (item as any).generated_image_url ?? (item as any).generatedImageUrl;
-        const itemId = (item as any).item_id ?? (item as any).itemId;
+        const itemId = getStoryboardItemId(item);
         // 视频页优先用 video_prompt（视频生成专用），fallback 到 image_prompt（图像生成 prompt）。
         // storyboard_items 表两个字段都存在；此前只读 image_prompt 导致视频提示词丢失。
         const prompt =
@@ -377,6 +422,15 @@ export const VideoGenPage: React.FC = () => {
         setHasWorkspaceImport(hasImported);
 
         if (hasImported) {
+          if (isWorkspaceForDifferentStoryboard(sess, allStoryboardItems)) {
+            autoImported.current = true;
+            setImportDone(false);
+            setHasWorkspaceImport(false);
+            setShowImportPanel(false);
+            setImportMsg({ kind: 'info', text: '检测到视频工作区仍是旧分镜，正在重新导入当前分镜。' });
+            handleImportAll();
+            return;
+          }
           autoImported.current = true;
           setImportDone(true);
           setShowImportPanel(false);
@@ -414,7 +468,7 @@ export const VideoGenPage: React.FC = () => {
   const latestImageById = useMemo(() => {
     const m: Record<string, string> = {};
     for (const item of allStoryboardItems) {
-      const id = (item as any).item_id ?? (item as any).itemId;
+      const id = getStoryboardItemId(item);
       const raw = ((item as any).generated_image_url ?? (item as any).generatedImageUrl ?? '').toString().split('?')[0];
       if (id && raw && !raw.startsWith('data:') && !raw.startsWith('blob:')) m[id] = raw;
     }
@@ -430,9 +484,14 @@ export const VideoGenPage: React.FC = () => {
         if (!alive || !r.success || !r.session) { if (alive) setChangedCount(0); return; }
         let n = 0;
         for (const img of (r.session.uploaded_images || [])) {
-          const id = (img as any).storyboardItemId || img.id;
+          const id = getWorkspaceImageStoryboardId(img);
+          if (!id) continue;
           const lu = latestImageById[id];
-          if (lu && lu !== (img.url || '').split('?')[0]) n++;
+          if (lu && lu !== (img.url || '').split('?')[0]) {
+            n++;
+          } else if (!lu && looksLikeStoryboardId(id)) {
+            n++;
+          }
         }
         if (alive) setChangedCount(n);
       } catch { if (alive) setChangedCount(0); }
@@ -451,10 +510,17 @@ export const VideoGenPage: React.FC = () => {
         return;
       }
       const sess = r.session;
+      if (isWorkspaceForDifferentStoryboard(sess, allStoryboardItems)) {
+        setImportMsg({ kind: 'info', text: '检测到视频工作区仍是旧分镜，正在重新导入当前分镜。' });
+        handleImportAll();
+        return;
+      }
       const newImages = (sess.uploaded_images || []).map((img: any) => {
-        const id = img.storyboardItemId || img.id;
+        const id = getWorkspaceImageStoryboardId(img);
         const lu = latestImageById[id];
-        return (lu && lu !== (img.url || '').split('?')[0]) ? { ...img, url: lu, isPlaceholder: false } : img;
+        return (lu && lu !== (img.url || '').split('?')[0])
+          ? { ...img, url: lu, storageUrl: lu, isPlaceholder: false }
+          : img;
       });
       const newSP: Record<string, any> = { ...(sess.seedance_params || {}) };
       for (const g of (sess.task_groups || [])) {
@@ -462,10 +528,11 @@ export const VideoGenPage: React.FC = () => {
         const lu = latestImageById[id];
         const sp = newSP[g.uuid];
         if (lu && sp) {
-          const cur = (sp.media_inputs || []).find((mi: any) => mi.kind === 'image' && mi.role === 'reference_image');
+          const cur = (sp.media_inputs || []).find(isPrimaryStoryboardImageMedia);
           if (!cur || (cur.url || '').split('?')[0] !== lu) {
-            const others = (sp.media_inputs || []).filter((mi: any) => !(mi.kind === 'image' && mi.role === 'reference_image'));
-            newSP[g.uuid] = { ...sp, media_inputs: [{ kind: 'image', url: lu, role: 'reference_image' }, ...others] };
+            const role = cur?.role || 'reference_image';
+            const others = (sp.media_inputs || []).filter((mi: any) => mi !== cur);
+            newSP[g.uuid] = { ...sp, media_inputs: [{ kind: 'image', url: lu, role }, ...others] };
           }
         }
       }
@@ -479,7 +546,7 @@ export const VideoGenPage: React.FC = () => {
     } finally {
       setSyncing(false);
     }
-  }, [sessionScope, latestImageById, handleImportAll]);
+  }, [sessionScope, latestImageById, handleImportAll, allStoryboardItems]);
 
   if (isLoading) {
     return (
