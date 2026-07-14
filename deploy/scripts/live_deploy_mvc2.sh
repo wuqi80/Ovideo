@@ -235,6 +235,63 @@ run_remote_smoke_test() {
   "
 }
 
+run_remote_db_migrations() {
+  echo "Running remote database migrations..."
+  ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+    cd '$REMOTE_DIR'
+    .venv/bin/python - <<'PY'
+import asyncio
+import os
+from pathlib import Path
+
+import asyncpg
+
+
+MIGRATIONS = [
+    'sql/db_migration_video_voice_references.sql',
+]
+
+
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'\"', \"'\"}:
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+async def main() -> None:
+    load_env_file(Path('configs/runtime.env'))
+    conn = await asyncpg.connect(
+        host=os.getenv('DB_HOST', 'localhost'),
+        port=int(os.getenv('DB_PORT', '5432')),
+        database=os.getenv('DB_NAME', 'my2_db'),
+        user=os.getenv('DB_USER', 'my2_user'),
+        password=os.getenv('DB_PASSWORD', ''),
+    )
+    try:
+        for migration in MIGRATIONS:
+            path = Path(migration)
+            if not path.exists():
+                raise FileNotFoundError(migration)
+            await conn.execute(path.read_text(encoding='utf-8'))
+            print(f'  applied {migration}')
+    finally:
+        await conn.close()
+
+
+asyncio.run(main())
+PY
+  "
+}
+
 echo "Creating remote backups..."
 BACKUP_INFO=$(
   ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
@@ -282,6 +339,12 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
 fi
 
 ssh "${SSH_OPTS[@]}" "$REMOTE" "rm -f '$REMOTE_DIR'/api_router.py"
+
+if ! run_remote_db_migrations; then
+  rollback_remote
+  echo "鈿狅笍 閮ㄧ讲澶辫触锛屽凡鍥炴粴: database migrations failed"
+  exit 1
+fi
 
 FRONTEND_SOURCE_HASH=$(frontend_source_hash)
 REMOTE_FRONTEND_HASH=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
