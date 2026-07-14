@@ -9759,3 +9759,9 @@
 - 2026-07-14: A real GPU2 dubbing task completed and returned MP4 in about eight minutes. Because GPU2 currently exposes no intermediate ComfyUI percentage, Enhance now shows an indeterminate “GPU processing may take several minutes” state and only renders a percentage when the backend reports a value above zero.
 - 2026-07-14: GPU2 InfiniteTalk keeps its 33-frame low-VRAM processing window but now derives the total frame count and audio loading duration from the selected clip duration at 16 FPS, capped at 30 seconds. This prevents longer dubbing clips from being truncated while preserving the RTX 3060 12 GB memory profile.
 - 2026-07-14: The production acceptance audio was about 0.68 seconds, so its roughly 0.64-second MP4 is the expected `trim_to_audio` result rather than a truncation failure. The duration-aware runner passed 25 focused tests and the frontend production build.
+
+## 2026-07-14 视频历史结果展示修复
+
+- 视频任务的 `state` 仅表示最近一次生成尝试；`videos` 是独立持久化的历史成功结果。后续模型生成失败时，历史视频必须继续正常播放，不能降级为灰度首帧。
+- `new_html/components/VideoPage.tsx` 现在优先按已有 `videos` 渲染结果，失败状态只显示“本次失败，历史结果已保留”，不会影响放大、配音、编辑和音色基准操作。
+- 新增 `utils/videoResultPresentation.ts` 及回归测试，锁定“失败重试仍展示历史视频”的行为。

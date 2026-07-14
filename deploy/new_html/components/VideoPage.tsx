@@ -78,6 +78,7 @@ import { getVideoSegments } from '../services/episodeDataService';
 import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
+import { hasStoredVideoResult } from '../utils/videoResultPresentation';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
@@ -2347,14 +2348,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         // 优先处理选中的任务
         let toUpscale = taskGroups.filter(g => {
             const status = tasksStatus[g.uuid];
-            return status?.selected && status.state === 'done' && !status.isUpscaled && status.videos && status.videos.length > 0;
+            return status?.selected && !status.isUpscaled && hasStoredVideoResult(status);
         });
         
         // 如果没有选中的，处理所有已完成的
         if (toUpscale.length === 0) {
             toUpscale = taskGroups.filter(g => {
                 const status = tasksStatus[g.uuid];
-                return status?.state === 'done' && !status.isUpscaled && status.videos && status.videos.length > 0;
+                return !status?.isUpscaled && hasStoredVideoResult(status);
             });
         }
         
@@ -2754,7 +2755,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 {/* 视频缩略图/状态（与左侧 w-20 h-14 对齐） */}
                 <div className="w-20 h-14 shrink-0 bg-n800 rounded overflow-hidden border border-n40">
-                    {status.state === 'done' && videos.length > 0 ? (
+                    {hasStoredVideoResult(status) ? (
                         <LazyVideo
                             src={videos[0]}
                             preload="none"
@@ -2801,7 +2802,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </span>
                     ) : status.state === 'failed' ? (
                         <span className="text-xs text-danger flex items-center justify-center gap-1">
-                            <AlertCircle className="w-3 h-3" /> 失败
+                            <AlertCircle className="w-3 h-3" /> {hasStoredVideoResult(status) ? '本次失败' : '失败'}
                         </span>
                     ) : (
                         <span className="text-xs text-n100">等待</span>
@@ -2831,7 +2832,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         );
                     })()}
                     
-                    {status.state === 'done' && videos.length > 0 && (
+                    {hasStoredVideoResult(status) && (
                         <>
                             <button
                                 onClick={() => openUpscaleModal(group.uuid)}
@@ -3088,7 +3089,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </span>
                     ) : status.state === 'failed' ? (
                         <span className="text-xs text-danger flex items-center justify-center gap-1">
-                            <AlertCircle className="w-3 h-3" /> 失败
+                            <AlertCircle className="w-3 h-3" /> {hasStoredVideoResult(status) ? '本次失败' : '失败'}
                         </span>
                     ) : (
                         <span className="text-xs text-n100">等待</span>
@@ -3118,7 +3119,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         );
                     })()}
                     
-                    {status.state === 'done' && status.videos && status.videos.length > 0 && (
+                    {hasStoredVideoResult(status) && (
                         <>
                             <button
                                 onClick={() => openUpscaleModal(group.uuid)}
@@ -3484,7 +3485,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 return (
                     <div className="text-xs text-danger flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
-                        失败
+                        {hasStoredVideoResult(status) ? '本次失败，历史结果已保留' : '失败'}
                     </div>
                 );
             }
@@ -3522,8 +3523,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 );
             };
             
-            // 完成状态或运行中（显示旧视频）：显示视频
-            if ((status.state === 'done' || isRunning) && videoCount > 0) {
+            // videos 是独立持久化的历史结果；最新一次重试失败不能隐藏或灰化旧视频。
+            if (hasStoredVideoResult(status)) {
                 // 多视频网格显示（超过1个视频或运行中）
                 if (videoCount > 1 || (videoCount === 1 && isRunning)) {
                     return (
