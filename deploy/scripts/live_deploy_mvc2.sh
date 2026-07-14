@@ -89,8 +89,12 @@ FILES=(
   "scripts/windows_gpu_video_smoke.cmd"
   "scripts/windows_gpu_wan_setup.ps1"
   "scripts/windows_gpu_wan_setup.cmd"
+  "scripts/windows_gpu_wan_install_task.cmd"
   "scripts/windows_gpu_wan_smoke.py"
   "scripts/windows_gpu_wan_smoke.cmd"
+  "scripts/windows_gpu_wan_smoke_task.cmd"
+  "scripts/windows_gpu_task_repair.cmd"
+  "scripts/windows_gpu_task_repair.ps1"
   scripts/check_*.py
   tests/test_ai_proxy_image_persistence_service.py
   tests/test_ai_proxy_reference_service.py

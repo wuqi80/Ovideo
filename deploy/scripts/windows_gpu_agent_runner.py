@@ -608,7 +608,7 @@ def _gpu2_wan_common_nodes(task: Dict[str, Any]) -> Dict[str, Any]:
             "class_type": "LoadWanVideoT5TextEncoder",
             "inputs": {
                 "model_name": GPU2_WAN_MODEL_FILES["text_encoder"],
-                "precision": "fp16",
+                "precision": "bf16",
                 "load_device": "offload_device",
                 "quantization": "fp8_e4m3fn",
             },

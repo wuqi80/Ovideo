@@ -8933,3 +8933,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - 本地验证：定向测试 11/11、Python 编译通过、路由契约保持 244 paths / 300 operations。
 - 部署后必须完成指定 GPU2 的 `three_view`、`upscale_hd`、`video_upscale` 真实任务验收。
 - 视频验收发现并修复前端分辨率标签契约：GPU2 现在接受 `360P`、`720P`、`1080P`、`2K`、`4K`，并按 12GB 显存策略限制到最高 1080；无法识别的值安全回退到 720。
+
+## 2026-07-14 GPU2 开机自启与 Wan 安装恢复
+
+- 新增 `deploy/scripts/windows_gpu_task_repair.ps1/.cmd`，使 ComfyUI 和 GPU Agent 以 `SYSTEM` 身份在 Windows 开机时自动启动，失败后每分钟重试，不保存本地管理员密码。
+- 修复 Windows GBK 终端导致 ComfyUI 日志 Unicode 崩溃；启动脚本统一启用 UTF-8，ComfyUI `8188` 和 Agent 轮询均已恢复。
+- Wan/InfiniteTalk 模型安装增加 ModelScope 国内镜像优先、Hugging Face 后备、aria2 多连接断点续传和 SHA256 校验；长时安装由 `windows_gpu_wan_install_task.cmd` 以后台 SYSTEM 任务执行。
+- `windows_gpu_wan_smoke_task.cmd` 使 readiness、I2V 和 InfiniteTalk 真实冒烟也能在 SYSTEM 任务中串行执行，RDP 断开不会中止。
+- 七个模型和十个节点均已通过 readiness 校验；Wan I2V 真实生成 `MECHA_GPU2_wan_i2v_00001.mp4`（490.97 秒），InfiniteTalk 真实生成带音频的 `MECHA_GPU2_infinitetalk_00001-audio.mp4`（501.15 秒），两项 ComfyUI 状态均为 `execution_success`。
+- GPU2 采用 640x384、33 帧、4 步、36 层 RAM 卸载的低显存配置，Agent 保持单任务串行；RTX 3060 12G 可以执行上述任务，但应预期约 8 分钟级处理时间。
+- 清理安装过程中遗留的 16,643,349,018 字节重复 `.part` 文件前，已确认正式模型 SHA256 标记存在且两次真实推理成功；正式模型和生成产物均保留。
