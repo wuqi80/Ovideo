@@ -429,10 +429,23 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         };
     }, [seedanceOmniEnabled]);
 
+    const resolveSeedanceDurationForGroup = useCallback((group: TaskGroup | undefined): number => {
+        const itemId = group?.ids?.[0];
+        const meta = itemId ? storyboardMetaByItemId[itemId] : undefined;
+        const reactiveDur = meta ? computeReactiveDurationFromMeta(meta) : undefined;
+        return group?.duration ?? reactiveDur ?? 3;
+    }, [storyboardMetaByItemId]);
+
+    const syncSeedanceDuration = useCallback((group: TaskGroup | undefined, params: SeedanceParams): SeedanceParams => {
+        if (!group) return params;
+        const duration = resolveSeedanceDurationForGroup(group);
+        return params.duration === duration ? params : { ...params, duration };
+    }, [resolveSeedanceDurationForGroup]);
+
     const getSeedanceParams = useCallback((uuid: string, model: VideoModel): SeedanceParams => {
         const group = taskGroups.find(g => g.uuid === uuid);
         const existing = seedanceParamsByUuid[uuid];
-        if (existing && group) return applyPreferredReferenceAudio(group, existing);
+        if (existing && group) return applyPreferredReferenceAudio(group, syncSeedanceDuration(group, existing));
         if (existing) return existing;
 
         // Issue 5a: when a card is freshly switched to Seedance2/Fast, auto-pull the
@@ -460,8 +473,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         // 端写入的最小 2000ms 一致——只有当 DB/meta 全空时才会走到这里。
         const itemId = group?.ids?.[0];
         const meta = itemId ? storyboardMetaByItemId[itemId] : undefined;
-        const reactiveDur = meta ? computeReactiveDurationFromMeta(meta) : undefined;
-        const dur = group?.duration ?? reactiveDur ?? 3;
+        const dur = resolveSeedanceDurationForGroup(group);
 
         // 2026-05-20 (Bug 3b)：切到 Seedance 时自动带本分镜的参考音
         // 优先级与 handleImportAll 一致：mixed > dialogue > narration > sfx。
@@ -488,11 +500,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             camera_fixed: false,
         };
         return group ? applyPreferredReferenceAudio(group, nextParams) : nextParams;
-    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId, applyPreferredReferenceAudio]);
+    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId, applyPreferredReferenceAudio, resolveSeedanceDurationForGroup, syncSeedanceDuration]);
 
     const setSeedanceParams = useCallback((uuid: string, next: SeedanceParams) => {
-        setSeedanceParamsByUuid(prev => ({ ...prev, [uuid]: next }));
-    }, []);
+        const group = taskGroups.find(g => g.uuid === uuid);
+        setSeedanceParamsByUuid(prev => ({ ...prev, [uuid]: syncSeedanceDuration(group, next) }));
+    }, [taskGroups, syncSeedanceDuration]);
 
     // 2026-05-24 — DashScope 共享 API 参数 getter/setter（合体/大乘/炼虚）
     // 2026-05-25 #1/#2 hotfix — storyboard 图按 isPair 注入 role：
@@ -571,6 +584,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // Task 6：单 group patch（用于响应式时长 hook 写回 duration / durationUserOverride）
     const patchTaskGroup = useCallback((uuid: string, patch: Partial<TaskGroup>) => {
         setTaskGroups(prev => prev.map(g => (g.uuid === uuid ? { ...g, ...patch } : g)));
+        if (Object.prototype.hasOwnProperty.call(patch, 'duration')) {
+            setSeedanceParamsByUuid(prev => {
+                const current = prev[uuid];
+                if (!current || current.duration === patch.duration) return prev;
+                return { ...prev, [uuid]: { ...current, duration: patch.duration } };
+            });
+        }
     }, []);
 
     // ==================== Toast工具 ====================
@@ -1021,6 +1041,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
     };
     
+    const seedanceParamsForSession = useMemo(() => {
+        let changed = false;
+        const next = { ...seedanceParamsByUuid };
+        taskGroups.forEach(group => {
+            const current = next[group.uuid];
+            if (!current) return;
+            const duration = resolveSeedanceDurationForGroup(group);
+            if (current.duration !== duration) {
+                next[group.uuid] = { ...current, duration };
+                changed = true;
+            }
+        });
+        return changed ? next : seedanceParamsByUuid;
+    }, [seedanceParamsByUuid, taskGroups, resolveSeedanceDurationForGroup]);
+
     const saveSession = useCallback(async () => {
         const cleanedStatus: Record<string, TaskStatus> = {};
         Object.entries(tasksStatus).forEach(([uuid, status]) => {
@@ -1054,12 +1089,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             uploaded_images: validImages,
             image_prompts: imagePrompts,
             tasks_status: cleanedStatus,
-            seedance_params: seedanceParamsByUuid,
+            seedance_params: seedanceParamsForSession,
             storyboard_meta: storyboardMetaByItemId,
             // 2026-05-24 — DashScope 共享 API 参数持久化
             dashscope_params: dashScopeParamsByUuid as any,
         } as any, sessionScope);
-    }, [taskGroups, uploadedImages, imagePrompts, tasksStatus, sessionScope, seedanceParamsByUuid, storyboardMetaByItemId, dashScopeParamsByUuid]);
+    }, [taskGroups, uploadedImages, imagePrompts, tasksStatus, sessionScope, seedanceParamsForSession, storyboardMetaByItemId, dashScopeParamsByUuid]);
 
     // 始终指向最新 saveSession，供 video 完成回调等"非 deps 闭包"立即持久化时用，
     // 避免 React 闭包陈旧（直接调旧 saveSession 会漏掉刚写入的视频）。

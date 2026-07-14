@@ -105,18 +105,6 @@ def _normalize_agent_plan_image_roles(payload: Dict[str, Any]) -> None:
 
 def _apply_model_payload_compatibility(payload: Dict[str, Any]) -> None:
     _normalize_agent_plan_image_roles(payload)
-    model_name = payload.get("model")
-    contents = payload.get("content") or []
-    if (
-        model_name == SEEDANCE_AGENT_PLAN_MODEL
-        and "duration" in payload
-        and _has_content_type(contents, "image_url")
-    ):
-        logger.info(
-            "Seedance Agent Plan i2v compatibility: omitting unsupported duration=%s",
-            payload.get("duration"),
-        )
-        payload.pop("duration", None)
 
 
 class SeedanceClient:
