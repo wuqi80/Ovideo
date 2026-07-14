@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dao.creative.episode_compose import EpisodeComposeDAO
 
@@ -16,10 +16,14 @@ logger = logging.getLogger(__name__)
 
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _STORAGE = os.path.join(_BASE, "persistent_storage")
-_VF = (
-    "scale=1920:1080:force_original_aspect_ratio=decrease,"
-    "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
-)
+_DEFAULT_OUTPUT_SIZE = (1920, 1080)
+_ASPECT_PRESETS: List[Tuple[str, float, Tuple[int, int]]] = [
+    ("9:16", 9 / 16, (1080, 1920)),
+    ("3:4", 3 / 4, (1080, 1440)),
+    ("1:1", 1.0, (1080, 1080)),
+    ("4:3", 4 / 3, (1440, 1080)),
+    ("16:9", 16 / 9, _DEFAULT_OUTPUT_SIZE),
+]
 
 # episode_id -> {status: running|done|failed, total, done, url, error}
 _jobs: Dict[str, Dict[str, Any]] = {}
@@ -101,6 +105,75 @@ async def _probe_has_audio(path: str) -> bool:
         ]
     )
     return "audio" in out.strip().lower()
+
+
+async def _probe_video_size(path: str) -> Optional[Tuple[int, int]]:
+    _rc, out, _err = await _run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=s=x:p=0",
+            path,
+        ]
+    )
+    text = out.strip().splitlines()[0] if out.strip() else ""
+    try:
+        width_text, height_text = text.lower().split("x", 1)
+        width = int(width_text)
+        height = int(height_text)
+        if width > 0 and height > 0:
+            return width, height
+    except Exception:
+        return None
+    return None
+
+
+def _even(value: int) -> int:
+    return max(2, value if value % 2 == 0 else value - 1)
+
+
+def _output_size_for_source(width: int, height: int) -> Tuple[int, int, str]:
+    if width <= 0 or height <= 0:
+        return (*_DEFAULT_OUTPUT_SIZE, "16:9")
+
+    ratio = width / height
+    for label, preset_ratio, (target_width, target_height) in _ASPECT_PRESETS:
+        if abs(ratio - preset_ratio) <= 0.04:
+            return target_width, target_height, label
+
+    if ratio < 1:
+        target_width = 1080
+        return target_width, _even(round(target_width / ratio)), f"{width}:{height}"
+
+    target_height = 1080
+    target_width = min(_even(round(target_height * ratio)), 1920)
+    return target_width, target_height, f"{width}:{height}"
+
+
+def _choose_output_size(sizes: List[Tuple[int, int]]) -> Tuple[int, int, str]:
+    if not sizes:
+        return (*_DEFAULT_OUTPUT_SIZE, "16:9")
+
+    buckets: Dict[Tuple[int, int, str], int] = {}
+    for width, height in sizes:
+        bucket = _output_size_for_source(width, height)
+        buckets[bucket] = buckets.get(bucket, 0) + 1
+
+    # 多数镜头决定成片比例；票数相同则按原顺序选择先出现的比例。
+    return max(buckets, key=lambda key: (buckets[key], -list(buckets).index(key)))
+
+
+def _video_filter(output_width: int, output_height: int) -> str:
+    return (
+        f"scale={output_width}:{output_height}:force_original_aspect_ratio=decrease,"
+        f"pad={output_width}:{output_height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30"
+    )
 
 
 async def _list_shot_takes(episode_id: str) -> List[Dict[str, Any]]:
@@ -185,13 +258,28 @@ async def _compose(
 
     tmp = tempfile.mkdtemp(prefix=f"compose_{episode_id}_")
     try:
-        clips: List[str] = []
-        idx = 0
+        prepared: List[Dict[str, Any]] = []
+        probed_sizes: List[Tuple[int, int]] = []
         for row in shots:
             video_path = _local(row.get("video_url"))
             if not video_path or not os.path.isfile(video_path):
                 logger.warning("compose: skipped missing video %s", video_path)
                 continue
+            size = await _probe_video_size(video_path)
+            if size:
+                probed_sizes.append(size)
+            prepared.append({**row, "_video_path": video_path})
+
+        output_width, output_height, output_aspect = _choose_output_size(probed_sizes)
+        vf = _video_filter(output_width, output_height)
+        job["output_width"] = output_width
+        job["output_height"] = output_height
+        job["output_aspect"] = output_aspect
+
+        clips: List[str] = []
+        idx = 0
+        for row in prepared:
+            video_path = row["_video_path"]
             idx += 1
             clip_path = os.path.join(tmp, f"clip_{idx:03d}.mp4")
             video_duration = await _probe_dur(video_path)
@@ -252,7 +340,7 @@ async def _compose(
                     video_path,
                     *audio_inputs,
                     "-filter_complex",
-                    f"[0:v]{_VF},tpad=stop_mode=clone:stop_duration={target_duration}[v];{audio_filter}",
+                    f"[0:v]{vf},tpad=stop_mode=clone:stop_duration={target_duration}[v];{audio_filter}",
                     "-map",
                     "[v]",
                     "-map",
@@ -273,7 +361,7 @@ async def _compose(
                         "-i",
                         video_path,
                         "-filter_complex",
-                        f"[0:v]{_VF}[v];[0:a]apad[a]",
+                        f"[0:v]{vf}[v];[0:a]apad[a]",
                         "-map",
                         "[v]",
                         "-map",
@@ -296,7 +384,7 @@ async def _compose(
                         "-i",
                         "anullsrc=r=48000:cl=stereo",
                         "-filter_complex",
-                        f"[0:v]{_VF}[v]",
+                        f"[0:v]{vf}[v]",
                         "-map",
                         "[v]",
                         "-map",
@@ -372,7 +460,13 @@ async def _compose(
             file_size_bytes=size,
             duration_seconds=duration,
             title=title,
-            metadata={"source": "composed_final", "kind": "final_cut"},
+            metadata={
+                "source": "composed_final",
+                "kind": "final_cut",
+                "output_width": output_width,
+                "output_height": output_height,
+                "output_aspect": output_aspect,
+            },
         )
 
         job["url"] = file_url

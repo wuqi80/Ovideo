@@ -201,7 +201,7 @@ export const FinalProductPage: React.FC = () => {
                 muted={false}
                 firstFrame={false}
                 hoverPreview={false}
-                className="w-full max-h-[70vh] bg-black block"
+                className="mx-auto max-w-full max-h-[70vh] bg-black block"
               />
             </div>
           ) : (

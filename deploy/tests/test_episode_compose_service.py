@@ -7,6 +7,13 @@ import pytest
 from services import episode_compose_service
 
 
+def test_compose_output_size_presets_for_mobile_ratios():
+    assert episode_compose_service._output_size_for_source(720, 1280) == (1080, 1920, "9:16")
+    assert episode_compose_service._output_size_for_source(768, 1024) == (1080, 1440, "3:4")
+    assert episode_compose_service._output_size_for_source(1024, 1024) == (1080, 1080, "1:1")
+    assert episode_compose_service._output_size_for_source(1920, 1080) == (1920, 1080, "16:9")
+
+
 @pytest.mark.asyncio
 async def test_get_takes_groups_video_segments_and_dedupes_join_rows(monkeypatch):
     async def fake_rows(_episode_id):
@@ -186,6 +193,9 @@ async def test_compose_mixes_multiple_storyboard_audio_parts(monkeypatch, tmp_pa
     async def fake_probe(_path):
         return 3.2
 
+    async def fake_video_size(_path):
+        return None
+
     async def fake_get_shots(_episode_id, _selections=None):
         return [
             {
@@ -207,6 +217,7 @@ async def test_compose_mixes_multiple_storyboard_audio_parts(monkeypatch, tmp_pa
     monkeypatch.setattr(episode_compose_service, "_ensure_media_tools", lambda: None)
     monkeypatch.setattr(episode_compose_service, "_run", fake_run)
     monkeypatch.setattr(episode_compose_service, "_probe_dur", fake_probe)
+    monkeypatch.setattr(episode_compose_service, "_probe_video_size", fake_video_size)
     monkeypatch.setattr(episode_compose_service, "_get_shots", fake_get_shots)
     monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "create_final_cut_records", fake_create_final_cut_records)
 
@@ -247,6 +258,9 @@ async def test_compose_preserves_video_audio_when_no_separate_audio(monkeypatch,
     async def fake_has_audio(_path):
         return True
 
+    async def fake_video_size(_path):
+        return None
+
     async def fake_get_shots(_episode_id, _selections=None):
         return [
             {
@@ -265,6 +279,7 @@ async def test_compose_preserves_video_audio_when_no_separate_audio(monkeypatch,
     monkeypatch.setattr(episode_compose_service, "_run", fake_run)
     monkeypatch.setattr(episode_compose_service, "_probe_dur", fake_probe)
     monkeypatch.setattr(episode_compose_service, "_probe_has_audio", fake_has_audio)
+    monkeypatch.setattr(episode_compose_service, "_probe_video_size", fake_video_size)
     monkeypatch.setattr(episode_compose_service, "_get_shots", fake_get_shots)
     monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "create_final_cut_records", fake_create_final_cut_records)
 
@@ -276,6 +291,69 @@ async def test_compose_preserves_video_audio_when_no_separate_audio(monkeypatch,
     assert "[0:a]apad[a]" in filter_arg
     assert "anullsrc=r=48000:cl=stereo" not in clip_cmd
     assert clip_cmd[clip_cmd.index("-map", clip_cmd.index("-map") + 1) + 1] == "[a]"
+    assert job["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_compose_uses_portrait_canvas_for_vertical_clips(monkeypatch, tmp_path):
+    storage = tmp_path / "storage"
+    video = storage / "video" / "vertical.mp4"
+    video.parent.mkdir(parents=True, exist_ok=True)
+    video.write_bytes(b"x")
+
+    commands = []
+
+    async def fake_run(cmd):
+        commands.append(cmd)
+        output_path = cmd[-1]
+        if output_path.endswith(".mp4"):
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_bytes(b"video")
+        return 0, "", ""
+
+    async def fake_probe(_path):
+        return 4.0
+
+    async def fake_has_audio(_path):
+        return False
+
+    async def fake_video_size(_path):
+        return (720, 1280)
+
+    async def fake_get_shots(_episode_id, _selections=None):
+        return [
+            {
+                "video_url": "/storage/video/vertical.mp4",
+                "audio_url": None,
+                "audio_urls": [],
+                "audio_ms": 0,
+            }
+        ]
+
+    async def fake_create_final_cut_records(**kwargs):
+        assert kwargs["metadata"]["output_width"] == 1080
+        assert kwargs["metadata"]["output_height"] == 1920
+        assert kwargs["metadata"]["output_aspect"] == "9:16"
+
+    monkeypatch.setattr(episode_compose_service, "_STORAGE", str(storage))
+    monkeypatch.setattr(episode_compose_service, "_ensure_media_tools", lambda: None)
+    monkeypatch.setattr(episode_compose_service, "_run", fake_run)
+    monkeypatch.setattr(episode_compose_service, "_probe_dur", fake_probe)
+    monkeypatch.setattr(episode_compose_service, "_probe_has_audio", fake_has_audio)
+    monkeypatch.setattr(episode_compose_service, "_probe_video_size", fake_video_size)
+    monkeypatch.setattr(episode_compose_service, "_get_shots", fake_get_shots)
+    monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "create_final_cut_records", fake_create_final_cut_records)
+
+    job = {}
+    await episode_compose_service._compose("ep_1", "user_1", "proj_1", job)
+
+    clip_cmd = commands[0]
+    filter_arg = clip_cmd[clip_cmd.index("-filter_complex") + 1]
+    assert "scale=1080:1920" in filter_arg
+    assert "pad=1080:1920" in filter_arg
+    assert job["output_width"] == 1080
+    assert job["output_height"] == 1920
+    assert job["output_aspect"] == "9:16"
     assert job["status"] == "done"
 
 
