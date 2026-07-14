@@ -200,6 +200,7 @@ const ProjectHub: React.FC = () => {
     const projectGridClass = isWideLayout
         ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
         : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4';
+    const currentUsername = localStorage.getItem('username') || '未登录';
 
     return (
         <div className="layout-safe min-h-screen bg-n20 p-6 md:p-10 text-n800" onClick={() => setContextMenu(null)}>
@@ -212,7 +213,7 @@ const ProjectHub: React.FC = () => {
                         </div>
                         <div className="min-w-0">
                             <h1 className="text-2xl font-bold text-n800 tracking-tight">项目管理</h1>
-                            <p className="text-sm text-n100 mt-0.5">{filteredProjects.length} 个项目 · {localStorage.getItem('username') || '未登录'}</p>
+                            <p className="text-sm text-n100 mt-0.5">{filteredProjects.length} 个项目 · {currentUsername}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -231,6 +232,9 @@ const ProjectHub: React.FC = () => {
                         >
                             <Plus size={18} /> 新建项目
                         </button>
+                        <span className="max-w-[160px] truncate text-sm font-medium text-n300" title={currentUsername}>
+                            {currentUsername}
+                        </span>
                         <button
                             onClick={() => {
                                 localStorage.removeItem('auth_token');
