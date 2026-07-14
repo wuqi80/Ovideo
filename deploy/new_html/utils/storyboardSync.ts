@@ -108,10 +108,16 @@ function buildArtifacts(item: any): PerItemArtifacts | null {
         generate_audio: true,
         camera_fixed: false,
     };
-    if (meta.mixedAudioUrl) {
+    const refAudio =
+        meta.mixedAudioUrl
+        || meta.audioUrls?.dialogue
+        || meta.audioUrls?.narration
+        || meta.audioUrls?.sfx
+        || null;
+    if (refAudio) {
         sp.media_inputs.push({
             kind: 'audio',
-            url: meta.mixedAudioUrl,
+            url: refAudio,
             role: 'reference_audio',
         });
     }

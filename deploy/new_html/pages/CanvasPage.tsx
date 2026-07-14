@@ -329,12 +329,18 @@ const getCanvasVideoResult = (status: any) => {
   };
 };
 
-export const buildCanvasSeedanceVideoParams = (target: Extract<CanvasGenerationTarget, { kind: 'video' }>) => ({
-  media_inputs: target.imageUrl
-    ? [{ kind: 'image' as const, url: target.imageUrl, role: 'first_frame' as const }]
-    : [],
-  generate_audio: !target.audioUrl,
-});
+export const buildCanvasSeedanceVideoParams = (target: Extract<CanvasGenerationTarget, { kind: 'video' }>) => {
+  const media_inputs: SeedanceMediaInput[] = target.imageUrl
+    ? [{ kind: 'image', url: target.imageUrl, role: 'first_frame' }]
+    : [];
+  if (target.audioUrl) {
+    media_inputs.push({ kind: 'audio', url: target.audioUrl, role: 'reference_audio' });
+  }
+  return {
+    media_inputs,
+    generate_audio: true,
+  };
+};
 
 type CanvasEdgeOverlayProps = {
   wrapperRef: React.RefObject<HTMLDivElement | null>;
@@ -994,7 +1000,7 @@ const CanvasInner: React.FC = () => {
     const submittedAt = new Date().toISOString();
 
     setIsGenerating(true);
-    setStatusText(target.audioUrl ? '正在提交视频生成任务（先按图片生成，音频节点保留用于后续合成）...' : '正在提交视频生成任务...');
+    setStatusText(target.audioUrl ? '正在提交视频生成任务（图片 + 音色参考将一起提交）...' : '正在提交视频生成任务...');
 
     try {
       const response = await submitSeedanceTask({
@@ -1084,7 +1090,7 @@ const CanvasInner: React.FC = () => {
         },
       });
 
-      setStatusText(target.audioUrl ? '视频任务已提交，完成后会写入视频节点；音频节点暂不传入 Seedance' : '视频任务已提交；上游音频为空，将由视频模型自行生成或保持无音频');
+      setStatusText(target.audioUrl ? '视频任务已提交，完成后会写入视频节点；音频已作为音色参考传入 Seedance' : '视频任务已提交；上游音频为空，将由视频模型自行生成或保持无音频');
     } catch (error) {
       console.error('canvas video generation failed', error);
       const message = error instanceof Error ? error.message : '视频生成失败';
