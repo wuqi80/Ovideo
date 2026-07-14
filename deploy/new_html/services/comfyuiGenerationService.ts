@@ -10,7 +10,7 @@ import { resolveGpuTaskRouting } from './clusterNodeService';
 
 type GenerationTaskResponse = { task_id: string };
 
-type ComfyUIEntityOptions = {
+export type ComfyUIEntityOptions = {
     entityType?: string;
     entityId?: string;
     fileRole?: string;
@@ -67,7 +67,7 @@ export const adjustImageAngle = async (
     imageDataUrl: string,
     prompt: string,
     seed: number = -1,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
+    entityOptions?: ComfyUIEntityOptions,
 ): Promise<{ taskId: string; status: string }> => {
     try {
         // 1. 先上传图片到ComfyUI
@@ -83,6 +83,7 @@ export const adjustImageAngle = async (
             entity_id: entityOptions?.entityId,
             file_role: entityOptions?.fileRole,
             episode_id: entityOptions?.episodeId,
+            ...comfyuiRoutingPayload(entityOptions),
         }, '角度调整');
     } catch (error) {
         console.error('Angle Adjustment Error:', error);
@@ -257,7 +258,7 @@ export const generateWithComfyUIWorkflow = async (
 export const processMaterialImage = async (
     imageDataUrl: string,
     workflowType: 'upscale_hd' | 'remove_watermark' | 'three_view',
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
+    entityOptions?: ComfyUIEntityOptions,
 ): Promise<{ taskId: string; status: string }> => {
     try {
         const { uploadImageToComfyUI, processMaterial } = await import('./comfyuiBridgeService');

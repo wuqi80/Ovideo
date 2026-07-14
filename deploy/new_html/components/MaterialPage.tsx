@@ -10,6 +10,7 @@ import { waitForComfyUITaskAllImages } from '../services/comfyuiTaskWaitService'
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
 import { generateThumbnail } from '../utils/imageOptimization';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
+import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
 
 type MaterialAIEngine = 'nanobanana' | 'doubao';
 type BindingAssetType = 'character' | 'scene' | 'prop';
@@ -42,6 +43,7 @@ type CameraGenerationPayload = {
   wideAngle: boolean;
   customPrompt?: string;
   seed: number;
+  gpu: GpuNodeSelection;
 };
 
 type CameraModalConfig = {
@@ -523,7 +525,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     });
   };
 
-  const handleProcessMaterial = async (materialId: string) => {
+  const handleProcessMaterial = async (materialId: string, gpu: GpuNodeSelection) => {
     if (!processModalConfig) return;
     
     const { tagName, materials, workflow } = processModalConfig;
@@ -544,14 +546,14 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         const { taskId } = await processMaterialImage(
             targetMaterial.url,
             workflow,
-            targetAssetId
-                ? {
-                    entityType: 'asset',
-                    entityId: targetAssetId,
-                    fileRole: 'material_image',
-                    episodeId: selectedFileId || undefined,
-                }
-                : undefined,
+            {
+                entityType: targetAssetId ? 'asset' : undefined,
+                entityId: targetAssetId,
+                fileRole: targetAssetId ? 'material_image' : undefined,
+                episodeId: selectedFileId || undefined,
+                preferredAgentId: gpu.preferredAgentId,
+                preferredNodeId: gpu.preferredNodeId,
+            },
         );
         const results = await waitForComfyUITaskAllImages(taskId, undefined, {
             title: `${workflow === 'upscale_hd' ? '高清放大' : '去水印'} · ${tagName}`,
@@ -688,6 +690,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 entityId: targetAssetId,
                 fileRole: 'material_image',
                 episodeId: selectedFileId || undefined,
+                preferredAgentId: payload.gpu.preferredAgentId,
+                preferredNodeId: payload.gpu.preferredNodeId,
             }
         );
         const results = await waitForComfyUITaskAllImages(taskId, undefined, {
@@ -1973,6 +1977,7 @@ const CameraModal: React.FC<{
     const [wideAngle, setWideAngle] = useState(false);
     const [customPrompt, setCustomPrompt] = useState('');
     const [seed, setSeed] = useState(randomSeed());
+    const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
 
     const promptExamples = [
         "将镜头向前移动（Move the camera forward.）",
@@ -1991,8 +1996,8 @@ const CameraModal: React.FC<{
     }, [config]);
 
     const handleSubmit = () => {
-        if (!currentMaterial) {
-            alert('请选择一张素材图片');
+        if (!currentMaterial || !gpuSelection?.usable) {
+            alert(currentMaterial ? '请选择一个可用 GPU 节点' : '请选择一张素材图片');
             return;
         }
         onSubmit({
@@ -2003,7 +2008,8 @@ const CameraModal: React.FC<{
             vertical,
             wideAngle,
             customPrompt: customPrompt.trim() || undefined,
-            seed
+            seed,
+            gpu: gpuSelection,
         });
     };
 
@@ -2140,12 +2146,18 @@ const CameraModal: React.FC<{
                                 随机
                             </button>
                         </div>
+                        <GpuNodeSelector onSelectionChange={setGpuSelection} />
                     </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
                     <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50">生成新角度</button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={!currentMaterial || !gpuSelection?.usable}
+                        title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+                        className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >生成新角度</button>
                 </div>
             </div>
         </div>
@@ -2155,9 +2167,10 @@ const CameraModal: React.FC<{
 const ProcessModal: React.FC<{
     config: ProcessModalConfig;
     onClose: () => void;
-    onSubmit: (materialId: string) => void;
+    onSubmit: (materialId: string, gpu: GpuNodeSelection) => void;
 }> = ({ config, onClose, onSubmit }) => {
     const [selectedMaterialId, setSelectedMaterialId] = useState<string>(config.selectedMaterialId);
+    const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
 
     const currentMaterial = config.materials.find(m => m.id === selectedMaterialId) || config.materials[0];
 
@@ -2166,11 +2179,11 @@ const ProcessModal: React.FC<{
     }, [config]);
 
     const handleSubmit = () => {
-        if (!currentMaterial) {
-            alert('请选择一张素材图片');
+        if (!currentMaterial || !gpuSelection?.usable) {
+            alert(currentMaterial ? '请选择一个可用 GPU 节点' : '请选择一张素材图片');
             return;
         }
-        onSubmit(selectedMaterialId);
+        onSubmit(selectedMaterialId, gpuSelection);
     };
 
     const workflowNames = {
@@ -2236,10 +2249,16 @@ const ProcessModal: React.FC<{
                     </div>
                 </div>
 
+                <GpuNodeSelector onSelectionChange={setGpuSelection} />
+
                 {/* 底部按钮 */}
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
                     <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-                    <button onClick={handleSubmit} className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg ${
+                    <button
+                      onClick={handleSubmit}
+                      disabled={!currentMaterial || !gpuSelection?.usable}
+                      title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+                      className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
                         config.workflow === 'upscale_hd'
                             ? 'bg-b400 hover:bg-b500 shadow-blue-900/30 hover:shadow-blue-900/50'
                             : 'bg-primary hover:bg-primary-hover shadow-purple-900/30 hover:shadow-purple-900/50'

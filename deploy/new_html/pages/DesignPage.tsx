@@ -27,6 +27,7 @@ import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 import { isAssetImageFileRole } from '../utils/assetImageRoles';
 import { filterAssetsForDesignScope } from '../utils/assetScope';
+import { GpuNodeSelector, type GpuNodeSelection } from '../components/GpuNodeSelector';
 
 type AssetTab = 'character' | 'scene' | 'prop';
 type MaterialAIEngine = 'nanobanana' | 'doubao';
@@ -442,7 +443,7 @@ export const DesignPage: React.FC = () => {
   }, [episodeId, forceReloadSlices]);
 
   /* ---- Camera ---- */
-  const handleCameraGenerate = useCallback(async (payload: { assetId: string; imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number }) => {
+  const handleCameraGenerate = useCallback(async (payload: { assetId: string; imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number; gpu: GpuNodeSelection }) => {
     setCameraModal(null);
     setBusyAssetId(payload.assetId); setBusyLabel('角度调整中...');
     try {
@@ -455,6 +456,8 @@ export const DesignPage: React.FC = () => {
       const finalPrompt = payload.customPrompt?.trim() || prompts.join(' ') || 'Adjust the camera angle slightly.';
       const { taskId } = await adjustImageAngle(payload.imageUrl, finalPrompt, payload.seed, {
         entityType: 'asset', entityId: payload.assetId, fileRole: 'reference_image', episodeId: episodeId || undefined,
+        preferredAgentId: payload.gpu.preferredAgentId,
+        preferredNodeId: payload.gpu.preferredNodeId,
       });
       // 2026-05-20 (M3)：接入 taskRegistry，让铃铛能看到设计页的 ComfyUI 任务
       await waitForComfyUITask(taskId, undefined, {
@@ -474,13 +477,15 @@ export const DesignPage: React.FC = () => {
   }, [episodeId, projectId, forceReloadSlices]);
 
   /* ---- Process (upscale/watermark) ---- */
-  const handleProcessSubmit = useCallback(async (materialUrl: string) => {
+  const handleProcessSubmit = useCallback(async (payload: { materialUrl: string; gpu: GpuNodeSelection }) => {
     if (!processModal) return;
     setProcessModal(null);
     setBusyAssetId(processModal.asset.assetId); setBusyLabel(processModal.workflow === 'upscale_hd' ? '高清放大中...' : '去水印中...');
     try {
-      const { taskId } = await processMaterialImage(materialUrl, processModal.workflow, {
+      const { taskId } = await processMaterialImage(payload.materialUrl, processModal.workflow, {
         entityType: 'asset', entityId: processModal.asset.assetId, fileRole: 'reference_image', episodeId: episodeId || undefined,
+        preferredAgentId: payload.gpu.preferredAgentId,
+        preferredNodeId: payload.gpu.preferredNodeId,
       });
       // 2026-05-20 (M3)：接入 taskRegistry
       await waitForComfyUITask(taskId, undefined, {
@@ -1125,7 +1130,7 @@ const BatchGenerateModal: React.FC<{
 /* ======================== CameraModal ======================== */
 const CameraModal: React.FC<{
   asset: AssetItem; materials: ModalMaterial[]; onClose: () => void;
-  onSubmit: (p: { imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number }) => void;
+  onSubmit: (p: { imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number; gpu: GpuNodeSelection }) => void;
 }> = ({ asset, materials, onClose, onSubmit }) => {
   const [selId, setSelId] = useState(materials[0]?.id);
   const [rotate, setRotate] = useState(0);
@@ -1134,6 +1139,7 @@ const CameraModal: React.FC<{
   const [wideAngle, setWideAngle] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
   const [seed, setSeed] = useState(randomSeed());
+  const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
   const cur = materials.find(m => m.id === selId) || materials[0];
   const promptExamples = ["镜头向前移动", "镜头向左移动", "转为俯视", "转为广角", "转为特写"];
   const Slider: React.FC<{ label: string; values: number[]; value: number; onChange: (v: number) => void }> = ({ label, values, value, onChange }) => {
@@ -1159,11 +1165,17 @@ const CameraModal: React.FC<{
             <textarea rows={2} value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-sm text-n800 p-3 resize-none" placeholder="自定义提示词..." />
             <div className="flex flex-wrap gap-1">{promptExamples.map((ex, i) => (<button key={i} onClick={() => setCustomPrompt(ex)} className="text-[10px] px-2 py-1 bg-n0 text-n300 rounded border border-n40 hover:bg-primary hover:text-white">{ex}</button>))}</div>
             <div className="flex items-center gap-2 text-xs text-n700"><span>种子</span><input type="number" value={seed} onChange={e => setSeed(+e.target.value)} className="w-28 bg-n0 border border-n40 rounded px-2 py-1" /><button onClick={() => setSeed(randomSeed())} className="px-2 py-1 rounded border border-n40 hover:text-n800">随机</button></div>
+            <GpuNodeSelector onSelectionChange={setGpuSelection} />
           </div>
         </div>
         <div className="flex justify-end gap-3 pt-4 border-t border-n40">
           <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button onClick={() => { if (!cur) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed }); }} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">生成新角度</button>
+          <button
+            onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed, gpu: gpuSelection }); }}
+            disabled={!cur || !gpuSelection?.usable}
+            title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >生成新角度</button>
         </div>
       </div>
     </div>
@@ -1172,9 +1184,10 @@ const CameraModal: React.FC<{
 
 /* ======================== ProcessModal ======================== */
 const ProcessModal: React.FC<{
-  asset: AssetItem; materials: ModalMaterial[]; workflow: 'upscale_hd' | 'remove_watermark'; onClose: () => void; onSubmit: (url: string) => void;
+  asset: AssetItem; materials: ModalMaterial[]; workflow: 'upscale_hd' | 'remove_watermark'; onClose: () => void; onSubmit: (payload: { materialUrl: string; gpu: GpuNodeSelection }) => void;
 }> = ({ asset, materials, workflow, onClose, onSubmit }) => {
   const [selId, setSelId] = useState(materials[0]?.id);
+  const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
   const cur = materials.find(m => m.id === selId) || materials[0];
   const info = workflow === 'upscale_hd' ? { title: '高清放大', desc: 'AI放大到4K' } : { title: '去水印', desc: '智能移除水印' };
   return (
@@ -1185,9 +1198,15 @@ const ProcessModal: React.FC<{
           <div className="rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">{cur ? <img src={secureMediaUrl(cur.url) || ''} className="w-full h-full object-contain" /> : <span className="text-xs text-n100">无</span>}</div>
           <div><span className="text-[11px] font-bold text-n100 uppercase mb-2 block">选择素材</span><div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-2 bg-n0 rounded-lg border border-n40">{materials.map(m => (<button key={m.id} onClick={() => setSelId(m.id)} className={`relative aspect-square rounded-lg overflow-hidden border-2 ${selId === m.id ? 'border-primary ring-2 ring-primary/30' : 'border-transparent hover:border-n40'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} className="w-full h-full object-cover" />{selId === m.id && <div className="absolute inset-0 bg-primary-light flex items-center justify-center"><Check className="w-6 h-6 text-primary" /></div>}</button>))}</div></div>
         </div>
+        <GpuNodeSelector onSelectionChange={setGpuSelection} />
         <div className="flex justify-end gap-3 pt-4 border-t border-n40">
           <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button onClick={() => { if (!cur) return; onSubmit(cur.url); }} className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg ${workflow === 'upscale_hd' ? 'bg-primary hover:bg-primary-hover' : 'bg-primary hover:bg-primary-hover'}`}>开始处理</button>
+          <button
+            onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ materialUrl: cur.url, gpu: gpuSelection }); }}
+            disabled={!cur || !gpuSelection?.usable}
+            title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+            className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${workflow === 'upscale_hd' ? 'bg-primary hover:bg-primary-hover' : 'bg-primary hover:bg-primary-hover'}`}
+          >开始处理</button>
         </div>
       </div>
     </div>
