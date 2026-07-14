@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, LogOut, Pencil, Copy } from 'lucide-react';
+import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, LogOut, Pencil, Copy, Maximize2, Minimize2 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import { duplicateEpisode as duplicateEpisodeRequest } from '../services/projectWorkflowService';
 import type { Episode } from '../types';
@@ -16,6 +16,7 @@ export const EpisodeHubPage: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('episode_hub_layout') === 'wide');
 
   const loadEpisodes = useCallback(async () => {
     if (!projectId) return;
@@ -44,6 +45,14 @@ export const EpisodeHubPage: React.FC = () => {
   }, [projectId]);
 
   useEffect(() => { loadEpisodes(); }, [loadEpisodes]);
+
+  const toggleLayoutWidth = useCallback(() => {
+    setIsWideLayout(prev => {
+      const next = !prev;
+      localStorage.setItem('episode_hub_layout', next ? 'wide' : 'narrow');
+      return next;
+    });
+  }, []);
 
   const createEpisode = async () => {
     if (!newTitle.trim() || !projectId) return;
@@ -131,9 +140,14 @@ export const EpisodeHubPage: React.FC = () => {
     published: 'bg-g50 text-g400',
   };
 
+  const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-6xl';
+  const episodeGridClass = isWideLayout
+    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4'
+    : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
+
   return (
     <div className="min-h-screen bg-n20 p-6 md:p-10">
-      <div className="max-w-6xl mx-auto">
+      <div className={`w-full ${shellWidthClass} mx-auto`}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8 animate-slideDown">
           <div className="flex items-center gap-3">
@@ -150,6 +164,15 @@ export const EpisodeHubPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleLayoutWidth}
+            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-n300 hover:text-n800 hover:bg-n0 border border-n40 hover:border-primary transition-all duration-200"
+            title={isWideLayout ? '切回窄屏' : '切到宽屏'}
+          >
+            {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {isWideLayout ? '窄屏' : '宽屏'}
+          </button>
           <button
             onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-card hover:shadow-atlas"
@@ -212,7 +235,7 @@ export const EpisodeHubPage: React.FC = () => {
             <p className="text-sm">点击上方「新建分集」开始创作</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={episodeGridClass}>
             {episodes.map((ep, idx) => (
               <div
                 key={ep.episodeId}

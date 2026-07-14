@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Archive, Trash2, Users, Clock, Tag, FolderOpen, MoreVertical, Star, ChevronDown, Share2 } from 'lucide-react';
+import { Plus, Search, Archive, Trash2, Users, Clock, Tag, FolderOpen, MoreVertical, Star, ChevronDown, Share2, Maximize2, Minimize2 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import ShareResourceDialog from './ShareResourceDialog';
@@ -21,6 +21,7 @@ const ProjectHub: React.FC = () => {
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDesc, setNewProjectDesc] = useState('');
     const [contextMenu, setContextMenu] = useState<{ projectId: string; x: number; y: number; isArchived?: boolean } | null>(null);
+    const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('project_hub_layout') === 'wide');
 
     // 2026-05-26 组织管理 MVP — workspace 联动 + share dialog 状态
     const orgId = useCurrentOrgId();
@@ -33,6 +34,14 @@ const ProjectHub: React.FC = () => {
     useEffect(() => {
         setNewProjectVisibility(isOrgWorkspace ? 'org-default' : 'private');
     }, [isOrgWorkspace, showCreateModal]);
+
+    const toggleLayoutWidth = useCallback(() => {
+        setIsWideLayout(prev => {
+            const next = !prev;
+            localStorage.setItem('project_hub_layout', next ? 'wide' : 'narrow');
+            return next;
+        });
+    }, []);
 
     const loadProjects = useCallback(async () => {
         setLoading(true);
@@ -187,10 +196,15 @@ const ProjectHub: React.FC = () => {
 
     // refactor/v2 (P1 旗舰)：项目中心整体换肤为 Atlassian 企业级浅色。
     // 逻辑/状态/handler 全部不变，仅替换样式（暗 gray/purple → 浅 n色阶/primary）。
+    const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-6xl';
+    const projectGridClass = isWideLayout
+        ? `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${shellWidthClass} mx-auto`
+        : `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 ${shellWidthClass} mx-auto`;
+
     return (
         <div className="layout-safe h-screen bg-n20 text-n800 flex flex-col" onClick={() => setContextMenu(null)}>
             {/* 顶部栏 */}
-            <header className="responsive-toolbar bg-n0 border-b border-n40 shadow-card flex items-center px-6 justify-between flex-shrink-0">
+            <header className={`responsive-toolbar bg-n0 border-b border-n40 shadow-card flex items-center px-6 justify-between flex-shrink-0 w-full ${shellWidthClass} mx-auto`}>
                 <div className="flex items-center gap-3 min-w-0">
                     <FolderOpen className="w-5 h-5 text-primary" />
                     <h1 className="text-lg font-semibold text-n800">项目管理</h1>
@@ -213,7 +227,7 @@ const ProjectHub: React.FC = () => {
             </header>
 
             {/* 工具栏 */}
-            <div className="responsive-toolbar px-6 py-4 flex items-center gap-4 border-b border-n40 bg-n0">
+            <div className={`responsive-toolbar px-6 py-4 flex items-center gap-4 border-b border-n40 bg-n0 w-full ${shellWidthClass} mx-auto`}>
                 <button
                     onClick={() => setShowCreateModal(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium transition-colors shadow-card"
@@ -254,18 +268,28 @@ const ProjectHub: React.FC = () => {
                     />
                     显示已归档
                 </label>
+
+                <button
+                    type="button"
+                    onClick={toggleLayoutWidth}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded border border-n40 bg-n0 text-sm text-n300 hover:text-n800 hover:border-primary transition-colors"
+                    title={isWideLayout ? '切回窄屏' : '切到宽屏'}
+                >
+                    {isWideLayout ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    {isWideLayout ? '窄屏' : '宽屏'}
+                </button>
             </div>
 
             {/* 项目列表 */}
             <div className="layout-safe flex-1 overflow-auto p-6 scrollbar-atlas">
                 {loading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className={projectGridClass}>
                         {[1, 2, 3, 4].map(i => (
                             <div key={i} className="h-48 bg-n30 rounded-md animate-pulse" />
                         ))}
                     </div>
                 ) : filteredProjects.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-n100">
+                    <div className={`flex flex-col items-center justify-center h-64 text-n100 ${shellWidthClass} mx-auto`}>
                         <FolderOpen className="w-16 h-16 mb-4 opacity-30" />
                         <p className="text-lg mb-2 text-n300">
                             {searchQuery ? '未找到匹配的项目' : '还没有项目'}
@@ -275,7 +299,7 @@ const ProjectHub: React.FC = () => {
                         </p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className={projectGridClass}>
                         {filteredProjects.map(p => (
                             <div
                                 key={p.projectId}
