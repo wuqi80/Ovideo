@@ -22,6 +22,9 @@ export interface SeedanceDetailModalProps {
     onClose: () => void;
     /** 2026-05-20 (Bug 4)：转发到内部 MentionTokensRow，让列表视图也能预览。 */
     onPreviewMedia?: (url: string, kind: SeedanceMediaInput['kind']) => void;
+    onUsePreviousVideoAudio?: () => void;
+    previousVideoAudioBusy?: boolean;
+    audioReferenceNotice?: string;
 }
 
 export const SeedanceDetailModal: React.FC<SeedanceDetailModalProps> = (p) => {
@@ -64,6 +67,9 @@ export const SeedanceDetailModal: React.FC<SeedanceDetailModalProps> = (p) => {
                         onChange={p.onChange}
                         candidates={p.candidates}
                         onPreviewMedia={p.onPreviewMedia}
+                        onUsePreviousVideoAudio={p.onUsePreviousVideoAudio}
+                        previousVideoAudioBusy={p.previousVideoAudioBusy}
+                        audioReferenceNotice={p.audioReferenceNotice}
                     />
                 </div>
             </div>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Upload, X, AlertCircle, Info, Plus, Maximize2 } from 'lucide-react';
+import { Upload, X, AlertCircle, Info, Plus, Maximize2, Volume2, Loader2 } from 'lucide-react';
 import { uploadAudio, uploadImage, uploadVideoFile } from '../services/videoMediaService';
 import type { SeedanceMediaInput, SeedanceMediaRole, SeedanceParams } from '../services/videoModelService';
 import { fetchSeedanceOmni } from '../services/videoWorkflowService';
@@ -16,6 +16,10 @@ interface Props {
     autoOpenMentionOnMount?: boolean;
     /** 2026-05-20 (Bug 4)：mention token 缩略图点击时打开外层 lightbox。 */
     onPreviewMedia?: (url: string, kind: SeedanceMediaInput['kind']) => void;
+    /** 从上一条已生成视频提取原声，作为当前卡片 reference_audio。 */
+    onUsePreviousVideoAudio?: () => void;
+    previousVideoAudioBusy?: boolean;
+    audioReferenceNotice?: string;
 }
 
 // Role options split per mode (Issue 3/4):
@@ -33,7 +37,17 @@ const ROLE_OPTIONS_FIRST_LAST: { value: SeedanceMediaRole | ''; label: string }[
 const RATIO_OPTIONS = ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'] as const;
 const RESOLUTION_OPTIONS = ['480p', '720p', '1080p'] as const;
 
-export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disabled, candidates, autoOpenMentionOnMount, onPreviewMedia }) => {
+export const SeedanceMultimodalPanel: React.FC<Props> = ({
+    value,
+    onChange,
+    disabled,
+    candidates,
+    autoOpenMentionOnMount,
+    onPreviewMedia,
+    onUsePreviousVideoAudio,
+    previousVideoAudioBusy,
+    audioReferenceNotice,
+}) => {
     const [uploadBusy, setUploadBusy] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [promptModalOpen, setPromptModalOpen] = useState(false);
@@ -162,7 +176,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
                     <div className="text-[9px] text-n100">
                         {mode === 'reference'
                             ? '全能参考：图片 0-9 · 视频 0-3 · 音频 0-3'
-                            : '首尾帧：仅 2 张图（首+尾），视频/音频不发送给后端'}
+                            : '首尾帧：首/尾图；支持通道可发送参考配音，视频不发送'}
                     </div>
                 </div>
                 <span className="text-[9px] px-1.5 py-0.5 rounded border border-primary text-primary bg-primary-light">
@@ -327,29 +341,47 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({ value, onChange, disa
 
                     <div
                         data-section="audio"
-                        data-greyed={mode === 'first_last' ? 'true' : 'false'}
-                        className={`rounded-md border border-n40 bg-n30 p-2 min-h-[122px] ${
-                            mode === 'first_last' ? 'opacity-30 pointer-events-none' : ''
-                        }`}
-                        title={mode === 'first_last' ? '首尾帧模式不发送音频给后端' : ''}
+                        data-greyed={audioReferenceNotice ? 'true' : 'false'}
+                        className="rounded-md border border-n40 bg-n30 p-2 min-h-[122px]"
+                        title={audioReferenceNotice || ''}
                     >
-                        <div className="flex items-center justify-between text-[10px] text-n300 mb-1">
-                            <span>音频 {audios.length}/3 {mode === 'first_last' && '(跳过)'}</span>
-                            <button
-                                onClick={() => audioInputRef.current?.click()}
-                                disabled={disabled || uploadBusy || audios.length >= 3}
-                                className="px-2 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px]"
-                            >
-                                <Upload size={10} className="inline mr-1" />添加
-                            </button>
+                        <div className="flex items-start justify-between gap-1 text-[10px] text-n300 mb-1">
+                            <span className="pt-0.5">参考配音 {audios.length}/3</span>
+                            <div className="flex flex-wrap justify-end gap-1">
+                                {onUsePreviousVideoAudio && (
+                                    <button
+                                        type="button"
+                                        onClick={onUsePreviousVideoAudio}
+                                        disabled={disabled || previousVideoAudioBusy}
+                                        className="px-1.5 py-0.5 bg-n0 hover:bg-success disabled:opacity-40 text-success hover:text-white border border-success/40 rounded text-[10px] inline-flex items-center gap-1"
+                                        title="提取上一条已生成视频的原声作为参考配音"
+                                    >
+                                        {previousVideoAudioBusy ? <Loader2 size={10} className="animate-spin" /> : <Volume2 size={10} />}
+                                        上一条原声
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => audioInputRef.current?.click()}
+                                    disabled={disabled || uploadBusy || audios.length >= 3}
+                                    className="px-1.5 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px] inline-flex items-center gap-1"
+                                >
+                                    <Upload size={10} />添加
+                                </button>
+                            </div>
                             <input ref={audioInputRef} type="file" accept="audio/*" multiple hidden
                                    onChange={e => onPickAudios(e.target.files)} />
                         </div>
+                        {audioReferenceNotice && (
+                            <div className="mb-1 rounded border border-warning/40 bg-warning/10 px-1.5 py-1 text-[9px] leading-relaxed text-warning">
+                                {audioReferenceNotice}
+                            </div>
+                        )}
                         {audios.length > 0 && (
                             <ul className="text-[10px] text-n700 space-y-0.5 max-h-28 overflow-y-auto pr-0.5">
                                 {value.media_inputs.map((m, i) => m.kind !== 'audio' ? null : (
-                                    <li key={i} className="flex items-center justify-between bg-n0 rounded px-1 py-0.5">
-                                        <span className="truncate">{m.url.split('/').pop()}</span>
+                                    <li key={i} className="flex items-center justify-between gap-1 bg-n0 rounded px-1 py-0.5">
+                                        <span className="truncate" title={m.url}>{m.url.split('/').pop()}</span>
                                         <button onClick={() => removeMedia(i)} disabled={disabled}>
                                             <X size={10} className="text-danger" />
                                         </button>
