@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Plus, Sparkles, Square, SkipBack, Wand2 } from 'lucide-react';
+import { Play, Pause, Plus, Sparkles, Square, SkipBack, Wand2, Trash2 } from 'lucide-react';
 
 // ─── Types ─────────────────────────────────────────────────────────
 export interface TimelineClip {
@@ -23,6 +23,7 @@ export interface TimelineTrackProps {
   onGenerateBgm?: () => void;
   onAddSfx?: () => void;
   onGenerateSfx?: () => void;
+  onDeleteClip?: (clip: TimelineClip) => void | Promise<void>;
 }
 
 // ─── Color Palette ─────────────────────────────────────────────────
@@ -55,6 +56,7 @@ function fmtTime(ms: number): string {
 export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   mode, clips, totalDurationMs, onClipClick, showPreview = false,
   onAddBgm, onGenerateBgm, onAddSfx, onGenerateSfx,
+  onDeleteClip,
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
@@ -303,11 +305,12 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                       const leftPct = (clip.startMs / effectiveTotal) * 100;
                       const widthPct = (clip.durationMs / effectiveTotal) * 100;
                       const colorClass = clip.color || TRACK_COLORS[clip.track] || 'bg-gray-600';
+                      const canDelete = Boolean(onDeleteClip && (clip.track === 'bgm' || clip.track === 'sfx'));
 
                       return (
                         <div
                           key={clip.id}
-                          className={`absolute top-0.5 bottom-0.5 rounded ${colorClass} flex items-center overflow-hidden cursor-pointer hover:brightness-110 transition-all`}
+                          className={`group absolute top-0.5 bottom-0.5 rounded ${colorClass} flex items-center overflow-hidden cursor-pointer hover:brightness-110 transition-all`}
                           style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 0.5)}%` }}
                           onClick={e => { e.stopPropagation(); onClipClick?.(clip); }}
                           title={`${clip.label} (${fmtTime(clip.durationMs)})`}
@@ -315,7 +318,20 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                           {clip.track === 'image' && clip.imageUrl ? (
                             <img src={clip.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
                           ) : (
-                            <span className="text-[8px] text-white/70 truncate px-1">{clip.label}</span>
+                            <span className={`text-[8px] text-white/70 truncate px-1 ${canDelete ? 'pr-5' : ''}`}>{clip.label}</span>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                void onDeleteClip?.(clip);
+                              }}
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex h-5 w-5 items-center justify-center rounded bg-black/35 text-white/80 opacity-0 transition-opacity hover:bg-danger hover:text-white group-hover:opacity-100"
+                              title={clip.track === 'bgm' ? '删除 BGM' : '删除音效'}
+                            >
+                              <Trash2 size={10} />
+                            </button>
                           )}
                         </div>
                       );

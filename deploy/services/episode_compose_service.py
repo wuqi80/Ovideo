@@ -85,6 +85,24 @@ async def _probe_dur(path: str) -> float:
         return 0.0
 
 
+async def _probe_has_audio(path: str) -> bool:
+    _rc, out, _err = await _run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "csv=p=0",
+            path,
+        ]
+    )
+    return "audio" in out.strip().lower()
+
+
 async def _list_shot_takes(episode_id: str) -> List[Dict[str, Any]]:
     rows = await EpisodeComposeDAO.list_shot_take_rows(episode_id)
     shots: Dict[str, Dict[str, Any]] = {}
@@ -244,29 +262,50 @@ async def _compose(
                     *common,
                 ]
             else:
-                cmd = [
-                    "ffmpeg",
-                    "-nostdin",
-                    "-y",
-                    "-loglevel",
-                    "error",
-                    "-i",
-                    video_path,
-                    "-f",
-                    "lavfi",
-                    "-i",
-                    "anullsrc=r=48000:cl=stereo",
-                    "-filter_complex",
-                    f"[0:v]{_VF}[v]",
-                    "-map",
-                    "[v]",
-                    "-map",
-                    "1:a",
-                    "-t",
-                    str(video_duration or 5),
-                    "-shortest",
-                    *common,
-                ]
+                target_duration = video_duration or 5
+                if await _probe_has_audio(video_path):
+                    cmd = [
+                        "ffmpeg",
+                        "-nostdin",
+                        "-y",
+                        "-loglevel",
+                        "error",
+                        "-i",
+                        video_path,
+                        "-filter_complex",
+                        f"[0:v]{_VF}[v];[0:a]apad[a]",
+                        "-map",
+                        "[v]",
+                        "-map",
+                        "[a]",
+                        "-t",
+                        str(target_duration),
+                        *common,
+                    ]
+                else:
+                    cmd = [
+                        "ffmpeg",
+                        "-nostdin",
+                        "-y",
+                        "-loglevel",
+                        "error",
+                        "-i",
+                        video_path,
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "anullsrc=r=48000:cl=stereo",
+                        "-filter_complex",
+                        f"[0:v]{_VF}[v]",
+                        "-map",
+                        "[v]",
+                        "-map",
+                        "1:a",
+                        "-t",
+                        str(target_duration),
+                        "-shortest",
+                        *common,
+                    ]
 
             rc, _out, err = await _run(cmd)
             if rc != 0:

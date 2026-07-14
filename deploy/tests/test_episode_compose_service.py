@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -214,11 +215,67 @@ async def test_compose_mixes_multiple_storyboard_audio_parts(monkeypatch, tmp_pa
 
     clip_cmd = commands[0]
     filter_arg = clip_cmd[clip_cmd.index("-filter_complex") + 1]
+    normalized_cmd = [os.path.normpath(str(part)) for part in clip_cmd]
     assert "amix=inputs=3" in filter_arg
     assert "-i" in clip_cmd
-    assert str(dialogue) in clip_cmd
-    assert str(narration) in clip_cmd
-    assert str(sfx) in clip_cmd
+    assert os.path.normpath(str(dialogue)) in normalized_cmd
+    assert os.path.normpath(str(narration)) in normalized_cmd
+    assert os.path.normpath(str(sfx)) in normalized_cmd
+    assert job["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_compose_preserves_video_audio_when_no_separate_audio(monkeypatch, tmp_path):
+    storage = tmp_path / "storage"
+    video = storage / "video" / "one.mp4"
+    video.parent.mkdir(parents=True, exist_ok=True)
+    video.write_bytes(b"x")
+
+    commands = []
+
+    async def fake_run(cmd):
+        commands.append(cmd)
+        output_path = cmd[-1]
+        if output_path.endswith(".mp4"):
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_bytes(b"video")
+        return 0, "", ""
+
+    async def fake_probe(_path):
+        return 4.0
+
+    async def fake_has_audio(_path):
+        return True
+
+    async def fake_get_shots(_episode_id, _selections=None):
+        return [
+            {
+                "video_url": "/storage/video/one.mp4",
+                "audio_url": None,
+                "audio_urls": [],
+                "audio_ms": 0,
+            }
+        ]
+
+    async def fake_create_final_cut_records(**_kwargs):
+        return None
+
+    monkeypatch.setattr(episode_compose_service, "_STORAGE", str(storage))
+    monkeypatch.setattr(episode_compose_service, "_ensure_media_tools", lambda: None)
+    monkeypatch.setattr(episode_compose_service, "_run", fake_run)
+    monkeypatch.setattr(episode_compose_service, "_probe_dur", fake_probe)
+    monkeypatch.setattr(episode_compose_service, "_probe_has_audio", fake_has_audio)
+    monkeypatch.setattr(episode_compose_service, "_get_shots", fake_get_shots)
+    monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "create_final_cut_records", fake_create_final_cut_records)
+
+    job = {}
+    await episode_compose_service._compose("ep_1", "user_1", "proj_1", job)
+
+    clip_cmd = commands[0]
+    filter_arg = clip_cmd[clip_cmd.index("-filter_complex") + 1]
+    assert "[0:a]apad[a]" in filter_arg
+    assert "anullsrc=r=48000:cl=stereo" not in clip_cmd
+    assert clip_cmd[clip_cmd.index("-map", clip_cmd.index("-map") + 1) + 1] == "[a]"
     assert job["status"] == "done"
 
 

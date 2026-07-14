@@ -16,6 +16,7 @@ import { LayoutGrid, Loader, ChevronDown, ChevronRight, GripHorizontal } from 'l
 import { TimelineTrack, type TimelineClip } from '../components/TimelineTrack';
 import { MusicModal } from '../components/audio/MusicModal';
 import { SfxModal } from '../components/audio/SfxModal';
+import { deleteAudioTrack } from '../services/audioGenerationService';
 import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary, AudioTrack } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { runWhenIdle } from '../utils/idleScheduler';
@@ -82,6 +83,7 @@ export const StoryboardGenPage: React.FC = () => {
   const [visibleEntityShotCount, setVisibleEntityShotCount] = useState(STORYBOARD_INITIAL_SHOT_COUNT);
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [showSfxModal, setShowSfxModal] = useState(false);
+  const [deletingAudioTrackId, setDeletingAudioTrackId] = useState<string | null>(null);
   const handleVisibleShotCountChange = useCallback((count: number) => {
     setVisibleEntityShotCount(count);
     if (count > STORYBOARD_INITIAL_SHOT_COUNT && count > storyboardItems.length) {
@@ -405,6 +407,29 @@ export const StoryboardGenPage: React.FC = () => {
     [timelineClips, timelineStoryboardTotalMs],
   );
 
+  const handleDeleteTimelineAudioClip = useCallback(async (clip: TimelineClip) => {
+    if (clip.track !== 'bgm' && clip.track !== 'sfx') return;
+    const trackId = clip.id.startsWith('track_') ? clip.id.slice('track_'.length) : '';
+    if (!trackId || deletingAudioTrackId) return;
+    const ok = await crmConfirm({
+      title: '删除音频',
+      message: `确定删除「${clip.label || (clip.track === 'bgm' ? 'BGM' : '音效')}」吗？`,
+      type: 'danger',
+      confirmText: '删除',
+    });
+    if (!ok) return;
+    setDeletingAudioTrackId(trackId);
+    try {
+      await deleteAudioTrack(trackId);
+      crmMessage.success('音频已删除');
+      await forceReloadSlices('audioTracks');
+    } catch (error: any) {
+      crmMessage.error(`删除失败：${error?.message || error}`);
+    } finally {
+      setDeletingAudioTrackId(null);
+    }
+  }, [deletingAudioTrackId, forceReloadSlices]);
+
   const showTimeline = storyboardItems.length > 0;
   const [timelinePanel, setTimelinePanel] = usePersistedPageState<{ collapsed: boolean; heightPx: number }>({
     page: 'StoryboardGenPage:timelinePanel',
@@ -561,6 +586,7 @@ export const StoryboardGenPage: React.FC = () => {
                 onGenerateBgm={() => setShowMusicModal(true)}
                 onAddSfx={() => setShowSfxModal(true)}
                 onGenerateSfx={() => setShowSfxModal(true)}
+                onDeleteClip={handleDeleteTimelineAudioClip}
               />
             </div>
           )}

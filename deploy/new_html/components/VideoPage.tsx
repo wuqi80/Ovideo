@@ -219,6 +219,9 @@ function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; tim
 }
 
 const VIDEO_GROUP_PAGE_SIZE = 10;
+const VIDEO_BATCH_WAIT_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+
+type VideoBatchWaitResult = 'done' | 'failed' | 'timeout';
 
 // ==================== 主组件 ====================
 
@@ -286,6 +289,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const [cropStartTime, setCropStartTime] = useState(0);
     const [cropEndTime, setCropEndTime] = useState(5);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isBatchRunning, setIsBatchRunning] = useState(false);
     const [beautifyApplyingKey, setBeautifyApplyingKey] = useState<string | null>(null);
     
     // Toast消息
@@ -299,8 +303,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const rightPanelRef = useRef<HTMLDivElement>(null);
     const editVideoRef = useRef<HTMLVideoElement>(null);
     const pollingIntervals = useRef<Record<string, NodeJS.Timeout>>({});
+    const batchWaitersRef = useRef<Record<string, {
+        timeoutId: ReturnType<typeof setTimeout>;
+        resolve: (result: VideoBatchWaitResult) => void;
+    }>>({});
     const isScrollSyncing = useRef(false);
     const initialVideoTaskCheckDoneRef = useRef(false);
+
+    useEffect(() => () => {
+        Object.values(batchWaitersRef.current).forEach(waiter => {
+            clearTimeout(waiter.timeoutId);
+            waiter.resolve('failed');
+        });
+        batchWaitersRef.current = {};
+    }, []);
     
     // Seedance 2.0 参数（按 group.uuid 索引），不污染 TaskGroup 类型
     const [seedanceParamsByUuid, setSeedanceParamsByUuid] = useState<Record<string, SeedanceParams>>({});
@@ -1618,9 +1634,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
     }, [ensureVideoSegmentId, showToast]);
 
-    const runTask = useCallback(async (uuid: string) => {
+    const runTask = useCallback(async (uuid: string): Promise<string | null> => {
         const group = taskGroups.find(g => g.uuid === uuid);
-        if (!group) return;
+        if (!group) return null;
 
         // 提交前先拿到真实 segment_id（取或建），供下方各分支作为 entity_id 写回 video_segments。
         const segmentId = await ensureVideoSegmentId(group);
@@ -1639,7 +1655,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             );
             if (seedanceBlock) {
                 showToast(seedanceBlock);
-                return;
+                return null;
             }
             // Issue 4: in 首尾帧 mode (any image has role first_frame/last_frame),
             // the panel greys out videos/audios — strip them before submit so the
@@ -1677,6 +1693,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 console.log('Seedance 任务提交成功:', result.task_id);
                 showToast('任务已提交');
                 startPolling(uuid, result.task_id);
+                return result.task_id;
             } catch (error: any) {
                 console.error('Seedance 任务提交失败:', error);
                 showToast('任务提交失败: ' + error.message);
@@ -1684,8 +1701,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     ...prev,
                     [uuid]: { ...prev[uuid], state: 'failed', error: error.message },
                 }));
+                return null;
             }
-            return;
+            return null;
         }
         // ==================== DashScope 共享 API (合体/大乘/炼虚) ====================
         // 2026-05-24 — Kling/Vidu/HappyHorse 走专用多模态面板（params.media_inputs）
@@ -1695,11 +1713,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const images = (params.media_inputs || []).filter(m => m.kind === 'image');
             if (group.model === 'Vidu' && images.length === 0) {
                 showToast('大乘 (Vidu) 至少需要 1 张图，参考生 或 首尾帧');
-                return;
+                return null;
             }
             if (group.model === 'HappyHorse' && images.length === 0) {
                 showToast('炼虚 (HappyHorse) 至少需要 1 张参考图');
-                return;
+                return null;
             }
             setTasksStatus(prev => {
                 const oldStatus: TaskStatus = prev[uuid] || {};
@@ -1728,6 +1746,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 console.log('DashScope 任务提交成功:', result.task_id);
                 showToast('任务已提交');
                 startPolling(uuid, result.task_id);
+                return result.task_id;
             } catch (error: any) {
                 console.error('DashScope 任务提交失败:', error);
                 showToast('任务提交失败: ' + error.message);
@@ -1735,8 +1754,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     ...prev,
                     [uuid]: { ...prev[uuid], state: 'failed', error: error.message },
                 }));
+                return null;
             }
-            return;
+            return null;
         }
 
         // ==================== 其他模型保持原路径不变 ====================
@@ -1747,7 +1767,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!img1) {
             console.error('找不到图片');
             showToast('找不到图片，请重新上传');
-            return;
+            return null;
         }
         
         // 判断是否为外部API模型
@@ -1814,6 +1834,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             console.log('✅ 任务提交成功:', result.task_id);
             showToast('任务已提交');
             startPolling(uuid, result.task_id);
+            return result.task_id;
             
         } catch (error: any) {
             console.error('任务提交失败:', error);
@@ -1822,8 +1843,51 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 ...prev,
                 [uuid]: { ...prev[uuid], state: 'failed', error: error.message }
             }));
+            return null;
         }
     }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId]);
+
+    const waitForBatchVideoTask = useCallback((uuid: string): Promise<VideoBatchWaitResult> => {
+        const existing = batchWaitersRef.current[uuid];
+        if (existing) {
+            clearTimeout(existing.timeoutId);
+            existing.resolve('failed');
+        }
+
+        return new Promise(resolve => {
+            const timeoutId = setTimeout(() => {
+                delete batchWaitersRef.current[uuid];
+                resolve('timeout');
+            }, VIDEO_BATCH_WAIT_TIMEOUT_MS);
+
+            batchWaitersRef.current[uuid] = { timeoutId, resolve };
+        });
+    }, []);
+
+    const resolveBatchVideoTask = useCallback((uuid: string, result: VideoBatchWaitResult) => {
+        const waiter = batchWaitersRef.current[uuid];
+        if (!waiter) return;
+        clearTimeout(waiter.timeoutId);
+        delete batchWaitersRef.current[uuid];
+        waiter.resolve(result);
+    }, []);
+
+    const runTaskAndWait = useCallback(async (uuid: string): Promise<VideoBatchWaitResult> => {
+        const waitPromise = waitForBatchVideoTask(uuid);
+        let taskId: string | null = null;
+        try {
+            taskId = await runTask(uuid);
+        } catch (error) {
+            console.error('批量视频任务提交异常:', error);
+            resolveBatchVideoTask(uuid, 'failed');
+            return 'failed';
+        }
+        if (!taskId) {
+            resolveBatchVideoTask(uuid, 'failed');
+            return 'failed';
+        }
+        return waitPromise;
+    }, [runTask, waitForBatchVideoTask, resolveBatchVideoTask]);
     
     // 2026-05-20 (M2)：startPolling 完全交给 videoTaskPoller。
     //   - 同 uuid 重复提交安全（poller 内部去重）
@@ -1877,6 +1941,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     taskId: uuid,
                 });
             }
+            resolveBatchVideoTask(uuid, 'done');
         },
         onFail: (error: string) => {
             setTasksStatus(prev => ({
@@ -1892,6 +1957,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     taskId: uuid,
                 });
             }
+            resolveBatchVideoTask(uuid, 'failed');
         },
         onProgress: (progress: number, status: 'queued' | 'running' | 'processing' | 'completed' | 'failed' | 'cancelled') => {
             setTasksStatus(prev => ({
@@ -1903,7 +1969,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 },
             }));
         },
-    }), [onAddNotification]);
+    }), [onAddNotification, resolveBatchVideoTask]);
 
     // 2026-05-20 (M2)：mount / 重新 mount 时把全局已存活的 video poller 回调
     // 重新接到本组件 setState 上。必须放在 `buildPollCallbacks` 定义之后，
@@ -1964,15 +2030,30 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }, [taskGroups, imagePrompts, sessionScope, buildPollCallbacks]);
     
     const runAllSelected = useCallback(async () => {
+        if (isBatchRunning) return;
         const selected = taskGroups.filter(g => tasksStatus[g.uuid]?.selected);
-        for (const group of selected) {
-            await runTask(group.uuid);
-            await new Promise(r => setTimeout(r, 500));
+        if (selected.length === 0) return;
+
+        setIsBatchRunning(true);
+        try {
+            for (let index = 0; index < selected.length; index++) {
+                const group = selected[index];
+                showToast(`正在执行 ${index + 1}/${selected.length}，完成后自动继续下一个`);
+                const result = await runTaskAndWait(group.uuid);
+                if (result === 'timeout') {
+                    showToast('当前视频等待超时，已暂停批量执行');
+                    break;
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+        } finally {
+            setIsBatchRunning(false);
         }
-    }, [taskGroups, tasksStatus, runTask]);
+    }, [isBatchRunning, taskGroups, tasksStatus, runTaskAndWait, showToast]);
     
     // 批量执行所有待处理任务
     const runAllPending = useCallback(async () => {
+        if (isBatchRunning) return;
         const pending = taskGroups.filter(g => {
             const status = tasksStatus[g.uuid];
             return !status || status.state === 'idle' || status.state === 'failed';
@@ -1987,11 +2068,22 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         
         showToast(`开始执行 ${pending.length} 个任务...`);
         
-        for (const group of pending) {
-            await runTask(group.uuid);
-            await new Promise(r => setTimeout(r, 500));
+        setIsBatchRunning(true);
+        try {
+            for (let index = 0; index < pending.length; index++) {
+                const group = pending[index];
+                showToast(`正在执行 ${index + 1}/${pending.length}，完成后自动继续下一个`);
+                const result = await runTaskAndWait(group.uuid);
+                if (result === 'timeout') {
+                    showToast('当前视频等待超时，已暂停批量执行');
+                    break;
+                }
+                await new Promise(r => setTimeout(r, 500));
+            }
+        } finally {
+            setIsBatchRunning(false);
         }
-    }, [taskGroups, tasksStatus, runTask, showToast]);
+    }, [isBatchRunning, taskGroups, tasksStatus, runTaskAndWait, showToast]);
     
     // 批量放大已完成的视频
     const batchUpscale = useCallback(async () => {
@@ -3802,19 +3894,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     
                     <button
                         onClick={runAllSelected}
-                        disabled={!taskGroups.some(g => tasksStatus[g.uuid]?.selected)}
+                        disabled={isBatchRunning || !taskGroups.some(g => tasksStatus[g.uuid]?.selected)}
                         className="flex items-center gap-1 px-3 py-1.5 bg-n0 hover:bg-n20 text-n700 text-xs font-bold rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         <Play className="w-3.5 h-3.5" />
-                        执行选中
+                        {isBatchRunning ? '批量执行中' : '执行选中'}
                     </button>
                     
                     <button
                         onClick={runAllPending}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-success hover:bg-success text-white text-xs font-bold rounded shadow-sm transition-colors"
+                        disabled={isBatchRunning}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-success hover:bg-success text-white text-xs font-bold rounded shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                         <Play className="w-3.5 h-3.5 fill-current" />
-                        批量执行
+                        {isBatchRunning ? '批量执行中' : '批量执行'}
                     </button>
                     
                     <button

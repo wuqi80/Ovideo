@@ -42,4 +42,41 @@ describe('TimelineTrack audio actions', () => {
     expect(onAddSfx).toHaveBeenCalledOnce();
     expect(onGenerateSfx).toHaveBeenCalledOnce();
   });
+
+  it('exposes delete actions for BGM and sound-effect clips', () => {
+    const onDeleteClip = vi.fn();
+
+    render(
+      <TimelineTrack
+        mode="combined"
+        clips={[
+          {
+            id: 'track_bgm_1',
+            label: 'BGM',
+            track: 'bgm',
+            audioUrl: '/bgm.mp3',
+            durationMs: 3000,
+            startMs: 0,
+          },
+          {
+            id: 'track_sfx_1',
+            label: '音效',
+            track: 'sfx',
+            audioUrl: '/sfx.mp3',
+            durationMs: 1000,
+            startMs: 1000,
+          },
+        ]}
+        totalDurationMs={3000}
+        onDeleteClip={onDeleteClip}
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle('删除 BGM'));
+    fireEvent.click(screen.getByTitle('删除音效'));
+
+    expect(onDeleteClip).toHaveBeenCalledTimes(2);
+    expect(onDeleteClip.mock.calls[0][0].id).toBe('track_bgm_1');
+    expect(onDeleteClip.mock.calls[1][0].id).toBe('track_sfx_1');
+  });
 });
