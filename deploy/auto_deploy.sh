@@ -55,6 +55,7 @@ if command -v psql >/dev/null 2>&1; then
         "sql/db_migration_video_segments.sql"
         "sql/db_migration_timeline_tracks.sql"
         "sql/db_migration_audio_tracks.sql"
+        "sql/db_migration_video_voice_references.sql"
         "sql/db_migration_admin.sql"
     )
 

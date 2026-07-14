@@ -604,6 +604,21 @@ export interface CharacterVoice {
   updatedAt: string;
 }
 
+export interface VideoVoiceReference {
+  referenceId: string;
+  projectId: string;
+  episodeId: string | null;
+  storyboardItemId: string | null;
+  videoSegmentId: string | null;
+  characterName: string;
+  sourceVideoUrl: string;
+  referenceAudioUrl: string;
+  videoModel: string | null;
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // MiniMax Audio types
 
 export type VoiceSourceType = 'system' | 'clone' | 'design';

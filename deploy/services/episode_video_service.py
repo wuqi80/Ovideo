@@ -48,6 +48,7 @@ async def start_episode_compose(
     episode_id: str,
     user_id: str,
     selections: Optional[Any],
+    audio_mode: str = "video_original",
     *,
     episode_dao: Any,
     compose_service: Any = episode_compose_service,
@@ -55,8 +56,20 @@ async def start_episode_compose(
     project_id = await episode_dao.get_project_id(episode_id)
     if not project_id:
         raise EpisodeNotFound("Episode not found")
-    job = compose_service.start_compose(episode_id, user_id, project_id, selections)
-    return {"success": True, "status": job["status"], "total": job["total"], "done": job["done"]}
+    job = compose_service.start_compose(
+        episode_id,
+        user_id,
+        project_id,
+        selections,
+        audio_mode,
+    )
+    return {
+        "success": True,
+        "status": job["status"],
+        "total": job["total"],
+        "done": job["done"],
+        "audio_mode": job.get("audio_mode", "video_original"),
+    }
 
 
 def get_episode_compose_status(

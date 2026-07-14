@@ -17,6 +17,7 @@ class StoryboardDAO:
             "script_id",
             "sort_order",
             "dialogue",
+            "generated_image_url",
             "dialogue_audio_url",
             "narration_audio_url",
             "sfx_audio_url",

@@ -7,14 +7,16 @@ import {
 import { useEpisode } from '../contexts/EpisodeContext';
 import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
 // 2026-05-20 (Task System Overhaul M4)：把 EnhancePage 的「假进度」改成真后端 worker。
-// upscale 接到 videoTaskService.submitUpscaleTaskQueued + videoTaskPoller，状态实时同步
-// 到 taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
-// dub / lipSync）后端目前没 worker，明确提示用户而非用假进度误导。
-import { submitUpscaleTaskQueued } from '../services/videoTaskService';
-import { fetchComfyuiAvailable, startCompose, getComposeStatus, type ComposeStatus } from '../services/videoWorkflowService';
+// upscale / lipSync 接到真实 GPU worker + videoTaskPoller，状态实时同步到
+// taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
+// dub）后端目前没 worker，明确提示用户而非用假进度误导。
+import { submitUpscaleTaskQueued, submitVoiceTaskQueued } from '../services/videoTaskService';
+import { fetchComfyuiAvailable, startCompose, getComposeStatus, updateVideoSegment, type ComposeStatus } from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
+import { fetchEntityFiles, uploadEntityFile } from '../services/entityFileService';
+import { uploadAudio } from '../services/videoMediaService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
-import { secureApiUrl } from '../services/httpClient';
+import { apiFetch, secureApiUrl } from '../services/httpClient';
 import { syncTimelineAudioPlayback } from '../utils/enhanceTimelineAudio';
 import LazyVideo from '../components/LazyVideo';
 
@@ -22,6 +24,10 @@ interface MediaClip {
   id: string;
   url: string;
   thumbnailUrl?: string;
+  referenceImageUrl?: string;
+  model?: string;
+  comfyFilename?: string;
+  sourceLabel?: string;
   startTime: number;
   duration: number;
   sourceOffset: number;
@@ -60,7 +66,7 @@ function normalizeStoryboardAudioItem(r: any): StoryboardItemDB {
     cameraMovement: '',
     imagePrompt: '',
     videoPrompt: '',
-    generatedImageUrl: null,
+    generatedImageUrl: r.generated_image_url ?? r.generatedImageUrl ?? null,
     boundAssets: [],
     status: r.status ?? 'draft',
     dialogueAudioUrl: r.dialogue_audio_url ?? r.dialogueAudioUrl ?? null,
@@ -96,13 +102,21 @@ function buildEnhanceSourceClips(
   let videoTime = 0;
 
   const sortedSegs = [...videoSegments].sort((a, b) => a.sortOrder - b.sortOrder);
+  const storyboardById = new Map(
+    storyboardAudioItems.map(item => [itemId(item as StoryboardItemDB & Record<string, any>), item]),
+  );
   for (let i = 0; i < sortedSegs.length; i++) {
     const seg = sortedSegs[i];
+    const storyboard = seg.storyboardItemId ? storyboardById.get(seg.storyboardItemId) : undefined;
     const dur = (seg.durationMs || 5000) / 1000;
     allClips.push({
       id: seg.segmentId || `vid_${i}`,
       url: secureMediaUrl(seg.videoUrl || ''),
       thumbnailUrl: seg.thumbnailUrl ? secureMediaUrl(seg.thumbnailUrl) : undefined,
+      referenceImageUrl: storyboard?.generatedImageUrl
+        ? secureMediaUrl(storyboard.generatedImageUrl)
+        : undefined,
+      model: seg.model,
       startTime: videoTime,
       duration: dur,
       sourceOffset: 0,
@@ -139,6 +153,7 @@ function buildEnhanceSourceClips(
         duration,
         sourceOffset: 0,
         type: 'audio',
+        sourceLabel: '参考配音',
       });
       continue;
     }
@@ -157,6 +172,7 @@ function buildEnhanceSourceClips(
         duration,
         sourceOffset: 0,
         type: 'audio',
+        sourceLabel: kind === 'dialogue' ? '参考对白' : kind === 'narration' ? '参考旁白' : '参考音效',
       });
     }
   }
@@ -172,6 +188,7 @@ function buildEnhanceSourceClips(
       duration: durationMs / 1000,
       sourceOffset: 0,
       type: 'audio',
+      sourceLabel: track.name || '音频轨道',
     });
   }
 
@@ -192,13 +209,14 @@ function mergeSourceClips(prev: MediaClip[], source: MediaClip[]): MediaClip[] {
       settings: existing.settings ?? clip.settings,
     };
   });
-  const manualClips = prev.filter(clip => !sourceIds.has(clip.id) && (/^aud_\d+/.test(clip.id) || clip.id.includes('_s_')));
+  const manualClips = prev.filter(clip => !sourceIds.has(clip.id) && (/^aud_\d+/.test(clip.id) || clip.id.startsWith('aud_actor_') || clip.id.includes('_s_')));
   return [...merged, ...manualClips];
 }
 
 export const EnhancePage: React.FC = () => {
   const { videoSegments, audioTracks, isLoading, error, reload, loadSlices, projectId, episodeId, selectedScriptId } = useEpisode();
   const [storyboardAudioItems, setStoryboardAudioItems] = useState<StoryboardItemDB[]>([]);
+  const [actorDubbingClips, setActorDubbingClips] = useState<MediaClip[]>([]);
   const [storyboardAudioLoaded, setStoryboardAudioLoaded] = useState(false);
   const [storyboardAudioReloadKey, setStoryboardAudioReloadKey] = useState(0);
 
@@ -244,6 +262,9 @@ export const EnhancePage: React.FC = () => {
   const [targetResolution, setTargetResolution] = useState<'720p' | '1080p' | '4K'>('1080p');
   const [targetFps, setTargetFps] = useState<30 | 60 | 120>(60);
   const [dubVoiceStyle, setDubVoiceStyle] = useState<'neutral' | 'dramatic' | 'soft'>('neutral');
+  const [composeAudioMode, setComposeAudioMode] = useState<'video_original' | 'reference_dubbing'>('video_original');
+  const [lipSyncAudioClipId, setLipSyncAudioClipId] = useState<string>('');
+  const [audioUploading, setAudioUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
   // GPU 类增强（放大/补帧/对口型）依赖 ComfyUI GPU 集群节点；无节点时禁用，避免点了必失败。
@@ -264,14 +285,14 @@ export const EnhancePage: React.FC = () => {
   const handleCompose = useCallback(async () => {
     if (!episodeId) { alert('未找到当前集'); return; }
     try {
-      const s = await startCompose(episodeId);
+      const s = await startCompose(episodeId, undefined, composeAudioMode);
       setCompose({ ...s, status: (s.status as any) || 'running' });
       if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
       composeTimerRef.current = window.setTimeout(pollCompose, 3000);
     } catch (e: any) {
       setCompose({ status: 'failed', total: 0, done: 0, error: e?.message || '启动失败' });
     }
-  }, [episodeId, pollCompose]);
+  }, [episodeId, pollCompose, composeAudioMode]);
   useEffect(() => () => { if (composeTimerRef.current) clearTimeout(composeTimerRef.current); }, []);
   // 进入页面时恢复正在进行/已完成的合成状态
   useEffect(() => {
@@ -279,6 +300,7 @@ export const EnhancePage: React.FC = () => {
     getComposeStatus(episodeId).then(s => {
       if (s.status && s.status !== 'idle') {
         setCompose(s);
+        if (s.audio_mode) setComposeAudioMode(s.audio_mode);
         if (s.status === 'running') composeTimerRef.current = window.setTimeout(pollCompose, 3000);
       }
     }).catch(() => {});
@@ -292,15 +314,55 @@ export const EnhancePage: React.FC = () => {
   const clipScopeRef = useRef('');
 
   useEffect(() => {
+    let active = true;
+    const sortedSegments = [...videoSegments].sort((a, b) => a.sortOrder - b.sortOrder);
+    if (sortedSegments.length === 0) {
+      setActorDubbingClips([]);
+      return () => { active = false; };
+    }
+
+    const starts = new Map<string, number>();
+    let cursor = 0;
+    for (const segment of sortedSegments) {
+      starts.set(segment.segmentId, cursor);
+      cursor += (segment.durationMs || 5000) / 1000;
+    }
+
+    Promise.all(sortedSegments.map(async segment => {
+      const files = await fetchEntityFiles('video_segment', segment.segmentId, 'actor_dubbing');
+      return files.items.map(file => ({
+        id: `aud_actor_${file.fileId}`,
+        url: secureMediaUrl(file.fileUrl),
+        startTime: starts.get(segment.segmentId) || 0,
+        duration: (segment.durationMs || 5000) / 1000,
+        sourceOffset: 0,
+        type: 'audio' as const,
+        sourceLabel: '演员录音',
+      }));
+    }))
+      .then(groups => {
+        if (active) setActorDubbingClips(groups.flat());
+      })
+      .catch(() => {
+        if (active) setActorDubbingClips([]);
+      });
+
+    return () => { active = false; };
+  }, [videoSegments]);
+
+  useEffect(() => {
     if (!storyboardAudioLoaded) return;
-    const sourceClips = buildEnhanceSourceClips(videoSegments, storyboardAudioItems, audioTracks);
+    const sourceClips = [
+      ...buildEnhanceSourceClips(videoSegments, storyboardAudioItems, audioTracks),
+      ...actorDubbingClips,
+    ];
     if (sourceClips.length === 0) return;
     setClips(prev => mergeSourceClips(prev, sourceClips));
     setSelectedClipId(prev => {
       if (prev && sourceClips.some(c => c.id === prev)) return prev;
       return sourceClips.find(c => c.type === 'video')?.id ?? sourceClips[0]?.id ?? null;
     });
-  }, [videoSegments, storyboardAudioItems, audioTracks, storyboardAudioLoaded]);
+  }, [videoSegments, storyboardAudioItems, audioTracks, actorDubbingClips, storyboardAudioLoaded]);
 
   useEffect(() => {
     const scope = `${episodeId || ''}:${selectedScriptId || ''}`;
@@ -325,6 +387,14 @@ export const EnhancePage: React.FC = () => {
   ) || videoClips[0];
 
   useEffect(() => {
+    if (lipSyncAudioClipId && audioClips.some(clip => clip.id === lipSyncAudioClipId)) return;
+    const activeAudio = audioClips.find(
+      clip => currentTime >= clip.startTime && currentTime <= clip.startTime + clip.duration,
+    ) || audioClips[0];
+    setLipSyncAudioClipId(activeAudio?.id || '');
+  }, [audioClips, currentTime, lipSyncAudioClipId]);
+
+  useEffect(() => {
     const video = previewVideoRef.current;
     if (!video || !videoUnderPlayhead?.url) return;
     const target = Math.max(0, currentTime - videoUnderPlayhead.startTime + videoUnderPlayhead.sourceOffset);
@@ -345,9 +415,9 @@ export const EnhancePage: React.FC = () => {
       })),
       audioElements: audioElementRefs.current,
       currentTime,
-      playing,
+      playing: playing && composeAudioMode === 'reference_dubbing',
     }).catch(() => {});
-  }, [audioClips, currentTime, playing]);
+  }, [audioClips, currentTime, playing, composeAudioMode]);
 
   const totalDuration = useMemo(
     () => Math.max(...clips.map(c => c.startTime + c.duration), currentTime + 10, 60),
@@ -376,25 +446,71 @@ export const EnhancePage: React.FC = () => {
     }
   }, [playing, totalDuration]);
 
-  const handleAudioUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const url = URL.createObjectURL(file);
-      const audio = new Audio(url);
-      audio.onloadedmetadata = () => {
-        const newClip: MediaClip = {
-          id: `aud_${Date.now()}`,
-          url,
-          startTime: currentTime,
-          duration: audio.duration,
-          sourceOffset: 0,
-          type: 'audio',
-        };
-        setClips(prev => [...prev, newClip]);
-        setSelectedClipId(newClip.id);
+  const handleAudioUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    const previewUrl = URL.createObjectURL(file);
+    setAudioUploading(true);
+    try {
+      const duration = await new Promise<number>((resolve, reject) => {
+        const audio = new Audio(previewUrl);
+        audio.onloadedmetadata = () => resolve(Number.isFinite(audio.duration) ? audio.duration : 5);
+        audio.onerror = () => reject(new Error('无法读取录音时长'));
+      });
+      const targetVideo = videoClips.find(clip => clip.id === selectedClipId) || videoUnderPlayhead || videoClips[0];
+      const entityId = targetVideo?.id || episodeId || '';
+      if (!entityId) throw new Error('请先选择一个视频片段');
+
+      const [saved, uploaded] = await Promise.all([
+        uploadEntityFile(
+          file,
+          targetVideo ? 'video_segment' : 'episode',
+          entityId,
+          'actor_dubbing',
+          episodeId || undefined,
+        ),
+        uploadAudio(file, 0, Math.max(1, Math.ceil(duration))),
+      ]);
+      const newClip: MediaClip = {
+        id: `aud_actor_${saved.fileId || Date.now()}`,
+        url: secureMediaUrl(saved.fileUrl),
+        startTime: targetVideo?.startTime ?? currentTime,
+        duration,
+        sourceOffset: 0,
+        type: 'audio',
+        comfyFilename: uploaded.filename,
+        sourceLabel: '演员录音',
       };
+      setClips(prev => [...prev, newClip]);
+      setLipSyncAudioClipId(newClip.id);
+      setEnhancementKind('lipSync');
+    } catch (uploadError: any) {
+      alert(`上传演员录音失败：${uploadError?.message || uploadError}`);
+    } finally {
+      URL.revokeObjectURL(previewUrl);
+      setAudioUploading(false);
     }
-  }, [currentTime]);
+  }, [currentTime, episodeId, selectedClipId, videoClips, videoUnderPlayhead]);
+
+  const ensureGpuAudioFilename = useCallback(async (clip: MediaClip): Promise<string> => {
+    if (clip.comfyFilename) return clip.comfyFilename;
+    const response = await apiFetch(clip.url, { credentials: 'include' }, {
+      apiName: 'loadLipSyncAudio',
+      requireAuth: false,
+      includeContentType: false,
+    });
+    if (!response.ok) throw new Error(`无法读取所选音频（HTTP ${response.status}）`);
+    const blob = await response.blob();
+    const extension = blob.type.includes('wav') ? 'wav' : blob.type.includes('mpeg') ? 'mp3' : 'audio';
+    const file = new File([blob], `lip-sync-${Date.now()}.${extension}`, {
+      type: blob.type || 'audio/mpeg',
+    });
+    const uploaded = await uploadAudio(file, 0, Math.max(1, Math.ceil(clip.duration)));
+    setClips(prev => prev.map(item => item.id === clip.id ? { ...item, comfyFilename: uploaded.filename } : item));
+    return uploaded.filename;
+  }, []);
 
   const handleSplit = useCallback(() => {
     if (!selectedClipId) return;
@@ -457,12 +573,13 @@ export const EnhancePage: React.FC = () => {
     ));
   }, [selectedClipId]);
 
-  // 2026-05-20 (M4)：mount effect — 自动扫描 videoTaskPoller 已知的所有 polling 中
-  // 以 `enhance-upscale:` 开头的（说明本页发起且未完成），把回调重接上来。
-  // 这样用户切页 / 刷新后回到 EnhancePage 仍能看到 upscale 进度，并接到完成事件。
+  // 自动恢复本页发起且尚未完成的 GPU 美化任务，避免切页后丢失状态。
   useEffect(() => {
-    const upscalePolls = getKnownVideoTaskIds().filter(uuid => uuid.startsWith('enhance-upscale:'));
-    for (const uuid of upscalePolls) {
+    const enhancePolls = getKnownVideoTaskIds().filter(uuid =>
+      uuid.startsWith('enhance-upscale:') || uuid.startsWith('enhance-lipsync:'),
+    );
+    for (const uuid of enhancePolls) {
+      const isLipSync = uuid.startsWith('enhance-lipsync:');
       attachVideoPollCallbacks(uuid, {
         onProgress: (progress) => {
           setProcessing(true);
@@ -476,7 +593,7 @@ export const EnhancePage: React.FC = () => {
         onFail: (err) => {
           setProcessing(false);
           setProcessProgress(0);
-          alert(`视频放大失败：${err}`);
+          alert(`${isLipSync ? '配音对嘴' : '视频放大'}失败：${err}`);
         },
       });
       setProcessing(true);
@@ -490,7 +607,86 @@ export const EnhancePage: React.FC = () => {
       alert('该功能需要 GPU 集群节点（ComfyUI Agent）。当前没有可用节点，暂不可用。\n\n请在后台“集群节点监控”确认 Agent 在线，或使用不依赖 GPU 的功能。');
       return;
     }
-    // === interpolate / dub / lipSync：后端目前没 worker ===
+    const targetClip = videoClips.find(c => c.id === selectedClipId) || videoUnderPlayhead || videoClips[0];
+    if (!targetClip || !targetClip.url) {
+      alert('请先在时间线上选择一个视频片段。');
+      return;
+    }
+
+    if (enhancementKind === 'lipSync') {
+      const audioClip = audioClips.find(clip => clip.id === lipSyncAudioClipId);
+      if (!audioClip) {
+        alert('请选择参考配音或上传配音演员录音。');
+        return;
+      }
+      const referenceImage = targetClip.referenceImageUrl || targetClip.thumbnailUrl;
+      if (!referenceImage) {
+        alert('当前视频片段缺少首帧图片，无法发起 GPU 对嘴任务。请先为对应分镜生成图片。');
+        return;
+      }
+
+      setProcessing(true);
+      setProcessProgress(0);
+      try {
+        const audioFilename = await ensureGpuAudioFilename(audioClip);
+        const result = await submitVoiceTaskQueued(
+          referenceImage,
+          targetClip.url,
+          audioFilename,
+          '保持人物身份、情绪和表情，自然地让嘴型与最终对白音频同步',
+          'Wan2',
+          {
+            entity_type: 'video_segment',
+            entity_id: targetClip.id,
+            file_role: 'video',
+            project_id: projectId || undefined,
+            episode_id: episodeId || undefined,
+          },
+        );
+        const pollerUuid = `enhance-lipsync:${targetClip.id}`;
+        startVideoPoll(pollerUuid, {
+          taskId: result.task_id,
+          title: `配音对嘴 · ${audioClip.sourceLabel || '音频轨道'}`,
+          kind: 'video-voice',
+          targetPage: 'enhance',
+          targetEntityType: 'video_segment',
+          targetEntityId: targetClip.id,
+          episodeId: episodeId || undefined,
+          projectId: projectId || undefined,
+          callbacks: {
+            onProgress: (progress) => {
+              setProcessing(true);
+              setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
+            },
+            onComplete: ({ status }) => {
+              const outputUrl = status.result?.videos?.[0]?.url;
+              if (outputUrl) {
+                void updateVideoSegment(targetClip.id, {
+                  video_url: outputUrl,
+                  task_id: status.task_id,
+                  status: 'completed',
+                }).catch(() => {});
+              }
+              setProcessProgress(100);
+              window.setTimeout(() => { setProcessing(false); setProcessProgress(0); }, 800);
+              reloadEnhanceData();
+            },
+            onFail: (err) => {
+              setProcessing(false);
+              setProcessProgress(0);
+              alert(`配音对嘴失败：${err}`);
+            },
+          },
+        });
+      } catch (error: any) {
+        setProcessing(false);
+        setProcessProgress(0);
+        alert(`提交配音对嘴任务失败：${error?.message || error}`);
+      }
+      return;
+    }
+
+    // === interpolate / dub：后端目前没 worker ===
     if (enhancementKind !== 'upscale') {
       const labelMap: Record<EnhancementKind, string> = {
         upscale: '高清放大',
@@ -503,11 +699,6 @@ export const EnhancePage: React.FC = () => {
     }
 
     // === upscale：真后端任务 + taskRegistry ===
-    const targetClip = videoUnderPlayhead || videoClips.find(c => c.id === selectedClipId) || videoClips[0];
-    if (!targetClip || !targetClip.url) {
-      alert('请先在时间线上选择一个视频片段。');
-      return;
-    }
     const filename = targetClip.url;
     if (!filename) {
       alert('无法从视频 URL 解析文件名，无法发起放大任务。');
@@ -557,7 +748,21 @@ export const EnhancePage: React.FC = () => {
       setProcessProgress(0);
       alert(`提交放大任务失败：${e?.message || e}`);
     }
-  }, [enhancementKind, videoUnderPlayhead, videoClips, selectedClipId, targetResolution, projectId, episodeId, reload, comfyAvailable]);
+  }, [
+    enhancementKind,
+    videoUnderPlayhead,
+    videoClips,
+    selectedClipId,
+    audioClips,
+    lipSyncAudioClipId,
+    targetResolution,
+    projectId,
+    episodeId,
+    reload,
+    reloadEnhanceData,
+    comfyAvailable,
+    ensureGpuAudioFilename,
+  ]);
 
   return (
     <div className="layout-safe flex flex-col h-full bg-n20 text-n800 overflow-hidden">
@@ -573,6 +778,24 @@ export const EnhancePage: React.FC = () => {
             <div className="toolbar-actions">
               <span className="text-xs font-mono text-n100">{formatTime(currentTime)}</span>
               <span className="text-[10px] text-n100">{videoClips.length}V · {audioClips.length}A</span>
+              <div className="inline-flex h-7 rounded border border-n40 overflow-hidden" aria-label="成片音频来源">
+                <button
+                  type="button"
+                  onClick={() => setComposeAudioMode('video_original')}
+                  className={`px-2 text-[11px] transition-colors ${composeAudioMode === 'video_original' ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:text-n700'}`}
+                  title="默认保留视频模型生成的情绪、呼吸和语气；静音视频自动使用参考配音"
+                >
+                  视频原声
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setComposeAudioMode('reference_dubbing')}
+                  className={`px-2 text-[11px] border-l border-n40 transition-colors ${composeAudioMode === 'reference_dubbing' ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:text-n700'}`}
+                  title="使用分镜阶段生成的参考配音替换视频原声"
+                >
+                  参考配音
+                </button>
+              </div>
               {isLoading && <Loader size={14} className="animate-spin text-primary" />}
               <button
                 onClick={reloadEnhanceData}
@@ -633,7 +856,7 @@ export const EnhancePage: React.FC = () => {
                   src={videoUnderPlayhead.url}
                   preload="none"
                   controls={false}
-                  muted
+                  muted={composeAudioMode === 'reference_dubbing'}
                   className="w-full h-full object-contain"
                 />
               ) : (
@@ -686,7 +909,10 @@ export const EnhancePage: React.FC = () => {
                             type="checkbox"
                             checked={checked}
                             disabled={gpuLocked}
-                            onChange={e => updateClipSettings({ [settingsKey]: e.target.checked })}
+                            onChange={e => {
+                              updateClipSettings({ [settingsKey]: e.target.checked });
+                              if (e.target.checked) setEnhancementKind(opt.kind);
+                            }}
                             className="rounded bg-n0 border-n40 text-primary w-4 h-4 disabled:cursor-not-allowed"
                           />
                         ) : (
@@ -735,10 +961,41 @@ export const EnhancePage: React.FC = () => {
                     </select>
                   </label>
                 )}
+                {enhancementKind === 'lipSync' && (
+                  <div className="space-y-2">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-xs text-n100">最终对白音频</span>
+                      <select
+                        value={lipSyncAudioClipId}
+                        onChange={e => setLipSyncAudioClipId(e.target.value)}
+                        className="px-3 py-2 rounded-lg bg-n0 border border-n40 text-n700 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value="">请选择音频</option>
+                        {audioClips.map(clip => (
+                          <option key={clip.id} value={clip.id}>
+                            {clip.sourceLabel || '音频轨道'} · {clip.duration.toFixed(1)}s
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={audioUploading}
+                      className="w-full h-9 rounded border border-n40 bg-n0 text-xs text-n500 hover:border-primary hover:text-primary disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      {audioUploading ? <Loader size={13} className="animate-spin" /> : <Mic2 size={13} />}
+                      {audioUploading ? '正在上传录音' : '上传配音演员录音'}
+                    </button>
+                    <p className="text-[11px] leading-4 text-n100">
+                      演员录音作为最终对白，提交后由 GPU 让当前镜头嘴型匹配该音频。
+                    </p>
+                  </div>
+                )}
 
                 <button
                   onClick={() => void applyEnhancement()}
-                  disabled={processing || (enhancementKind !== 'dub' && !comfyAvailable)}
+                  disabled={processing || (enhancementKind !== 'dub' && !comfyAvailable) || (enhancementKind === 'lipSync' && !lipSyncAudioClipId)}
                   className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {processing ? (
@@ -808,9 +1065,11 @@ export const EnhancePage: React.FC = () => {
             <div className="w-px h-4 bg-n40 mx-1" />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-n700 transition-colors"
+              disabled={audioUploading}
+              className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-n700 transition-colors disabled:opacity-50"
             >
-              <Music size={12} /> 导入音频
+              {audioUploading ? <Loader size={12} className="animate-spin" /> : <Mic2 size={12} />}
+              {audioUploading ? '正在上传' : '上传演员录音'}
             </button>
             <input type="file" accept="audio/*" className="hidden" ref={fileInputRef} onChange={handleAudioUpload} />
           </div>
@@ -942,6 +1201,9 @@ export const EnhancePage: React.FC = () => {
                     </div>
                     <div className="absolute top-0.5 right-1 text-[9px] text-primary font-mono z-10 pointer-events-none">
                       {clip.duration.toFixed(1)}s
+                    </div>
+                    <div className="absolute bottom-0.5 left-4 right-1 text-[9px] text-primary z-10 truncate pointer-events-none">
+                      {clip.sourceLabel || '音频轨道'}
                     </div>
                   </div>
                 ))}

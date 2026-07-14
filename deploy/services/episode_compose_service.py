@@ -249,6 +249,7 @@ async def _compose(
     project_id: str,
     job: Dict[str, Any],
     selections: Optional[Dict[str, str]] = None,
+    audio_mode: str = "video_original",
 ) -> None:
     _ensure_media_tools()
     shots = await _get_shots(episode_id, selections)
@@ -296,6 +297,12 @@ async def _compose(
             if audio_paths and audio_ms <= 0:
                 durations = [await _probe_dur(audio_path) for audio_path in audio_paths]
                 audio_ms = int(max(durations or [0.0]) * 1000)
+            video_has_audio = await _probe_has_audio(video_path)
+            use_reference_audio = bool(
+                audio_paths
+                and audio_ms > 0
+                and (audio_mode == "reference_dubbing" or not video_has_audio)
+            )
 
             common = [
                 "-c:v",
@@ -316,7 +323,7 @@ async def _compose(
                 "2",
                 clip_path,
             ]
-            if audio_paths and audio_ms > 0:
+            if use_reference_audio:
                 target_duration = max(video_duration, audio_ms / 1000.0)
                 audio_inputs: List[str] = []
                 for audio_path in audio_paths:
@@ -351,7 +358,7 @@ async def _compose(
                 ]
             else:
                 target_duration = video_duration or 5
-                if await _probe_has_audio(video_path):
+                if video_has_audio:
                     cmd = [
                         "ffmpeg",
                         "-nostdin",
@@ -482,17 +489,35 @@ def start_compose(
     user_id: str,
     project_id: str,
     selections: Optional[Dict[str, str]] = None,
+    audio_mode: str = "video_original",
 ) -> Dict[str, Any]:
     current = _jobs.get(episode_id)
     if current and current.get("status") == "running":
         return current
 
-    job: Dict[str, Any] = {"status": "running", "total": 0, "done": 0, "url": None, "error": None}
+    normalized_audio_mode = (
+        "reference_dubbing" if audio_mode == "reference_dubbing" else "video_original"
+    )
+    job: Dict[str, Any] = {
+        "status": "running",
+        "total": 0,
+        "done": 0,
+        "url": None,
+        "error": None,
+        "audio_mode": normalized_audio_mode,
+    }
     _jobs[episode_id] = job
 
     async def _runner() -> None:
         try:
-            await _compose(episode_id, user_id, project_id, job, selections)
+            await _compose(
+                episode_id,
+                user_id,
+                project_id,
+                job,
+                selections,
+                normalized_audio_mode,
+            )
         except Exception as exc:
             job["status"] = "failed"
             job["error"] = str(exc)[:300]

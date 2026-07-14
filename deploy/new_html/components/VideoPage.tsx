@@ -52,6 +52,7 @@ import {
     type StoryboardMeta,
 } from '../services/videoWorkspaceService';
 import { AppView, TaskNotification } from '../types';
+import type { VideoVoiceReference } from '../types';
 import {
     getCardHeightClass,
     getPreviewImageHeightClass,
@@ -82,6 +83,12 @@ import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
+import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
+import {
+    createVideoVoiceReference,
+    getVideoVoiceReferences,
+    normalizeVideoVoiceReference,
+} from '../services/videoVoiceReferenceService';
 // 2026-05-20 (Task System Overhaul M2)：把视频任务的轮询提到模块级 service，
 // 实现「切页后台继续生成 + 完成时铃铛通知」。
 //   M2a：注册到 TaskRegistry，让铃铛 / TaskBadge 看到任务（之前已注入）。
@@ -143,6 +150,7 @@ interface VideoPageProps {
     onUpdateNotification?: (id: string, updates: Partial<TaskNotification>) => void;
     isActive?: boolean;
     sessionScope?: string;
+    projectId?: string;
     /** 纯 episodeId（sessionScope 可能带 :scriptId 后缀，不能用于 video-segments API）。
      *  视频生成完成后需把 video_url 同步进该剧集的 video_segments，美化页才看得到。 */
     episodeId?: string;
@@ -230,6 +238,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     onUpdateNotification,
     isActive = true,
     sessionScope,
+    projectId,
     episodeId,
     storyboardItems = [],
     onRequestReimport,
@@ -279,6 +288,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 功能弹窗状态
     const [upscaleModalUuid, setUpscaleModalUuid] = useState<string | null>(null);
     const [voiceModalUuid, setVoiceModalUuid] = useState<string | null>(null);
+    const [voiceReferenceModalUuid, setVoiceReferenceModalUuid] = useState<string | null>(null);
+    const [voiceReferenceVideoIndex, setVoiceReferenceVideoIndex] = useState(0);
+    const [voiceReferenceCharacter, setVoiceReferenceCharacter] = useState('');
+    const [voiceReferenceSaving, setVoiceReferenceSaving] = useState(false);
+    const [videoVoiceReferences, setVideoVoiceReferences] = useState<VideoVoiceReference[]>([]);
     const [editModalUuid, setEditModalUuid] = useState<string | null>(null);
     // Issue 7: list-view ⚙ detail modal
     const [seedanceDetailUuid, setSeedanceDetailUuid] = useState<string | null>(null);
@@ -333,6 +347,23 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // Task 6：分镜元信息（音轨 URL / 时长 / 已混音）按 itemId 索引
     const [storyboardMetaByItemId, setStoryboardMetaByItemId] = useState<Record<string, StoryboardMeta>>({});
 
+    const refreshVideoVoiceReferences = useCallback(async () => {
+        if (!projectId) {
+            setVideoVoiceReferences([]);
+            return;
+        }
+        try {
+            const response = await getVideoVoiceReferences(projectId);
+            setVideoVoiceReferences((response.references || []).map(normalizeVideoVoiceReference));
+        } catch (error) {
+            console.warn('Failed to load video voice references:', error);
+        }
+    }, [projectId]);
+
+    useEffect(() => {
+        void refreshVideoVoiceReferences();
+    }, [refreshVideoVoiceReferences]);
+
     // Task 6：↻ 同步分镜弹窗
     const [syncModalOpen, setSyncModalOpen] = useState(false);
 
@@ -349,15 +380,61 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return img?.storyboardItemId ?? undefined;
     }, [taskGroups, uploadedImages]);
 
+    const getCharacterNameForGroup = useCallback((group: TaskGroup): string => {
+        const itemId = group.ids?.[0];
+        if (!itemId) return '';
+        const item = storyboardItems.find((candidate: any) =>
+            (candidate.item_id ?? candidate.itemId) === itemId
+        );
+        const dialogue = String(item?.dialogue ?? storyboardMetaByItemId[itemId]?.dialogue ?? '').trim();
+        if (!dialogue) return '';
+        const knownCharacters = videoVoiceReferences.map(reference => reference.characterName);
+        return extractSpokenDialogue(dialogue.split(/\r?\n/)[0], knownCharacters).speaker.trim();
+    }, [storyboardItems, storyboardMetaByItemId, videoVoiceReferences]);
+
+    const getVideoVoiceReferenceForGroup = useCallback((group: TaskGroup): VideoVoiceReference | undefined => {
+        const characterName = getCharacterNameForGroup(group);
+        if (!characterName) return undefined;
+        return videoVoiceReferences.find(reference => reference.characterName === characterName);
+    }, [getCharacterNameForGroup, videoVoiceReferences]);
+
+    const applyPreferredReferenceAudio = useCallback((
+        group: TaskGroup,
+        params: SeedanceParams,
+    ): SeedanceParams => {
+        const reference = getVideoVoiceReferenceForGroup(group);
+        if (!reference?.referenceAudioUrl) return params;
+        return {
+            ...params,
+            media_inputs: [
+                ...(params.media_inputs || []).filter(media => media.kind !== 'audio'),
+                {
+                    kind: 'audio',
+                    url: reference.referenceAudioUrl,
+                    role: 'reference_audio',
+                },
+            ],
+        };
+    }, [getVideoVoiceReferenceForGroup]);
+
+    const prepareSeedanceParamsForCapability = useCallback((params: SeedanceParams): SeedanceParams => {
+        if (seedanceOmniEnabled) return params;
+        return {
+            ...params,
+            media_inputs: (params.media_inputs || []).filter(media => media.kind !== 'audio'),
+        };
+    }, [seedanceOmniEnabled]);
+
     const getSeedanceParams = useCallback((uuid: string, model: VideoModel): SeedanceParams => {
+        const group = taskGroups.find(g => g.uuid === uuid);
         const existing = seedanceParamsByUuid[uuid];
+        if (existing && group) return applyPreferredReferenceAudio(group, existing);
         if (existing) return existing;
 
         // Issue 5a: when a card is freshly switched to Seedance2/Fast, auto-pull the
         // storyboard image linked to this group as a reference_image so the prompt
         // editor's @-popover can resolve "current_card" candidates and the panel
         // doesn't show 0/9 while the card visually has an image.
-        const group = taskGroups.find(g => g.uuid === uuid);
         const linkedImages = uploadedImages.filter(img =>
             img.url
             && !img.isPlaceholder
@@ -394,7 +471,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             seedMedia.push({ kind: 'audio', url: refAudio, role: 'reference_audio' });
         }
 
-        return {
+        const nextParams: SeedanceParams = {
             sub_model: model === 'Seedance2Fast' ? 'fast' : 'standard',
             prompt: imagePrompts[itemId || ''] || '',
             media_inputs: seedMedia,
@@ -406,7 +483,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             generate_audio: true,
             camera_fixed: false,
         };
-    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId]);
+        return group ? applyPreferredReferenceAudio(group, nextParams) : nextParams;
+    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId, applyPreferredReferenceAudio]);
 
     const setSeedanceParams = useCallback((uuid: string, next: SeedanceParams) => {
         setSeedanceParamsByUuid(prev => ({ ...prev, [uuid]: next }));
@@ -1634,6 +1712,61 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
     }, [ensureVideoSegmentId, showToast]);
 
+    const openVideoVoiceReferenceModal = useCallback((uuid: string) => {
+        const group = taskGroups.find(candidate => candidate.uuid === uuid);
+        const videos = tasksStatus[uuid]?.videos || [];
+        if (!group || videos.length === 0) {
+            showToast('请先生成一个带声音的视频');
+            return;
+        }
+        setVoiceReferenceCharacter(getCharacterNameForGroup(group));
+        setVoiceReferenceVideoIndex(0);
+        setVoiceReferenceModalUuid(uuid);
+    }, [taskGroups, tasksStatus, getCharacterNameForGroup, showToast]);
+
+    const saveVideoVoiceReference = useCallback(async () => {
+        if (!voiceReferenceModalUuid || !projectId || !episodeId) return;
+        const group = taskGroups.find(candidate => candidate.uuid === voiceReferenceModalUuid);
+        const videoUrl = tasksStatus[voiceReferenceModalUuid]?.videos?.[voiceReferenceVideoIndex];
+        const characterName = voiceReferenceCharacter.trim();
+        if (!group || !videoUrl) {
+            showToast('请选择一个已生成的视频');
+            return;
+        }
+        if (!characterName) {
+            showToast('请输入要绑定的角色');
+            return;
+        }
+
+        setVoiceReferenceSaving(true);
+        try {
+            const segmentId = await ensureVideoSegmentId(group);
+            const response = await createVideoVoiceReference({
+                project_id: projectId,
+                episode_id: episodeId,
+                character_name: characterName,
+                source_video_url: toPersistedVideoUrl(videoUrl),
+                storyboard_item_id: getStoryboardItemId(group.uuid),
+                video_segment_id: segmentId || undefined,
+                video_model: group.model,
+            });
+            const savedReference = normalizeVideoVoiceReference(response.reference);
+            setVideoVoiceReferences(previous => [
+                ...previous.filter(reference => reference.characterName !== savedReference.characterName),
+                savedReference,
+            ]);
+            setVoiceReferenceModalUuid(null);
+            showToast(`已设为 ${characterName} 的视频音色基准`);
+        } catch (error: any) {
+            const message = String(error?.message || error || '未知错误');
+            showToast(message.includes('no audio track')
+                ? '该视频没有音轨，不能设为角色视频音色基准'
+                : `设置视频音色基准失败: ${message}`);
+        } finally {
+            setVoiceReferenceSaving(false);
+        }
+    }, [voiceReferenceModalUuid, projectId, episodeId, taskGroups, tasksStatus, voiceReferenceVideoIndex, voiceReferenceCharacter, ensureVideoSegmentId, getStoryboardItemId, showToast]);
+
     const runTask = useCallback(async (uuid: string): Promise<string | null> => {
         const group = taskGroups.find(g => g.uuid === uuid);
         if (!group) return null;
@@ -1646,11 +1779,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         // 飞升/渡劫 走多模态面板（params.media_inputs），完全跳过 prepareImage / submitTaskQueued
         if (group.model === 'Seedance2' || group.model === 'Seedance2Fast') {
             const rawParams = getSeedanceParams(group.uuid, group.model);
+            const capabilityParams = prepareSeedanceParamsForCapability(rawParams);
             // 2026-07-11：Seedance 1.5-pro（Agent Plan 强制覆盖）仅支持单图/首尾帧。
             // 后端 seedance.py 对视频/音频 kind 和 3+ 张图会抛 ModelNotOpen，
             // 前端先拦截避免用户点了扣费再失败。
             const seedanceBlock = validateSeedanceMediaInputs(
-                rawParams.media_inputs,
+                capabilityParams.media_inputs,
                 seedanceOmniEnabled,
             );
             if (seedanceBlock) {
@@ -1660,12 +1794,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             // Issue 4: in 首尾帧 mode (any image has role first_frame/last_frame),
             // the panel greys out videos/audios — strip them before submit so the
             // backend only receives first/last-frame images.
-            const isFirstLastMode = rawParams.media_inputs.some(
+            const isFirstLastMode = capabilityParams.media_inputs.some(
                 m => m.kind === 'image' && (m.role === 'first_frame' || m.role === 'last_frame')
             );
             const params = isFirstLastMode
-                ? { ...rawParams, media_inputs: rawParams.media_inputs.filter(m => m.kind === 'image') }
-                : rawParams;
+                ? { ...capabilityParams, media_inputs: capabilityParams.media_inputs.filter(m => m.kind === 'image') }
+                : capabilityParams;
             setTasksStatus(prev => {
                 const oldStatus: TaskStatus = prev[uuid] || {};
                 return {
@@ -1684,6 +1818,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             setTaskStartTimes(prev => ({ ...prev, [uuid]: Date.now() }));
             try {
                 console.log('Seedance 2.0 提交:', { uuid, sub_model: params.sub_model, media: params.media_inputs.length, prompt: params.prompt.substring(0, 40) });
+                const characterName = getCharacterNameForGroup(group);
+                const videoVoiceReference = getVideoVoiceReferenceForGroup(group);
+                console.log('Seedance 音频参考:', {
+                    characterName,
+                    referenceId: videoVoiceReference?.referenceId || null,
+                    mode: videoVoiceReference
+                        ? (seedanceOmniEnabled ? 'character_video_voice' : 'unsupported_ignored')
+                        : ((rawParams.media_inputs || []).some(media => media.kind === 'audio')
+                            ? (seedanceOmniEnabled ? 'storyboard_reference' : 'storyboard_reference_ignored')
+                            : 'free_generation'),
+                });
                 const result = await submitSeedanceTask(params, {
                     entity_type: 'video_segment',
                     entity_id: entityId,
@@ -1845,7 +1990,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }));
             return null;
         }
-    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId]);
+    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceOmniEnabled]);
 
     const waitForBatchVideoTask = useCallback((uuid: string): Promise<VideoBatchWaitResult> => {
         const existing = batchWaitersRef.current[uuid];
@@ -2557,7 +2702,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {(() => {
                         const seedanceBlock = isSeedanceModel(group.model)
                             ? validateSeedanceMediaInputs(
-                                getSeedanceParams(group.uuid, group.model).media_inputs,
+                                prepareSeedanceParamsForCapability(getSeedanceParams(group.uuid, group.model)).media_inputs,
                                 seedanceOmniEnabled,
                             )
                             : null;
@@ -2596,6 +2741,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 title="编辑"
                             >
                                 <Scissors className="w-3 h-3" />
+                            </button>
+                            <button
+                                onClick={() => openVideoVoiceReferenceModal(group.uuid)}
+                                className="p-1.5 bg-success hover:bg-success text-white rounded transition-colors"
+                                title="设为角色视频音色基准"
+                            >
+                                <Volume2 className="w-3 h-3" />
                             </button>
                         </>
                     )}
@@ -2831,7 +2983,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {(() => {
                         const seedanceBlock = isSeedanceModel(group.model)
                             ? validateSeedanceMediaInputs(
-                                getSeedanceParams(group.uuid, group.model).media_inputs,
+                                prepareSeedanceParamsForCapability(getSeedanceParams(group.uuid, group.model)).media_inputs,
                                 seedanceOmniEnabled,
                             )
                             : null;
@@ -2870,6 +3022,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 title="编辑"
                             >
                                 <Scissors className="w-3 h-3" />
+                            </button>
+                            <button
+                                onClick={() => openVideoVoiceReferenceModal(group.uuid)}
+                                className="p-1.5 bg-success hover:bg-success text-white rounded transition-colors"
+                                title="设为角色视频音色基准"
+                            >
+                                <Volume2 className="w-3 h-3" />
                             </button>
                         </>
                     )}
@@ -2921,6 +3080,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const cardHeight = getCardHeightClass(group.model, isPlaceholderCard);
         const previewHeight = isPlaceholderCard ? 'h-24 shrink-0' : getPreviewImageHeightClass(group.model, isPair);
         const seedanceCard = isSeedanceModel(group.model);
+        const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
         
         return (
             <div
@@ -2964,6 +3124,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 <option key={m} value={m}>{getModelDisplayName(m)}</option>
                             ))}
                         </select>
+                        {activeVideoVoiceReference && (
+                            <span
+                                className="text-[10px] px-1.5 py-0.5 rounded border border-success/40 bg-success/10 text-success whitespace-nowrap"
+                                title="生成时优先使用角色视频音色基准"
+                            >
+                                {activeVideoVoiceReference.characterName} · 视频音色
+                            </span>
+                        )}
                         
                         {/* 大能模型的镜头类型 */}
                         {group.model === '大能' && (
@@ -3162,6 +3330,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const cardHeight = getCardHeightClass(group.model, isPlaceholderCard);
         const seedanceCard = isSeedanceModel(group.model);
         const resultVisualHeight = getResultVisualHeightClass(group.model);
+        const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
         
         const renderStatusBadge = () => {
             if (status.state === 'running') {
@@ -3381,6 +3550,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             {getModelDisplayName(group.model)}
                         </span>
                         {renderStatusBadge()}
+                        {activeVideoVoiceReference && (
+                            <span
+                                className="text-[10px] px-1.5 py-0.5 rounded border border-success/40 bg-success/10 text-success whitespace-nowrap"
+                                title="生成时优先使用角色视频音色基准"
+                            >
+                                {activeVideoVoiceReference.characterName} · 视频音色
+                            </span>
+                        )}
                     </div>
                     
                     {/* 操作按钮移到顶部右侧 */}
@@ -3428,6 +3605,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     <Scissors className="w-3 h-3" />
                                     编辑
                                 </button>
+                                <button
+                                    onClick={() => openVideoVoiceReferenceModal(group.uuid)}
+                                    className="flex items-center gap-1 px-2 py-1 bg-success hover:bg-success text-white text-[10px] rounded transition-colors"
+                                    title="设为角色视频音色基准"
+                                >
+                                    <Volume2 className="w-3 h-3" />
+                                    音色基准
+                                </button>
                             </>
                         )}
                     </div>
@@ -3453,6 +3638,134 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     // ==================== 弹窗渲染 ====================
     
+    const renderVideoVoiceReferenceModal = () => {
+        if (!voiceReferenceModalUuid) return null;
+        const group = taskGroups.find(candidate => candidate.uuid === voiceReferenceModalUuid);
+        const videos = tasksStatus[voiceReferenceModalUuid]?.videos || [];
+        if (!group || videos.length === 0) return null;
+        const selectedVideo = videos[Math.min(voiceReferenceVideoIndex, videos.length - 1)];
+        const currentReference = videoVoiceReferences.find(
+            reference => reference.characterName === voiceReferenceCharacter.trim(),
+        );
+
+        return (
+            <div
+                className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center p-4"
+                onClick={() => !voiceReferenceSaving && setVoiceReferenceModalUuid(null)}
+            >
+                <div
+                    className="bg-n0 rounded-md p-5 w-[560px] max-w-full max-h-[86vh] overflow-y-auto shadow-bottom"
+                    onClick={event => event.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 className="text-base font-bold text-n800 flex items-center gap-2">
+                                <Volume2 className="w-5 h-5 text-success" />
+                                角色视频音色基准
+                            </h3>
+                            <p className="text-[11px] text-n100 mt-1">从满意的视频原声提取音频，后续同角色镜头会优先作为音色参考。</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setVoiceReferenceModalUuid(null)}
+                            disabled={voiceReferenceSaving}
+                            className="text-n300 hover:text-n800 disabled:opacity-50"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="rounded border border-n40 bg-n900 overflow-hidden aspect-video">
+                            <LazyVideo
+                                src={selectedVideo}
+                                controls
+                                muted={false}
+                                hoverPreview={false}
+                                firstFrame={false}
+                                preload="metadata"
+                                className="w-full h-full object-contain"
+                            />
+                        </div>
+
+                        {videos.length > 1 && (
+                            <label className="block">
+                                <span className="block text-xs text-n300 mb-1.5">来源视频</span>
+                                <select
+                                    value={voiceReferenceVideoIndex}
+                                    onChange={event => setVoiceReferenceVideoIndex(Number(event.target.value))}
+                                    className="w-full px-3 py-2 rounded border border-n40 bg-n0 text-sm text-n700"
+                                >
+                                    {videos.map((_video, index) => (
+                                        <option key={index} value={index}>第 {index + 1} 个生成结果</option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+
+                        <label className="block">
+                            <span className="block text-xs text-n300 mb-1.5">绑定角色</span>
+                            <input
+                                value={voiceReferenceCharacter}
+                                onChange={event => setVoiceReferenceCharacter(event.target.value)}
+                                list="video-voice-reference-characters"
+                                placeholder="例如：男1、女1"
+                                className="w-full px-3 py-2 rounded border border-n40 bg-n0 text-sm text-n700 focus:border-primary focus:outline-none"
+                            />
+                            <datalist id="video-voice-reference-characters">
+                                {Array.from(new Set([
+                                    ...videoVoiceReferences.map(reference => reference.characterName),
+                                    getCharacterNameForGroup(group),
+                                ].filter(Boolean))).map(character => (
+                                    <option key={character} value={character} />
+                                ))}
+                            </datalist>
+                        </label>
+
+                        {currentReference && (
+                            <div className="rounded border border-success/40 bg-success/5 p-3">
+                                <div className="text-xs font-medium text-success">当前已绑定，将替换现有基准</div>
+                                <div className="text-[11px] text-n300 mt-1">
+                                    {currentReference.videoModel || '未知模型'} · {currentReference.updatedAt ? new Date(currentReference.updatedAt).toLocaleString() : '时间未知'}
+                                </div>
+                                <audio
+                                    src={secureMediaUrl(currentReference.referenceAudioUrl)}
+                                    controls
+                                    preload="metadata"
+                                    className="w-full h-8 mt-2"
+                                />
+                            </div>
+                        )}
+
+                        <div className="rounded border border-n40 bg-n20 px-3 py-2 text-[11px] text-n300 leading-relaxed">
+                            生成优先级：角色视频音色基准 → 当前分镜参考配音 → 模型自由生成。当前模型不支持音频参考时，系统会忽略音频并继续生成视频。
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 mt-5">
+                        <button
+                            type="button"
+                            onClick={() => setVoiceReferenceModalUuid(null)}
+                            disabled={voiceReferenceSaving}
+                            className="px-4 py-2 text-sm rounded border border-n40 text-n300 hover:text-n700 disabled:opacity-50"
+                        >
+                            取消
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => void saveVideoVoiceReference()}
+                            disabled={voiceReferenceSaving || !voiceReferenceCharacter.trim()}
+                            className="px-4 py-2 text-sm rounded bg-success text-white hover:bg-success disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {voiceReferenceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
+                            {voiceReferenceSaving ? '正在提取音频...' : '设为角色视频音色基准'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const renderUpscaleModal = () => {
         if (!upscaleModalUuid) return null;
         const status = tasksStatus[upscaleModalUuid];
@@ -4188,6 +4501,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             {renderUpscaleModal()}
             {renderVoiceModal()}
             {renderEditModal()}
+            {renderVideoVoiceReferenceModal()}
 
             {/* Task 6：同步分镜弹窗 */}
             {syncModalOpen && (

@@ -20,6 +20,7 @@ from dao_entity_file import EntityFileDAO
 from dao_timeline import TimelineDAO
 from dao_audio_track import AudioTrackDAO
 from dao_character_voice import CharacterVoiceDAO
+from dao_video_voice_reference import VideoVoiceReferenceDAO
 from dao_organization import OrganizationMemberDAO
 from audio_provider import get_audio_provider, AUDIO_UPLOAD_DIR
 
@@ -50,6 +51,7 @@ from routers.script_timeline import create_script_timeline_router
 from routers.storyboard import create_storyboard_router
 from routers.task_notifications import create_task_notifications_router
 from routers.video_capabilities import create_video_capabilities_router
+from routers.video_voice_references import create_video_voice_references_router
 
 # 2026-05-24：MiniMax TTS 改异步入队，handler 调 task_service.submit
 import task_service
@@ -185,6 +187,14 @@ router.include_router(
 )
 
 router.include_router(create_video_capabilities_router())
+
+router.include_router(
+    create_video_voice_references_router(
+        get_current_user_dependency=get_current_user,
+        video_voice_reference_dao=VideoVoiceReferenceDAO,
+        episode_dao=EpisodeDAO,
+    )
+)
 
 router.include_router(
     create_storyboard_router(

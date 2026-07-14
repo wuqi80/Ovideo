@@ -52,14 +52,27 @@ class FakeComposeService:
         return [{"episode_id": episode_id, "takes": []}]
 
     @classmethod
-    def start_compose(cls, episode_id: str, user_id: str, project_id: str, selections):
+    def start_compose(
+        cls,
+        episode_id: str,
+        user_id: str,
+        project_id: str,
+        selections,
+        audio_mode="video_original",
+    ):
         cls.started = {
             "episode_id": episode_id,
             "user_id": user_id,
             "project_id": project_id,
             "selections": selections,
+            "audio_mode": audio_mode,
         }
-        return {"status": "running", "total": 3, "done": 1}
+        return {
+            "status": "running",
+            "total": 3,
+            "done": 1,
+            "audio_mode": audio_mode,
+        }
 
     @staticmethod
     def get_status(episode_id: str):
@@ -134,12 +147,19 @@ async def test_start_episode_compose_uses_project_id_and_selections():
         compose_service=FakeComposeService,
     )
 
-    assert result == {"success": True, "status": "running", "total": 3, "done": 1}
+    assert result == {
+        "success": True,
+        "status": "running",
+        "total": 3,
+        "done": 1,
+        "audio_mode": "video_original",
+    }
     assert FakeComposeService.started == {
         "episode_id": "ep_1",
         "user_id": "user_1",
         "project_id": "proj_1",
         "selections": {"shot_1": "seg_1"},
+        "audio_mode": "video_original",
     }
 
 

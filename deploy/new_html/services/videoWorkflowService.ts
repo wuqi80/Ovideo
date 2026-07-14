@@ -46,6 +46,7 @@ export interface ComposeStatus {
   url?: string | null;
   duration?: number;
   error?: string | null;
+  audio_mode?: 'video_original' | 'reference_dubbing';
 }
 
 export interface VideoTake {
@@ -84,10 +85,14 @@ export async function getVideoTakes(episodeId: string): Promise<{ success: boole
 export async function startCompose(
   episodeId: string,
   selections?: Record<string, string>,
+  audioMode: 'video_original' | 'reference_dubbing' = 'video_original',
 ): Promise<ComposeStatus> {
   return apiJson<any>(`/api/episodes/${episodeId}/compose`, {
     method: 'POST',
-    body: JSON.stringify(selections ? { selections } : {}),
+    body: JSON.stringify({
+      ...(selections ? { selections } : {}),
+      audio_mode: audioMode,
+    }),
   }, 'startCompose');
 }
 

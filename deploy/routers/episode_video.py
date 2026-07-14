@@ -64,17 +64,21 @@ def create_episode_video_router(
     async def compose_episode_endpoint(episode_id: str, request: Request, user_id: str = Depends(get_current_user)):
         """Start async episode composition; frontend polls `/compose/status`."""
         selections = None
+        audio_mode = "video_original"
         try:
             body = await request.json()
             selections = (body or {}).get("selections")
+            audio_mode = (body or {}).get("audio_mode") or "video_original"
         except Exception:
             selections = None
+            audio_mode = "video_original"
 
         try:
             return await start_episode_compose(
                 episode_id,
                 user_id,
                 selections,
+                audio_mode,
                 episode_dao=EpisodeDAO,
             )
         except EpisodeNotFound as exc:

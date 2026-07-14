@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 244
-DEFAULT_EXPECTED_OPERATIONS = 300
+DEFAULT_EXPECTED_PATHS = 247
+DEFAULT_EXPECTED_OPERATIONS = 303
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -180,6 +180,18 @@ EXPECTED_ENDPOINTS = {
     ("/api/video-segments/{segment_id}", "PUT"): ("routers.episode_video", "update_video_segment"),
     ("/api/video-segments/{segment_id}", "DELETE"): ("routers.episode_video", "delete_video_segment"),
     ("/api/video/capabilities", "GET"): ("routers.video_capabilities", "video_capabilities"),
+    ("/api/projects/{project_id}/video-voice-references", "GET"): (
+        "routers.video_voice_references",
+        "list_video_voice_references",
+    ),
+    ("/api/video-voice-references/from-video", "POST"): (
+        "routers.video_voice_references",
+        "create_video_voice_reference",
+    ),
+    ("/api/video-voice-references/{reference_id}", "DELETE"): (
+        "routers.video_voice_references",
+        "delete_video_voice_reference",
+    ),
     ("/api/episodes/{episode_id}/storyboard-items", "GET"): ("routers.storyboard", "get_storyboard_items"),
     ("/api/episodes/{episode_id}/storyboard-items", "POST"): ("routers.storyboard", "create_storyboard_item"),
     ("/api/storyboard-items/{item_id}", "PUT"): ("routers.storyboard", "update_storyboard_item"),

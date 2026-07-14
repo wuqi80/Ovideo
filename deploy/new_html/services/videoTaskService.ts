@@ -284,7 +284,14 @@ export async function submitVoiceTask(
     videoFilename: string,
     audioFilename: string,
     prompt: string,
-    model: VideoModel = 'Wan2'
+    model: VideoModel = 'Wan2',
+    entityOptions?: {
+        entity_type?: string;
+        entity_id?: string;
+        file_role?: string;
+        project_id?: string;
+        episode_id?: string;
+    },
 ): Promise<{ task_id: string }> {
     const routing = await resolveGpuTaskRouting();
     return await apiJson<{ task_id: string }>('/api/generate', {
@@ -298,6 +305,7 @@ export async function submitVoiceTask(
             model: model,
             seed: -1,
             priority: 2,
+            ...entityOptions,
             preferred_agent_id: routing.preferredAgentId,
             preferred_node_id: routing.preferredNodeId,
         })
@@ -484,10 +492,17 @@ export async function submitVoiceTaskQueued(
     videoFilename: string,
     audioFilename: string,
     prompt: string,
-    model: VideoModel = 'Wan2'
+    model: VideoModel = 'Wan2',
+    entityOptions?: {
+        entity_type?: string;
+        entity_id?: string;
+        file_role?: string;
+        project_id?: string;
+        episode_id?: string;
+    },
 ): Promise<{ task_id: string }> {
     return enqueueComfyUITask(async (_frontendKey) => {
-        return submitVoiceTask(imageFilename, videoFilename, audioFilename, prompt, model);
+        return submitVoiceTask(imageFilename, videoFilename, audioFilename, prompt, model, entityOptions);
     }, '视频配音');
 }
 

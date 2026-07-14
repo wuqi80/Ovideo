@@ -196,6 +196,9 @@ async def test_compose_mixes_multiple_storyboard_audio_parts(monkeypatch, tmp_pa
     async def fake_video_size(_path):
         return None
 
+    async def fake_has_audio(_path):
+        return False
+
     async def fake_get_shots(_episode_id, _selections=None):
         return [
             {
@@ -218,6 +221,7 @@ async def test_compose_mixes_multiple_storyboard_audio_parts(monkeypatch, tmp_pa
     monkeypatch.setattr(episode_compose_service, "_run", fake_run)
     monkeypatch.setattr(episode_compose_service, "_probe_dur", fake_probe)
     monkeypatch.setattr(episode_compose_service, "_probe_video_size", fake_video_size)
+    monkeypatch.setattr(episode_compose_service, "_probe_has_audio", fake_has_audio)
     monkeypatch.setattr(episode_compose_service, "_get_shots", fake_get_shots)
     monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "create_final_cut_records", fake_create_final_cut_records)
 
@@ -236,11 +240,13 @@ async def test_compose_mixes_multiple_storyboard_audio_parts(monkeypatch, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_compose_preserves_video_audio_when_no_separate_audio(monkeypatch, tmp_path):
+async def test_compose_prefers_video_audio_over_reference_dubbing_by_default(monkeypatch, tmp_path):
     storage = tmp_path / "storage"
     video = storage / "video" / "one.mp4"
-    video.parent.mkdir(parents=True, exist_ok=True)
-    video.write_bytes(b"x")
+    reference_audio = storage / "audio" / "reference.mp3"
+    for path in (video, reference_audio):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
 
     commands = []
 
@@ -265,9 +271,9 @@ async def test_compose_preserves_video_audio_when_no_separate_audio(monkeypatch,
         return [
             {
                 "video_url": "/storage/video/one.mp4",
-                "audio_url": None,
-                "audio_urls": [],
-                "audio_ms": 0,
+                "audio_url": "/storage/audio/reference.mp3",
+                "audio_urls": ["/storage/audio/reference.mp3"],
+                "audio_ms": 4000,
             }
         ]
 
@@ -290,8 +296,22 @@ async def test_compose_preserves_video_audio_when_no_separate_audio(monkeypatch,
     filter_arg = clip_cmd[clip_cmd.index("-filter_complex") + 1]
     assert "[0:a]apad[a]" in filter_arg
     assert "anullsrc=r=48000:cl=stereo" not in clip_cmd
+    assert os.path.normpath(str(reference_audio)) not in [os.path.normpath(str(part)) for part in clip_cmd]
     assert clip_cmd[clip_cmd.index("-map", clip_cmd.index("-map") + 1) + 1] == "[a]"
     assert job["status"] == "done"
+
+    commands.clear()
+    await episode_compose_service._compose(
+        "ep_1",
+        "user_1",
+        "proj_1",
+        {},
+        audio_mode="reference_dubbing",
+    )
+    reference_cmd = commands[0]
+    reference_filter = reference_cmd[reference_cmd.index("-filter_complex") + 1]
+    assert "[1:a]apad[a]" in reference_filter
+    assert os.path.normpath(str(reference_audio)) in [os.path.normpath(str(part)) for part in reference_cmd]
 
 
 @pytest.mark.asyncio
