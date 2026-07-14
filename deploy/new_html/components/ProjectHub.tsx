@@ -198,44 +198,56 @@ const ProjectHub: React.FC = () => {
     // 逻辑/状态/handler 全部不变，仅替换样式（暗 gray/purple → 浅 n色阶/primary）。
     const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-6xl';
     const projectGridClass = isWideLayout
-        ? `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 ${shellWidthClass} mx-auto`
-        : `grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 ${shellWidthClass} mx-auto`;
+        ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+        : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4';
 
     return (
-        <div className="layout-safe h-screen bg-n20 text-n800 flex flex-col" onClick={() => setContextMenu(null)}>
-            {/* 顶部栏 */}
-            <header className={`responsive-toolbar bg-n0 border-b border-n40 shadow-card flex items-center px-6 justify-between flex-shrink-0 w-full ${shellWidthClass} mx-auto`}>
-                <div className="flex items-center gap-3 min-w-0">
-                    <FolderOpen className="w-5 h-5 text-primary" />
-                    <h1 className="text-lg font-semibold text-n800">项目管理</h1>
+        <div className="layout-safe min-h-screen bg-n20 p-6 md:p-10 text-n800" onClick={() => setContextMenu(null)}>
+            <div className={`w-full ${shellWidthClass} mx-auto`}>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6 animate-slideDown">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-n0 border border-n40 text-primary">
+                            <FolderOpen size={18} />
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="text-2xl font-bold text-n800 tracking-tight">项目管理</h1>
+                            <p className="text-sm text-n100 mt-0.5">{filteredProjects.length} 个项目 · {localStorage.getItem('username') || '未登录'}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button
+                            type="button"
+                            onClick={toggleLayoutWidth}
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-n300 hover:text-n800 hover:bg-n0 border border-n40 hover:border-primary transition-all duration-200"
+                            title={isWideLayout ? '切回窄屏' : '切到宽屏'}
+                        >
+                            {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                            {isWideLayout ? '窄屏' : '宽屏'}
+                        </button>
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-card hover:shadow-atlas"
+                        >
+                            <Plus size={18} /> 新建项目
+                        </button>
+                        <button
+                            onClick={() => {
+                                localStorage.removeItem('auth_token');
+                                localStorage.removeItem('username');
+                                window.location.href = '/login';
+                            }}
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-n100 hover:text-danger hover:bg-r50 border border-n40 hover:border-n40 transition-all duration-200"
+                            title="退出登录"
+                        >
+                            退出
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-sm text-n300">
-                        {localStorage.getItem('username') || ''}
-                    </span>
-                    <button
-                        onClick={() => {
-                            localStorage.removeItem('auth_token');
-                            localStorage.removeItem('username');
-                            window.location.href = '/login';
-                        }}
-                        className="text-sm text-n200 hover:text-danger transition-colors"
-                    >
-                        退出
-                    </button>
-                </div>
-            </header>
 
-            {/* 工具栏 */}
-            <div className={`responsive-toolbar px-6 py-4 flex items-center gap-4 border-b border-n40 bg-n0 w-full ${shellWidthClass} mx-auto`}>
-                <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded text-sm font-medium transition-colors shadow-card"
-                >
-                    <Plus className="w-4 h-4" /> 新建项目
-                </button>
-
-                <div className="flex-1 relative max-w-md min-w-[220px]">
+                {/* 工具栏 */}
+                <div className="flex flex-wrap items-center gap-4 mb-6">
+                    <div className="flex-1 relative max-w-md min-w-[220px]">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-n100" />
                     <input
                         type="text"
@@ -244,44 +256,33 @@ const ProjectHub: React.FC = () => {
                         onChange={e => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
                     />
+                    </div>
+
+                    <div className="flex items-center gap-2 text-sm min-w-0">
+                        <span className="text-n200">排序:</span>
+                        <select
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value as SortKey)}
+                            className="bg-n0 border border-n40 rounded px-2 py-1.5 text-sm text-n800 focus:outline-none focus:border-primary"
+                        >
+                            <option value="updated">最近更新</option>
+                            <option value="created">创建时间</option>
+                            <option value="name">名称</option>
+                        </select>
+                    </div>
+
+                    <label className="flex items-center gap-2 text-sm text-n300 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={showArchived}
+                            onChange={e => setShowArchived(e.target.checked)}
+                            className="rounded accent-primary"
+                        />
+                        显示已归档
+                    </label>
                 </div>
 
-                <div className="flex items-center gap-2 text-sm min-w-0">
-                    <span className="text-n200">排序:</span>
-                    <select
-                        value={sortBy}
-                        onChange={e => setSortBy(e.target.value as SortKey)}
-                        className="bg-n0 border border-n40 rounded px-2 py-1.5 text-sm text-n800 focus:outline-none focus:border-primary"
-                    >
-                        <option value="updated">最近更新</option>
-                        <option value="created">创建时间</option>
-                        <option value="name">名称</option>
-                    </select>
-                </div>
-
-                <label className="flex items-center gap-2 text-sm text-n300 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={showArchived}
-                        onChange={e => setShowArchived(e.target.checked)}
-                        className="rounded accent-primary"
-                    />
-                    显示已归档
-                </label>
-
-                <button
-                    type="button"
-                    onClick={toggleLayoutWidth}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded border border-n40 bg-n0 text-sm text-n300 hover:text-n800 hover:border-primary transition-colors"
-                    title={isWideLayout ? '切回窄屏' : '切到宽屏'}
-                >
-                    {isWideLayout ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                    {isWideLayout ? '窄屏' : '宽屏'}
-                </button>
-            </div>
-
-            {/* 项目列表 */}
-            <div className="layout-safe flex-1 overflow-auto p-6 scrollbar-atlas">
+                {/* 项目列表 */}
                 {loading ? (
                     <div className={projectGridClass}>
                         {[1, 2, 3, 4].map(i => (
