@@ -9739,4 +9739,5 @@
 - `scripts/windows_gpu_wan_install_task.cmd` launches the long Wan/InfiniteTalk setup as an on-demand `SYSTEM` task, so downloads continue after RDP disconnects and support resumable retries.
 - `scripts/windows_gpu_wan_smoke_task.cmd` launches readiness, I2V, or InfiniteTalk validation as a serial `SYSTEM` task and writes the durable JSON report through the existing smoke runner.
 - GPU2's installed `LoadWanVideoT5TextEncoder` accepts `fp32` or `bf16`; the runner uses `bf16` and the contract test locks this value to prevent ComfyUI prompt validation regressions.
+- Production end-to-end task `dd31788f-2ade-48ca-b862-d18870db6595` was explicitly routed from `mecha.one` to GPU2 and completed upload, Agent polling, ComfyUI upscale, and result callback in 55.9 seconds. The server recorded `completed` with one 206,308-byte WebP result.
 - Storyboard timeline BGM/SFX clips now expose explicit delete controls, and episode composition preserves an existing video's embedded audio when no separate dialogue/narration/SFX track is selected instead of replacing it with silence.

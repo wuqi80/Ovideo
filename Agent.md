@@ -8943,3 +8943,4 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - 七个模型和十个节点均已通过 readiness 校验；Wan I2V 真实生成 `MECHA_GPU2_wan_i2v_00001.mp4`（490.97 秒），InfiniteTalk 真实生成带音频的 `MECHA_GPU2_infinitetalk_00001-audio.mp4`（501.15 秒），两项 ComfyUI 状态均为 `execution_success`。
 - GPU2 采用 640x384、33 帧、4 步、36 层 RAM 卸载的低显存配置，Agent 保持单任务串行；RTX 3060 12G 可以执行上述任务，但应预期约 8 分钟级处理时间。
 - 清理安装过程中遗留的 16,643,349,018 字节重复 `.part` 文件前，已确认正式模型 SHA256 标记存在且两次真实推理成功；正式模型和生成产物均保留。
+- 生产端到端验收任务 `dd31788f-2ade-48ca-b862-d18870db6595` 已从 `mecha.one` 指定调度到 GPU2，完成上传、Agent 拉取、ComfyUI 高清放大和结果回传；总耗时 55.9 秒，服务端状态为 `completed`，回传 1 张 206,308 字节 WebP。
