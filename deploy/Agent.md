@@ -9727,4 +9727,12 @@
 - Production acceptance passed through `https://mecha.one` for `qwenN`, `three_view`, `image_fusion`, `matting_subject`, and SeedVR2 `video_upscale`; every task was picked up by GPU2 and returned the expected image/video result type.
 - The video page now submits batch work serially: it waits for the current task to complete or fail before submitting the next item, exposes a batch-running state, and stops on timeout. This keeps browser batch actions aligned with GPU2's one-task execution contract.
 - Production smoke passed 9/9, remote architecture contracts passed, GPU2 readiness reports `ready=true`, and the frontend passed 307 tests plus a production build.
+
+## 2026-07-14 GPU2 Wan / InfiniteTalk Low-VRAM Runtime
+
+- GPU2 runtime now converts `wan2_i2v`, `wan2_morph`, `voice`, and `video_infinitetalk` work into dedicated 12 GB graphs. The implementation does not modify protected `pipeline/` files or `workflows/*.json`.
+- The low-VRAM profile is fixed at one Wan 2.1 I2V 14B scaled-FP8 model, 640x384, 33 frames, four steps, `sdpa`, tiled VAE, and 36 swapped Transformer blocks backed by the node's 128 GB system memory.
+- InfiniteTalk uses the scaled-FP8 projection model plus `wav2vec2-chinese-base_fp16.safetensors`; audio is passed directly through VideoHelperSuite, removing unavailable audio-separation/easy-use dependencies.
+- `scripts/windows_gpu_wan_setup.ps1` installs a pinned WanVideoWrapper revision and seven SHA256-verified model files with resumable downloads. `scripts/windows_gpu_wan_smoke.py` supports `readiness`, `i2v`, and `infinitetalk` modes against local ComfyUI.
+- Deployment prerequisite: copy the new runner/setup/smoke files to `E:\MECHA-GPU`, run `windows_gpu_wan_setup.cmd` as Administrator, then run `windows_gpu_wan_smoke.cmd i2v` and `windows_gpu_wan_smoke.cmd infinitetalk`. GPU2 is currently offline at `192.168.31.134`, so these real tests are not yet accepted.
 - Storyboard timeline BGM/SFX clips now expose explicit delete controls, and episode composition preserves an existing video's embedded audio when no separate dialogue/narration/SFX track is selected instead of replacing it with silence.

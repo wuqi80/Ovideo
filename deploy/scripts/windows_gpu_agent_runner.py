@@ -20,6 +20,21 @@ GPU2_QWEN_MODEL_FILES = {
 }
 GPU2_BACKGROUND_REMOVAL_MODEL = "birefnet.safetensors"
 
+GPU2_WAN_MODEL_FILES = {
+    "diffusion": r"wan2.1\Wan2_1-I2V-14B-480p_fp8_e4m3fn_scaled_KJ.safetensors",
+    "infinitetalk": r"wan2.1\Wan2_1-InfiniteTalk-Single_fp8_e4m3fn_scaled_KJ.safetensors",
+    "text_encoder": "umt5-xxl-enc-fp8_e4m3fn.safetensors",
+    "vae": r"wan2.1\Wan2_1_VAE_bf16.safetensors",
+    "clip_vision": "clip_vision_h.safetensors",
+    "lora": r"wan2.1\lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+    "wav2vec": "wav2vec2-chinese-base_fp16.safetensors",
+}
+GPU2_WAN_WIDTH = 640
+GPU2_WAN_HEIGHT = 384
+GPU2_WAN_FRAMES = 33
+GPU2_WAN_FPS = 16
+GPU2_WAN_BLOCKS_TO_SWAP = 36
+
 GPU2_QWEN_COMPAT_PREFIXES = (
     "qwen_",
     "qwen_lora_",
@@ -253,6 +268,9 @@ def _gpu2_input_image_names(task: Dict[str, Any]) -> list[str]:
     params = _gpu2_task_params(task)
     names: list[str] = []
     param_names = [
+        "image",
+        "start_image",
+        "end_image",
         "image_path",
         "uploaded_image",
         *[f"image_path_{index}" for index in range(1, 7)],
@@ -513,11 +531,431 @@ def tune_gpu2_qwen_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
     return tuned
 
 
+def _gpu2_workflow_name(task: Dict[str, Any]) -> str:
+    return str(task.get("workflow_name") or task.get("workflow") or "").strip().lower()
+
+
+def _gpu2_input_file_name(
+    task: Dict[str, Any],
+    *,
+    param_names: tuple[str, ...],
+    extensions: tuple[str, ...],
+) -> str:
+    params = _gpu2_task_params(task)
+    for key in param_names:
+        value = str(params.get(key) or "").strip()
+        if value:
+            return value
+
+    normalized_params = {name.lower() for name in param_names}
+    fallback = ""
+    for item in task.get("files") or []:
+        if not isinstance(item, dict):
+            continue
+        filename = str(item.get("filename") or "").strip()
+        if not filename:
+            continue
+        item_param = str(item.get("param") or "").strip().lower()
+        if item_param in normalized_params:
+            return filename
+        if not fallback and filename.lower().endswith(extensions):
+            fallback = filename
+    if fallback:
+        return fallback
+    raise RuntimeError(f"GPU2 task is missing an input file for {', '.join(param_names)}")
+
+
+def _gpu2_seed(task: Dict[str, Any]) -> int:
+    params = _gpu2_task_params(task)
+    try:
+        return int(params.get("seed") or params.get("seed_0") or 42)
+    except (TypeError, ValueError):
+        return 42
+
+
+def is_gpu2_wan_i2v_task(task: Dict[str, Any]) -> bool:
+    task_type = str(task.get("task_type") or "").strip().lower()
+    workflow_name = _gpu2_workflow_name(task)
+    params = _gpu2_task_params(task)
+    model = str(params.get("model") or params.get("model_name") or "").strip().lower()
+    return (
+        workflow_name in {"wan2_i2v", "wan2_morph"}
+        or workflow_name.startswith("wan2_i2v")
+        or workflow_name.startswith("wan2_morph")
+        or (task_type in {"i2v", "morph"} and "wan" in model)
+    )
+
+
+def is_gpu2_infinitetalk_task(task: Dict[str, Any]) -> bool:
+    task_type = str(task.get("task_type") or "").strip().lower()
+    workflow_name = _gpu2_workflow_name(task)
+    return task_type in {"voice", "infinitetalk"} or "infinitetalk" in workflow_name
+
+
+def _gpu2_wan_common_nodes(task: Dict[str, Any]) -> Dict[str, Any]:
+    params = _gpu2_task_params(task)
+    prompt = str(
+        params.get("prompt")
+        or params.get("positive_prompt")
+        or "cinematic movement, stable subject, natural motion, high quality"
+    ).strip()
+    negative_prompt = str(
+        params.get("negative_prompt")
+        or "low quality, static image, blur, distortion, flicker, text, watermark"
+    ).strip()
+    return {
+        "10": {
+            "class_type": "LoadWanVideoT5TextEncoder",
+            "inputs": {
+                "model_name": GPU2_WAN_MODEL_FILES["text_encoder"],
+                "precision": "fp16",
+                "load_device": "offload_device",
+                "quantization": "fp8_e4m3fn",
+            },
+        },
+        "11": {
+            "class_type": "WanVideoTextEncode",
+            "inputs": {
+                "positive_prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "force_offload": True,
+                "use_disk_cache": False,
+                "device": "cpu",
+                "t5": ["10", 0],
+            },
+        },
+        "12": {
+            "class_type": "WanVideoBlockSwap",
+            "inputs": {
+                "blocks_to_swap": GPU2_WAN_BLOCKS_TO_SWAP,
+                "offload_img_emb": True,
+                "offload_txt_emb": True,
+                "use_non_blocking": False,
+                "vace_blocks_to_swap": 0,
+                "prefetch_blocks": 0,
+                "block_swap_debug": False,
+            },
+        },
+        "13": {
+            "class_type": "WanVideoLoraSelect",
+            "inputs": {
+                "lora": GPU2_WAN_MODEL_FILES["lora"],
+                "strength": 1.0,
+                "low_mem_load": True,
+                "merge_loras": False,
+            },
+        },
+        "14": {
+            "class_type": "WanVideoModelLoader",
+            "inputs": {
+                "model": GPU2_WAN_MODEL_FILES["diffusion"],
+                "base_precision": "fp16",
+                "quantization": "fp8_e4m3fn_scaled",
+                "load_device": "offload_device",
+                "attention_mode": "sdpa",
+                "rms_norm_function": "default",
+                "block_swap_args": ["12", 0],
+                "lora": ["13", 0],
+            },
+        },
+        "15": {
+            "class_type": "WanVideoVAELoader",
+            "inputs": {
+                "model_name": GPU2_WAN_MODEL_FILES["vae"],
+                "precision": "bf16",
+            },
+        },
+    }
+
+
+def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a single-model Wan 2.1 graph that can spill into 128 GB RAM."""
+    workflow_name = _gpu2_workflow_name(task)
+    task_type = str(task.get("task_type") or "").strip().lower()
+    morph = task_type == "morph" or "morph" in workflow_name
+    image_names = _gpu2_input_image_names(task)
+    if not image_names:
+        raise RuntimeError("GPU2 Wan task is missing a start image filename")
+    if morph and len(image_names) < 2:
+        raise RuntimeError("GPU2 Wan morph task is missing an end image filename")
+
+    workflow = _gpu2_wan_common_nodes(task)
+    workflow.update(
+        {
+            "20": {"class_type": "LoadImage", "inputs": {"image": image_names[0]}},
+            "21": {
+                "class_type": "ImageScale",
+                "inputs": {
+                    "image": ["20", 0],
+                    "upscale_method": "lanczos",
+                    "width": GPU2_WAN_WIDTH,
+                    "height": GPU2_WAN_HEIGHT,
+                    "crop": "center",
+                },
+            },
+            "22": {
+                "class_type": "WanVideoImageToVideoEncode",
+                "inputs": {
+                    "width": GPU2_WAN_WIDTH,
+                    "height": GPU2_WAN_HEIGHT,
+                    "num_frames": GPU2_WAN_FRAMES,
+                    "noise_aug_strength": 0.0,
+                    "start_latent_strength": 1.0,
+                    "end_latent_strength": 1.0,
+                    "force_offload": True,
+                    "fun_or_fl2v_model": False,
+                    "tiled_vae": True,
+                    "vae": ["15", 0],
+                    "start_image": ["21", 0],
+                },
+            },
+            "23": {
+                "class_type": "WanVideoSampler",
+                "inputs": {
+                    "steps": 4,
+                    "cfg": 1.0,
+                    "shift": 8.0,
+                    "seed": _gpu2_seed(task),
+                    "force_offload": True,
+                    "scheduler": "dpm++_sde",
+                    "riflex_freq_index": 0,
+                    "denoise_strength": 1.0,
+                    "batched_cfg": False,
+                    "rope_function": "comfy_chunked",
+                    "start_step": 0,
+                    "end_step": -1,
+                    "add_noise_to_samples": False,
+                    "model": ["14", 0],
+                    "image_embeds": ["22", 0],
+                    "text_embeds": ["11", 0],
+                },
+            },
+            "24": {
+                "class_type": "WanVideoDecode",
+                "inputs": {
+                    "enable_vae_tiling": True,
+                    "tile_x": 256,
+                    "tile_y": 256,
+                    "tile_stride_x": 128,
+                    "tile_stride_y": 128,
+                    "normalization": "default",
+                    "vae": ["15", 0],
+                    "samples": ["23", 0],
+                },
+            },
+            "25": {
+                "class_type": "VHS_VideoCombine",
+                "inputs": {
+                    "images": ["24", 0],
+                    "frame_rate": GPU2_WAN_FPS,
+                    "loop_count": 0,
+                    "filename_prefix": "MECHA_GPU2_wan_i2v",
+                    "format": "video/h264-mp4",
+                    "pix_fmt": "yuv420p",
+                    "crf": 23,
+                    "save_metadata": True,
+                    "trim_to_audio": False,
+                    "pingpong": False,
+                    "save_output": True,
+                },
+            },
+        }
+    )
+    if morph:
+        workflow["26"] = {"class_type": "LoadImage", "inputs": {"image": image_names[1]}}
+        workflow["27"] = {
+            "class_type": "ImageScale",
+            "inputs": {
+                "image": ["26", 0],
+                "upscale_method": "lanczos",
+                "width": GPU2_WAN_WIDTH,
+                "height": GPU2_WAN_HEIGHT,
+                "crop": "center",
+            },
+        }
+        workflow["22"]["inputs"]["end_image"] = ["27", 0]
+        workflow["25"]["inputs"]["filename_prefix"] = "MECHA_GPU2_wan_morph"
+    return workflow
+
+
+def build_gpu2_infinitetalk_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a two-second InfiniteTalk graph for the RTX 3060 12 GB node."""
+    params = _gpu2_task_params(task)
+    video_name = _gpu2_input_file_name(
+        task,
+        param_names=("video_filename", "uploaded_video", "video"),
+        extensions=(".mp4", ".mov", ".mkv", ".webm", ".avi"),
+    )
+    audio_name = _gpu2_input_file_name(
+        task,
+        param_names=("audio_filename", "uploaded_audio", "audio", "Audio"),
+        extensions=(".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg"),
+    )
+    prompt = str(
+        params.get("prompt_AU")
+        or params.get("prompt")
+        or "A person speaks naturally with stable identity and synchronized lips."
+    ).strip()
+    workflow = _gpu2_wan_common_nodes({**task, "params": {**params, "prompt": prompt}})
+    workflow["14"]["inputs"]["multitalk_model"] = ["32", 0]
+    workflow.update(
+        {
+            "30": {
+                "class_type": "VHS_LoadVideo",
+                "inputs": {
+                    "video": video_name,
+                    "force_rate": GPU2_WAN_FPS,
+                    "custom_width": 0,
+                    "custom_height": 0,
+                    "frame_load_cap": 1,
+                    "skip_first_frames": 0,
+                    "select_every_nth": 1,
+                    "format": "AnimateDiff",
+                },
+            },
+            "31": {
+                "class_type": "VHS_LoadAudioUpload",
+                "inputs": {"audio": audio_name, "start_time": 0, "duration": 2.1},
+            },
+            "32": {
+                "class_type": "MultiTalkModelLoader",
+                "inputs": {"model": GPU2_WAN_MODEL_FILES["infinitetalk"]},
+            },
+            "33": {
+                "class_type": "ImageScale",
+                "inputs": {
+                    "image": ["30", 0],
+                    "upscale_method": "lanczos",
+                    "width": GPU2_WAN_WIDTH,
+                    "height": GPU2_WAN_HEIGHT,
+                    "crop": "center",
+                },
+            },
+            "34": {
+                "class_type": "CLIPVisionLoader",
+                "inputs": {"clip_name": GPU2_WAN_MODEL_FILES["clip_vision"]},
+            },
+            "35": {
+                "class_type": "WanVideoClipVisionEncode",
+                "inputs": {
+                    "strength_1": 1.0,
+                    "strength_2": 1.0,
+                    "crop": "center",
+                    "combine_embeds": "average",
+                    "force_offload": True,
+                    "tiles": 0,
+                    "ratio": 0.5,
+                    "clip_vision": ["34", 0],
+                    "image_1": ["33", 0],
+                },
+            },
+            "36": {
+                "class_type": "WanVideoImageToVideoMultiTalk",
+                "inputs": {
+                    "width": GPU2_WAN_WIDTH,
+                    "height": GPU2_WAN_HEIGHT,
+                    "frame_window_size": GPU2_WAN_FRAMES,
+                    "motion_frame": 9,
+                    "force_offload": True,
+                    "colormatch": "disabled",
+                    "tiled_vae": True,
+                    "mode": "infinitetalk",
+                    "output_path": "",
+                    "vae": ["15", 0],
+                    "start_image": ["33", 0],
+                    "clip_embeds": ["35", 0],
+                },
+            },
+            "37": {
+                "class_type": "Wav2VecModelLoader",
+                "inputs": {
+                    "model": GPU2_WAN_MODEL_FILES["wav2vec"],
+                    "base_precision": "fp16",
+                    "load_device": "offload_device",
+                },
+            },
+            "38": {
+                "class_type": "MultiTalkWav2VecEmbeds",
+                "inputs": {
+                    "normalize_loudness": True,
+                    "num_frames": GPU2_WAN_FRAMES,
+                    "fps": float(GPU2_WAN_FPS),
+                    "audio_scale": 1.0,
+                    "audio_cfg_scale": 1.0,
+                    "multi_audio_type": "para",
+                    "wav2vec_model": ["37", 0],
+                    "audio_1": ["31", 0],
+                },
+            },
+            "39": {
+                "class_type": "WanVideoSampler",
+                "inputs": {
+                    "steps": 4,
+                    "cfg": 1.0,
+                    "shift": 8.0,
+                    "seed": _gpu2_seed(task),
+                    "force_offload": True,
+                    "scheduler": "dpm++_sde",
+                    "riflex_freq_index": 0,
+                    "denoise_strength": 1.0,
+                    "batched_cfg": False,
+                    "rope_function": "comfy_chunked",
+                    "start_step": 0,
+                    "end_step": -1,
+                    "add_noise_to_samples": False,
+                    "model": ["14", 0],
+                    "image_embeds": ["36", 0],
+                    "text_embeds": ["11", 0],
+                    "multitalk_embeds": ["38", 0],
+                },
+            },
+            "40": {
+                "class_type": "WanVideoDecode",
+                "inputs": {
+                    "enable_vae_tiling": True,
+                    "tile_x": 256,
+                    "tile_y": 256,
+                    "tile_stride_x": 128,
+                    "tile_stride_y": 128,
+                    "normalization": "default",
+                    "vae": ["15", 0],
+                    "samples": ["39", 0],
+                },
+            },
+            "41": {
+                "class_type": "VHS_VideoCombine",
+                "inputs": {
+                    "images": ["40", 0],
+                    "audio": ["31", 0],
+                    "frame_rate": GPU2_WAN_FPS,
+                    "loop_count": 0,
+                    "filename_prefix": "MECHA_GPU2_infinitetalk",
+                    "format": "video/h264-mp4",
+                    "pix_fmt": "yuv420p",
+                    "crf": 23,
+                    "save_metadata": True,
+                    "trim_to_audio": True,
+                    "pingpong": False,
+                    "save_output": True,
+                },
+            },
+        }
+    )
+    return workflow
+
+
 def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
     prepared = deepcopy(task)
     task_type = str(prepared.get("task_type") or "").lower()
     operation = str(_gpu2_task_params(prepared).get("gpu2_operation") or "").lower()
-    if operation in {"matting_subject", "matting_split"}:
+    if is_gpu2_infinitetalk_task(prepared):
+        prepared["workflow_json"] = build_gpu2_infinitetalk_workflow(prepared)
+        prepared["workflow_name"] = "gpu2_infinitetalk_wan21_low_vram"
+    elif is_gpu2_wan_i2v_task(prepared):
+        prepared["workflow_json"] = build_gpu2_wan_i2v_workflow(prepared)
+        suffix = "morph" if task_type == "morph" or "morph" in _gpu2_workflow_name(prepared) else "i2v"
+        prepared["workflow_name"] = f"gpu2_wan21_{suffix}_low_vram"
+    elif operation in {"matting_subject", "matting_split"}:
         prepared["workflow_json"] = build_gpu2_matting_workflow(
             prepared,
             split=operation == "matting_split",

@@ -8862,6 +8862,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Production acceptance passed through `https://mecha.one` for `qwenN`, `three_view`, `image_fusion`, `matting_subject`, and SeedVR2 `video_upscale`; every task was picked up by GPU2 and returned the expected image/video result type.
 - The video page now submits batch work serially: it waits for the current task to complete or fail before submitting the next item, exposes a batch-running state, and stops on timeout. This keeps browser batch actions aligned with GPU2's one-task execution contract.
 - Production smoke passed 9/9, remote architecture contracts passed, GPU2 readiness reports `ready=true`, and the frontend passed 307 tests plus a production build.
+
+## 2026-07-14 GPU2 Wan / InfiniteTalk Low-VRAM Runtime
+
+- `deploy/scripts/windows_gpu_agent_runner.py` now replaces GPU2 Wan I2V, Wan morph, and InfiniteTalk tasks with RTX 3060-safe graphs before ComfyUI submission. The graphs use one Wan 2.1 14B scaled-FP8 base model, `sdpa`, 640x384 output, 33 frames, four sampling steps, tiled VAE, and 36-block CPU/RAM offload.
+- InfiniteTalk uses the scaled-FP8 projection model and a local Wav2Vec safetensors file. It no longer depends on the legacy audio-separation/easy-use nodes or runtime Hugging Face downloads.
+- Added `windows_gpu_wan_setup.ps1/.cmd` for resumable, SHA256-verified model/plugin installation and `windows_gpu_wan_smoke.py/.cmd` for readiness, direct I2V, and direct InfiniteTalk ComfyUI validation. Required model storage is about 28 GB.
+- The existing GPU2 Agent contract remains serial. Slow execution is expected on 12 GB VRAM; queued work must wait for the current task rather than run concurrently.
+- Local runner contracts pass. Real GPU2 model installation and production end-to-end acceptance remain pending because `192.168.31.134` is currently unreachable.
 - Storyboard timeline BGM/SFX clips now expose explicit delete controls, and episode composition preserves an existing video's embedded audio when no separate dialogue/narration/SFX track is selected instead of replacing it with silence.
 
 ## 2026-07-11 Doubao SeedDream Agent Plan Task Endpoint

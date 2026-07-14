@@ -1,16 +1,105 @@
 from scripts.windows_gpu_agent_runner import (
     GPU2_BACKGROUND_REMOVAL_MODEL,
     GPU2_QWEN_MODEL_FILES,
+    GPU2_WAN_BLOCKS_TO_SWAP,
+    GPU2_WAN_FRAMES,
+    GPU2_WAN_HEIGHT,
+    GPU2_WAN_MODEL_FILES,
+    GPU2_WAN_WIDTH,
+    build_gpu2_infinitetalk_workflow,
     build_gpu2_matting_workflow,
     build_gpu2_qwen_workflow,
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
+    build_gpu2_wan_i2v_workflow,
+    is_gpu2_infinitetalk_task,
     is_gpu2_qwen_compatible_task,
+    is_gpu2_wan_i2v_task,
     normalize_gpu2_image_dimensions,
     normalize_gpu2_video_resolution,
     prepare_gpu2_task,
     tune_gpu2_qwen_workflow,
 )
+
+
+def test_gpu2_wan_i2v_uses_one_scaled_fp8_model_and_aggressive_ram_offload():
+    task = {
+        "task_type": "i2v",
+        "workflow_name": "wan2_i2v",
+        "params": {"image": "start.png", "prompt": "slow camera push", "seed": 77},
+        "files": [{"param": "image", "filename": "start.png"}],
+    }
+
+    workflow = build_gpu2_wan_i2v_workflow(task)
+    prepared = prepare_gpu2_task(task)
+
+    assert is_gpu2_wan_i2v_task(task)
+    assert workflow["12"]["inputs"]["blocks_to_swap"] == GPU2_WAN_BLOCKS_TO_SWAP
+    assert workflow["12"]["inputs"]["offload_img_emb"] is True
+    assert workflow["14"]["inputs"]["model"] == GPU2_WAN_MODEL_FILES["diffusion"]
+    assert workflow["14"]["inputs"]["attention_mode"] == "sdpa"
+    assert workflow["14"]["inputs"]["quantization"] == "fp8_e4m3fn_scaled"
+    assert workflow["21"]["inputs"]["width"] == GPU2_WAN_WIDTH
+    assert workflow["21"]["inputs"]["height"] == GPU2_WAN_HEIGHT
+    assert workflow["22"]["inputs"]["num_frames"] == GPU2_WAN_FRAMES
+    assert workflow["23"]["inputs"]["steps"] == 4
+    assert workflow["23"]["inputs"]["rope_function"] == "comfy_chunked"
+    assert workflow["25"]["inputs"]["save_output"] is True
+    assert prepared["workflow_name"] == "gpu2_wan21_i2v_low_vram"
+
+
+def test_gpu2_wan_morph_preserves_start_and_end_images():
+    task = {
+        "task_type": "morph",
+        "workflow_name": "wan2_morph",
+        "params": {"start_image": "first.png", "end_image": "last.png"},
+        "files": [
+            {"param": "start_image", "filename": "first.png"},
+            {"param": "end_image", "filename": "last.png"},
+        ],
+    }
+
+    workflow = build_gpu2_wan_i2v_workflow(task)
+    prepared = prepare_gpu2_task(task)
+
+    assert workflow["20"]["inputs"]["image"] == "first.png"
+    assert workflow["26"]["inputs"]["image"] == "last.png"
+    assert workflow["22"]["inputs"]["end_image"] == ["27", 0]
+    assert prepared["workflow_name"] == "gpu2_wan21_morph_low_vram"
+
+
+def test_gpu2_infinitetalk_uses_short_window_and_direct_audio_without_separation():
+    task = {
+        "task_type": "voice",
+        "workflow_name": "video_infinitetalk",
+        "params": {
+            "video_filename": "speaker.mp4",
+            "audio_filename": "speech.wav",
+            "prompt_AU": "speak naturally",
+        },
+        "files": [
+            {"param": "video_filename", "filename": "speaker.mp4"},
+            {"param": "audio_filename", "filename": "speech.wav"},
+        ],
+    }
+
+    workflow = build_gpu2_infinitetalk_workflow(task)
+    prepared = prepare_gpu2_task(task)
+    class_types = {node["class_type"] for node in workflow.values()}
+
+    assert is_gpu2_infinitetalk_task(task)
+    assert workflow["30"]["inputs"]["video"] == "speaker.mp4"
+    assert workflow["30"]["inputs"]["frame_load_cap"] == 1
+    assert workflow["31"]["inputs"]["audio"] == "speech.wav"
+    assert workflow["32"]["inputs"]["model"] == GPU2_WAN_MODEL_FILES["infinitetalk"]
+    assert workflow["37"]["class_type"] == "Wav2VecModelLoader"
+    assert workflow["37"]["inputs"]["model"] == GPU2_WAN_MODEL_FILES["wav2vec"]
+    assert workflow["36"]["inputs"]["frame_window_size"] == GPU2_WAN_FRAMES
+    assert workflow["38"]["inputs"]["num_frames"] == GPU2_WAN_FRAMES
+    assert workflow["41"]["inputs"]["audio"] == ["31", 0]
+    assert "AudioSeparation" not in class_types
+    assert "easy cleanGpuUsed" not in class_types
+    assert prepared["workflow_name"] == "gpu2_infinitetalk_wan21_low_vram"
 
 
 def test_gpu2_upscale_workflow_uses_low_vram_seedvr2_nodes():
