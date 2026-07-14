@@ -25,6 +25,26 @@ export async function createVideoVoiceReference(data: {
   );
 }
 
+export async function extractVideoReferenceAudio(data: {
+  project_id: string;
+  episode_id: string;
+  source_video_url: string;
+  storyboard_item_id?: string;
+  video_segment_id?: string;
+  video_model?: string;
+}) {
+  return apiJson<{
+    success: boolean;
+    file_id?: string;
+    audio_url: string;
+    source_video_url: string;
+  }>(
+    '/api/video-voice-references/extract-audio',
+    { method: 'POST', body: JSON.stringify(data) },
+    'extractVideoReferenceAudio',
+  );
+}
+
 export async function deleteVideoVoiceReference(referenceId: string) {
   return apiJson<{ success: boolean }>(
     `/api/video-voice-references/${encodeURIComponent(referenceId)}`,

@@ -10,6 +10,9 @@ export interface SeedancePanelWithCandidatesProps {
     autoOpenMentionOnMount?: boolean;
     storyboardItemId?: string;
     onPreviewMedia?: (url: string, kind: SeedanceMediaInput['kind']) => void;
+    onUsePreviousVideoAudio?: () => void;
+    previousVideoAudioBusy?: boolean;
+    audioReferenceNotice?: string;
 }
 
 export const SeedancePanelWithCandidates: React.FC<SeedancePanelWithCandidatesProps> = ({
@@ -19,6 +22,9 @@ export const SeedancePanelWithCandidates: React.FC<SeedancePanelWithCandidatesPr
     autoOpenMentionOnMount,
     storyboardItemId,
     onPreviewMedia,
+    onUsePreviousVideoAudio,
+    previousVideoAudioBusy,
+    audioReferenceNotice,
 }) => {
     const { candidates } = useSeedanceCandidates({
         currentParams: value,
@@ -33,6 +39,9 @@ export const SeedancePanelWithCandidates: React.FC<SeedancePanelWithCandidatesPr
             candidates={candidates}
             autoOpenMentionOnMount={autoOpenMentionOnMount}
             onPreviewMedia={onPreviewMedia}
+            onUsePreviousVideoAudio={onUsePreviousVideoAudio}
+            previousVideoAudioBusy={previousVideoAudioBusy}
+            audioReferenceNotice={audioReferenceNotice}
         />
     );
 };

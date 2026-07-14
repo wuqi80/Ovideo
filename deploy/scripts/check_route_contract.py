@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 249
-DEFAULT_EXPECTED_OPERATIONS = 306
+DEFAULT_EXPECTED_PATHS = 250
+DEFAULT_EXPECTED_OPERATIONS = 307
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -187,6 +187,10 @@ EXPECTED_ENDPOINTS = {
     ("/api/video-voice-references/from-video", "POST"): (
         "routers.video_voice_references",
         "create_video_voice_reference",
+    ),
+    ("/api/video-voice-references/extract-audio", "POST"): (
+        "routers.video_voice_references",
+        "extract_video_reference_audio",
     ),
     ("/api/video-voice-references/{reference_id}", "DELETE"): (
         "routers.video_voice_references",

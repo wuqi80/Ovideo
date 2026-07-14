@@ -86,6 +86,7 @@ import { LazyVideo } from './LazyVideo';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import {
     createVideoVoiceReference,
+    extractVideoReferenceAudio,
     getVideoVoiceReferences,
     normalizeVideoVoiceReference,
 } from '../services/videoVoiceReferenceService';
@@ -292,6 +293,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const [voiceReferenceVideoIndex, setVoiceReferenceVideoIndex] = useState(0);
     const [voiceReferenceCharacter, setVoiceReferenceCharacter] = useState('');
     const [voiceReferenceSaving, setVoiceReferenceSaving] = useState(false);
+    const [referenceAudioExtractingUuid, setReferenceAudioExtractingUuid] = useState<string | null>(null);
     const [videoVoiceReferences, setVideoVoiceReferences] = useState<VideoVoiceReference[]>([]);
     const [editModalUuid, setEditModalUuid] = useState<string | null>(null);
     // Issue 7: list-view ⚙ detail modal
@@ -402,12 +404,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         group: TaskGroup,
         params: SeedanceParams,
     ): SeedanceParams => {
+        const hasManualOrStoryboardAudio = (params.media_inputs || []).some(media => media.kind === 'audio');
+        if (hasManualOrStoryboardAudio) return params;
         const reference = getVideoVoiceReferenceForGroup(group);
         if (!reference?.referenceAudioUrl) return params;
         return {
             ...params,
             media_inputs: [
-                ...(params.media_inputs || []).filter(media => media.kind !== 'audio'),
+                ...(params.media_inputs || []),
                 {
                     kind: 'audio',
                     url: reference.referenceAudioUrl,
@@ -1767,6 +1771,74 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
     }, [voiceReferenceModalUuid, projectId, episodeId, taskGroups, tasksStatus, voiceReferenceVideoIndex, voiceReferenceCharacter, ensureVideoSegmentId, getStoryboardItemId, showToast]);
 
+    const usePreviousVideoAudioAsReference = useCallback(async (uuid: string) => {
+        if (!projectId || !episodeId) {
+            showToast('缺少项目或分集信息，无法提取参考配音');
+            return;
+        }
+        const groupIndex = taskGroups.findIndex(candidate => candidate.uuid === uuid);
+        const group = taskGroups[groupIndex];
+        if (!group || groupIndex < 0) {
+            showToast('没有找到当前视频卡片');
+            return;
+        }
+
+        let sourceGroup: TaskGroup | null = null;
+        let sourceVideoUrl = '';
+        for (let index = groupIndex - 1; index >= 0; index -= 1) {
+            const previousGroup = taskGroups[index];
+            const previousStatus = tasksStatus[previousGroup.uuid];
+            const candidates = [
+                previousStatus?.result,
+                ...(previousStatus?.videos || []),
+            ].filter(Boolean) as string[];
+            if (candidates.length > 0) {
+                sourceGroup = previousGroup;
+                sourceVideoUrl = candidates[0];
+                break;
+            }
+        }
+        if (!sourceGroup || !sourceVideoUrl) {
+            showToast('前面还没有可作为参考配音的视频');
+            return;
+        }
+
+        setReferenceAudioExtractingUuid(uuid);
+        try {
+            const response = await extractVideoReferenceAudio({
+                project_id: projectId,
+                episode_id: episodeId,
+                source_video_url: toPersistedVideoUrl(sourceVideoUrl),
+                storyboard_item_id: getStoryboardItemId(uuid),
+                video_segment_id: await ensureVideoSegmentId(group) || undefined,
+                video_model: sourceGroup.model,
+            });
+            if (!response.audio_url) {
+                throw new Error('提取完成但未返回音频地址');
+            }
+            const current = getSeedanceParams(uuid, group.model);
+            const nextMedia = [
+                ...(current.media_inputs || []).filter(media => media.kind !== 'audio'),
+                {
+                    kind: 'audio' as const,
+                    url: response.audio_url,
+                    role: 'reference_audio' as const,
+                },
+            ];
+            setSeedanceParams(uuid, { ...current, media_inputs: nextMedia });
+            showToast(seedanceOmniEnabled
+                ? '已把上一条视频原声设为当前参考配音'
+                : '已保存参考配音；当前兼容通道生成时会忽略音频参考');
+        } catch (error: any) {
+            const message = String(error?.message || error || '未知错误');
+            showToast(message.includes('no audio track')
+                ? '上一条视频没有音轨，无法作为参考配音'
+                : `提取参考配音失败: ${message}`);
+        } finally {
+            setReferenceAudioExtractingUuid(current => (current === uuid ? null : current));
+        }
+    }, [projectId, episodeId, taskGroups, tasksStatus, showToast, getStoryboardItemId, ensureVideoSegmentId, getSeedanceParams, setSeedanceParams, seedanceOmniEnabled]);
+
     const runTask = useCallback(async (uuid: string): Promise<string | null> => {
         const group = taskGroups.find(g => g.uuid === uuid);
         if (!group) return null;
@@ -1798,7 +1870,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 m => m.kind === 'image' && (m.role === 'first_frame' || m.role === 'last_frame')
             );
             const params = isFirstLastMode
-                ? { ...capabilityParams, media_inputs: capabilityParams.media_inputs.filter(m => m.kind === 'image') }
+                ? {
+                    ...capabilityParams,
+                    media_inputs: capabilityParams.media_inputs.filter(m =>
+                        m.kind === 'image' || (seedanceOmniEnabled && m.kind === 'audio')
+                    ),
+                }
                 : capabilityParams;
             setTasksStatus(prev => {
                 const oldStatus: TaskStatus = prev[uuid] || {};
@@ -2794,12 +2871,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // and useSeedanceCandidates must be called from a function component (not the
     // outer VideoPage callback). Wrap it once here.
     const SeedanceDetailModalWithCandidates: React.FC<{
+        groupUuid: string;
         title: string;
         value: SeedanceParams;
         onChange: (next: SeedanceParams) => void;
         onClose: () => void;
         storyboardItemId?: string;
-    }> = ({ title, value, onChange, onClose, storyboardItemId }) => {
+    }> = ({ groupUuid, title, value, onChange, onClose, storyboardItemId }) => {
         const { candidates } = useSeedanceCandidates({
             currentParams: value,
             currentStoryboardItemId: storyboardItemId,
@@ -2813,6 +2891,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     onChange={onChange}
                     candidates={candidates}
                     onClose={onClose}
+                    onUsePreviousVideoAudio={() => void usePreviousVideoAudioAsReference(groupUuid)}
+                    previousVideoAudioBusy={referenceAudioExtractingUuid === groupUuid}
+                    audioReferenceNotice={!seedanceOmniEnabled
+                        ? '当前通道会兼容到 Seedance 1.5-pro / Agent Plan，参考配音会保存到卡片，但提交时会自动忽略。'
+                        : undefined}
                     onPreviewMedia={(url, kind) => {
                         if (kind === 'audio') { showToast('音频在浏览器新标签播放'); window.open(url, '_blank'); return; }
                         setLightboxUrl(url);
@@ -3282,6 +3365,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 onChange={(next) => setSeedanceParams(group.uuid, next)}
                                 autoOpenMentionOnMount={!!img1.isPlaceholder && (getSeedanceParams(group.uuid, group.model).prompt || '').trim() === '@'}
                                 storyboardItemId={getStoryboardItemId(group.uuid)}
+                                onUsePreviousVideoAudio={() => void usePreviousVideoAudioAsReference(group.uuid)}
+                                previousVideoAudioBusy={referenceAudioExtractingUuid === group.uuid}
+                                audioReferenceNotice={!seedanceOmniEnabled
+                                    ? '当前通道会兼容到 Seedance 1.5-pro / Agent Plan，参考配音会保存到卡片，但提交时会自动忽略。'
+                                    : undefined}
                                 onPreviewMedia={(url, kind) => {
                                     if (kind === 'audio') { showToast('音频点击预览（请在浏览器新标签播放）'); window.open(url, '_blank'); return; }
                                     setLightboxUrl(url);
@@ -4556,6 +4644,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 const params = getSeedanceParams(g.uuid, g.model);
                 return (
                     <SeedanceDetailModalWithCandidates
+                        groupUuid={g.uuid}
                         title={`#${(taskGroups.findIndex(x => x.uuid === g.uuid) + 1)}`}
                         value={params}
                         storyboardItemId={getStoryboardItemId(g.uuid)}

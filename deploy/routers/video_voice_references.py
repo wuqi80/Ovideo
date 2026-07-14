@@ -8,6 +8,7 @@ from services.video_voice_reference_service import (
     VideoVoiceReferenceError,
     VideoVoiceReferenceValidationError,
     create_from_video,
+    extract_audio_reference_from_video,
 )
 
 
@@ -15,6 +16,15 @@ class VideoVoiceReferenceCreate(BaseModel):
     project_id: str
     episode_id: str
     character_name: str
+    source_video_url: str
+    storyboard_item_id: Optional[str] = None
+    video_segment_id: Optional[str] = None
+    video_model: Optional[str] = None
+
+
+class VideoReferenceAudioExtract(BaseModel):
+    project_id: str
+    episode_id: str
     source_video_url: str
     storyboard_item_id: Optional[str] = None
     video_segment_id: Optional[str] = None
@@ -54,6 +64,27 @@ def create_video_voice_references_router(
                 video_model=data.video_model,
                 user_id=user_id,
                 video_voice_reference_dao=video_voice_reference_dao,
+                episode_dao=episode_dao,
+            )
+        except VideoVoiceReferenceValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except VideoVoiceReferenceError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @router.post("/api/video-voice-references/extract-audio")
+    async def extract_video_reference_audio(
+        data: VideoReferenceAudioExtract,
+        user_id: str = Depends(get_current_user),
+    ):
+        try:
+            return await extract_audio_reference_from_video(
+                project_id=data.project_id,
+                episode_id=data.episode_id,
+                source_video_url=data.source_video_url,
+                storyboard_item_id=data.storyboard_item_id,
+                video_segment_id=data.video_segment_id,
+                video_model=data.video_model,
+                user_id=user_id,
                 episode_dao=episode_dao,
             )
         except VideoVoiceReferenceValidationError as exc:

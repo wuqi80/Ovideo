@@ -9,6 +9,88 @@ from typing import List, Dict, Any, Optional
 from db_manager import get_db_manager
 
 
+def _int_or_none(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_value(row: Dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in row:
+            return row[key]
+    return None
+
+
+def _prepare_storyboard_items_for_export(
+    existing_rows: List[Dict[str, Any]],
+    storyboard_items: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Preserve storyboard ids so generated files stay attached after re-export."""
+    by_item_id: Dict[str, Dict[str, Any]] = {}
+    by_segment: Dict[tuple[str, str], Dict[str, Any]] = {}
+    by_sort_order: Dict[int, List[Dict[str, Any]]] = {}
+
+    for raw_row in existing_rows:
+        row = dict(raw_row or {})
+        item_id = _row_value(row, "item_id", "itemId")
+        if item_id:
+            by_item_id[str(item_id)] = row
+        segment_id = _row_value(row, "script_segment_id", "scriptSegmentId")
+        source_shot_no = _row_value(row, "source_video_shot_no", "sourceVideoShotNo")
+        if segment_id and source_shot_no:
+            by_segment[(str(segment_id), str(source_shot_no))] = row
+        sort_order = _int_or_none(_row_value(row, "sort_order", "sortOrder"))
+        if sort_order is not None:
+            by_sort_order.setdefault(sort_order, []).append(row)
+
+    prepared: List[Dict[str, Any]] = []
+    used_item_ids: set[str] = set()
+
+    for raw_item in storyboard_items:
+        item = dict(raw_item or {})
+        matched: Optional[Dict[str, Any]] = None
+
+        incoming_id = _row_value(item, "item_id", "itemId")
+        if incoming_id:
+            row = by_item_id.get(str(incoming_id))
+            if row and str(_row_value(row, "item_id", "itemId")) not in used_item_ids:
+                matched = row
+
+        if matched is None:
+            segment_id = _row_value(item, "script_segment_id", "scriptSegmentId")
+            source_shot_no = _row_value(item, "source_video_shot_no", "sourceVideoShotNo")
+            if segment_id and source_shot_no:
+                row = by_segment.get((str(segment_id), str(source_shot_no)))
+                if row and str(_row_value(row, "item_id", "itemId")) not in used_item_ids:
+                    matched = row
+
+        if matched is None:
+            sort_order = _int_or_none(_row_value(item, "sort_order", "sortOrder"))
+            if sort_order is not None:
+                for row in by_sort_order.get(sort_order, []):
+                    row_id = str(_row_value(row, "item_id", "itemId"))
+                    if row_id not in used_item_ids:
+                        matched = row
+                        break
+
+        if matched:
+            matched_id = str(_row_value(matched, "item_id", "itemId"))
+            used_item_ids.add(matched_id)
+            item["_preserved_item_id"] = matched_id
+            if not item.get("generated_image_url") and not item.get("generatedImageUrl"):
+                generated_image_url = _row_value(matched, "generated_image_url", "generatedImageUrl")
+                if generated_image_url:
+                    item["generated_image_url"] = generated_image_url
+
+        prepared.append(item)
+
+    return prepared
+
+
 class StoryboardDAO:
     FIELD_SETS = {
         "audio": (
@@ -167,7 +249,12 @@ class StoryboardDAO:
         """在已有事务连接上批量创建分镜，返回创建数量"""
         count = 0
         for item in items:
-            item_id = f"sb_{uuid.uuid4().hex[:12]}"
+            item_id = (
+                item.get('_preserved_item_id')
+                or item.get('item_id')
+                or item.get('itemId')
+                or f"sb_{uuid.uuid4().hex[:12]}"
+            )
             sid = script_id or item.get('script_id')
             await conn.execute("""
                 INSERT INTO storyboard_items
@@ -175,9 +262,9 @@ class StoryboardDAO:
                      dialogue, camera_movement, image_prompt, video_prompt,
                      bound_assets, planned_duration_ms, script_id,
                      script_segment_id, source_video_shot_no, video_script_block,
-                     shot_size, camera_angle)
+                     shot_size, camera_angle, generated_image_url)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12,
-                        $13, $14, $15, $16, $17)
+                        $13, $14, $15, $16, $17, $18)
             """,
                 item_id, episode_id,
                 item.get('sort_order', 0),
@@ -195,6 +282,7 @@ class StoryboardDAO:
                 item.get('video_script_block', ''),
                 item.get('shot_size', ''),
                 item.get('camera_angle', ''),
+                item.get('generated_image_url') or item.get('generatedImageUrl') or None,
             )
             count += 1
         return count
@@ -237,6 +325,21 @@ class StoryboardDAO:
 
         async with db.acquire() as conn:
             async with conn.transaction():
+                if script_id:
+                    existing_rows = await conn.fetch(
+                        "SELECT * FROM storyboard_items WHERE episode_id = $1 AND script_id = $2 ORDER BY sort_order ASC",
+                        episode_id,
+                        script_id,
+                    )
+                else:
+                    existing_rows = await conn.fetch(
+                        "SELECT * FROM storyboard_items WHERE episode_id = $1 ORDER BY sort_order ASC",
+                        episode_id,
+                    )
+                prepared_storyboard_items = _prepare_storyboard_items_for_export(
+                    [dict(row) for row in existing_rows],
+                    storyboard_items,
+                )
                 await episode_script_dao.upsert_transactional(
                     conn,
                     episode_id,
@@ -249,16 +352,16 @@ class StoryboardDAO:
                         "extracted_props": [p.get("name", "") for p in (props or [])],
                     },
                 )
+                created = 0
                 if not preserve_existing_storyboards:
                     await StoryboardDAO.delete_by_episode_transactional(conn, episode_id, script_id=script_id)
-                created = 0
-                if storyboard_items:
-                    created = await StoryboardDAO.batch_create_transactional(
-                        conn,
-                        episode_id,
-                        storyboard_items,
-                        script_id=script_id,
-                    )
+                    if prepared_storyboard_items:
+                        created = await StoryboardDAO.batch_create_transactional(
+                            conn,
+                            episode_id,
+                            prepared_storyboard_items,
+                            script_id=script_id,
+                        )
                 await asset_dao.create_missing_episode_assets_transactional(
                     conn,
                     project_id=project_id,

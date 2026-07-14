@@ -79,6 +79,52 @@ async def test_create_from_video_extracts_audio_and_upserts_character_reference(
 
 
 @pytest.mark.asyncio
+async def test_extract_audio_reference_from_video_saves_current_card_audio(monkeypatch):
+    async def fake_materialize(_source_url, destination):
+        Path(destination).write_bytes(b"video")
+
+    async def fake_extract(_video_path, audio_path):
+        Path(audio_path).write_bytes(b"audio")
+
+    async def fake_save_generated_file_to_db(**kwargs):
+        assert kwargs["content"] == b"audio"
+        assert kwargs["source"] == "video_reference_audio"
+        assert kwargs["file_role"] == "reference_audio"
+        assert kwargs["entity_type"] == "storyboard_item"
+        assert kwargs["entity_id"] == "sb_2"
+        assert kwargs["extra_metadata"]["source_video_url"] == "/storage/video/take-1.mp4"
+        return {
+            "file_id": "file_ref_audio",
+            "file_url": "/storage/audio/reference-audio.mp3",
+        }
+
+    monkeypatch.setattr(video_voice_reference_service, "_materialize_video", fake_materialize)
+    monkeypatch.setattr(video_voice_reference_service, "_extract_first_audio_stream", fake_extract)
+    monkeypatch.setattr(
+        video_voice_reference_service,
+        "save_generated_file_to_db",
+        fake_save_generated_file_to_db,
+    )
+
+    result = await video_voice_reference_service.extract_audio_reference_from_video(
+        project_id="proj_1",
+        episode_id="ep_1",
+        source_video_url="/storage/video/take-1.mp4",
+        storyboard_item_id="sb_2",
+        video_model="Seedance2",
+        user_id="user_1",
+        episode_dao=FakeEpisodeDAO,
+    )
+
+    assert result == {
+        "success": True,
+        "file_id": "file_ref_audio",
+        "audio_url": "/storage/audio/reference-audio.mp3",
+        "source_video_url": "/storage/video/take-1.mp4",
+    }
+
+
+@pytest.mark.asyncio
 async def test_create_from_video_rejects_episode_from_another_project():
     with pytest.raises(
         video_voice_reference_service.VideoVoiceReferenceValidationError,

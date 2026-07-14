@@ -31,6 +31,7 @@ FILES=(
   "admin_recycle_bin_routes.py"
   "api_routes.py"
   "video_reverse_routes.py"
+  "dao_video_voice_reference.py"
   "ARCHITECTURE.md"
   "Agent.md"
   "login.html"

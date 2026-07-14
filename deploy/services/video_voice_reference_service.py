@@ -102,28 +102,19 @@ async def create_from_video(
     if not actual_project_id or actual_project_id != project_id:
         raise VideoVoiceReferenceValidationError("Episode does not belong to the project")
 
-    with tempfile.TemporaryDirectory(prefix="video_voice_reference_") as tmpdir:
-        video_path = os.path.join(tmpdir, "source.mp4")
-        audio_path = os.path.join(tmpdir, "voice_reference.mp3")
-        await _materialize_video(source_video_url, video_path)
-        await _extract_first_audio_stream(video_path, audio_path)
-        saved = await save_generated_file_to_db(
-            content=Path(audio_path).read_bytes(),
-            file_type="audio",
-            user_id=user_id,
-            source="video_voice_reference",
-            entity_type="video_segment" if video_segment_id else "storyboard_item",
-            entity_id=video_segment_id or storyboard_item_id,
-            file_role="voice_reference_audio",
-            original_ext=".mp3",
-            project_id=project_id,
-            episode_id=episode_id,
-            extra_metadata={
-                "character_name": normalized_character,
-                "source_video_url": source_video_url,
-                "video_model": video_model,
-            },
-        )
+    saved = await extract_audio_reference_from_video(
+        project_id=project_id,
+        episode_id=episode_id,
+        source_video_url=source_video_url,
+        user_id=user_id,
+        storyboard_item_id=storyboard_item_id,
+        video_segment_id=video_segment_id,
+        video_model=video_model,
+        source="video_voice_reference",
+        file_role="voice_reference_audio",
+        extra_metadata={"character_name": normalized_character},
+        episode_dao=episode_dao,
+    )
 
     row = await video_voice_reference_dao.upsert(
         project_id=project_id,
@@ -132,7 +123,7 @@ async def create_from_video(
         video_segment_id=video_segment_id,
         character_name=normalized_character,
         source_video_url=source_video_url,
-        reference_audio_url=saved["file_url"],
+        reference_audio_url=saved["audio_url"],
         video_model=video_model,
         created_by=user_id,
         metadata={"file_id": saved.get("file_id")},
@@ -140,3 +131,66 @@ async def create_from_video(
     if not row:
         raise VideoVoiceReferenceError("Failed to save video voice reference")
     return {"success": True, "reference": dict(row)}
+
+
+async def extract_audio_reference_from_video(
+    *,
+    project_id: str,
+    episode_id: str,
+    source_video_url: str,
+    user_id: str,
+    episode_dao: Any,
+    storyboard_item_id: Optional[str] = None,
+    video_segment_id: Optional[str] = None,
+    video_model: Optional[str] = None,
+    source: str = "video_reference_audio",
+    file_role: str = "reference_audio",
+    extra_metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    if not source_video_url:
+        raise VideoVoiceReferenceValidationError("Source video URL is required")
+    actual_project_id = await episode_dao.get_project_id(episode_id)
+    if not actual_project_id or actual_project_id != project_id:
+        raise VideoVoiceReferenceValidationError("Episode does not belong to the project")
+
+    entity_type = None
+    entity_id = None
+    if video_segment_id:
+        entity_type = "video_segment"
+        entity_id = video_segment_id
+    elif storyboard_item_id:
+        entity_type = "storyboard_item"
+        entity_id = storyboard_item_id
+    elif episode_id:
+        entity_type = "episode"
+        entity_id = episode_id
+
+    with tempfile.TemporaryDirectory(prefix="video_reference_audio_") as tmpdir:
+        video_path = os.path.join(tmpdir, "source.mp4")
+        audio_path = os.path.join(tmpdir, "reference_audio.mp3")
+        await _materialize_video(source_video_url, video_path)
+        await _extract_first_audio_stream(video_path, audio_path)
+        saved = await save_generated_file_to_db(
+            content=Path(audio_path).read_bytes(),
+            file_type="audio",
+            user_id=user_id,
+            source=source,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            file_role=file_role,
+            original_ext=".mp3",
+            project_id=project_id,
+            episode_id=episode_id,
+            extra_metadata={
+                "source_video_url": source_video_url,
+                "video_model": video_model,
+                **(extra_metadata or {}),
+            },
+        )
+
+    return {
+        "success": True,
+        "file_id": saved.get("file_id"),
+        "audio_url": saved["file_url"],
+        "source_video_url": source_video_url,
+    }

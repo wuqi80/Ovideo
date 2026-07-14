@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from typing import Any, Awaitable, Callable, Iterable
 
 from services.project_image_service import (
@@ -94,6 +95,146 @@ def _select_image_url(shot_images_data: Any, logger: Any, item_id: str) -> tuple
     return image_url, selected_img
 
 
+def _as_dict(row: Any) -> dict[str, Any]:
+    if not row:
+        return {}
+    if isinstance(row, dict):
+        return row
+    try:
+        return dict(row)
+    except Exception:
+        return {}
+
+
+def _parse_bound_assets(raw: Any) -> list[Any]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    return raw if isinstance(raw, list) else []
+
+
+def _bound_asset_names(raw: Any, prefix: str) -> list[str]:
+    names: list[str] = []
+    for item in _parse_bound_assets(raw):
+        if isinstance(item, str):
+            if item.startswith(prefix):
+                names.append(item[len(prefix):])
+        elif isinstance(item, dict):
+            kind = item.get("asset_type") or item.get("assetType") or item.get("type")
+            name = item.get("name") or item.get("asset_name") or item.get("assetName")
+            expected = prefix[:-1]
+            if kind == expected and name:
+                names.append(str(name))
+    return names
+
+
+async def _get_storyboard_row(
+    item_id: str,
+    *,
+    storyboard_dao: Any,
+    logger: Any,
+) -> dict[str, Any]:
+    if not item_id or not storyboard_dao:
+        return {}
+    getter = getattr(storyboard_dao, "get_by_id", None)
+    if not callable(getter):
+        return {}
+    try:
+        return _as_dict(await getter(item_id))
+    except Exception as exc:
+        logger.warning("Failed to load storyboard item %s for video export: %s", item_id, exc)
+        return {}
+
+
+async def _select_entity_file_url(
+    item_id: str,
+    *,
+    entity_file_dao: Any,
+    logger: Any,
+) -> str:
+    if not item_id or not entity_file_dao:
+        return ""
+
+    getter = getattr(entity_file_dao, "get_selected_file", None)
+    if callable(getter):
+        try:
+            selected = _as_dict(await getter("storyboard_item", item_id, "generated_image"))
+            file_url = selected.get("file_url") or selected.get("file_path") or ""
+            if file_url:
+                logger.info("Using selected entity file for shot %s: %s...", item_id, file_url[:50])
+                return file_url
+        except Exception as exc:
+            logger.warning("Failed to load selected entity file for shot %s: %s", item_id, exc)
+
+    list_files = getattr(entity_file_dao, "get_entity_files", None)
+    if not callable(list_files):
+        return ""
+    try:
+        result = await list_files("storyboard_item", item_id, "generated_image", limit=50, offset=0)
+    except Exception as exc:
+        logger.warning("Failed to list entity files for shot %s: %s", item_id, exc)
+        return ""
+
+    files = result.get("items", []) if isinstance(result, dict) else []
+    selected = next((f for f in files if _as_dict(f).get("is_selected")), None)
+    fallback = selected or (files[0] if files else None)
+    file_row = _as_dict(fallback)
+    file_url = file_row.get("file_url") or file_row.get("file_path") or ""
+    if file_url:
+        logger.info("Using entity file fallback for shot %s: %s...", item_id, file_url[:50])
+    return file_url
+
+
+async def _select_export_image_url(
+    *,
+    item_id: str,
+    generated_images_data: dict[str, Any],
+    storyboard_dao: Any,
+    entity_file_dao: Any,
+    logger: Any,
+) -> tuple[str, dict[str, Any]]:
+    row = await _get_storyboard_row(item_id, storyboard_dao=storyboard_dao, logger=logger)
+
+    file_url = await _select_entity_file_url(item_id, entity_file_dao=entity_file_dao, logger=logger)
+    if file_url:
+        return file_url, row
+
+    db_url = row.get("generated_image_url") or row.get("generatedImageUrl") or ""
+    if db_url:
+        logger.info("Using storyboard_items.generated_image_url for shot %s: %s...", item_id, db_url[:50])
+        return db_url, row
+
+    image_url, _selected_img = _select_image_url(generated_images_data.get(item_id, {}), logger, item_id)
+    return image_url, row
+
+
+def _legacy_or_db_text(item: dict[str, Any], row: dict[str, Any], db_key: str, legacy_key: str) -> str:
+    value = row.get(db_key)
+    if value:
+        return str(value)
+    legacy_value = item.get(legacy_key)
+    return str(legacy_value or "")
+
+
+def _characters_for_task(item: dict[str, Any], row: dict[str, Any]) -> list[Any]:
+    names = _bound_asset_names(row.get("bound_assets") or row.get("boundAssets"), "char:")
+    if names:
+        return names
+    legacy = item.get("characters", [])
+    return legacy if isinstance(legacy, list) else []
+
+
+def _scene_for_task(item: dict[str, Any], row: dict[str, Any]) -> str:
+    names = _bound_asset_names(row.get("bound_assets") or row.get("boundAssets"), "scene:")
+    if names:
+        return names[0]
+    return str(item.get("scene") or "")
+
+
 async def _persist_image_if_needed(
     *,
     image_url: str,
@@ -126,10 +267,21 @@ async def _persist_image_if_needed(
     return image_url
 
 
-def _iter_selected_items(items: Iterable[dict[str, Any]], selected_items: set[str]) -> Iterable[dict[str, Any]]:
-    for item in items:
-        if item.get("id") in selected_items:
-            yield item
+def _unique_selected_items(selected_items: Iterable[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for item_id in selected_items:
+        if not item_id or item_id in seen:
+            continue
+        result.append(item_id)
+        seen.add(item_id)
+    return result
+
+
+def _iter_selected_items(items: Iterable[dict[str, Any]], selected_items: Iterable[str]) -> Iterable[dict[str, Any]]:
+    by_id = {str(item.get("id")): item for item in items if item.get("id")}
+    for item_id in selected_items:
+        yield by_id.get(item_id, {"id": item_id})
 
 
 async def export_project_to_video_response(
@@ -141,6 +293,8 @@ async def export_project_to_video_response(
     version_dao: Any,
     file_dao: Any,
     logger: Any,
+    storyboard_dao: Any = None,
+    entity_file_dao: Any = None,
     now_provider: Callable[[], datetime] = datetime.now,
     persist_image: ImagePersister = persist_export_storyboard_base64_image,
 ) -> dict[str, Any]:
@@ -156,7 +310,7 @@ async def export_project_to_video_response(
     storyboard = data.get("storyboard", {})
     items = storyboard.get("items", [])
     generated_images_data = data.get("generated_images", {})
-    selected_item_ids = set(selected_items)
+    selected_item_ids = _unique_selected_items(selected_items)
     logger.info(
         "Export data: storyboard_items=%s generated_image_entries=%s selected=%s",
         len(items),
@@ -167,8 +321,13 @@ async def export_project_to_video_response(
     video_tasks = []
     for item in _iter_selected_items(items, selected_item_ids):
         item_id = item.get("id")
-        shot_images_data = generated_images_data.get(item_id, {})
-        image_url, _selected_img = _select_image_url(shot_images_data, logger, item_id)
+        image_url, db_row = await _select_export_image_url(
+            item_id=item_id,
+            generated_images_data=generated_images_data,
+            storyboard_dao=storyboard_dao,
+            entity_file_dao=entity_file_dao,
+            logger=logger,
+        )
         image_url = await _persist_image_if_needed(
             image_url=image_url,
             item=item,
@@ -186,10 +345,10 @@ async def export_project_to_video_response(
             {
                 "storyboard_id": item["id"],
                 "image_url": image_url or "",
-                "video_prompt": item.get("videoPrompt", ""),
-                "dialogue": item.get("dialogue", ""),
-                "characters": item.get("characters", []),
-                "scene": item.get("scene", ""),
+                "video_prompt": _legacy_or_db_text(item, db_row, "video_prompt", "videoPrompt"),
+                "dialogue": _legacy_or_db_text(item, db_row, "dialogue", "dialogue"),
+                "characters": _characters_for_task(item, db_row),
+                "scene": _scene_for_task(item, db_row),
             }
         )
 

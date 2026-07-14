@@ -41,6 +41,36 @@ class _FileDAO:
     pass
 
 
+class _StoryboardDAO:
+    rows = {}
+    calls = []
+
+    @classmethod
+    async def get_by_id(cls, item_id):
+        cls.calls.append(item_id)
+        row = cls.rows.get(item_id)
+        return {**row} if row else None
+
+
+class _EntityFileDAO:
+    selected_files = {}
+    entity_files = {}
+    selected_calls = []
+    entity_file_calls = []
+
+    @classmethod
+    async def get_selected_file(cls, entity_type, entity_id, file_role):
+        cls.selected_calls.append((entity_type, entity_id, file_role))
+        row = cls.selected_files.get((entity_type, entity_id, file_role))
+        return {**row} if row else None
+
+    @classmethod
+    async def get_entity_files(cls, entity_type, entity_id, file_role=None, limit=50, offset=0):
+        cls.entity_file_calls.append((entity_type, entity_id, file_role, limit, offset))
+        rows = cls.entity_files.get((entity_type, entity_id, file_role), [])
+        return {"items": [{**row} for row in rows], "total": len(rows)}
+
+
 class _Logger:
     infos = []
     warnings = []
@@ -108,6 +138,12 @@ def _reset_fakes():
     _ProjectDAO.saved = []
     _VersionDAO.versions = [{"version_id": "ver_existing"}]
     _VersionDAO.created = []
+    _StoryboardDAO.rows = {}
+    _StoryboardDAO.calls = []
+    _EntityFileDAO.selected_files = {}
+    _EntityFileDAO.entity_files = {}
+    _EntityFileDAO.selected_calls = []
+    _EntityFileDAO.entity_file_calls = []
     _Logger.infos = []
     _Logger.warnings = []
     _Logger.errors = []
@@ -197,6 +233,84 @@ async def test_export_project_to_video_response_falls_back_to_base64_when_persis
     assert result["video_tasks"][0]["image_url"].startswith("data:image/png;base64,")
     assert _Logger.errors
     assert _Logger.warnings
+
+
+@pytest.mark.asyncio
+async def test_export_project_to_video_response_prefers_current_selected_entity_file():
+    _StoryboardDAO.rows = {
+        "shot_1": {
+            "item_id": "shot_1",
+            "video_prompt": "db prompt",
+            "dialogue": "db line",
+            "generated_image_url": "/storage/db-current.webp",
+            "bound_assets": ["char:小悟", "scene:教室"],
+        }
+    }
+    _EntityFileDAO.selected_files = {
+        ("storyboard_item", "shot_1", "generated_image"): {
+            "file_id": "file_selected",
+            "file_url": "/storage/entity-selected.webp",
+            "is_selected": True,
+        }
+    }
+
+    result = await svc.export_project_to_video_response(
+        "proj_1",
+        selected_items=["shot_1"],
+        username="yuan",
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        file_dao=_FileDAO,
+        logger=_Logger,
+        storyboard_dao=_StoryboardDAO,
+        entity_file_dao=_EntityFileDAO,
+    )
+
+    task = result["video_tasks"][0]
+    assert task["image_url"] == "/storage/entity-selected.webp"
+    assert task["video_prompt"] == "db prompt"
+    assert task["dialogue"] == "db line"
+    assert task["characters"] == ["小悟"]
+    assert task["scene"] == "教室"
+    assert _StoryboardDAO.calls == ["shot_1"]
+    assert _EntityFileDAO.selected_calls == [("storyboard_item", "shot_1", "generated_image")]
+
+
+@pytest.mark.asyncio
+async def test_export_project_to_video_response_exports_db_only_storyboard_item():
+    _StoryboardDAO.rows = {
+        "sb_db_only": {
+            "item_id": "sb_db_only",
+            "video_prompt": "new db prompt",
+            "dialogue": "new db line",
+            "generated_image_url": "/storage/db-only.webp",
+            "bound_assets": ["char:小空"],
+        }
+    }
+
+    result = await svc.export_project_to_video_response(
+        "proj_1",
+        selected_items=["sb_db_only"],
+        username="yuan",
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        file_dao=_FileDAO,
+        logger=_Logger,
+        storyboard_dao=_StoryboardDAO,
+        entity_file_dao=_EntityFileDAO,
+    )
+
+    assert result["exported_count"] == 1
+    assert result["video_tasks"] == [
+        {
+            "storyboard_id": "sb_db_only",
+            "image_url": "/storage/db-only.webp",
+            "video_prompt": "new db prompt",
+            "dialogue": "new db line",
+            "characters": ["小空"],
+            "scene": "",
+        }
+    ]
 
 
 @pytest.mark.asyncio
