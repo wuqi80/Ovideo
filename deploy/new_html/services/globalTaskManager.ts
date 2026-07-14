@@ -165,7 +165,7 @@ export class GlobalTaskManager {
                     displayName: t.display_name || t.task_type,
                     projectId: t.project_id || '',
                     sourcePage: t.source_page || 'editor',
-                    sourceItemId: t.source_item_id,
+                    sourceItemId: t.source_item_id || t.entity_id,
                     progress: 0,
                     createdAt: new Date(t.created_at).getTime()
                 }));

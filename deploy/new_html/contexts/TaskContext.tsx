@@ -64,6 +64,20 @@ function isAdminRoute(): boolean {
   }
 }
 
+function inferRuntimeTaskKind(task: GlobalTask): TaskKind {
+  const category = String(task.category || '').toLowerCase();
+  const name = String(task.displayName || task.id || '').toLowerCase();
+  if (category.includes('image') || name.includes('image') || name.includes('图像') || name.includes('生图')) {
+    if (name.includes('doubao') || name.includes('豆包')) return 'doubao-image';
+    if (name.includes('gemini')) return 'gemini-image';
+    return 'comfyui-image';
+  }
+  if (category.includes('video')) return 'video-i2v';
+  if (category.includes('text')) return 'script-segment';
+  if (category.includes('material')) return 'matting';
+  return 'other';
+}
+
 function notifyEpisodeDataChanged(notification: TaskNotification) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent('drama:episode-data-changed', {
@@ -155,7 +169,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!existing) {
               taskRegistry.register({
                 taskId: t.id,
-                kind: 'other',
+                kind: inferRuntimeTaskKind(t),
                 title: t.displayName || t.id,
                 targetPage: t.sourcePage as SourcePage,
                 initialStatus: t.status === 'running' ? 'running' : 'queued',

@@ -159,6 +159,37 @@ async def test_get_active_tasks_reconciles_terminal_redis_state():
     ]
 
 
+async def test_get_active_tasks_enriches_context_from_task_data():
+    class ActiveTaskDAO(FakeTaskDAO):
+        @classmethod
+        async def get_active_tasks_for_user(cls, user_id: str, limit: int):
+            return [
+                {
+                    "task_id": "doubao_img_1",
+                    "user_id": user_id,
+                    "status": "processing",
+                    "task_type": "doubao_image",
+                    "task_data": '{"project_id": "proj_1", "episode_id": "ep_1", "source_page": "design", "source_item_id": "asset_1", "entity_type": "asset", "entity_id": "asset_1", "file_role": "reference_image", "display_name": "豆包图像生成", "category": "image"}',
+                }
+            ]
+
+    result = await task_notification_service.get_active_tasks(
+        user_id="user_1",
+        task_dao=ActiveTaskDAO,
+    )
+
+    task = result["tasks"][0]
+    assert task["project_id"] == "proj_1"
+    assert task["episode_id"] == "ep_1"
+    assert task["source_page"] == "design"
+    assert task["source_item_id"] == "asset_1"
+    assert task["entity_type"] == "asset"
+    assert task["entity_id"] == "asset_1"
+    assert task["file_role"] == "reference_image"
+    assert task["display_name"] == "豆包图像生成"
+    assert task["category"] == "image"
+
+
 async def test_get_task_files_rejects_missing_or_foreign_task():
     result = await task_notification_service.get_task_files(
         task_id="task_1",

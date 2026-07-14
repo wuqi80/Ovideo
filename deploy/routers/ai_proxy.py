@@ -39,10 +39,12 @@ from services.ai_proxy_gpt_image_service import (
 from services.ai_proxy_types import AIProxyError
 from services.ai_proxy_image_persistence_service import persist_generated_ai_images
 from services.ai_proxy_task_service import (
+    complete_ai_proxy_image_task,
     complete_ai_proxy_text_task,
     create_completed_gemini_text_task,
-    create_completed_image_task,
     create_deepseek_text_task,
+    fail_ai_proxy_task,
+    start_ai_proxy_task,
 )
 from services.ai_proxy_reference_service import (
     ReferenceImageError,
@@ -79,6 +81,24 @@ def create_ai_proxy_router(
                 logger.error("⚠️ 提交保存任务到主事件循环失败: %s", e, exc_info=True)
         else:
             logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过 DeepSeek 文本结果持久化")
+
+    def _image_task_data(request, *, provider: str, model: Optional[str] = None, **extra):
+        task_data = {
+            "prompt": request.prompt,
+            "provider": provider,
+            "model": model,
+            "entity_type": request.entity_type,
+            "entity_id": request.entity_id,
+            "file_role": request.file_role,
+            "project_id": request.project_id,
+            "episode_id": request.episode_id,
+            "source_page": "design",
+            "source_item_id": request.entity_id,
+            "display_name": extra.pop("display_name", f"{provider} image"),
+            "category": "image",
+        }
+        task_data.update(extra)
+        return task_data
 
     @router.post("/api/deepseek/chat")
     async def deepseek_chat(request: DeepseekChatRequest, username: str = Depends(require_auth_dependency)):
@@ -157,6 +177,21 @@ def create_ai_proxy_router(
     @router.post("/api/gemini/image")
     async def gemini_image_generate(request: GeminiImageRequest, username: str = Depends(require_auth_dependency)):
         """Gemini图像生成接口（代理）"""
+        task_id = await start_ai_proxy_task(
+            task_id_prefix="gemini_img",
+            user_id=username,
+            task_type="gemini_image",
+            task_data=_image_task_data(
+                request,
+                provider="gemini",
+                model=request.model,
+                aspectRatio=request.aspectRatio,
+                imageSize=request.imageSize,
+                ref_count=len(request.references or []),
+                display_name="Gemini 图像生成",
+            ),
+            logger=logger,
+        )
         try:
             parts = prepare_gemini_image_parts(
                 prompt=request.prompt,
@@ -174,16 +209,8 @@ def create_ai_proxy_router(
 
             logger.info("✅ 图像生成成功: %s 张图片, 用户: %s", len(images), username)
 
-            task_id = await create_completed_image_task(
-                task_id_prefix="gemini_img",
-                user_id=username,
-                task_type=f"gemini_image_{model.replace('gemini-', '').replace('-image', '')}",
-                task_data={
-                    "prompt": request.prompt,
-                    "model": model,
-                    "aspectRatio": request.aspectRatio,
-                    "imageSize": request.imageSize,
-                },
+            await complete_ai_proxy_image_task(
+                task_id=task_id,
                 images_count=len(images),
                 logger=logger,
             )
@@ -209,12 +236,15 @@ def create_ai_proxy_router(
             return {"success": True, "images": images, "files": files_result}
 
         except ReferenceImageError as e:
+            await fail_ai_proxy_task(task_id=task_id, error_message=str(e), logger=logger)
             logger.warning("Gemini 角色参考图无效: %s", e)
             raise HTTPException(status_code=400, detail=str(e))
         except AIProxyError as e:
+            await fail_ai_proxy_task(task_id=task_id, error_message=e.detail, logger=logger)
             logger.error("图像生成失败: %s | upstream: %s", e, e.upstream)
             raise HTTPException(status_code=e.status_code, detail=e.detail)
         except Exception as e:
+            await fail_ai_proxy_task(task_id=task_id, error_message=str(e), logger=logger)
             logger.error("图像生成失败: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail="图像生成失败，请稍后重试")
 
@@ -279,6 +309,22 @@ def create_ai_proxy_router(
 
     @router.post("/api/materials/doubao")
     async def generate_doubao_images(request: DoubaoImageRequest, username: str = Depends(require_auth_dependency)):
+        task_id = await start_ai_proxy_task(
+            task_id_prefix="doubao_img",
+            user_id=username,
+            task_type="doubao_image",
+            task_data=_image_task_data(
+                request,
+                provider="doubao",
+                model=request.model,
+                size=request.size,
+                count=request.count,
+                sequential=request.sequential,
+                ref_count=len(request.references or []),
+                display_name="豆包图像生成",
+            ),
+            logger=logger,
+        )
         try:
             ref_inputs = prepare_doubao_reference_inputs(request.references)
 
@@ -292,16 +338,8 @@ def create_ai_proxy_router(
             )
             logger.info("✅ 豆包生成 %s 张图片, 用户: %s", len(images), username)
 
-            await create_completed_image_task(
-                task_id_prefix="doubao_img",
-                user_id=username,
-                task_type="doubao_image",
-                task_data={
-                    "prompt": request.prompt,
-                    "size": request.size,
-                    "count": request.count,
-                    "sequential": request.sequential,
-                },
+            await complete_ai_proxy_image_task(
+                task_id=task_id,
                 images_count=len(images),
                 logger=logger,
             )
@@ -320,16 +358,19 @@ def create_ai_proxy_router(
                 episode_id=request.episode_id,
                 file_metadata={"prompt": request.prompt, "model": "doubao"},
                 media_metadata={"prompt": request.prompt, "model": "doubao"},
+                source_task_id=task_id,
                 logger=logger,
             )
 
             return {"success": True, "images": images, "files": files_result}
         except AIProxyError as e:
+            await fail_ai_proxy_task(task_id=task_id, error_message=e.detail, logger=logger)
             logger.error("豆包图像生成失败: %s | upstream: %s", e, e.upstream)
             raise HTTPException(status_code=e.status_code, detail=e.detail)
         except HTTPException:
             raise
         except Exception as e:
+            await fail_ai_proxy_task(task_id=task_id, error_message=str(e), logger=logger)
             logger.error("豆包图像生成异常: %s", e)
             raise HTTPException(status_code=500, detail="图像生成失败，请稍后重试")
 

@@ -34,6 +34,29 @@ def _normalize_task_data(value: Any) -> dict:
     return {}
 
 
+def _enrich_task_row_from_data(row: Dict[str, Any], *, include_empty_entity: bool = False) -> Dict[str, Any]:
+    task_data = _normalize_task_data(row.pop("task_data", None) or {})
+    context_keys = (
+        "project_id",
+        "source_page",
+        "source_item_id",
+        "display_name",
+        "category",
+    )
+    for key in context_keys:
+        value = row.get(key) or task_data.get(key)
+        if value:
+            row[key] = value
+
+    entity_keys = ("entity_type", "entity_id", "file_role", "episode_id")
+    for key in entity_keys:
+        value = task_data.get(key, "")
+        if value or include_empty_entity:
+            row[key] = value or ""
+
+    return row
+
+
 def _since_ms_to_naive_utc(since: Optional[int]) -> Optional[datetime]:
     if not since:
         return None
@@ -140,8 +163,9 @@ async def get_active_tasks(
     task_queue: Any = None,
 ) -> Dict[str, Any]:
     tasks = await task_dao.get_active_tasks_for_user(user_id, limit=50)
+    active_rows = [_enrich_task_row_from_data(row) for row in _rows_to_dicts(tasks)]
     active_tasks = await _reconcile_active_tasks_with_queue(
-        _rows_to_dicts(tasks),
+        active_rows,
         task_queue=task_queue,
         task_dao=task_dao,
     )
@@ -159,12 +183,7 @@ async def get_task_notifications(
 
     notifications = []
     for task in tasks:
-        row = _row_to_dict(task)
-        task_data = _normalize_task_data(row.pop("task_data", None) or {})
-        row["entity_type"] = task_data.get("entity_type", "")
-        row["entity_id"] = task_data.get("entity_id", "")
-        row["file_role"] = task_data.get("file_role", "")
-        row["episode_id"] = task_data.get("episode_id", "")
+        row = _enrich_task_row_from_data(_row_to_dict(task), include_empty_entity=True)
         notifications.append(row)
 
     return {"success": True, "notifications": notifications}

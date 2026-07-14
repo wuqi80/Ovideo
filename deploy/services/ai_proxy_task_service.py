@@ -73,6 +73,89 @@ async def complete_ai_proxy_text_task(
         return False
 
 
+async def start_ai_proxy_task(
+    *,
+    task_id_prefix: str,
+    user_id: str,
+    task_type: str,
+    task_data: Dict[str, Any],
+    logger: Any,
+    task_dao: Optional[Any] = None,
+    timestamp_ms_provider: TimestampMsProvider = _default_timestamp_ms,
+) -> Optional[str]:
+    """Create an AI proxy task and mark it processing immediately."""
+
+    task_id = await create_ai_proxy_task(
+        task_id_prefix=task_id_prefix,
+        user_id=user_id,
+        task_type=task_type,
+        task_data=task_data,
+        logger=logger,
+        task_dao=task_dao,
+        timestamp_ms_provider=timestamp_ms_provider,
+    )
+    if not task_id:
+        return None
+
+    try:
+        dao = task_dao or await _default_task_dao()
+        await dao.update_task_status(task_id=task_id, status="processing")
+        logger.info("AI proxy task started: %s", task_id)
+    except Exception as exc:
+        logger.error("AI proxy task start failed: %s", exc, exc_info=True)
+    return task_id
+
+
+async def complete_ai_proxy_image_task(
+    *,
+    task_id: Optional[str],
+    images_count: int,
+    logger: Any,
+    task_dao: Optional[Any] = None,
+) -> bool:
+    """Persist a completed image generation task."""
+
+    if not task_id:
+        return False
+    try:
+        dao = task_dao or await _default_task_dao()
+        await dao.update_task_status(
+            task_id=task_id,
+            status="completed",
+            result_data={"images_count": images_count},
+        )
+        logger.info("AI proxy image task completed: %s images=%s", task_id, images_count)
+        return True
+    except Exception as exc:
+        logger.error("AI proxy image task completion failed: %s", exc, exc_info=True)
+        return False
+
+
+async def fail_ai_proxy_task(
+    *,
+    task_id: Optional[str],
+    error_message: str,
+    logger: Any,
+    task_dao: Optional[Any] = None,
+) -> bool:
+    """Persist a failed AI proxy task without masking the original error."""
+
+    if not task_id:
+        return False
+    try:
+        dao = task_dao or await _default_task_dao()
+        await dao.update_task_status(
+            task_id=task_id,
+            status="failed",
+            error_message=error_message[:1000],
+        )
+        logger.info("AI proxy task failed: %s", task_id)
+        return True
+    except Exception as exc:
+        logger.error("AI proxy task failure persistence failed: %s", exc, exc_info=True)
+        return False
+
+
 async def create_deepseek_text_task(
     *,
     user_id: str,
@@ -155,14 +238,10 @@ async def create_completed_image_task(
         timestamp_ms_provider=timestamp_ms_provider,
     )
     if task_id:
-        try:
-            dao = task_dao or await _default_task_dao()
-            await dao.update_task_status(
-                task_id=task_id,
-                status="completed",
-                result_data={"images_count": images_count},
-            )
-            logger.info("AI proxy image task completed: %s images=%s", task_id, images_count)
-        except Exception as exc:
-            logger.error("AI proxy image task completion failed: %s", exc, exc_info=True)
+        await complete_ai_proxy_image_task(
+            task_id=task_id,
+            images_count=images_count,
+            logger=logger,
+            task_dao=task_dao,
+        )
     return task_id

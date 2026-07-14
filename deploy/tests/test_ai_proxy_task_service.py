@@ -1,10 +1,13 @@
 import pytest
 
 from services.ai_proxy_task_service import (
+    complete_ai_proxy_image_task,
     complete_ai_proxy_text_task,
     create_completed_gemini_text_task,
     create_completed_image_task,
     create_deepseek_text_task,
+    fail_ai_proxy_task,
+    start_ai_proxy_task,
 )
 
 
@@ -141,6 +144,58 @@ async def test_create_completed_image_task_creates_and_completes():
             "task_id": "gemini_img_789",
             "status": "completed",
             "result_data": {"images_count": 3},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_start_and_fail_ai_proxy_task_updates_status():
+    task_id = await start_ai_proxy_task(
+        task_id_prefix="doubao_img",
+        user_id="yuan",
+        task_type="doubao_image",
+        task_data={"prompt": "draw", "entity_id": "asset_1"},
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        timestamp_ms_provider=lambda: 111,
+    )
+
+    assert task_id == "doubao_img_111"
+    assert _TaskDAO.created[0]["task_id"] == "doubao_img_111"
+    assert _TaskDAO.updated == [
+        {"task_id": "doubao_img_111", "status": "processing"}
+    ]
+
+    ok = await fail_ai_proxy_task(
+        task_id=task_id,
+        error_message="upstream failed",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+    )
+
+    assert ok is True
+    assert _TaskDAO.updated[-1] == {
+        "task_id": "doubao_img_111",
+        "status": "failed",
+        "error_message": "upstream failed",
+    }
+
+
+@pytest.mark.asyncio
+async def test_complete_ai_proxy_image_task_updates_existing_task():
+    ok = await complete_ai_proxy_image_task(
+        task_id="gemini_img_1",
+        images_count=2,
+        logger=_Logger,
+        task_dao=_TaskDAO,
+    )
+
+    assert ok is True
+    assert _TaskDAO.updated == [
+        {
+            "task_id": "gemini_img_1",
+            "status": "completed",
+            "result_data": {"images_count": 2},
         }
     ]
 

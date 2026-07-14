@@ -224,7 +224,7 @@ class TaskDAO:
         query = """
             SELECT task_id, task_type, status, project_id, category,
                    source_page, source_item_id, display_name,
-                   created_at, started_at, completed_at, metadata
+                   created_at, started_at, completed_at, metadata, task_data
             FROM tasks
             WHERE user_id = $1 AND status IN ('pending', 'processing', 'queued')
             ORDER BY created_at DESC
