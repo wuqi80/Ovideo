@@ -8956,3 +8956,5 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - 本地验证：GPU 路由与工作流定向测试 46 项通过，Vite 生产构建通过；全量 TypeScript 检查仍有 Admin/Workspace 历史类型错误，本轮文件没有新增报错。
 - 2026-07-14：美化页配音真实任务复测发现 GPU2 的 WanVideoSampler 不接受前端随机种子哨兵 `-1`。服务端 `prepare_video_voice_task()` 和 Windows GPU2 runner 现均把负数或非法 seed 转为非负随机整数，避免任务在 ComfyUI `/prompt` 校验阶段直接失败。
 - 2026-07-14：GPU1 的视频/音频/T5/VAE/Wav2Vec/CLIP 节点探测正常，但当前 Wan/InfiniteTalk 模型及 LoRA 清单与仓库旧模板不一致，且 GPU1 仍运行不回传 `/prompt` 响应体的 legacy Agent。未将猜测模型名上线；待取得 GPU1 主机访问权限后更新 Agent 并按实际 `object_info` 清单修复。GPU2 配音链路可独立验收。
+- 2026-07-14：视频反推任务详情轮询改为容忍两次瞬时网关失败；连续失败才提示自动重试，下一次 JSON 响应成功后立即清除轮询错误，避免部署重启产生的一次 502 长时间残留在页面。
+- 2026-07-14：GPU2 配音真实验收任务约 8 分钟完成并回传 MP4。GPU2 当前不提供 ComfyUI 中间百分比，美化页不再显示误导性的 `0%`，改为“GPU 处理中，可能需要数分钟”；仅收到大于 0 的真实进度时才展示百分比。

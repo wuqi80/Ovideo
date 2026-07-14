@@ -273,7 +273,7 @@ export const EnhancePage: React.FC = () => {
   const [audioUploading, setAudioUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
-  const [processStage, setProcessStage] = useState('处理中');
+  const [processStage, setProcessStage] = useState('GPU 处理中，可能需要数分钟');
   // All enhancement modes are dispatched through a selected GPU Agent.
   const [clusterNodes, setClusterNodes] = useState<ClusterNodeOption[]>([]);
   const [clusterNodesLoading, setClusterNodesLoading] = useState(false);
@@ -640,7 +640,7 @@ export const EnhancePage: React.FC = () => {
       attachVideoPollCallbacks(uuid, {
         onProgress: (progress, status) => {
           setProcessing(true);
-          setProcessStage(status === 'queued' ? '排队中' : '处理中');
+          setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
           setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
         },
         onComplete: () => {
@@ -724,7 +724,7 @@ export const EnhancePage: React.FC = () => {
           callbacks: {
             onProgress: (progress, status) => {
               setProcessing(true);
-              setProcessStage(status === 'queued' ? '排队中' : '处理中');
+              setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
               setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
             },
             onComplete: ({ status }) => {
@@ -784,7 +784,7 @@ export const EnhancePage: React.FC = () => {
           callbacks: {
             onProgress: (progress, status) => {
               setProcessing(true);
-              setProcessStage(status === 'queued' ? '排队中' : '处理中');
+              setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
               setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
             },
             onComplete: ({ status }) => {
@@ -852,7 +852,7 @@ export const EnhancePage: React.FC = () => {
         callbacks: {
           onProgress: (progress, status) => {
             setProcessing(true);
-            setProcessStage(status === 'queued' ? '排队中' : '处理中');
+            setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
             setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
           },
           onComplete: () => {

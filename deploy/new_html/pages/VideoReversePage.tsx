@@ -49,7 +49,9 @@ export const VideoReversePage: React.FC = () => {
   const [selectedTask, setSelectedTask] = useState<VideoReverseTask | null>(null);
   const [segments, setSegments] = useState<VideoReverseSegment[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const detailPollFailuresRef = useRef(0);
 
   // 上传 + 估算 + 创建
   const [uploading, setUploading] = useState(false);
@@ -73,13 +75,19 @@ export const VideoReversePage: React.FC = () => {
     }
   }, [projectId, selectedTaskId]);
 
-  const loadDetail = useCallback(async (rid: string) => {
+  const loadDetail = useCallback(async (rid: string, isPolling = false) => {
     try {
       const r = await getVideoReverseTask(rid);
       setSelectedTask(r.task);
       setSegments(r.segments || []);
+      detailPollFailuresRef.current = 0;
+      setPollError(null);
     } catch (e: any) {
-      setError(e?.message || String(e));
+      detailPollFailuresRef.current += 1;
+      if (!isPolling || detailPollFailuresRef.current >= 3) {
+        const detail = e?.message || String(e);
+        setPollError(isPolling ? `任务详情连接暂时中断，正在自动重试：${detail}` : detail);
+      }
     }
   }, []);
 
@@ -95,7 +103,7 @@ export const VideoReversePage: React.FC = () => {
     const inProgress = !['completed', 'failed', 'cancelled'].includes(selectedTask.status);
     if (!inProgress) return;
     const timer = setInterval(() => {
-      if (selectedTaskId) loadDetail(selectedTaskId);
+      if (selectedTaskId) loadDetail(selectedTaskId, true);
       reload();
     }, 3000);
     return () => clearInterval(timer);
@@ -205,10 +213,10 @@ export const VideoReversePage: React.FC = () => {
         </div>
       </div>
 
-      {error && (
+      {(error || pollError) && (
         <div className="px-4 py-2 text-xs text-danger bg-r50 border-b border-r75 flex items-center gap-2">
           <AlertTriangle size={14} />
-          {error}
+          {error || pollError}
         </div>
       )}
 
