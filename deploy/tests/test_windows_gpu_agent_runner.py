@@ -12,6 +12,8 @@ from scripts.windows_gpu_agent_runner import (
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
     build_gpu2_wan_i2v_workflow,
+    gpu2_infinitetalk_duration_seconds,
+    gpu2_infinitetalk_total_frames,
     is_gpu2_infinitetalk_task,
     is_gpu2_qwen_compatible_task,
     is_gpu2_wan_i2v_task,
@@ -77,6 +79,7 @@ def test_gpu2_infinitetalk_uses_short_window_and_direct_audio_without_separation
             "video_filename": "speaker.mp4",
             "audio_filename": "speech.wav",
             "prompt_AU": "speak naturally",
+            "duration": 5,
         },
         "files": [
             {"param": "video_filename", "filename": "speaker.mp4"},
@@ -96,7 +99,8 @@ def test_gpu2_infinitetalk_uses_short_window_and_direct_audio_without_separation
     assert workflow["37"]["class_type"] == "Wav2VecModelLoader"
     assert workflow["37"]["inputs"]["model"] == GPU2_WAN_MODEL_FILES["wav2vec"]
     assert workflow["36"]["inputs"]["frame_window_size"] == GPU2_WAN_FRAMES
-    assert workflow["38"]["inputs"]["num_frames"] == GPU2_WAN_FRAMES
+    assert workflow["31"]["inputs"]["duration"] == 5
+    assert workflow["38"]["inputs"]["num_frames"] == 5 * 16
     assert workflow["41"]["inputs"]["audio"] == ["31", 0]
     assert "AudioSeparation" not in class_types
     assert "easy cleanGpuUsed" not in class_types
@@ -116,6 +120,25 @@ def test_gpu2_infinitetalk_normalizes_random_seed_sentinel():
     )
 
     assert workflow["39"]["inputs"]["seed"] >= 0
+
+
+def test_gpu2_infinitetalk_keeps_small_window_but_scales_total_frames_with_duration():
+    task = {
+        "task_type": "voice",
+        "params": {
+            "video_filename": "speaker.mp4",
+            "audio_filename": "speech.wav",
+            "duration": 9.5,
+        },
+    }
+
+    workflow = build_gpu2_infinitetalk_workflow(task)
+
+    assert gpu2_infinitetalk_duration_seconds(task) == 9.5
+    assert gpu2_infinitetalk_total_frames(task) == 152
+    assert workflow["36"]["inputs"]["frame_window_size"] == GPU2_WAN_FRAMES
+    assert workflow["38"]["inputs"]["num_frames"] == 152
+    assert workflow["31"]["inputs"]["duration"] == 9.5
 
 
 def test_gpu2_upscale_workflow_uses_low_vram_seedvr2_nodes():

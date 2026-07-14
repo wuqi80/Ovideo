@@ -710,6 +710,7 @@ export const EnhancePage: React.FC = () => {
             preferred_agent_id: selectedClusterNode?.agentId,
             preferred_node_id: selectedClusterNode?.nodeId || selectedClusterNode?.id,
           },
+          { duration: targetClip.duration },
         );
         const pollerUuid = `enhance-${isDub ? 'dub' : 'lipsync'}:${targetClip.id}`;
         startVideoPoll(pollerUuid, {

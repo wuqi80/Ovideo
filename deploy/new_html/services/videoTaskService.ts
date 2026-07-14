@@ -330,6 +330,9 @@ export async function submitVoiceTask(
         preferred_agent_id?: string;
         preferred_node_id?: string;
     },
+    generationOptions?: {
+        duration?: number;
+    },
 ): Promise<{ task_id: string }> {
     const routing = await resolveGpuTaskRouting(
         entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id,
@@ -345,6 +348,7 @@ export async function submitVoiceTask(
             model: model,
             seed: -1,
             priority: 2,
+            duration: generationOptions?.duration,
             ...entityOptions,
             preferred_agent_id: entityOptions?.preferred_agent_id || routing.preferredAgentId,
             preferred_node_id: entityOptions?.preferred_node_id || routing.preferredNodeId,
@@ -566,9 +570,20 @@ export async function submitVoiceTaskQueued(
         preferred_agent_id?: string;
         preferred_node_id?: string;
     },
+    generationOptions?: {
+        duration?: number;
+    },
 ): Promise<{ task_id: string }> {
     return enqueueComfyUITask(async (_frontendKey) => {
-        return submitVoiceTask(imageFilename, videoFilename, audioFilename, prompt, model, entityOptions);
+        return submitVoiceTask(
+            imageFilename,
+            videoFilename,
+            audioFilename,
+            prompt,
+            model,
+            entityOptions,
+            generationOptions,
+        );
     }, '视频配音');
 }
 

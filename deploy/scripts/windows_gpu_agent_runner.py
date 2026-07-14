@@ -1,6 +1,7 @@
 """Run the MECHA ComfyUI Agent without exposing its token in process arguments."""
 from __future__ import annotations
 
+import math
 import os
 import random
 import sys
@@ -35,6 +36,7 @@ GPU2_WAN_HEIGHT = 384
 GPU2_WAN_FRAMES = 33
 GPU2_WAN_FPS = 16
 GPU2_WAN_BLOCKS_TO_SWAP = 36
+GPU2_WAN_MAX_DURATION_SECONDS = 30.0
 
 GPU2_QWEN_COMPAT_PREFIXES = (
     "qwen_",
@@ -780,9 +782,25 @@ def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
     return workflow
 
 
-def build_gpu2_infinitetalk_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a two-second InfiniteTalk graph for the RTX 3060 12 GB node."""
+def gpu2_infinitetalk_duration_seconds(task: Dict[str, Any]) -> float:
+    """Return a bounded target duration while preserving the low-VRAM window size."""
     params = _gpu2_task_params(task)
+    try:
+        duration = float(params.get("duration") or 5.0)
+    except (TypeError, ValueError):
+        duration = 5.0
+    return max(1.0, min(GPU2_WAN_MAX_DURATION_SECONDS, duration))
+
+
+def gpu2_infinitetalk_total_frames(task: Dict[str, Any]) -> int:
+    return max(1, int(math.ceil(gpu2_infinitetalk_duration_seconds(task) * GPU2_WAN_FPS)))
+
+
+def build_gpu2_infinitetalk_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a duration-aware InfiniteTalk graph for the RTX 3060 12 GB node."""
+    params = _gpu2_task_params(task)
+    duration_seconds = gpu2_infinitetalk_duration_seconds(task)
+    total_frames = gpu2_infinitetalk_total_frames(task)
     video_name = _gpu2_input_file_name(
         task,
         param_names=("video_filename", "uploaded_video", "video"),
@@ -817,7 +835,7 @@ def build_gpu2_infinitetalk_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
             },
             "31": {
                 "class_type": "VHS_LoadAudioUpload",
-                "inputs": {"audio": audio_name, "start_time": 0, "duration": 2.1},
+                "inputs": {"audio": audio_name, "start_time": 0, "duration": duration_seconds},
             },
             "32": {
                 "class_type": "MultiTalkModelLoader",
@@ -880,7 +898,7 @@ def build_gpu2_infinitetalk_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "class_type": "MultiTalkWav2VecEmbeds",
                 "inputs": {
                     "normalize_loudness": True,
-                    "num_frames": GPU2_WAN_FRAMES,
+                    "num_frames": total_frames,
                     "fps": float(GPU2_WAN_FPS),
                     "audio_scale": 1.0,
                     "audio_cfg_scale": 1.0,
