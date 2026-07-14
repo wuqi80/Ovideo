@@ -312,8 +312,9 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                     </h3>
                     <div className="flex items-center gap-2">
                         {activeFileId === file.id && (
-                          <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold text-success bg-g50 border border-success/30">
-                            后续采用
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold text-success bg-g50 border border-success/40">
+                            <CheckCircle2 className="w-3 h-3" />
+                            当前主剧本
                           </span>
                         )}
                         {getStatusIcon(file.status)}
@@ -322,33 +323,42 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   <p className="text-[10px] text-n100 line-clamp-2 font-serif leading-relaxed opacity-80 group-hover:opacity-100">
                     {file.originalContent.slice(0, 60).replace(/\n/g, ' ')}...
                   </p>
+                  <div className="mt-2">
+                    {activeFileId === file.id ? (
+                      <div className="h-9 w-full inline-flex items-center justify-center gap-2 rounded border border-success/40 bg-g50 px-3 text-xs font-semibold text-success">
+                        <CheckCircle2 className="w-4 h-4" />
+                        本集后续流程使用此剧本
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setActivatingFileId(file.id);
+                          try {
+                            await onActivateFile(file.id);
+                          } catch (error) {
+                            console.error('设置本集主剧本失败:', error);
+                            window.alert('设置本集主剧本失败，请稍后重试。');
+                          } finally {
+                            setActivatingFileId(null);
+                          }
+                        }}
+                        disabled={activatingFileId !== null}
+                        className="h-9 w-full inline-flex items-center justify-center gap-2 rounded bg-primary px-3 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover disabled:cursor-wait disabled:opacity-50"
+                        title="设为本集后续流程使用的主剧本"
+                      >
+                        <CheckCircle2 className={`w-4 h-4 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
+                        {activatingFileId === file.id ? '正在设置...' : '设为本集主剧本'}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Hover Actions - 水平布局 */}
                 <div 
                   className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity bg-n0 rounded-md backdrop-blur-sm shadow-bottom px-1 py-0.5 border border-n40 z-30 flex items-center gap-0.5"
                 >
-                  {activeFileId !== file.id && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        setActivatingFileId(file.id);
-                        try {
-                          await onActivateFile(file.id);
-                        } catch (error) {
-                          console.error('设置本集采用剧本失败:', error);
-                          window.alert('设置本集采用剧本失败，请稍后重试。');
-                        } finally {
-                          setActivatingFileId(null);
-                        }
-                      }}
-                      disabled={activatingFileId !== null}
-                      className="p-1 text-n300 hover:text-success hover:bg-g50 rounded disabled:opacity-40"
-                      title="设为本集后续流程采用剧本"
-                    >
-                      <CheckCircle2 className={`w-3 h-3 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
-                    </button>
-                  )}
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleStartRename(e, file); }}
                     className="p-1 text-n300 hover:text-primary hover:bg-n20 rounded"

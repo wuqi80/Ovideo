@@ -122,7 +122,7 @@ class EpisodeDAO:
             """
             UPDATE episodes
             SET settings = COALESCE(settings, '{}'::jsonb)
-                || jsonb_build_object('workflow_script_id', $2)
+                || jsonb_build_object('workflow_script_id', $2::text)
             WHERE episode_id = $1
             RETURNING *
             """,
