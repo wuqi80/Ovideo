@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +27,30 @@ DOUBAO_IMAGE_TASK_SUCCESS_STATUSES = {"succeeded", "success", "completed", "done
 DOUBAO_IMAGE_TASK_FAILED_STATUSES = {"failed", "error", "cancelled", "canceled", "expired"}
 
 
+def normalize_doubao_image_size(size: str, *, minimum_square: Optional[int] = None) -> str:
+    value = (size or "").strip().lower().replace("×", "x").replace("*", "x")
+    value = re.sub(r"\s+", "", value)
+
+    if value == "1k":
+        if minimum_square and minimum_square > 1024:
+            return f"{minimum_square}x{minimum_square}"
+        return "1024x1024"
+    if value in {"2k", "3k", "4k"}:
+        return value
+
+    match = re.fullmatch(r"(\d+)x(\d+)", value)
+    if match:
+        width = int(match.group(1))
+        height = int(match.group(2))
+        if minimum_square and width * height < minimum_square * minimum_square:
+            return f"{minimum_square}x{minimum_square}"
+        return f"{width}x{height}"
+
+    if minimum_square:
+        return f"{minimum_square}x{minimum_square}"
+    return "1024x1024"
+
+
 def build_doubao_image_payload(
     *,
     prompt: str,
@@ -38,7 +63,7 @@ def build_doubao_image_payload(
     payload: Dict[str, Any] = {
         "model": model,
         "prompt": prompt,
-        "size": size,
+        "size": normalize_doubao_image_size(size),
         "sequential_image_generation": sequential,
         "stream": False,
         "response_format": "b64_json",
@@ -195,18 +220,7 @@ async def _get_json_request_async(**kwargs: Any) -> Dict[str, Any]:
 
 
 def _normalize_agent_plan_size(size: str) -> str:
-    value = (size or "").strip()
-    if "x" not in value.lower():
-        return value or "2048x2048"
-    try:
-        width_text, height_text = value.lower().split("x", 1)
-        width = int(width_text.strip())
-        height = int(height_text.strip())
-    except ValueError:
-        return "2048x2048"
-    if width * height < 2048 * 2048:
-        return "2048x2048"
-    return value
+    return normalize_doubao_image_size(size, minimum_square=2048)
 
 
 def build_doubao_agent_plan_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -351,6 +365,11 @@ async def _post_doubao_image_generation(
             "size": _normalize_agent_plan_size(str(payload.get("size") or "")),
             "response_format": "url",
         }
+    else:
+        payload = {
+            **payload,
+            "size": normalize_doubao_image_size(str(payload.get("size") or "")),
+        }
 
     result = await _post_json_request_async(
         label="Doubao image",
@@ -390,7 +409,7 @@ async def generate_doubao_images(
     resolved_size = (
         _normalize_agent_plan_size(size)
         if doubao_image_access_mode(config.endpoint) == "agent_plan"
-        else size
+        else normalize_doubao_image_size(size)
     )
     payload = build_doubao_image_payload(
         prompt=prompt,
