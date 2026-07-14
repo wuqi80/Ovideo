@@ -8852,6 +8852,14 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - Remaining runtime dependency:
   - GPU Agent is still offline. The latest public script is downloadable, but local GPU / ComfyUI tasks require restarting the external GPU Agent with the admin token.
 
+## 2026-07-14 GPU2 Placeholder Runtime Completion
+
+- Placeholder-only material operations (matting, fusion, transfer, pose imitation, panorama, storyboard, and three-view) are routed to executable `qwen_1..6` task families before queue submission. The protected `workflows/*.json` files remain unchanged.
+- Runtime tasks retain the requested semantic operation, all input file references, a task-specific prompt, and low-VRAM output geometry so GPU2 can execute them with its installed Qwen Image Edit stack.
+- The GPU2 runner includes an optional native BiRefNet matting graph. It becomes active after `birefnet.safetensors` is installed under ComfyUI `models/background_removal`; until then the server-side Qwen fallback remains executable but is not a true alpha-matting implementation.
+- GPU2 does not currently contain the large Wan/InfiniteTalk model pack required by the legacy local video-generation and lip-sync workflows. SeedVR2 image/video enhancement is supported; Wan generation and InfiniteTalk voice tasks must remain unavailable on GPU2 until their models and executable 12GB workflows are installed and tested.
+- Verification: 21 targeted GPU routing/runner/readiness tests passed, Python compilation passed, and the workflow prebuild contract passed with placeholder failures treated as expected static definitions rather than executable graphs.
+
 ## 2026-07-11 Doubao SeedDream Agent Plan Task Endpoint
 
 - Updated Doubao SeedDream Agent Plan image generation to use `https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks`.

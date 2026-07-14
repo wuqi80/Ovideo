@@ -40,6 +40,52 @@ THREE_VIEW_PROMPT = (
     "and design details. Do not add text, labels, borders, or unrelated objects."
 )
 
+GPU2_OPERATION_PROMPTS = {
+    "matting_subject": (
+        "Remove the background completely and keep only the main foreground subject. "
+        "Preserve fine hair and edge details, and return a clean transparent-background cutout."
+    ),
+    "matting_split": (
+        "Separate the main foreground subject from the background with clean detailed edges. "
+        "Return a transparent-background subject cutout suitable for compositing."
+    ),
+    "image_fusion": (
+        "Blend the subject from the second reference naturally into the scene from the first reference. "
+        "Preserve the subject identity and the scene perspective, lighting, and visual style."
+    ),
+    "image_transfer": (
+        "Transfer the subject from the second reference into the first reference scene, using the third "
+        "reference as the placement mask or composition guide. Preserve identity and produce a coherent image."
+    ),
+    "pose_imitation": (
+        "Make the subject in the second reference imitate the pose and composition of the first reference. "
+        "Preserve identity, clothing, colors, and visual style."
+    ),
+    "panorama_360": (
+        "Create a seamless 2:1 equirectangular 360-degree panorama from the reference scene. "
+        "Preserve scene identity, lighting, and style, and avoid seams, text, and borders."
+    ),
+    "panorama_fusion": (
+        "Create one seamless 2:1 equirectangular panorama by coherently combining all references. "
+        "Preserve subjects and scene details while matching perspective, lighting, and style."
+    ),
+    "auto_storyboard": (
+        "Create a clean storyboard contact sheet from the reference image and description. "
+        "Use six distinct cinematic shots in a 3 by 2 grid with consistent characters and scene design. "
+        "Do not add captions, labels, or borders."
+    ),
+}
+
+
+def merge_gpu2_operation_prompt(operation: str, user_prompt: str = "") -> str:
+    base = GPU2_OPERATION_PROMPTS[operation]
+    cleaned = str(user_prompt or "").strip()
+    return f"{base} Additional direction: {cleaned}" if cleaned else base
+
+
+def qwen_fallback_task_type(image_count: int) -> str:
+    return f"qwen_{max(1, min(6, image_count))}"
+
 
 def resolve_executable_comfyui_workflow_type(requested_type: str, image_count: int) -> tuple[str, bool]:
     """Resolve legacy placeholder workflow families to executable graphs."""
@@ -207,6 +253,7 @@ def create_generation_router(
         try:
             task_data = {
                 "image_path": request.image_filename,
+                "prompt": merge_gpu2_operation_prompt(task_type),
                 "seed": request.seed,
             }
             _attach_entity_fields(task_data, request)
@@ -265,14 +312,20 @@ def create_generation_router(
             task_data = {
                 "image_path": request.image_filename,
                 "seed": request.seed,
+                "gpu2_operation": task_type,
+                "requested_workflow_type": task_type,
             }
             _attach_entity_fields(task_data, request)
-            task_id = await task_service_module.get().submit(task_type, task_data, username)
+            effective_task_type = qwen_fallback_task_type(1)
+            task_id = await task_service_module.get().submit(effective_task_type, task_data, username)
             logger.info("✅ 创建抠图任务: %s (类型: %s, 图片: %s)", task_id, task_type, request.image_filename)
 
             return {
                 "success": True,
                 "task_id": task_id,
+                "workflow_type": effective_task_type,
+                "requested_workflow_type": task_type,
+                "fallback_applied": True,
                 "message": f"抠图任务({request.matting_type})已提交",
             }
 
@@ -299,22 +352,29 @@ def create_generation_router(
             }
             task_type = workflow_map[request.fusion_type]
 
-            task_data = {
-                "image_BK": request.image_bk,
-                "image_HU": request.image_hu,
-                "seed": request.seed,
-            }
-
+            image_filenames = [request.image_bk, request.image_hu]
             if request.fusion_type == "transfer":
-                task_data["image_MB"] = request.image_mb
+                image_filenames.append(request.image_mb)
+            task_data = {
+                "prompt": merge_gpu2_operation_prompt(task_type),
+                "seed": request.seed,
+                "gpu2_operation": task_type,
+                "requested_workflow_type": task_type,
+            }
+            for index, filename in enumerate(image_filenames, 1):
+                task_data[f"image_path_{index}"] = filename
             _attach_entity_fields(task_data, request)
 
-            task_id = await task_service_module.get().submit(task_type, task_data, username)
+            effective_task_type = qwen_fallback_task_type(len(image_filenames))
+            task_id = await task_service_module.get().submit(effective_task_type, task_data, username)
             logger.info("✅ 创建融合任务: %s (类型: %s)", task_id, task_type)
 
             return {
                 "success": True,
                 "task_id": task_id,
+                "workflow_type": effective_task_type,
+                "requested_workflow_type": task_type,
+                "fallback_applied": True,
                 "message": f"融合任务({request.fusion_type})已提交",
             }
 
@@ -329,16 +389,24 @@ def create_generation_router(
         try:
             task_data = {
                 "image_path": request.image_filename,
-                "prompt": request.prompt,
+                "prompt": merge_gpu2_operation_prompt("panorama_360", request.prompt),
                 "seed": request.seed,
+                "gpu2_operation": "panorama_360",
+                "requested_workflow_type": "panorama_360",
+                "output_width": 1024,
+                "output_height": 512,
             }
             _attach_entity_fields(task_data, request)
-            task_id = await task_service_module.get().submit("panorama_360", task_data, username)
+            effective_task_type = qwen_fallback_task_type(1)
+            task_id = await task_service_module.get().submit(effective_task_type, task_data, username)
             logger.info("✅ 创建360度全景生成任务: %s", task_id)
 
             return {
                 "success": True,
                 "task_id": task_id,
+                "workflow_type": effective_task_type,
+                "requested_workflow_type": "panorama_360",
+                "fallback_applied": True,
                 "message": "360度全景生成任务已提交",
             }
 
@@ -357,29 +425,40 @@ def create_generation_router(
             if request.image_2:
                 task_type = "panorama_fusion_3"
                 task_data = {
-                    "image_1": request.image_1,
-                    "image_2": request.image_2,
-                    "image_3": request.image_3,
-                    "prompt": request.prompt,
+                    "image_path_1": request.image_1,
+                    "image_path_2": request.image_2,
+                    "image_path_3": request.image_3,
+                    "prompt": merge_gpu2_operation_prompt("panorama_fusion", request.prompt),
                     "seed": request.seed,
                 }
             else:
                 task_type = "panorama_fusion_1"
                 task_data = {
-                    "image_1": request.image_1,
-                    "image_3": request.image_3,
-                    "prompt": request.prompt,
+                    "image_path_1": request.image_1,
+                    "image_path_2": request.image_3,
+                    "prompt": merge_gpu2_operation_prompt("panorama_fusion", request.prompt),
                     "seed": request.seed,
                 }
+            task_data.update(
+                {
+                    "gpu2_operation": "panorama_fusion",
+                    "requested_workflow_type": task_type,
+                    "output_width": 1024,
+                    "output_height": 512,
+                }
+            )
             _attach_entity_fields(task_data, request)
 
-            task_id = await task_service_module.get().submit(task_type, task_data, username)
+            effective_task_type = qwen_fallback_task_type(3 if request.image_2 else 2)
+            task_id = await task_service_module.get().submit(effective_task_type, task_data, username)
             logger.info("✅ 创建全景融合任务: %s (工作流: %s)", task_id, task_type)
 
             return {
                 "success": True,
                 "task_id": task_id,
-                "workflow_type": task_type,
+                "workflow_type": effective_task_type,
+                "requested_workflow_type": task_type,
+                "fallback_applied": True,
                 "message": "全景融合任务已提交",
             }
 
@@ -397,16 +476,24 @@ def create_generation_router(
         try:
             task_data = {
                 "image_path": request.image_filename,
-                "prompt": request.prompt,
+                "prompt": merge_gpu2_operation_prompt("auto_storyboard", request.prompt),
                 "seed": request.seed,
+                "gpu2_operation": "auto_storyboard",
+                "requested_workflow_type": "auto_storyboard",
+                "output_width": 1024,
+                "output_height": 768,
             }
             _attach_entity_fields(task_data, request)
-            task_id = await task_service_module.get().submit("auto_storyboard", task_data, username)
+            effective_task_type = qwen_fallback_task_type(1)
+            task_id = await task_service_module.get().submit(effective_task_type, task_data, username)
             logger.info("✅ 创建自动分镜任务: %s", task_id)
 
             return {
                 "success": True,
                 "task_id": task_id,
+                "workflow_type": effective_task_type,
+                "requested_workflow_type": "auto_storyboard",
+                "fallback_applied": True,
                 "message": "自动分镜任务已提交",
             }
 

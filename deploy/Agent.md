@@ -9716,3 +9716,11 @@
 - Route contract passed with 244 OpenAPI paths and 300 operations.
 - Production acceptance remains required for `three_view`, `upscale_hd`, and `video_upscale` after deployment.
 - GPU2 video resolution parsing now accepts frontend labels (`360P`, `720P`, `1080P`, `2K`, `4K`), caps the SeedVR2 target at 1080 for 12GB VRAM, and falls back to 720 for unknown labels.
+
+## 2026-07-14 GPU2 Placeholder Runtime Completion
+
+- Placeholder-only material operations (matting, fusion, transfer, pose imitation, panorama, storyboard, and three-view) are routed to executable `qwen_1..6` task families before queue submission. The protected `workflows/*.json` files remain unchanged.
+- Runtime tasks retain the requested semantic operation, all input file references, a task-specific prompt, and low-VRAM output geometry so GPU2 can execute them with its installed Qwen Image Edit stack.
+- The GPU2 runner includes an optional native BiRefNet matting graph. It becomes active after `birefnet.safetensors` is installed under ComfyUI `models/background_removal`; until then the server-side Qwen fallback remains executable but is not a true alpha-matting implementation.
+- GPU2 does not currently contain the large Wan/InfiniteTalk model pack required by the legacy local video-generation and lip-sync workflows. SeedVR2 image/video enhancement is supported; Wan generation and InfiniteTalk voice tasks must remain unavailable on GPU2 until their models and executable 12GB workflows are installed and tested.
+- Verification: 21 targeted GPU routing/runner/readiness tests passed, Python compilation passed, and the workflow prebuild contract passed with placeholder failures treated as expected static definitions rather than executable graphs.

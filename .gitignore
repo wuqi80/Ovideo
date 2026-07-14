@@ -60,6 +60,7 @@ Thumbs.db
 
 # 端到端成片生成的素材产物（不入库）
 deploy/output_film/
+/outputs/
 
 # Local deployment snapshots and transient workflow backups
 /deploy-v1.zip

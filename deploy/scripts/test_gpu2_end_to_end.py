@@ -26,6 +26,15 @@ WORKFLOWS = {
     "i2i_fj",
     "i2i_human",
     "i2i_around",
+    "matting_subject",
+    "matting_split",
+    "image_fusion",
+    "image_transfer",
+    "pose_imitation",
+    "panorama_360",
+    "panorama_fusion_1",
+    "panorama_fusion_3",
+    "auto_storyboard",
     "video_upscale",
 }
 
@@ -65,6 +74,57 @@ def _submit_workflow(
             "workflow_type": workflow,
             "prompt": "Keep the reference composition and render a clean, high quality result.",
             "image_filenames": [filename],
+            "seed": 20260713,
+            **routing,
+        }
+    elif workflow in {"matting_subject", "matting_split"}:
+        endpoint = "/api/generate/matting"
+        payload = {
+            "image_filename": filename,
+            "matting_type": workflow.removeprefix("matting_"),
+            "seed": 20260713,
+            **routing,
+        }
+    elif workflow in {"image_fusion", "image_transfer", "pose_imitation"}:
+        endpoint = "/api/generate/image-fusion"
+        type_map = {
+            "image_fusion": "fusion",
+            "image_transfer": "transfer",
+            "pose_imitation": "imitation",
+        }
+        payload = {
+            "fusion_type": type_map[workflow],
+            "image_bk": filename,
+            "image_hu": filename,
+            "seed": 20260713,
+            **routing,
+        }
+        if workflow == "image_transfer":
+            payload["image_mb"] = filename
+    elif workflow == "panorama_360":
+        endpoint = "/api/generate/panorama-360"
+        payload = {
+            "image_filename": filename,
+            "prompt": "A seamless blue-hour panorama.",
+            "seed": 20260713,
+            **routing,
+        }
+    elif workflow in {"panorama_fusion_1", "panorama_fusion_3"}:
+        endpoint = "/api/generate/panorama-fusion"
+        payload = {
+            "image_1": filename,
+            "image_3": filename,
+            "prompt": "A seamless blue-hour panorama.",
+            "seed": 20260713,
+            **routing,
+        }
+        if workflow == "panorama_fusion_3":
+            payload["image_2"] = filename
+    elif workflow == "auto_storyboard":
+        endpoint = "/api/generate/auto-storyboard"
+        payload = {
+            "image_filename": filename,
+            "prompt": "The subject turns and walks toward the window.",
             "seed": 20260713,
             **routing,
         }
@@ -186,6 +246,8 @@ def main() -> int:
             outputs = result.get(result_key) or []
             if not outputs:
                 raise RuntimeError(f"GPU2 task completed without {result_key}: {status}")
+            if args.workflow == "matting_split" and len(outputs) < 2:
+                raise RuntimeError(f"GPU2 matting split returned fewer than two images: {status}")
             print(
                 {
                     "success": True,

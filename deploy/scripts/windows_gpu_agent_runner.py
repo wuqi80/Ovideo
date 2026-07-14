@@ -18,6 +18,7 @@ GPU2_QWEN_MODEL_FILES = {
     "vae": "qwen_image_vae.safetensors",
     "lora": "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
 }
+GPU2_BACKGROUND_REMOVAL_MODEL = "birefnet.safetensors"
 
 GPU2_QWEN_COMPAT_PREFIXES = (
     "qwen_",
@@ -32,6 +33,14 @@ GPU2_QWEN_COMPAT_TASKS = {
     "i2i_around",
     "remove_watermark",
     "three_view",
+    "image_fusion",
+    "image_transfer",
+    "pose_imitation",
+    "panorama_360",
+    "panorama_fusion_1",
+    "panorama_fusion_2",
+    "panorama_fusion_3",
+    "auto_storyboard",
 }
 GPU2_LONG_TASK_TIMEOUT_SECONDS = 6 * 60 * 60
 
@@ -248,6 +257,9 @@ def _gpu2_input_image_names(task: Dict[str, Any]) -> list[str]:
         "uploaded_image",
         *[f"image_path_{index}" for index in range(1, 7)],
         *[f"uploaded_image_{index}" for index in range(1, 7)],
+        *[f"image_{suffix}" for suffix in ("BK", "HU", "MB")],
+        *[f"uploaded_image_{suffix}" for suffix in ("BK", "HU", "MB")],
+        *[f"image_{index}" for index in range(1, 7)],
     ]
     for key in param_names:
         value = str(params.get(key) or "").strip()
@@ -274,8 +286,75 @@ def _gpu2_prompt(task: Dict[str, Any], task_type: str) -> str:
         "remove_watermark": "Remove all visible watermarks and repair the covered area naturally. Preserve all other content.",
         "three_view": "Create a single orthographic three-view reference sheet with front, side, and back views. Preserve identity and design.",
         "kontext": "Create a faithful edited image based on the reference image while preserving identity and visual style.",
+        "image_fusion": "Blend all reference images into one coherent composition while preserving identity and scene style.",
+        "image_transfer": "Transfer the subject and composition according to the references while preserving identity and style.",
+        "pose_imitation": "Match the pose from the first reference while preserving the subject identity from the other reference.",
+        "panorama_360": "Create a seamless 2:1 equirectangular 360-degree panorama from the reference scene.",
+        "panorama_fusion_1": "Create one seamless 2:1 equirectangular panorama by combining all references.",
+        "panorama_fusion_2": "Create one seamless 2:1 equirectangular panorama by combining all references.",
+        "panorama_fusion_3": "Create one seamless 2:1 equirectangular panorama by combining all references.",
+        "auto_storyboard": "Create a six-shot cinematic storyboard contact sheet in a 3 by 2 grid.",
     }
     return defaults.get(task_type, "Create a high quality image faithful to the reference images.")
+
+
+def normalize_gpu2_image_dimensions(width: Any, height: Any) -> tuple[int, int]:
+    """Clamp requested image geometry to a low-VRAM, Qwen-compatible range."""
+    try:
+        normalized_width = int(float(width or 768))
+    except (TypeError, ValueError):
+        normalized_width = 768
+    try:
+        normalized_height = int(float(height or 768))
+    except (TypeError, ValueError):
+        normalized_height = 768
+    normalized_width = max(256, min(1024, normalized_width))
+    normalized_height = max(256, min(1024, normalized_height))
+    return (
+        max(256, (normalized_width // 8) * 8),
+        max(256, (normalized_height // 8) * 8),
+    )
+
+
+def build_gpu2_matting_workflow(task: Dict[str, Any], *, split: bool) -> Dict[str, Any]:
+    """Build a local, MIT-licensed BiRefNet background-removal workflow."""
+    image_names = _gpu2_input_image_names(task)
+    if not image_names:
+        raise RuntimeError("GPU2 matting task is missing an input image filename")
+    workflow: Dict[str, Any] = {
+        "1": {"class_type": "LoadImage", "inputs": {"image": image_names[0]}},
+        "2": {
+            "class_type": "LoadBackgroundRemovalModel",
+            "inputs": {"bg_removal_name": GPU2_BACKGROUND_REMOVAL_MODEL},
+        },
+        "3": {
+            "class_type": "RemoveBackground",
+            "inputs": {"bg_removal_model": ["2", 0], "image": ["1", 0]},
+        },
+        "4": {
+            "class_type": "JoinImageWithAlpha",
+            "inputs": {"image": ["1", 0], "alpha": ["3", 0]},
+        },
+        "5": {
+            "class_type": "SaveImage",
+            "inputs": {"images": ["4", 0], "filename_prefix": "MECHA_GPU2_matting_subject"},
+        },
+    }
+    if split:
+        workflow.update(
+            {
+                "6": {"class_type": "InvertMask", "inputs": {"mask": ["3", 0]}},
+                "7": {
+                    "class_type": "JoinImageWithAlpha",
+                    "inputs": {"image": ["1", 0], "alpha": ["6", 0]},
+                },
+                "8": {
+                    "class_type": "SaveImage",
+                    "inputs": {"images": ["7", 0], "filename_prefix": "MECHA_GPU2_matting_background"},
+                },
+            }
+        )
+    return workflow
 
 
 def is_gpu2_qwen_compatible_task(task_type: str) -> bool:
@@ -298,6 +377,10 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
     params = _gpu2_task_params(task)
     seed = int(params.get("seed") or params.get("seed_0") or 42)
     prompt = _gpu2_prompt(task, task_type)
+    output_width, output_height = normalize_gpu2_image_dimensions(
+        params.get("output_width"),
+        params.get("output_height"),
+    )
     negative = (
         "different identity, different clothes, changed visual style, distorted anatomy, "
         "bad perspective, duplicate subject, text, logo, watermark"
@@ -348,7 +431,7 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         },
         "121": {
             "class_type": "EmptyLatentImage",
-            "inputs": {"width": 768, "height": 768, "batch_size": 1},
+            "inputs": {"width": output_width, "height": output_height, "batch_size": 1},
         },
     }
 
@@ -367,7 +450,7 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "method": "lanczos",
                 "round_to_multiple": "8",
                 "scale_to_side": "longest",
-                "scale_to_length": 768,
+                "scale_to_length": max(output_width, output_height),
                 "background_color": "#000000",
                 "image": [load_id, 0],
             },
@@ -433,12 +516,25 @@ def tune_gpu2_qwen_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
 def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
     prepared = deepcopy(task)
     task_type = str(prepared.get("task_type") or "").lower()
-    if task_type == "upscale_hd":
+    operation = str(_gpu2_task_params(prepared).get("gpu2_operation") or "").lower()
+    if operation in {"matting_subject", "matting_split"}:
+        prepared["workflow_json"] = build_gpu2_matting_workflow(
+            prepared,
+            split=operation == "matting_split",
+        )
+        prepared["workflow_name"] = f"gpu2_{operation}_birefnet"
+    elif task_type == "upscale_hd":
         prepared["workflow_json"] = build_gpu2_upscale_workflow(prepared)
         prepared["workflow_name"] = "gpu2_upscale_hd"
     elif task_type == "upscale":
         prepared["workflow_json"] = build_gpu2_video_upscale_workflow(prepared)
         prepared["workflow_name"] = "gpu2_video_upscale_seedvr2"
+    elif task_type in {"matting_subject", "matting_split"}:
+        prepared["workflow_json"] = build_gpu2_matting_workflow(
+            prepared,
+            split=task_type == "matting_split",
+        )
+        prepared["workflow_name"] = f"gpu2_{task_type}_birefnet"
     elif is_gpu2_qwen_compatible_task(task_type):
         prepared["workflow_json"] = build_gpu2_qwen_workflow(prepared)
         prepared["workflow_name"] = f"gpu2_{task_type}_qwen_fp8"

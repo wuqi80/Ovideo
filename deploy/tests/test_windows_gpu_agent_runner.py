@@ -1,9 +1,12 @@
 from scripts.windows_gpu_agent_runner import (
+    GPU2_BACKGROUND_REMOVAL_MODEL,
     GPU2_QWEN_MODEL_FILES,
+    build_gpu2_matting_workflow,
     build_gpu2_qwen_workflow,
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
     is_gpu2_qwen_compatible_task,
+    normalize_gpu2_image_dimensions,
     normalize_gpu2_video_resolution,
     prepare_gpu2_task,
     tune_gpu2_qwen_workflow,
@@ -81,6 +84,13 @@ def test_gpu2_qwen_compatibility_covers_frontend_image_workflows():
         "i2i_around",
         "remove_watermark",
         "three_view",
+        "image_fusion",
+        "image_transfer",
+        "pose_imitation",
+        "panorama_360",
+        "panorama_fusion_1",
+        "panorama_fusion_3",
+        "auto_storyboard",
     ):
         assert is_gpu2_qwen_compatible_task(task_type)
 
@@ -111,6 +121,44 @@ def test_gpu2_builds_executable_qwen_fallback_for_placeholder_workflow():
     assert "image4" not in workflow["111"]["inputs"]
     assert prepared["workflow_name"] == "gpu2_qwenn_lora_6_qwen_fp8"
     assert prepared["workflow_json"]["60"]["class_type"] == "SaveImage"
+
+
+def test_gpu2_qwen_fallback_uses_requested_safe_geometry_and_legacy_image_names():
+    workflow = build_gpu2_qwen_workflow(
+        {
+            "task_type": "panorama_fusion_3",
+            "params": {
+                "uploaded_image_BK": "background.png",
+                "uploaded_image_HU": "subject.png",
+                "output_width": 1025,
+                "output_height": 509,
+            },
+        }
+    )
+
+    assert normalize_gpu2_image_dimensions(1025, 509) == (1024, 504)
+    assert workflow["121"]["inputs"] == {"width": 1024, "height": 504, "batch_size": 1}
+    assert workflow["111"]["inputs"]["image1"] == ["126", 0]
+    assert workflow["111"]["inputs"]["image2"] == ["127", 0]
+    assert workflow["126"]["inputs"]["scale_to_length"] == 1024
+
+
+def test_gpu2_matting_uses_native_birefnet_and_split_has_two_outputs():
+    task = {
+        "task_type": "qwen_1",
+        "params": {"image_path": "subject.png", "gpu2_operation": "matting_split"},
+        "workflow_json": {"1": {"class_type": "PlaceholderNode"}},
+    }
+
+    workflow = build_gpu2_matting_workflow(task, split=True)
+    prepared = prepare_gpu2_task(task)
+
+    assert workflow["2"]["inputs"]["bg_removal_name"] == GPU2_BACKGROUND_REMOVAL_MODEL
+    assert workflow["3"]["class_type"] == "RemoveBackground"
+    assert workflow["5"]["class_type"] == "SaveImage"
+    assert workflow["8"]["class_type"] == "SaveImage"
+    assert prepared["workflow_name"] == "gpu2_matting_split_birefnet"
+    assert prepared["workflow_json"]["6"]["class_type"] == "InvertMask"
 
 
 def test_gpu2_angle_adjustment_does_not_require_private_angle_lora():
