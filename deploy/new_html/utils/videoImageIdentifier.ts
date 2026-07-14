@@ -33,7 +33,10 @@ export function resolveVideoImageIdentifier(img: UploadedImage, isExternalAPI: b
     if (isExternalAPI) {
         const fileId = extractFileId(storageRef) || extractFileId(urlRef);
         if (fileId) return fileId;
-        return img.filename || storageRef || urlRef || '';
+        if (isUsableTransferRef(storageRef)) return storageRef;
+        if (isUsableTransferRef(urlRef)) return urlRef;
+        if (isDisplayOnlyFilename(img.filename)) return '';
+        return img.filename || '';
     }
 
     if (img.comfyuiFilename) return img.comfyuiFilename;

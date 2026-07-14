@@ -47,6 +47,20 @@ describe('resolveVideoImageIdentifier', () => {
         expect(resolveVideoImageIdentifier(img, true)).toBe('file_real123');
     });
 
+    it('uses the persistent storyboard URL instead of its display filename for external APIs', () => {
+        const img = image({
+            filename: 'storyboard_35.png',
+            url: '/storage/image/storyboard-real.png',
+            storageUrl: '/storage/image/storyboard-real.png',
+        });
+
+        expect(resolveVideoImageIdentifier(img, true)).toBe('/storage/image/storyboard-real.png');
+    });
+
+    it('does not use storyboard display names as external API transfer refs', () => {
+        expect(resolveVideoImageIdentifier(image({ filename: 'storyboard_35.png' }), true)).toBe('');
+    });
+
     it('does not use storyboard or placeholder display names as ComfyUI transfer refs', () => {
         expect(resolveVideoImageIdentifier(image({ filename: 'storyboard_1.png' }), false)).toBe('');
         expect(resolveVideoImageIdentifier(image({ filename: 'placeholder_1' }), false)).toBe('');

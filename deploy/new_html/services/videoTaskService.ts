@@ -28,6 +28,21 @@ async function throwResponseError(response: Response, fallback: string): Promise
     throw new Error(typeof detail === 'string' && detail ? detail : fallback);
 }
 
+export function normalizeVideoMediaRef(ref: string): string {
+    const value = (ref || '').trim();
+    if (!value) return '';
+    if (
+        value.startsWith('http://') ||
+        value.startsWith('https://') ||
+        value.startsWith('data:') ||
+        value.startsWith('/') ||
+        value.startsWith('file_')
+    ) {
+        return value;
+    }
+    return `/uploads/${value.replace(/^uploads\//, '')}`;
+}
+
 // ==================== 视频生成任务 ====================
 
 /**
@@ -61,7 +76,7 @@ export async function submitTask(
     if (model === 'MINI') {
         // MiniMax API
         taskType = imageFilenameEnd ? 'minimax_morph' : 'minimax_i2v';
-        const imageUrl = imageFilename.startsWith('http') ? imageFilename : `/uploads/${imageFilename}`;
+        const imageUrl = normalizeVideoMediaRef(imageFilename);
         requestData = {
             task_type: taskType,
             first_frame_image: imageUrl,
@@ -71,7 +86,7 @@ export async function submitTask(
             priority: 2
         };
         if (imageFilenameEnd) {
-            requestData.last_frame_image = imageFilenameEnd.startsWith('http') ? imageFilenameEnd : `/uploads/${imageFilenameEnd}`;
+            requestData.last_frame_image = normalizeVideoMediaRef(imageFilenameEnd);
         }
     } else if (model === 'Sora2') {
         // Sora2 API
