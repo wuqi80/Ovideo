@@ -74,6 +74,48 @@ async def get_episode(
     return {"success": True, "episode": dict(episode)}
 
 
+async def get_workflow_script(
+    episode_id: str,
+    *,
+    episode_dao: Any,
+    episode_script_dao: Any,
+) -> Dict[str, Any]:
+    episode = await episode_dao.get_episode(episode_id)
+    if not episode:
+        raise EpisodeNotFound("Episode not found")
+
+    scripts = await episode_script_dao.list_by_episode(episode_id)
+    settings = _parse_json_object(episode.get("settings"))
+    selected_id = settings.get("workflow_script_id")
+    selected = next((row for row in scripts if row.get("script_id") == selected_id), None)
+    if selected is None and scripts:
+        selected = scripts[0]
+        selected_id = selected.get("script_id")
+        await episode_dao.set_workflow_script(episode_id, selected_id)
+
+    return {
+        "success": True,
+        "script_id": selected_id if selected else None,
+        "script": dict(selected) if selected else None,
+    }
+
+
+async def select_workflow_script(
+    episode_id: str,
+    script_id: str,
+    *,
+    episode_dao: Any,
+    episode_script_dao: Any,
+) -> Dict[str, Any]:
+    script = await episode_script_dao.get_by_id(script_id)
+    if not script or script.get("episode_id") != episode_id:
+        raise EpisodeNotFound("Script does not belong to episode")
+    episode = await episode_dao.set_workflow_script(episode_id, script_id)
+    if not episode:
+        raise EpisodeNotFound("Episode not found")
+    return {"success": True, "script_id": script_id, "script": dict(script)}
+
+
 async def update_episode(
     episode_id: str,
     fields: Dict[str, Any],

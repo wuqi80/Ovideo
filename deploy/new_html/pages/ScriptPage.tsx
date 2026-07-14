@@ -23,7 +23,14 @@ export const ScriptPage: React.FC = () => {
   return (
     <div className="layout-safe h-full w-full overflow-auto">
       <React.Suspense fallback={<ScriptWorkspaceFallback />}>
-        <WorkspaceApp hideHeader episodeId={episodeId} initialScriptId={selectedScriptId} onScriptSelect={setSelectedScriptId} onAfterExport={handleAfterExport} />
+        <WorkspaceApp
+          hideHeader
+          episodeId={episodeId}
+          initialScriptId={selectedScriptId}
+          activeScriptId={selectedScriptId}
+          onActivateScript={setSelectedScriptId}
+          onAfterExport={handleAfterExport}
+        />
       </React.Suspense>
     </div>
   );

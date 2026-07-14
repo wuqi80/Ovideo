@@ -38,6 +38,7 @@ db_migration_admin_users_groups.sql     # 建 project_groups; ALTER projects/use
 
 # ---- 4. 用户维度业务表 ----
 db_migration_credits.sql                # REF users
+db_migration_credit_onboarding.sql     # REF users, credit_accounts, credit_transactions
 db_migration_notifications.sql          # REF users
 db_migration_organizations.sql          # REF users（建 organizations/resource_shares）
 

@@ -12,6 +12,12 @@ import {
   updateStoryboardItem as apiUpdateStoryboardItem,
   updateEpisodeScript as apiUpdateEpisodeScript,
 } from '../services/episodeDataService';
+import {
+  getWorkflowScript,
+  listEpisodeScripts,
+  selectWorkflowScript,
+  updateEpisodeScriptById,
+} from '../services/scriptTimelineService';
 import type { AssetItem, StoryboardItemDB, VideoSegment, AudioTrack, EpisodeScript, CharacterVoice } from '../types';
 import { filterAssetsForEpisodeScope, type AssetScopeMode } from '../utils/assetScope';
 
@@ -143,7 +149,7 @@ interface EpisodeContextValue {
   episodeId: string;
   projectId: string;
   selectedScriptId: string | null;
-  setSelectedScriptId: (id: string | null) => void;
+  setSelectedScriptId: (id: string | null) => Promise<void>;
   isLoading: boolean;
   error: string | null;
   script: EpisodeScript | null;
@@ -171,7 +177,7 @@ const EpisodeContext = createContext<EpisodeContextValue>({
   episodeId: '',
   projectId: '',
   selectedScriptId: null,
-  setSelectedScriptId: () => {},
+  setSelectedScriptId: async () => {},
   isLoading: false,
   error: null,
   script: null,
@@ -210,7 +216,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
+  const [selectedScriptId, setSelectedScriptIdState] = useState<string | null>(null);
   const [script, setScript] = useState<EpisodeScript | null>(null);
   const [storyboardItems, setStoryboardItems] = useState<StoryboardItemDB[]>([]);
   const [storyboardTotalCount, setStoryboardTotalCount] = useState(0);
@@ -226,6 +232,39 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
   const assetScopeModeRef = useRef<AssetScopeMode>('episode');
   selectedScriptIdRef.current = selectedScriptId;
   assetScopeModeRef.current = assetScopeMode;
+
+  useEffect(() => {
+    let cancelled = false;
+    selectedScriptIdRef.current = null;
+    setSelectedScriptIdState(null);
+    if (!episodeId) return () => { cancelled = true; };
+
+    void getWorkflowScript(episodeId)
+      .then((res: any) => {
+        if (cancelled || !res?.success) return;
+        const scriptId = res.script_id ?? res.scriptId ?? null;
+        selectedScriptIdRef.current = scriptId;
+        setSelectedScriptIdState(scriptId);
+      })
+      .catch((err: any) => {
+        if (!cancelled) console.warn('加载本集采用剧本失败:', err);
+      });
+    return () => { cancelled = true; };
+  }, [episodeId]);
+
+  const setSelectedScriptId = useCallback(async (id: string | null) => {
+    if (!episodeId || !id || id === selectedScriptIdRef.current) return;
+    const previousId = selectedScriptIdRef.current;
+    selectedScriptIdRef.current = id;
+    setSelectedScriptIdState(id);
+    try {
+      await selectWorkflowScript(episodeId, id);
+    } catch (err) {
+      selectedScriptIdRef.current = previousId;
+      setSelectedScriptIdState(previousId);
+      throw err;
+    }
+  }, [episodeId]);
 
   useEffect(() => {
     if (!episodeId) {
@@ -249,13 +288,6 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     }
   }, [episodeId]);
 
-  const clearStaleScriptSelectionFromStoryboardFallback = useCallback((res: any, sid?: string) => {
-    const fallbackScriptId = res?.fallbackScriptId ?? res?.fallback_script_id;
-    if (!sid || !fallbackScriptId || fallbackScriptId !== sid) return;
-    selectedScriptIdRef.current = null;
-    setSelectedScriptId(null);
-  }, []);
-
   const fetchSlices = useCallback(async (optionsOrFirst?: DataSlice | { quiet?: boolean }, ...rest: DataSlice[]) => {
     const quiet = typeof optionsOrFirst === 'object';
     const slices = (quiet ? rest : [optionsOrFirst as DataSlice, ...rest]).filter(Boolean) as DataSlice[];
@@ -267,8 +299,15 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
 
     const loaders: Record<DataSlice, () => Promise<void>> = {
       script: async () => {
-        const res = await getEpisodeScript(episodeId).catch(() => ({ success: false, script: null }));
-        if (res.success && res.script) setScript(normalizeEpisodeScript(res.script));
+        const sid = selectedScriptIdRef.current;
+        const res: any = sid
+          ? await listEpisodeScripts(episodeId).catch(() => ({ success: false, scripts: [] }))
+          : await getEpisodeScript(episodeId).catch(() => ({ success: false, script: null }));
+        if (selectedScriptIdRef.current !== sid || !res.success) return;
+        const selectedScript = sid
+          ? (res.scripts || []).find((item: any) => (item.script_id ?? item.scriptId) === sid)
+          : res.script;
+        setScript(selectedScript ? normalizeEpisodeScript(selectedScript) : null);
       },
       storyboardItems: async () => {
         const sid = selectedScriptIdRef.current || undefined;
@@ -277,7 +316,6 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
           includeTotal: true,
         }).catch(() => ({ success: false, items: [], total: 0 }));
         if (res.success) {
-          clearStaleScriptSelectionFromStoryboardFallback(res, sid);
           const items = (res.items || []).map(normalizeStoryboardItem);
           setStoryboardItems(items);
           setStoryboardTotalCount(typeof (res as any).total === 'number' ? (res as any).total : items.length);
@@ -286,8 +324,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       assets: async () => {
         const scopeMode = assetScopeModeRef.current;
         const queryEpisodeId = scopeMode === 'project' ? undefined : episodeId;
-        const queryScriptId = scopeMode === 'project' ? undefined : (selectedScriptIdRef.current || undefined);
-        const res = await getAssets(projectId, queryEpisodeId, undefined, queryScriptId).catch(() => ({ success: false, assets: [] }));
+        const res = await getAssets(projectId, queryEpisodeId).catch(() => ({ success: false, assets: [] }));
         if (res.success) {
           const normalized = (res.assets || []).map(normalizeAsset);
           setAssets(filterAssetsForEpisodeScope(normalized, episodeId, scopeMode));
@@ -321,7 +358,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     } finally {
       if (!quiet) setIsLoading(false);
     }
-  }, [episodeId, projectId, clearStaleScriptSelectionFromStoryboardFallback]);
+  }, [episodeId, projectId]);
 
   useEffect(() => {
     if (loadedSlicesRef.current.has('assets')) {
@@ -384,8 +421,6 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       includeTotal: options.includeTotal !== false,
     }).catch(() => ({ success: false, items: [], total: 0 }));
     if (!res.success) return;
-    clearStaleScriptSelectionFromStoryboardFallback(res, sid);
-
     const nextItems = (res.items || []).map(normalizeStoryboardItem);
     setStoryboardItems(prev => {
       if (offset <= 0) return nextItems;
@@ -397,7 +432,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     setStoryboardTotalCount(prev =>
       typeof total === 'number' ? total : Math.max(prev, offset + nextItems.length),
     );
-  }, [episodeId, clearStaleScriptSelectionFromStoryboardFallback]);
+  }, [episodeId]);
 
   const reload = useCallback(async () => {
     const slices = Array.from(loadedSlicesRef.current) as DataSlice[];
@@ -409,7 +444,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
   useEffect(() => {
     loadedSlicesRef.current.clear();
     prevScriptIdRef.current = null;
-    setSelectedScriptId(null);
+    setSelectedScriptIdState(null);
     setScript(null);
     setStoryboardItems([]);
     setStoryboardTotalCount(0);
@@ -430,8 +465,8 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     }
 
     const slicesToReload: DataSlice[] = [];
+    if (loadedSlicesRef.current.has('script')) slicesToReload.push('script');
     if (loadedSlicesRef.current.has('storyboardItems')) slicesToReload.push('storyboardItems');
-    if (loadedSlicesRef.current.has('assets')) slicesToReload.push('assets');
     if (slicesToReload.length > 0) {
       void fetchSlices({ quiet: true }, ...slicesToReload);
     }
@@ -452,7 +487,12 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
 
   const saveScript = useCallback(async (data: { original_content?: string; adapted_script?: string; metadata?: Record<string, any> }) => {
     try {
-      await apiUpdateEpisodeScript(episodeId, data);
+      const sid = selectedScriptIdRef.current;
+      if (sid) {
+        await updateEpisodeScriptById(episodeId, sid, data);
+      } else {
+        await apiUpdateEpisodeScript(episodeId, data);
+      }
       await reload();
     } catch (e: any) {
       console.error('Failed to save script:', e);
@@ -488,16 +528,6 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     }
   }, [episodeId, reload]);
 
-  const filteredVideoSegments = useMemo(() => {
-    if (!selectedScriptId) return videoSegments;
-    if (storyboardItems.length === 0) return [];
-    const sbItemIds = new Set(storyboardItems.map(si => si.itemId));
-    return videoSegments.filter(seg => {
-      const sbItemId = seg.storyboardItemId ?? (seg as any).storyboard_item_id;
-      return sbItemId && sbItemIds.has(sbItemId);
-    });
-  }, [videoSegments, storyboardItems, selectedScriptId]);
-
   return (
     <EpisodeContext.Provider value={{
       episodeId,
@@ -511,7 +541,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       storyboardTotalCount,
       assets,
       audioTracks,
-      videoSegments: filteredVideoSegments,
+      videoSegments,
       characterVoices,
       assetScopeMode,
       setAssetScopeMode,

@@ -5,9 +5,11 @@ import {
   createTimelineTrack,
   deleteEpisodeScript,
   deleteScriptSegments,
+  getWorkflowScript,
   getTimelineTracks,
   listEpisodeScriptSegments,
   listEpisodeScripts,
+  selectWorkflowScript,
   updateEpisodeScriptById,
   updateTimelineTrack,
 } from '../../services/scriptTimelineService';
@@ -65,6 +67,21 @@ describe('script timeline service', () => {
     expect(JSON.parse(mockFetch.mock.calls[0][1].body).file_name).toBe('new name');
     expect(mockFetch.mock.calls[1][0]).toBe('/api/episodes/ep_1/scripts/script_1');
     expect(mockFetch.mock.calls[1][1].method).toBe('DELETE');
+  });
+
+  it('reads and updates the episode workflow script', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, script_id: 'script_1' }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, script_id: 'script_2' }));
+
+    await getWorkflowScript('ep_1');
+    await selectWorkflowScript('ep_1', 'script_2');
+
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/episodes/ep_1/workflow-script');
+    expect(mockFetch.mock.calls[0][1].method).toBe('GET');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/episodes/ep_1/workflow-script');
+    expect(mockFetch.mock.calls[1][1].method).toBe('PUT');
+    expect(JSON.parse(mockFetch.mock.calls[1][1].body).script_id).toBe('script_2');
   });
 
   it('lists script segments with optional script scope', async () => {

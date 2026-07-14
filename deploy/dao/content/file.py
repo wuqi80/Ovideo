@@ -85,6 +85,22 @@ class FileDAO:
         )
 
     @staticmethod
+    async def merge_metadata(file_id: str, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        return await db.fetchrow(
+            """
+            UPDATE files
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+            WHERE file_id = $1 AND is_deleted = FALSE
+            RETURNING *
+            """,
+            file_id,
+            json.dumps(metadata or {}, ensure_ascii=False),
+        )
+
+    @staticmethod
     async def get_by_task_id(task_id: str) -> List[Dict[str, Any]]:
         db = get_db_manager()
         if not db:

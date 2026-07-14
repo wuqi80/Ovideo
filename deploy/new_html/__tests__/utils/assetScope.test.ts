@@ -39,7 +39,7 @@ describe('asset scope helpers', () => {
     expect(isSharedAsset({ asset_id: 'shared', episode_id: null })).toBe(true);
   });
 
-  it('strictly limits design assets to current episode and script', () => {
+  it('keeps all accumulated design assets in the current episode chain', () => {
     const current = asset({ assetId: 'current', episodeId: 'ep_1', scriptId: 'script_1' });
     const shared = asset({ assetId: 'shared', episodeId: null, scriptId: null });
     const oldEpisode = asset({ assetId: 'old_episode', episodeId: 'ep_deleted', scriptId: 'script_1' });
@@ -50,7 +50,7 @@ describe('asset scope helpers', () => {
       [current, shared, oldEpisode, otherScript, legacyNullScript],
       'ep_1',
       'script_1',
-    ).map(item => item.assetId)).toEqual(['current']);
+    ).map(item => item.assetId)).toEqual(['current', 'other_script', 'legacy_null_script']);
   });
 
   it('uses current episode only when no script is selected', () => {

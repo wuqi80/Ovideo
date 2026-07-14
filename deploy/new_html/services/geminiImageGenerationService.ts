@@ -1,4 +1,5 @@
 import { generateGeminiImageViaProxy, GeminiImageOptions, GeneratedFileResult } from './geminiImageService';
+import type { GeminiImageReferenceMetadata } from './geminiImageService';
 
 const callWithRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> => {
     try {
@@ -43,12 +44,25 @@ export const generateFinalIllustration = async (
     referenceImages: string[],
     entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string },
     imageOptions?: { aspectRatio?: string; imageSize?: '1K' | '2K' | '4K' },
+    referenceMetadata?: GeminiImageReferenceMetadata[],
 ): Promise<string> => {
+    const result = await generateFinalIllustrationResult(prompt, referenceImages, entityOptions, imageOptions, referenceMetadata);
+    return result.url;
+};
+
+export const generateFinalIllustrationResult = async (
+    prompt: string,
+    referenceImages: string[],
+    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string },
+    imageOptions?: { aspectRatio?: string; imageSize?: '1K' | '2K' | '4K' },
+    referenceMetadata?: GeminiImageReferenceMetadata[],
+): Promise<GeneratedFileResult> => {
     return callWithRetry(async () => {
         try {
             const results = await generateGeminiImageVariant({
                 prompt: `${prompt}\n\nStyle: High quality Anime/Manga screenshot, detailed background, cinematic lighting.`,
                 references: referenceImages,
+                referenceMetadata,
                 aspectRatio: imageOptions?.aspectRatio ?? '16:9',
                 imageSize: imageOptions?.imageSize ?? '2K',
                 entityType: entityOptions?.entityType,
@@ -62,7 +76,7 @@ export const generateFinalIllustration = async (
                 throw new Error("No image generated");
             }
 
-            return results[0].url;
+            return results[0];
         } catch (error) {
             console.error("Final Gen Error:", error);
             throw new Error("Failed to generate final illustration.");

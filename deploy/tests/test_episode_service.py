@@ -16,6 +16,7 @@ class FakeEpisodeDAO:
     deleted = []
     reordered = None
     create_returns_none = False
+    workflow_script = None
 
     @classmethod
     async def get_episodes(cls, project_id: str):
@@ -53,6 +54,11 @@ class FakeEpisodeDAO:
         return True
 
     @classmethod
+    async def set_workflow_script(cls, episode_id: str, script_id: str):
+        cls.workflow_script = (episode_id, script_id)
+        return {"episode_id": episode_id, "settings": {"workflow_script_id": script_id}}
+
+    @classmethod
     async def delete_episode(cls, episode_id: str):
         cls.deleted.append(episode_id)
         return True
@@ -68,6 +74,11 @@ class FakeEpisodeScriptDAO:
 
     @classmethod
     async def list_by_episode(cls, episode_id: str):
+        if episode_id == "ep_1":
+            return [
+                {"script_id": "script_1", "episode_id": "ep_1", "file_name": "A"},
+                {"script_id": "script_2", "episode_id": "ep_1", "file_name": "B"},
+            ]
         return [
             {
                 "file_name": "script-a",
@@ -90,6 +101,13 @@ class FakeEpisodeScriptDAO:
         cls.created.append(kwargs)
         return {"script_id": f"script_{len(cls.created)}", **kwargs}
 
+    @classmethod
+    async def get_by_id(cls, script_id: str):
+        return next(
+            (row for row in await cls.list_by_episode("ep_1") if row.get("script_id") == script_id),
+            None,
+        )
+
 
 def setup_function():
     FakeEpisodeDAO.created = []
@@ -97,6 +115,7 @@ def setup_function():
     FakeEpisodeDAO.deleted = []
     FakeEpisodeDAO.reordered = None
     FakeEpisodeDAO.create_returns_none = False
+    FakeEpisodeDAO.workflow_script = None
     FakeEpisodeScriptDAO.created = []
 
 
@@ -129,6 +148,39 @@ async def test_create_episode_uses_next_number_and_default_name():
 async def test_get_episode_raises_when_missing():
     with pytest.raises(episode_service.EpisodeNotFound):
         await episode_service.get_episode("missing", episode_dao=FakeEpisodeDAO)
+
+
+async def test_get_workflow_script_defaults_to_first_script_and_persists_selection():
+    result = await episode_service.get_workflow_script(
+        "ep_1",
+        episode_dao=FakeEpisodeDAO,
+        episode_script_dao=FakeEpisodeScriptDAO,
+    )
+
+    assert result["script_id"] == "script_1"
+    assert FakeEpisodeDAO.workflow_script == ("ep_1", "script_1")
+
+
+async def test_select_workflow_script_rejects_script_from_another_episode():
+    with pytest.raises(episode_service.EpisodeNotFound):
+        await episode_service.select_workflow_script(
+            "ep_2",
+            "script_1",
+            episode_dao=FakeEpisodeDAO,
+            episode_script_dao=FakeEpisodeScriptDAO,
+        )
+
+
+async def test_select_workflow_script_persists_valid_script():
+    result = await episode_service.select_workflow_script(
+        "ep_1",
+        "script_2",
+        episode_dao=FakeEpisodeDAO,
+        episode_script_dao=FakeEpisodeScriptDAO,
+    )
+
+    assert result["script_id"] == "script_2"
+    assert FakeEpisodeDAO.workflow_script == ("ep_1", "script_2")
 
 
 async def test_update_episode_preserves_zero_sort_order():

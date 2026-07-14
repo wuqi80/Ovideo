@@ -49,6 +49,7 @@ from routers.project_core import create_project_core_router
 from routers.project_admin import create_project_admin_router
 from routers.script_timeline import create_script_timeline_router
 from routers.storyboard import create_storyboard_router
+from routers.storyboard_quality import create_storyboard_quality_router
 from routers.task_notifications import create_task_notifications_router
 from routers.video_capabilities import create_video_capabilities_router
 from routers.video_voice_references import create_video_voice_references_router
@@ -204,6 +205,13 @@ router.include_router(
         asset_dao=AssetDAO,
         episode_dao=EpisodeDAO,
         logger=logger,
+    )
+)
+
+router.include_router(
+    create_storyboard_quality_router(
+        get_current_user_dependency=get_current_user,
+        file_dao=FileDAO,
     )
 )
 

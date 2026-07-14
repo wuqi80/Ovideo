@@ -113,6 +113,24 @@ class EpisodeDAO:
         return True
 
     @staticmethod
+    async def set_workflow_script(episode_id: str, script_id: str) -> Optional[Dict[str, Any]]:
+        """Persist the single script that drives the episode workflow."""
+        db = get_db_manager()
+        if not db:
+            return None
+        return await db.fetchrow(
+            """
+            UPDATE episodes
+            SET settings = COALESCE(settings, '{}'::jsonb)
+                || jsonb_build_object('workflow_script_id', $2)
+            WHERE episode_id = $1
+            RETURNING *
+            """,
+            episode_id,
+            script_id,
+        )
+
+    @staticmethod
     async def delete_episode(episode_id: str) -> bool:
         db = get_db_manager()
         if not db:

@@ -11,10 +11,19 @@ export interface GeneratedFileResult {
     fileUrl?: string;
 }
 
+export interface GeminiImageReferenceMetadata {
+    type: 'character' | 'scene' | 'pose' | 'prop' | 'effect';
+    name?: string;
+    description?: string;
+    source?: 'identity_anchor' | 'material_binding' | 'manual';
+    isLocked?: boolean;
+}
+
 export interface GeminiImageOptions {
     model?: string;
     prompt: string;
     references?: string[];
+    referenceMetadata?: GeminiImageReferenceMetadata[];
     aspectRatio?: string;
     imageSize?: '1K' | '2K' | '4K';
     entityType?: string;
@@ -51,6 +60,7 @@ export const generateGeminiImageViaProxy = async (options: GeminiImageOptions): 
                 prompt,
                 ...(model ? { model } : {}),
                 references,
+                reference_metadata: options.referenceMetadata || [],
                 aspectRatio,
                 imageSize,
                 entity_type: options.entityType,

@@ -7,6 +7,7 @@ import {
   assetsToMaterialLibrary,
   storyboardItemToDbUpdate,
 } from '../utils/episodeAdapters';
+import { normalizeStoryboardQualityReview } from '../services/storyboardQualityService';
 import { createStoryboardItem, deleteStoryboardItem } from '../services/storyboardMutationService';
 import { updateStoryboardItem } from '../services/episodeDataService';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
@@ -144,6 +145,11 @@ export const StoryboardGenPage: React.FC = () => {
           timestamp: new Date(ef.createdAt).getTime(),
           fileId: ef.fileId,
           isSelected: ef.isSelected,
+          qualityReview: ef.metadata?.storyboard_quality_review
+            ? normalizeStoryboardQualityReview(ef.metadata.storyboard_quality_review)
+            : undefined,
+          generationModel: String(ef.metadata?.storyboard_generation_model || ''),
+          generationAttempt: Number(ef.metadata?.storyboard_generation_attempt || 1),
         }));
       }
     });

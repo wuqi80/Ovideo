@@ -265,13 +265,25 @@ export function scriptToProjectFile(
   };
 }
 
-export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Array<{ id: string; url: string; thumbnail?: string; name: string; source: string }>> {
-  const lib: Record<string, Array<{ id: string; url: string; thumbnail?: string; name: string; source: string }>> = {};
+export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Array<{
+  id: string;
+  url: string;
+  thumbnail?: string;
+  name: string;
+  source: string;
+  assetId: string;
+  assetType: AssetItem['assetType'];
+  description: string;
+  styleParams: Record<string, any>;
+  isIdentityReference: boolean;
+}>> {
+  const lib: ReturnType<typeof assetsToMaterialLibrary> = {};
   for (const asset of assets) {
     const key = asset.name;
     if (!lib[key]) lib[key] = [];
     const seenUrls = new Set<string>();
 
+    const identityReferenceUrl = String(asset.styleParams?.identity_reference_url || '');
     const pushMaterial = (url: string, thumbnail: string | undefined, source: string) => {
       if (!url || seenUrls.has(url)) return;
       seenUrls.add(url);
@@ -282,6 +294,11 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
         thumbnail: index === 0 ? (asset.thumbnailUrl || thumbnail || url) : (thumbnail || url),
         name: asset.name,
         source,
+        assetId: asset.assetId,
+        assetType: asset.assetType,
+        description: asset.description || '',
+        styleParams: asset.styleParams || {},
+        isIdentityReference: Boolean(identityReferenceUrl && identityReferenceUrl === url),
       });
     };
 

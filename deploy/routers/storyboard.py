@@ -36,6 +36,7 @@ class ExportScriptRequest(BaseModel):
     scenes: List[dict] = []
     props: List[dict] = []
     script_id: Optional[str] = None
+    preserve_existing_storyboards: bool = False
 
 
 class StoryboardItemCreate(BaseModel):
@@ -224,6 +225,7 @@ def create_storyboard_router(
                 scenes=req.scenes,
                 props=req.props,
                 script_id=req.script_id,
+                preserve_existing_storyboards=req.preserve_existing_storyboards,
                 user_id=user_id,
                 storyboard_dao=StoryboardDAO,
                 episode_script_dao=EpisodeScriptDAO,

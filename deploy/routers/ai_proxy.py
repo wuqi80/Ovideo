@@ -45,6 +45,7 @@ from services.ai_proxy_task_service import (
     create_deepseek_text_task,
 )
 from services.ai_proxy_reference_service import (
+    ReferenceImageError,
     prepare_doubao_reference_inputs,
     prepare_gemini_image_parts,
     prepare_gpt_image_reference_inputs,
@@ -160,6 +161,7 @@ def create_ai_proxy_router(
             parts = prepare_gemini_image_parts(
                 prompt=request.prompt,
                 references=request.references,
+                reference_metadata=[item.model_dump() for item in request.reference_metadata],
                 logger=logger,
             )
 
@@ -206,6 +208,9 @@ def create_ai_proxy_router(
 
             return {"success": True, "images": images, "files": files_result}
 
+        except ReferenceImageError as e:
+            logger.warning("Gemini 角色参考图无效: %s", e)
+            raise HTTPException(status_code=400, detail=str(e))
         except AIProxyError as e:
             logger.error("图像生成失败: %s | upstream: %s", e, e.upstream)
             raise HTTPException(status_code=e.status_code, detail=e.detail)

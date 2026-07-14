@@ -465,6 +465,23 @@ class FileDAO:
             return None
         query = "SELECT * FROM files WHERE file_id = $1 AND is_deleted = FALSE"
         return await db.fetchrow(query, file_id)
+
+    @staticmethod
+    async def merge_metadata(file_id: str, metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Merge selected metadata fields without overwriting generation metadata."""
+        db = get_db_manager()
+        if not db:
+            return None
+        return await db.fetchrow(
+            """
+            UPDATE files
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+            WHERE file_id = $1 AND is_deleted = FALSE
+            RETURNING *
+            """,
+            file_id,
+            json.dumps(metadata or {}, ensure_ascii=False),
+        )
     
     @staticmethod
     async def get_file_by_name(file_name: str) -> Optional[Dict[str, Any]]:

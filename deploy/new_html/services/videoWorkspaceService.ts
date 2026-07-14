@@ -27,6 +27,35 @@ export interface WorkspaceSession {
   storyboard_meta?: Record<string, StoryboardMeta>;
 }
 
+function mergeListByIdentity<T extends Record<string, any>>(lists: T[][], keys: string[]): T[] {
+  const merged = new Map<string, T>();
+  let anonymousIndex = 0;
+  for (const list of lists) {
+    for (const item of list || []) {
+      const identity = keys.map(key => item?.[key]).find(Boolean);
+      merged.set(identity ? String(identity) : `anonymous:${anonymousIndex++}`, item);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+export function mergeWorkspaceSessions(sessions: WorkspaceSession[]): WorkspaceSession {
+  return {
+    task_groups: mergeListByIdentity(
+      sessions.map(session => session.task_groups || []),
+      ['id', 'groupId', 'group_id', 'uuid'],
+    ),
+    uploaded_images: mergeListByIdentity(
+      sessions.map(session => session.uploaded_images || []),
+      ['uuid', 'id', 'itemId', 'item_id'],
+    ),
+    image_prompts: Object.assign({}, ...sessions.map(session => session.image_prompts || {})),
+    tasks_status: Object.assign({}, ...sessions.map(session => session.tasks_status || {})),
+    seedance_params: Object.assign({}, ...sessions.map(session => session.seedance_params || {})),
+    storyboard_meta: Object.assign({}, ...sessions.map(session => session.storyboard_meta || {})),
+  };
+}
+
 export async function saveWorkspaceSession(
   session: WorkspaceSession,
   scope?: string,

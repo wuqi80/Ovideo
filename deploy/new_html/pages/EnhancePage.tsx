@@ -7,10 +7,8 @@ import {
 import { useEpisode } from '../contexts/EpisodeContext';
 import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
 // 2026-05-20 (Task System Overhaul M4)：把 EnhancePage 的「假进度」改成真后端 worker。
-// upscale / lipSync 接到真实 GPU worker + videoTaskPoller，状态实时同步到
-// taskRegistry，铃铛 / TaskBadge 都看得到。其它 enhancementKind（interpolate /
-// dub）后端目前没 worker，明确提示用户而非用假进度误导。
-import { submitUpscaleTaskQueued, submitVoiceTaskQueued } from '../services/videoTaskService';
+// All enhancement actions use real GPU tasks and report through videoTaskPoller.
+import { submitInterpolateTaskQueued, submitUpscaleTaskQueued, submitVoiceTaskQueued } from '../services/videoTaskService';
 import { fetchComfyuiAvailable, startCompose, getComposeStatus, updateVideoSegment, type ComposeStatus } from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
 import { fetchEntityFiles, uploadEntityFile } from '../services/entityFileService';
@@ -268,7 +266,7 @@ export const EnhancePage: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
   // GPU 类增强（放大/补帧/对口型）依赖 ComfyUI GPU 集群节点；无节点时禁用，避免点了必失败。
-  // 默认 true 避免加载瞬间误禁；确认无 agent 后置 false。配音(dub)走外部 API，不受影响。
+  // Default true avoids a loading flicker; all four enhancement modes use a GPU Agent.
   const [comfyAvailable, setComfyAvailable] = useState<boolean>(true);
   useEffect(() => { fetchComfyuiAvailable().then(setComfyAvailable); }, []);
 
@@ -365,7 +363,7 @@ export const EnhancePage: React.FC = () => {
   }, [videoSegments, storyboardAudioItems, audioTracks, actorDubbingClips, storyboardAudioLoaded]);
 
   useEffect(() => {
-    const scope = `${episodeId || ''}:${selectedScriptId || ''}`;
+    const scope = episodeId || '';
     if (clipScopeRef.current && clipScopeRef.current !== scope) {
       setClips([]);
       setSelectedClipId(null);
@@ -373,7 +371,7 @@ export const EnhancePage: React.FC = () => {
       setPlaying(false);
     }
     clipScopeRef.current = scope;
-  }, [episodeId, selectedScriptId]);
+  }, [episodeId]);
 
   useEffect(() => {
     return () => { if (playTimerRef.current) clearInterval(playTimerRef.current); };
@@ -485,7 +483,7 @@ export const EnhancePage: React.FC = () => {
       };
       setClips(prev => [...prev, newClip]);
       setLipSyncAudioClipId(newClip.id);
-      setEnhancementKind('lipSync');
+      setEnhancementKind(current => current === 'dub' ? 'dub' : 'lipSync');
     } catch (uploadError: any) {
       alert(`上传演员录音失败：${uploadError?.message || uploadError}`);
     } finally {
@@ -576,10 +574,19 @@ export const EnhancePage: React.FC = () => {
   // 自动恢复本页发起且尚未完成的 GPU 美化任务，避免切页后丢失状态。
   useEffect(() => {
     const enhancePolls = getKnownVideoTaskIds().filter(uuid =>
-      uuid.startsWith('enhance-upscale:') || uuid.startsWith('enhance-lipsync:'),
+      uuid.startsWith('enhance-upscale:')
+        || uuid.startsWith('enhance-interpolate:')
+        || uuid.startsWith('enhance-lipsync:')
+        || uuid.startsWith('enhance-dub:'),
     );
     for (const uuid of enhancePolls) {
-      const isLipSync = uuid.startsWith('enhance-lipsync:');
+      const failureLabel = uuid.startsWith('enhance-interpolate:')
+        ? '智能补帧'
+        : uuid.startsWith('enhance-upscale:')
+          ? '视频放大'
+          : uuid.startsWith('enhance-dub:')
+            ? '视频配音'
+            : '配音对嘴';
       attachVideoPollCallbacks(uuid, {
         onProgress: (progress) => {
           setProcessing(true);
@@ -593,7 +600,7 @@ export const EnhancePage: React.FC = () => {
         onFail: (err) => {
           setProcessing(false);
           setProcessProgress(0);
-          alert(`${isLipSync ? '配音对嘴' : '视频放大'}失败：${err}`);
+          alert(`${failureLabel}失败：${err}`);
         },
       });
       setProcessing(true);
@@ -601,9 +608,9 @@ export const EnhancePage: React.FC = () => {
   }, [reload]);
 
   const applyEnhancement = useCallback(async () => {
-    // GPU 类增强（放大/补帧/对口型）无 ComfyUI GPU 集群节点时直接拦下，给清晰提示（双保险，
+    // GPU enhancement actions require an online ComfyUI Agent.
     // 按钮已禁用，这里防止意外触发）。
-    if (enhancementKind !== 'dub' && !comfyAvailable) {
+    if (!comfyAvailable) {
       alert('该功能需要 GPU 集群节点（ComfyUI Agent）。当前没有可用节点，暂不可用。\n\n请在后台“集群节点监控”确认 Agent 在线，或使用不依赖 GPU 的功能。');
       return;
     }
@@ -613,7 +620,7 @@ export const EnhancePage: React.FC = () => {
       return;
     }
 
-    if (enhancementKind === 'lipSync') {
+    if (enhancementKind === 'lipSync' || enhancementKind === 'dub') {
       const audioClip = audioClips.find(clip => clip.id === lipSyncAudioClipId);
       if (!audioClip) {
         alert('请选择参考配音或上传配音演员录音。');
@@ -629,11 +636,17 @@ export const EnhancePage: React.FC = () => {
       setProcessProgress(0);
       try {
         const audioFilename = await ensureGpuAudioFilename(audioClip);
+        const isDub = enhancementKind === 'dub';
+        const dubPrompt = {
+          neutral: '保持人物身份、构图和自然表情，使用中性自然的表演让嘴型与最终音频同步',
+          dramatic: '保持人物身份和构图，使用更有张力的表演让嘴型与最终音频同步',
+          soft: '保持人物身份和构图，使用柔和克制的表演让嘴型与最终音频同步',
+        }[dubVoiceStyle];
         const result = await submitVoiceTaskQueued(
           referenceImage,
           targetClip.url,
           audioFilename,
-          '保持人物身份、情绪和表情，自然地让嘴型与最终对白音频同步',
+          isDub ? dubPrompt : '保持人物身份、情绪和表情，自然地让嘴型与最终对白音频同步',
           'Wan2',
           {
             entity_type: 'video_segment',
@@ -643,10 +656,10 @@ export const EnhancePage: React.FC = () => {
             episode_id: episodeId || undefined,
           },
         );
-        const pollerUuid = `enhance-lipsync:${targetClip.id}`;
+        const pollerUuid = `enhance-${isDub ? 'dub' : 'lipsync'}:${targetClip.id}`;
         startVideoPoll(pollerUuid, {
           taskId: result.task_id,
-          title: `配音对嘴 · ${audioClip.sourceLabel || '音频轨道'}`,
+          title: `${isDub ? '视频配音' : '配音对嘴'} · ${audioClip.sourceLabel || '音频轨道'}`,
           kind: 'video-voice',
           targetPage: 'enhance',
           targetEntityType: 'video_segment',
@@ -674,27 +687,69 @@ export const EnhancePage: React.FC = () => {
             onFail: (err) => {
               setProcessing(false);
               setProcessProgress(0);
-              alert(`配音对嘴失败：${err}`);
+              alert(`${isDub ? '视频配音' : '配音对嘴'}失败：${err}`);
             },
           },
         });
       } catch (error: any) {
         setProcessing(false);
         setProcessProgress(0);
-        alert(`提交配音对嘴任务失败：${error?.message || error}`);
+        alert(`提交${enhancementKind === 'dub' ? '视频配音' : '配音对嘴'}任务失败：${error?.message || error}`);
       }
       return;
     }
 
-    // === interpolate / dub：后端目前没 worker ===
-    if (enhancementKind !== 'upscale') {
-      const labelMap: Record<EnhancementKind, string> = {
-        upscale: '高清放大',
-        interpolate: '智能补帧',
-        lipSync: '对口型',
-        dub: '配音',
-      };
-      alert(`「${labelMap[enhancementKind]}」功能后端 worker 暂未启用。\n\n目前仅「高清放大」可用，请先切换到该选项再运行。`);
+    if (enhancementKind === 'interpolate') {
+      setProcessing(true);
+      setProcessProgress(0);
+      try {
+        const result = await submitInterpolateTaskQueued(targetClip.url, targetFps, {
+          entity_type: 'video_segment',
+          entity_id: targetClip.id,
+          file_role: 'video',
+          project_id: projectId || undefined,
+          episode_id: episodeId || undefined,
+        });
+        const pollerUuid = `enhance-interpolate:${targetClip.id}`;
+        startVideoPoll(pollerUuid, {
+          taskId: result.task_id,
+          title: `智能补帧 · ${targetFps} FPS`,
+          kind: 'video-enhance',
+          targetPage: 'enhance',
+          targetEntityType: 'video_segment',
+          targetEntityId: targetClip.id,
+          episodeId: episodeId || undefined,
+          projectId: projectId || undefined,
+          callbacks: {
+            onProgress: (progress) => {
+              setProcessing(true);
+              setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
+            },
+            onComplete: ({ status }) => {
+              const outputUrl = status.result?.videos?.[0]?.url;
+              if (outputUrl) {
+                void updateVideoSegment(targetClip.id, {
+                  video_url: outputUrl,
+                  task_id: status.task_id,
+                  status: 'completed',
+                }).catch(() => {});
+              }
+              setProcessProgress(100);
+              window.setTimeout(() => { setProcessing(false); setProcessProgress(0); }, 800);
+              reloadEnhanceData();
+            },
+            onFail: (err) => {
+              setProcessing(false);
+              setProcessProgress(0);
+              alert(`智能补帧失败：${err}`);
+            },
+          },
+        });
+      } catch (error: any) {
+        setProcessing(false);
+        setProcessProgress(0);
+        alert(`提交智能补帧任务失败：${error?.message || error}`);
+      }
       return;
     }
 
@@ -712,7 +767,9 @@ export const EnhancePage: React.FC = () => {
         entity_type: 'video_segment',
         entity_id: targetClip.id,
         file_role: 'video',
+        project_id: projectId || undefined,
         episode_id: episodeId || undefined,
+        resolution: targetResolution,
       });
       const backendTaskId = result.task_id;
       const pollerUuid = `enhance-upscale:${targetClip.id}`;
@@ -755,7 +812,9 @@ export const EnhancePage: React.FC = () => {
     selectedClipId,
     audioClips,
     lipSyncAudioClipId,
+    dubVoiceStyle,
     targetResolution,
+    targetFps,
     projectId,
     episodeId,
     reload,
@@ -961,10 +1020,12 @@ export const EnhancePage: React.FC = () => {
                     </select>
                   </label>
                 )}
-                {enhancementKind === 'lipSync' && (
+                {(enhancementKind === 'lipSync' || enhancementKind === 'dub') && (
                   <div className="space-y-2">
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-xs text-n100">最终对白音频</span>
+                      <span className="text-xs text-n100">
+                        {enhancementKind === 'dub' ? '配音音轨' : '最终对白音频'}
+                      </span>
                       <select
                         value={lipSyncAudioClipId}
                         onChange={e => setLipSyncAudioClipId(e.target.value)}
@@ -988,14 +1049,16 @@ export const EnhancePage: React.FC = () => {
                       {audioUploading ? '正在上传录音' : '上传配音演员录音'}
                     </button>
                     <p className="text-[11px] leading-4 text-n100">
-                      演员录音作为最终对白，提交后由 GPU 让当前镜头嘴型匹配该音频。
+                      {enhancementKind === 'dub'
+                        ? '选择现有音轨或上传录音，GPU 将生成带该配音且嘴型同步的新视频。'
+                        : '演员录音作为最终对白，提交后由 GPU 让当前镜头嘴型匹配该音频。'}
                     </p>
                   </div>
                 )}
 
                 <button
                   onClick={() => void applyEnhancement()}
-                  disabled={processing || (enhancementKind !== 'dub' && !comfyAvailable) || (enhancementKind === 'lipSync' && !lipSyncAudioClipId)}
+                  disabled={processing || !comfyAvailable || ((enhancementKind === 'lipSync' || enhancementKind === 'dub') && !lipSyncAudioClipId)}
                   className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {processing ? (
@@ -1004,7 +1067,7 @@ export const EnhancePage: React.FC = () => {
                     <><Wand2 size={14} /> 提交处理任务</>
                   )}
                 </button>
-                {enhancementKind !== 'dub' && !comfyAvailable && (
+                {!comfyAvailable && (
                   <div className="text-[11px] text-amber-600 text-center mt-1.5 leading-snug">
                     「{ENHANCE_OPTIONS.find(o => o.kind === enhancementKind)?.label}」需 GPU 集群节点（ComfyUI Agent），
                     当前无可用节点，暂不可用。

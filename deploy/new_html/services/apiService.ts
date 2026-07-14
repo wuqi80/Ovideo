@@ -80,6 +80,8 @@ export {
     createEpisodeScript,
     updateEpisodeScriptById,
     deleteEpisodeScript,
+    getWorkflowScript,
+    selectWorkflowScript,
     listEpisodeScriptSegments,
     batchSaveScriptSegments,
     deleteScriptSegments,

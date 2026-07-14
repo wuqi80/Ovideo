@@ -19,11 +19,61 @@ import task_service
 import video_reverse_service
 from api_routes import get_current_user
 from dao_content import FileDAO
+from dao_task import TaskDAO
 from dao_video_reverse import VideoReverseSegmentDAO, VideoReverseTaskDAO
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/video-reverse", tags=["video-reverse"])
+
+_REVERSE_TERMINAL_STATUSES = {'completed', 'failed', 'cancelled'}
+
+
+async def _reconcile_terminal_task(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep the video-reverse row aligned with its generic queue task."""
+    if not task or task.get('status') in _REVERSE_TERMINAL_STATUSES:
+        return task
+    task_id = task.get('task_id')
+    if not task_id:
+        return task
+
+    generic_task = await TaskDAO.get_task(task_id)
+    generic_status = str((generic_task or {}).get('status') or '')
+    if generic_status not in _REVERSE_TERMINAL_STATUSES:
+        return task
+
+    if generic_status == 'cancelled':
+        reverse_status = 'cancelled'
+        error_message = (generic_task or {}).get('error_message') or 'Task was cancelled.'
+    else:
+        reverse_status = 'failed'
+        error_message = (generic_task or {}).get('error_message')
+        if not error_message:
+            error_message = (
+                'Video reverse task ended before its analysis results were persisted.'
+                if generic_status == 'completed'
+                else 'Video reverse task failed before processing started.'
+            )
+
+    await VideoReverseTaskDAO.update_status(
+        task['reverse_task_id'],
+        reverse_status,
+        progress=100,
+        error_message=str(error_message)[:500],
+        completed=True,
+    )
+    try:
+        await credit_service.release(task_id, reason=str(error_message)[:200])
+    except Exception as exc:
+        logger.warning("video_reverse reconcile credit release failed: %s", exc)
+
+    refreshed = await VideoReverseTaskDAO.get(task['reverse_task_id'])
+    return refreshed or {
+        **task,
+        'status': reverse_status,
+        'progress': 100,
+        'error_message': str(error_message)[:500],
+    }
 
 
 # ============================================
@@ -215,6 +265,7 @@ async def get_video_reverse_task(
     if task.get('user_id') != user_id:
         # TODO Slice 4: 走 project 共享判断
         raise HTTPException(status_code=403, detail='无权访问')
+    task = await _reconcile_terminal_task(task)
     segments = await VideoReverseSegmentDAO.list_for_task(reverse_task_id)
     return {"success": True, "task": task, "segments": segments}
 

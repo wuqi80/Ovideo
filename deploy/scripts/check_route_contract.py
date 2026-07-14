@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 247
-DEFAULT_EXPECTED_OPERATIONS = 303
+DEFAULT_EXPECTED_PATHS = 249
+DEFAULT_EXPECTED_OPERATIONS = 306
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -1191,16 +1191,15 @@ def check_storyboard_paged_reload_contract(root: Path) -> int:
         (episode_data_text, "function normalizeStoryboardFallbackResult(", "storyboard backend fallback metadata normalizer"),
         (episode_data_text, "result.fallbackScriptId ?? result.fallback_script_id", "storyboard fallback script id supports snake case"),
         (episode_data_text, "fallbackReason: 'empty_script_storyboard'", "storyboard stale script fallback marker"),
-        (episode_data_test_text, "falls back to episode storyboard when selected script has no rows", "storyboard fallback unit test"),
+        (episode_data_test_text, "keeps an empty selected script isolated by default", "storyboard empty script isolation unit test"),
+        (episode_data_test_text, "falls back to episode storyboard only when explicitly requested", "storyboard explicit fallback unit test"),
         (episode_data_test_text, "normalizes backend storyboard fallback metadata", "storyboard backend fallback metadata unit test"),
-        (context_text, "clearStaleScriptSelectionFromStoryboardFallback", "storyboard context clears stale script fallback"),
-        (context_text, "res?.fallbackScriptId ?? res?.fallback_script_id", "storyboard context supports snake fallback metadata"),
+        (context_text, "getStoryboardItems(episodeId, sid", "storyboard context keeps workflow script scope"),
         (context_text, "const previousScriptId = prevScriptIdRef.current", "storyboard context tracks previous script selection"),
         (context_text, "if (previousScriptId === selectedScriptId) return", "storyboard context reloads first real script selection"),
         (context_text, "void fetchSlices({ quiet: true }, ...slicesToReload)", "storyboard context quietly reloads script-scoped slices"),
-        (context_test_text, "clears stale script selection when storyboard falls back to episode scope", "storyboard stale script context unit test"),
         (context_test_text, "reloads script scoped slices on first script selection", "storyboard first script selection reload test"),
-        (context_test_text, "reloads loaded script scoped slices after stale storyboard fallback clears selection", "storyboard fallback clears and reloads script-scoped slices test"),
+        (context_test_text, "keeps episode assets cumulative while storyboard input remains script scoped", "storyboard scope isolation context test"),
         (storyboard_service_text, "episode_script_dao.get_by_id(script_id)", "storyboard backend stale script ownership check"),
         (storyboard_service_text, 'fallback_reason = "stale_script_storyboard"', "storyboard backend stale script fallback marker"),
         (storyboard_service_text, 'payload["fallback_scope"] = "episode"', "storyboard backend fallback scope marker"),
@@ -2278,6 +2277,8 @@ def check_episode_routes_extracted(root: Path) -> int:
         ("/api/episodes/{episode_id}", "delete"),
         ("/api/episodes/{episode_id}/duplicate", "post"),
         ("/api/projects/{project_id}/episodes/reorder", "post"),
+        ("/api/episodes/{episode_id}/workflow-script", "get"),
+        ("/api/episodes/{episode_id}/workflow-script", "put"),
     }
     api_tree = parse_py_file(api_routes_path)
     violations: list[str] = []
@@ -2315,8 +2316,8 @@ def check_episode_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 7:
-        fail(f"routers/episodes.py should own 7 episode route registrations, found {route_count}")
+    if route_count != 9:
+        fail(f"routers/episodes.py should own 9 episode route registrations, found {route_count}")
 
     router_text = episodes_path.read_text(encoding="utf-8")
     service_text = episode_service_path.read_text(encoding="utf-8")
@@ -2329,6 +2330,8 @@ def check_episode_routes_extracted(root: Path) -> int:
         (router_text, "delete_episode_service(", episodes_path),
         (router_text, "duplicate_episode_service(", episodes_path),
         (router_text, "reorder_episodes_service(", episodes_path),
+        (router_text, "get_workflow_script_service(", episodes_path),
+        (router_text, "select_workflow_script_service(", episodes_path),
         (service_text, "episode_dao.get_episodes(", episode_service_path),
         (service_text, "episode_dao.get_next_episode_number(", episode_service_path),
         (service_text, "episode_dao.create_episode(", episode_service_path),
@@ -2336,6 +2339,7 @@ def check_episode_routes_extracted(root: Path) -> int:
         (service_text, "episode_script_dao.list_by_episode(", episode_service_path),
         (service_text, "episode_script_dao.create(", episode_service_path),
         (service_text, "episode_dao.reorder_episodes(", episode_service_path),
+        (service_text, "episode_dao.set_workflow_script(", episode_service_path),
     ]
     forbidden_snippets = [
         (router_text, "EpisodeDAO.get_episodes(", episodes_path),
@@ -2514,11 +2518,14 @@ def check_video_capabilities_routes_extracted(root: Path) -> int:
 def check_storyboard_routes_extracted(root: Path) -> int:
     api_routes_path = root / "api_routes.py"
     storyboard_path = root / "routers" / "storyboard.py"
+    storyboard_quality_path = root / "routers" / "storyboard_quality.py"
     storyboard_service_path = root / "services" / "storyboard_service.py"
     if not storyboard_path.exists():
         fail("routers/storyboard.py is missing")
     if not storyboard_service_path.exists():
         fail("services/storyboard_service.py is missing")
+    if not storyboard_quality_path.exists():
+        fail("routers/storyboard_quality.py is missing")
 
     route_pairs = {
         ("/api/episodes/{episode_id}/storyboard-items", "get"),
@@ -2570,8 +2577,26 @@ def check_storyboard_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 11:
-        fail(f"routers/storyboard.py should own 11 storyboard route registrations, found {route_count}")
+    quality_tree = parse_py_file(storyboard_quality_path)
+    quality_route_count = 0
+    for node in ast.walk(quality_tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            target = decorator.func if isinstance(decorator, ast.Call) else decorator
+            name = ast_call_name(target)
+            if not name:
+                continue
+            owner, _, method = name.rpartition(".")
+            if owner == "router" and method.lower() in OPENAPI_METHODS:
+                quality_route_count += 1
+
+    if route_count != 11 or quality_route_count != 1:
+        fail(
+            "Storyboard route ownership mismatch: "
+            f"routers/storyboard.py={route_count} (expected 11), "
+            f"routers/storyboard_quality.py={quality_route_count} (expected 1)"
+        )
 
     router_text = storyboard_path.read_text(encoding="utf-8")
     service_text = storyboard_service_path.read_text(encoding="utf-8")
@@ -2625,7 +2650,7 @@ def check_storyboard_routes_extracted(root: Path) -> int:
     for text, snippet, path in forbidden_snippets:
         if snippet in text:
             fail(f"Storyboard router must delegate DAO orchestration to service: {path.relative_to(root)} {snippet}")
-    return route_count + len(required_snippets)
+    return route_count + quality_route_count + len(required_snippets)
 
 
 def check_asset_routes_extracted(root: Path) -> int:

@@ -240,6 +240,7 @@ export async function submitUpscaleTask(
         episode_id?: string;
         preferred_agent_id?: string;
         preferred_node_id?: string;
+        resolution?: string;
     }
 ): Promise<{ task_id: string }> {
     const requestData: Record<string, any> = {
@@ -255,6 +256,7 @@ export async function submitUpscaleTask(
         requestData.file_role = entityOptions.file_role || 'video';
         requestData.project_id = entityOptions.project_id;
         requestData.episode_id = entityOptions.episode_id;
+        requestData.resolution = entityOptions.resolution;
     }
 
 
@@ -277,6 +279,40 @@ export async function submitUpscaleTask(
 }
 
 /**
+ * Submit a GPU frame-interpolation task.
+ */
+export async function submitInterpolateTask(
+    videoFilename: string,
+    targetFps: 30 | 60 | 120,
+    entityOptions?: {
+        entity_type?: string;
+        entity_id?: string;
+        file_role?: string;
+        project_id?: string;
+        episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
+    },
+): Promise<{ task_id: string }> {
+    const routing = await resolveGpuTaskRouting(
+        entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id,
+    );
+    return apiJson<{ task_id: string }>('/api/generate', {
+        method: 'POST',
+        body: JSON.stringify({
+            task_type: 'interpolate',
+            video_filename: videoFilename,
+            target_fps: targetFps,
+            seed: -1,
+            priority: 2,
+            ...entityOptions,
+            preferred_agent_id: entityOptions?.preferred_agent_id || routing.preferredAgentId,
+            preferred_node_id: entityOptions?.preferred_node_id || routing.preferredNodeId,
+        }),
+    }, 'submitInterpolateTask');
+}
+
+/**
  * 提交配音任务
  */
 export async function submitVoiceTask(
@@ -291,9 +327,13 @@ export async function submitVoiceTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
     },
 ): Promise<{ task_id: string }> {
-    const routing = await resolveGpuTaskRouting();
+    const routing = await resolveGpuTaskRouting(
+        entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id,
+    );
     return await apiJson<{ task_id: string }>('/api/generate', {
         method: 'POST',
         body: JSON.stringify({
@@ -306,8 +346,8 @@ export async function submitVoiceTask(
             seed: -1,
             priority: 2,
             ...entityOptions,
-            preferred_agent_id: routing.preferredAgentId,
-            preferred_node_id: routing.preferredNodeId,
+            preferred_agent_id: entityOptions?.preferred_agent_id || routing.preferredAgentId,
+            preferred_node_id: entityOptions?.preferred_node_id || routing.preferredNodeId,
         })
     }, 'submitVoiceTask');
 }
@@ -477,11 +517,35 @@ export async function submitUpscaleTaskQueued(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
+        resolution?: string;
     }
 ): Promise<{ task_id: string }> {
     return enqueueComfyUITask(async (_frontendKey) => {
         return submitUpscaleTask(videoFilename, entityOptions);
     }, '视频放大');
+}
+
+/**
+ * Queue execution: GPU frame interpolation.
+ */
+export async function submitInterpolateTaskQueued(
+    videoFilename: string,
+    targetFps: 30 | 60 | 120,
+    entityOptions?: {
+        entity_type?: string;
+        entity_id?: string;
+        file_role?: string;
+        project_id?: string;
+        episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
+    },
+): Promise<{ task_id: string }> {
+    return enqueueComfyUITask(async (_frontendKey) => {
+        return submitInterpolateTask(videoFilename, targetFps, entityOptions);
+    }, '智能补帧');
 }
 
 /**
@@ -499,6 +563,8 @@ export async function submitVoiceTaskQueued(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
     },
 ): Promise<{ task_id: string }> {
     return enqueueComfyUITask(async (_frontendKey) => {

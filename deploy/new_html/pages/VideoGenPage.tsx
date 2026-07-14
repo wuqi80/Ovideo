@@ -12,10 +12,12 @@ import {
 import {
   computeReactiveDurationFromMeta,
   loadWorkspaceSession,
+  mergeWorkspaceSessions,
   patchWorkspaceSession,
   saveWorkspaceSession,
   type StoryboardMeta,
 } from '../services/videoWorkspaceService';
+import { listEpisodeScripts } from '../services/scriptTimelineService';
 import { estimateDurationMs } from '../utils/durationMapping';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { secureApiUrl } from '../services/httpClient';
@@ -78,10 +80,39 @@ export const VideoGenPage: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [changedCount, setChangedCount] = useState(0);
 
-  const sessionScope = useMemo(
-    () => selectedScriptId ? `${episodeId}:${selectedScriptId}` : episodeId || '',
-    [episodeId, selectedScriptId]
-  );
+  const sessionScope = episodeId || '';
+  const [workspaceScopeReady, setWorkspaceScopeReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setWorkspaceScopeReady(false);
+    if (!episodeId) return () => { alive = false; };
+
+    void (async () => {
+      try {
+        const scriptsRes = await listEpisodeScripts(episodeId);
+        const scriptIds = (scriptsRes?.scripts || [])
+          .map((item: any) => item.script_id ?? item.scriptId)
+          .filter(Boolean);
+        const [episodeSession, ...legacySessions] = await Promise.all([
+          loadWorkspaceSession(episodeId),
+          ...scriptIds.map((scriptId: string) => loadWorkspaceSession(`${episodeId}:${scriptId}`)),
+        ]);
+        const sessions = [
+          ...legacySessions.filter(result => result?.success && result.session).map(result => result.session!),
+          ...(episodeSession?.success && episodeSession.session ? [episodeSession.session] : []),
+        ];
+        if (sessions.length > 0 && legacySessions.some(result => result?.success && result.session)) {
+          await saveWorkspaceSession(mergeWorkspaceSessions(sessions), episodeId);
+        }
+      } catch (err) {
+        console.warn('[VideoGenPage] 合并旧视频工作区失败:', err);
+      } finally {
+        if (alive) setWorkspaceScopeReady(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [episodeId]);
 
   const itemsWithImages = useMemo(
     () =>
@@ -364,7 +395,7 @@ export const VideoGenPage: React.FC = () => {
   }, [sessionScope]);
 
   useEffect(() => {
-    if (autoImported.current || importing || importDone || isLoading) return;
+    if (!workspaceScopeReady || autoImported.current || importing || importDone || isLoading) return;
     if (allStoryboardItems.length === 0) return;
     let alive = true;
     (async () => {
@@ -401,6 +432,7 @@ export const VideoGenPage: React.FC = () => {
     return () => { alive = false; };
   }, [
     isLoading,
+    workspaceScopeReady,
     allStoryboardItems,
     importing,
     importDone,
@@ -605,7 +637,7 @@ export const VideoGenPage: React.FC = () => {
       {/* Embedded old VideoPage */}
       <div className="layout-safe flex-1 min-h-0 overflow-auto">
         <React.Suspense fallback={<WorkflowChunkFallback label="加载视频工作台..." />}>
-          <VideoPage
+          {workspaceScopeReady ? <VideoPage
             isActive={true}
             sessionScope={sessionScope}
             projectId={projectId || ''}
@@ -613,7 +645,7 @@ export const VideoGenPage: React.FC = () => {
             storyboardItems={allStoryboardItems}
             onRequestReimport={handleImportAll}
             key={`${sessionScope}-${importDone}-${syncNonce}`}
-          />
+          /> : <WorkflowChunkFallback label="合并本集视频工作区..." />}
         </React.Suspense>
       </div>
     </div>

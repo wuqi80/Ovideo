@@ -21,6 +21,7 @@ class GenerateRequest(BaseModel):
     image_path_end: Optional[str] = Field(None, description="结束帧路径（morph）")
     video_filename: Optional[str] = Field(None, description="视频文件名（upscale/voice）")
     audio_filename: Optional[str] = Field(None, description="音频文件名（voice）")
+    target_fps: Optional[int] = Field(60, description="Target frame rate for interpolate tasks")
     seed: int = Field(-1, description="随机种子")
     steps: int = Field(20, description="步数")
     cfg: float = Field(7.5, description="CFG")
@@ -74,10 +75,19 @@ class GeminiTextRequest(BaseModel):
     model: Optional[str] = Field(None, description="Gemini text model override; omitted uses admin runtime config")
 
 
+class GeminiImageReferenceMetadata(BaseModel):
+    type: str = Field("effect", description="character | scene | pose | prop | effect")
+    name: Optional[str] = None
+    description: Optional[str] = None
+    source: Optional[str] = None
+    isLocked: bool = False
+
+
 class GeminiImageRequest(BaseModel):
     prompt: str
     model: Optional[str] = Field(None, description="Gemini image model override; omitted uses admin runtime config")
     references: List[str] = Field(default_factory=list)
+    reference_metadata: List[GeminiImageReferenceMetadata] = Field(default_factory=list)
     aspectRatio: str = Field("1:1")
     imageSize: Optional[str] = None
     entity_type: Optional[str] = Field(None)

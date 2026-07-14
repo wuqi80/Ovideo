@@ -16,6 +16,29 @@ export interface GeneratedImage {
   /** 统一文件服务返回的实体文件 ID（ComfyUI 等异步任务） */
   fileId?: string | null;
   isSelected?: boolean;
+  qualityReview?: StoryboardQualityReview;
+  generationModel?: string;
+  generationAttempt?: number;
+}
+
+export interface CharacterQualityScore {
+  name: string;
+  score: number;
+  issues: string[];
+}
+
+export interface StoryboardQualityReview {
+  status: 'passed' | 'failed' | 'unverified';
+  characterConsistencyScore: number;
+  scriptComplianceScore: number;
+  visualQualityScore: number;
+  overallScore: number;
+  characterScores: CharacterQualityScore[];
+  issues: string[];
+  retryPrompt: string;
+  reviewedAt: string;
+  reviewerModel?: string;
+  attempt?: number;
 }
 
 export interface StoryboardItem {
@@ -186,8 +209,14 @@ export interface Material {
   url: string; // Blob URL or Base64
   thumbnail?: string; // 缩略图
   type: 'image';
-  source: 'upload' | 'ai';
+  source: string;
   timestamp: number;
+  name?: string;
+  assetId?: string;
+  assetType?: 'character' | 'scene' | 'prop';
+  description?: string;
+  styleParams?: Record<string, any>;
+  isIdentityReference?: boolean;
 }
 
 // Key is the tag name (e.g., "Main Character", "Living Room")
@@ -200,6 +229,19 @@ export interface GenerationReference {
   url: string;
   type: ReferenceType;
   name?: string; // Optional tag name
+  assetId?: string;
+  description?: string;
+  source?: 'identity_anchor' | 'material_binding' | 'manual';
+  isLocked?: boolean;
+}
+
+export interface CharacterIdentityAnchor {
+  age?: string;
+  face?: string;
+  hair?: string;
+  outfit?: string;
+  distinguishingFeatures?: string;
+  forbiddenChanges?: string;
 }
 
 // --- Admin Types ---

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from dao_agent import AgentDAO
 from pathlib import Path
 from dao_task import TaskDAO
+from core.task_types import is_external_api_task
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,74 @@ def _preferred_agent_id_from_task_info(task_info: dict) -> str:
     return ""
 
 
+async def _task_info_from_queue_member(redis_client, task_status_prefix: str, raw_member):
+    """Load task metadata without removing the queue member."""
+    if isinstance(raw_member, bytes):
+        raw_member = raw_member.decode("utf-8")
+
+    try:
+        parsed = json.loads(raw_member)
+        if isinstance(parsed, dict) and parsed.get("task_id"):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    task_id = str(raw_member or "").strip()
+    if not task_id:
+        return None
+
+    raw_hash = await redis_client.hgetall(f"{task_status_prefix}{task_id}")
+    if not raw_hash:
+        return None
+    task_hash = {
+        (key.decode("utf-8") if isinstance(key, bytes) else key):
+        (value.decode("utf-8") if isinstance(value, bytes) else value)
+        for key, value in raw_hash.items()
+    }
+    try:
+        data = json.loads(task_hash.get("data", "{}"))
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    return {
+        "task_id": task_id,
+        "task_type": task_hash.get("task_type", "comfyui"),
+        "data": data if isinstance(data, dict) else {},
+    }
+
+
+async def _claim_next_agent_task(redis_client, redis_config, agent_id: str, scan_limit: int = 100):
+    """Atomically claim a GPU task while leaving external API tasks untouched."""
+    members = await redis_client.zrange(
+        redis_config.TASK_QUEUE_KEY,
+        0,
+        max(0, scan_limit - 1),
+        withscores=True,
+    )
+    for raw_member, score in members:
+        task_info = await _task_info_from_queue_member(
+            redis_client,
+            redis_config.TASK_STATUS_PREFIX,
+            raw_member,
+        )
+        if not task_info:
+            await redis_client.zrem(redis_config.TASK_QUEUE_KEY, raw_member)
+            logger.warning("poll: removed orphan queue member %r", raw_member)
+            continue
+
+        task_type = str(task_info.get("task_type") or "")
+        if is_external_api_task(task_type):
+            continue
+
+        preferred_agent_id = _preferred_agent_id_from_task_info(task_info)
+        if preferred_agent_id and preferred_agent_id != str(agent_id):
+            continue
+
+        removed = await redis_client.zrem(redis_config.TASK_QUEUE_KEY, raw_member)
+        if removed:
+            return task_info, raw_member, score
+    return None
+
+
 @router.post("/register")
 async def register_agent(request: RegisterRequest, authorization: str = Header(...)):
     token = authorization.replace("Bearer ", "").strip()
@@ -190,10 +259,16 @@ async def agent_poll(authorization: str = Header(...)):
     queue_len = await redis_client.zcard(RedisConfig.TASK_QUEUE_KEY)
     logger.info(f"poll: agent={agent['agent_id']}, queue_len={queue_len}, key={RedisConfig.TASK_QUEUE_KEY}")
 
-    members = await redis_client.zpopmin(RedisConfig.TASK_QUEUE_KEY)
-    logger.info(f"poll: zpopmin result={members}")
-    if not members:
+    claimed = await _claim_next_agent_task(
+        redis_client,
+        RedisConfig,
+        str(agent["agent_id"]),
+    )
+    logger.info("poll: claimed=%s", claimed[:1] if claimed else None)
+    if not claimed:
         return {"task": None}
+    task_info, claimed_member, claimed_score = claimed
+    members = [(claimed_member, claimed_score)]
 
     raw_member = members[0][0] if isinstance(members[0], (list, tuple)) else members[0]
     if not raw_member:

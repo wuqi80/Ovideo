@@ -65,11 +65,23 @@ describe('getStoryboardItems', () => {
     expect(url).toBe('/api/episodes/ep_1/storyboard-items?script_id=script_1&limit=10&offset=20&include_total=true');
   });
 
-  it('falls back to episode storyboard when selected script has no rows', async () => {
+  it('keeps an empty selected script isolated by default', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, items: [], total: 0 }));
+    const result = await getStoryboardItems('ep_1', 'script_empty', { limit: 10, includeTotal: true });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.items).toHaveLength(0);
+  });
+
+  it('falls back to episode storyboard only when explicitly requested', async () => {
     mockFetch
       .mockResolvedValueOnce(mockJsonResponse({ success: true, items: [], total: 0 }))
       .mockResolvedValueOnce(mockJsonResponse({ success: true, items: [{ item_id: 'sb_1' }], total: 1 }));
-    const result = await getStoryboardItems('ep_1', 'stale_script', { limit: 10, includeTotal: true });
+    const result = await getStoryboardItems('ep_1', 'stale_script', {
+      limit: 10,
+      includeTotal: true,
+      fallbackToEpisode: true,
+    });
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch.mock.calls[0][0]).toBe('/api/episodes/ep_1/storyboard-items?script_id=stale_script&limit=10&include_total=true');

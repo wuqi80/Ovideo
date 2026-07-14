@@ -229,6 +229,7 @@ class StoryboardDAO:
         props: Optional[List[Dict[str, Any]]] = None,
         script_id: Optional[str],
         created_by: str,
+        preserve_existing_storyboards: bool = False,
     ) -> int:
         db = get_db_manager()
         if not db:
@@ -241,19 +242,23 @@ class StoryboardDAO:
                     episode_id,
                     original_content=original_content,
                     adapted_script=script_content,
+                    script_id=script_id,
                     metadata={
                         "extracted_characters": [c.get("name", "") for c in characters],
                         "extracted_scenes": [s.get("name", "") for s in scenes],
                         "extracted_props": [p.get("name", "") for p in (props or [])],
                     },
                 )
-                await StoryboardDAO.delete_by_episode_transactional(conn, episode_id, script_id=script_id)
-                created = await StoryboardDAO.batch_create_transactional(
-                    conn,
-                    episode_id,
-                    storyboard_items,
-                    script_id=script_id,
-                )
+                if not preserve_existing_storyboards:
+                    await StoryboardDAO.delete_by_episode_transactional(conn, episode_id, script_id=script_id)
+                created = 0
+                if storyboard_items:
+                    created = await StoryboardDAO.batch_create_transactional(
+                        conn,
+                        episode_id,
+                        storyboard_items,
+                        script_id=script_id,
+                    )
                 await asset_dao.create_missing_episode_assets_transactional(
                     conn,
                     project_id=project_id,

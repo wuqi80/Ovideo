@@ -13,8 +13,10 @@ from services.episode_service import (
     delete_episode as delete_episode_service,
     duplicate_episode as duplicate_episode_service,
     get_episode as get_episode_service,
+    get_workflow_script as get_workflow_script_service,
     list_episodes as list_episodes_service,
     reorder_episodes as reorder_episodes_service,
+    select_workflow_script as select_workflow_script_service,
     update_episode as update_episode_service,
 )
 
@@ -34,6 +36,10 @@ class EpisodeUpdate(BaseModel):
 
 class EpisodeReorder(BaseModel):
     episode_ids: List[str]
+
+
+class WorkflowScriptSelection(BaseModel):
+    script_id: str
 
 
 def create_episodes_router(
@@ -85,6 +91,33 @@ def create_episodes_router(
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @router.get("/api/episodes/{episode_id}/workflow-script")
+    async def get_workflow_script(episode_id: str, user_id: str = Depends(get_current_user)):
+        try:
+            return await get_workflow_script_service(
+                episode_id,
+                episode_dao=EpisodeDAO,
+                episode_script_dao=EpisodeScriptDAO,
+            )
+        except EpisodeNotFound as e:
+            raise HTTPException(status_code=404, detail="集数或采用剧本不存在") from e
+
+    @router.put("/api/episodes/{episode_id}/workflow-script")
+    async def select_workflow_script(
+        episode_id: str,
+        data: WorkflowScriptSelection,
+        user_id: str = Depends(get_current_user),
+    ):
+        try:
+            return await select_workflow_script_service(
+                episode_id,
+                data.script_id,
+                episode_dao=EpisodeDAO,
+                episode_script_dao=EpisodeScriptDAO,
+            )
+        except EpisodeNotFound as e:
+            raise HTTPException(status_code=404, detail="集数或采用剧本不存在") from e
 
     @router.delete("/api/episodes/{episode_id}")
     async def delete_episode(episode_id: str, user_id: str = Depends(get_current_user)):

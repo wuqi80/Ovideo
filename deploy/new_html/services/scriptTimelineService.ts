@@ -45,6 +45,21 @@ export async function deleteEpisodeScript(episodeId: string, scriptId: string) {
   );
 }
 
+export async function getWorkflowScript(episodeId: string) {
+  return apiJson<any>(
+    `/api/episodes/${episodeId}/workflow-script`,
+    { method: 'GET' },
+    'getWorkflowScript',
+  );
+}
+
+export async function selectWorkflowScript(episodeId: string, scriptId: string) {
+  return apiJson<any>(`/api/episodes/${episodeId}/workflow-script`, {
+    method: 'PUT',
+    body: JSON.stringify({ script_id: scriptId }),
+  }, 'selectWorkflowScript');
+}
+
 export async function listEpisodeScriptSegments(episodeId: string, scriptId?: string) {
   const qs = scriptId ? `?script_id=${encodeURIComponent(scriptId)}` : '';
   return apiJson<any>(

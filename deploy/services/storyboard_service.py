@@ -386,6 +386,7 @@ async def export_script(
     storyboard_dao: Any,
     episode_script_dao: Any,
     asset_dao: Any,
+    preserve_existing_storyboards: bool = False,
 ) -> Dict[str, Any]:
     created = await storyboard_dao.export_script_transaction(
         episode_script_dao=episode_script_dao,
@@ -399,6 +400,7 @@ async def export_script(
         scenes=scenes,
         props=props or [],
         script_id=script_id,
+        preserve_existing_storyboards=preserve_existing_storyboards,
         created_by=user_id,
     )
     return {

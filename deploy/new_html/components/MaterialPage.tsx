@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion } from '../types';
-import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box, ShieldCheck } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle } from '../services/comfyuiGenerationService';
@@ -1573,9 +1573,17 @@ const MaterialCard: React.FC<{
                         <span className="text-[10px] font-bold text-n100 uppercase tracking-wide block mb-1">当前状态</span>
                         <p className={`text-xs leading-relaxed ${boundMaterial ? 'text-success' : 'text-n300'}`}>
                             {boundMaterial 
-                                ? "已锁定当前及后续镜头。"
+                                ? type === 'character'
+                                  ? "已设为角色身份参考，锁定当前及后续镜头。"
+                                  : "已锁定当前及后续镜头。"
                                 : "请选择素材。绑定后将自动填充后续所有同名标签。"}
                         </p>
+                        {boundMaterial && type === 'character' && (
+                          <div className="mt-2 text-[10px] text-n300">
+                            <span className="inline-flex items-center gap-1 font-semibold text-primary"><ShieldCheck className="w-3 h-3" /> 角色身份参考</span>
+                            {boundMaterial.description && <p className="mt-1 line-clamp-2" title={boundMaterial.description}>{boundMaterial.description}</p>}
+                          </div>
+                        )}
                      </div>
                      {boundMaterial && (
                          <button 

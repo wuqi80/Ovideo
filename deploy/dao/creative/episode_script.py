@@ -149,12 +149,20 @@ class EpisodeScriptDAO:
         original_content: str = '',
         adapted_script: str = '',
         metadata: Optional[dict] = None,
+        script_id: Optional[str] = None,
     ) -> None:
-        """在已有事务连接上 upsert 剧本（兼容旧接口，操作第一条记录）"""
-        existing = await conn.fetchrow(
-            "SELECT script_id FROM episode_scripts WHERE episode_id = $1 ORDER BY sort_order, created_at LIMIT 1",
-            episode_id
-        )
+        """在已有事务连接上更新指定剧本；未指定时兼容旧接口操作第一条。"""
+        if script_id:
+            existing = await conn.fetchrow(
+                "SELECT script_id FROM episode_scripts WHERE episode_id = $1 AND script_id = $2",
+                episode_id,
+                script_id,
+            )
+        else:
+            existing = await conn.fetchrow(
+                "SELECT script_id FROM episode_scripts WHERE episode_id = $1 ORDER BY sort_order, created_at LIMIT 1",
+                episode_id,
+            )
         if existing:
             await conn.execute("""
                 UPDATE episode_scripts SET
@@ -166,12 +174,12 @@ class EpisodeScriptDAO:
                 existing['script_id'],
             )
         else:
-            script_id = f"script_{uuid.uuid4().hex[:12]}"
+            target_script_id = script_id or f"script_{uuid.uuid4().hex[:12]}"
             await conn.execute("""
                 INSERT INTO episode_scripts
                     (script_id, episode_id, file_name, original_content, adapted_script, metadata)
                 VALUES ($1, $2, '分集剧本', $3, $4, $5::jsonb)
-            """, script_id, episode_id,
+            """, target_script_id, episode_id,
                 original_content, adapted_script,
                 json.dumps(metadata or {}, ensure_ascii=False),
             )

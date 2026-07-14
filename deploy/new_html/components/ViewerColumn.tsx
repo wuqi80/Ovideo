@@ -129,6 +129,7 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
       <div className="flex-1 overflow-hidden relative bg-n20">
         {selectedFile ? (
           <textarea
+            key={selectedFile.id}
             className="w-full h-full p-6 bg-transparent text-n700 font-serif leading-relaxed resize-none focus:outline-none focus:bg-n0 transition-colors custom-scrollbar"
             value={selectedFile.originalContent}
             onChange={(e) => onUpdateContent(selectedFile.id, e.target.value)}

@@ -264,6 +264,27 @@ async def test_export_script_delegates_transaction_and_counts_inputs():
     assert FakeStoryboardDAO.export_kwargs["created_by"] == "user_1"
 
 
+async def test_export_script_can_preserve_existing_storyboards():
+    await storyboard_service.export_script(
+        "ep_1",
+        project_id="proj_1",
+        original_content="original",
+        script_content="script",
+        storyboard_items=[],
+        characters=[],
+        scenes=[],
+        script_id="script_2",
+        user_id="user_1",
+        storyboard_dao=FakeStoryboardDAO,
+        episode_script_dao=FakeEpisodeScriptDAO,
+        asset_dao=FakeAssetDAO,
+        preserve_existing_storyboards=True,
+    )
+
+    assert FakeStoryboardDAO.export_kwargs["script_id"] == "script_2"
+    assert FakeStoryboardDAO.export_kwargs["preserve_existing_storyboards"] is True
+
+
 async def test_reorder_storyboard_items_raises_when_dao_fails():
     FakeStoryboardDAO.reorder_returns_false = True
 

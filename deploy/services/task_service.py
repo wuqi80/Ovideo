@@ -263,6 +263,10 @@ class TaskService:
             logger.warning("加载后台工作流模板失败，回退磁盘工作流 %s: %s", workflow_name, exc)
         return None
 
+    async def resolve_agent_file(self, param: str, file_ref, username: str) -> Optional[dict]:
+        """Resolve a stored file reference for download by a GPU Agent."""
+        return await self._resolve_agent_file(param, file_ref, username)
+
     async def _resolve_agent_file(self, param: str, file_ref, username: str) -> Optional[dict]:
         if not file_ref or not isinstance(file_ref, str) or not file_ref.strip():
             return None

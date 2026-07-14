@@ -12,9 +12,8 @@ import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, Material
 import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
-import { estimateDurationMs } from './utils/durationMapping';
 import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/scriptTimelineService';
-import { deleteAllStoryboardItems, exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
+import { exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
 import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
 
@@ -122,11 +121,19 @@ interface WorkspaceAppProps {
   hideHeader?: boolean;
   episodeId: string;
   initialScriptId?: string | null;
-  onScriptSelect?: (scriptId: string | null) => void;
+  activeScriptId?: string | null;
+  onActivateScript?: (scriptId: string) => Promise<void> | void;
   onAfterExport?: () => Promise<void> | void;
 }
 
-const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episodeId: propEpisodeId, initialScriptId, onScriptSelect, onAfterExport }) => {
+const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
+  hideHeader = false,
+  episodeId: propEpisodeId,
+  initialScriptId,
+  activeScriptId,
+  onActivateScript,
+  onAfterExport,
+}) => {
 
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [storyboardTotalsByFileId, setStoryboardTotalsByFileId] = useState<Record<string, number>>({});
@@ -230,12 +237,24 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
   // 🔧 使用 ref 存储最新状态，避免闭包问题
   const filesRef = useRef<ProjectFile[]>(files);
   const materialLibraryRef = useRef<MaterialLibrary>(materialLibrary);
+  const savedScriptSignaturesRef = useRef<Record<string, string>>({});
   
   // 🔧 每次状态更新时同步到 ref
   useEffect(() => {
     filesRef.current = files;
     materialLibraryRef.current = materialLibrary;
   }, [files, materialLibrary]);
+
+  const getScriptPersistenceSignature = useCallback((file: ProjectFile) => JSON.stringify([
+    file.name,
+    file.originalContent,
+    file.scriptContent ?? null,
+  ]), []);
+
+  const activateWorkflowScript = useCallback(async (scriptId: string) => {
+    if (!onActivateScript || scriptId === activeScriptId) return;
+    await onActivateScript(scriptId);
+  }, [activeScriptId, onActivateScript]);
 
   // Undo/Redo History State: Map<FileID, { past, future }>
   const [fileHistory, setFileHistory] = useState<Record<string, { past: ProjectFile[], future: ProjectFile[] }>>({});
@@ -378,8 +397,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         ? (sbRes as any).total
         : dbItems.length;
       setStoryboardTotalsByFileId(restoreId ? { [restoreId]: storyboardTotal } : {});
+      savedScriptSignaturesRef.current = Object.fromEntries(
+        projectFiles
+          .filter(file => !file.id.startsWith('local_'))
+          .map(file => [file.id, getScriptPersistenceSignature(file)]),
+      );
+      filesRef.current = projectFiles;
       setFiles(projectFiles);
       setSelectedFileId(restoreId);
+      if (!activeScriptId && restoreId) {
+        void activateWorkflowScript(restoreId).catch(err => {
+          console.error('设置本集采用剧本失败:', err);
+        });
+      }
       setLoadedViews(new Set([AppView.Editor, AppView.Materials, AppView.Generation]));
       setIsDataLoaded(true);
     } catch (error) {
@@ -403,11 +433,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
     try {
       for (const file of currentFiles) {
         if (file.id.startsWith('local_')) continue;
-        await updateEpisodeScriptById(propEpisodeId, file.id, {
-          file_name: file.name,
-          original_content: file.originalContent,
-          adapted_script: file.scriptContent,
-        }).catch(err => console.error(`保存文件 ${file.name} 失败:`, err));
+        const signature = getScriptPersistenceSignature(file);
+        if (savedScriptSignaturesRef.current[file.id] === signature) continue;
+        try {
+          await updateEpisodeScriptById(propEpisodeId, file.id, {
+            file_name: file.name,
+            original_content: file.originalContent,
+            adapted_script: file.scriptContent,
+          });
+          savedScriptSignaturesRef.current[file.id] = signature;
+        } catch (err) {
+          console.error(`保存文件 ${file.name} 失败:`, err);
+        }
       }
 
       // 2026-05-29 保存剧本分段（Stage 1 产物）
@@ -433,16 +470,20 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         if (!file.storyboard?.items?.length) continue;
 
         const realItems = file.storyboard.items.filter(i => !i.isPlaceholder);
-        const hasNewItems = realItems.some(i => !i.id || !i.id.startsWith('sb_'));
-        if (!hasNewItems) continue;
+        const newItems = realItems.filter(i => !i.id || !i.id.startsWith('sb_'));
+        if (newItems.length === 0) continue;
+        const persistedItemCount = Math.max(
+          storyboardTotalsByFileId[file.id] ?? 0,
+          realItems.length - newItems.length,
+        );
 
-        const dbItems = realItems.map((item: StoryboardItem, idx: number) => {
+        const dbItems = newItems.map((item: StoryboardItem, idx: number) => {
           // 持久化已生成的画面 URL（仅持久化协议，过滤 blob:/data:），避免"删旧建新"丢图。
           const rawImg = ((item as any).generatedImage || (item as any).generated_image_url || '').toString();
           const cleanImg = rawImg.split('?')[0];
           const persistImg = (cleanImg.startsWith('http') || cleanImg.startsWith('/')) ? cleanImg : '';
           return ({
-          sort_order: idx,
+          sort_order: persistedItemCount + idx,
           scene_heading: item.originalText || item.scene || '',
           action_text: item.scriptSegment || '',
           dialogue: item.dialogue || '',
@@ -460,28 +501,31 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         });
         });
 
-        await deleteAllStoryboardItems(propEpisodeId, file.id).catch(err =>
-          console.warn(`清理旧分镜失败 (${file.id}):`, err)
-        );
         const result: any = await batchCreateStoryboardItems(propEpisodeId, dbItems, file.id);
         if (result?.success && Array.isArray(result.items)) {
           const newIds: string[] = result.items.map((r: any) => r.item_id ?? r.itemId);
-          setFiles(prev => prev.map(f => {
+          const applyCreatedIds = (sourceFiles: ProjectFile[]) => sourceFiles.map(f => {
             if (f.id !== file.id || !f.storyboard) return f;
             let realIdx = 0;
             const updatedItems = f.storyboard.items.map(it => {
-              if (it.isPlaceholder) return it;
+              if (it.isPlaceholder || (it.id && it.id.startsWith('sb_'))) return it;
               const newId = newIds[realIdx++];
               return newId ? { ...it, id: newId } : it;
             });
             return { ...f, storyboard: { ...f.storyboard, items: updatedItems } };
+          });
+          setFiles(applyCreatedIds);
+          filesRef.current = applyCreatedIds(filesRef.current);
+          setStoryboardTotalsByFileId(prev => ({
+            ...prev,
+            [file.id]: Math.max(prev[file.id] ?? 0, persistedItemCount) + newIds.length,
           }));
         }
       }
     } catch (error) {
       console.error('❌ 保存分集数据失败:', error);
     }
-  }, [propEpisodeId, isLoadingProjects]);
+  }, [propEpisodeId, isLoadingProjects, getScriptPersistenceSignature, storyboardTotalsByFileId]);
 
   /**
    * 初始化：加载分集数据
@@ -494,10 +538,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
   }, []);
   
   useEffect(() => {
-    if (onScriptSelect) {
-      onScriptSelect(selectedFileId);
+    if (initialScriptId && files.some(file => file.id === initialScriptId)) {
+      setSelectedFileId(initialScriptId);
     }
-  }, [selectedFileId, onScriptSelect]);
+  }, [initialScriptId, files.length]);
 
   /**
    * 🚀 懒加载优化：根据当前视图按需加载数据
@@ -897,8 +941,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
               lastUpdated: Date.now(),
               versions: [],
             };
-            setFiles(prev => [...prev, newFile]);
+            savedScriptSignaturesRef.current[newFile.id] = getScriptPersistenceSignature(newFile);
+            setFiles(prev => {
+              const next = [...prev, newFile];
+              filesRef.current = next;
+              return next;
+            });
             setSelectedFileId(newFile.id);
+            if (!activeScriptId) {
+              void activateWorkflowScript(newFile.id).catch(err => {
+                console.error('设置本集采用剧本失败:', err);
+              });
+            }
           }
         } catch (err) {
           console.error('上传文件失败:', err);
@@ -930,8 +984,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           lastUpdated: Date.now(),
           versions: [],
         };
-        setFiles(prev => [...prev, newFile]);
+        savedScriptSignaturesRef.current[newFile.id] = getScriptPersistenceSignature(newFile);
+        setFiles(prev => {
+          const next = [...prev, newFile];
+          filesRef.current = next;
+          return next;
+        });
         setSelectedFileId(newFile.id);
+        if (!activeScriptId) {
+          void activateWorkflowScript(newFile.id).catch(err => {
+            console.error('设置本集采用剧本失败:', err);
+          });
+        }
       }
     } catch (err) {
       console.error('创建空白文件失败:', err);
@@ -1006,8 +1070,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
     }
     try {
       await deleteEpisodeScript(propEpisodeId, id);
+      delete savedScriptSignaturesRef.current[id];
+      const remainingFiles = files.filter(file => file.id !== id);
+      if (activeScriptId === id && remainingFiles.length > 0) {
+        await activateWorkflowScript(remainingFiles[0].id);
+      }
       setFiles(prev => {
         const newFiles = prev.filter(f => f.id !== id);
+        filesRef.current = newFiles;
         if (selectedFileId === id && newFiles.length > 0) {
           setSelectedFileId(newFiles[0].id);
         }
@@ -1615,12 +1685,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
         const projIdx = pathSegments.indexOf('projects');
         const pid = projIdx >= 0 ? pathSegments[projIdx + 1] : '';
         const eid = pathSegments[epIdx + 1];
-        if (pid && eid && selectedFile) {
-          const charSet = new Set<string>(selectedFile.extractedCharacters || []);
-          const sceneSet = new Set<string>(selectedFile.extractedScenes || []);
-          const propSet = new Set<string>(selectedFile.extractedProps || []);
-          if (selectedFile.storyboard?.items) {
-            for (const item of selectedFile.storyboard.items) {
+        const workflowFile = filesRef.current.find(file => file.id === activeScriptId);
+        if (pid && eid && workflowFile) {
+          if (selectedFileId !== activeScriptId) {
+            alert('当前浏览的不是本集后续采用剧本，请先在文件列表中设为后续采用。');
+            return;
+          }
+          await saveEpisodeToBackend();
+          const charSet = new Set<string>(workflowFile.extractedCharacters || []);
+          const sceneSet = new Set<string>(workflowFile.extractedScenes || []);
+          const propSet = new Set<string>(workflowFile.extractedProps || []);
+          if (workflowFile.storyboard?.items) {
+            for (const item of workflowFile.storyboard.items) {
               if (item.characters) item.characters.forEach(c => { if (c) charSet.add(c); });
               if (item.scene) sceneSet.add(item.scene);
               if (item.props) item.props.forEach(p => { if (p) propSet.add(p); });
@@ -1630,36 +1706,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
           const sceneNames = Array.from(sceneSet);
           const propNames = Array.from(propSet);
 
-          // 2026-05-20 (Bug 3)：导出时永远写入非 NULL 的 planned_duration_ms。
-          // 优先 LLM 解析的「时间：N秒」字段，失败回退按台词字数估算（4 字/秒），
-          // 最低 2 秒。这样视频页 fallback 不会再回到 5 秒默认值。
-          const dbItems = (selectedFile.storyboard?.items || []).map((item, idx) => ({
-            sort_order: idx,
-            scene_heading: item.originalText || item.scene || '',
-            action_text: item.scriptSegment || '',
-            dialogue: item.dialogue || '',
-            camera_movement: item.cameraMovement || '',
-            image_prompt: item.imagePrompt || '',
-            video_prompt: item.videoPrompt || '',
-            planned_duration_ms: estimateDurationMs({
-              durationStr: item.duration,
-              dialogueText: item.dialogue,
-            }),
-            bound_assets: buildBoundAssetTags(item),
-          }));
-
           try {
             await exportScript(eid, {
               project_id: pid,
-              original_content: selectedFile.originalContent || '',
-              script_content: selectedFile.scriptContent || '',
-              storyboard_items: dbItems,
+              original_content: workflowFile.originalContent || '',
+              script_content: workflowFile.scriptContent || '',
+              storyboard_items: [],
               characters: charNames.map(n => ({ name: n, description: '' })),
               scenes: sceneNames.map(n => ({ name: n, description: '' })),
               props: propNames.map(n => ({ name: n, description: '' })),
-              script_id: selectedFile.id,
+              script_id: workflowFile.id,
+              preserve_existing_storyboards: true,
             });
-            console.log(`✅ 原子导出完成: ${dbItems.length} 个分镜`);
+            console.log(`✅ 本集采用剧本导出完成: ${workflowFile.storyboard?.items?.length || 0} 个分镜`);
           } catch (e) {
             console.error('导出失败:', e);
             alert('导出失败: ' + (e instanceof Error ? e.message : '未知错误'));
@@ -2093,7 +2152,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
 
     // total = 视频镜头数（AI 调用次数）；一个视频镜头可拆成多个分镜 item
     setStage(file.id, 'storyboardPrompt', { status: 'running', total: shots.length, completed: 0, errorMessage: '' });
-    const items: StoryboardItem[] = [];
+    // 重跑只追加新的镜头设计；已生成镜头及其下游素材由用户自行删除。
+    const items: StoryboardItem[] = (file.storyboard?.items || []).filter(item => !item.isPlaceholder);
     // 把当前 items 写入 React state + filesRef（同步），供 Stage3 末尾的 saveEpisodeToBackend 立即看到
     const applyItems = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, storyboard: { items } } : f);
     for (let i = 0; i < shots.length; i++) {
@@ -2528,8 +2588,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                     <FileColumn 
                     files={files} 
                     selectedFileId={selectedFileId} 
+                    activeFileId={activeScriptId || null}
                     checkedFileIds={checkedFileIds}
                     onFileSelect={handleFileSelect} 
+                    onActivateFile={activateWorkflowScript}
                     onFileCheck={handleFileCheck}
                     onCheckAll={handleCheckAll}
                     onFileUpload={handleFileUpload}
@@ -2689,6 +2751,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                         onInsertShotWithAI={handleInsertShotWithAI}
                         onExport={handleExportStoryboards}
                         isExporting={isExporting}
+                        isWorkflowScript={selectedFileId === activeScriptId}
                         onUndo={handleUndo}
                         onRedo={handleRedo}
                         canUndo={canUndo}
@@ -2763,7 +2826,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({ hideHeader = false, episode
                   onAddNotification={addTaskNotification}
                   onUpdateNotification={updateTaskNotification}
                   isActive={currentView === AppView.Video}
-                  sessionScope={selectedFileId ? `${propEpisodeId}:${selectedFileId}` : propEpisodeId || ''}
+                  sessionScope={propEpisodeId || ''}
                 />
                 </React.Suspense>
             </div>

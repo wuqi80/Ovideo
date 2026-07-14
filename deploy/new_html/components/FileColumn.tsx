@@ -6,8 +6,10 @@ import { Upload, CheckCircle2, CircleDashed, AlertCircle, Trash2, ChevronUp, Che
 interface FileColumnProps {
   files: ProjectFile[];
   selectedFileId: string | null;
+  activeFileId: string | null;
   checkedFileIds: Set<string>;
   onFileSelect: (id: string) => void;
+  onActivateFile: (id: string) => Promise<void> | void;
   onFileCheck: (id: string, checked: boolean) => void;
   onCheckAll: (checked: boolean) => void;
   onFileUpload: (files: FileList) => void;
@@ -28,8 +30,10 @@ interface FileColumnProps {
 export const FileColumn: React.FC<FileColumnProps> = ({ 
   files, 
   selectedFileId, 
+  activeFileId,
   checkedFileIds,
   onFileSelect, 
+  onActivateFile,
   onFileCheck,
   onCheckAll,
   onFileUpload,
@@ -49,6 +53,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [activatingFileId, setActivatingFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 🆕 拖拽排序状态
@@ -261,6 +266,9 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   selectedFileId === file.id
                     ? 'bg-primary-light border-primary shadow-sm'
                     : 'hover:bg-n20 border-transparent hover:border-n40'
+                } ${activeFileId === file.id
+                    ? 'ring-2 ring-success/30 border-success'
+                    : ''
                 } ${draggedIndex === index ? 'opacity-50 scale-95' : ''} ${
                   dragOverIndex === index
                     ? 'border-primary bg-primary-light ring-2 ring-primary/20'
@@ -303,6 +311,11 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                       {file.name}
                     </h3>
                     <div className="flex items-center gap-2">
+                        {activeFileId === file.id && (
+                          <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold text-success bg-g50 border border-success/30">
+                            后续采用
+                          </span>
+                        )}
                         {getStatusIcon(file.status)}
                     </div>
                   </div>
@@ -315,6 +328,27 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                 <div 
                   className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity bg-n0 rounded-md backdrop-blur-sm shadow-bottom px-1 py-0.5 border border-n40 z-30 flex items-center gap-0.5"
                 >
+                  {activeFileId !== file.id && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setActivatingFileId(file.id);
+                        try {
+                          await onActivateFile(file.id);
+                        } catch (error) {
+                          console.error('设置本集采用剧本失败:', error);
+                          window.alert('设置本集采用剧本失败，请稍后重试。');
+                        } finally {
+                          setActivatingFileId(null);
+                        }
+                      }}
+                      disabled={activatingFileId !== null}
+                      className="p-1 text-n300 hover:text-success hover:bg-g50 rounded disabled:opacity-40"
+                      title="设为本集后续流程采用剧本"
+                    >
+                      <CheckCircle2 className={`w-3 h-3 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
+                    </button>
+                  )}
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleStartRename(e, file); }}
                     className="p-1 text-n300 hover:text-primary hover:bg-n20 rounded"

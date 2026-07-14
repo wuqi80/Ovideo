@@ -40,7 +40,7 @@ export async function getStoryboardItems(
     const result = normalizeStoryboardFallbackResult(await getStoryboardItemsRaw(episodeId, scriptId, options));
     const shouldFallback =
         !!scriptId &&
-        options.fallbackToEpisode !== false &&
+        options.fallbackToEpisode === true &&
         result?.success &&
         Array.isArray(result.items) &&
         result.items.length === 0 &&

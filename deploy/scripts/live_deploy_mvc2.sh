@@ -30,6 +30,7 @@ FILES=(
   "admin_api_config_routes.py"
   "admin_recycle_bin_routes.py"
   "api_routes.py"
+  "video_reverse_routes.py"
   "ARCHITECTURE.md"
   "Agent.md"
   "login.html"

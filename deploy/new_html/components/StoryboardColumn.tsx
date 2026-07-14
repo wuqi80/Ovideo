@@ -24,6 +24,7 @@ interface StoryboardColumnProps {
   onUpdateItem: (id: string, updates: Partial<StoryboardItem>) => void;
   onExport: () => void;
   isExporting?: boolean;
+  isWorkflowScript?: boolean;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -49,6 +50,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   onUpdateItem,
   onExport,
   isExporting,
+  isWorkflowScript = false,
   isProcessing,
   
   // 🆕 新增props
@@ -384,11 +386,12 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                     <>
                     <button
                         onClick={onExport}
-                        disabled={isExporting}
-                        className={`flex items-center gap-1 text-[10px] text-white px-3 py-1.5 rounded shadow-sm transition-colors font-bold ${isExporting ? 'bg-n100 cursor-wait' : 'bg-success hover:bg-emerald-500'}`}
+                        disabled={isExporting || !isWorkflowScript}
+                        title={isWorkflowScript ? '将本集采用剧本导出到后续流程' : '请先在文件列表中将当前剧本设为后续采用'}
+                        className={`flex items-center gap-1 text-[10px] text-white px-3 py-1.5 rounded shadow-sm transition-colors font-bold ${isExporting || !isWorkflowScript ? 'bg-n100 cursor-not-allowed' : 'bg-success hover:bg-emerald-500'}`}
                     >
-                        {isExporting ? '导出中...' : '全部导出'}
-                        {!isExporting && <ArrowRight className="w-3 h-3" />}
+                        {isExporting ? '导出中...' : isWorkflowScript ? '全部导出' : '设为采用后导出'}
+                        {!isExporting && isWorkflowScript && <ArrowRight className="w-3 h-3" />}
                       </button>
                     </>
                 )}
