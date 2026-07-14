@@ -20,6 +20,10 @@ from services.task_read_service import (
     list_user_tasks_response,
     soft_delete_user_file_by_path_fragment,
 )
+from services.video_enhancement_service import (
+    prepare_video_upscale_task,
+    prepare_video_voice_task,
+)
 from services.video_interpolation_service import prepare_video_interpolation_task
 
 
@@ -58,9 +62,15 @@ def create_task_router(
                 task_data["episode_id"] = request.episode_id
             task_service = task_service_module.get()
             prepare_workflow = _should_prepare_workflow(request.task_type)
-            if request.task_type == "interpolate":
+            explicit_preparers = {
+                "interpolate": prepare_video_interpolation_task,
+                "upscale": prepare_video_upscale_task,
+                "voice": prepare_video_voice_task,
+            }
+            explicit_preparer = explicit_preparers.get(request.task_type)
+            if explicit_preparer:
                 try:
-                    await prepare_video_interpolation_task(task_data, username, task_service)
+                    await explicit_preparer(task_data, username, task_service)
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
                 prepare_workflow = False

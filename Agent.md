@@ -8944,3 +8944,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\local_stop.ps1 -StopInfra
 - GPU2 采用 640x384、33 帧、4 步、36 层 RAM 卸载的低显存配置，Agent 保持单任务串行；RTX 3060 12G 可以执行上述任务，但应预期约 8 分钟级处理时间。
 - 清理安装过程中遗留的 16,643,349,018 字节重复 `.part` 文件前，已确认正式模型 SHA256 标记存在且两次真实推理成功；正式模型和生成产物均保留。
 - 生产端到端验收任务 `dd31788f-2ade-48ca-b862-d18870db6595` 已从 `mecha.one` 指定调度到 GPU2，完成上传、Agent 拉取、ComfyUI 高清放大和结果回传；总耗时 55.9 秒，服务端状态为 `completed`，回传 1 张 206,308 字节 WebP。
+
+## 2026-07-14 美化任务与练气路由修复
+
+- 美化页的高清放大、智能补帧、对口型和配音统一显示 GPU1/GPU2 节点选择，并随任务提交 `preferred_agent_id` / `preferred_node_id`；所选节点繁忙时进入服务端队列。
+- 美化页不再读取旧的单机 ComfyUI 可用性探针，功能可用性仅以后台集群节点健康状态为准，避免 Agent 在线但前端仍显示“worker 暂未启用”。
+- `/api/generate` 对 `upscale`、`interpolate`、`voice` 使用显式工作流准备器并以 `prepare=False` 入队，绕过可能错绑到 `qwen_6` 的数据库模板；`pipeline/` 和 `workflows/*.json` 未修改。
+- 配音不再使用浏览器假进度：前端创建真实 `voice` 任务、恢复轮询，并显示“正在提交 / 排队中 / 处理中”。GPU2 InfiniteTalk 直接实测成功，生成带音频 MP4，耗时约 8 分钟。
+- 分镜练气/筑基模型默认保持用户明确选择，不再自动切换为其他 provider；缺少手工参考图时优先使用当前分镜已选生成结果，没有任何参考图时返回明确提示。
+- 部署必须同时包含 `routers/tasks.py`、`services/video_enhancement_service.py`、Enhance/Generation 前端源码和重新生成的 `dist/`。
+- 本地验证：GPU 路由与工作流定向测试 46 项通过，Vite 生产构建通过；全量 TypeScript 检查仍有 Admin/Workspace 历史类型错误，本轮文件没有新增报错。

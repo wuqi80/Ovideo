@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Wand2, MonitorPlay, Zap, Mic2, Volume2, Film, Play, Pause,
   Scissors, Trash2, Music, ZoomIn, ZoomOut, GripHorizontal,
-  Maximize, Loader, CheckCircle, Download,
+  Maximize, Loader, CheckCircle, Download, RefreshCw,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
 // 2026-05-20 (Task System Overhaul M4)：把 EnhancePage 的「假进度」改成真后端 worker。
 // All enhancement actions use real GPU tasks and report through videoTaskPoller.
 import { submitInterpolateTaskQueued, submitUpscaleTaskQueued, submitVoiceTaskQueued } from '../services/videoTaskService';
-import { fetchComfyuiAvailable, startCompose, getComposeStatus, updateVideoSegment, type ComposeStatus } from '../services/videoWorkflowService';
+import { startCompose, getComposeStatus, updateVideoSegment, type ComposeStatus } from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
 import { fetchEntityFiles, uploadEntityFile } from '../services/entityFileService';
 import { uploadAudio } from '../services/videoMediaService';
@@ -17,6 +17,14 @@ import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '
 import { apiFetch, secureApiUrl } from '../services/httpClient';
 import { syncTimelineAudioPlayback } from '../utils/enhanceTimelineAudio';
 import LazyVideo from '../components/LazyVideo';
+import {
+  DEFAULT_GPU_NODE_NAME,
+  fetchClusterNodes,
+  getPreferredGpuNodeId,
+  isClusterNodeUsable,
+  setPreferredGpuNodeId,
+  type ClusterNodeOption,
+} from '../services/clusterNodeService';
 
 interface MediaClip {
   id: string;
@@ -265,10 +273,52 @@ export const EnhancePage: React.FC = () => {
   const [audioUploading, setAudioUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
-  // GPU 类增强（放大/补帧/对口型）依赖 ComfyUI GPU 集群节点；无节点时禁用，避免点了必失败。
-  // Default true avoids a loading flicker; all four enhancement modes use a GPU Agent.
-  const [comfyAvailable, setComfyAvailable] = useState<boolean>(true);
-  useEffect(() => { fetchComfyuiAvailable().then(setComfyAvailable); }, []);
+  const [processStage, setProcessStage] = useState('处理中');
+  // All enhancement modes are dispatched through a selected GPU Agent.
+  const [clusterNodes, setClusterNodes] = useState<ClusterNodeOption[]>([]);
+  const [clusterNodesLoading, setClusterNodesLoading] = useState(false);
+  const [clusterNodeMessage, setClusterNodeMessage] = useState('');
+  const [selectedClusterNodeId, setSelectedClusterNodeId] = useState(getPreferredGpuNodeId);
+  const selectedClusterNode = useMemo(() => {
+    const selectedKey = selectedClusterNodeId.trim().toLowerCase();
+    return clusterNodes.find(node => (
+      [node.id, node.nodeId, node.agentId, node.name]
+        .filter(Boolean)
+        .some(value => String(value).trim().toLowerCase() === selectedKey)
+    ));
+  }, [clusterNodes, selectedClusterNodeId]);
+  const selectedClusterNodeUsable = Boolean(selectedClusterNode && isClusterNodeUsable(selectedClusterNode));
+  const loadClusterNodes = useCallback(async () => {
+    setClusterNodesLoading(true);
+    try {
+      const result = await fetchClusterNodes();
+      setClusterNodes(result.nodes);
+      setClusterNodeMessage(result.message);
+      const usableNodes = result.nodes.filter(isClusterNodeUsable);
+      const requested = getPreferredGpuNodeId().trim().toLowerCase();
+      const requestedNode = result.nodes.find(node => (
+        [node.id, node.nodeId, node.agentId, node.name]
+          .filter(Boolean)
+          .some(value => String(value).trim().toLowerCase() === requested)
+      ));
+      if (!requestedNode) {
+        const fallback = usableNodes.find(node => node.name === DEFAULT_GPU_NODE_NAME) || usableNodes[0];
+        if (fallback) {
+          setSelectedClusterNodeId(fallback.name);
+          setPreferredGpuNodeId(fallback.name);
+        }
+      }
+    } catch (error) {
+      console.warn('[EnhancePage] cluster nodes unavailable:', error);
+      setClusterNodes([]);
+      setClusterNodeMessage('GPU 集群节点状态获取失败，请刷新重试。');
+    } finally {
+      setClusterNodesLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void loadClusterNodes();
+  }, [loadClusterNodes]);
 
   // 一键合成成片：后台拼接本集视频段+配音 → 完整 mp4 存入成品页，前端轮询进度。
   const [compose, setCompose] = useState<ComposeStatus | null>(null);
@@ -588,18 +638,20 @@ export const EnhancePage: React.FC = () => {
             ? '视频配音'
             : '配音对嘴';
       attachVideoPollCallbacks(uuid, {
-        onProgress: (progress) => {
+        onProgress: (progress, status) => {
           setProcessing(true);
+          setProcessStage(status === 'queued' ? '排队中' : '处理中');
           setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
         },
         onComplete: () => {
           setProcessProgress(100);
-          window.setTimeout(() => { setProcessing(false); setProcessProgress(0); }, 800);
+          window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
           reload();
         },
         onFail: (err) => {
           setProcessing(false);
           setProcessProgress(0);
+          setProcessStage('处理中');
           alert(`${failureLabel}失败：${err}`);
         },
       });
@@ -610,7 +662,7 @@ export const EnhancePage: React.FC = () => {
   const applyEnhancement = useCallback(async () => {
     // GPU enhancement actions require an online ComfyUI Agent.
     // 按钮已禁用，这里防止意外触发）。
-    if (!comfyAvailable) {
+    if (!selectedClusterNodeUsable) {
       alert('该功能需要 GPU 集群节点（ComfyUI Agent）。当前没有可用节点，暂不可用。\n\n请在后台“集群节点监控”确认 Agent 在线，或使用不依赖 GPU 的功能。');
       return;
     }
@@ -634,6 +686,7 @@ export const EnhancePage: React.FC = () => {
 
       setProcessing(true);
       setProcessProgress(0);
+      setProcessStage('正在提交');
       try {
         const audioFilename = await ensureGpuAudioFilename(audioClip);
         const isDub = enhancementKind === 'dub';
@@ -654,6 +707,8 @@ export const EnhancePage: React.FC = () => {
             file_role: 'video',
             project_id: projectId || undefined,
             episode_id: episodeId || undefined,
+            preferred_agent_id: selectedClusterNode?.agentId,
+            preferred_node_id: selectedClusterNode?.nodeId || selectedClusterNode?.id,
           },
         );
         const pollerUuid = `enhance-${isDub ? 'dub' : 'lipsync'}:${targetClip.id}`;
@@ -667,8 +722,9 @@ export const EnhancePage: React.FC = () => {
           episodeId: episodeId || undefined,
           projectId: projectId || undefined,
           callbacks: {
-            onProgress: (progress) => {
+            onProgress: (progress, status) => {
               setProcessing(true);
+              setProcessStage(status === 'queued' ? '排队中' : '处理中');
               setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
             },
             onComplete: ({ status }) => {
@@ -681,12 +737,13 @@ export const EnhancePage: React.FC = () => {
                 }).catch(() => {});
               }
               setProcessProgress(100);
-              window.setTimeout(() => { setProcessing(false); setProcessProgress(0); }, 800);
+              window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
               reloadEnhanceData();
             },
             onFail: (err) => {
               setProcessing(false);
               setProcessProgress(0);
+              setProcessStage('处理中');
               alert(`${isDub ? '视频配音' : '配音对嘴'}失败：${err}`);
             },
           },
@@ -694,6 +751,7 @@ export const EnhancePage: React.FC = () => {
       } catch (error: any) {
         setProcessing(false);
         setProcessProgress(0);
+        setProcessStage('处理中');
         alert(`提交${enhancementKind === 'dub' ? '视频配音' : '配音对嘴'}任务失败：${error?.message || error}`);
       }
       return;
@@ -702,6 +760,7 @@ export const EnhancePage: React.FC = () => {
     if (enhancementKind === 'interpolate') {
       setProcessing(true);
       setProcessProgress(0);
+      setProcessStage('正在提交');
       try {
         const result = await submitInterpolateTaskQueued(targetClip.url, targetFps, {
           entity_type: 'video_segment',
@@ -709,6 +768,8 @@ export const EnhancePage: React.FC = () => {
           file_role: 'video',
           project_id: projectId || undefined,
           episode_id: episodeId || undefined,
+          preferred_agent_id: selectedClusterNode?.agentId,
+          preferred_node_id: selectedClusterNode?.nodeId || selectedClusterNode?.id,
         });
         const pollerUuid = `enhance-interpolate:${targetClip.id}`;
         startVideoPoll(pollerUuid, {
@@ -721,8 +782,9 @@ export const EnhancePage: React.FC = () => {
           episodeId: episodeId || undefined,
           projectId: projectId || undefined,
           callbacks: {
-            onProgress: (progress) => {
+            onProgress: (progress, status) => {
               setProcessing(true);
+              setProcessStage(status === 'queued' ? '排队中' : '处理中');
               setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
             },
             onComplete: ({ status }) => {
@@ -735,12 +797,13 @@ export const EnhancePage: React.FC = () => {
                 }).catch(() => {});
               }
               setProcessProgress(100);
-              window.setTimeout(() => { setProcessing(false); setProcessProgress(0); }, 800);
+              window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
               reloadEnhanceData();
             },
             onFail: (err) => {
               setProcessing(false);
               setProcessProgress(0);
+              setProcessStage('处理中');
               alert(`智能补帧失败：${err}`);
             },
           },
@@ -748,6 +811,7 @@ export const EnhancePage: React.FC = () => {
       } catch (error: any) {
         setProcessing(false);
         setProcessProgress(0);
+        setProcessStage('处理中');
         alert(`提交智能补帧任务失败：${error?.message || error}`);
       }
       return;
@@ -762,6 +826,7 @@ export const EnhancePage: React.FC = () => {
 
     setProcessing(true);
     setProcessProgress(0);
+    setProcessStage('正在提交');
     try {
       const result = await submitUpscaleTaskQueued(filename, {
         entity_type: 'video_segment',
@@ -770,6 +835,8 @@ export const EnhancePage: React.FC = () => {
         project_id: projectId || undefined,
         episode_id: episodeId || undefined,
         resolution: targetResolution,
+        preferred_agent_id: selectedClusterNode?.agentId,
+        preferred_node_id: selectedClusterNode?.nodeId || selectedClusterNode?.id,
       });
       const backendTaskId = result.task_id;
       const pollerUuid = `enhance-upscale:${targetClip.id}`;
@@ -783,19 +850,21 @@ export const EnhancePage: React.FC = () => {
         episodeId: episodeId || undefined,
         projectId: projectId || undefined,
         callbacks: {
-          onProgress: (progress) => {
+          onProgress: (progress, status) => {
             setProcessing(true);
+            setProcessStage(status === 'queued' ? '排队中' : '处理中');
             setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
           },
           onComplete: () => {
             setProcessProgress(100);
-            window.setTimeout(() => { setProcessing(false); setProcessProgress(0); }, 800);
+            window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
             // 拉新数据让用户看到 upscaled 视频
             reload();
           },
           onFail: (err) => {
             setProcessing(false);
             setProcessProgress(0);
+            setProcessStage('处理中');
             alert(`视频放大失败：${err}`);
           },
         },
@@ -803,6 +872,7 @@ export const EnhancePage: React.FC = () => {
     } catch (e: any) {
       setProcessing(false);
       setProcessProgress(0);
+      setProcessStage('处理中');
       alert(`提交放大任务失败：${e?.message || e}`);
     }
   }, [
@@ -819,7 +889,8 @@ export const EnhancePage: React.FC = () => {
     episodeId,
     reload,
     reloadEnhanceData,
-    comfyAvailable,
+    selectedClusterNode,
+    selectedClusterNodeUsable,
     ensureGpuAudioFilename,
   ]);
 
@@ -941,6 +1012,45 @@ export const EnhancePage: React.FC = () => {
                 <div className="text-[11px] text-n100 truncate">
                   选中: {selectedClip.id.slice(0, 20)}{selectedClip.id.length > 20 ? '...' : ''}
                 </div>
+                <div className="rounded border border-n40 bg-n10 p-2.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-n500">处理节点</span>
+                    <button
+                      type="button"
+                      onClick={() => void loadClusterNodes()}
+                      disabled={clusterNodesLoading || processing}
+                      className="inline-flex items-center gap-1 text-[11px] text-primary disabled:opacity-50"
+                      title="刷新 GPU 节点状态"
+                    >
+                      <RefreshCw size={12} className={clusterNodesLoading ? 'animate-spin' : ''} />
+                      刷新
+                    </button>
+                  </div>
+                  <select
+                    value={selectedClusterNodeId}
+                    onChange={event => {
+                      setSelectedClusterNodeId(event.target.value);
+                      setPreferredGpuNodeId(event.target.value);
+                    }}
+                    disabled={clusterNodesLoading || processing || clusterNodes.length === 0}
+                    className="w-full px-2.5 py-2 rounded bg-n0 border border-n40 text-xs text-n700 focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-n20"
+                  >
+                    {clusterNodes.length === 0 && (
+                      <option value={selectedClusterNodeId}>{selectedClusterNodeId} · offline</option>
+                    )}
+                    {clusterNodes.map(node => (
+                      <option key={node.id} value={node.name}>
+                        {node.name} · {node.status}{node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className={`text-[10px] leading-4 ${selectedClusterNodeUsable ? 'text-g400' : 'text-amber-600'}`}>
+                    {selectedClusterNodeUsable
+                      ? `${selectedClusterNode?.name} 可用；繁忙时任务自动排队。`
+                      : `节点 ${selectedClusterNodeId} 当前不可用。`}
+                    {clusterNodeMessage ? ` ${clusterNodeMessage}` : ''}
+                  </p>
+                </div>
                 <div className="space-y-2.5">
                   {ENHANCE_OPTIONS.map(opt => {
                     const settingsKey = opt.kind === 'dub' ? null
@@ -948,7 +1058,7 @@ export const EnhancePage: React.FC = () => {
                       : opt.kind as 'upscale' | 'interpolate';
                     const checked = settingsKey ? (selectedClip.settings?.[settingsKey] ?? false) : false;
                     // GPU 类增强（有 settingsKey 的 放大/补帧/对口型）无 ComfyUI GPU 集群节点时锁定
-                    const gpuLocked = settingsKey !== null && !comfyAvailable;
+                    const gpuLocked = !selectedClusterNodeUsable;
 
                     return (
                       <label
@@ -1058,16 +1168,16 @@ export const EnhancePage: React.FC = () => {
 
                 <button
                   onClick={() => void applyEnhancement()}
-                  disabled={processing || !comfyAvailable || ((enhancementKind === 'lipSync' || enhancementKind === 'dub') && !lipSyncAudioClipId)}
+                  disabled={processing || !selectedClusterNodeUsable || ((enhancementKind === 'lipSync' || enhancementKind === 'dub') && !lipSyncAudioClipId)}
                   className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {processing ? (
-                    <><Loader size={14} className="animate-spin" /> 处理中 {processProgress}%</>
+                    <><Loader size={14} className="animate-spin" /> {processStage}{processProgress > 0 ? ` ${processProgress}%` : ''}</>
                   ) : (
                     <><Wand2 size={14} /> 提交处理任务</>
                   )}
                 </button>
-                {!comfyAvailable && (
+                {!selectedClusterNodeUsable && (
                   <div className="text-[11px] text-amber-600 text-center mt-1.5 leading-snug">
                     「{ENHANCE_OPTIONS.find(o => o.kind === enhancementKind)?.label}」需 GPU 集群节点（ComfyUI Agent），
                     当前无可用节点，暂不可用。

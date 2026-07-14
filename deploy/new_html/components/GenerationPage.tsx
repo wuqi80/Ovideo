@@ -390,7 +390,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     defaultValue: 'nanobanana',
   });
   const [smartConsistencyRouting, setSmartConsistencyRouting] = usePersistedPageState<boolean>({
-    page: 'GenerationPage:smartConsistencyRouting', episodeId, version: 1, defaultValue: true,
+    page: 'GenerationPage:smartConsistencyRouting', episodeId, version: 2, defaultValue: false,
   });
   const [qualityReviewEnabled, setQualityReviewEnabled] = usePersistedPageState<boolean>({
     page: 'GenerationPage:qualityReviewEnabled', episodeId, version: 1, defaultValue: true,
@@ -975,6 +975,22 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           materialLibrary,
           currentRefs ?? shot.configuredReferences ?? [],
       );
+      if (boundReferences.length === 0) {
+          const generated = shot.selectedImageId
+              ? shot.generatedImages?.find(image => image.id === shot.selectedImageId)
+              : shot.generatedImages?.[0];
+          const generatedUrl = generated?.url || shot.generatedImage;
+          if (generatedUrl) {
+              boundReferences.push({
+                  id: `current-result:${shot.id}`,
+                  url: generatedUrl,
+                  type: 'effect',
+                  name: '当前分镜结果',
+                  source: 'manual',
+                  isLocked: false,
+              });
+          }
+      }
       const requestedModel = model || (useCurrentState ? globalModel : (shotModels[shot.id] || globalModel));
       const routed = resolveConsistencyModel(
           requestedModel,
@@ -984,6 +1000,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       );
       const modelToUse = routed.model;
       if (routed.reason) console.info(`[角色一致性调度] ${routed.reason}`);
+      if (COMFYUI_MODELS.has(modelToUse) && boundReferences.length === 0) {
+          throw new Error('练气/筑基等本地 GPU 模型需要一张参考图；请添加参考图，或先选择当前分镜已有的生成结果。');
+      }
 
       const basePrompt = (useCurrentState ? prompt : shot.imagePrompt) || shot.scriptSegment || '';
       const refImages = boundReferences.map(reference => reference.url);
@@ -1174,13 +1193,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   const handleGenerateCurrent = async () => {
       if (!selectedShot) return;
-      
-      // 🆕 没有参考图片时禁止生成
-      if (references.length === 0) {
-          alert('⚠️ 请先添加参考图片后再生成！');
-          return;
-      }
-      
+
       const shotId = selectedShot.id;
       setGeneratingShotIds(prev => new Set(prev).add(shotId));
       try {
@@ -3021,12 +3034,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                    <div className="absolute bottom-0 left-0 right-0 flex justify-center py-3 bg-n20 border-t border-n40 backdrop-blur-sm">
                         <button 
                             onClick={handleGenerateCurrent}
-                            disabled={isCurrentShotGenerating || !prompt || references.length === 0}
+                            disabled={isCurrentShotGenerating || !prompt}
                             className="px-8 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
-                            title={references.length === 0 ? '请先添加参考图片' : ''}
+                            title={COMFYUI_MODELS.has(globalModel) && references.length === 0 && currentGeneratedImages.length === 0 ? '本地 GPU 模型需要参考图' : ''}
                         >
                             <Sparkles className={`w-4 h-4 ${isCurrentShotGenerating ? 'animate-spin' : ''}`} />
-                            {isCurrentShotGenerating ? '正在生成...' : references.length === 0 ? '请添加参考图' : (currentGeneratedImages.length > 0 ? '重新/追加生成' : '开始生成')}
+                            {isCurrentShotGenerating ? '正在生成...' : (currentGeneratedImages.length > 0 ? '重新/追加生成' : '开始生成')}
                         </button>
                    </div>
 

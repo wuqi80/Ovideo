@@ -9741,3 +9741,14 @@
 - GPU2's installed `LoadWanVideoT5TextEncoder` accepts `fp32` or `bf16`; the runner uses `bf16` and the contract test locks this value to prevent ComfyUI prompt validation regressions.
 - Production end-to-end task `dd31788f-2ade-48ca-b862-d18870db6595` was explicitly routed from `mecha.one` to GPU2 and completed upload, Agent polling, ComfyUI upscale, and result callback in 55.9 seconds. The server recorded `completed` with one 206,308-byte WebP result.
 - Storyboard timeline BGM/SFX clips now expose explicit delete controls, and episode composition preserves an existing video's embedded audio when no separate dialogue/narration/SFX track is selected instead of replacing it with silence.
+
+## 2026-07-14 Enhancement Task And Qwen Routing Repair
+
+- `new_html/pages/EnhancePage.tsx` now submits real upscale, interpolation, lip-sync, and dubbing tasks to the explicitly selected GPU1/GPU2 Agent. The UI reports submission, queue, and processing stages instead of a browser-only 0% timer.
+- Cluster health is the only enhancement availability source. The obsolete single-ComfyUI probe can no longer disable a healthy external Agent.
+- `routers/tasks.py` explicitly prepares `upscale`, `interpolate`, and `voice` workflows through service builders and submits them with `prepare=False`, preventing ambiguous database workflow names from resolving video upscale to a Qwen graph.
+- `services/video_enhancement_service.py` builds GPU1-compatible SeedVR2 and InfiniteTalk graphs. GPU2 performs its existing 12GB rewrite when it claims the task. Protected `pipeline/`, `agent_routes.py`, and `workflows/*.json` remain unchanged.
+- A direct GPU2 InfiniteTalk acceptance completed successfully and wrote an audio-bearing MP4 in about eight minutes.
+- `new_html/components/GenerationPage.tsx` preserves explicit Qwen tier choices by default. It uses the selected storyboard result as a fallback reference and only blocks local GPU generation when no valid reference exists.
+- Deployment scope: `routers/tasks.py`, `services/video_enhancement_service.py`, `new_html/pages/EnhancePage.tsx`, `new_html/components/GenerationPage.tsx`, rebuilt `dist/`, and associated tests.
+- Verification: 46 focused backend tests passed and the Vite production build passed. Repository-wide TypeScript checking still reports pre-existing Admin/Workspace errors outside this change set.
