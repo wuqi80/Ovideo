@@ -81,7 +81,7 @@ import { getVideoSegments } from '../services/episodeDataService';
 import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
-import { hasStoredVideoResult } from '../utils/videoResultPresentation';
+import { hasStoredVideoResult, mergeStoredVideoResult } from '../utils/videoResultPresentation';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
@@ -740,11 +740,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     if (item && url) byItem[item] = url;
                 }
                 if (cancelled || Object.keys(byItem).length === 0) return;
-                // 归一化用于去重：去掉 ?query 和 origin，让 onComplete 存的绝对 URL
-                // 与本处 DB 的相对 URL 能对齐（否则同一视频会被重复加入 → 出现两个）。
-                const bare = (u: any) => (typeof u === 'string'
-                    ? u.split('?')[0].replace(/^https?:\/\/[^/]+/, '')
-                    : u);
                 setTasksStatus(prev => {
                     const next = { ...prev };
                     let changed = false;
@@ -755,17 +750,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         // 与 onComplete 一致：相对路径补成绝对 URL，再附 token
                         const url = secureMediaUrl(raw0, { absolute: true });
                         const cur: TaskStatus = next[g.uuid] || {};
-                        const curVideos = cur.videos || [];
-                        if (curVideos.some((v: any) => bare(v) === bare(url))) continue; // 已有，跳过
-                        next[g.uuid] = {
-                            ...cur,
-                            state: 'done',
-                            progress: 100,
-                            videos: [...curVideos, url],
-                            result: url,
-                            keepResult: true,
-                        };
-                        changed = true;
+                        const merged = mergeStoredVideoResult(cur, url);
+                        if (merged !== cur) {
+                            next[g.uuid] = merged;
+                            changed = true;
+                        }
                     }
                     return changed ? next : prev;
                 });

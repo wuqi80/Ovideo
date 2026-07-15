@@ -2288,7 +2288,7 @@ class Worker:
             return ref
         # 2) URL（绝对或相对）：优先还原本地文件转 Base64
         if ref.startswith(("http://", "https://", "/")):
-            rec = await FileDAO.get_file_by_url(ref)
+            rec = await FileDAO.get_file_by_url(ref, include_deleted=True)
             if rec:
                 return self._record_to_base64(rec, label)
             if ref.startswith(("http://", "https://")):
@@ -2301,7 +2301,7 @@ class Worker:
             img_url = (item or {}).get('generated_image_url')
             if not img_url:
                 raise FileNotFoundError(f"{label} 分镜 {ref} 无 generated_image_url")
-            rec = await FileDAO.get_file_by_url(img_url)
+            rec = await FileDAO.get_file_by_url(img_url, include_deleted=True)
             if not rec:
                 raise FileNotFoundError(f"{label} 分镜 {ref} 图片未入库: {img_url}")
             return self._record_to_base64(rec, label)

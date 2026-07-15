@@ -494,28 +494,64 @@ class FileDAO:
             LIMIT 1
         """
         return await db.fetchrow(query, file_name)
+
+    @staticmethod
+    def _file_url_lookup_candidates(url: str) -> List[str]:
+        """Return lookup keys for stored file URLs after stripping signed tokens."""
+        if not url:
+            return []
+        from urllib.parse import urlsplit
+
+        raw = str(url).strip()
+        parsed = urlsplit(raw)
+        path = parsed.path or raw.split("?", 1)[0]
+        if path.startswith("storage/"):
+            path = f"/{path}"
+
+        candidates: List[str] = []
+
+        def add(value: str) -> None:
+            if value and value not in candidates:
+                candidates.append(value)
+
+        add(path)
+        if parsed.scheme and parsed.netloc and path:
+            add(f"{parsed.scheme}://{parsed.netloc}{path}")
+
+        for singular, plural in (
+            ("/storage/image/", "/storage/images/"),
+            ("/storage/video/", "/storage/videos/"),
+            ("/storage/audio/", "/storage/audios/"),
+        ):
+            if path.startswith(singular):
+                add(path.replace(singular, plural, 1))
+            if path.startswith(plural):
+                add(path.replace(plural, singular, 1))
+        return candidates
     
     @staticmethod
-    async def get_file_by_url(url: str) -> Optional[Dict[str, Any]]:
+    async def get_file_by_url(url: str, include_deleted: bool = False) -> Optional[Dict[str, Any]]:
         """按 file_url 反查文件，忽略 scheme/host 与 ?token=... 查询串。
 
         用途：把分镜 generated_image_url（带 token 的 /storage 预览 URL）还原成
         本地文件，供 DashScope worker 转 Base64（DashScope 服务端无法 fetch token URL）。
         files.file_url 存为相对路径（如 /storage/...），故只比较 path。
         """
-        if not url:
+        candidates = FileDAO._file_url_lookup_candidates(url)
+        if not candidates:
             return None
-        from urllib.parse import urlparse
         # urlparse 对绝对/相对 URL 都能取出 path；fallback 兜底去掉 query
-        path = urlparse(url).path or url.split('?', 1)[0]
         db = get_db_manager()
+        if not db:
+            return None
         query = """
             SELECT * FROM files
-            WHERE split_part(file_url, '?', 1) = $1 AND is_deleted = FALSE
-            ORDER BY created_at DESC
+            WHERE split_part(file_url, '?', 1) = ANY($1::text[])
+              AND ($2::boolean OR is_deleted = FALSE)
+            ORDER BY is_deleted ASC, created_at DESC
             LIMIT 1
         """
-        return await db.fetchrow(query, path)
+        return await db.fetchrow(query, candidates, include_deleted)
     
     @staticmethod
     async def get_recent_files(limit: int = 500) -> List[Dict[str, Any]]:

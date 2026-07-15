@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasStoredVideoResult } from '../../utils/videoResultPresentation';
+import { hasStoredVideoResult, mergeStoredVideoResult } from '../../utils/videoResultPresentation';
 
 describe('hasStoredVideoResult', () => {
   it('keeps a previous successful video visible after a retry fails', () => {
@@ -13,5 +13,28 @@ describe('hasStoredVideoResult', () => {
   it('does not treat an empty result list as video history', () => {
     expect(hasStoredVideoResult({ state: 'failed', videos: [] })).toBe(false);
     expect(hasStoredVideoResult({ state: 'failed', videos: [''] })).toBe(false);
+  });
+
+  it('adds a DB fallback video without hiding the latest failed attempt', () => {
+    const merged = mergeStoredVideoResult(
+      { state: 'failed', progress: 0, error: 'latest generation failed' },
+      'https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=x',
+    );
+
+    expect(merged.state).toBe('failed');
+    expect(merged.progress).toBe(0);
+    expect(merged.result).toBe('https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=x');
+    expect(merged.videos).toEqual(['https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=x']);
+    expect(merged.keepResult).toBe(true);
+  });
+
+  it('deduplicates the same stored video across absolute and relative URLs', () => {
+    const original = {
+      state: 'done' as const,
+      videos: ['https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=old'],
+    };
+    const merged = mergeStoredVideoResult(original, '/storage/video/u/p/e/202607/ok.mp4');
+
+    expect(merged).toBe(original);
   });
 });
