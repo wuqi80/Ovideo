@@ -4,14 +4,30 @@
 export const DURATION_MIN_SEC = 3;
 export const DURATION_MAX_SEC = 15;
 export const DURATION_DEFAULT_SEC = 5;
+export const SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC = 11;
 
-export function clampSec(value: unknown, fallback: number = DURATION_DEFAULT_SEC): number {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return fallback;
-    const rounded = Math.round(n);
+function normalizeMaxSec(maxSec: number = DURATION_MAX_SEC): number {
+    const n = Number(maxSec);
+    if (!Number.isFinite(n)) return DURATION_MAX_SEC;
+    return Math.max(DURATION_MIN_SEC, Math.round(n));
+}
+
+function clampFiniteSec(value: number, maxSec: number): number {
+    const rounded = Math.round(value);
     if (rounded < DURATION_MIN_SEC) return DURATION_MIN_SEC;
-    if (rounded > DURATION_MAX_SEC) return DURATION_MAX_SEC;
+    if (rounded > maxSec) return maxSec;
     return rounded;
+}
+
+export function clampSec(
+    value: unknown,
+    fallback: number = DURATION_DEFAULT_SEC,
+    maxSec: number = DURATION_MAX_SEC,
+): number {
+    const max = normalizeMaxSec(maxSec);
+    const n = Number(value);
+    if (!Number.isFinite(n)) return clampFiniteSec(Number(fallback), max);
+    return clampFiniteSec(n, max);
 }
 
 export interface DurationInputs {
@@ -19,15 +35,18 @@ export interface DurationInputs {
     plannedDurationMs?: number;
 }
 
-export function computeReactiveDuration(inputs: DurationInputs): number {
+export function computeReactiveDuration(
+    inputs: DurationInputs,
+    maxSec: number = DURATION_MAX_SEC,
+): number {
     const { audioDurationMs, plannedDurationMs } = inputs;
     if (audioDurationMs && audioDurationMs > 0) {
-        return clampSec(audioDurationMs / 1000);
+        return clampSec(audioDurationMs / 1000, DURATION_DEFAULT_SEC, maxSec);
     }
     if (plannedDurationMs && plannedDurationMs > 0) {
-        return clampSec(plannedDurationMs / 1000);
+        return clampSec(plannedDurationMs / 1000, DURATION_DEFAULT_SEC, maxSec);
     }
-    return DURATION_DEFAULT_SEC;
+    return clampSec(DURATION_DEFAULT_SEC, DURATION_DEFAULT_SEC, maxSec);
 }
 
 // 2026-05-20 (Bug 3): 估算 planned_duration_ms。

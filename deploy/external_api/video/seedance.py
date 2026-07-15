@@ -14,6 +14,7 @@ from services.api_provider_runtime import resolve_provider, resolve_seedance_mod
 logger = logging.getLogger(__name__)
 
 SEEDANCE_AGENT_PLAN_MODEL = "doubao-seedance-1.5-pro"
+SEEDANCE_AGENT_PLAN_MAX_DURATION = 11
 SEEDANCE_PAYG_MODELS = frozenset(
     {
         "doubao-seedance-2-0-260128",
@@ -67,6 +68,28 @@ def _duration_rejection_message(payload: Dict[str, Any]) -> str:
         f"Seedance 当前通道拒绝 duration={duration}（model={model}），"
         "已停止自动降级为默认 5 秒；请改用供应商支持的时长，或切换支持该时长的通道。"
     )
+
+
+def _agent_plan_duration_limit_message(duration: int) -> str:
+    return (
+        f"Seedance 当前 Agent Plan / 1.5-pro 通道最多支持 {SEEDANCE_AGENT_PLAN_MAX_DURATION} 秒，"
+        f"当前请求为 {duration} 秒；请设置为 {SEEDANCE_AGENT_PLAN_MAX_DURATION} 秒以内，"
+        "避免供应商回退为默认 5 秒。"
+    )
+
+
+def _validate_payload_duration(payload: Dict[str, Any]) -> None:
+    if payload.get("model") != SEEDANCE_AGENT_PLAN_MODEL:
+        return
+    raw_duration = payload.get("duration")
+    if raw_duration is None:
+        return
+    try:
+        duration = int(raw_duration)
+    except (TypeError, ValueError):
+        return
+    if duration > SEEDANCE_AGENT_PLAN_MAX_DURATION:
+        raise ValueError(_agent_plan_duration_limit_message(duration))
 
 
 def _has_content_type(contents: List[Dict[str, Any]], content_type: str) -> bool:
@@ -197,6 +220,7 @@ class SeedanceClient:
         if tools:
             payload["tools"] = tools
         _apply_model_payload_compatibility(payload)
+        _validate_payload_duration(payload)
 
         logger.info(
             "Seedance create task: sub_model=%s model=%s contents=%s duration=%s",
@@ -225,6 +249,7 @@ class SeedanceClient:
                 model_name = SEEDANCE_AGENT_PLAN_MODEL
                 payload["model"] = model_name
                 _apply_model_payload_compatibility(payload)
+                _validate_payload_duration(payload)
                 data = self._submit_create_request(payload)
             task_id = data.get("id")
             if not task_id:

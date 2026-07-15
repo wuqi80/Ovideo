@@ -13,6 +13,7 @@ export interface DurationFieldForGroupProps {
     meta: Partial<StoryboardMeta> | undefined;
     onPatchGroup: (uuid: string, patch: Partial<TaskGroup>) => void;
     disabled?: boolean;
+    maxDuration?: number;
 }
 
 export const DurationFieldForGroup: React.FC<DurationFieldForGroupProps> = ({
@@ -20,12 +21,14 @@ export const DurationFieldForGroup: React.FC<DurationFieldForGroupProps> = ({
     meta,
     onPatchGroup,
     disabled,
+    maxDuration,
 }) => {
     const dur = useReactiveDuration({
         groupUuid: group.uuid,
         durationUserOverride: !!group.durationUserOverride,
         meta: meta || {},
         currentDuration: group.duration,
+        maxDuration,
         onChange: (duration, durationUserOverride) =>
             onPatchGroup(group.uuid, { duration, durationUserOverride }),
     });
@@ -37,6 +40,7 @@ export const DurationFieldForGroup: React.FC<DurationFieldForGroupProps> = ({
             onChange={dur.setUserDuration}
             onClear={dur.clearOverride}
             disabled={disabled}
+            maxDuration={maxDuration}
         />
     );
 };

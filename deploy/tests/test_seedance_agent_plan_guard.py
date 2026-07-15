@@ -140,6 +140,35 @@ def test_seedance_agent_plan_maps_single_reference_image_to_i2v(monkeypatch):
     assert request_payload["content"][1]["role"] == "first_frame"
 
 
+def test_seedance_agent_plan_rejects_duration_above_supported_limit_before_submit(monkeypatch):
+    monkeypatch.setattr(seedance_module, "resolve_provider", lambda provider, model=None: _ResolvedConfig())
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-260128",
+    )
+    submitted_payloads = []
+
+    def fake_request_json(*args, **kwargs):
+        submitted_payloads.append(dict(kwargs["json"]))
+        return {"id": "unexpected-submit-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    with pytest.raises(ValueError, match="最多支持 11 秒"):
+        client.create_video_task(
+            "standard",
+            [
+                {"type": "text", "text": "move gently"},
+                {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
+            ],
+            duration=12,
+        )
+
+    assert submitted_payloads == []
+
+
 def test_seedance_agent_plan_i2v_rejects_invalid_duration_without_retry(monkeypatch):
     monkeypatch.setattr(seedance_module, "resolve_provider", lambda provider, model=None: _ResolvedConfig())
     monkeypatch.setattr(
@@ -170,19 +199,19 @@ def test_seedance_agent_plan_i2v_rejects_invalid_duration_without_retry(monkeypa
     monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
     client = seedance_module.SeedanceClient()
 
-    with pytest.raises(ValueError, match="duration=12"):
+    with pytest.raises(ValueError, match="duration=11"):
         client.create_video_task(
             "standard",
             [
                 {"type": "text", "text": "move gently"},
                 {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
             ],
-            duration=12,
+            duration=11,
         )
 
     assert len(submitted_payloads) == 1
     assert submitted_payloads[0]["model"] == "doubao-seedance-1.5-pro"
-    assert submitted_payloads[0]["duration"] == 12
+    assert submitted_payloads[0]["duration"] == 11
     assert submitted_payloads[0]["content"][1]["role"] == "first_frame"
 
 

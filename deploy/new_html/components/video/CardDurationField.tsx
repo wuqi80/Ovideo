@@ -9,18 +9,20 @@ export interface CardDurationFieldProps {
     onChange: (sec: number, override: boolean) => void;
     onClear: () => void;
     disabled?: boolean;
+    maxDuration?: number;
 }
 
 export const CardDurationField: React.FC<CardDurationFieldProps> = ({
-    duration, userOverride, onChange, onClear, disabled,
+    duration, userOverride, onChange, onClear, disabled, maxDuration,
 }) => {
+    const maxSec = maxDuration ?? DURATION_MAX_SEC;
     return (
         <div className="flex items-center gap-1 text-[10px]">
             <label className="text-n300">时长</label>
             <input
                 type="number"
                 min={DURATION_MIN_SEC}
-                max={DURATION_MAX_SEC}
+                max={maxSec}
                 step={1}
                 value={duration}
                 disabled={disabled}
@@ -28,9 +30,11 @@ export const CardDurationField: React.FC<CardDurationFieldProps> = ({
                 onChange={e => {
                     const n = parseInt(e.target.value, 10);
                     if (!Number.isFinite(n)) return;
-                    onChange(n, true);
+                    onChange(Math.max(DURATION_MIN_SEC, Math.min(maxSec, n)), true);
                 }}
-                title={userOverride ? '已手动设置（点 ↺ 恢复跟随音频）' : '跟随音频/脚本'}
+                title={userOverride
+                    ? `已手动设置（当前上限 ${maxSec}s，点 ↺ 恢复跟随音频）`
+                    : `跟随音频/脚本（当前上限 ${maxSec}s）`}
             />
             <span className="text-n100">s</span>
             {userOverride && (

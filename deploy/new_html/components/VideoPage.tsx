@@ -88,6 +88,7 @@ import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
+import { clampSec, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
 import {
     createVideoVoiceReference,
     extractVideoReferenceAudio,
@@ -437,7 +438,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const itemId = group?.ids?.[0];
         const meta = itemId ? storyboardMetaByItemId[itemId] : undefined;
         const reactiveDur = meta ? computeReactiveDurationFromMeta(meta) : undefined;
-        return group?.duration ?? reactiveDur ?? 3;
+        return clampSec(
+            group?.duration ?? reactiveDur ?? 3,
+            3,
+            SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC,
+        );
     }, [storyboardMetaByItemId]);
 
     const syncSeedanceDuration = useCallback((group: TaskGroup | undefined, params: SeedanceParams): SeedanceParams => {
@@ -3401,6 +3406,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     group={group}
                                     meta={m}
                                     onPatchGroup={patchTaskGroup}
+                                    maxDuration={SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC}
                                 />
                             )}
                         </div>
