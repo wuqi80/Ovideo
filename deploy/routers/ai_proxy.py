@@ -41,6 +41,7 @@ from services.ai_proxy_image_persistence_service import persist_generated_ai_ima
 from services.ai_proxy_task_service import (
     complete_ai_proxy_image_task,
     complete_ai_proxy_text_task,
+    create_completed_image_task,
     create_completed_gemini_text_task,
     create_deepseek_text_task,
     fail_ai_proxy_task,
@@ -271,6 +272,25 @@ def create_ai_proxy_router(
                 quality=request.quality,
             )
 
+            task_id = await create_completed_image_task(
+                task_id_prefix="gpt_image",
+                user_id=username,
+                task_type="gpt_image",
+                task_data=_image_task_data(
+                    request,
+                    provider=f"gpt-image-{tier}",
+                    model=model,
+                    tier=tier,
+                    size=request.size,
+                    quality=request.quality,
+                    n=request.n,
+                    ref_count=len(request.references or []),
+                    display_name=f"GPT Image {tier}",
+                ),
+                images_count=len(images),
+                logger=logger,
+            )
+
             files_result = await persist_generated_ai_images(
                 images,
                 user_id=username,
@@ -293,6 +313,7 @@ def create_ai_proxy_router(
                 },
                 media_metadata={"prompt": request.prompt, "model": model, "tier": tier},
                 include_url=True,
+                source_task_id=task_id,
                 logger=logger,
             )
 

@@ -9766,3 +9766,4 @@
 - `new_html/components/VideoPage.tsx` 现在优先按已有 `videos` 渲染结果，失败状态只显示“本次失败，历史结果已保留”，不会影响放大、配音、编辑和音色基准操作。
 - 新增 `utils/videoResultPresentation.ts` 及回归测试，锁定“失败重试仍展示历史视频”的行为。
 - 2026-07-15：Yuan 账号 SB-8 复盘确认该镜头没有历史成功视频；本次失败来自当前参考图的 DB 文件记录已软删除但物理文件仍存在。worker 现在解析任务引用素材时可包含软删除记录，并统一剥离 token、域名及 image/images 前缀差异；前端 DB 兜底只追加历史视频，不改变正在失败的任务状态。
+- 2026-07-15：GPT Image 路由补齐 MVC 任务持久化契约，通过 `create_completed_image_task()` 委托 service 创建/完成任务并传递 `source_task_id` 给图片持久化服务，解除部署时 `route-mvc-frontend-contract` 阻塞。
