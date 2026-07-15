@@ -4,7 +4,7 @@
 export const DURATION_MIN_SEC = 3;
 export const DURATION_MAX_SEC = 15;
 export const DURATION_DEFAULT_SEC = 5;
-export const SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC = 11;
+export const SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC = 12;
 
 function normalizeMaxSec(maxSec: number = DURATION_MAX_SEC): number {
     const n = Number(maxSec);

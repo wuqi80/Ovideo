@@ -14,7 +14,7 @@ from services.api_provider_runtime import resolve_provider, resolve_seedance_mod
 logger = logging.getLogger(__name__)
 
 SEEDANCE_AGENT_PLAN_MODEL = "doubao-seedance-1.5-pro"
-SEEDANCE_AGENT_PLAN_MAX_DURATION = 11
+SEEDANCE_AGENT_PLAN_MAX_DURATION = 12
 SEEDANCE_PAYG_MODELS = frozenset(
     {
         "doubao-seedance-2-0-260128",

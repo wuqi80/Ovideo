@@ -25,8 +25,8 @@ describe('clampSec', () => {
         expect(clampSec(-Infinity, 5)).toBe(5);
     });
     it('supports provider-specific max seconds', () => {
-        expect(clampSec(13, 5, 11)).toBe(11);
-        expect(clampSec(NaN, 15, 11)).toBe(11);
+        expect(clampSec(13, 5, 12)).toBe(12);
+        expect(clampSec(NaN, 15, 12)).toBe(12);
     });
 });
 
@@ -48,7 +48,7 @@ describe('computeReactiveDuration', () => {
         expect(computeReactiveDuration({ audioDurationMs: 0, plannedDurationMs: 8000 })).toBe(8);
     });
     it('clamps to provider-specific max seconds', () => {
-        expect(computeReactiveDuration({ audioDurationMs: 13000 }, 11)).toBe(11);
+        expect(computeReactiveDuration({ audioDurationMs: 13000 }, 12)).toBe(12);
     });
 });
 

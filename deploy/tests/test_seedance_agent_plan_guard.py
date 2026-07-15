@@ -156,14 +156,14 @@ def test_seedance_agent_plan_rejects_duration_above_supported_limit_before_submi
     monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
     client = seedance_module.SeedanceClient()
 
-    with pytest.raises(ValueError, match="最多支持 11 秒"):
+    with pytest.raises(ValueError, match="最多支持 12 秒"):
         client.create_video_task(
             "standard",
             [
                 {"type": "text", "text": "move gently"},
                 {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
             ],
-            duration=12,
+            duration=13,
         )
 
     assert submitted_payloads == []
@@ -199,19 +199,19 @@ def test_seedance_agent_plan_i2v_rejects_invalid_duration_without_retry(monkeypa
     monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
     client = seedance_module.SeedanceClient()
 
-    with pytest.raises(ValueError, match="duration=11"):
+    with pytest.raises(ValueError, match="duration=12"):
         client.create_video_task(
             "standard",
             [
                 {"type": "text", "text": "move gently"},
                 {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
             ],
-            duration=11,
+            duration=12,
         )
 
     assert len(submitted_payloads) == 1
     assert submitted_payloads[0]["model"] == "doubao-seedance-1.5-pro"
-    assert submitted_payloads[0]["duration"] == 11
+    assert submitted_payloads[0]["duration"] == 12
     assert submitted_payloads[0]["content"][1]["role"] == "first_frame"
 
 
