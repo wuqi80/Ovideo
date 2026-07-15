@@ -140,7 +140,7 @@ def test_seedance_agent_plan_maps_single_reference_image_to_i2v(monkeypatch):
     assert request_payload["content"][1]["role"] == "first_frame"
 
 
-def test_seedance_agent_plan_i2v_retries_without_duration_when_rejected(monkeypatch):
+def test_seedance_agent_plan_i2v_rejects_invalid_duration_without_retry(monkeypatch):
     monkeypatch.setattr(seedance_module, "resolve_provider", lambda provider, model=None: _ResolvedConfig())
     monkeypatch.setattr(
         seedance_module,
@@ -165,25 +165,25 @@ def test_seedance_agent_plan_i2v_retries_without_duration_when_rejected(monkeypa
         submitted_payloads.append(dict(kwargs["json"]))
         if len(submitted_payloads) == 1:
             raise InvalidDurationError("400 Client Error")
-        return {"id": "agent-plan-retry-without-duration-task"}
+        return {"id": "unexpected-retry-task"}
 
     monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
     client = seedance_module.SeedanceClient()
 
-    task_id = client.create_video_task(
-        "standard",
-        [
-            {"type": "text", "text": "move gently"},
-            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
-        ],
-        duration=12,
-    )
+    with pytest.raises(ValueError, match="duration=12"):
+        client.create_video_task(
+            "standard",
+            [
+                {"type": "text", "text": "move gently"},
+                {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
+            ],
+            duration=12,
+        )
 
-    assert task_id == "agent-plan-retry-without-duration-task"
+    assert len(submitted_payloads) == 1
     assert submitted_payloads[0]["model"] == "doubao-seedance-1.5-pro"
     assert submitted_payloads[0]["duration"] == 12
     assert submitted_payloads[0]["content"][1]["role"] == "first_frame"
-    assert "duration" not in submitted_payloads[1]
 
 
 def test_seedance_agent_plan_maps_two_reference_images_to_morph(monkeypatch):
@@ -342,7 +342,7 @@ def test_seedance_payg_fallback_to_agent_plan_i2v_keeps_duration_until_rejected(
     assert submitted_payloads[1]["duration"] == 5
 
 
-def test_seedance_retries_without_duration_when_provider_rejects_it(monkeypatch):
+def test_seedance_rejects_invalid_duration_without_retry(monkeypatch):
     monkeypatch.setattr(
         seedance_module,
         "resolve_provider",
@@ -371,20 +371,20 @@ def test_seedance_retries_without_duration_when_provider_rejects_it(monkeypatch)
         submitted_payloads.append(dict(kwargs["json"]))
         if len(submitted_payloads) == 1:
             raise InvalidDurationError("400 Client Error")
-        return {"id": "retry-without-duration-task"}
+        return {"id": "unexpected-retry-task"}
 
     monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
     client = seedance_module.SeedanceClient()
 
-    task_id = client.create_video_task(
-        "standard",
-        [{"type": "text", "text": "move gently"}],
-        duration=5,
-    )
+    with pytest.raises(ValueError, match="duration=5"):
+        client.create_video_task(
+            "standard",
+            [{"type": "text", "text": "move gently"}],
+            duration=5,
+        )
 
-    assert task_id == "retry-without-duration-task"
+    assert len(submitted_payloads) == 1
     assert submitted_payloads[0]["duration"] == 5
-    assert "duration" not in submitted_payloads[1]
 
 
 def test_seedance_payg_does_not_fallback_for_transport_errors(monkeypatch):

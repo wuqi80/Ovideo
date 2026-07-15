@@ -60,6 +60,15 @@ def _is_duration_parameter_error(exc: BaseException) -> bool:
     return any(marker in error_text for marker in SEEDANCE_DURATION_ERROR_MARKERS)
 
 
+def _duration_rejection_message(payload: Dict[str, Any]) -> str:
+    duration = payload.get("duration")
+    model = payload.get("model") or "-"
+    return (
+        f"Seedance 当前通道拒绝 duration={duration}（model={model}），"
+        "已停止自动降级为默认 5 秒；请改用供应商支持的时长，或切换支持该时长的通道。"
+    )
+
+
 def _has_content_type(contents: List[Dict[str, Any]], content_type: str) -> bool:
     if not isinstance(contents, list):
         return False
@@ -190,10 +199,11 @@ class SeedanceClient:
         _apply_model_payload_compatibility(payload)
 
         logger.info(
-            "Seedance create task: sub_model=%s model=%s contents=%s",
+            "Seedance create task: sub_model=%s model=%s contents=%s duration=%s",
             normalized_sub_model,
             model_name,
             len(contents),
+            payload.get("duration"),
         )
         try:
             try:
@@ -244,23 +254,13 @@ class SeedanceClient:
         except Exception as exc:
             if "duration" not in payload or not _is_duration_parameter_error(exc):
                 raise
-            retry_payload = dict(payload)
-            removed_duration = retry_payload.pop("duration", None)
-            logger.warning(
-                "Seedance provider rejected duration=%s for model=%s; retrying without duration",
-                removed_duration,
-                retry_payload.get("model"),
+            message = _duration_rejection_message(payload)
+            logger.error(
+                "%s provider_error=%s",
+                message,
+                exc,
             )
-            return request_json(
-                "POST",
-                self.base_url,
-                headers=self.headers,
-                json=retry_payload,
-                timeout=180,
-                request_kwargs=self._request_kwargs,
-                logger=logger,
-                label="Seedance create",
-            )
+            raise ValueError(message) from exc
 
     def query_task(self, task_id: str) -> Dict[str, Any]:
         """Poll a Seedance task status."""
