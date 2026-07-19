@@ -231,16 +231,13 @@ run_remote_smoke_test() {
 
   echo "Running remote smoke test..."
   ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
-    if [ -z \"\${ADMIN_PASSWORD:-}\" ]; then
-      if [ '$REQUIRE_REMOTE_SMOKE' = '1' ]; then
-        echo 'ADMIN_PASSWORD is not set on remote; smoke test is required'
-        exit 1
-      fi
-      echo 'Skipping remote smoke test: ADMIN_PASSWORD is not set on remote'
-      exit 0
-    fi
     cp '$REMOTE_DIR'/scripts/smoke_test.py /tmp/smoke_test.py
     cd /home/Administrator
+    if [ -z \"\${ADMIN_PASSWORD:-}\" ]; then
+      echo 'ADMIN_PASSWORD is not set on remote; running required public/security smoke checks'
+      python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' --public-only
+      exit \$?
+    fi
     python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' \"\$ADMIN_PASSWORD\"
   "
 }

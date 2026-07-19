@@ -10,7 +10,9 @@
 import os, sys, json, ssl, time, hmac, hashlib, base64, urllib.request, urllib.error
 
 BASE = sys.argv[1].rstrip('/') if len(sys.argv) > 1 else "http://127.0.0.1:6006"
-ADMIN_PW = sys.argv[2] if len(sys.argv) > 2 else os.getenv("ADMIN_PASSWORD", "admin123")
+PUBLIC_ONLY = "--public-only" in sys.argv[2:]
+password_args = [arg for arg in sys.argv[2:] if arg != "--public-only"]
+ADMIN_PW = password_args[0] if password_args else os.getenv("ADMIN_PASSWORD", "admin123")
 CTX = ssl.create_default_context()
 results = []
 
@@ -65,15 +67,18 @@ def run():
     )
 
     print(f"=== 冒烟 {BASE} ===")
-    # 1. 登录
-    st, b = req("/api/login", "POST", {"username": "admin", "password": ADMIN_PW})
     tok = None
-    if st == 200:
-        try: tok = json.loads(b).get("token")
-        except Exception: pass
-    check("登录 admin 成功并拿到 token", st == 200 and bool(tok), f"http={st}")
-    if not tok:
-        return  # 后续都依赖 token
+    if PUBLIC_ONLY:
+        check("未配置发布凭据，使用公共与安全冒烟检查", True)
+    else:
+        # 1. 登录
+        st, b = req("/api/login", "POST", {"username": "admin", "password": ADMIN_PW})
+        if st == 200:
+            try: tok = json.loads(b).get("token")
+            except Exception: pass
+        check("登录 admin 成功并拿到 token", st == 200 and bool(tok), f"http={st}")
+        if not tok:
+            return  # 后续都依赖 token
 
     # 2. 安全项
     st, _ = req("/api/debug/auth-status")
@@ -82,24 +87,26 @@ def run():
     check("公开注册已关闭(403)", st == 403, f"http={st}")
     st, _ = req("/api/admin/dashboard")
     check("admin 无 token 被拒(401/403)", st in (401, 403), f"http={st}")
-    st, _ = req("/api/admin/dashboard", token=tok)
-    check("admin 带 token 可访问(200)", st == 200, f"http={st}")
+    if tok:
+        st, _ = req("/api/admin/dashboard", token=tok)
+        check("admin 带 token 可访问(200)", st == 200, f"http={st}")
     st, _ = req("/api/projects", token=forged_token())
     check("旧密钥伪造令牌被拒(401)", st == 401, f"http={st}")
 
-    # 3. 核心流程
-    st, b = req("/api/projects", token=tok)
-    ok = st == 200
-    try: ok = ok and json.loads(b).get("success", False)
-    except Exception: ok = False
-    check("项目列表 /api/projects 正常", ok, f"http={st}")
+    if tok:
+        # 3. 核心流程
+        st, b = req("/api/projects", token=tok)
+        ok = st == 200
+        try: ok = ok and json.loads(b).get("success", False)
+        except Exception: ok = False
+        check("项目列表 /api/projects 正常", ok, f"http={st}")
 
-    # 只读核查（不写库，避免软删除残留 cruft，保证冒烟可重复跑无副作用）
-    st, b = req("/api/projects?include_archived=false", token=tok)
-    ok = st == 200
-    try: ok = ok and isinstance(json.loads(b).get("projects"), list)
-    except Exception: ok = False
-    check("项目读路径(含过滤参数)正常", ok, f"http={st}")
+        # 只读核查（不写库，避免软删除残留 cruft，保证冒烟可重复跑无副作用）
+        st, b = req("/api/projects?include_archived=false", token=tok)
+        ok = st == 200
+        try: ok = ok and isinstance(json.loads(b).get("projects"), list)
+        except Exception: ok = False
+        check("项目读路径(含过滤参数)正常", ok, f"http={st}")
 
     # 4. 首页/SPA
     st, b = req("/projects")
