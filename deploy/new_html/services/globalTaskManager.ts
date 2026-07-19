@@ -6,6 +6,14 @@ import type { GlobalTask, TaskNotification } from '../types';
 import { authTokenFromHeaders } from './httpClient';
 import { getActiveTasks, getTaskNotifications } from './taskNotificationService';
 
+function normalizeProgress(value: unknown): number | undefined {
+    if (value == null || value === '' || typeof value === 'boolean') return undefined;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return undefined;
+    const normalized = numeric > 1 ? numeric / 100 : numeric;
+    return Math.min(1, Math.max(0, normalized));
+}
+
 export type TaskEventType = 'tasks_updated' | 'notification' | 'progress';
 export type TaskEventCallback = (
     type: TaskEventType,
@@ -123,7 +131,7 @@ export class GlobalTaskManager {
         } else {
             this.emit('progress', {
                 taskId: data.task_id,
-                progress: data.progress,
+                progress: normalizeProgress(data.progress),
                 message: data.message,
                 // 2026-05-20 (Phase 8)：把 SSE 原始 payload 透传给 TaskContext，
                 // 由后者按需 cherry-pick 字段（stage/step/eta/worker_node_id/...）写入 metadata。
@@ -166,7 +174,7 @@ export class GlobalTaskManager {
                     projectId: t.project_id || '',
                     sourcePage: t.source_page || 'editor',
                     sourceItemId: t.source_item_id || t.entity_id,
-                    progress: 0,
+                    progress: normalizeProgress(t.progress),
                     createdAt: new Date(t.created_at).getTime()
                 }));
                 this.emit('tasks_updated', { tasks: this.activeTasks });

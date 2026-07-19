@@ -128,6 +128,42 @@ async def _verify_agent_token(authorization: str = Header(...)) -> dict:
     return agent
 
 
+def _assert_agent_completion_scope(
+    authenticated_agent: dict,
+    submitted_agent_id: str,
+    task_id: str,
+    task_hash: dict,
+    db_task: Optional[dict],
+) -> str:
+    """Require the callback token to own the task claimed by this agent."""
+    token_agent_id = str(authenticated_agent.get("agent_id") or "").strip()
+    submitted = str(submitted_agent_id or "").strip()
+    if not token_agent_id or submitted != token_agent_id:
+        raise HTTPException(status_code=403, detail="Agent ID mismatch")
+
+    redis_row = task_hash if isinstance(task_hash, dict) else {}
+    database_row = dict(db_task or {})
+    if not redis_row and not database_row:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    assigned_agent_id = str(
+        redis_row.get("node_id")
+        or database_row.get("node_id")
+        or ""
+    ).strip()
+    if not assigned_agent_id:
+        raise HTTPException(status_code=409, detail="Task has not been assigned to an agent")
+    if assigned_agent_id != token_agent_id:
+        logger.warning(
+            "agent completion denied: task=%s assigned=%s token_agent=%s",
+            task_id,
+            assigned_agent_id,
+            token_agent_id,
+        )
+        raise HTTPException(status_code=403, detail="Task is assigned to another agent")
+    return token_agent_id
+
+
 def _preferred_agent_id_from_task_info(task_info: dict) -> str:
     data = task_info.get("data") if isinstance(task_info, dict) else {}
     if not isinstance(data, dict):
@@ -396,11 +432,16 @@ async def agent_complete(
     files: List[UploadFile] = File(default=[]),
     authorization: str = Header(...)
 ):
-    await _verify_agent_token(authorization)
+    agent = await _verify_agent_token(authorization)
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in {"completed", "failed"}:
+        raise HTTPException(status_code=400, detail="Unsupported agent completion status")
+    status = normalized_status
 
     # ---- 0. Retrieve task data from Redis for entity fields ----
     task_data: dict = {}
     user_id: str = ""
+    task_hash: dict = {}
     try:
         from cluster_main import redis_client
         from cluster_config import RedisConfig
@@ -411,6 +452,26 @@ async def agent_complete(
         task_data = json.loads(raw_data) if raw_data else {}
     except Exception as e:
         logger.warning(f"Failed to retrieve task data for {task_id}: {e}")
+
+    db_task = None
+    try:
+        db_row = await TaskDAO.get_task_by_task_id(task_id)
+        db_task = dict(db_row) if db_row else None
+    except Exception as e:
+        logger.warning("Failed to retrieve DB task assignment for %s: %s", task_id, e)
+
+    _assert_agent_completion_scope(agent, agent_id, task_id, task_hash, db_task)
+
+    if not user_id and db_task:
+        user_id = str(db_task.get("user_id") or "")
+    if not task_data and db_task:
+        raw_db_data = db_task.get("task_data") or {}
+        if isinstance(raw_db_data, str):
+            try:
+                raw_db_data = json.loads(raw_db_data)
+            except (json.JSONDecodeError, TypeError):
+                raw_db_data = {}
+        task_data = raw_db_data if isinstance(raw_db_data, dict) else {}
 
     # ---- 1. Save files to disk ----
     file_entries = []

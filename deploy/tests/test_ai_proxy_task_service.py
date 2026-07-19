@@ -201,6 +201,25 @@ async def test_complete_ai_proxy_image_task_updates_existing_task():
 
 
 @pytest.mark.asyncio
+async def test_complete_ai_proxy_image_task_persists_submitted_reference_snapshot():
+    snapshot = [{"input_order": 1, "asset_id": "asset-1", "submitted": True}]
+    ok = await complete_ai_proxy_image_task(
+        task_id="gemini_img_refs",
+        images_count=1,
+        reference_snapshot=snapshot,
+        logger=_Logger,
+        task_dao=_TaskDAO,
+    )
+
+    assert ok is True
+    assert _TaskDAO.updated == [{
+        "task_id": "gemini_img_refs",
+        "status": "completed",
+        "result_data": {"images_count": 1, "reference_snapshot": snapshot},
+    }]
+
+
+@pytest.mark.asyncio
 async def test_task_persistence_failures_are_nonfatal():
     _TaskDAO.create_error = RuntimeError("db down")
 

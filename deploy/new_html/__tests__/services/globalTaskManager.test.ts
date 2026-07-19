@@ -70,4 +70,38 @@ describe('GlobalTaskManager notification polling', () => {
 
     expect(notifications).toEqual(['new_failed']);
   });
+
+  it('preserves unknown progress and normalizes backend percentages', async () => {
+    mockGetActiveTasks.mockResolvedValueOnce({
+      success: true,
+      tasks: [
+        {
+          task_id: 'known_progress',
+          task_type: 'seedance_i2v',
+          status: 'processing',
+          progress: 42,
+          created_at: new Date().toISOString(),
+        },
+        {
+          task_id: 'unknown_progress',
+          task_type: 'seedance_i2v',
+          status: 'processing',
+          progress: null,
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    mockGetTaskNotifications.mockResolvedValueOnce({ success: true, notifications: [] });
+
+    const manager = new GlobalTaskManager();
+    const snapshots: any[][] = [];
+    manager.addEventListener((type, data) => {
+      if (type === 'tasks_updated' && data.tasks) snapshots.push(data.tasks);
+    });
+
+    await (manager as any).poll();
+
+    expect(snapshots[0][0].progress).toBe(0.42);
+    expect(snapshots[0][1].progress).toBeUndefined();
+  });
 });

@@ -1,41 +1,69 @@
 import { apiJson } from './httpClient';
 
-let seedanceOmniCache: boolean | null = null;
-let seedanceOmniPromise: Promise<boolean> | null = null;
-
-export function fetchSeedanceOmni(): Promise<boolean> {
-  if (seedanceOmniCache !== null) return Promise.resolve(seedanceOmniCache);
-  if (!seedanceOmniPromise) {
-    seedanceOmniPromise = apiJson<any>('/api/video/capabilities', { method: 'GET' }, 'fetchSeedanceOmni')
-      .then((data) => {
-        seedanceOmniCache = !!data.seedance_omni;
-        return seedanceOmniCache;
-      })
-      .catch(() => {
-        seedanceOmniCache = false;
-        return false;
-      });
-  }
-  return seedanceOmniPromise;
+export interface VideoModelCapability {
+  key: string;
+  label: string;
+  provider: string;
+  model_name?: string | null;
+  model_options?: string[];
+  task_types: string[];
+  media_inputs: string[];
+  supports_original_audio?: boolean;
+  supports_cancel?: boolean;
+  requires_gpu_node?: boolean;
+  available?: boolean;
+  query_mode: 'async' | 'queue' | string;
+  parameter_rules: Record<string, unknown>;
 }
 
-let comfyuiAvailableCache: boolean | null = null;
-let comfyuiAvailablePromise: Promise<boolean> | null = null;
+export interface VideoCapabilityManifest {
+  seedance_omni: boolean;
+  comfyui_available: boolean;
+  manifest_version: string;
+  models: VideoModelCapability[];
+}
 
-export function fetchComfyuiAvailable(): Promise<boolean> {
-  if (comfyuiAvailableCache !== null) return Promise.resolve(comfyuiAvailableCache);
-  if (!comfyuiAvailablePromise) {
-    comfyuiAvailablePromise = apiJson<any>('/api/video/capabilities', { method: 'GET' }, 'fetchComfyuiAvailable')
+const UNAVAILABLE_VIDEO_CAPABILITIES: VideoCapabilityManifest = {
+  seedance_omni: false,
+  comfyui_available: false,
+  manifest_version: 'unavailable',
+  models: [],
+};
+
+let videoCapabilitiesCache: VideoCapabilityManifest | null = null;
+let videoCapabilitiesPromise: Promise<VideoCapabilityManifest> | null = null;
+
+export function fetchVideoCapabilities(): Promise<VideoCapabilityManifest> {
+  if (videoCapabilitiesCache) return Promise.resolve(videoCapabilitiesCache);
+  if (!videoCapabilitiesPromise) {
+    videoCapabilitiesPromise = apiJson<VideoCapabilityManifest>(
+      '/api/video/capabilities',
+      { method: 'GET' },
+      'fetchVideoCapabilities',
+    )
       .then((data) => {
-        comfyuiAvailableCache = !!data.comfyui_available;
-        return comfyuiAvailableCache;
+        videoCapabilitiesCache = {
+          seedance_omni: !!data.seedance_omni,
+          comfyui_available: !!data.comfyui_available,
+          manifest_version: String(data.manifest_version || 'legacy'),
+          models: Array.isArray(data.models) ? data.models : [],
+        };
+        return videoCapabilitiesCache;
       })
       .catch(() => {
-        comfyuiAvailableCache = false;
-        return false;
+        videoCapabilitiesCache = UNAVAILABLE_VIDEO_CAPABILITIES;
+        return videoCapabilitiesCache;
       });
   }
-  return comfyuiAvailablePromise;
+  return videoCapabilitiesPromise;
+}
+
+export function fetchSeedanceOmni(): Promise<boolean> {
+  return fetchVideoCapabilities().then(data => data.seedance_omni);
+}
+
+export function fetchComfyuiAvailable(): Promise<boolean> {
+  return fetchVideoCapabilities().then(data => data.comfyui_available);
 }
 
 export interface ComposeStatus {

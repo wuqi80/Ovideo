@@ -39,6 +39,31 @@ def forged_token():
     return f"{pb}.{hmac.new(OLD.encode(), pb.encode(), hashlib.sha256).hexdigest()}"
 
 def run():
+    # Release gate: dependencies and migration ledger must be ready.
+    st, b = req("/health", timeout=30)
+    health = {}
+    try:
+        health = json.loads(b) if b else {}
+    except Exception:
+        health = {}
+    database = health.get("database") or {}
+    migrations = database.get("migrations") or {}
+    health_ok = (
+        st == 200
+        and health.get("status") == "healthy"
+        and health.get("redis") == "healthy"
+        and database.get("status") == "healthy"
+        and migrations.get("status") == "ready"
+    )
+    check(
+        "release health gate is ready",
+        health_ok,
+        (
+            f"http={st} status={health.get('status')} redis={health.get('redis')} "
+            f"database={database.get('status')} migrations={migrations.get('status')}"
+        ),
+    )
+
     print(f"=== 冒烟 {BASE} ===")
     # 1. 登录
     st, b = req("/api/login", "POST", {"username": "admin", "password": ADMIN_PW})

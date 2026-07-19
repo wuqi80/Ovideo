@@ -49,6 +49,7 @@ function normalizeStoryboardItem(r: any): StoryboardItemDB {
     videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
     generatedImageUrl: r.generated_image_url ?? r.generatedImageUrl ?? null,
     boundAssets: safeArr(r.bound_assets ?? r.boundAssets),
+    configuredReferences: safeArr(r.configured_references ?? r.configuredReferences),
     status: r.status ?? 'draft',
     dialogueAudioUrl: r.dialogue_audio_url ?? r.dialogueAudioUrl ?? null,
     narrationAudioUrl: r.narration_audio_url ?? r.narrationAudioUrl ?? null,

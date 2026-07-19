@@ -249,6 +249,10 @@ class TaskQueue:
             if not task:
                 logger.warning(f"任务 {task_id} 不存在")
                 return False
+            if task.status == TaskStatus.CANCELLED:
+                await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+                logger.info(f"任务 {task_id} 已取消，忽略迟到的完成结果")
+                return False
             
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.now().isoformat()
@@ -336,6 +340,10 @@ class TaskQueue:
             task = await self.get_task(task_id)
             if not task:
                 logger.warning(f"任务 {task_id} 不存在")
+                return False
+            if task.status == TaskStatus.CANCELLED:
+                await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+                logger.info(f"任务 {task_id} 已取消，忽略迟到的失败结果")
                 return False
             
             task.error = error

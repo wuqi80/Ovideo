@@ -5,6 +5,7 @@ import pytest
 from routers.generation import create_generation_router
 from schemas.generation import (
     AutoStoryboardRequest,
+    HumanMultiAngleRequest,
     ImageFusionRequest,
     MattingRequest,
     PanoramaFusionRequest,
@@ -29,17 +30,39 @@ def build_router_and_service():
     async def unused_generate(*args, **kwargs):
         raise AssertionError("Gemini should not be called")
 
+    async def allow_generation(*args, **kwargs):
+        return {"project_id": "", "episode_id": ""}
+
     router = create_generation_router(
         require_auth_dependency=require_auth,
         task_service_module=SimpleNamespace(get=lambda: service),
         generate_gemini_images=unused_generate,
+        file_dao=SimpleNamespace(),
         logger=SimpleNamespace(info=lambda *args: None, warning=lambda *args: None, error=lambda *args: None),
+        generation_access_checker=allow_generation,
     )
     return router, service
 
 
 def endpoint_for(router, path):
     return next(route.endpoint for route in router.routes if route.path == path)
+
+
+@pytest.mark.asyncio
+async def test_human_multi_angle_uses_defined_identity_preserving_prompt():
+    router, service = build_router_and_service()
+    request = HumanMultiAngleRequest(
+        image_filename="character.png",
+        preferred_node_id="gpu-node-2",
+    )
+
+    await endpoint_for(router, "/api/generate/human-multi-angle")(request, username="tester")
+
+    task_type, data, _ = service.calls[0]
+    assert task_type == "i2i_human"
+    assert data["image_path"] == "character.png"
+    assert "Preserve identity" in data["prompt"]
+    assert data["preferred_node_id"] == "gpu-node-2"
 
 
 @pytest.mark.asyncio

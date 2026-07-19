@@ -23,10 +23,11 @@ from pydantic import BaseModel
 
 import media_library_service
 from api_routes import get_current_user
-from dao_content import FileDAO, ProjectMemberDAO
+from dao_content import FileDAO
 from dao_media_library import MediaLibraryDAO
 from dao_media_library_folder import MediaLibraryFolderDAO
 from file_service import save_generated_file_to_db
+from services.project_access_service import ProjectAccessDenied, require_project_access
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,11 @@ async def _check_project_access(project_id: Optional[str], user_id: str, *, requ
     """非空 project_id 时检查用户在该项目内的角色权重。"""
     if not project_id:
         return True
-    return await ProjectMemberDAO.check_permission(project_id, user_id, required_role=required_role)
+    try:
+        await require_project_access(project_id, user_id, required_role)
+        return True
+    except ProjectAccessDenied:
+        return False
 
 
 # ============================================

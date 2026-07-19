@@ -12,8 +12,10 @@ from schemas.video import CropVideoRequest
 from services.video_crop_service import (
     FfmpegCropFailed,
     FfmpegUnavailable,
+    VideoSourceAccessDenied,
     VideoSourceNotFound,
     crop_video_file,
+    require_video_crop_source_access,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,8 +36,13 @@ def create_video_router(
     ):
         """Crop a video segment from DB, storage, or ComfyUI sources."""
         try:
+            authorized_file_id = await require_video_crop_source_access(
+                request.video_filename,
+                username,
+                file_dao=FileDAO,
+            )
             return await crop_video_file(
-                video_filename=request.video_filename,
+                video_filename=authorized_file_id,
                 start_time=request.start_time,
                 end_time=request.end_time,
                 username=username,
@@ -47,6 +54,8 @@ def create_video_router(
                 logger=logger,
                 deploy_root=Path(__file__).resolve().parents[1],
             )
+        except VideoSourceAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except VideoSourceNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except FfmpegUnavailable as exc:

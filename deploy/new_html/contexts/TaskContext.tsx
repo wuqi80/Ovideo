@@ -270,7 +270,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         projectId: t.targetProjectId || '',
         sourcePage: t.targetPage,
         sourceItemId: t.targetItemId,
-        progress: t.progress ?? 0,
+        progress: t.progress,
         createdAt: t.createdAt,
         startedAt: t.startedAt,
       }));

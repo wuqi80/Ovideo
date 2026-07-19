@@ -6,6 +6,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from services.project_access_service import require_project_access
 from services.episode_video_service import (
     EpisodeNotFound,
     VideoSegmentCreateFailed,
@@ -15,6 +16,8 @@ from services.episode_video_service import (
     get_episode_compose_status,
     get_video_takes,
     list_video_segments,
+    require_episode_access,
+    require_video_segment_access,
     start_episode_compose,
     update_video_segment as update_video_segment_service,
 )
@@ -45,24 +48,54 @@ def create_episode_video_router(
     get_current_user_dependency: Any,
     video_segment_dao: Any,
     episode_dao: Any,
+    project_access_checker: Any = require_project_access,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
     VideoSegmentDAO = video_segment_dao
     EpisodeDAO = episode_dao
 
+    async def require_episode(episode_id: str, identity: str, role: str) -> None:
+        try:
+            await require_episode_access(
+                episode_id,
+                identity,
+                role,
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except EpisodeNotFound as exc:
+            raise HTTPException(status_code=404, detail="剧集不存在") from exc
+
+    async def require_segment(segment_id: str, identity: str) -> None:
+        try:
+            await require_video_segment_access(
+                segment_id,
+                identity,
+                video_segment_dao=VideoSegmentDAO,
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except VideoSegmentNotFound as exc:
+            raise HTTPException(status_code=404, detail="视频段不存在")
+        except EpisodeNotFound as exc:
+            raise HTTPException(status_code=404, detail="剧集不存在") from exc
+
     @router.get("/api/episodes/{episode_id}/video-segments")
     async def get_video_segments(episode_id: str, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'readonly')
         return await list_video_segments(episode_id, video_segment_dao=VideoSegmentDAO)
 
     @router.get("/api/episodes/{episode_id}/video-takes")
     async def video_takes_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
         """Return all generated video takes grouped by storyboard item for composition selection."""
+        await require_episode(episode_id, user_id, 'readonly')
         return await get_video_takes(episode_id)
 
     @router.post("/api/episodes/{episode_id}/compose")
     async def compose_episode_endpoint(episode_id: str, request: Request, user_id: str = Depends(get_current_user)):
         """Start async episode composition; frontend polls `/compose/status`."""
+        await require_episode(episode_id, user_id, 'member')
         selections = None
         audio_mode = "video_original"
         try:
@@ -87,10 +120,12 @@ def create_episode_video_router(
     @router.get("/api/episodes/{episode_id}/compose/status")
     async def compose_status_endpoint(episode_id: str, user_id: str = Depends(get_current_user)):
         """Return episode composition status."""
+        await require_episode(episode_id, user_id, 'readonly')
         return get_episode_compose_status(episode_id)
 
     @router.post("/api/episodes/{episode_id}/video-segments")
     async def create_video_segment(episode_id: str, data: VideoSegmentCreate, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await create_video_segment_service(
                 episode_id,
@@ -106,6 +141,7 @@ def create_episode_video_router(
 
     @router.put("/api/video-segments/{segment_id}")
     async def update_video_segment(segment_id: str, data: VideoSegmentUpdate, user_id: str = Depends(get_current_user)):
+        await require_segment(segment_id, user_id)
         try:
             return await update_video_segment_service(
                 segment_id,
@@ -117,6 +153,7 @@ def create_episode_video_router(
 
     @router.delete("/api/video-segments/{segment_id}")
     async def delete_video_segment(segment_id: str, user_id: str = Depends(get_current_user)):
+        await require_segment(segment_id, user_id)
         try:
             return await delete_video_segment_service(segment_id, video_segment_dao=VideoSegmentDAO)
         except VideoSegmentNotFound as exc:

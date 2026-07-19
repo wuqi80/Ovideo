@@ -7,11 +7,13 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.project_access_service import require_project_access
 from services.storyboard_service import (
     EpisodeNotFound,
     StoryboardCreateFailed,
     StoryboardItemNotFound,
     StoryboardReorderFailed,
+    StoryboardScriptNotFound,
     UnsupportedStoryboardFields,
     batch_create_storyboard_items as batch_create_storyboard_items_service,
     create_storyboard_item as create_storyboard_item_service,
@@ -22,6 +24,9 @@ from services.storyboard_service import (
     get_storyboard_items as get_storyboard_items_service,
     mix_storyboard_audio as mix_storyboard_audio_service,
     reorder_storyboard_items as reorder_storyboard_items_service,
+    require_storyboard_episode_access,
+    require_storyboard_item_access,
+    require_storyboard_script,
     sync_storyboard_items as sync_storyboard_items_service,
     update_storyboard_item as update_storyboard_item_service,
 )
@@ -48,6 +53,7 @@ class StoryboardItemCreate(BaseModel):
     image_prompt: Optional[str] = ""
     video_prompt: Optional[str] = ""
     script_id: Optional[str] = None
+    configured_references: Optional[list] = None
 
 
 class StoryboardItemUpdate(BaseModel):
@@ -66,6 +72,7 @@ class StoryboardItemUpdate(BaseModel):
     audio_duration_ms: Optional[int] = None
     planned_duration_ms: Optional[int] = None
     bound_assets: Optional[list] = None
+    configured_references: Optional[list] = None
 
 
 class ReorderRequest(BaseModel):
@@ -114,6 +121,7 @@ def create_storyboard_router(
     asset_dao: Any,
     episode_dao: Any,
     logger: logging.Logger,
+    project_access_checker: Any = require_project_access,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
@@ -121,6 +129,43 @@ def create_storyboard_router(
     EpisodeScriptDAO = episode_script_dao
     AssetDAO = asset_dao
     EpisodeDAO = episode_dao
+
+    async def require_episode(episode_id: str, identity: str, role: str) -> str:
+        try:
+            return await require_storyboard_episode_access(
+                episode_id,
+                identity,
+                role,
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except EpisodeNotFound as exc:
+            raise HTTPException(status_code=404, detail="集不存在") from exc
+
+    async def require_item(item_id: str, identity: str, role: str) -> dict:
+        try:
+            return await require_storyboard_item_access(
+                item_id,
+                identity,
+                role,
+                storyboard_dao=StoryboardDAO,
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except StoryboardItemNotFound as exc:
+            raise HTTPException(status_code=404, detail="分镜不存在")
+        except EpisodeNotFound as exc:
+            raise HTTPException(status_code=404, detail="集不存在") from exc
+
+    async def require_script(episode_id: str, script_id: Optional[str]) -> None:
+        try:
+            await require_storyboard_script(
+                episode_id,
+                script_id,
+                episode_script_dao=EpisodeScriptDAO,
+            )
+        except StoryboardScriptNotFound as exc:
+            raise HTTPException(status_code=404, detail="Script not found for this episode")
 
     @router.get("/api/episodes/{episode_id}/storyboard-items")
     async def get_storyboard_items(
@@ -132,6 +177,7 @@ def create_storyboard_router(
         fields: Optional[str] = None,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'readonly')
         selected_fields = (fields or "").strip().lower() or None
         if selected_fields and selected_fields not in {"audio", "video", "audio_stage", "materials"}:
             raise HTTPException(status_code=400, detail="unsupported storyboard fields")
@@ -156,6 +202,7 @@ def create_storyboard_router(
         data: StoryboardItemCreate,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await create_storyboard_item_service(
                 episode_id,
@@ -166,6 +213,7 @@ def create_storyboard_router(
                 camera_movement=data.camera_movement,
                 image_prompt=data.image_prompt,
                 video_prompt=data.video_prompt,
+                configured_references=data.configured_references,
                 script_id=data.script_id,
                 storyboard_dao=StoryboardDAO,
                 episode_script_dao=EpisodeScriptDAO,
@@ -180,6 +228,7 @@ def create_storyboard_router(
         data: StoryboardItemUpdate,
         user_id: str = Depends(get_current_user),
     ):
+        await require_item(item_id, user_id, 'member')
         try:
             return await update_storyboard_item_service(
                 item_id,
@@ -191,6 +240,7 @@ def create_storyboard_router(
 
     @router.delete("/api/storyboard-items/{item_id}")
     async def delete_storyboard_item(item_id: str, user_id: str = Depends(get_current_user)):
+        await require_item(item_id, user_id, 'member')
         try:
             return await delete_storyboard_item_service(item_id, storyboard_dao=StoryboardDAO)
         except StoryboardItemNotFound as exc:
@@ -202,6 +252,7 @@ def create_storyboard_router(
         script_id: Optional[str] = None,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'member')
         return await delete_all_storyboard_items_service(
             episode_id,
             script_id=script_id,
@@ -214,6 +265,9 @@ def create_storyboard_router(
         req: ExportScriptRequest,
         user_id: str = Depends(get_current_user),
     ):
+        actual_project_id = await require_episode(episode_id, user_id, 'member')
+        if req.project_id != actual_project_id:
+            raise HTTPException(status_code=400, detail="project_id 与集所属项目不一致")
         try:
             return await export_script_service(
                 episode_id,
@@ -240,6 +294,7 @@ def create_storyboard_router(
         data: ReorderRequest,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await reorder_storyboard_items_service(
                 episode_id,
@@ -254,6 +309,7 @@ def create_storyboard_router(
         body: MixAudioRequest,
         user_id: str = Depends(get_current_user),
     ) -> MixAudioResponse:
+        await require_item(body.item_id, user_id, 'member')
         try:
             result = await mix_storyboard_audio_service(
                 item_id=body.item_id,
@@ -282,6 +338,8 @@ def create_storyboard_router(
         data: BatchStoryboardCreate,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'member')
+        await require_script(episode_id, data.script_id)
         return await batch_create_storyboard_items_service(
             episode_id,
             items=data.items,
@@ -295,6 +353,8 @@ def create_storyboard_router(
         data: SyncStoryboardItemsRequest,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'member')
+        await require_script(episode_id, data.script_id)
         return await sync_storyboard_items_service(
             episode_id,
             items=data.items,
@@ -308,6 +368,7 @@ def create_storyboard_router(
         data: ExtractToAssetsRequest,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await extract_to_assets_service(
                 episode_id,

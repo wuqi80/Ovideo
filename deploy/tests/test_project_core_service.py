@@ -42,6 +42,7 @@ class FakeVersionDAO:
 
 class FakeProjectMemberDAO:
     added = None
+    added_rows = []
     logged_org_query = None
     logged_user_query = None
     permission_users = set()
@@ -49,6 +50,7 @@ class FakeProjectMemberDAO:
     @classmethod
     async def add_member(cls, **kwargs):
         cls.added = kwargs
+        cls.added_rows.append(kwargs)
         return {"member_id": "pm_1", **kwargs}
 
     @classmethod
@@ -92,10 +94,15 @@ class FakeOrganizationMemberDAO:
 
 class FakeUserDAO:
     admins = set()
+    users_by_name = {}
 
     @classmethod
     async def is_admin_user(cls, user_id: str):
         return user_id in cls.admins
+
+    @classmethod
+    async def get_user_by_username(cls, username: str):
+        return cls.users_by_name.get(username)
 
 
 def setup_function():
@@ -105,12 +112,14 @@ def setup_function():
     FakeProjectDAO.owner_id = "owner"
     FakeVersionDAO.created = None
     FakeProjectMemberDAO.added = None
+    FakeProjectMemberDAO.added_rows = []
     FakeProjectMemberDAO.logged_org_query = None
     FakeProjectMemberDAO.logged_user_query = None
     FakeProjectMemberDAO.permission_users = set()
     FakeActivityLogDAO.logged = None
     FakeOrganizationMemberDAO.members = {"member"}
     FakeUserDAO.admins = set()
+    FakeUserDAO.users_by_name = {}
 
 
 async def test_create_project_creates_initial_version_owner_member_and_log():
@@ -119,9 +128,11 @@ async def test_create_project_creates_initial_version_owner_member_and_log():
         project_name="My Project",
         description="desc",
         visibility=None,
+        member_usernames=None,
         project_dao=FakeProjectDAO,
         version_dao=FakeVersionDAO,
         project_member_dao=FakeProjectMemberDAO,
+        user_dao=FakeUserDAO,
         activity_log_dao=FakeActivityLogDAO,
     )
 
@@ -141,6 +152,38 @@ async def test_create_project_creates_initial_version_owner_member_and_log():
         "resource_type": "project",
         "resource_id": "proj_1",
     }
+
+
+async def test_create_project_adds_named_members_and_reports_missing_users():
+    FakeUserDAO.users_by_name = {
+        "alice": {"user_id": "user_alice", "username": "alice"},
+        "owner-name": {"user_id": "owner", "username": "owner-name"},
+    }
+
+    result = await project_core_service.create_project(
+        user_id="owner",
+        project_name="Shared Project",
+        description="",
+        visibility="private",
+        member_usernames=[" alice ", "missing", "alice", "owner-name"],
+        project_dao=FakeProjectDAO,
+        version_dao=FakeVersionDAO,
+        project_member_dao=FakeProjectMemberDAO,
+        user_dao=FakeUserDAO,
+        activity_log_dao=FakeActivityLogDAO,
+    )
+
+    assert FakeProjectMemberDAO.added_rows == [
+        {"project_id": "proj_1", "user_id": "owner", "role": "owner"},
+        {
+            "project_id": "proj_1",
+            "user_id": "user_alice",
+            "role": "member",
+            "responsibility": "all",
+        },
+    ]
+    assert result["member_additions"]["missing_usernames"] == ["missing"]
+    assert result["member_additions"]["added"][0]["user_id"] == "user_alice"
 
 
 async def test_list_user_projects_uses_user_scope_without_org():

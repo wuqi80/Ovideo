@@ -21,6 +21,12 @@ from services.entity_file_service import (
     soft_delete_entity_file,
     upload_entity_file as upload_entity_file_service,
 )
+from services.entity_access_service import (
+    EntityAccessDenied,
+    require_entity_access,
+    require_file_access,
+)
+from services.project_access_service import resolve_user_id
 
 
 def create_entity_files_router(
@@ -28,6 +34,11 @@ def create_entity_files_router(
     get_current_user_dependency: Any,
     file_dao: Any,
     entity_file_dao: Any,
+    episode_dao: Any,
+    storyboard_dao: Any,
+    asset_dao: Any,
+    video_segment_dao: Any,
+    user_dao: Any,
     save_generated_file_to_db_provider: Callable[[], Callable[..., Any]],
     logger: logging.Logger,
 ) -> APIRouter:
@@ -35,6 +46,42 @@ def create_entity_files_router(
     get_current_user = get_current_user_dependency
     FileDAO = file_dao
     EntityFileDAO = entity_file_dao
+    scope_dependencies = {
+        "episode_dao": episode_dao,
+        "storyboard_dao": storyboard_dao,
+        "asset_dao": asset_dao,
+        "video_segment_dao": video_segment_dao,
+    }
+
+    async def canonical_user_id(identity: str) -> str:
+        resolved = await resolve_user_id(identity, user_dao=user_dao)
+        if not resolved:
+            raise HTTPException(403, "User not found or access denied")
+        return resolved
+
+    async def guard_entity(entity_type: str, entity_id: str, identity: str, role: str):
+        try:
+            return await require_entity_access(
+                entity_type,
+                entity_id,
+                identity,
+                role,
+                **scope_dependencies,
+            )
+        except EntityAccessDenied as exc:
+            raise HTTPException(404, "Entity not found or access denied") from exc
+
+    async def guard_file(file_id: str, identity: str, role: str):
+        try:
+            return await require_file_access(
+                file_id,
+                identity,
+                role,
+                file_dao=FileDAO,
+                **scope_dependencies,
+            )
+        except EntityAccessDenied as exc:
+            raise HTTPException(404, "File not found or access denied") from exc
 
     async def save_generated_file_to_db(*args, **kwargs):
         return await save_generated_file_to_db_provider()(*args, **kwargs)
@@ -61,6 +108,7 @@ def create_entity_files_router(
         offset: int = 0,
         user_id: str = Depends(get_current_user),
     ):
+        user_id = await canonical_user_id(user_id)
         return await list_user_files(
             user_id=user_id,
             file_type=file_type,
@@ -79,6 +127,7 @@ def create_entity_files_router(
         offset: int = 0,
         user_id: str = Depends(get_current_user),
     ):
+        await guard_entity(entity_type, entity_id, user_id, "readonly")
         return await list_entity_files(
             entity_type=entity_type,
             entity_id=entity_id,
@@ -93,6 +142,12 @@ def create_entity_files_router(
         req: EntityFileLinkRequest,
         user_id: str = Depends(get_current_user),
     ):
+        target_scope = await guard_entity(req.entity_type, req.entity_id, user_id, "member")
+        file_row = await guard_file(req.file_id, user_id, "member")
+        source_project_id = str(file_row.get("_access_project_id") or "")
+        target_project_id = str(target_scope.get("project_id") or "")
+        if source_project_id and source_project_id != target_project_id:
+            raise HTTPException(409, "File belongs to another project; copy it before linking")
         try:
             return await link_entity_file_service(
                 file_id=req.file_id,
@@ -111,6 +166,8 @@ def create_entity_files_router(
         req: EntityFileSelectRequest,
         user_id: str = Depends(get_current_user),
     ):
+        await guard_entity(req.entity_type, req.entity_id, user_id, "member")
+        await guard_file(file_id, user_id, "member")
         try:
             return await select_entity_file_service(
                 file_id=file_id,
@@ -132,6 +189,20 @@ def create_entity_files_router(
         episode_id: str = Form(None),
         user_id: str = Depends(get_current_user),
     ):
+        canonical_id = await canonical_user_id(user_id)
+        project_id = None
+        if bool(entity_type) != bool(entity_id):
+            raise HTTPException(400, "entity_type and entity_id must be provided together")
+        if entity_type and entity_id:
+            scope = await guard_entity(entity_type, entity_id, user_id, "member")
+            project_id = scope.get("project_id")
+            scope_episode_id = scope.get("episode_id")
+            if episode_id and scope_episode_id and episode_id != scope_episode_id:
+                raise HTTPException(409, "episode_id does not match the target entity")
+            episode_id = scope_episode_id or episode_id
+        elif episode_id:
+            scope = await guard_entity("episode", episode_id, user_id, "member")
+            project_id = scope.get("project_id")
         content = await file.read()
         return await upload_entity_file_service(
             content=content,
@@ -141,8 +212,9 @@ def create_entity_files_router(
             entity_id=entity_id,
             file_role=file_role,
             episode_id=episode_id,
-            user_id=user_id,
+            user_id=canonical_id,
             save_generated_file_to_db=save_generated_file_to_db,
+            project_id=project_id,
             logger=logger,
         )
 
@@ -151,6 +223,7 @@ def create_entity_files_router(
         file_id: str,
         user_id: str = Depends(get_current_user),
     ):
+        await guard_file(file_id, user_id, "member")
         try:
             return await soft_delete_entity_file(file_id=file_id, entity_file_dao=EntityFileDAO)
         except EntityFileNotFound as exc:
@@ -161,6 +234,7 @@ def create_entity_files_router(
         file_id: str,
         user_id: str = Depends(get_current_user),
     ):
+        await guard_file(file_id, user_id, "member")
         try:
             return await hard_delete_entity_file_service(file_id=file_id, entity_file_dao=EntityFileDAO)
         except EntityFileNotFound as exc:
@@ -171,6 +245,10 @@ def create_entity_files_router(
         request: HardDeleteBatchRequest,
         user_id: str = Depends(get_current_user),
     ):
+        if len(request.file_ids) > 200:
+            raise HTTPException(400, "Batch hard delete accepts at most 200 files")
+        for file_id in dict.fromkeys(request.file_ids):
+            await guard_file(file_id, user_id, "member")
         try:
             return await hard_delete_entity_files_batch_service(
                 file_ids=request.file_ids,
@@ -181,6 +259,8 @@ def create_entity_files_router(
 
     @router.post("/api/entity-files/migrate")
     async def run_entity_file_migration(user_id: str = Depends(get_current_user)):
+        if not await user_dao.is_admin_user(user_id):
+            raise HTTPException(403, "Administrator access required")
         try:
             return await run_entity_file_migration_service()
         except EntityFileMigrationFailed as exc:

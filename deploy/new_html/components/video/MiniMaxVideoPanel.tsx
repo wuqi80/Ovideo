@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+    getMiniMaxVideoParamsError,
     normalizeMiniMaxVideoParams,
     type MiniMaxVideoDuration,
     type MiniMaxVideoModelName,
@@ -28,26 +29,19 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
     compact = false,
 }) => {
     const params = normalizeMiniMaxVideoParams(value);
+    const validationError = getMiniMaxVideoParamsError(params);
 
     const setDuration = (duration: MiniMaxVideoDuration) => {
-        onChange(normalizeMiniMaxVideoParams({
-            ...params,
-            duration,
-            resolution: duration === 10 ? '768P' : params.resolution,
-        }));
+        onChange({ ...params, duration });
     };
 
     const setResolution = (resolution: MiniMaxVideoResolution) => {
-        onChange(normalizeMiniMaxVideoParams({
-            ...params,
-            resolution,
-            duration: resolution === '1080P' ? 6 : params.duration,
-        }));
+        onChange({ ...params, resolution });
     };
 
     if (compact) {
         return (
-            <div className="flex flex-1 min-w-0 items-center gap-1.5">
+            <div className="flex flex-1 min-w-0 items-center gap-1.5" title={validationError || undefined}>
                 <select
                     value={params.model}
                     onChange={(event) => onChange(normalizeMiniMaxVideoParams({
@@ -68,7 +62,7 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
                     aria-label="MiniMax 时长"
                 >
                     <option value={6}>6 秒</option>
-                    <option value={10}>10 秒</option>
+                    <option value={10} disabled={params.resolution === '1080P'}>10 秒</option>
                 </select>
                 <select
                     value={params.resolution}
@@ -128,7 +122,7 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
                         className="h-8 w-full rounded border border-n40 bg-n0 px-2 text-[11px] text-n700 focus:border-primary focus:outline-none"
                     >
                         <option value={6}>6 秒</option>
-                        <option value={10}>10 秒</option>
+                        <option value={10} disabled={params.resolution === '1080P'}>10 秒</option>
                     </select>
                 </label>
                 <label className="min-w-0">
@@ -160,6 +154,11 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
                 placeholder="描述画面与动作内容..."
                 className="min-h-[84px] flex-1 resize-none overflow-y-auto rounded border border-n40 bg-n20 px-3 py-2 text-xs leading-5 text-n700 focus:border-primary focus:outline-none"
             />
+            {validationError && (
+                <div className="shrink-0 rounded border border-r100 bg-r50 px-2 py-1 text-[11px] text-danger">
+                    {validationError}
+                </div>
+            )}
         </div>
     );
 };

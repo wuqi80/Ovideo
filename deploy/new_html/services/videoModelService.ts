@@ -37,10 +37,17 @@ export function normalizeMiniMaxVideoParams(
 
   return {
     model,
-    duration: resolution === '1080P' ? 6 : requestedDuration,
+    duration: requestedDuration,
     resolution,
     promptOptimizer: params?.promptOptimizer !== false,
   };
+}
+
+export function getMiniMaxVideoParamsError(params: MiniMaxVideoParams): string | null {
+  if (params.resolution === '1080P' && params.duration !== 6) {
+    return '1080P 仅支持 6 秒；请选择 6 秒，或将清晰度改为 768P。';
+  }
+  return null;
 }
 
 export type DashScopeVideoModel = 'Kling' | 'Vidu' | 'HappyHorse';

@@ -68,6 +68,19 @@ def _task_status_value(task: Any) -> str:
     return getattr(status, "value", status) or ""
 
 
+def _task_progress_value(task: Any, status: str) -> Optional[float]:
+    if status == "completed":
+        return 100
+    value = getattr(task, "progress", None)
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        progress = min(100.0, max(0.0, float(value)))
+    except (TypeError, ValueError):
+        return None
+    return progress if progress > 0 else None
+
+
 async def _persist_terminal_task(task: Any, task_dao: Any) -> None:
     status = _task_status_value(task)
     if hasattr(task_dao, "reconcile_terminal_task"):
@@ -124,11 +137,32 @@ async def _reconcile_active_tasks_with_queue(
             active_tasks.append(task_row)
             continue
 
-        if _task_status_value(redis_task) in terminal_statuses:
+        queue_status = _task_status_value(redis_task)
+        if queue_status in terminal_statuses:
             await _persist_terminal_task(redis_task, task_dao)
             continue
 
-        active_tasks.append(task_row)
+        merged_row = dict(task_row)
+        merged_row["status"] = queue_status or merged_row.get("status")
+        merged_row["progress"] = _task_progress_value(redis_task, queue_status)
+        queue_data = _normalize_task_data(getattr(redis_task, "data", None))
+        for key in (
+            "project_id",
+            "source_page",
+            "source_item_id",
+            "display_name",
+            "category",
+            "entity_type",
+            "entity_id",
+            "file_role",
+            "episode_id",
+        ):
+            if queue_data.get(key):
+                merged_row[key] = queue_data[key]
+        started_at = getattr(redis_task, "started_at", None)
+        if started_at is not None:
+            merged_row["started_at"] = started_at
+        active_tasks.append(merged_row)
 
     return active_tasks
 

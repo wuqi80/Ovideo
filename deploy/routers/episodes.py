@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.project_access_service import ProjectAccessDenied, require_project_access
 from services.episode_service import (
     EpisodeDuplicateFailed,
     EpisodeNotFound,
@@ -47,14 +48,29 @@ def create_episodes_router(
     get_current_user_dependency: Any,
     episode_dao: Any,
     episode_script_dao: Any,
+    project_access_checker: Any = require_project_access,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
     EpisodeDAO = episode_dao
     EpisodeScriptDAO = episode_script_dao
 
+    async def require_project(project_id: str, identity: str, role: str) -> None:
+        try:
+            await project_access_checker(project_id, identity, role)
+        except ProjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail="项目不存在或无权访问") from exc
+
+    async def require_episode(episode_id: str, identity: str, role: str) -> str:
+        project_id = await EpisodeDAO.get_project_id(episode_id)
+        if not project_id:
+            raise HTTPException(status_code=404, detail="集数不存在")
+        await require_project(project_id, identity, role)
+        return project_id
+
     @router.get("/api/projects/{project_id}/episodes")
     async def list_episodes(project_id: str, user_id: str = Depends(get_current_user)):
+        await require_project(project_id, user_id, 'readonly')
         try:
             return await list_episodes_service(project_id, episode_dao=EpisodeDAO)
         except Exception as e:
@@ -62,6 +78,7 @@ def create_episodes_router(
 
     @router.post("/api/projects/{project_id}/episodes")
     async def create_episode(project_id: str, data: EpisodeCreate, user_id: str = Depends(get_current_user)):
+        await require_project(project_id, user_id, 'member')
         try:
             return await create_episode_service(
                 project_id,
@@ -74,6 +91,7 @@ def create_episodes_router(
 
     @router.get("/api/episodes/{episode_id}")
     async def get_episode(episode_id: str, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'readonly')
         try:
             return await get_episode_service(episode_id, episode_dao=EpisodeDAO)
         except EpisodeNotFound as e:
@@ -83,6 +101,7 @@ def create_episodes_router(
 
     @router.put("/api/episodes/{episode_id}")
     async def update_episode(episode_id: str, data: EpisodeUpdate, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await update_episode_service(
                 episode_id,
@@ -94,6 +113,7 @@ def create_episodes_router(
 
     @router.get("/api/episodes/{episode_id}/workflow-script")
     async def get_workflow_script(episode_id: str, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'readonly')
         try:
             return await get_workflow_script_service(
                 episode_id,
@@ -109,6 +129,7 @@ def create_episodes_router(
         data: WorkflowScriptSelection,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await select_workflow_script_service(
                 episode_id,
@@ -121,6 +142,7 @@ def create_episodes_router(
 
     @router.delete("/api/episodes/{episode_id}")
     async def delete_episode(episode_id: str, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await delete_episode_service(episode_id, episode_dao=EpisodeDAO)
         except Exception as e:
@@ -129,6 +151,7 @@ def create_episodes_router(
     @router.post("/api/episodes/{episode_id}/duplicate")
     async def duplicate_episode(episode_id: str, user_id: str = Depends(get_current_user)):
         """复制一个分集：新建副本并拷贝剧本内容。"""
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await duplicate_episode_service(
                 episode_id,
@@ -144,6 +167,7 @@ def create_episodes_router(
 
     @router.post("/api/projects/{project_id}/episodes/reorder")
     async def reorder_episodes(project_id: str, data: EpisodeReorder, user_id: str = Depends(get_current_user)):
+        await require_project(project_id, user_id, 'member')
         try:
             return await reorder_episodes_service(
                 project_id,

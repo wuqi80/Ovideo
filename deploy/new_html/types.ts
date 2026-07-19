@@ -213,6 +213,7 @@ export interface Material {
   timestamp: number;
   name?: string;
   assetId?: string;
+  fileId?: string;
   assetType?: 'character' | 'scene' | 'prop';
   description?: string;
   styleParams?: Record<string, any>;
@@ -230,6 +231,7 @@ export interface GenerationReference {
   type: ReferenceType;
   name?: string; // Optional tag name
   assetId?: string;
+  fileId?: string;
   description?: string;
   source?: 'identity_anchor' | 'material_binding' | 'manual';
   isLocked?: boolean;
@@ -469,7 +471,7 @@ export interface GlobalTask {
   projectId: string;
   sourcePage: SourcePage;
   sourceItemId?: string;
-  progress: number;
+  progress?: number;
   createdAt: number;
   startedAt?: number;
   completedAt?: number;
@@ -579,6 +581,7 @@ export interface StoryboardItemDB {
   videoPrompt: string;
   generatedImageUrl: string | null;
   boundAssets: string[];
+  configuredReferences: GenerationReference[];
   status: string;
   dialogueAudioUrl: string | null;
   narrationAudioUrl: string | null;

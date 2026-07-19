@@ -16,6 +16,7 @@ import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, delet
 import { exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
 import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
+import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
 
 const loadAiModelService = () => import('./services/aiModelService');
 
@@ -89,6 +90,9 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
       generatedImage: imageUrl ?? undefined,
       generatedImages: imageUrl ? [{ id: imageId, url: imageUrl, thumbnail: imageUrl, timestamp: Date.now() }] : [],
       selectedImageId: imageUrl ? imageId : undefined,
+      configuredReferences: Array.isArray(r.configured_references ?? r.configuredReferences)
+        ? (r.configured_references ?? r.configuredReferences)
+        : [],
       characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
       scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
       props: boundAssets.filter((a: string) => a.startsWith('prop:')).map((a: string) => a.replace('prop:', '')),
@@ -1268,11 +1272,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
       if (currentItem) {
           const actualUpdates = typeof updates === 'function' ? updates(currentItem) : updates;
+          const dbUpdates = storyboardItemToDbUpdate(actualUpdates);
           if ('characters' in actualUpdates || 'scene' in actualUpdates || 'props' in actualUpdates) {
               const updatedItem = { ...currentItem, ...actualUpdates };
-              const bound_assets = buildBoundAssetTags(updatedItem);
-              updateStoryboardItem(itemId, { bound_assets }).catch(err => {
-                  console.error('❌ 保存分镜标签失败:', err);
+              dbUpdates.bound_assets = buildBoundAssetTags(updatedItem);
+          }
+          if (Object.keys(dbUpdates).length > 0) {
+              updateStoryboardItem(itemId, dbUpdates).catch(err => {
+                  console.error('❌ 保存分镜更新失败:', err);
               });
           }
       }

@@ -1169,7 +1169,8 @@ async def test_all_saved_api_config_health(
     enabled_only: bool = False,
     concurrency: Optional[int] = None,
 ) -> Dict[str, Any]:
-    rows = list(await ApiConfigDAO.list_all())
+    all_rows = list(await ApiConfigDAO.list_all())
+    rows = list(all_rows)
     if config_ids:
         wanted = {str(config_id) for config_id in config_ids if config_id}
         rows = [row for row in rows if str(row.get("config_id") or "") in wanted]

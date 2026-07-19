@@ -51,6 +51,12 @@ class FakeCanvasBoardDAO:
 
 
 class FakeCanvasNodeDAO:
+    nodes = {
+        "node_1": {"node_id": "node_1", "board_id": "board_1"},
+        "node_a": {"node_id": "node_a", "board_id": "board_1"},
+        "node_b": {"node_id": "node_b", "board_id": "board_1"},
+        "node_other": {"node_id": "node_other", "board_id": "board_2"},
+    }
     created = None
     updated = None
     deleted = []
@@ -58,6 +64,10 @@ class FakeCanvasNodeDAO:
     @staticmethod
     async def get_board_nodes(board_id):
         return [{"node_id": "node_1", "board_id": board_id}]
+
+    @classmethod
+    async def get_node(cls, node_id):
+        return cls.nodes.get(node_id)
 
     @classmethod
     async def create_node(cls, board_id, node_type, x, y, width, height, data):
@@ -82,12 +92,19 @@ class FakeCanvasNodeDAO:
 
 
 class FakeCanvasConnectionDAO:
+    connections = {
+        "conn_new": {"connection_id": "conn_new", "board_id": "board_1"},
+    }
     created = None
     deleted = []
 
     @staticmethod
     async def get_board_connections(board_id):
         return [{"connection_id": "conn_1", "board_id": board_id}]
+
+    @classmethod
+    async def get_by_id(cls, connection_id):
+        return cls.connections.get(connection_id)
 
     @classmethod
     async def create_connection(cls, board_id, source_node_id, target_node_id, source_port, target_port, label):
@@ -217,15 +234,19 @@ async def test_create_canvas_node_checks_board_permission():
     assert FakeCanvasNodeDAO.created["data"] == {"asset_id": "asset_1"}
 
 
-async def test_update_canvas_node_delegates_without_permission_change():
+async def test_update_canvas_node_requires_owning_board_permission():
     result = await canvas_service.update_canvas_node(
         node_id="node_1",
         fields={"x": 12, "data": {"title": "A"}},
+        user_id="user_1",
+        project_member_dao=FakeProjectMemberDAO,
+        canvas_board_dao=FakeCanvasBoardDAO,
         canvas_node_dao=FakeCanvasNodeDAO,
     )
 
     assert result == {"success": True}
     assert FakeCanvasNodeDAO.updated == {"node_id": "node_1", "x": 12, "data": {"title": "A"}}
+    assert FakeProjectMemberDAO.calls == [("proj_1", "user_1", "member")]
 
 
 async def test_create_and_delete_canvas_connection_delegate():
@@ -236,13 +257,52 @@ async def test_create_and_delete_canvas_connection_delegate():
         source_port="out",
         target_port="in",
         label="关系",
+        user_id="user_1",
+        project_member_dao=FakeProjectMemberDAO,
+        canvas_board_dao=FakeCanvasBoardDAO,
+        canvas_node_dao=FakeCanvasNodeDAO,
         canvas_connection_dao=FakeCanvasConnectionDAO,
     )
     deleted = await canvas_service.delete_canvas_connection(
         connection_id="conn_new",
+        user_id="user_1",
+        project_member_dao=FakeProjectMemberDAO,
+        canvas_board_dao=FakeCanvasBoardDAO,
         canvas_connection_dao=FakeCanvasConnectionDAO,
     )
 
     assert created["connection"]["connection_id"] == "conn_new"
     assert deleted == {"success": True}
     assert FakeCanvasConnectionDAO.deleted == ["conn_new"]
+
+
+async def test_create_canvas_connection_rejects_cross_board_nodes():
+    with pytest.raises(canvas_service.CanvasInvalidConnection):
+        await canvas_service.create_canvas_connection(
+            board_id="board_1",
+            source_node_id="node_a",
+            target_node_id="node_other",
+            source_port=None,
+            target_port=None,
+            label=None,
+            user_id="user_1",
+            project_member_dao=FakeProjectMemberDAO,
+            canvas_board_dao=FakeCanvasBoardDAO,
+            canvas_node_dao=FakeCanvasNodeDAO,
+            canvas_connection_dao=FakeCanvasConnectionDAO,
+        )
+
+
+async def test_delete_canvas_node_denies_non_member():
+    FakeProjectMemberDAO.allowed = False
+
+    with pytest.raises(canvas_service.CanvasPermissionDenied):
+        await canvas_service.delete_canvas_node(
+            node_id="node_1",
+            user_id="user_1",
+            project_member_dao=FakeProjectMemberDAO,
+            canvas_board_dao=FakeCanvasBoardDAO,
+            canvas_node_dao=FakeCanvasNodeDAO,
+        )
+
+    assert FakeCanvasNodeDAO.deleted == []

@@ -25,6 +25,7 @@ from services.video_enhancement_service import (
     prepare_video_voice_task,
 )
 from services.video_interpolation_service import prepare_video_interpolation_task
+from external_api.video.minimax import normalize_minimax_generation_options
 
 
 def _should_prepare_workflow(task_type: str) -> bool:
@@ -74,6 +75,14 @@ def create_task_router(
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
                 prepare_workflow = False
+            if request.task_type in {"minimax_i2v", "minimax_morph"}:
+                try:
+                    normalize_minimax_generation_options(
+                        task_data.get("duration"),
+                        task_data.get("minimax_resolution"),
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
             task_id = await task_service.submit(
                 request.task_type,
                 task_data,
@@ -107,6 +116,7 @@ def create_task_router(
             task_queue=task_service_module.get_queue(),
             task_dao=task_dao,
             logger=logger,
+            username=username,
         )
         if response:
             return response
@@ -116,6 +126,16 @@ def create_task_router(
     @router.delete("/api/task/{task_id}")
     async def cancel_task(task_id: str, username: str = Depends(require_auth_dependency)):
         """取消任务"""
+        visible_task = await get_task_status_response(
+            task_id=task_id,
+            task_queue=task_service_module.get_queue(),
+            task_dao=task_dao,
+            logger=logger,
+            username=username,
+        )
+        if not visible_task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+
         success = await task_service_module.get_queue().cancel_task(task_id)
 
         if not success:
@@ -141,6 +161,15 @@ def create_task_router(
                     task_dao=task_dao,
                     logger=logger,
                 )
+
+            task_owner = None
+            if task:
+                task_owner = task.user_id
+            elif task_data:
+                task_owner = task_data.get("user_id")
+
+            if not task_owner or str(task_owner) != str(username):
+                raise HTTPException(status_code=404, detail="任务不存在")
 
             deleted_files = []
 
@@ -210,23 +239,6 @@ def create_task_router(
                 logger.info("✅ 已从数据库删除任务: %s", task_id)
             elif db_deleted is False:
                 logger.warning("⚠️ 数据库中未找到任务或无权删除: %s", task_id)
-
-            task_owner = None
-            if task:
-                task_owner = task.user_id
-            elif task_data:
-                task_owner = task_data.get("user_id")
-
-            if task_owner and task_owner != username:
-                raise HTTPException(status_code=403, detail="无权删除此任务")
-
-            if not task and not task_data:
-                logger.info("任务 %s 不存在，已尝试从数据库删除", task_id)
-                return {
-                    "success": True,
-                    "message": "任务不存在或已删除",
-                    "deleted_files_count": len(deleted_files),
-                }
 
             if task:
                 success = await task_service_module.get_queue().delete_task(task_id)

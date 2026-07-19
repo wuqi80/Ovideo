@@ -13,11 +13,11 @@ class _FakeDb:
 
 
 @pytest.mark.asyncio
-async def test_cleanup_stale_defaults_to_one_hour(monkeypatch):
+async def test_cleanup_stale_defaults_to_twenty_four_hours(monkeypatch):
     db = _FakeDb()
     monkeypatch.setattr(task_module, "get_db_manager", lambda: db)
 
     cleaned = await task_module.TaskDAO.cleanup_stale()
 
     assert cleaned == 4
-    assert db.args == (1, 50)
+    assert db.args == (24, 50)

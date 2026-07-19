@@ -85,17 +85,19 @@ if not os.path.exists(static_dir):
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # 用户认证配置
-DEFAULT_USERS = {
-    'admin': 'admin123',
-    'user': 'user123',
-    'demo': 'demo123'
-}
+try:
+    DEFAULT_USERS = json.loads(os.getenv("COMFYUI_LEGACY_USERS_JSON", "{}"))
+except (TypeError, ValueError):
+    DEFAULT_USERS = {}
+if not isinstance(DEFAULT_USERS, dict):
+    DEFAULT_USERS = {}
 
 # Session 存储
 active_sessions = {}
 
 # 任务状态存储
 task_storage = {}
+upload_owners = {}
 
 # 认证依赖
 security = HTTPBearer(auto_error=False)
@@ -140,6 +142,49 @@ def require_auth(username: Optional[str] = Depends(verify_session)) -> str:
     if not username:
         raise HTTPException(status_code=401, detail="需要登录")
     return username
+
+
+def _require_task_owner(task_id: str, username: str) -> dict:
+    task = task_storage.get(task_id)
+    if not task or task.get("user") != username:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+def _task_for_prompt(prompt_id: str, username: str) -> Optional[dict]:
+    for task in task_storage.values():
+        if task.get("prompt_id") == prompt_id and task.get("user") == username:
+            return task
+    return None
+
+
+def _owns_artifact(filename: str, username: str) -> bool:
+    if upload_owners.get(filename) == username:
+        return True
+    for task in task_storage.values():
+        if task.get("user") != username:
+            continue
+        result = task.get("result") or {}
+        for entry in result.get("output_files") or []:
+            if entry.get("filename") == filename or Path(str(entry.get("url") or "")).name == filename:
+                return True
+    return False
+
+
+def _safe_child(root: str, filename: str) -> Path:
+    base = Path(root).resolve()
+    candidate = (base / filename).resolve()
+    if candidate.parent != base:
+        raise HTTPException(status_code=404, detail="File not found")
+    return candidate
+
+
+def _require_configured_comfyui_server(server: Optional[str]) -> str:
+    configured = str(ComfyUIConfig.COMFYUI_BASE_URL).rstrip("/")
+    requested = str(server or configured).rstrip("/")
+    if requested != configured:
+        raise HTTPException(status_code=400, detail="Unregistered ComfyUI server")
+    return configured
 
 
 def _save_output_file(content: bytes, task_id: str, filename: str, content_type: str) -> dict:
@@ -521,6 +566,7 @@ async def get_user_info(username: str = Depends(require_auth)):
 async def generate_task(request: GenerateRequest, username: str = Depends(require_auth)):
     """创建生成任务"""
     try:
+        _require_configured_comfyui_server(request.comfyui_server)
         # 生成任务 ID
         task_id = str(uuid.uuid4())
         
@@ -637,6 +683,7 @@ async def process_generation_task(task_id: str, request: GenerateRequest):
 
 @app.get("/api/task/{task_id}")
 async def get_task_status(task_id: str, username: str = Depends(require_auth)):
+    _require_task_owner(task_id, username)
     """获取任务状态"""
     if task_id not in task_storage:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -681,9 +728,11 @@ async def list_tasks(username: str = Depends(require_auth)):
     }
 
 @app.get("/outputs/{filename}")
-async def get_output_file(filename: str):
+async def get_output_file(filename: str, username: str = Depends(require_auth)):
     """获取输出文件"""
-    file_path = Path(StorageConfig.OUTPUT_DIR) / filename
+    if not _owns_artifact(filename, username):
+        raise HTTPException(status_code=404, detail="File not found")
+    file_path = _safe_child(StorageConfig.OUTPUT_DIR, filename)
     
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
@@ -731,6 +780,7 @@ async def upload_file(file: UploadFile = File(...), username: str = Depends(requ
         # 保存文件
         file_path = Path(StorageConfig.UPLOAD_DIR) / filename
         file_path.write_bytes(contents)
+        upload_owners[filename] = username
         
         logger.info(f"用户 {username} 上传文件: {filename}")
         
@@ -753,9 +803,11 @@ async def upload_file(file: UploadFile = File(...), username: str = Depends(requ
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
 @app.get("/uploads/{filename}")
-async def get_upload_file(filename: str):
+async def get_upload_file(filename: str, username: str = Depends(require_auth)):
     """获取上传的文件"""
-    file_path = Path(StorageConfig.UPLOAD_DIR) / filename
+    if upload_owners.get(filename) != username:
+        raise HTTPException(status_code=404, detail="File not found")
+    file_path = _safe_child(StorageConfig.UPLOAD_DIR, filename)
     
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
@@ -954,6 +1006,8 @@ async def get_comfyui_images(
     process: bool = True,
     username: str = Depends(require_auth)
 ):
+    if not _task_for_prompt(prompt_id, username):
+        raise HTTPException(status_code=404, detail="Task not found")
     """
     获取 ComfyUI 生成的图片列表
     
@@ -1025,10 +1079,13 @@ async def get_comfyui_images(
 async def proxy_comfyui_view(
     filename: str,
     subfolder: str = "",
-    type: str = "output"
+    type: str = "output",
+    username: str = Depends(require_auth),
 ):
     """代理 ComfyUI 的 /view 端点，用于获取原始图片"""
     try:
+        if not _owns_artifact(filename, username):
+            raise HTTPException(status_code=404, detail="File not found")
         # 构建 ComfyUI 的 view URL
         params = {
             "filename": filename,
@@ -1088,7 +1145,7 @@ async def comfyui_upload_proxy(
         logger.info(f"用户 {username} 上传图片: {image.filename}, 大小: {len(file_content)} 字节")
         
         # 确定目标 ComfyUI 服务器
-        target_server = comfyui_server or ComfyUIConfig.COMFYUI_BASE_URL
+        target_server = _require_configured_comfyui_server(comfyui_server)
         
         # 准备转发到 ComfyUI 的请求
         files = {
@@ -1118,6 +1175,7 @@ async def comfyui_upload_proxy(
         
         result = response.json()
         uploaded_filename = result.get('name', image.filename)
+        upload_owners[uploaded_filename] = username
         
         logger.info(f"ComfyUI 图片上传成功，文件名: {uploaded_filename}, 服务器: {target_server}")
         
@@ -1157,12 +1215,7 @@ async def serve_image_files(filename: str):
         raise HTTPException(status_code=404, detail="不支持的文件类型")
     
     # 尝试多个可能的路径
-    possible_paths = [
-        f"/root/{filename}",  # 服务器根目录
-        filename,  # 当前工作目录
-        f"static/{filename}",  # static 目录
-        f"uploads/{filename}",  # uploads 目录
-    ]
+    possible_paths = [str(_safe_child(static_dir, filename))]
     
     for path in possible_paths:
         if os.path.exists(path):
@@ -1195,4 +1248,3 @@ if __name__ == "__main__":
     logger.info(f"已加载工作流: {len(workflow_manager.workflows)} 个")
     
     uvicorn.run(app, host=SystemConfig.HOST, port=SystemConfig.PORT, log_level=SystemConfig.LOG_LEVEL.lower())
-

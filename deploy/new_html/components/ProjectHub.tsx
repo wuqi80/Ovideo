@@ -20,6 +20,7 @@ const ProjectHub: React.FC = () => {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDesc, setNewProjectDesc] = useState('');
+    const [newProjectMembers, setNewProjectMembers] = useState('');
     const [contextMenu, setContextMenu] = useState<{ projectId: string; x: number; y: number; isArchived?: boolean } | null>(null);
     const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('project_hub_layout') === 'wide');
 
@@ -28,12 +29,11 @@ const ProjectHub: React.FC = () => {
     const { isOrgWorkspace, currentName } = useWorkspace();
     const [shareTarget, setShareTarget] = useState<ProjectInfo | null>(null);
 
-    // 2026-05-26 组织管理 MVP — Slice 5: 创建项目时的 visibility
-    // org workspace 默认 'org-default'，personal workspace 默认 'private'
+    // 新项目始终默认私有；需要协作时由创建者明确添加成员或共享给组织。
     const [newProjectVisibility, setNewProjectVisibility] = useState<'private' | 'org-default'>('private');
     useEffect(() => {
-        setNewProjectVisibility(isOrgWorkspace ? 'org-default' : 'private');
-    }, [isOrgWorkspace, showCreateModal]);
+        setNewProjectVisibility('private');
+    }, [showCreateModal]);
 
     const toggleLayoutWidth = useCallback(() => {
         setIsWideLayout(prev => {
@@ -105,6 +105,10 @@ const ProjectHub: React.FC = () => {
                     project_name: newProjectName,
                     description: newProjectDesc,
                     visibility: newProjectVisibility,
+                    member_usernames: newProjectMembers
+                        .split(/[\s,，;；]+/)
+                        .map(value => value.trim())
+                        .filter(Boolean),
                 })
             }, '创建项目');
             if (data.success) {
@@ -126,6 +130,11 @@ const ProjectHub: React.FC = () => {
                 setShowCreateModal(false);
                 setNewProjectName('');
                 setNewProjectDesc('');
+                setNewProjectMembers('');
+                const missingMembers = data.member_additions?.missing_usernames || [];
+                if (missingMembers.length > 0) {
+                    crmMessage.warning(`项目已创建，以下成员未找到：${missingMembers.join('、')}`);
+                }
                 navigate(`/projects/${createdProjectId}`);
             }
         } catch (e) {
@@ -467,6 +476,17 @@ const ProjectHub: React.FC = () => {
                                     rows={3}
                                     className="w-full px-3 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none transition-colors"
                                 />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-n300 mb-1">项目成员（可选）</label>
+                                <textarea
+                                    value={newProjectMembers}
+                                    onChange={e => setNewProjectMembers(e.target.value)}
+                                    placeholder="输入平台用户名，多个成员用逗号或换行分隔"
+                                    rows={2}
+                                    className="w-full px-3 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none transition-colors"
+                                />
+                                <p className="mt-1 text-xs text-n100">成员将获得项目访问权限；移除成员不会删除其已创建的内容。</p>
                             </div>
                             {/* 2026-05-26 组织管理 MVP — Slice 5: visibility radio */}
                             <div>

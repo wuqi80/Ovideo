@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse
 
+from services.entity_access_service import EntityAccessDenied, require_file_access
 from services.video_source_service import fetch_comfyui_file_bytes
 
 
@@ -31,6 +32,10 @@ class FfmpegCropFailed(VideoCropServiceError):
     pass
 
 
+class VideoSourceAccessDenied(VideoCropServiceError):
+    pass
+
+
 @dataclass(frozen=True)
 class VideoSource:
     content: bytes
@@ -47,6 +52,43 @@ def _extract_file_id_from_ref(ref: str) -> Optional[str]:
     if basename.startswith("file_") and not Path(basename).suffix:
         return basename
     return None
+
+
+class _CropFileAccessDAO:
+    def __init__(self, file_dao: Any):
+        self.file_dao = file_dao
+
+    async def get_by_id(self, file_id: str) -> Optional[Dict[str, Any]]:
+        return await self.file_dao.get_file(file_id)
+
+
+async def require_video_crop_source_access(
+    video_ref: str,
+    username: str,
+    *,
+    file_dao: Any,
+    file_access_checker: Callable[..., Any] = require_file_access,
+) -> str:
+    """Resolve a public-looking media reference to an authorized DB file id."""
+    file_id = _extract_file_id_from_ref(video_ref)
+    record = await file_dao.get_file(file_id) if file_id else None
+    if not record and hasattr(file_dao, "get_file_by_url"):
+        record = await file_dao.get_file_by_url(video_ref)
+    if not record and hasattr(file_dao, "get_file_by_name"):
+        record = await file_dao.get_file_by_name(Path(urlparse(video_ref or "").path).name)
+    if not record or not record.get("file_id"):
+        raise VideoSourceAccessDenied("Video source not found or access denied")
+
+    try:
+        await file_access_checker(
+            str(record["file_id"]),
+            username,
+            "readonly",
+            file_dao=_CropFileAccessDAO(file_dao),
+        )
+    except EntityAccessDenied as exc:
+        raise VideoSourceAccessDenied("Video source not found or access denied") from exc
+    return str(record["file_id"])
 
 
 def _read_file_bytes(path: str) -> bytes:

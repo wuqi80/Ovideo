@@ -54,10 +54,22 @@ class DeepseekChatRequest(BaseModel):
     model: Optional[str] = Field(None, description="DeepSeek model override; omitted uses admin runtime config")
 
 
+class ImageReferenceMetadata(BaseModel):
+    referenceId: Optional[str] = None
+    assetId: Optional[str] = None
+    fileId: Optional[str] = None
+    type: str = Field("effect", description="character | scene | pose | prop | effect")
+    name: Optional[str] = None
+    description: Optional[str] = None
+    source: Optional[str] = None
+    isLocked: bool = False
+
+
 class DoubaoImageRequest(BaseModel):
     prompt: str
     model: Optional[str] = Field(None, description="Doubao image model override; omitted uses admin runtime config")
     references: List[str] = Field(default_factory=list)
+    reference_metadata: List[ImageReferenceMetadata] = Field(default_factory=list)
     size: str = Field("2K")
     sequential: str = Field("disabled", pattern="^(disabled|auto)$")
     count: int = Field(1, ge=1, le=15)
@@ -76,6 +88,9 @@ class GeminiTextRequest(BaseModel):
 
 
 class GeminiImageReferenceMetadata(BaseModel):
+    referenceId: Optional[str] = None
+    assetId: Optional[str] = None
+    fileId: Optional[str] = None
     type: str = Field("effect", description="character | scene | pose | prop | effect")
     name: Optional[str] = None
     description: Optional[str] = None
@@ -110,6 +125,7 @@ class GptImageRequest(BaseModel):
     prompt: str
     tier: str = Field("vip", description="vip | official")
     references: List[str] = Field(default_factory=list)
+    reference_metadata: List[ImageReferenceMetadata] = Field(default_factory=list)
     size: str = Field("auto", description="1024x1024 / 1536x1024 / auto / etc，由前端按 ratio×K 推荐后透传")
     quality: str = Field("auto", description="auto | low | medium | high")
     n: int = Field(1, ge=1, le=4)

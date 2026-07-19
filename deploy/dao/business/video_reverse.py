@@ -143,28 +143,32 @@ class VideoReverseTaskDAO:
         progress: Optional[float] = None,
         error_message: Optional[str] = None,
         completed: bool = False,
-    ) -> None:
+    ) -> bool:
         db = get_db_manager()
+        protect_cancelled = status != 'cancelled'
         if completed:
-            await db.execute(
+            result = await db.execute(
                 """
                 UPDATE video_reverse_tasks
                 SET status = $2, progress = COALESCE($3, progress),
                     error_message = $4, completed_at = CURRENT_TIMESTAMP
                 WHERE reverse_task_id = $1
+                  AND (NOT $5 OR status <> 'cancelled')
                 """,
-                reverse_task_id, status, progress, error_message,
+                reverse_task_id, status, progress, error_message, protect_cancelled,
             )
         else:
-            await db.execute(
+            result = await db.execute(
                 """
                 UPDATE video_reverse_tasks
                 SET status = $2, progress = COALESCE($3, progress),
                     error_message = $4
                 WHERE reverse_task_id = $1
+                  AND (NOT $5 OR status <> 'cancelled')
                 """,
-                reverse_task_id, status, progress, error_message,
+                reverse_task_id, status, progress, error_message, protect_cancelled,
             )
+        return str(result).endswith(' 1')
 
     @staticmethod
     async def update_results(

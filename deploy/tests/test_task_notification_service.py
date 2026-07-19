@@ -139,6 +139,9 @@ async def test_get_active_tasks_reconciles_terminal_redis_state():
                 error=None,
                 result=None,
                 retries=0,
+                progress=42,
+                data={"display_name": "Live task"},
+                started_at="started-now",
             )
 
     result = await task_notification_service.get_active_tasks(
@@ -147,7 +150,14 @@ async def test_get_active_tasks_reconciles_terminal_redis_state():
         task_queue=FakeTaskQueue(),
     )
 
-    assert result["tasks"] == [{"task_id": "still_running", "user_id": "user_1", "status": "processing"}]
+    assert result["tasks"] == [{
+        "task_id": "still_running",
+        "user_id": "user_1",
+        "status": "processing",
+        "progress": 42.0,
+        "display_name": "Live task",
+        "started_at": "started-now",
+    }]
     assert ActiveTaskDAO.terminal_updates == [
         {
             "task_id": "stale_failed",

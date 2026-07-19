@@ -496,6 +496,25 @@ class FileDAO:
         return await db.fetchrow(query, file_name)
 
     @staticmethod
+    async def get_file_by_comfyui_filename(file_name: str) -> Optional[Dict[str, Any]]:
+        """Resolve a ComfyUI physical filename to its local ownership record."""
+        db = get_db_manager()
+        return await db.fetchrow(
+            """
+            SELECT * FROM files
+            WHERE is_deleted = FALSE
+              AND (
+                file_name = $1
+                OR metadata->>'comfyui_filename' = $1
+                OR metadata->>'physical_filename' = $1
+              )
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            file_name,
+        )
+
+    @staticmethod
     def _file_url_lookup_candidates(url: str) -> List[str]:
         """Return lookup keys for stored file URLs after stripping signed tokens."""
         if not url:

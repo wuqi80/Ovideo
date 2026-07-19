@@ -142,6 +142,11 @@ def get_queue() -> TaskQueue:
     return get().queue
 
 
+def allocate_task_id() -> str:
+    """Allocate a task id before enqueueing so callers can reserve related resources atomically."""
+    return str(uuid.uuid4())
+
+
 class TaskService:
     def __init__(self, redis_client):
         self.queue = TaskQueue(redis_client)
@@ -154,6 +159,7 @@ class TaskService:
         user_id: str,
         priority: int = 2,
         prepare: bool = True,
+        task_id: Optional[str] = None,
     ) -> str:
         """
         提交任务到队列，返回 task_id。
@@ -164,8 +170,9 @@ class TaskService:
             user_id:   触发用户
             priority:  优先级（默认 2）
             prepare:   是否调用 _prepare_for_agent 构建工作流 JSON 和文件下载列表
+            task_id:   可选的预分配任务 ID；用于在入队前完成积分冻结等关联操作
         """
-        task_id = str(uuid.uuid4())
+        task_id = task_id or allocate_task_id()
 
         if prepare:
             await self._prepare_for_agent(task_type, task_data, user_id)

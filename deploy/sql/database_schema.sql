@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
     permissions JSONB DEFAULT '{}'::jsonb  -- 用户权限配置
 );
 
-CREATE INDEX idx_users_user_id ON users(user_id);
-CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 -- 2. 项目/脚本表 (用户的工作区)
 CREATE TABLE IF NOT EXISTS projects (
@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS projects (
     settings JSONB DEFAULT '{}'::jsonb  -- 项目设置
 );
 
-CREATE INDEX idx_projects_user_id ON projects(user_id);
-CREATE INDEX idx_projects_project_id ON projects(project_id);
+CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_project_id ON projects(project_id);
 
 -- 3. 版本表 (文件版本管理)
 CREATE TABLE IF NOT EXISTS versions (
@@ -54,9 +54,9 @@ CREATE TABLE IF NOT EXISTS versions (
     metadata JSONB DEFAULT '{}'::jsonb -- 版本元数据
 );
 
-CREATE INDEX idx_versions_project_id ON versions(project_id);
-CREATE INDEX idx_versions_user_id ON versions(user_id);
-CREATE INDEX idx_versions_version_id ON versions(version_id);
+CREATE INDEX IF NOT EXISTS idx_versions_project_id ON versions(project_id);
+CREATE INDEX IF NOT EXISTS idx_versions_user_id ON versions(user_id);
+CREATE INDEX IF NOT EXISTS idx_versions_version_id ON versions(version_id);
 
 -- 4. 文件表 (统一管理所有文件)
 CREATE TABLE IF NOT EXISTS files (
@@ -81,11 +81,11 @@ CREATE TABLE IF NOT EXISTS files (
     deleted_at TIMESTAMP
 );
 
-CREATE INDEX idx_files_file_id ON files(file_id);
-CREATE INDEX idx_files_version_id ON files(version_id);
-CREATE INDEX idx_files_user_id ON files(user_id);
-CREATE INDEX idx_files_file_type ON files(file_type);
-CREATE INDEX idx_files_is_deleted ON files(is_deleted);
+CREATE INDEX IF NOT EXISTS idx_files_file_id ON files(file_id);
+CREATE INDEX IF NOT EXISTS idx_files_version_id ON files(version_id);
+CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id);
+CREATE INDEX IF NOT EXISTS idx_files_file_type ON files(file_type);
+CREATE INDEX IF NOT EXISTS idx_files_is_deleted ON files(is_deleted);
 
 -- 5. 文本内容表 (用于AI生成的文本内容)
 CREATE TABLE IF NOT EXISTS text_contents (
@@ -104,9 +104,9 @@ CREATE TABLE IF NOT EXISTS text_contents (
     is_deleted BOOLEAN DEFAULT FALSE
 );
 
-CREATE INDEX idx_text_contents_content_id ON text_contents(content_id);
-CREATE INDEX idx_text_contents_version_id ON text_contents(version_id);
-CREATE INDEX idx_text_contents_user_id ON text_contents(user_id);
+CREATE INDEX IF NOT EXISTS idx_text_contents_content_id ON text_contents(content_id);
+CREATE INDEX IF NOT EXISTS idx_text_contents_version_id ON text_contents(version_id);
+CREATE INDEX IF NOT EXISTS idx_text_contents_user_id ON text_contents(user_id);
 
 -- 6. 任务表 (持久化Redis任务)
 CREATE TABLE IF NOT EXISTS tasks (
@@ -130,10 +130,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     metadata JSONB DEFAULT '{}'::jsonb
 );
 
-CREATE INDEX idx_tasks_task_id ON tasks(task_id);
-CREATE INDEX idx_tasks_user_id ON tasks(user_id);
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_created_at ON tasks(created_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_task_id ON tasks(task_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 
 -- 7. 任务文件关联表 (任务产生的文件)
 CREATE TABLE IF NOT EXISTS task_files (
@@ -145,8 +145,8 @@ CREATE TABLE IF NOT EXISTS task_files (
     UNIQUE(task_id, file_id)
 );
 
-CREATE INDEX idx_task_files_task_id ON task_files(task_id);
-CREATE INDEX idx_task_files_file_id ON task_files(file_id);
+CREATE INDEX IF NOT EXISTS idx_task_files_task_id ON task_files(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_files_file_id ON task_files(file_id);
 
 -- 8. 用户活动日志表
 CREATE TABLE IF NOT EXISTS activity_logs (
@@ -161,8 +161,8 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     metadata JSONB DEFAULT '{}'::jsonb
 );
 
-CREATE INDEX idx_activity_logs_user_id ON activity_logs(user_id);
-CREATE INDEX idx_activity_logs_created_at ON activity_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
 
 -- 9. 系统配置表
 CREATE TABLE IF NOT EXISTS system_configs (
@@ -188,8 +188,8 @@ CREATE TABLE IF NOT EXISTS file_shares (
     is_active BOOLEAN DEFAULT TRUE
 );
 
-CREATE INDEX idx_file_shares_share_token ON file_shares(share_token);
-CREATE INDEX idx_file_shares_file_id ON file_shares(file_id);
+CREATE INDEX IF NOT EXISTS idx_file_shares_share_token ON file_shares(share_token);
+CREATE INDEX IF NOT EXISTS idx_file_shares_file_id ON file_shares(file_id);
 
 -- ============================================
 -- 初始化数据

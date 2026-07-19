@@ -660,7 +660,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 静态资源缓存头（文件名含UUID/hash，内容不变，长期缓存）
+# Frontend assets are immutable. Project media remains private during the
+# signed-URL migration and must never be stored by shared caches.
 from starlette.middleware.base import BaseHTTPMiddleware
 
 class CacheControlMiddleware(BaseHTTPMiddleware):
@@ -668,7 +669,8 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         path = request.url.path
         if path.startswith('/storage/') or path.startswith('/uploads/'):
-            response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+            response.headers['Cache-Control'] = 'private, no-store, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
         elif path.startswith('/assets/'):
             response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
         elif path.startswith('/admin-legacy'):
@@ -875,6 +877,7 @@ app.include_router(
         get_cluster_manager=lambda: cluster_manager,
         get_workers=lambda: workers,
         get_redis_client=lambda: redis_client,
+        get_db_manager=lambda: db_manager,
     )
 )
 logger.info("✅ Cluster Status API 路由已注册 (/api/cluster/stats, /api/cluster/nodes, /health)")
@@ -922,6 +925,7 @@ app.include_router(
         require_auth_dependency=require_auth,
         task_service_module=task_service,
         generate_gemini_images=generate_gemini_images,
+        file_dao=FileDAO,
         logger=logger,
     )
 )

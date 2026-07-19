@@ -62,6 +62,7 @@ def _queue_task(task_id="task_redis", status="processing"):
         started_at="started",
         completed_at=None,
         data={"prompt": "hi"},
+        user_id="u1",
     )
 
 
@@ -105,6 +106,70 @@ async def test_get_task_status_falls_back_to_database():
 
 
 @pytest.mark.asyncio
+async def test_get_task_status_does_not_invent_zero_progress_for_active_database_task():
+    result = await svc.get_task_status_response(
+        task_id="task_db",
+        task_queue=_Queue(task=None),
+        task_dao=_TaskDAO(status_task={
+            "task_id": "task_db",
+            "status": "processing",
+            "metadata": {},
+            "task_data": {},
+        }),
+        logger=_Logger(),
+    )
+
+    assert result["status"] == "processing"
+    assert result["progress"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_uses_persisted_progress_metadata():
+    result = await svc.get_task_status_response(
+        task_id="task_db",
+        task_queue=_Queue(task=None),
+        task_dao=_TaskDAO(status_task={
+            "task_id": "task_db",
+            "status": "processing",
+            "metadata": '{"progress": 37}',
+        }),
+        logger=_Logger(),
+    )
+
+    assert result["progress"] == 37
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_hides_queue_task_from_another_user():
+    result = await svc.get_task_status_response(
+        task_id="task_1",
+        task_queue=_Queue(task=_queue_task()),
+        task_dao=_TaskDAO(),
+        logger=_Logger(),
+        username="u2",
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_task_status_hides_database_task_from_another_user():
+    result = await svc.get_task_status_response(
+        task_id="task_db",
+        task_queue=_Queue(task=None),
+        task_dao=_TaskDAO(status_task={
+            "task_id": "task_db",
+            "user_id": "u1",
+            "status": "processing",
+        }),
+        logger=_Logger(),
+        username="u2",
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_list_user_tasks_formats_database_rows():
     db_row = {
         "task_id": "task_db",
@@ -121,7 +186,7 @@ async def test_list_user_tasks_formats_database_rows():
         username="u1",
         limit=10,
         status=None,
-        task_queue=_Queue(tasks=[_queue_task()]),
+        task_queue=_Queue(tasks=[]),
         task_dao=_TaskDAO(list_tasks=[db_row]),
         logger=_Logger(),
     )
@@ -140,6 +205,58 @@ async def test_list_user_tasks_formats_database_rows():
             "data": {"prompt": "scene"},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_list_user_tasks_merges_live_queue_state_over_database_history():
+    db_rows = [
+        {
+            "task_id": "task_redis",
+            "task_type": "image",
+            "status": "pending",
+            "task_data": '{"project_id": "proj_1", "db_only": true}',
+            "created_at": datetime(2026, 1, 1, 1, 2, 3),
+        },
+        {
+            "task_id": "task_done",
+            "task_type": "video",
+            "status": "completed",
+            "result_data": '{"url": "done.mp4"}',
+            "created_at": datetime(2026, 1, 1, 1, 1, 3),
+        },
+    ]
+    result = await svc.list_user_tasks_response(
+        username="u1",
+        limit=10,
+        status=None,
+        task_queue=_Queue(tasks=[_queue_task(task_id="task_redis", status="processing")]),
+        task_dao=_TaskDAO(list_tasks=db_rows),
+        logger=_Logger(),
+    )
+
+    assert [task["task_id"] for task in result["tasks"]] == ["task_redis", "task_done"]
+    live = result["tasks"][0]
+    assert live["status"] == "processing"
+    assert live["progress"] == 42
+    assert live["data"] == {"project_id": "proj_1", "db_only": True, "prompt": "hi"}
+
+
+@pytest.mark.asyncio
+async def test_list_user_tasks_filters_comma_separated_active_statuses_after_merge():
+    result = await svc.list_user_tasks_response(
+        username="u1",
+        limit=10,
+        status="processing,queued",
+        task_queue=_Queue(tasks=[
+            _queue_task("running", "processing"),
+            _queue_task("queued", "queued"),
+            _queue_task("done", "completed"),
+        ]),
+        task_dao=_TaskDAO(list_tasks=[]),
+        logger=_Logger(),
+    )
+
+    assert [task["task_id"] for task in result["tasks"]] == ["running", "queued"]
 
 
 @pytest.mark.asyncio

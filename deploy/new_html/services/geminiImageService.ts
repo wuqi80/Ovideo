@@ -12,6 +12,9 @@ export interface GeneratedFileResult {
 }
 
 export interface GeminiImageReferenceMetadata {
+    referenceId?: string;
+    assetId?: string;
+    fileId?: string;
     type: 'character' | 'scene' | 'pose' | 'prop' | 'effect';
     name?: string;
     description?: string;

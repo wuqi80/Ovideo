@@ -38,6 +38,7 @@ import { reviewStoryboardImage } from '../services/storyboardQualityService';
 import {
   buildIdentityAnchoredPrompt,
   resolveConsistencyModel,
+  resolveShotReferencePlan,
   resolveShotReferences,
   reviewPassed,
   type StoryboardGenerationModel,
@@ -658,6 +659,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const hasUnloadedStoryboardItems = storyboardTotalCount > loadedStoryboardCount;
   const allStoryboardItemsSelected = storyboardTotalCount > 0 && selectedShotIds.size === storyboardTotalCount;
   const selectedShot = hasStoryboard && selectedFile ? selectedFile.storyboard!.items.find(i => i.id === selectedShotId) : null;
+  const referencePlan = useMemo(() => (
+      selectedShot
+          ? resolveShotReferencePlan(selectedShot, materialLibrary, references)
+          : { references: [], excluded: [], criticalExcluded: [], maxReferences: 6 }
+  ), [materialLibrary, references, selectedShot]);
   const materialPickerItems = useMemo(() => {
       const typeByTag = new Map<string, 'character' | 'scene' | 'prop'>();
       for (const file of files) {
@@ -753,7 +759,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       url: string,
       type: ReferenceType,
       name?: string,
-      metadata: Partial<Pick<GenerationReference, 'assetId' | 'description'>> = {},
+      metadata: Partial<Pick<GenerationReference, 'assetId' | 'fileId' | 'description'>> = {},
   ) => {
       if (references.length >= 6) {
           alert("最多只能加载6张参考图片");
@@ -786,7 +792,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           item.material.url,
           item.type,
           item.tagName || item.material.name,
-          { assetId: item.material.assetId, description: item.material.description },
+          {
+              assetId: item.material.assetId,
+              fileId: item.material.fileId,
+              description: item.material.description,
+          },
       );
   };
 
@@ -799,7 +809,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               const shotId = selectedShot?.id || 'temp';
               const saved = await uploadEntityFile(file, 'storyboard_item', shotId, 'reference_image', episodeId);
               console.log(`✅ 参考图片已上传到服务器: ${saved.fileUrl}`);
-              handleAddReference(saved.fileUrl, type, file.name);
+              handleAddReference(saved.fileUrl, type, file.name, { fileId: saved.fileId });
           } catch (err) {
               console.error('❌ 参考图片上传失败，回退到本地预览:', err);
               const reader = new FileReader();
@@ -875,7 +885,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   const shotId = selectedShot?.id || 'temp';
                   const saved = await uploadEntityFile(file, 'storyboard_item', shotId, 'reference_image', episodeId);
                   console.log(`✅ 拖拽参考图片已上传: ${saved.fileUrl}`);
-                  handleAddReference(saved.fileUrl, 'character', file.name);
+                  handleAddReference(saved.fileUrl, 'character', file.name, { fileId: saved.fileId });
               } catch (err) {
                   console.error('❌ 拖拽上传失败，回退本地预览:', err);
                   const reader = new FileReader();
@@ -970,11 +980,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       model?: GenerationModel,
       currentRefs?: GenerationReference[],
   ) => {
-      const boundReferences = resolveShotReferences(
+      const plan = resolveShotReferencePlan(
           shot,
           materialLibrary,
           currentRefs ?? shot.configuredReferences ?? [],
       );
+      if (plan.criticalExcluded.length > 0) {
+          const omitted = plan.criticalExcluded
+              .map(item => `${item.reference.type === 'character' ? '角色' : '场景'}「${item.reference.name || '未命名'}」`)
+              .join('、');
+          throw new Error(`参考图上限为 ${plan.maxReferences} 张，关键绑定素材 ${omitted} 未能提交。请减少当前镜头的角色/场景绑定后再生成。`);
+      }
+      const boundReferences = [...plan.references];
       if (boundReferences.length === 0) {
           const generated = shot.selectedImageId
               ? shot.generatedImages?.find(image => image.id === shot.selectedImageId)
@@ -1045,6 +1062,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   { entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId },
                   { aspectRatio: geminiNano2Ratio, imageSize: geminiNano2Size },
                   boundReferences.map(reference => ({
+                      referenceId: reference.id,
+                      assetId: reference.assetId,
+                      fileId: reference.fileId,
                       type: reference.type,
                       name: reference.name,
                       description: reference.description,
@@ -1067,6 +1087,16 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   tier,
                   prompt: promptToUse,
                   references: refImages,
+                  referenceMetadata: boundReferences.map(reference => ({
+                      referenceId: reference.id,
+                      assetId: reference.assetId,
+                      fileId: reference.fileId,
+                      type: reference.type,
+                      name: reference.name,
+                      description: reference.description,
+                      source: reference.source,
+                      isLocked: reference.isLocked,
+                  })),
                   ratio: imageRatio,
                   k: imageK,
                   quality: tier === 'official' ? imageQuality : 'auto',
@@ -2655,7 +2685,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   >
                       <div className="flex items-center justify-between mb-3">
                           <label className="text-xs font-bold text-n300">
-                              参考图片 ({references.length}/6) 
+                              实际提交参考图片 ({referencePlan.references.length}/{referencePlan.maxReferences})
                               <span className="font-normal text-n100 ml-2">可拖拽图片到此</span>
                           </label>
                           <div className="flex items-center gap-2">
@@ -2677,6 +2707,24 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </button>
                           </div>
                       </div>
+
+                      {referencePlan.excluded.length > 0 && (
+                        <div className={`mb-3 rounded border px-3 py-2 text-[10px] leading-relaxed ${referencePlan.criticalExcluded.length > 0 ? 'border-danger/40 bg-danger/5 text-danger' : 'border-warning/40 bg-warning/5 text-warning'}`}>
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <div>
+                              <div className="font-semibold">
+                                {referencePlan.criticalExcluded.length > 0
+                                  ? '关键绑定素材超出接口上限，已阻止生成'
+                                  : `${referencePlan.excluded.length} 张补充参考未提交`}
+                              </div>
+                              <div className="mt-1 text-current/80">
+                                未提交：{referencePlan.excluded.map(item => `${item.reference.type === 'character' ? '角色' : item.reference.type === 'scene' ? '场景' : item.reference.type === 'prop' ? '道具' : '补充'}「${item.reference.name || '未命名'}」`).join('、')}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Reference Grid */}
                       <div className="grid grid-cols-3 gap-2 mb-4">

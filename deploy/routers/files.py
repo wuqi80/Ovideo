@@ -15,8 +15,10 @@ from services.file_route_service import (
     UnsupportedUploadFileType,
     UploadFileRecordError,
     UploadFileTooLarge,
+    UploadVersionAccessDenied,
     build_thumbnail_file,
     cleanup_thumbnail_cache as cleanup_thumbnail_cache_service,
+    require_thumbnail_source_access,
     upload_generic_file,
 )
 
@@ -53,6 +55,7 @@ def create_files_router(
             if not username:
                 raise HTTPException(status_code=401, detail="需要登录")
 
+            await require_thumbnail_source_access(url, username, file_dao=FileDAO)
             thumbnail = await build_thumbnail_file(
                 url=url,
                 width=width,
@@ -97,6 +100,8 @@ def create_files_router(
             raise HTTPException(status_code=413, detail="文件太大") from exc
         except UnsupportedUploadFileType as exc:
             raise HTTPException(status_code=400, detail=f"不支持的文件类型: {exc.content_type}") from exc
+        except UploadVersionAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except UploadFileRecordError as exc:
             raise HTTPException(status_code=500, detail=f"保存文件记录失败: {str(exc)}") from exc
         except HTTPException:

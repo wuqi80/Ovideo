@@ -654,7 +654,7 @@ def test_minimax_video_explicit_non_default_model_overrides_runtime_model(monkey
     assert calls[0]["json"]["model"] == "minimax-explicit-video-model"
 
 
-def test_minimax_video_accepts_nested_task_id_and_normalizes_duration(monkeypatch):
+def test_minimax_video_rejects_unsupported_duration_before_provider_call(monkeypatch):
     env_key = get_provider_env_key("minimax")
     assert env_key
     endpoint_env = get_endpoint_env_key(env_key)
@@ -670,14 +670,14 @@ def test_minimax_video_accepts_nested_task_id_and_normalizes_duration(monkeypatc
     monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = minimax_video.MinimaxClient()
-    result = client.generate_video(
-        first_frame_image="https://cdn.example.test/frame.png",
-        prompt="move gently",
-        duration=3,
-    )
+    with pytest.raises(ValueError, match="6 秒或 10 秒"):
+        client.generate_video(
+            first_frame_image="https://cdn.example.test/frame.png",
+            prompt="move gently",
+            duration=3,
+        )
 
-    assert result["task_id"] == "minimax-nested-task-1"
-    assert calls[0]["json"]["duration"] == 6
+    assert calls == []
 
 
 def test_minimax_video_enforces_supported_resolution_duration_pair(monkeypatch):
@@ -696,17 +696,16 @@ def test_minimax_video_enforces_supported_resolution_duration_pair(monkeypatch):
     monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = minimax_video.MinimaxClient()
-    client.generate_video(
-        first_frame_image="https://cdn.example.test/frame.png",
-        prompt="move gently",
-        duration=10,
-        resolution="1080P",
-        prompt_optimizer=False,
-    )
+    with pytest.raises(ValueError, match="1080P 仅支持 6 秒"):
+        client.generate_video(
+            first_frame_image="https://cdn.example.test/frame.png",
+            prompt="move gently",
+            duration=10,
+            resolution="1080P",
+            prompt_optimizer=False,
+        )
 
-    assert calls[0]["json"]["duration"] == 6
-    assert calls[0]["json"]["resolution"] == "1080P"
-    assert calls[0]["json"]["prompt_optimizer"] is False
+    assert calls == []
 
 
 def test_minimax_video_business_error_is_actionable(monkeypatch):

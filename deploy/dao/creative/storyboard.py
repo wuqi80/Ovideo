@@ -25,6 +25,16 @@ def _row_value(row: Dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _json_list_value(value: Any) -> list[Any]:
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value) if value else []
+            return parsed if isinstance(parsed, list) else []
+        except (TypeError, ValueError):
+            return []
+    return value if isinstance(value, list) else []
+
+
 def _prepare_storyboard_items_for_export(
     existing_rows: List[Dict[str, Any]],
     storyboard_items: List[Dict[str, Any]],
@@ -85,6 +95,14 @@ def _prepare_storyboard_items_for_export(
                 generated_image_url = _row_value(matched, "generated_image_url", "generatedImageUrl")
                 if generated_image_url:
                     item["generated_image_url"] = generated_image_url
+            if "configured_references" not in item and "configuredReferences" not in item:
+                configured_references = _row_value(
+                    matched,
+                    "configured_references",
+                    "configuredReferences",
+                )
+                if configured_references is not None:
+                    item["configured_references"] = _json_list_value(configured_references)
 
         prepared.append(item)
 
@@ -153,6 +171,7 @@ class StoryboardDAO:
             "video_prompt",
             "generated_image_url",
             "bound_assets",
+            "configured_references",
             "status",
         ),
     }
@@ -177,6 +196,7 @@ class StoryboardDAO:
         image_prompt: str = '',
         video_prompt: str = '',
         bound_assets: list = None,
+        configured_references: list = None,
         script_id: Optional[str] = None,
         # 2026-05-29 三步生成新增字段
         script_segment_id: Optional[str] = None,
@@ -196,11 +216,11 @@ class StoryboardDAO:
             INSERT INTO storyboard_items
                 (item_id, episode_id, sort_order, scene_heading, action_text,
                  dialogue, camera_movement, image_prompt, video_prompt, bound_assets,
-                 script_id, script_segment_id, source_video_shot_no,
+                 configured_references, script_id, script_segment_id, source_video_shot_no,
                  video_script_block, shot_size, camera_angle,
                  generated_image_url, planned_duration_ms)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb,
-                    $11, $12, $13, $14, $15, $16, $17, $18)
+                    $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING *
         """
         return await db.fetchrow(
@@ -208,6 +228,7 @@ class StoryboardDAO:
             scene_heading, action_text, dialogue,
             camera_movement, image_prompt, video_prompt,
             json.dumps(bound_assets or [], ensure_ascii=False),
+            json.dumps(configured_references or [], ensure_ascii=False),
             script_id, script_segment_id, source_video_shot_no,
             video_script_block, shot_size, camera_angle,
             (generated_image_url or None), planned_duration_ms,
@@ -231,6 +252,7 @@ class StoryboardDAO:
                 image_prompt=item.get('image_prompt', ''),
                 video_prompt=item.get('video_prompt', ''),
                 bound_assets=item.get('bound_assets'),
+                configured_references=item.get('configured_references', item.get('configuredReferences')),
                 script_id=script_id or item.get('script_id'),
                 script_segment_id=item.get('script_segment_id'),
                 source_video_shot_no=item.get('source_video_shot_no', ''),
@@ -243,6 +265,151 @@ class StoryboardDAO:
             if row:
                 results.append(dict(row))
         return results
+
+    @staticmethod
+    async def replace_batch(
+        episode_id: str,
+        items: list,
+        script_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Replace one script's active storyboard without breaking matched links."""
+        db = get_db_manager()
+        if not db:
+            return []
+
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                if script_id:
+                    existing_rows = await conn.fetch(
+                        """SELECT * FROM storyboard_items
+                           WHERE episode_id = $1 AND script_id = $2
+                           ORDER BY sort_order ASC FOR UPDATE""",
+                        episode_id,
+                        script_id,
+                    )
+                else:
+                    existing_rows = await conn.fetch(
+                        """SELECT * FROM storyboard_items
+                           WHERE episode_id = $1 AND script_id IS NULL
+                           ORDER BY sort_order ASC FOR UPDATE""",
+                        episode_id,
+                    )
+
+                prepared = _prepare_storyboard_items_for_export(
+                    [dict(row) for row in existing_rows],
+                    items,
+                )
+                retained_ids: list[str] = []
+
+                for item in prepared:
+                    item_id = str(item.get('_preserved_item_id') or '')
+                    generated_image_url = item.get('generated_image_url') or item.get('generatedImageUrl') or None
+                    if item_id:
+                        row = await conn.fetchrow(
+                            """
+                            UPDATE storyboard_items
+                            SET sort_order = $3,
+                                scene_heading = $4,
+                                action_text = $5,
+                                dialogue = $6,
+                                camera_movement = $7,
+                                image_prompt = $8,
+                                video_prompt = $9,
+                                bound_assets = $10::jsonb,
+                                configured_references = $11::jsonb,
+                                planned_duration_ms = $12,
+                                script_id = $13,
+                                script_segment_id = $14,
+                                source_video_shot_no = $15,
+                                video_script_block = $16,
+                                shot_size = $17,
+                                camera_angle = $18,
+                                generated_image_url = COALESCE($19, generated_image_url),
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE item_id = $1 AND episode_id = $2
+                            RETURNING *
+                            """,
+                            item_id,
+                            episode_id,
+                            item.get('sort_order', 0),
+                            item.get('scene_heading', ''),
+                            item.get('action_text', ''),
+                            item.get('dialogue', ''),
+                            item.get('camera_movement', ''),
+                            item.get('image_prompt', ''),
+                            item.get('video_prompt', ''),
+                            json.dumps(item.get('bound_assets', []), ensure_ascii=False),
+                            json.dumps(
+                                item.get('configured_references', item.get('configuredReferences', [])),
+                                ensure_ascii=False,
+                            ),
+                            item.get('planned_duration_ms'),
+                            script_id or item.get('script_id'),
+                            item.get('script_segment_id'),
+                            item.get('source_video_shot_no', ''),
+                            item.get('video_script_block', ''),
+                            item.get('shot_size', ''),
+                            item.get('camera_angle', ''),
+                            generated_image_url,
+                        )
+                        if row:
+                            retained_ids.append(item_id)
+                        continue
+
+                    item_id = str(item.get('item_id') or item.get('itemId') or f"sb_{uuid.uuid4().hex[:12]}")
+                    item['_preserved_item_id'] = item_id
+                    await StoryboardDAO.batch_create_transactional(
+                        conn,
+                        episode_id,
+                        [item],
+                        script_id=script_id,
+                    )
+                    retained_ids.append(item_id)
+
+                if script_id:
+                    if retained_ids:
+                        await conn.execute(
+                            """DELETE FROM storyboard_items
+                               WHERE episode_id = $1 AND script_id = $2
+                                 AND NOT (item_id = ANY($3::varchar[]))""",
+                            episode_id,
+                            script_id,
+                            retained_ids,
+                        )
+                    else:
+                        await conn.execute(
+                            "DELETE FROM storyboard_items WHERE episode_id = $1 AND script_id = $2",
+                            episode_id,
+                            script_id,
+                        )
+                    rows = await conn.fetch(
+                        """SELECT * FROM storyboard_items
+                           WHERE episode_id = $1 AND script_id = $2
+                           ORDER BY sort_order ASC""",
+                        episode_id,
+                        script_id,
+                    )
+                else:
+                    if retained_ids:
+                        await conn.execute(
+                            """DELETE FROM storyboard_items
+                               WHERE episode_id = $1 AND script_id IS NULL
+                                 AND NOT (item_id = ANY($2::varchar[]))""",
+                            episode_id,
+                            retained_ids,
+                        )
+                    else:
+                        await conn.execute(
+                            "DELETE FROM storyboard_items WHERE episode_id = $1 AND script_id IS NULL",
+                            episode_id,
+                        )
+                    rows = await conn.fetch(
+                        """SELECT * FROM storyboard_items
+                           WHERE episode_id = $1 AND script_id IS NULL
+                           ORDER BY sort_order ASC""",
+                        episode_id,
+                    )
+                return [dict(row) for row in rows]
 
     @staticmethod
     async def batch_create_transactional(conn, episode_id: str, items: list, script_id: Optional[str] = None) -> int:
@@ -260,11 +427,11 @@ class StoryboardDAO:
                 INSERT INTO storyboard_items
                     (item_id, episode_id, sort_order, scene_heading, action_text,
                      dialogue, camera_movement, image_prompt, video_prompt,
-                     bound_assets, planned_duration_ms, script_id,
+                     bound_assets, configured_references, planned_duration_ms, script_id,
                      script_segment_id, source_video_shot_no, video_script_block,
                      shot_size, camera_angle, generated_image_url)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12,
-                        $13, $14, $15, $16, $17, $18)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13,
+                        $14, $15, $16, $17, $18, $19)
             """,
                 item_id, episode_id,
                 item.get('sort_order', 0),
@@ -275,6 +442,10 @@ class StoryboardDAO:
                 item.get('image_prompt', ''),
                 item.get('video_prompt', ''),
                 json.dumps(item.get('bound_assets', []), ensure_ascii=False),
+                json.dumps(
+                    item.get('configured_references', item.get('configuredReferences', [])),
+                    ensure_ascii=False,
+                ),
                 item.get('planned_duration_ms'),
                 sid,
                 item.get('script_segment_id'),
@@ -486,7 +657,7 @@ class StoryboardDAO:
             'mixed_audio_url',
             'mixed_audio_hash',
         }
-        json_fields = {'bound_assets'}
+        json_fields = {'bound_assets', 'configured_references'}
         sets, vals, idx = [], [], 1
         for key, val in kwargs.items():
             if key in allowed and (val is not None or key in nullable_fields):

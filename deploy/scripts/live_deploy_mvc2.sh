@@ -8,10 +8,11 @@ SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)
 SERVICE="${SERVICE:-drama.service}"
 FRONTEND_TAR_REMOTE="/tmp/mecha-new_html-src.tgz"
 FRONTEND_HASH_REMOTE="${FRONTEND_HASH_REMOTE:-$REMOTE_DIR/.new_html_build_source.sha256}"
+RELEASE_METADATA_REMOTE_CANDIDATE="/tmp/mecha-release-metadata.json"
 FORCE_FRONTEND_BUILD="${FORCE_FRONTEND_BUILD:-0}"
 RUN_REMOTE_CONTRACTS="${RUN_REMOTE_CONTRACTS:-1}"
-RUN_REMOTE_SMOKE="${RUN_REMOTE_SMOKE:-0}"
-REQUIRE_REMOTE_SMOKE="${REQUIRE_REMOTE_SMOKE:-0}"
+RUN_REMOTE_SMOKE="${RUN_REMOTE_SMOKE:-1}"
+REQUIRE_REMOTE_SMOKE="${REQUIRE_REMOTE_SMOKE:-1}"
 SMOKE_BASE_URL="${SMOKE_BASE_URL:-https://mecha.one}"
 
 if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ ! -d "services" ] || [ ! -d "utils" ] || [ ! -d "new_html" ]; then
@@ -25,11 +26,16 @@ FILES=(
   "cluster_config_generated.py"
   "config.py"
   "auto_deploy_cluster.py"
+  "auto_deploy.sh"
+  "agent_routes.py"
+  "audio_mix_service.py"
   "compose_service.py"
   "admin_routes.py"
   "admin_api_config_routes.py"
   "admin_recycle_bin_routes.py"
   "api_routes.py"
+  "dao_character_voice.py"
+  "media_library_routes.py"
   "video_reverse_routes.py"
   "dao_video_voice_reference.py"
   "ARCHITECTURE.md"
@@ -54,6 +60,8 @@ FILES=(
   "external_api/video/wan2.py"
   "external_api/audio/minimax_audio.py"
   "scripts/live_deploy_mvc2.sh"
+  "scripts/apply_migrations.py"
+  "scripts/smoke_test.py"
   "scripts/audit_storage_manifest.py"
   "scripts/build_clean_migration_package.py"
   "scripts/package_storage_orphans.py"
@@ -159,8 +167,12 @@ for path in "${FILES[@]}"; do
 done
 
 STAGING_DIR=$(mktemp -d)
+RELEASE_METADATA_LOCAL=""
 cleanup() {
   rm -rf "$STAGING_DIR"
+  if [ -n "$RELEASE_METADATA_LOCAL" ]; then
+    rm -f "$RELEASE_METADATA_LOCAL"
+  fi
 }
 trap cleanup EXIT
 
@@ -175,7 +187,7 @@ rollback_remote() {
       rm -rf '$REMOTE_DIR'/dist
       cp -a '${DIST_BACKUP_PATH:-}' '$REMOTE_DIR'/dist
     fi
-    rm -f '$FRONTEND_HASH_REMOTE'
+    rm -f '$FRONTEND_HASH_REMOTE' '$RELEASE_METADATA_REMOTE_CANDIDATE'
     chown Administrator:Administrator '$REMOTE_DIR'
     chmod 755 '$REMOTE_DIR'
     sudo systemctl restart '$SERVICE'
@@ -227,9 +239,7 @@ run_remote_smoke_test() {
       echo 'Skipping remote smoke test: ADMIN_PASSWORD is not set on remote'
       exit 0
     fi
-    if [ ! -f /tmp/smoke_test.py ]; then
-      cp '$REMOTE_DIR'/scripts/smoke_test.py /tmp/smoke_test.py
-    fi
+    cp '$REMOTE_DIR'/scripts/smoke_test.py /tmp/smoke_test.py
     cd /home/Administrator
     python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' \"\$ADMIN_PASSWORD\"
   "
@@ -239,56 +249,16 @@ run_remote_db_migrations() {
   echo "Running remote database migrations..."
   ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
     cd '$REMOTE_DIR'
-    .venv/bin/python - <<'PY'
-import asyncio
-import os
-from pathlib import Path
-
-import asyncpg
-
-
-MIGRATIONS = [
-    'sql/db_migration_video_voice_references.sql',
-]
-
-
-def load_env_file(path: Path) -> None:
-    if not path.exists():
-        return
-    for raw_line in path.read_text(encoding='utf-8').splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        key, value = line.split('=', 1)
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'\"', \"'\"}:
-            value = value[1:-1]
-        os.environ.setdefault(key, value)
-
-
-async def main() -> None:
-    load_env_file(Path('configs/runtime.env'))
-    conn = await asyncpg.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        port=int(os.getenv('DB_PORT', '5432')),
-        database=os.getenv('DB_NAME', 'my2_db'),
-        user=os.getenv('DB_USER', 'my2_user'),
-        password=os.getenv('DB_PASSWORD', ''),
-    )
-    try:
-        for migration in MIGRATIONS:
-            path = Path(migration)
-            if not path.exists():
-                raise FileNotFoundError(migration)
-            await conn.execute(path.read_text(encoding='utf-8'))
-            print(f'  applied {migration}')
-    finally:
-        await conn.close()
-
-
-asyncio.run(main())
-PY
+    GIT_SHA=\$(git rev-parse --short HEAD 2>/dev/null || true) \
+      .venv/bin/python scripts/apply_migrations.py \
+        --env configs/runtime.env \
+        --root . \
+        sql/db_migration_files_project_episode_source.sql \
+        sql/db_migration_credits.sql \
+        sql/db_migration_credit_onboarding.sql \
+        sql/db_migration_video_voice_references.sql \
+        sql/db_migration_storyboard_reference_config.sql \
+        sql/db_migration_provider_remote_objects.sql
   "
 }
 
@@ -319,6 +289,20 @@ for path in "${FILES[@]}"; do
   mkdir -p "$STAGING_DIR/$(dirname "$path")"
   cp -R "$path" "$STAGING_DIR/$path"
 done
+
+BACKEND_SOURCE_HASH=$(
+  find "$STAGING_DIR" -type f -print0 \
+    | LC_ALL=C sort -z \
+    | xargs -0 sha256sum \
+    | sed -E "s#^([0-9a-f]+)[[:space:]]+\*?$STAGING_DIR/#\1  #" \
+    | sha256sum \
+    | awk '{print $1}'
+)
+RELEASE_GIT_SHA=$(git rev-parse HEAD 2>/dev/null || printf 'unknown')
+RELEASE_GIT_DIRTY=false
+if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+  RELEASE_GIT_DIRTY=true
+fi
 
 echo "Uploading MVC/API management files..."
 if ! scp -r "${SSH_OPTS[@]}" "$STAGING_DIR"/. "$REMOTE:$REMOTE_DIR/"; then
@@ -434,6 +418,17 @@ fi
 fi
 fi
 
+RELEASED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+RELEASE_METADATA_LOCAL=$(mktemp)
+printf '%s\n' \
+  "{\"git_sha\":\"$RELEASE_GIT_SHA\",\"git_dirty\":$RELEASE_GIT_DIRTY,\"backend_source_sha256\":\"$BACKEND_SOURCE_HASH\",\"frontend_source_sha256\":\"$FRONTEND_SOURCE_HASH\",\"released_at\":\"$RELEASED_AT\"}" \
+  > "$RELEASE_METADATA_LOCAL"
+if ! scp "${SSH_OPTS[@]}" "$RELEASE_METADATA_LOCAL" "$REMOTE:$RELEASE_METADATA_REMOTE_CANDIDATE"; then
+  rollback_remote
+  echo "ERROR: release metadata upload failed"
+  exit 1
+fi
+
 echo "Restarting $SERVICE..."
 if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "sudo systemctl restart '$SERVICE'"; then
   rollback_remote
@@ -467,6 +462,15 @@ fi
 if ! run_remote_smoke_test; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: remote smoke test failed"
+  exit 1
+fi
+
+if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+  mv '$RELEASE_METADATA_REMOTE_CANDIDATE' '$REMOTE_DIR/release_metadata.json'
+  chown Administrator:Administrator '$REMOTE_DIR/release_metadata.json'
+  chmod 644 '$REMOTE_DIR/release_metadata.json'
+"; then
+  echo "ERROR: deployment succeeded but release metadata activation failed"
   exit 1
 fi
 

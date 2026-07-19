@@ -11,6 +11,8 @@ from typing import Any, Callable, Dict, Mapping, Optional
 
 import requests
 
+from services.entity_access_service import EntityAccessDenied, require_file_access
+
 
 class ComfyUIFileRequestError(RuntimeError):
     """Raised when a ComfyUI file transfer request cannot be completed."""
@@ -38,6 +40,53 @@ class ComfyUIMediaUploadFailed(RuntimeError):
     def __init__(self, message: str, *, status_code: Optional[int] = None):
         super().__init__(message)
         self.status_code = status_code
+
+
+class ComfyUIFileAccessDenied(LookupError):
+    pass
+
+
+class _ComfyUIFileAccessDAO:
+    def __init__(self, file_dao: Any):
+        self.file_dao = file_dao
+
+    async def get_by_id(self, file_id: str) -> Optional[Dict[str, Any]]:
+        return await self.file_dao.get_file(file_id)
+
+
+async def require_comfyui_file_access(
+    *,
+    filename: str,
+    identity: str,
+    file_dao: Any,
+    redis_client: Any = None,
+    file_access_checker: Callable[..., Any] = require_file_access,
+) -> Dict[str, Any]:
+    file_id: Optional[str] = None
+    if redis_client is not None:
+        value = redis_client.get(f"comfyui:file:{filename}")
+        if inspect.isawaitable(value):
+            value = await value
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="ignore")
+        file_id = str(value or "") or None
+
+    record = await file_dao.get_file(file_id) if file_id else None
+    if not record and hasattr(file_dao, "get_file_by_comfyui_filename"):
+        record = await file_dao.get_file_by_comfyui_filename(filename)
+    if not record or not record.get("file_id"):
+        raise ComfyUIFileAccessDenied("ComfyUI file not found or access denied")
+
+    try:
+        await file_access_checker(
+            str(record["file_id"]),
+            identity,
+            "readonly",
+            file_dao=_ComfyUIFileAccessDAO(file_dao),
+        )
+    except EntityAccessDenied as exc:
+        raise ComfyUIFileAccessDenied("ComfyUI file not found or access denied") from exc
+    return dict(record)
 
 
 @dataclass(frozen=True)

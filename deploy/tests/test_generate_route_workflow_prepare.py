@@ -2,6 +2,7 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from fastapi import HTTPException
 
 from routers.tasks import _should_prepare_workflow, create_task_router
 from schemas.generation import GenerateRequest
@@ -64,6 +65,48 @@ async def test_generate_route_submits_i2v_with_prepare_enabled():
     assert response["success"] is True
     service.submit.assert_awaited_once()
     assert service.submit.call_args.kwargs["prepare"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_route_rejects_invalid_minimax_options_before_enqueue():
+    async def require_auth():
+        return "u-test"
+
+    service = Mock()
+    service.submit = AsyncMock(return_value="should-not-submit")
+    task_service_module = Mock()
+    task_service_module.get.return_value = service
+    task_service_module.get_queue.return_value.get_queue_length = AsyncMock(return_value=0)
+
+    router = create_task_router(
+        require_auth_dependency=require_auth,
+        jwt_auth_module=Mock(),
+        task_service_module=task_service_module,
+        task_dao=Mock(),
+        file_dao=Mock(),
+        get_pubsub_redis_client=Mock(),
+        logger=Mock(),
+    )
+    create_generate_task = next(
+        route.endpoint
+        for route in router.routes
+        if getattr(route, "path", None) == "/api/generate"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await create_generate_task(
+            GenerateRequest(
+                task_type="minimax_i2v",
+                first_frame_image="/storage/frame.png",
+                duration=10,
+                minimax_resolution="1080P",
+            ),
+            username="u-test",
+        )
+
+    assert exc.value.status_code == 400
+    assert "1080P 仅支持 6 秒" in str(exc.value.detail)
+    service.submit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

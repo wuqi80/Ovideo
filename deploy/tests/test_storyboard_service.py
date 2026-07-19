@@ -30,7 +30,17 @@ class FakeStoryboardDAO:
             return cls.episode_rows
         if script_id:
             return [{"item_id": "sb_stale", "bound_assets": "[bad-json"}]
-        return [{"item_id": "sb_current", "bound_assets": '[{"asset_id":"a1"}]'}]
+        return [{
+            "item_id": "sb_current",
+            "bound_assets": '[{"asset_id":"a1"}]',
+            "configured_references": '[{"referenceId":"ref-1"}]',
+        }]
+
+    @classmethod
+    async def get_by_id(cls, item_id):
+        if item_id == "missing":
+            return None
+        return {"item_id": item_id, "episode_id": "ep_1"}
 
     @classmethod
     async def count_by_episode(cls, episode_id, script_id=None):
@@ -77,13 +87,19 @@ class FakeStoryboardDAO:
         cls.batch_kwargs = {"episode_id": episode_id, "items": items, "script_id": script_id}
         return [{"item_id": "sb_batch", **item} for item in items]
 
+    @classmethod
+    async def replace_batch(cls, episode_id, items, script_id=None):
+        cls.batch_kwargs = {"episode_id": episode_id, "items": items, "script_id": script_id}
+        return [{"item_id": "sb_batch", **item} for item in items]
+
 
 class FakeEpisodeScriptDAO:
     list_raises = False
+    row = None
 
-    @staticmethod
-    async def get_by_id(script_id):
-        return None
+    @classmethod
+    async def get_by_id(cls, script_id):
+        return cls.row
 
     @classmethod
     async def list_by_episode(cls, episode_id):
@@ -109,10 +125,44 @@ class FakeEpisodeDAO:
     missing = False
 
     @classmethod
+    async def get_project_id(cls, episode_id):
+        return None if cls.missing else "proj_1"
+
+    @classmethod
     async def get_episode(cls, episode_id):
         if cls.missing:
             return None
         return {"episode_id": episode_id, "project_id": "proj_1"}
+
+
+async def test_storyboard_access_helpers_delegate_project_scope():
+    calls = []
+
+    async def check(project_id, identity, role):
+        calls.append((project_id, identity, role))
+
+    item = await storyboard_service.require_storyboard_item_access(
+        "sb_1",
+        "user_1",
+        "member",
+        storyboard_dao=FakeStoryboardDAO,
+        episode_dao=FakeEpisodeDAO,
+        project_access_checker=check,
+    )
+
+    assert item["item_id"] == "sb_1"
+    assert calls == [("proj_1", "user_1", "member")]
+
+
+async def test_storyboard_script_must_belong_to_episode():
+    FakeEpisodeScriptDAO.row = {"script_id": "script_1", "episode_id": "ep_other"}
+
+    with pytest.raises(storyboard_service.StoryboardScriptNotFound):
+        await storyboard_service.require_storyboard_script(
+            "ep_1",
+            "script_1",
+            episode_script_dao=FakeEpisodeScriptDAO,
+        )
 
 
 @dataclass
@@ -149,6 +199,7 @@ def setup_function():
     FakeStoryboardDAO.delete_returns_false = False
     FakeStoryboardDAO.reorder_returns_false = False
     FakeEpisodeScriptDAO.list_raises = False
+    FakeEpisodeScriptDAO.row = None
     FakeAssetDAO.created = []
     FakeEpisodeDAO.missing = False
 
@@ -170,6 +221,7 @@ async def test_get_storyboard_items_falls_back_for_stale_script_and_normalizes_a
     assert result["fallback_scope"] == "episode"
     assert result["total"] == 9
     assert result["items"][0]["bound_assets"] == [{"asset_id": "a1"}]
+    assert result["items"][0]["configured_references"] == [{"referenceId": "ref-1"}]
     assert FakeStoryboardDAO.calls == [
         ("ep_1", "script_deleted", 10, 0, "video"),
         ("ep_1", None, 10, 0, "video"),
@@ -414,6 +466,35 @@ async def test_sync_storyboard_items_skips_unchanged_existing_rows():
     assert result["skipped"] == 1
     assert FakeStoryboardDAO.created is None
     assert FakeStoryboardDAO.updates == []
+
+
+async def test_sync_storyboard_items_updates_configured_references():
+    FakeStoryboardDAO.episode_rows = [
+        {
+            "item_id": "sb_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "sort_order": 0,
+            "configured_references": '[{"referenceId":"old"}]',
+        }
+    ]
+
+    result = await storyboard_service.sync_storyboard_items(
+        "ep_1",
+        items=[{
+            "itemId": "sb_1",
+            "sortOrder": 0,
+            "configuredReferences": [{"referenceId": "new", "assetId": "asset-1"}],
+        }],
+        script_id="script_1",
+        storyboard_dao=FakeStoryboardDAO,
+    )
+
+    assert result["updated"] == 1
+    assert FakeStoryboardDAO.updates == [{
+        "item_id": "sb_1",
+        "configured_references": [{"referenceId": "new", "assetId": "asset-1"}],
+    }]
 
 
 async def test_sync_storyboard_items_creates_missing_rows_and_applies_audio_fields():

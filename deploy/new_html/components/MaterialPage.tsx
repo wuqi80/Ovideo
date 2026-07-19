@@ -382,7 +382,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
       try {
         const { uploadEntityFile } = await import('../services/entityFileService');
         const shotId = selectedShot?.id || 'temp';
-        const saved = await uploadEntityFile(file, 'material', shotId, `${type}_ref`, '');
+        const saved = await uploadEntityFile(file, 'storyboard_item', shotId, `${type}_ref`, episodeId);
         const newId = getNextMaterialId(tagName, 0, saved.fileId);
         const newMaterial: Material = {
           id: newId,

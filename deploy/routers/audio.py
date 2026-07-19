@@ -7,6 +7,12 @@ from typing import Any, Callable, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from services.audio_access_service import (
+    AudioObjectAccessDenied,
+    require_audio_episode_access,
+    require_audio_track_access,
+    require_character_voice_access,
+)
 from services.audio_generation_service import (
     AudioGenerationMissingAudioError,
     AudioGenerationProviderError,
@@ -30,8 +36,17 @@ from services.audio_minimax_voice_service import (
     clone_minimax_voice_response,
     delete_minimax_voice_response,
     design_minimax_voice_response,
-    get_minimax_voice_response,
     list_minimax_voices_response,
+)
+from services.project_access_service import ProjectAccessDenied, require_project_access
+from services.provider_object_access_service import (
+    ProviderObjectAccessDenied,
+    filter_minimax_voice_payload,
+    find_minimax_voice,
+    owned_provider_object_ids,
+    record_provider_object,
+    reject_foreign_provider_object,
+    require_provider_object_owner,
 )
 
 
@@ -40,23 +55,33 @@ def create_audio_router(
     get_current_user_dependency: Any,
     audio_track_dao: Any,
     character_voice_dao: Any,
+    episode_dao: Any,
+    provider_object_dao: Any,
+    user_dao: Any,
     get_audio_provider_func: Callable[[str], Any],
     audio_upload_dir: str,
     require_minimax_client: Callable[[], Any],
     task_service_module: Any,
     save_generated_file_to_db_provider: Callable[[], Callable[..., Any]],
     logger: logging.Logger,
+    project_access_checker: Any = require_project_access,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
     AudioTrackDAO = audio_track_dao
     CharacterVoiceDAO = character_voice_dao
+    EpisodeDAO = episode_dao
+    ProviderObjectDAO = provider_object_dao
+    UserDAO = user_dao
     get_audio_provider = get_audio_provider_func
     AUDIO_UPLOAD_DIR = audio_upload_dir
     task_service = task_service_module
 
     def _require_minimax_client():
         return require_minimax_client()
+
+    def _minimax_voice_object_type(voice_type: str) -> str:
+        return "minimax_voice_generation" if voice_type in {"voice_generation", "voice_design"} else "minimax_voice_cloning"
 
     async def save_generated_file_to_db(*args, **kwargs):
         return await save_generated_file_to_db_provider()(*args, **kwargs)
@@ -75,12 +100,32 @@ def create_audio_router(
 
     @router.get("/api/episodes/{episode_id}/audio-tracks")
     async def get_audio_tracks(episode_id: str, user_id: str = Depends(get_current_user)):
+        try:
+            await require_audio_episode_access(
+                episode_id,
+                user_id,
+                "readonly",
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except AudioObjectAccessDenied:
+            raise HTTPException(status_code=404, detail="音频轨不存在")
         tracks = await AudioTrackDAO.get_by_episode(episode_id)
         return {"success": True, "tracks": [dict(t) for t in tracks]}
 
 
     @router.post("/api/episodes/{episode_id}/audio-tracks")
     async def create_audio_track(episode_id: str, data: AudioTrackCreate, user_id: str = Depends(get_current_user)):
+        try:
+            await require_audio_episode_access(
+                episode_id,
+                user_id,
+                "member",
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except AudioObjectAccessDenied:
+            raise HTTPException(status_code=404, detail="音频轨不存在")
         track = await AudioTrackDAO.create(
             episode_id=episode_id, track_type=data.track_type, name=data.name,
             audio_url=data.audio_url, duration_ms=data.duration_ms,
@@ -94,6 +139,17 @@ def create_audio_router(
 
     @router.delete("/api/audio-tracks/{track_id}")
     async def delete_audio_track(track_id: str, user_id: str = Depends(get_current_user)):
+        try:
+            await require_audio_track_access(
+                track_id,
+                user_id,
+                "member",
+                audio_track_dao=AudioTrackDAO,
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except AudioObjectAccessDenied:
+            raise HTTPException(status_code=404, detail="音频轨不存在")
         ok = await AudioTrackDAO.delete(track_id)
         if not ok:
             raise HTTPException(status_code=404, detail="音频轨不存在")
@@ -280,12 +336,30 @@ def create_audio_router(
     @router.post("/api/minimax/voice-design")
     async def minimax_voice_design(data: MinimaxVoiceDesignRequest, user_id: str = Depends(get_current_user)):
         try:
-            return await design_minimax_voice_response(
+            if data.voice_id:
+                await reject_foreign_provider_object(
+                    provider="minimax",
+                    object_types=("minimax_voice_generation", "minimax_voice_cloning"),
+                    object_id=data.voice_id,
+                    owner_identity=user_id,
+                    provider_object_dao=ProviderObjectDAO,
+                )
+            result = await design_minimax_voice_response(
                 client=_require_minimax_client(),
                 prompt=data.prompt,
                 preview_text=data.preview_text,
                 voice_id=data.voice_id,
             )
+            await record_provider_object(
+                provider="minimax",
+                object_type="minimax_voice_generation",
+                object_id=str(result.get("voice_id") or ""),
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+            )
+            return result
+        except ProviderObjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except HTTPException:
             raise
         except Exception as e:
@@ -296,7 +370,22 @@ def create_audio_router(
     @router.post("/api/minimax/voice-clone")
     async def minimax_voice_clone(data: MinimaxVoiceCloneRequest, user_id: str = Depends(get_current_user)):
         try:
-            return await clone_minimax_voice_response(
+            await require_provider_object_owner(
+                provider="minimax",
+                object_type="minimax_file",
+                object_id=data.file_id,
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+            )
+            if data.voice_id:
+                await reject_foreign_provider_object(
+                    provider="minimax",
+                    object_types=("minimax_voice_generation", "minimax_voice_cloning"),
+                    object_id=data.voice_id,
+                    owner_identity=user_id,
+                    provider_object_dao=ProviderObjectDAO,
+                )
+            result = await clone_minimax_voice_response(
                 client=_require_minimax_client(),
                 file_id=data.file_id,
                 voice_id=data.voice_id,
@@ -304,6 +393,17 @@ def create_audio_router(
                 model=data.model,
                 voice_id_prefix=data.voice_id_prefix,
             )
+            await record_provider_object(
+                provider="minimax",
+                object_type="minimax_voice_cloning",
+                object_id=str(result.get("voice_id") or ""),
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+                metadata={"source_file_id": data.file_id},
+            )
+            return result
+        except ProviderObjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except HTTPException:
             raise
         except Exception as e:
@@ -314,7 +414,14 @@ def create_audio_router(
     @router.get("/api/minimax/voices")
     async def minimax_list_voices(voice_type: str = "all", user_id: str = Depends(get_current_user)):
         try:
-            return await list_minimax_voices_response(client=_require_minimax_client(), voice_type=voice_type)
+            owned_ids = await owned_provider_object_ids(
+                provider="minimax",
+                object_types=("minimax_voice_cloning", "minimax_voice_generation"),
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+            )
+            result = await list_minimax_voices_response(client=_require_minimax_client(), voice_type=voice_type)
+            return filter_minimax_voice_payload(result, owned_ids)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -322,7 +429,19 @@ def create_audio_router(
     @router.get("/api/minimax/voices/{voice_id}")
     async def minimax_get_voice(voice_id: str, user_id: str = Depends(get_current_user)):
         try:
-            return await get_minimax_voice_response(client=_require_minimax_client(), voice_id=voice_id)
+            owned_ids = await owned_provider_object_ids(
+                provider="minimax",
+                object_types=("minimax_voice_cloning", "minimax_voice_generation"),
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+            )
+            result = await list_minimax_voices_response(client=_require_minimax_client(), voice_type="all")
+            voice = find_minimax_voice(filter_minimax_voice_payload(result, owned_ids), voice_id)
+            if not voice:
+                raise HTTPException(status_code=404, detail="Voice not found or access denied")
+            return voice
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -334,11 +453,27 @@ def create_audio_router(
         user_id: str = Depends(get_current_user),
     ):
         try:
-            return await delete_minimax_voice_response(
+            object_type = _minimax_voice_object_type(voice_type)
+            await require_provider_object_owner(
+                provider="minimax",
+                object_type=object_type,
+                object_id=voice_id,
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+            )
+            result = await delete_minimax_voice_response(
                 client=_require_minimax_client(),
                 voice_id=voice_id,
                 voice_type=voice_type,
             )
+            await ProviderObjectDAO.delete(
+                provider="minimax",
+                object_type=object_type,
+                object_id=voice_id,
+            )
+            return result
+        except ProviderObjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -353,6 +488,18 @@ def create_audio_router(
 
         详见 recurring-pitfalls §Q「HTTP handler 阻塞超过反代 idle timeout」。
         """
+        if data.voice_id.startswith(("clone", "ttv-voice-")):
+            try:
+                await reject_foreign_provider_object(
+                    provider="minimax",
+                    object_types=("minimax_voice_generation", "minimax_voice_cloning"),
+                    object_id=data.voice_id,
+                    owner_identity=user_id,
+                    provider_object_dao=ProviderObjectDAO,
+                )
+            except ProviderObjectAccessDenied as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+
         # 早 fail：MiniMax 未配置直接 503/501，不浪费一次入队
         try:
             _require_minimax_client()
@@ -415,6 +562,14 @@ def create_audio_router(
         user_id: str = Depends(get_current_user),
     ):
         try:
+            if data.voice_id.startswith(("clone", "ttv-voice-")):
+                await reject_foreign_provider_object(
+                    provider="minimax",
+                    object_types=("minimax_voice_generation", "minimax_voice_cloning"),
+                    object_id=data.voice_id,
+                    owner_identity=user_id,
+                    provider_object_dao=ProviderObjectDAO,
+                )
             return await generate_minimax_tts_sync_response(
                 data,
                 user_id=user_id,
@@ -423,6 +578,8 @@ def create_audio_router(
                 logger=logger,
                 save_generated_file_to_db=save_generated_file_to_db,
             )
+        except ProviderObjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except AudioGenerationValidationError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
         except (AudioGenerationProviderError, AudioGenerationMissingAudioError) as exc:
@@ -437,7 +594,11 @@ def create_audio_router(
         判断 MiniMax 端是否在 5min 保留窗口内仍有该 task）。
         """
         try:
+            if not await UserDAO.is_admin_user(user_id):
+                raise HTTPException(status_code=404, detail="Task not found")
             return await query_minimax_tts_response(client=_require_minimax_client(), task_id=task_id)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -477,13 +638,22 @@ def create_audio_router(
         user_id: str = Depends(get_current_user),
     ):
         try:
-            return await upload_minimax_file_response(
+            result = await upload_minimax_file_response(
                 upload_file=file,
                 purpose=purpose,
                 audio_upload_dir=AUDIO_UPLOAD_DIR,
                 client=_require_minimax_client(),
                 logger=logger,
             )
+            await record_provider_object(
+                provider="minimax",
+                object_type="minimax_file",
+                object_id=str(result.get("file_id") or ""),
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+                metadata={"purpose": purpose},
+            )
+            return result
         except MiniMaxFileValidationError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
         except MiniMaxFileProviderError as exc:
@@ -493,7 +663,16 @@ def create_audio_router(
     @router.get("/api/minimax/files/{file_id}")
     async def minimax_file_retrieve(file_id: str, user_id: str = Depends(get_current_user)):
         try:
+            await require_provider_object_owner(
+                provider="minimax",
+                object_type="minimax_file",
+                object_id=file_id,
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+            )
             return await retrieve_minimax_file_response(file_id=file_id, client=_require_minimax_client())
+        except ProviderObjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -501,7 +680,22 @@ def create_audio_router(
     @router.delete("/api/minimax/files/{file_id}")
     async def minimax_file_delete(file_id: str, user_id: str = Depends(get_current_user)):
         try:
-            return await delete_minimax_file_response(file_id=file_id, client=_require_minimax_client())
+            await require_provider_object_owner(
+                provider="minimax",
+                object_type="minimax_file",
+                object_id=file_id,
+                owner_identity=user_id,
+                provider_object_dao=ProviderObjectDAO,
+            )
+            result = await delete_minimax_file_response(file_id=file_id, client=_require_minimax_client())
+            await ProviderObjectDAO.delete(
+                provider="minimax",
+                object_type="minimax_file",
+                object_id=file_id,
+            )
+            return result
+        except ProviderObjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -533,6 +727,10 @@ def create_audio_router(
 
     @router.post("/api/character-voices")
     async def create_character_voice(data: CharacterVoiceCreate, user_id: str = Depends(get_current_user)):
+        try:
+            await project_access_checker(data.project_id, user_id, "member")
+        except ProjectAccessDenied:
+            raise HTTPException(status_code=404, detail="项目不存在")
         voice = await CharacterVoiceDAO.create(
             project_id=data.project_id, character_name=data.character_name,
             asset_id=data.asset_id, voice_provider=data.voice_provider,
@@ -546,12 +744,26 @@ def create_audio_router(
 
     @router.get("/api/projects/{project_id}/character-voices")
     async def get_character_voices(project_id: str, user_id: str = Depends(get_current_user)):
+        try:
+            await project_access_checker(project_id, user_id, "readonly")
+        except ProjectAccessDenied:
+            raise HTTPException(status_code=404, detail="项目不存在")
         voices = await CharacterVoiceDAO.get_by_project(project_id)
         return {"success": True, "voices": [dict(v) for v in voices]}
 
 
     @router.put("/api/character-voices/{voice_id}")
     async def update_character_voice(voice_id: str, data: CharacterVoiceUpdate, user_id: str = Depends(get_current_user)):
+        try:
+            await require_character_voice_access(
+                voice_id,
+                user_id,
+                "member",
+                character_voice_dao=CharacterVoiceDAO,
+                project_access_checker=project_access_checker,
+            )
+        except AudioObjectAccessDenied:
+            raise HTTPException(status_code=404, detail="音色不存在")
         voice = await CharacterVoiceDAO.update(voice_id, **data.dict(exclude_none=True))
         if not voice:
             raise HTTPException(status_code=404, detail="音色不存在")
@@ -560,6 +772,16 @@ def create_audio_router(
 
     @router.delete("/api/character-voices/{voice_id}")
     async def delete_character_voice(voice_id: str, user_id: str = Depends(get_current_user)):
+        try:
+            await require_character_voice_access(
+                voice_id,
+                user_id,
+                "member",
+                character_voice_dao=CharacterVoiceDAO,
+                project_access_checker=project_access_checker,
+            )
+        except AudioObjectAccessDenied:
+            raise HTTPException(status_code=404, detail="音色不存在")
         ok = await CharacterVoiceDAO.delete(voice_id)
         if not ok:
             raise HTTPException(status_code=404, detail="音色不存在")

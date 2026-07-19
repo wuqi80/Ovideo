@@ -40,6 +40,14 @@ class _FileDAO:
         return cls.records.get(file_id)
 
     @classmethod
+    async def get_file_by_url(cls, url):
+        return next((row for row in cls.records.values() if row.get("file_url") == url), None)
+
+    @classmethod
+    async def get_file_by_name(cls, file_name):
+        return next((row for row in cls.records.values() if row.get("file_name") == file_name), None)
+
+    @classmethod
     async def create_file(cls, **kwargs):
         cls.created.append(kwargs)
         return {"file_id": kwargs["file_id"], "file_url": kwargs["file_url"], **kwargs}
@@ -117,6 +125,40 @@ def _fake_ffmpeg_runner(output_bytes: bytes = b"cropped"):
         return _RunResult()
 
     return run
+
+
+@pytest.mark.asyncio
+async def test_crop_source_access_resolves_url_and_checks_file_acl():
+    _FileDAO.records["file_video"] = {
+        "file_id": "file_video",
+        "file_url": "/storage/videos/user/video.mp4",
+        "file_name": "video.mp4",
+    }
+    checked = []
+
+    async def checker(file_id, username, role, **kwargs):
+        checked.append((file_id, username, role, kwargs["file_dao"]))
+        return {"file_id": file_id}
+
+    resolved = await svc.require_video_crop_source_access(
+        "/storage/videos/user/video.mp4",
+        "yuan",
+        file_dao=_FileDAO,
+        file_access_checker=checker,
+    )
+
+    assert resolved == "file_video"
+    assert checked[0][:3] == ("file_video", "yuan", "readonly")
+
+
+@pytest.mark.asyncio
+async def test_crop_source_access_rejects_unregistered_storage_path():
+    with pytest.raises(svc.VideoSourceAccessDenied):
+        await svc.require_video_crop_source_access(
+            "/storage/videos/another-user/private.mp4",
+            "yuan",
+            file_dao=_FileDAO,
+        )
 
 
 @pytest.mark.asyncio

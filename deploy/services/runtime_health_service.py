@@ -1,0 +1,193 @@
+"""Runtime database, migration, and release metadata health helpers."""
+from __future__ import annotations
+
+import json
+import os
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+
+from dao.admin.runtime_health import RuntimeHealthDAO
+from dao.admin.api_config import ApiConfigDAO
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def _age_seconds(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    parsed = value
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if not isinstance(parsed, datetime):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return max(0, int((datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()))
+
+
+def release_metadata_path() -> Path:
+    configured = str(os.getenv("RELEASE_METADATA_PATH") or "").strip()
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[1] / "release_metadata.json"
+
+
+def read_release_metadata(path: Optional[Path] = None) -> dict[str, Any]:
+    metadata_path = path or release_metadata_path()
+    fallback = {
+        "git_sha": str(os.getenv("GIT_SHA") or "").strip() or None,
+        "backend_source_sha256": str(os.getenv("BACKEND_SOURCE_SHA256") or "").strip() or None,
+        "frontend_source_sha256": str(os.getenv("FRONTEND_SOURCE_SHA256") or "").strip() or None,
+        "released_at": str(os.getenv("RELEASED_AT") or "").strip() or None,
+    }
+    if not metadata_path.is_file():
+        return {
+            "status": "missing",
+            "path": str(metadata_path),
+            **fallback,
+        }
+
+    try:
+        parsed = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return {
+            "status": "invalid",
+            "path": str(metadata_path),
+            "error": type(exc).__name__,
+            **fallback,
+        }
+    if not isinstance(parsed, dict):
+        return {
+            "status": "invalid",
+            "path": str(metadata_path),
+            "error": "metadata must be a JSON object",
+            **fallback,
+        }
+    return {
+        "status": "available",
+        "path": str(metadata_path),
+        **parsed,
+    }
+
+
+async def collect_database_health(db_manager: Optional[object]) -> dict[str, Any]:
+    if db_manager is None:
+        return {
+            "status": "unhealthy",
+            "error": "database manager is unavailable",
+            "migrations": {"status": "unknown", "applied_count": None},
+        }
+
+    try:
+        snapshot = await RuntimeHealthDAO.get_database_snapshot(db_manager)
+        ping = snapshot["ping"]
+        if ping != 1:
+            raise RuntimeError(f"unexpected database ping result: {ping!r}")
+        if not snapshot["ledger_exists"]:
+            migrations = {"status": "uninitialized", "applied_count": 0}
+        else:
+            latest = dict(snapshot["latest"] or {})
+            if not latest:
+                migrations = {"status": "ready", "applied_count": 0, "latest": None}
+            else:
+                applied_count = int(latest.pop("applied_count") or 0)
+                migrations = {
+                    "status": "ready",
+                    "applied_count": applied_count,
+                    "latest": {key: _json_value(value) for key, value in latest.items()},
+                }
+        task_queue = dict(snapshot.get("task_queue") or {})
+        oldest_pending_at = task_queue.get("oldest_pending_at")
+        oldest_processing_at = task_queue.get("oldest_processing_at")
+        task_queue.update(
+            {
+                "pending_count": int(task_queue.get("pending_count") or 0),
+                "processing_count": int(task_queue.get("processing_count") or 0),
+                "oldest_pending_at": _json_value(oldest_pending_at),
+                "oldest_pending_age_seconds": _age_seconds(oldest_pending_at),
+                "oldest_processing_at": _json_value(oldest_processing_at),
+                "oldest_processing_age_seconds": _age_seconds(oldest_processing_at),
+            }
+        )
+        return {
+            "status": "healthy",
+            "migrations": migrations,
+            "task_queue": task_queue,
+        }
+    except Exception as exc:
+        return {
+            "status": "unhealthy",
+            "error": f"{type(exc).__name__}: {exc}",
+            "migrations": {"status": "unknown", "applied_count": None},
+        }
+
+
+def critical_provider_ids(configured_providers: Optional[list[str]] = None) -> list[str]:
+    raw = os.getenv("HEALTH_CRITICAL_PROVIDERS")
+    source = raw.split(",") if raw is not None else (configured_providers or [])
+    return list(dict.fromkeys(item.strip().lower() for item in source if item.strip()))
+
+
+async def collect_provider_health() -> dict[str, Any]:
+    from services.api_provider_health_monitor import (
+        list_cached_provider_health,
+        provider_health_monitor_state,
+        summarize_provider_health_results,
+    )
+
+    try:
+        configured = [
+            str(row.get("provider") or "")
+            for row in await ApiConfigDAO.list_enabled()
+            if str(row.get("api_key_encrypted") or "").strip()
+        ]
+        providers = critical_provider_ids(configured)
+        if not providers:
+            return {
+                "status": "unknown",
+                "critical_providers": [],
+                "summary": summarize_provider_health_results([]),
+                "channels": [],
+                "monitor": provider_health_monitor_state(),
+            }
+        rows = await list_cached_provider_health(providers)
+        summary = summarize_provider_health_results(rows)
+        unhealthy_count = (
+            summary["error"] + summary["no_key"] + summary["blocked_region"]
+        )
+        if unhealthy_count:
+            status = "unhealthy"
+        elif rows:
+            status = "healthy"
+        else:
+            status = "unknown"
+        channels = [
+            {
+                "provider": row.get("provider"),
+                "model_name": row.get("model_name"),
+                "status": row.get("status") or "unknown",
+                "checked_at": row.get("checked_at") or row.get("cached_at"),
+            }
+            for row in rows
+        ]
+        return {
+            "status": status,
+            "critical_providers": providers,
+            "summary": summary,
+            "channels": channels,
+            "monitor": provider_health_monitor_state(),
+        }
+    except Exception as exc:
+        return {
+            "status": "unavailable",
+            "critical_providers": critical_provider_ids(),
+            "error": f"{type(exc).__name__}: {exc}",
+        }

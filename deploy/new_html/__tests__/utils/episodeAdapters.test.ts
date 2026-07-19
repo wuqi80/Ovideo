@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { assetsToMaterialLibrary, dbItemToStoryboardItem, newShotToDbFields } from '../../utils/episodeAdapters';
+import {
+  assetsToMaterialLibrary,
+  dbItemToStoryboardItem,
+  newShotToDbFields,
+  storyboardItemToDbUpdate,
+} from '../../utils/episodeAdapters';
 
 describe('assetsToMaterialLibrary', () => {
   it('includes generated material_image files alongside reference images', () => {
@@ -34,11 +39,13 @@ describe('assetsToMaterialLibrary', () => {
         id: 'asset_1_0',
         url: '/storage/legacy/original.webp',
         source: 'asset',
+        fileId: 'file_ref',
       }),
       expect.objectContaining({
         id: 'asset_1_1',
         url: '/storage/generated/angle.webp',
         source: 'asset',
+        fileId: 'file_angle',
       }),
     ]);
   });
@@ -142,5 +149,44 @@ describe('prop storyboard bindings', () => {
     } as any, 0);
 
     expect(fields.bound_assets).toEqual(['char:小悟', 'scene:办公室', 'prop:扇子']);
+  });
+});
+
+describe('storyboard configured references', () => {
+  const references = [{
+    id: 'ref-1',
+    url: '/storage/character.webp',
+    type: 'character',
+    name: '小悟',
+    assetId: 'asset-1',
+    fileId: 'file-1',
+  }] as any;
+
+  it('maps persisted configured references into the storyboard item', () => {
+    const item = dbItemToStoryboardItem({
+      itemId: 'sb_1',
+      sceneHeading: '',
+      actionText: '',
+      dialogue: '',
+      imagePrompt: '',
+      videoPrompt: '',
+      cameraMovement: '',
+      generatedImageUrl: null,
+      boundAssets: [],
+      configuredReferences: references,
+      status: 'draft',
+    } as any);
+
+    expect(item.configuredReferences).toEqual(references);
+  });
+
+  it('writes configured references for updates and new shots', () => {
+    expect(storyboardItemToDbUpdate({ configuredReferences: references } as any))
+      .toEqual({ configured_references: references });
+    expect(newShotToDbFields({
+      originalText: '',
+      scriptSegment: '',
+      configuredReferences: references,
+    } as any, 0).configured_references).toEqual(references);
   });
 });

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from pathlib import Path
 from typing import Any, Callable, Iterable, List, Mapping, Optional
 from urllib.parse import urlparse
@@ -53,6 +54,54 @@ def _reference_metadata_item(
     index: int,
 ) -> Mapping[str, Any]:
     return metadata[index] if index < len(metadata) else {}
+
+
+def _reference_snapshot_item(
+    reference: str,
+    index: int,
+    metadata: Mapping[str, Any],
+    *,
+    submitted: bool,
+) -> dict[str, Any]:
+    item = {
+        "input_order": index + 1,
+        "reference_id": metadata.get("referenceId") or metadata.get("reference_id"),
+        "asset_id": metadata.get("assetId") or metadata.get("asset_id"),
+        "entity_file_id": metadata.get("fileId") or metadata.get("file_id"),
+        "type": str(metadata.get("type") or "effect").lower(),
+        "name": metadata.get("name"),
+        "description": metadata.get("description"),
+        "source": metadata.get("source"),
+        "locked": bool(metadata.get("isLocked") or metadata.get("is_locked")),
+        "submitted": submitted,
+    }
+    if reference.startswith("data:"):
+        item.update({
+            "reference_uri": "inline:data",
+            "content_sha256": hashlib.sha256(reference.encode("utf-8")).hexdigest(),
+        })
+    else:
+        item["reference_uri"] = reference
+    return item
+
+
+def build_reference_snapshot(
+    references: Optional[Iterable[str]],
+    reference_metadata: Optional[Iterable[Mapping[str, Any]]] = None,
+    *,
+    max_refs: int = 14,
+    submitted: bool = False,
+) -> List[dict[str, Any]]:
+    metadata = list(reference_metadata or [])[:max_refs]
+    return [
+        _reference_snapshot_item(
+            reference,
+            index,
+            _reference_metadata_item(metadata, index),
+            submitted=submitted,
+        )
+        for index, reference in enumerate(list(references or [])[:max_refs])
+    ]
 
 
 def _reference_label(index: int, metadata: Mapping[str, Any]) -> str:
@@ -134,6 +183,7 @@ def prepare_gemini_image_parts(
     reference_metadata: Optional[Iterable[Mapping[str, Any]]] = None,
     logger: Any,
     max_refs: int = 6,
+    reference_snapshot: Optional[List[dict[str, Any]]] = None,
     storage_path_resolver: StoragePathResolver = storage_path_safe,
 ) -> List[dict[str, Any]]:
     """Build Gemini multimodal parts from prompt and local/data URL references."""
@@ -174,6 +224,10 @@ def prepare_gemini_image_parts(
         if item_metadata:
             parts.append({"text": _reference_label(index, item_metadata)})
         parts.append(image_part)
+        if reference_snapshot is not None:
+            reference_snapshot.append(
+                _reference_snapshot_item(ref, index, item_metadata, submitted=True)
+            )
         ref_count += 1
         loaded_metadata.append(item_metadata)
 
@@ -195,6 +249,8 @@ def _gpt_reference_extension_from_mime(mime: str) -> str:
 def prepare_gpt_image_reference_inputs(
     references: Optional[Iterable[str]],
     *,
+    reference_metadata: Optional[Iterable[Mapping[str, Any]]] = None,
+    reference_snapshot: Optional[List[dict[str, Any]]] = None,
     logger: Any,
     max_refs: int = 8,
     storage_path_resolver: StoragePathResolver = storage_path_safe,
@@ -202,6 +258,7 @@ def prepare_gpt_image_reference_inputs(
     """Convert route reference strings into GPT Image multipart inputs."""
     reference_inputs: List[GptImageReferenceInput] = []
 
+    metadata = list(reference_metadata or [])[:max_refs]
     for idx, ref in enumerate(list(references or [])[:max_refs]):
         img_bytes: bytes | None = None
         ext = "png"
@@ -234,14 +291,39 @@ def prepare_gpt_image_reference_inputs(
                 mime_type=f"image/{ext}",
             )
         )
+        if reference_snapshot is not None:
+            reference_snapshot.append(
+                _reference_snapshot_item(
+                    ref,
+                    idx,
+                    _reference_metadata_item(metadata, idx),
+                    submitted=True,
+                )
+            )
 
     return reference_inputs
 
 
-def prepare_doubao_reference_inputs(references: Optional[Iterable[str]], *, max_refs: int = 14) -> List[str]:
+def prepare_doubao_reference_inputs(
+    references: Optional[Iterable[str]],
+    *,
+    reference_metadata: Optional[Iterable[Mapping[str, Any]]] = None,
+    reference_snapshot: Optional[List[dict[str, Any]]] = None,
+    max_refs: int = 14,
+) -> List[str]:
     ref_inputs: List[str] = []
-    for ref in list(references or [])[:max_refs]:
+    metadata = list(reference_metadata or [])[:max_refs]
+    for index, ref in enumerate(list(references or [])[:max_refs]):
         converted = to_doubao_image_input(ref)
         if converted:
             ref_inputs.append(converted)
+            if reference_snapshot is not None:
+                reference_snapshot.append(
+                    _reference_snapshot_item(
+                        ref,
+                        index,
+                        _reference_metadata_item(metadata, index),
+                        submitted=True,
+                    )
+                )
     return ref_inputs

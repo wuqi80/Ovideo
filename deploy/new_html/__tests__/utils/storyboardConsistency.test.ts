@@ -4,6 +4,7 @@ import type { MaterialLibrary, StoryboardItem } from '../../types';
 import {
   buildIdentityAnchoredPrompt,
   resolveConsistencyModel,
+  resolveShotReferencePlan,
   resolveShotReferences,
 } from '../../utils/storyboardConsistency';
 
@@ -15,6 +16,7 @@ const library: MaterialLibrary = {
     },
     {
       id: 'char_1', url: '/storage/char/bound.png', type: 'image', source: 'asset', timestamp: 2,
+      assetId: 'asset-char', fileId: 'file-char',
       name: '女1', description: '冷静的女总裁',
       styleParams: { identity_anchor: { hair: '黑色齐肩直发', outfit: '黑色西装' } },
     },
@@ -38,6 +40,8 @@ describe('storyboard consistency', () => {
     const refs = resolveShotReferences(shot, library);
     expect(refs[0]).toMatchObject({
       url: '/storage/char/bound.png',
+      assetId: 'asset-char',
+      fileId: 'file-char',
       name: '女1',
       source: 'identity_anchor',
       isLocked: true,
@@ -99,5 +103,54 @@ describe('storyboard consistency', () => {
     ];
     expect(resolveConsistencyModel('qwen', refs, 2, true)).toMatchObject({ model: 'nanobanana' });
     expect(resolveConsistencyModel('qwen', refs, 2, false)).toEqual({ model: 'qwen' });
+  });
+
+  it('reports every reference excluded by the provider capacity', () => {
+    const crowdedLibrary: MaterialLibrary = {};
+    const characters = Array.from({ length: 7 }, (_, index) => `角色${index + 1}`);
+    const materialSelections: Record<string, string> = {};
+    for (const [index, name] of characters.entries()) {
+      const id = `character_${index + 1}`;
+      materialSelections[name] = id;
+      crowdedLibrary[name] = [{
+        id,
+        url: `/storage/characters/${index + 1}.png`,
+        type: 'image',
+        source: 'asset',
+        timestamp: index,
+        name,
+      }];
+    }
+
+    const plan = resolveShotReferencePlan({
+      ...shot,
+      characters,
+      scene: '',
+      materialSelections,
+    }, crowdedLibrary, [], 6);
+
+    expect(plan.references).toHaveLength(6);
+    expect(plan.excluded).toEqual([
+      expect.objectContaining({
+        isCritical: true,
+        reference: expect.objectContaining({ name: '角色7', url: '/storage/characters/7.png' }),
+      }),
+    ]);
+    expect(plan.criticalExcluded).toHaveLength(1);
+  });
+
+  it('does not mark an omitted manual or prop reference as critical', () => {
+    const manual = Array.from({ length: 6 }, (_, index) => ({
+      id: `manual_${index}`,
+      url: `/storage/manual/${index}.png`,
+      type: 'pose' as const,
+      name: `构图${index + 1}`,
+      source: 'manual' as const,
+    }));
+    const plan = resolveShotReferencePlan(shot, library, manual, 2);
+
+    expect(plan.references.map(item => item.type)).toEqual(['character', 'scene']);
+    expect(plan.excluded).toHaveLength(6);
+    expect(plan.criticalExcluded).toHaveLength(0);
   });
 });

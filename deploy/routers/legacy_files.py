@@ -75,13 +75,20 @@ def create_legacy_files_router(
     async def download_file(file_id: str, request: Request, token: Optional[str] = None):
         """Download a legacy file with range support for audio/video."""
         try:
+            raw_token = token
+            if not raw_token:
+                authorization = request.headers.get("Authorization") or ""
+                if authorization.startswith("Bearer "):
+                    raw_token = authorization[7:]
+            identity = jwt_auth_module.verify_token(raw_token) if raw_token else None
+            if not identity:
+                raise HTTPException(status_code=401, detail="Authentication required")
             download = await get_legacy_download_info(
                 file_id=file_id,
                 range_header=request.headers.get("range"),
-                token=token,
+                identity=identity,
                 deploy_root=deploy_root(),
                 file_dao=file_dao,
-                jwt_auth_module=jwt_auth_module,
                 logger=logger,
             )
 

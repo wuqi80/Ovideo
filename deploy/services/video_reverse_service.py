@@ -38,6 +38,16 @@ MAX_DURATION = 60.0
 ALLOWED_MIME_PREFIXES = ('video/',)
 
 
+class VideoReverseCancelled(RuntimeError):
+    pass
+
+
+async def _ensure_reverse_task_active(reverse_task_id: str) -> None:
+    row = await VideoReverseTaskDAO.get(reverse_task_id)
+    if row and row.get('status') == 'cancelled':
+        raise VideoReverseCancelled('视频反推任务已由用户取消')
+
+
 # ============================================
 # 1. validate
 # ============================================
@@ -312,6 +322,7 @@ async def run_pipeline(task) -> Dict[str, Any]:
         raise ValueError('task.data 缺少 reverse_task_id 或 video_file_id')
 
     try:
+        await _ensure_reverse_task_active(reverse_task_id)
         # 1) validate
         await VideoReverseTaskDAO.update_status(reverse_task_id, 'splitting', progress=5)
         file_record = await FileDAO.get_file(video_file_id)
@@ -336,11 +347,13 @@ async def run_pipeline(task) -> Dict[str, Any]:
             segments_boundaries,
             frames_per_segment=frames_per_segment,
         )
+        await _ensure_reverse_task_active(reverse_task_id)
 
         # 把每个抽帧落入 files 表 + media_library
         saved_frame_file_ids: Dict[int, List[str]] = {}
         all_frame_file_ids: List[str] = []
         for idx, fps in frames_map.items():
+            await _ensure_reverse_task_active(reverse_task_id)
             saved_frame_file_ids[idx] = []
             for fp in fps:
                 with open(fp, 'rb') as fh:
@@ -387,6 +400,7 @@ async def run_pipeline(task) -> Dict[str, Any]:
         await VideoReverseTaskDAO.update_status(reverse_task_id, 'analyzing', progress=55)
         segment_results: List[Dict[str, Any]] = []
         for idx, (start, end) in enumerate(segments_boundaries):
+            await _ensure_reverse_task_active(reverse_task_id)
             local_frames = frames_map.get(idx, [])
             analysis = await analyze_segment_frames(local_frames, language=language)
             segment_results.append({
@@ -407,6 +421,7 @@ async def run_pipeline(task) -> Dict[str, Any]:
             )
 
         # 5) build prompts
+        await _ensure_reverse_task_active(reverse_task_id)
         await VideoReverseTaskDAO.update_status(reverse_task_id, 'building_prompts', progress=95)
         prompts = build_prompts(segment_results, language=language)
 
@@ -421,11 +436,15 @@ async def run_pipeline(task) -> Dict[str, Any]:
         )
         await VideoReverseSegmentDAO.delete_all_for_task(reverse_task_id)
         await VideoReverseSegmentDAO.create_many(reverse_task_id, segment_results)
-        await VideoReverseTaskDAO.update_status(
+        await _ensure_reverse_task_active(reverse_task_id)
+        completed = await VideoReverseTaskDAO.update_status(
             reverse_task_id, 'completed', progress=100, completed=True,
         )
+        if completed is False:
+            raise VideoReverseCancelled('视频反推任务在完成前已取消')
 
         # 7) settle credits
+        await _ensure_reverse_task_active(reverse_task_id)
         cost_row = await VideoReverseTaskDAO.get(reverse_task_id)
         final_cost = int(cost_row.get('credit_cost') or 0)
         try:
@@ -442,6 +461,20 @@ async def run_pipeline(task) -> Dict[str, Any]:
             'overall_prompt_zh': prompts['overall_prompt_zh'],
             'final_cost': final_cost,
         }
+    except VideoReverseCancelled as e:
+        logger.info("video_reverse 任务取消 (reverse_task_id=%s)", reverse_task_id)
+        try:
+            await VideoReverseTaskDAO.update_status(
+                reverse_task_id, 'cancelled',
+                progress=100, error_message=str(e)[:500], completed=True,
+            )
+        except Exception:
+            pass
+        try:
+            await credit_service.release(task.task_id, reason=str(e)[:200])
+        except Exception as release_exc:
+            logger.warning(f"credit_service.release 失败: {release_exc}")
+        raise
     except Exception as e:
         logger.error(f"video_reverse 任务失败 (reverse_task_id={reverse_task_id}): {e}", exc_info=True)
         try:

@@ -28,22 +28,29 @@ describe('MiniMaxVideoPanel', () => {
         }));
     });
 
-    it('forces 1080P to the supported 6-second duration', () => {
-        const onChange = vi.fn();
+    it('disables 10 seconds while 1080P is selected instead of silently changing the resolution', () => {
         render(
             <MiniMaxVideoPanel
-                value={{ ...defaultValue, duration: 10, resolution: '768P' }}
-                prompt="move gently"
-                onChange={onChange}
+                value={{ ...defaultValue, resolution: '1080P' }}
+                prompt="test"
+                onChange={vi.fn()}
                 onPromptChange={vi.fn()}
             />,
         );
 
-        fireEvent.change(screen.getByLabelText('清晰度'), { target: { value: '1080P' } });
+        expect(screen.getByRole('option', { name: '10 秒' })).toBeDisabled();
+    });
 
-        expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-            duration: 6,
-            resolution: '1080P',
-        }));
+    it('disables 1080P while 10 seconds is selected', () => {
+        render(
+            <MiniMaxVideoPanel
+                value={{ ...defaultValue, duration: 10, resolution: '768P' }}
+                prompt="move gently"
+                onChange={vi.fn()}
+                onPromptChange={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByRole('option', { name: '1080P' })).toBeDisabled();
     });
 });

@@ -103,6 +103,14 @@ class CanvasNodeDAO:
             "SELECT * FROM canvas_nodes WHERE board_id = $1 ORDER BY z_index",
             board_id
         )
+
+    @staticmethod
+    async def get_node(node_id: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        return await db.fetchrow(
+            "SELECT * FROM canvas_nodes WHERE node_id = $1",
+            node_id,
+        )
     
     @staticmethod
     async def update_node(node_id: str, **kwargs):
@@ -166,6 +174,14 @@ class CanvasConnectionDAO:
         return await db.fetch(
             "SELECT * FROM canvas_connections WHERE board_id = $1",
             board_id
+        )
+
+    @staticmethod
+    async def get_by_id(connection_id: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        return await db.fetchrow(
+            "SELECT * FROM canvas_connections WHERE connection_id = $1",
+            connection_id,
         )
     
     @staticmethod

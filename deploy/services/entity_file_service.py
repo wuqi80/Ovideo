@@ -134,6 +134,7 @@ async def upload_entity_file(
     episode_id: Optional[str],
     user_id: str,
     save_generated_file_to_db: Callable[..., Any],
+    project_id: Optional[str] = None,
     media_library_create_from_file: Optional[Callable[..., Any]] = None,
     logger: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
@@ -149,6 +150,7 @@ async def upload_entity_file(
         entity_id=entity_id,
         file_role=file_role,
         original_ext=original_ext,
+        project_id=project_id,
         episode_id=episode_id,
     )
 

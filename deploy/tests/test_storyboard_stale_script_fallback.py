@@ -12,7 +12,13 @@ class _AssetDAO:
 
 
 class _EpisodeDAO:
-    pass
+    @staticmethod
+    async def get_project_id(_episode_id):
+        return "project-1"
+
+
+async def _allow_project_access(_project_id, _identity, _role):
+    return "user-1"
 
 
 def _build_app(storyboard_dao, episode_script_dao) -> FastAPI:
@@ -25,6 +31,7 @@ def _build_app(storyboard_dao, episode_script_dao) -> FastAPI:
             asset_dao=_AssetDAO,
             episode_dao=_EpisodeDAO,
             logger=logging.getLogger("test_storyboard_stale_script_fallback"),
+            project_access_checker=_allow_project_access,
         )
     )
     return app

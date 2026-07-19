@@ -20,6 +20,7 @@ import {
   type GptImageK,
 } from '../utils/gptImageSizeMap';
 import { apiJson } from './httpClient';
+import type { GeminiImageReferenceMetadata } from './geminiImageService';
 
 export type GptImageTier = 'vip' | 'official';
 export type GptImageQuality = 'auto' | 'low' | 'medium' | 'high';
@@ -27,6 +28,7 @@ export type GptImageQuality = 'auto' | 'low' | 'medium' | 'high';
 export interface GenerateGptImageOptions {
   tier: GptImageTier;
   prompt: string;
+  referenceMetadata?: GeminiImageReferenceMetadata[];
   references?: string[];        // data:URL 或 /storage/ 路径，空 → 文生图
   ratio?: GptImageRatio;        // 默认 "auto"
   k?: GptImageK;                // 默认 "auto"
@@ -73,6 +75,7 @@ export async function generateGptImage(
   const body = {
     tier: opts.tier,
     prompt: opts.prompt,
+    reference_metadata: opts.referenceMetadata ?? [],
     references: opts.references ?? [],
     size,
     quality,

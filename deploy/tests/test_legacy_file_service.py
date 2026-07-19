@@ -241,14 +241,17 @@ async def test_get_legacy_download_info_supports_range_and_fallback_paths(tmp_pa
         "mime_type": "video/mp4",
     }
 
+    async def allow_file(*_args, **_kwargs):
+        return _FileDAO.records["file1"]
+
     info = await svc.get_legacy_download_info(
         file_id="file1",
         range_header="bytes=2-5",
-        token="token",
+        identity="yuan",
         deploy_root=tmp_path,
         file_dao=_FileDAO,
-        jwt_auth_module=_JwtAuth,
         logger=_Logger(),
+        file_access_checker=allow_file,
     )
 
     assert Path(info.file_path) == actual_path
@@ -264,11 +267,37 @@ async def test_get_legacy_download_info_raises_when_missing(tmp_path):
         await svc.get_legacy_download_info(
             file_id="missing",
             range_header=None,
-            token=None,
+            identity="yuan",
             deploy_root=tmp_path,
             file_dao=_FileDAO,
-            jwt_auth_module=_JwtAuth,
             logger=_Logger(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_legacy_download_info_hides_forbidden_file(tmp_path):
+    source = tmp_path / "private.mp4"
+    source.write_bytes(b"private")
+    _FileDAO.records["file_private"] = {
+        "file_id": "file_private",
+        "user_id": "another-user",
+        "file_name": "private.mp4",
+        "file_path": str(source),
+        "mime_type": "video/mp4",
+    }
+
+    async def deny_file(*_args, **_kwargs):
+        raise svc.EntityAccessDenied("denied")
+
+    with pytest.raises(svc.LegacyFileNotFound):
+        await svc.get_legacy_download_info(
+            file_id="file_private",
+            range_header=None,
+            identity="yuan",
+            deploy_root=tmp_path,
+            file_dao=_FileDAO,
+            logger=_Logger(),
+            file_access_checker=deny_file,
         )
 
 

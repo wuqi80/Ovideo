@@ -72,16 +72,25 @@ def _raise_for_minimax_error(action: str, payload: Any) -> None:
 
 
 def normalize_minimax_duration(duration: Optional[int]) -> int:
-    """MiniMax video accepts fixed short durations; choose the nearest safe value."""
+    """Validate MiniMax's fixed duration values without silently changing intent."""
+    if duration is None:
+        return 6
     try:
-        value = int(duration or 6)
+        value = int(duration)
     except (TypeError, ValueError):
-        value = 6
-    return 10 if value > 6 else 6
+        raise ValueError("MiniMax 视频时长必须为 6 秒或 10 秒") from None
+    if value not in {6, 10}:
+        raise ValueError(f"MiniMax 视频不支持 {value} 秒；可选时长为 6 秒或 10 秒")
+    return value
 
 
 def normalize_minimax_resolution(resolution: Optional[str]) -> str:
-    return "1080P" if str(resolution or "").strip().upper() == "1080P" else "768P"
+    if resolution is None or not str(resolution).strip():
+        return "768P"
+    value = str(resolution).strip().upper()
+    if value not in {"768P", "1080P"}:
+        raise ValueError(f"MiniMax 视频不支持分辨率 {resolution}；可选分辨率为 768P 或 1080P")
+    return value
 
 
 def normalize_minimax_generation_options(
@@ -90,8 +99,8 @@ def normalize_minimax_generation_options(
 ) -> tuple[int, str]:
     resolved_duration = normalize_minimax_duration(duration)
     resolved_resolution = normalize_minimax_resolution(resolution)
-    if resolved_resolution == "1080P":
-        resolved_duration = 6
+    if resolved_resolution == "1080P" and resolved_duration != 6:
+        raise ValueError("MiniMax 1080P 仅支持 6 秒；请选择 6 秒，或将分辨率改为 768P")
     return resolved_duration, resolved_resolution
 
 

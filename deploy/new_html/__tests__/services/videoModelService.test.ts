@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
   normalizeMiniMaxVideoParams,
 } from '../../services/videoModelService';
@@ -43,10 +44,12 @@ describe('normalizeMiniMaxVideoParams', () => {
     });
   });
 
-  it('forces 1080P generation to the supported 6-second duration', () => {
-    expect(normalizeMiniMaxVideoParams({ duration: 10, resolution: '1080P' })).toMatchObject({
-      duration: 6,
+  it('preserves an invalid saved combination so the UI can explain it instead of silently changing it', () => {
+    const params = normalizeMiniMaxVideoParams({ duration: 10, resolution: '1080P' });
+    expect(params).toMatchObject({
+      duration: 10,
       resolution: '1080P',
     });
+    expect(getMiniMaxVideoParamsError(params)).toContain('1080P 仅支持 6 秒');
   });
 });

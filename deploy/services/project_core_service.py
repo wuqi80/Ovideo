@@ -1,7 +1,7 @@
 """Core project create/list/detail business logic."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 class ProjectCoreServiceError(RuntimeError):
@@ -34,9 +34,11 @@ async def create_project(
     project_name: str,
     description: Optional[str],
     visibility: Optional[str],
+    member_usernames: Optional[List[str]],
     project_dao: Any,
     version_dao: Any,
     project_member_dao: Any,
+    user_dao: Any,
     activity_log_dao: Any,
 ) -> Dict[str, Any]:
     project = await project_dao.create_project(
@@ -60,6 +62,28 @@ async def create_project(
         role="owner",
     )
 
+    added_members: list[Dict[str, Any]] = []
+    missing_usernames: list[str] = []
+    normalized_usernames = list(dict.fromkeys(
+        username.strip() for username in (member_usernames or []) if username and username.strip()
+    ))
+    for username in normalized_usernames:
+        target_user = await user_dao.get_user_by_username(username)
+        if not target_user:
+            missing_usernames.append(username)
+            continue
+        target_user_id = target_user.get("user_id")
+        if not target_user_id or target_user_id == user_id:
+            continue
+        member = await project_member_dao.add_member(
+            project_id=project_id,
+            user_id=target_user_id,
+            role="member",
+            responsibility="all",
+        )
+        if member:
+            added_members.append(dict(member))
+
     await activity_log_dao.log_activity(
         user_id=user_id,
         action="create_project",
@@ -71,6 +95,10 @@ async def create_project(
         "success": True,
         "project": _row_to_dict(project),
         "initial_version": _row_to_dict(version),
+        "member_additions": {
+            "added": added_members,
+            "missing_usernames": missing_usernames,
+        },
     }
 
 

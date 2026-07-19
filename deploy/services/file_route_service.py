@@ -9,7 +9,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+from urllib.parse import urlparse
 
+from services.entity_access_service import EntityAccessDenied, require_file_access
+from services.project_access_service import ProjectAccessDenied, require_project_access
 from utils.image_reference import storage_path_safe
 
 
@@ -63,6 +66,45 @@ class UnsupportedUploadFileType(FileRouteServiceError):
 
 class UploadFileRecordError(FileRouteServiceError):
     pass
+
+
+class UploadVersionAccessDenied(FileRouteServiceError):
+    pass
+
+
+class _ThumbnailFileAccessDAO:
+    def __init__(self, file_dao: Any):
+        self.file_dao = file_dao
+
+    async def get_by_id(self, file_id: str) -> Optional[Dict[str, Any]]:
+        return await self.file_dao.get_file(file_id)
+
+
+async def require_thumbnail_source_access(
+    url: str,
+    identity: str,
+    *,
+    file_dao: Any,
+    file_access_checker: Callable[..., Any] = require_file_access,
+) -> Dict[str, Any]:
+    path = urlparse(url or "").path
+    parts = [part for part in path.split("/") if part]
+    file_id = parts[2] if len(parts) >= 3 and parts[:2] == ["api", "files"] else None
+    record = await file_dao.get_file(file_id) if file_id else None
+    if not record and hasattr(file_dao, "get_file_by_url"):
+        record = await file_dao.get_file_by_url(url)
+    if not record or not record.get("file_id"):
+        raise ThumbnailFileNotFound("file_not_found")
+    try:
+        await file_access_checker(
+            str(record["file_id"]),
+            identity,
+            "readonly",
+            file_dao=_ThumbnailFileAccessDAO(file_dao),
+        )
+    except EntityAccessDenied as exc:
+        raise ThumbnailFileNotFound("file_not_found") from exc
+    return dict(record)
 
 
 @dataclass(frozen=True)
@@ -274,8 +316,21 @@ async def _ensure_upload_version(
     project_dao: Any,
     version_dao: Any,
     uuid_hex_provider: Callable[[], str],
+    project_access_checker: Callable[..., Any] = require_project_access,
 ) -> str:
     if version_id:
+        version = await version_dao.get_version(version_id)
+        if not version:
+            raise UploadVersionAccessDenied("Version not found or access denied")
+        if str(version.get("user_id") or "") == str(username):
+            return version_id
+        project_id = str(version.get("project_id") or "")
+        if not project_id:
+            raise UploadVersionAccessDenied("Version not found or access denied")
+        try:
+            await project_access_checker(project_id, username, "member")
+        except ProjectAccessDenied as exc:
+            raise UploadVersionAccessDenied("Version not found or access denied") from exc
         return version_id
 
     projects = await project_dao.get_user_projects(username)
@@ -318,6 +373,7 @@ async def upload_generic_file(
     storage_root: Path = Path("persistent_storage"),
     now_provider: Callable[[], datetime] = datetime.now,
     uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
+    project_access_checker: Callable[..., Any] = require_project_access,
 ) -> Dict[str, Any]:
     if len(content) > max_upload_size:
         raise UploadFileTooLarge("file_too_large")
@@ -327,20 +383,20 @@ async def upload_generic_file(
     file_id = f"file_{uuid_hex_provider()[:12]}"
     ext = upload_extension(safe_filename, content_type, file_type)
     server_filename = f"{file_id}{ext}"
-    year_month = now_provider().strftime("%Y%m")
-    storage_dir = storage_root / f"{file_type}s" / username / year_month
-    storage_dir.mkdir(parents=True, exist_ok=True)
-    file_path = storage_dir / server_filename
-
-    file_path.write_bytes(content)
-
     resolved_version_id = await _ensure_upload_version(
         username=username,
         version_id=version_id,
         project_dao=project_dao,
         version_dao=version_dao,
         uuid_hex_provider=uuid_hex_provider,
+        project_access_checker=project_access_checker,
     )
+    year_month = now_provider().strftime("%Y%m")
+    storage_dir = storage_root / f"{file_type}s" / username / year_month
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    file_path = storage_dir / server_filename
+
+    file_path.write_bytes(content)
 
     try:
         file_record = await file_dao.create_file(

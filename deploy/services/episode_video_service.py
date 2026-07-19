@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, Optional
 
 from services import episode_compose_service
+from services.project_access_service import ProjectAccessDenied
 
 
 class EpisodeVideoServiceError(RuntimeError):
@@ -24,6 +25,45 @@ class VideoSegmentNotFound(EpisodeVideoServiceError):
 
 def _rows_to_dicts(rows: Iterable[Any]) -> list[Dict[str, Any]]:
     return [dict(row) for row in rows]
+
+
+async def require_episode_access(
+    episode_id: str,
+    identity: str,
+    role: str,
+    *,
+    episode_dao: Any,
+    project_access_checker: Any,
+) -> str:
+    project_id = await episode_dao.get_project_id(episode_id)
+    if not project_id:
+        raise EpisodeNotFound("Episode not found")
+    try:
+        await project_access_checker(project_id, identity, role)
+    except ProjectAccessDenied as exc:
+        raise EpisodeNotFound("Episode not found") from exc
+    return str(project_id)
+
+
+async def require_video_segment_access(
+    segment_id: str,
+    identity: str,
+    *,
+    video_segment_dao: Any,
+    episode_dao: Any,
+    project_access_checker: Any,
+) -> Dict[str, Any]:
+    segment = await video_segment_dao.get_by_id(segment_id)
+    if not segment:
+        raise VideoSegmentNotFound("Video segment not found")
+    await require_episode_access(
+        str(segment["episode_id"]),
+        identity,
+        "member",
+        episode_dao=episode_dao,
+        project_access_checker=project_access_checker,
+    )
+    return dict(segment)
 
 
 async def list_video_segments(

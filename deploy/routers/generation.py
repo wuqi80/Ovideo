@@ -24,6 +24,10 @@ from schemas.generation import (
 )
 from services.ai_proxy_image_persistence_service import persist_generated_ai_images
 from services.ai_proxy_types import AIProxyError
+from services.generation_access_service import (
+    GenerationAccessDenied,
+    require_generation_request_access,
+)
 from utils.image_reference import storage_path_safe
 
 
@@ -118,13 +122,27 @@ def create_generation_router(
     require_auth_dependency: Any,
     task_service_module: Any,
     generate_gemini_images: Any,
+    file_dao: Any,
     logger: logging.Logger,
+    generation_access_checker: Any = require_generation_request_access,
 ) -> APIRouter:
     router = APIRouter()
+
+    async def _authorize(request: Any, username: str, references: list[str]) -> None:
+        try:
+            await generation_access_checker(
+                request,
+                username,
+                references,
+                file_dao=file_dao,
+            )
+        except GenerationAccessDenied as exc:
+            raise HTTPException(status_code=404, detail="Generation scope or source not found") from exc
 
     @router.post("/api/generate/image")
     async def generate_image(request: ImageGenerationRequest, username: str = Depends(require_auth_dependency)):
         try:
+            await _authorize(request, username, request.ref_images)
             if request.engine == "gemini":
                 return {
                     "success": False,
@@ -168,6 +186,7 @@ def create_generation_router(
         username: str = Depends(require_auth_dependency),
     ):
         try:
+            await _authorize(request, username, request.image_filenames)
             if request.workflow_type not in ["qwen", "qwen_lora", "kontext", "qwenN", "qwenN_lora"]:
                 raise HTTPException(status_code=400, detail=f"不支持的工作流类型: {request.workflow_type}")
 
@@ -224,6 +243,7 @@ def create_generation_router(
     @router.post("/api/generate/angle-adjust")
     async def adjust_image_angle(request: AngleAdjustRequest, username: str = Depends(require_auth_dependency)):
         try:
+            await _authorize(request, username, [request.image_filename])
             task_data = {
                 "image_path": request.image_filename,
                 "prompt": request.prompt,
@@ -251,9 +271,10 @@ def create_generation_router(
         username: str = Depends(require_auth_dependency),
     ):
         try:
+            await _authorize(request, username, [request.image_filename])
             task_data = {
                 "image_path": request.image_filename,
-                "prompt": merge_gpu2_operation_prompt(task_type),
+                "prompt": THREE_VIEW_PROMPT,
                 "seed": request.seed,
             }
             _attach_entity_fields(task_data, request)
@@ -275,6 +296,7 @@ def create_generation_router(
     @router.post("/api/generate/around-angle")
     async def generate_around_angle(request: AroundAngleRequest, username: str = Depends(require_auth_dependency)):
         try:
+            await _authorize(request, username, [request.image_filename])
             task_data = {
                 "image_path": request.image_filename,
                 "prompt": request.prompt,
@@ -304,6 +326,7 @@ def create_generation_router(
     @router.post("/api/generate/matting")
     async def generate_matting(request: MattingRequest, username: str = Depends(require_auth_dependency)):
         try:
+            await _authorize(request, username, [request.image_filename])
             if request.matting_type not in ["subject", "split"]:
                 raise HTTPException(status_code=400, detail=f"不支持的抠图类型: {request.matting_type}")
 
@@ -338,6 +361,11 @@ def create_generation_router(
     @router.post("/api/generate/image-fusion")
     async def generate_image_fusion(request: ImageFusionRequest, username: str = Depends(require_auth_dependency)):
         try:
+            await _authorize(
+                request,
+                username,
+                [request.image_bk, request.image_hu, request.image_mb or ""],
+            )
             valid_types = ["fusion", "transfer", "imitation"]
             if request.fusion_type not in valid_types:
                 raise HTTPException(status_code=400, detail=f"不支持的融合类型: {request.fusion_type}")
@@ -387,6 +415,7 @@ def create_generation_router(
     @router.post("/api/generate/panorama-360")
     async def generate_panorama_360(request: Panorama360Request, username: str = Depends(require_auth_dependency)):
         try:
+            await _authorize(request, username, [request.image_filename])
             task_data = {
                 "image_path": request.image_filename,
                 "prompt": merge_gpu2_operation_prompt("panorama_360", request.prompt),
@@ -422,6 +451,11 @@ def create_generation_router(
         username: str = Depends(require_auth_dependency),
     ):
         try:
+            await _authorize(
+                request,
+                username,
+                [request.image_1, request.image_2 or "", request.image_3],
+            )
             if request.image_2:
                 task_type = "panorama_fusion_3"
                 task_data = {
@@ -474,6 +508,7 @@ def create_generation_router(
         username: str = Depends(require_auth_dependency),
     ):
         try:
+            await _authorize(request, username, [request.image_filename])
             task_data = {
                 "image_path": request.image_filename,
                 "prompt": merge_gpu2_operation_prompt("auto_storyboard", request.prompt),
@@ -509,6 +544,7 @@ def create_generation_router(
         username: str = Depends(require_auth_dependency),
     ):
         try:
+            await _authorize(request, username, [request.reference_image])
             if request.mode not in ["multi_shot", "story"]:
                 raise HTTPException(status_code=400, detail=f"不支持的模式: {request.mode}")
 
@@ -601,6 +637,7 @@ def create_generation_router(
     @router.post("/api/materials/process")
     async def process_material(request: MaterialProcessRequest, username: str = Depends(require_auth_dependency)):
         try:
+            await _authorize(request, username, [request.image_filename])
             if request.workflow_type not in ["upscale_hd", "remove_watermark", "three_view"]:
                 raise HTTPException(status_code=400, detail=f"不支持的工作流类型: {request.workflow_type}")
 

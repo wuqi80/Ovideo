@@ -70,6 +70,36 @@ describe('video workflow service', () => {
     expect(mockFetch.mock.calls[0][0]).toBe('/api/video/capabilities');
   });
 
+  it('loads the versioned model manifest and shares one request across capability helpers', async () => {
+    const { fetchVideoCapabilities, fetchSeedanceOmni, fetchComfyuiAvailable } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({
+      seedance_omni: true,
+      comfyui_available: true,
+      manifest_version: 'test-v1',
+      models: [{
+        key: 'MINI',
+        label: '金丹',
+        provider: 'minimax',
+        task_types: ['i2v'],
+        media_inputs: ['first_frame'],
+        query_mode: 'async',
+        parameter_rules: { normalization_policy: 'reject' },
+      }],
+    }));
+
+    const [manifest, seedanceOmni, comfyuiAvailable] = await Promise.all([
+      fetchVideoCapabilities(),
+      fetchSeedanceOmni(),
+      fetchComfyuiAvailable(),
+    ]);
+
+    expect(manifest.manifest_version).toBe('test-v1');
+    expect(manifest.models[0].key).toBe('MINI');
+    expect(seedanceOmni).toBe(true);
+    expect(comfyuiAvailable).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('loads video takes for the final compose picker', async () => {
     const { getVideoTakes } = await loadService();
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, shots: [] }));

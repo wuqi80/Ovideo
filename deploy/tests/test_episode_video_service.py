@@ -19,6 +19,10 @@ class FakeVideoSegmentDAO:
         return [row for row in cls.rows if row["episode_id"] == episode_id]
 
     @classmethod
+    async def get_by_id(cls, segment_id: str):
+        return next((row for row in cls.rows if row["segment_id"] == segment_id), None)
+
+    @classmethod
     async def create(cls, **kwargs):
         cls.created = kwargs
         return {"segment_id": "seg_new", **kwargs}
@@ -95,6 +99,38 @@ async def test_list_video_segments_returns_dict_rows():
 
     assert result["success"] is True
     assert [row["segment_id"] for row in result["segments"]] == ["seg_1", "seg_2"]
+
+
+async def test_require_episode_access_delegates_project_role_check():
+    calls = []
+
+    async def check(project_id, identity, role):
+        calls.append((project_id, identity, role))
+
+    project_id = await episode_video_service.require_episode_access(
+        "ep_1",
+        "user_1",
+        "readonly",
+        episode_dao=FakeEpisodeDAO,
+        project_access_checker=check,
+    )
+
+    assert project_id == "proj_1"
+    assert calls == [("proj_1", "user_1", "readonly")]
+
+
+async def test_require_video_segment_access_rejects_missing_segment():
+    async def check(project_id, identity, role):
+        raise AssertionError("project access should not be checked")
+
+    with pytest.raises(episode_video_service.VideoSegmentNotFound):
+        await episode_video_service.require_video_segment_access(
+            "missing",
+            "user_1",
+            video_segment_dao=FakeVideoSegmentDAO,
+            episode_dao=FakeEpisodeDAO,
+            project_access_checker=check,
+        )
 
 
 async def test_create_video_segment_passes_expected_fields():

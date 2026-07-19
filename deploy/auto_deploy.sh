@@ -37,39 +37,36 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs 2>/dev/null)
 fi
 
-if command -v psql >/dev/null 2>&1; then
-    export PGPASSWORD="${DB_PASSWORD:-}"
-    DB_U="${DB_USER:-my2_user}"
-    DB_N="${DB_NAME:-my2_db}"
-    DB_H="${DB_HOST:-localhost}"
+SQL_FILES=(
+    "sql/database_schema.sql"
+    "sql/db_migration_project_hub.sql"
+    "sql/db_migration_add_permissions.sql"
+    "sql/db_migration_notifications.sql"
+    "sql/db_migration_episodes.sql"
+    "sql/db_migration_assets.sql"
+    "sql/db_migration_episode_scripts.sql"
+    "sql/db_migration_storyboard_items.sql"
+    "sql/db_migration_video_segments.sql"
+    "sql/db_migration_timeline_tracks.sql"
+    "sql/db_migration_audio_tracks.sql"
+    "sql/db_migration_files_project_episode_source.sql"
+    "sql/db_migration_credits.sql"
+    "sql/db_migration_credit_onboarding.sql"
+    "sql/db_migration_video_voice_references.sql"
+    "sql/db_migration_storyboard_reference_config.sql"
+    "sql/db_migration_provider_remote_objects.sql"
+    "sql/db_migration_admin.sql"
+)
 
-    SQL_FILES=(
-        "sql/database_schema.sql"
-        "sql/db_migration_project_hub.sql"
-        "sql/db_migration_add_permissions.sql"
-        "sql/db_migration_notifications.sql"
-        "sql/db_migration_episodes.sql"
-        "sql/db_migration_assets.sql"
-        "sql/db_migration_episode_scripts.sql"
-        "sql/db_migration_storyboard_items.sql"
-        "sql/db_migration_video_segments.sql"
-        "sql/db_migration_timeline_tracks.sql"
-        "sql/db_migration_audio_tracks.sql"
-        "sql/db_migration_video_voice_references.sql"
-        "sql/db_migration_admin.sql"
-    )
+for f in "${SQL_FILES[@]}"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: missing required migration: $f"
+        exit 1
+    fi
+done
 
-    for f in "${SQL_FILES[@]}"; do
-        if [ -f "$f" ]; then
-            echo "  执行 $f ..."
-            psql -U "$DB_U" -d "$DB_N" -h "$DB_H" -f "$f" 2>/dev/null || true
-        fi
-    done
-    echo "  迁移完成"
-else
-    echo "  psql 不可用，请手动执行 sql/ 下的迁移脚本"
-    echo "  或参考 DEPLOY_GUIDE.md 中的 Python 迁移方案"
-fi
+python3 scripts/apply_migrations.py --env .env --root . "${SQL_FILES[@]}"
+echo "  迁移完成"
 
 echo ""
 echo "[5/8] 构建前端..."

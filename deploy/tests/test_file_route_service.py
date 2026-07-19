@@ -38,6 +38,10 @@ class _FileDAO:
         return cls.records.get(file_id)
 
     @classmethod
+    async def get_file_by_url(cls, url):
+        return next((row for row in cls.records.values() if row.get("file_url") == url), None)
+
+    @classmethod
     async def create_file(cls, **kwargs):
         if cls.raise_on_create:
             raise RuntimeError("db write failed")
@@ -68,11 +72,20 @@ class _ProjectDAO:
 class _VersionDAO:
     versions = []
     created = []
+    records = {}
 
     @classmethod
     def reset(cls):
         cls.versions = []
         cls.created = []
+        cls.records = {
+            "ver_existing": {"version_id": "ver_existing", "user_id": "yuan", "project_id": "proj_1"},
+            "v1": {"version_id": "v1", "user_id": "yuan", "project_id": "proj_1"},
+        }
+
+    @classmethod
+    async def get_version(cls, version_id):
+        return cls.records.get(version_id)
 
     @classmethod
     async def get_project_versions(cls, _project_id):
@@ -97,6 +110,39 @@ def _create_png(path: Path):
 
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (20, 20), color=(255, 0, 0)).save(path)
+
+
+@pytest.mark.asyncio
+async def test_thumbnail_source_access_checks_registered_file_acl():
+    _FileDAO.records["file_1"] = {
+        "file_id": "file_1",
+        "file_url": "/storage/images/yuan/shot.png",
+    }
+    checked = []
+
+    async def checker(file_id, identity, role, **_kwargs):
+        checked.append((file_id, identity, role))
+        return _FileDAO.records[file_id]
+
+    row = await svc.require_thumbnail_source_access(
+        "/storage/images/yuan/shot.png",
+        "yuan",
+        file_dao=_FileDAO,
+        file_access_checker=checker,
+    )
+
+    assert row["file_id"] == "file_1"
+    assert checked == [("file_1", "yuan", "readonly")]
+
+
+@pytest.mark.asyncio
+async def test_thumbnail_source_access_rejects_unregistered_path():
+    with pytest.raises(svc.ThumbnailFileNotFound):
+        await svc.require_thumbnail_source_access(
+            "/uploads/another-user/private.png",
+            "yuan",
+            file_dao=_FileDAO,
+        )
 
 
 @pytest.mark.asyncio
@@ -212,6 +258,37 @@ async def test_upload_generic_file_uses_existing_version_and_video_type(tmp_path
     assert _ProjectDAO.saved == []
     assert _VersionDAO.created == []
     assert _FileDAO.created[0]["version_id"] == "ver_existing"
+
+
+@pytest.mark.asyncio
+async def test_upload_generic_file_rejects_foreign_version_before_writing(tmp_path):
+    _VersionDAO.records["ver_foreign"] = {
+        "version_id": "ver_foreign",
+        "user_id": "other",
+        "project_id": "proj_other",
+    }
+
+    async def deny_project(*_args, **_kwargs):
+        raise svc.ProjectAccessDenied("denied")
+
+    with pytest.raises(svc.UploadVersionAccessDenied):
+        await svc.upload_generic_file(
+            filename="shot.png",
+            content_type="image/png",
+            content=b"image-bytes",
+            version_id="ver_foreign",
+            username="yuan",
+            max_upload_size=1024,
+            file_dao=_FileDAO,
+            project_dao=_ProjectDAO,
+            version_dao=_VersionDAO,
+            logger=_Logger(),
+            storage_root=tmp_path / "storage",
+            project_access_checker=deny_project,
+        )
+
+    assert list((tmp_path / "storage").rglob("*")) == []
+    assert _FileDAO.created == []
 
 
 @pytest.mark.asyncio

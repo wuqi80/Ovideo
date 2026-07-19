@@ -19,6 +19,19 @@ export type StoryboardGenerationModel =
 
 const AUTO_REFERENCE_SOURCES = new Set(['identity_anchor', 'material_binding']);
 
+export interface StoryboardReferenceExclusion {
+  reference: GenerationReference;
+  reason: 'capacity';
+  isCritical: boolean;
+}
+
+export interface StoryboardReferencePlan {
+  references: GenerationReference[];
+  excluded: StoryboardReferenceExclusion[];
+  criticalExcluded: StoryboardReferenceExclusion[];
+  maxReferences: number;
+}
+
 function normalizedAnchor(raw: unknown): CharacterIdentityAnchor {
   const anchor = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   return {
@@ -48,18 +61,19 @@ function toReference(
     type,
     name,
     assetId: material.assetId,
+    fileId: material.fileId,
     description: material.description,
     source,
     isLocked: source === 'identity_anchor',
   };
 }
 
-export function resolveShotReferences(
+export function resolveShotReferencePlan(
   shot: StoryboardItem,
   materialLibrary: MaterialLibrary,
   existing: GenerationReference[] = [],
   maxReferences = 6,
-): GenerationReference[] {
+): StoryboardReferencePlan {
   const automatic: GenerationReference[] = [];
   const add = (reference?: GenerationReference) => {
     if (!reference || automatic.some(item => item.url === reference.url)) return;
@@ -103,13 +117,33 @@ export function resolveShotReferences(
     })
     .map(reference => ({ ...reference, source: reference.source || ('manual' as const) }));
 
-  const merged: GenerationReference[] = [];
+  const candidates: GenerationReference[] = [];
   for (const reference of [...automatic, ...manual]) {
-    if (!reference.url || merged.some(item => item.url === reference.url)) continue;
-    merged.push(reference);
-    if (merged.length >= maxReferences) break;
+    if (!reference.url || candidates.some(item => item.url === reference.url)) continue;
+    candidates.push(reference);
   }
-  return merged;
+
+  const references = candidates.slice(0, maxReferences);
+  const excluded = candidates.slice(maxReferences).map(reference => ({
+    reference,
+    reason: 'capacity' as const,
+    isCritical: reference.type === 'character' || reference.type === 'scene',
+  }));
+  return {
+    references,
+    excluded,
+    criticalExcluded: excluded.filter(item => item.isCritical),
+    maxReferences,
+  };
+}
+
+export function resolveShotReferences(
+  shot: StoryboardItem,
+  materialLibrary: MaterialLibrary,
+  existing: GenerationReference[] = [],
+  maxReferences = 6,
+): GenerationReference[] {
+  return resolveShotReferencePlan(shot, materialLibrary, existing, maxReferences).references;
 }
 
 function materialMetadata(name: string, materialLibrary: MaterialLibrary, selectedId?: string): Material | undefined {

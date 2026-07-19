@@ -10,6 +10,9 @@ import json
 from typing import Any, Optional
 
 
+_TERMINAL_STATUSES = {"completed", "failed", "cancelled", "timeout"}
+
+
 def _jsonish(value: Any, default: Any) -> Any:
     if value is None:
         return default
@@ -30,11 +33,65 @@ def _iso(value: Any) -> Optional[str]:
     return str(value)
 
 
+def _coerce_progress(value: Any, *, status: str) -> Optional[float]:
+    if status == "completed":
+        return 100
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        progress = float(value)
+    except (TypeError, ValueError):
+        return None
+    progress = min(100.0, max(0.0, progress))
+    if progress <= 0 and status not in _TERMINAL_STATUSES:
+        return None
+    return progress
+
+
+def _db_progress(task: dict[str, Any]) -> Optional[float]:
+    status = str(task.get("status") or "unknown")
+    metadata = _jsonish(task.get("metadata"), {})
+    task_data = _jsonish(task.get("task_data"), {})
+    candidates = (
+        task.get("progress"),
+        metadata.get("progress") if isinstance(metadata, dict) else None,
+        task_data.get("progress") if isinstance(task_data, dict) else None,
+    )
+    for candidate in candidates:
+        progress = _coerce_progress(candidate, status=status)
+        if progress is not None:
+            return progress
+    return _coerce_progress(None, status=status)
+
+
+def _queue_progress(task: Any) -> Optional[float]:
+    status_value = getattr(task, "status", "")
+    status = str(getattr(status_value, "value", status_value) or "unknown")
+    return _coerce_progress(getattr(task, "progress", None), status=status)
+
+
+def _requested_statuses(status: Optional[str]) -> set[str]:
+    if not status:
+        return set()
+    aliases = {
+        "running": {"running", "processing"},
+        "processing": {"running", "processing"},
+        "pending": {"pending", "queued"},
+        "queued": {"pending", "queued"},
+    }
+    requested: set[str] = set()
+    for item in str(status).split(","):
+        normalized = item.strip().lower()
+        if normalized:
+            requested.update(aliases.get(normalized, {normalized}))
+    return requested
+
+
 def format_queue_task_status(task: Any) -> dict[str, Any]:
     return {
         "task_id": task.task_id,
         "status": task.status.value,
-        "progress": task.progress,
+        "progress": _queue_progress(task),
         "node_id": task.node_id,
         "result": task.result,
         "error": task.error,
@@ -49,7 +106,7 @@ def format_db_task_status(task: dict[str, Any]) -> dict[str, Any]:
     return {
         "task_id": task["task_id"],
         "status": task["status"],
-        "progress": 100 if task["status"] == "completed" else 0,
+        "progress": _db_progress(task),
         "node_id": task.get("node_id"),
         "result": result_data,
         "error": task.get("error_message"),
@@ -65,7 +122,7 @@ def format_db_task_summary(task: dict[str, Any]) -> dict[str, Any]:
         "task_id": task.get("task_id"),
         "task_type": task.get("task_type"),
         "status": task.get("status", "unknown"),
-        "progress": task.get("progress", 0),
+        "progress": _db_progress(task),
         "result": _jsonish(task.get("result_data"), {}),
         "error": task.get("error_message"),
         "created_at": _iso(task.get("created_at")),
@@ -79,7 +136,7 @@ def format_queue_task_summary(task: Any) -> dict[str, Any]:
         "task_id": task.task_id,
         "task_type": task.task_type,
         "status": task.status.value,
-        "progress": task.progress,
+        "progress": _queue_progress(task),
         "result": task.result,
         "error": task.error,
         "created_at": task.created_at,
@@ -94,16 +151,21 @@ async def get_task_status_response(
     task_queue: Any,
     task_dao: Any,
     logger: Any,
+    username: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     task = await task_queue.get_task(task_id)
     if task:
+        if username is not None and str(getattr(task, "user_id", "") or "") != str(username):
+            return None
         return format_queue_task_status(task)
 
     try:
         db_task = await task_dao.get_task_by_task_id(task_id)
+        if db_task and username is not None and str(db_task.get("user_id") or "") != str(username):
+            return None
         return format_db_task_status(db_task) if db_task else None
     except Exception as exc:
-        logger.warning("DB降级查询任务失败: %s", exc)
+        logger.warning("Database fallback task lookup failed: %s", exc)
         return None
 
 
@@ -116,10 +178,10 @@ async def get_db_task_for_delete(
     try:
         db_task = await task_dao.get_task(task_id)
         if db_task:
-            logger.info("✅ 从数据库获取任务信息: %s", task_id)
+            logger.info("Loaded task from database: %s", task_id)
         return db_task
     except Exception as exc:
-        logger.warning("从数据库获取任务失败: %s", exc)
+        logger.warning("Database task lookup failed: %s", exc)
         return None
 
 
@@ -133,7 +195,7 @@ async def soft_delete_user_file_by_path_fragment(
     try:
         return int(await file_dao.soft_delete_user_files_by_path_fragment(username, file_path) or 0)
     except Exception as exc:
-        logger.warning("数据库删除文件记录失败: %s", exc)
+        logger.warning("Database file soft-delete failed: %s", exc)
         return 0
 
 
@@ -145,16 +207,16 @@ async def delete_db_task(
     logger: Any,
 ) -> Optional[bool]:
     try:
-        logger.info("📞 调用 TaskDAO.delete_task(%s, %s)", task_id, username)
+        logger.info("Deleting task %s for user %s", task_id, username)
         result = await task_dao.delete_task(task_id, username)
         if result is None:
-            logger.warning("⚠️ 数据库未连接，跳过数据库删除")
+            logger.warning("Database unavailable; skipped task deletion")
             return None
         deleted = bool(result)
-        logger.info("📋 TaskDAO.delete_task 返回结果: %s", deleted)
+        logger.info("Task database deletion result: %s", deleted)
         return deleted
     except Exception as exc:
-        logger.error("❌ 从数据库删除任务失败: %s", exc, exc_info=True)
+        logger.error("Database task deletion failed: %s", exc, exc_info=True)
         return False
 
 
@@ -167,24 +229,46 @@ async def list_user_tasks_response(
     task_dao: Any,
     logger: Any,
 ) -> dict[str, Any]:
+    db_task_list: list[dict[str, Any]] = []
     try:
         db_tasks = await task_dao.get_user_tasks(username, limit=limit)
         if db_tasks is not None:
-            task_list = [format_db_task_summary(task) for task in db_tasks]
-            logger.info("✅ 从数据库加载了 %s 个任务", len(task_list))
-            if task_list:
-                logger.info(
-                    "📋 示例任务数据: task_id=%s, type=%s, result=%s, data=%s",
-                    task_list[0]["task_id"],
-                    task_list[0]["task_type"],
-                    type(task_list[0]["result"]),
-                    type(task_list[0]["data"]),
-                )
-            return {"success": True, "tasks": task_list}
+            db_task_list = [format_db_task_summary(task) for task in db_tasks]
+            logger.info("Loaded %s tasks from database", len(db_task_list))
     except Exception as exc:
-        logger.warning("⚠️ 数据库加载失败，降级到Redis: %s", exc)
+        logger.warning("Database task load failed; using queue state: %s", exc)
 
-    tasks = await task_queue.get_user_tasks(username, limit=limit, status=status)
-    task_list = [format_queue_task_summary(task) for task in tasks]
-    logger.info("✅ 从Redis加载了 %s 个任务", len(task_list))
-    return {"success": True, "tasks": task_list}
+    queue_task_list: list[dict[str, Any]] = []
+    try:
+        queue_tasks = await task_queue.get_user_tasks(username, limit=limit, status=None)
+        queue_task_list = [format_queue_task_summary(task) for task in queue_tasks]
+        logger.info("Loaded %s tasks from queue", len(queue_task_list))
+    except Exception as exc:
+        logger.warning("Queue task load failed; using database state: %s", exc)
+
+    db_by_id = {str(task.get("task_id")): task for task in db_task_list if task.get("task_id")}
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    # Redis is authoritative while the live task record exists. PostgreSQL is
+    # the durable history source after that Redis record expires.
+    for queue_task in queue_task_list:
+        task_id = str(queue_task.get("task_id") or "")
+        db_task = db_by_id.get(task_id, {})
+        combined = {**db_task, **queue_task}
+        if isinstance(db_task.get("data"), dict) and isinstance(queue_task.get("data"), dict):
+            combined["data"] = {**db_task["data"], **queue_task["data"]}
+        merged.append(combined)
+        if task_id:
+            seen.add(task_id)
+
+    merged.extend(
+        task for task in db_task_list
+        if str(task.get("task_id") or "") not in seen
+    )
+
+    requested = _requested_statuses(status)
+    if requested:
+        merged = [task for task in merged if str(task.get("status") or "").lower() in requested]
+
+    return {"success": True, "tasks": merged[:limit]}

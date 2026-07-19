@@ -1,9 +1,11 @@
 import { enqueueComfyUITask } from './comfyuiTaskQueue';
 import { apiFetch, apiJson, buildAuthHeaders, handleUnauthorized } from './httpClient';
 import {
+    getMiniMaxVideoParamsError,
     inferDashScopeTaskType,
     inferSeedanceTaskType,
     isComfyUIModel,
+    normalizeMiniMaxVideoParams,
     normalizeSeedanceMediaForSubmission,
     type DashScopeVideoParams,
     type SeedanceMediaInput,
@@ -79,16 +81,25 @@ export async function submitTask(
 
     if (model === 'MINI') {
         // MiniMax API
+        const minimaxParams = normalizeMiniMaxVideoParams({
+            duration: generationOptions?.duration as 6 | 10 | undefined,
+            resolution: generationOptions?.minimax_resolution,
+            promptOptimizer: generationOptions?.minimax_prompt_optimizer,
+        });
+        const parameterError = getMiniMaxVideoParamsError(minimaxParams);
+        if (parameterError) {
+            throw new Error(`MiniMax 参数无效：${parameterError}`);
+        }
         taskType = imageFilenameEnd ? 'minimax_morph' : 'minimax_i2v';
         const imageUrl = normalizeVideoMediaRef(imageFilename);
         requestData = {
             task_type: taskType,
             first_frame_image: imageUrl,
             prompt: prompt,
-            duration: generationOptions?.duration,
+            duration: minimaxParams.duration,
             minimax_model: generationOptions?.minimax_model,
-            minimax_resolution: generationOptions?.minimax_resolution,
-            minimax_prompt_optimizer: generationOptions?.minimax_prompt_optimizer,
+            minimax_resolution: minimaxParams.resolution,
+            minimax_prompt_optimizer: minimaxParams.promptOptimizer,
             priority: 2
         };
         if (imageFilenameEnd) {

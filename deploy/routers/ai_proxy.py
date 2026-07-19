@@ -49,6 +49,7 @@ from services.ai_proxy_task_service import (
 )
 from services.ai_proxy_reference_service import (
     ReferenceImageError,
+    build_reference_snapshot,
     prepare_doubao_reference_inputs,
     prepare_gemini_image_parts,
     prepare_gpt_image_reference_inputs,
@@ -84,6 +85,10 @@ def create_ai_proxy_router(
             logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过 DeepSeek 文本结果持久化")
 
     def _image_task_data(request, *, provider: str, model: Optional[str] = None, **extra):
+        reference_metadata = [
+            item.model_dump() if hasattr(item, "model_dump") else dict(item)
+            for item in (getattr(request, "reference_metadata", None) or [])
+        ]
         task_data = {
             "prompt": request.prompt,
             "provider": provider,
@@ -97,6 +102,10 @@ def create_ai_proxy_router(
             "source_item_id": request.entity_id,
             "display_name": extra.pop("display_name", f"{provider} image"),
             "category": "image",
+            "reference_snapshot": build_reference_snapshot(
+                getattr(request, "references", None),
+                reference_metadata,
+            ),
         }
         task_data.update(extra)
         return task_data
@@ -194,10 +203,12 @@ def create_ai_proxy_router(
             logger=logger,
         )
         try:
+            submitted_references = []
             parts = prepare_gemini_image_parts(
                 prompt=request.prompt,
                 references=request.references,
                 reference_metadata=[item.model_dump() for item in request.reference_metadata],
+                reference_snapshot=submitted_references,
                 logger=logger,
             )
 
@@ -213,6 +224,7 @@ def create_ai_proxy_router(
             await complete_ai_proxy_image_task(
                 task_id=task_id,
                 images_count=len(images),
+                reference_snapshot=submitted_references,
                 logger=logger,
             )
 
@@ -228,8 +240,16 @@ def create_ai_proxy_router(
                 file_role=request.file_role,
                 project_id=request.project_id,
                 episode_id=request.episode_id,
-                file_metadata={"prompt": request.prompt, "model": model},
-                media_metadata={"prompt": request.prompt, "model": model},
+                file_metadata={
+                    "prompt": request.prompt,
+                    "model": model,
+                    "reference_snapshot": submitted_references,
+                },
+                media_metadata={
+                    "prompt": request.prompt,
+                    "model": model,
+                    "reference_snapshot": submitted_references,
+                },
                 source_task_id=task_id,
                 logger=logger,
             )
@@ -256,8 +276,11 @@ def create_ai_proxy_router(
             raise HTTPException(status_code=400, detail="prompt 不能为空")
 
         try:
+            submitted_references = []
             reference_inputs = prepare_gpt_image_reference_inputs(
                 request.references,
+                reference_metadata=[item.model_dump() for item in request.reference_metadata],
+                reference_snapshot=submitted_references,
                 logger=logger,
             )
             if request.references and not reference_inputs:
@@ -285,6 +308,7 @@ def create_ai_proxy_router(
                     quality=request.quality,
                     n=request.n,
                     ref_count=len(request.references or []),
+                    submitted_reference_snapshot=submitted_references,
                     display_name=f"GPT Image {tier}",
                 ),
                 images_count=len(images),
@@ -310,8 +334,14 @@ def create_ai_proxy_router(
                     "size": request.size,
                     "quality": request.quality,
                     "ref_count": len(request.references or []),
+                    "reference_snapshot": submitted_references,
                 },
-                media_metadata={"prompt": request.prompt, "model": model, "tier": tier},
+                media_metadata={
+                    "prompt": request.prompt,
+                    "model": model,
+                    "tier": tier,
+                    "reference_snapshot": submitted_references,
+                },
                 include_url=True,
                 source_task_id=task_id,
                 logger=logger,
@@ -347,7 +377,12 @@ def create_ai_proxy_router(
             logger=logger,
         )
         try:
-            ref_inputs = prepare_doubao_reference_inputs(request.references)
+            submitted_references = []
+            ref_inputs = prepare_doubao_reference_inputs(
+                request.references,
+                reference_metadata=[item.model_dump() for item in request.reference_metadata],
+                reference_snapshot=submitted_references,
+            )
 
             images = await proxy_generate_doubao_images(
                 prompt=request.prompt,
@@ -362,6 +397,7 @@ def create_ai_proxy_router(
             await complete_ai_proxy_image_task(
                 task_id=task_id,
                 images_count=len(images),
+                reference_snapshot=submitted_references,
                 logger=logger,
             )
 
@@ -377,8 +413,16 @@ def create_ai_proxy_router(
                 file_role=request.file_role,
                 project_id=request.project_id,
                 episode_id=request.episode_id,
-                file_metadata={"prompt": request.prompt, "model": "doubao"},
-                media_metadata={"prompt": request.prompt, "model": "doubao"},
+                file_metadata={
+                    "prompt": request.prompt,
+                    "model": "doubao",
+                    "reference_snapshot": submitted_references,
+                },
+                media_metadata={
+                    "prompt": request.prompt,
+                    "model": "doubao",
+                    "reference_snapshot": submitted_references,
+                },
                 source_task_id=task_id,
                 logger=logger,
             )

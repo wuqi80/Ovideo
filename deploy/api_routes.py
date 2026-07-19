@@ -12,6 +12,7 @@ from dao_task import TaskDAO, ActivityLogDAO
 from dao_notification import NotificationDAO
 from dao_canvas import CanvasBoardDAO, CanvasNodeDAO, CanvasConnectionDAO
 from dao_asset import AssetDAO
+from dao_episode import EpisodeDAO
 from dao_storyboard import StoryboardDAO
 from dao_episode_script import EpisodeScriptDAO
 from dao_episode_script_segment import EpisodeScriptSegmentDAO
@@ -22,6 +23,7 @@ from dao_audio_track import AudioTrackDAO
 from dao_character_voice import CharacterVoiceDAO
 from dao_video_voice_reference import VideoVoiceReferenceDAO
 from dao_organization import OrganizationMemberDAO
+from dao.provider_objects import ProviderObjectDAO
 from audio_provider import get_audio_provider, AUDIO_UPLOAD_DIR
 
 try:
@@ -108,6 +110,9 @@ router.include_router(
         get_current_user_dependency=get_current_user,
         audio_track_dao=AudioTrackDAO,
         character_voice_dao=CharacterVoiceDAO,
+        episode_dao=EpisodeDAO,
+        provider_object_dao=ProviderObjectDAO,
+        user_dao=UserDAO,
         get_audio_provider_func=get_audio_provider,
         audio_upload_dir=AUDIO_UPLOAD_DIR,
         require_minimax_client=lambda: _require_minimax_client(),
@@ -165,19 +170,13 @@ router.include_router(
     )
 )
 
-try:
-    from dao_episode import EpisodeDAO
-except ImportError:
-    EpisodeDAO = None
-
-if EpisodeDAO is not None:
-    router.include_router(
-        create_episodes_router(
-            get_current_user_dependency=get_current_user,
-            episode_dao=EpisodeDAO,
-            episode_script_dao=EpisodeScriptDAO,
-        )
+router.include_router(
+    create_episodes_router(
+        get_current_user_dependency=get_current_user,
+        episode_dao=EpisodeDAO,
+        episode_script_dao=EpisodeScriptDAO,
     )
+)
 
 router.include_router(
     create_episode_video_router(
@@ -212,6 +211,8 @@ router.include_router(
     create_storyboard_quality_router(
         get_current_user_dependency=get_current_user,
         file_dao=FileDAO,
+        storyboard_dao=StoryboardDAO,
+        episode_dao=EpisodeDAO,
     )
 )
 
@@ -230,6 +231,11 @@ router.include_router(
         get_current_user_dependency=get_current_user,
         file_dao=FileDAO,
         entity_file_dao=EntityFileDAO,
+        episode_dao=EpisodeDAO,
+        storyboard_dao=StoryboardDAO,
+        asset_dao=AssetDAO,
+        video_segment_dao=VideoSegmentDAO,
+        user_dao=UserDAO,
         save_generated_file_to_db_provider=lambda: save_generated_file_to_db,
         logger=logger,
     )

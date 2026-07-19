@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from services.canvas_service import (
     CanvasBoardNotFound,
+    CanvasInvalidConnection,
+    CanvasObjectNotFound,
     CanvasPermissionDenied,
     create_canvas_board as create_canvas_board_service,
     create_canvas_connection as create_canvas_connection_service,
@@ -203,8 +205,15 @@ def create_canvas_router(
             return await update_canvas_node_service(
                 node_id=node_id,
                 fields=data,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
                 canvas_node_dao=CanvasNodeDAO,
             )
+        except (CanvasBoardNotFound, CanvasObjectNotFound) as exc:
+            raise HTTPException(status_code=404, detail="Canvas node not found") from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="Canvas access denied") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -215,7 +224,17 @@ def create_canvas_router(
     ):
         """删除画布节点"""
         try:
-            return await delete_canvas_node_service(node_id=node_id, canvas_node_dao=CanvasNodeDAO)
+            return await delete_canvas_node_service(
+                node_id=node_id,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+                canvas_node_dao=CanvasNodeDAO,
+            )
+        except (CanvasBoardNotFound, CanvasObjectNotFound) as exc:
+            raise HTTPException(status_code=404, detail="Canvas node not found") from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="Canvas access denied") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -233,8 +252,18 @@ def create_canvas_router(
                 source_port=data.source_port,
                 target_port=data.target_port,
                 label=data.label,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
+                canvas_node_dao=CanvasNodeDAO,
                 canvas_connection_dao=CanvasConnectionDAO,
             )
+        except (CanvasBoardNotFound, CanvasObjectNotFound) as exc:
+            raise HTTPException(status_code=404, detail="Canvas object not found") from exc
+        except CanvasInvalidConnection as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="Canvas access denied") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -247,8 +276,15 @@ def create_canvas_router(
         try:
             return await delete_canvas_connection_service(
                 connection_id=connection_id,
+                user_id=user_id,
+                project_member_dao=ProjectMemberDAO,
+                canvas_board_dao=CanvasBoardDAO,
                 canvas_connection_dao=CanvasConnectionDAO,
             )
+        except (CanvasBoardNotFound, CanvasObjectNotFound) as exc:
+            raise HTTPException(status_code=404, detail="Canvas connection not found") from exc
+        except CanvasPermissionDenied as exc:
+            raise HTTPException(status_code=403, detail="Canvas access denied") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

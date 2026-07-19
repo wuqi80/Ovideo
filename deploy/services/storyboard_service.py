@@ -5,6 +5,8 @@ import json
 import logging
 from typing import Any, Dict, Iterable, Optional
 
+from services.project_access_service import ProjectAccessDenied
+
 
 SUPPORTED_STORYBOARD_FIELDS = {"audio", "video", "audio_stage", "materials"}
 
@@ -16,6 +18,7 @@ SYNC_UPDATE_FIELDS = (
     ("audio_duration_ms", ("audio_duration_ms", "audioDurationMs")),
     ("planned_duration_ms", ("planned_duration_ms", "plannedDurationMs")),
     ("bound_assets", ("bound_assets", "boundAssets")),
+    ("configured_references", ("configured_references", "configuredReferences")),
 )
 AUDIO_URL_FIELDS = {"dialogue_audio_url", "narration_audio_url", "sfx_audio_url"}
 
@@ -44,12 +47,69 @@ class EpisodeNotFound(StoryboardServiceError):
     pass
 
 
+class StoryboardScriptNotFound(StoryboardServiceError):
+    pass
+
+
 def _row_to_dict(row: Any) -> Optional[Dict[str, Any]]:
     return dict(row) if row is not None else None
 
 
 def _rows_to_dicts(rows: Iterable[Any]) -> list[Dict[str, Any]]:
-    return [dict(row) for row in rows]
+    return [_normalize_bound_assets(dict(row)) for row in rows]
+
+
+async def require_storyboard_episode_access(
+    episode_id: str,
+    identity: str,
+    role: str,
+    *,
+    episode_dao: Any,
+    project_access_checker: Any,
+) -> str:
+    project_id = await episode_dao.get_project_id(episode_id)
+    if not project_id:
+        raise EpisodeNotFound("Episode not found")
+    try:
+        await project_access_checker(project_id, identity, role)
+    except ProjectAccessDenied as exc:
+        raise EpisodeNotFound("Episode not found") from exc
+    return str(project_id)
+
+
+async def require_storyboard_item_access(
+    item_id: str,
+    identity: str,
+    role: str,
+    *,
+    storyboard_dao: Any,
+    episode_dao: Any,
+    project_access_checker: Any,
+) -> Dict[str, Any]:
+    item = await storyboard_dao.get_by_id(item_id)
+    if not item:
+        raise StoryboardItemNotFound("Storyboard item not found")
+    await require_storyboard_episode_access(
+        str(item["episode_id"]),
+        identity,
+        role,
+        episode_dao=episode_dao,
+        project_access_checker=project_access_checker,
+    )
+    return dict(item)
+
+
+async def require_storyboard_script(
+    episode_id: str,
+    script_id: Optional[str],
+    *,
+    episode_script_dao: Any,
+) -> None:
+    if not script_id:
+        return
+    script = await episode_script_dao.get_by_id(script_id)
+    if not script or str(script.get("episode_id") or "") != episode_id:
+        raise StoryboardScriptNotFound("Script not found for this episode")
 
 
 def normalize_storyboard_fields(fields: Optional[str]) -> Optional[str]:
@@ -60,11 +120,13 @@ def normalize_storyboard_fields(fields: Optional[str]) -> Optional[str]:
 
 
 def _normalize_bound_assets(item: Dict[str, Any]) -> Dict[str, Any]:
-    if isinstance(item.get("bound_assets"), str):
-        try:
-            item["bound_assets"] = json.loads(item["bound_assets"]) if item["bound_assets"] else []
-        except Exception:
-            item["bound_assets"] = []
+    for field in ("bound_assets", "configured_references"):
+        if isinstance(item.get(field), str):
+            try:
+                parsed = json.loads(item[field]) if item[field] else []
+                item[field] = parsed if isinstance(parsed, list) else []
+            except Exception:
+                item[field] = []
     return item
 
 
@@ -82,7 +144,7 @@ def _row_value(row: Dict[str, Any], *keys: str) -> Any:
     return None
 
 
-def _bound_assets_value(value: Any) -> list[Any]:
+def _json_list_value(value: Any) -> list[Any]:
     if isinstance(value, str):
         try:
             parsed = json.loads(value) if value else []
@@ -93,8 +155,8 @@ def _bound_assets_value(value: Any) -> list[Any]:
 
 
 def _comparable_storyboard_value(field: str, value: Any) -> Any:
-    if field == "bound_assets":
-        return _bound_assets_value(value)
+    if field in {"bound_assets", "configured_references"}:
+        return _json_list_value(value)
     if field in AUDIO_URL_FIELDS:
         return value or None
     return value
@@ -154,7 +216,7 @@ def _sync_update_fields(item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, 
         current_cmp = _comparable_storyboard_value(field, current)
         if incoming_cmp == current_cmp:
             continue
-        updates[field] = incoming_cmp if field == "bound_assets" or field in AUDIO_URL_FIELDS else incoming
+        updates[field] = incoming_cmp if field in {"bound_assets", "configured_references"} or field in AUDIO_URL_FIELDS else incoming
         if field in AUDIO_URL_FIELDS:
             audio_changed = True
     if audio_changed:
@@ -181,7 +243,10 @@ def _creation_kwargs_from_sync_item(
         "camera_movement": value("", "camera_movement", "cameraMovement"),
         "image_prompt": value("", "image_prompt", "imagePrompt"),
         "video_prompt": value("", "video_prompt", "videoPrompt"),
-        "bound_assets": _bound_assets_value(value([], "bound_assets", "boundAssets")),
+        "bound_assets": _json_list_value(value([], "bound_assets", "boundAssets")),
+        "configured_references": _json_list_value(
+            value([], "configured_references", "configuredReferences")
+        ),
         "script_id": script_id or value(None, "script_id", "scriptId"),
         "script_segment_id": value(None, "script_segment_id", "scriptSegmentId"),
         "source_video_shot_no": value("", "source_video_shot_no", "sourceVideoShotNo"),
@@ -301,6 +366,7 @@ async def create_storyboard_item(
     camera_movement: Optional[str],
     image_prompt: Optional[str],
     video_prompt: Optional[str],
+    configured_references: Optional[list] = None,
     script_id: Optional[str],
     storyboard_dao: Any,
     episode_script_dao: Any,
@@ -325,11 +391,12 @@ async def create_storyboard_item(
         camera_movement=camera_movement,
         image_prompt=image_prompt,
         video_prompt=video_prompt,
+        configured_references=configured_references,
         script_id=resolved_script_id,
     )
     if not item:
         raise StoryboardCreateFailed("Storyboard create failed")
-    return {"success": True, "item": dict(item)}
+    return {"success": True, "item": _normalize_bound_assets(dict(item))}
 
 
 async def update_storyboard_item(
@@ -347,7 +414,7 @@ async def update_storyboard_item(
     item = await storyboard_dao.update(item_id, **fields)
     if not item:
         raise StoryboardItemNotFound("Storyboard item not found")
-    return {"success": True, "item": dict(item)}
+    return {"success": True, "item": _normalize_bound_assets(dict(item))}
 
 
 async def delete_storyboard_item(
@@ -473,7 +540,7 @@ async def batch_create_storyboard_items(
     script_id: Optional[str],
     storyboard_dao: Any,
 ) -> Dict[str, Any]:
-    created = await storyboard_dao.batch_create(episode_id, items, script_id=script_id)
+    created = await storyboard_dao.replace_batch(episode_id, items, script_id=script_id)
     return {"success": True, "items": _rows_to_dicts(created)}
 
 

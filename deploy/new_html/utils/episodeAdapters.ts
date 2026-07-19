@@ -175,6 +175,9 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     generatedImage: item.generatedImageUrl || undefined,
     generatedImages,
     selectedImageId: generatedImages.length > 0 ? generatedImages[0].id : undefined,
+    configuredReferences: Array.isArray(item.configuredReferences)
+      ? item.configuredReferences
+      : [],
     materialSelections,
     boundCharNames: charNames,
     boundSceneName: sceneName,
@@ -224,6 +227,11 @@ export function storyboardItemToDbUpdate(updates: Partial<StoryboardItem>): Reco
   }
   if ((updates as any).cameraMovement !== undefined) result.camera_movement = (updates as any).cameraMovement;
   if (updates.isConfigConfirmed !== undefined) result.is_config_confirmed = updates.isConfigConfirmed;
+  if (updates.configuredReferences !== undefined) {
+    result.configured_references = Array.isArray(updates.configuredReferences)
+      ? updates.configuredReferences
+      : [];
+  }
   return result;
 }
 
@@ -236,6 +244,9 @@ export function newShotToDbFields(shot: Omit<StoryboardItem, 'id'>, sortOrder: n
     camera_movement: (shot as any).cameraMovement || '',
     image_prompt: shot.imagePrompt || '',
     video_prompt: shot.videoPrompt || '',
+    configured_references: Array.isArray(shot.configuredReferences)
+      ? shot.configuredReferences
+      : [],
     bound_assets: [
       ...(shot.characters || []).map((c: string) => `${CHAR_PREFIX}${c}`),
       ...(shot.scene ? [`${SCENE_PREFIX}${shot.scene}`] : []),
@@ -272,6 +283,7 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
   name: string;
   source: string;
   assetId: string;
+  fileId?: string;
   assetType: AssetItem['assetType'];
   description: string;
   styleParams: Record<string, any>;
@@ -284,8 +296,15 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
     const seenUrls = new Set<string>();
 
     const identityReferenceUrl = String(asset.styleParams?.identity_reference_url || '');
-    const pushMaterial = (url: string, thumbnail: string | undefined, source: string) => {
-      if (!url || seenUrls.has(url)) return;
+    const pushMaterial = (url: string, thumbnail: string | undefined, source: string, fileId?: string) => {
+      if (!url) return;
+      if (seenUrls.has(url)) {
+        if (fileId) {
+          const existing = lib[key].find(material => material.url === url);
+          if (existing) existing.fileId = fileId;
+        }
+        return;
+      }
       seenUrls.add(url);
       const index = lib[key].length;
       lib[key].push({
@@ -295,6 +314,7 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
         name: asset.name,
         source,
         assetId: asset.assetId,
+        fileId,
         assetType: asset.assetType,
         description: asset.description || '',
         styleParams: asset.styleParams || {},
@@ -315,7 +335,7 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
       .filter(f => isAssetImageFileRole(f.fileRole) && Boolean(f.fileUrl))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     efImages.forEach((f) => {
-      pushMaterial(f.fileUrl, f.fileUrl, `entity_file:${f.fileRole}`);
+      pushMaterial(f.fileUrl, f.fileUrl, `entity_file:${f.fileRole}`, f.fileId);
     });
 
     if (lib[key].length === 0 && asset.thumbnailUrl) {

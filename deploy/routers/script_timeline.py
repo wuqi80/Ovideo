@@ -6,6 +6,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.project_access_service import ProjectAccessDenied, require_project_access
 from services.script_timeline_service import (
     ScriptFileCreateFailed,
     ScriptFileNotFound,
@@ -33,12 +34,39 @@ def create_script_timeline_router(
     episode_script_dao: Any,
     episode_script_segment_dao: Any,
     timeline_dao: Any,
+    episode_dao: Any = None,
+    project_access_checker: Any = require_project_access,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
     EpisodeScriptDAO = episode_script_dao
     EpisodeScriptSegmentDAO = episode_script_segment_dao
     TimelineDAO = timeline_dao
+    if episode_dao is None:
+        from dao_episode import EpisodeDAO as DefaultEpisodeDAO
+        episode_dao = DefaultEpisodeDAO
+    EpisodeDAO = episode_dao
+
+    async def require_episode(episode_id: str, identity: str, role: str) -> None:
+        project_id = await EpisodeDAO.get_project_id(episode_id)
+        if not project_id:
+            raise HTTPException(status_code=404, detail="集不存在")
+        try:
+            await project_access_checker(project_id, identity, role)
+        except ProjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail="集不存在") from exc
+
+    async def require_track(track_id: str, identity: str) -> None:
+        track = await TimelineDAO.get_by_id(track_id)
+        if not track:
+            raise HTTPException(status_code=404, detail="时间轴轨道不存在")
+        await require_episode(track['episode_id'], identity, 'member')
+
+    async def require_script(episode_id: str, script_id: str, identity: str) -> None:
+        await require_episode(episode_id, identity, 'member')
+        script = await EpisodeScriptDAO.get_by_id(script_id)
+        if not script or str(script.get('episode_id') or '') != episode_id:
+            raise HTTPException(status_code=404, detail="剧本文件不存在")
 
     # ============================================
 
@@ -67,6 +95,7 @@ def create_script_timeline_router(
     @router.get("/api/episodes/{episode_id}/script-segments")
     async def list_script_segments(episode_id: str, script_id: Optional[str] = None,
                                    user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'readonly')
         return await list_script_segments_service(
             episode_id,
             script_id,
@@ -77,6 +106,7 @@ def create_script_timeline_router(
     @router.put("/api/episodes/{episode_id}/script-segments/batch")
     async def batch_save_script_segments(episode_id: str, data: ScriptSegmentBatchBody,
                                          user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         return await batch_save_script_segments_service(
             episode_id,
             data.script_id,
@@ -88,6 +118,7 @@ def create_script_timeline_router(
     @router.delete("/api/episodes/{episode_id}/script-segments")
     async def delete_script_segments(episode_id: str, script_id: Optional[str] = None,
                                      user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         return await delete_script_segments_service(
             episode_id,
             script_id,
@@ -97,11 +128,13 @@ def create_script_timeline_router(
 
     @router.get("/api/episodes/{episode_id}/script")
     async def get_script(episode_id: str, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'readonly')
         return await get_primary_script(episode_id, episode_script_dao=EpisodeScriptDAO)
 
 
     @router.put("/api/episodes/{episode_id}/script")
     async def update_script(episode_id: str, data: ScriptUpdate, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await update_primary_script(
                 episode_id,
@@ -118,11 +151,13 @@ def create_script_timeline_router(
 
     @router.get("/api/episodes/{episode_id}/scripts")
     async def list_scripts(episode_id: str, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'readonly')
         return await list_scripts_service(episode_id, episode_script_dao=EpisodeScriptDAO)
 
 
     @router.post("/api/episodes/{episode_id}/scripts")
     async def create_script(episode_id: str, data: ScriptCreate, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await create_script_file(
                 episode_id,
@@ -139,6 +174,7 @@ def create_script_timeline_router(
 
     @router.put("/api/episodes/{episode_id}/scripts/{script_id}")
     async def update_script_by_id(episode_id: str, script_id: str, data: ScriptUpdate, user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
         try:
             return await update_script_file(
                 script_id,
@@ -154,6 +190,7 @@ def create_script_timeline_router(
 
     @router.delete("/api/episodes/{episode_id}/scripts/{script_id}")
     async def delete_script_by_id(episode_id: str, script_id: str, user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
         try:
             return await delete_script_file(script_id, episode_script_dao=EpisodeScriptDAO)
         except ScriptFileNotFound as exc:
@@ -178,11 +215,13 @@ def create_script_timeline_router(
 
     @router.get("/api/episodes/{episode_id}/timeline-tracks")
     async def get_timeline_tracks(episode_id: str, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'readonly')
         return await list_timeline_tracks(episode_id, timeline_dao=TimelineDAO)
 
 
     @router.post("/api/episodes/{episode_id}/timeline-tracks")
     async def create_timeline_track(episode_id: str, data: TimelineTrackCreate, user_id: str = Depends(get_current_user)):
+        await require_episode(episode_id, user_id, 'member')
         try:
             return await create_timeline_track_service(
                 episode_id,
@@ -198,6 +237,7 @@ def create_script_timeline_router(
 
     @router.put("/api/timeline-tracks/{track_id}")
     async def update_timeline_track(track_id: str, data: TimelineTrackUpdate, user_id: str = Depends(get_current_user)):
+        await require_track(track_id, user_id)
         try:
             return await update_timeline_track_service(
                 track_id,

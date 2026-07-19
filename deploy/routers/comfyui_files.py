@@ -11,12 +11,14 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from dao_content import FileDAO, ProjectDAO, VersionDAO
 from services.comfyui_file_service import (
+    ComfyUIFileAccessDenied,
     ComfyUIFileRequestError,
     ComfyUIMediaUploadFailed,
     ComfyUIVideoReuploadFailed,
     ComfyUIVideoReuploadNotFound,
     ComfyUIViewFetchFailed,
     fetch_comfyui_view_with_fallback,
+    require_comfyui_file_access,
     reupload_comfyui_video_with_uuid,
     upload_audio_file_to_comfyui,
     upload_image_file_to_comfyui,
@@ -38,9 +40,29 @@ def create_comfyui_files_router(
 ) -> APIRouter:
     router = APIRouter()
 
+    def registered_comfyui_servers() -> dict[str, Optional[str]]:
+        servers: dict[str, Optional[str]] = {}
+        for manager_getter in (get_cluster_manager, get_video_cluster_manager, get_image_cluster_manager):
+            manager = manager_getter()
+            nodes = getattr(manager, "nodes", []) if manager else []
+            if isinstance(nodes, dict):
+                nodes = nodes.values()
+            for node in nodes or []:
+                base_url = str(getattr(node, "base_url", "") or "").rstrip("/")
+                if base_url:
+                    servers[base_url] = getattr(node, "id", None)
+        return servers
+
+    def require_registered_comfyui_server(comfyui_server: str) -> tuple[str, Optional[str]]:
+        requested = str(comfyui_server or "").rstrip("/")
+        servers = registered_comfyui_servers()
+        if requested not in servers:
+            raise HTTPException(status_code=400, detail="Unknown ComfyUI server")
+        return requested, servers[requested]
+
     def select_video_comfyui_server(comfyui_server: Optional[str] = None) -> tuple[str, Optional[str]]:
         if comfyui_server:
-            return comfyui_server.rstrip("/"), None
+            return require_registered_comfyui_server(comfyui_server)
 
         video_cluster_manager = get_video_cluster_manager()
         if video_cluster_manager:
@@ -69,6 +91,13 @@ def create_comfyui_files_router(
                 username = verify_token(token)
             if not username:
                 raise HTTPException(status_code=401, detail="需要登录")
+
+            await require_comfyui_file_access(
+                filename=filename,
+                identity=username,
+                file_dao=FileDAO,
+                redis_client=get_redis_client(),
+            )
 
             cluster_manager = get_cluster_manager()
             target_server = None
@@ -121,6 +150,8 @@ def create_comfyui_files_router(
 
         except HTTPException:
             raise
+        except ComfyUIFileAccessDenied as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
         except ComfyUIViewFetchFailed as e:
             raise HTTPException(status_code=e.status_code, detail=str(e))
         except ComfyUIFileRequestError as e:
@@ -159,7 +190,7 @@ def create_comfyui_files_router(
             node_id = None
 
             if comfyui_server:
-                target_server = comfyui_server.rstrip("/")
+                target_server, node_id = require_registered_comfyui_server(comfyui_server)
             else:
                 cluster_manager = get_cluster_manager()
                 video_cluster_manager = get_video_cluster_manager()
@@ -313,6 +344,12 @@ def create_comfyui_files_router(
         """从ComfyUI或持久化存储下载视频文件，用新的UUID文件名重新上传到input目录"""
         try:
             target_server, _node_id = select_video_comfyui_server(comfyui_server)
+            await require_comfyui_file_access(
+                filename=filename,
+                identity=username,
+                file_dao=FileDAO,
+                redis_client=get_redis_client(),
+            )
             logger.info("用户 %s 请求重新上传视频: %s (从%s目录)", username, filename, file_type)
 
             return reupload_comfyui_video_with_uuid(
@@ -322,6 +359,8 @@ def create_comfyui_files_router(
                 logger=logger,
             )
 
+        except ComfyUIFileAccessDenied as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
         except ComfyUIVideoReuploadNotFound as e:
             logger.error("%s", e)
             raise HTTPException(status_code=404, detail=str(e))

@@ -2,6 +2,7 @@ import base64
 
 from services.ai_proxy_reference_service import (
     ReferenceImageError,
+    build_reference_snapshot,
     enhance_reference_prompt,
     prepare_doubao_reference_inputs,
     prepare_gemini_image_parts,
@@ -31,16 +32,46 @@ def test_enhance_reference_prompt_keeps_plain_prompt_without_references():
     assert enhance_reference_prompt("draw a robot", 0) == "draw a robot"
 
 
+def test_reference_snapshot_preserves_binding_identity_and_redacts_inline_payload():
+    snapshot = build_reference_snapshot(
+        ["data:image/png;base64,AAAA", "/storage/scene.png"],
+        [
+            {
+                "referenceId": "ref-character",
+                "assetId": "asset-character",
+                "fileId": "file-character",
+                "type": "character",
+                "source": "identity_anchor",
+                "isLocked": True,
+            },
+            {"assetId": "asset-scene", "type": "scene"},
+        ],
+    )
+
+    assert snapshot[0]["reference_uri"] == "inline:data"
+    assert snapshot[0]["content_sha256"]
+    assert snapshot[0]["asset_id"] == "asset-character"
+    assert snapshot[0]["entity_file_id"] == "file-character"
+    assert snapshot[0]["locked"] is True
+    assert snapshot[0]["submitted"] is False
+    assert snapshot[1]["reference_uri"] == "/storage/scene.png"
+
+
 def test_prepare_gemini_image_parts_accepts_data_url_reference():
+    snapshot = []
     parts = prepare_gemini_image_parts(
         prompt="draw a robot",
         references=["data:image/png;base64,AAAA"],
+        reference_metadata=[{"assetId": "asset-1", "type": "character"}],
+        reference_snapshot=snapshot,
         logger=_Logger,
     )
 
-    assert parts[0] == {"inlineData": {"mimeType": "image/png", "data": "AAAA"}}
-    assert parts[-1]["text"].startswith("请严格参考上面提供的参考图片")
+    assert parts[1] == {"inlineData": {"mimeType": "image/png", "data": "AAAA"}}
+    assert "参考图1" in parts[-1]["text"]
     assert "draw a robot" in parts[-1]["text"]
+    assert snapshot[0]["asset_id"] == "asset-1"
+    assert snapshot[0]["submitted"] is True
 
 
 def test_prepare_gemini_image_parts_reads_storage_reference(tmp_path):
@@ -139,8 +170,11 @@ def test_prepare_gpt_image_reference_inputs_accepts_data_and_storage_refs(tmp_pa
         "/storage/source.jpg",
     ]
 
+    snapshot = []
     inputs = prepare_gpt_image_reference_inputs(
         refs,
+        reference_metadata=[{"assetId": "asset-a"}, {"assetId": "asset-b"}],
+        reference_snapshot=snapshot,
         logger=_Logger,
         storage_path_resolver=lambda _: storage_image,
     )
@@ -152,6 +186,8 @@ def test_prepare_gpt_image_reference_inputs_accepts_data_and_storage_refs(tmp_pa
     assert inputs[1].filename == "ref_1.jpeg"
     assert inputs[1].content == b"storage-image"
     assert inputs[1].mime_type == "image/jpeg"
+    assert [item["asset_id"] for item in snapshot] == ["asset-a", "asset-b"]
+    assert all(item["submitted"] for item in snapshot)
 
 
 def test_prepare_gpt_image_reference_inputs_skips_invalid_refs():
@@ -173,7 +209,13 @@ def test_prepare_doubao_reference_inputs_uses_common_converter(monkeypatch):
 
     monkeypatch.setattr("services.ai_proxy_reference_service.to_doubao_image_input", fake_convert)
 
-    result = prepare_doubao_reference_inputs(["a", "skip", "b"])
+    snapshot = []
+    result = prepare_doubao_reference_inputs(
+        ["a", "skip", "b"],
+        reference_metadata=[{"assetId": "a"}, {"assetId": "skip"}, {"assetId": "b"}],
+        reference_snapshot=snapshot,
+    )
 
     assert result == ["converted:a", "converted:b"]
     assert calls == ["a", "skip", "b"]
+    assert [item["asset_id"] for item in snapshot] == ["a", "b"]

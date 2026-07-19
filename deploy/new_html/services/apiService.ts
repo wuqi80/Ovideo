@@ -51,6 +51,7 @@ export {
 export {
     createVideoSegment,
     updateVideoSegment,
+    fetchVideoCapabilities,
     fetchSeedanceOmni,
     fetchComfyuiAvailable,
     getVideoTakes,
@@ -59,6 +60,8 @@ export {
     type ComposeStatus,
     type VideoTake,
     type VideoShot,
+    type VideoModelCapability,
+    type VideoCapabilityManifest,
 } from './videoWorkflowService';
 export {
     createAsset,

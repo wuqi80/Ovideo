@@ -11,6 +11,8 @@ from urllib.parse import quote
 
 import aiofiles
 
+from services.entity_access_service import EntityAccessDenied, require_file_access
+
 
 class LegacyFileServiceError(RuntimeError):
     pass
@@ -26,6 +28,14 @@ class LegacyStorageQuotaExceeded(LegacyFileServiceError):
 
 class LegacyFileNotFound(LegacyFileServiceError):
     pass
+
+
+class _LegacyFileAccessDAO:
+    def __init__(self, file_dao: Any):
+        self.file_dao = file_dao
+
+    async def get_by_id(self, file_id: str) -> Optional[Dict[str, Any]]:
+        return await self.file_dao.get_file(file_id)
 
 
 @dataclass(frozen=True)
@@ -167,24 +177,27 @@ async def get_legacy_download_info(
     *,
     file_id: str,
     range_header: Optional[str],
-    token: Optional[str],
+    identity: str,
     deploy_root: Path,
     file_dao: Any,
-    jwt_auth_module: Any,
     logger: Any,
+    file_access_checker: Callable[..., Any] = require_file_access,
 ) -> LegacyDownloadInfo:
-    logger.info("文件下载请求: file_id=%s, has_token=%s", file_id, token is not None)
+    logger.info("Legacy file download request: file_id=%s", file_id)
     file_record = await file_dao.get_file(file_id)
     if not file_record:
         logger.error("文件记录不存在: file_id=%s", file_id)
         raise LegacyFileNotFound("文件不存在")
 
-    if token:
-        username = jwt_auth_module.verify_token(token)
-        if username:
-            file_owner = file_record.get("user_id")
-            if username and file_owner and username != file_owner:
-                logger.warning("用户 %s 尝试访问 %s 的文件 %s", username, file_owner, file_id)
+    try:
+        await file_access_checker(
+            file_id,
+            identity,
+            "readonly",
+            file_dao=_LegacyFileAccessDAO(file_dao),
+        )
+    except EntityAccessDenied as exc:
+        raise LegacyFileNotFound("File not found or access denied") from exc
 
     file_path = file_record["file_path"]
     possible_paths = _possible_download_paths(file_path, deploy_root=deploy_root)

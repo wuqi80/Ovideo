@@ -1,4 +1,5 @@
 import { apiJson } from './httpClient';
+import type { GeminiImageReferenceMetadata } from './geminiImageService';
 
 export interface GeneratedFileResult {
     url: string;
@@ -8,6 +9,7 @@ export interface GeneratedFileResult {
 
 export interface DoubaoGenerationOptions {
     prompt: string;
+    referenceMetadata?: GeminiImageReferenceMetadata[];
     references?: string[];
     size?: '1K' | '2K' | '4K';
     sequential?: 'disabled' | 'auto';
@@ -33,6 +35,7 @@ export const generateDoubaoImages = async (options: DoubaoGenerationOptions): Pr
         method: 'POST',
         body: JSON.stringify({
             prompt: options.prompt,
+            reference_metadata: options.referenceMetadata || [],
             references: options.references || [],
             size: options.size || '2K',
             sequential: options.sequential || 'disabled',

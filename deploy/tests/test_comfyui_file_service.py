@@ -162,19 +162,41 @@ class _VersionDAO:
 
 class _FileDAO:
     created = []
+    records = {}
 
     @classmethod
     async def create_file(cls, **kwargs):
         cls.created.append(kwargs)
-        return {"file_id": kwargs["file_id"], "file_url": kwargs["file_url"], **kwargs}
+        row = {"file_id": kwargs["file_id"], "file_url": kwargs["file_url"], **kwargs}
+        cls.records[row["file_id"]] = row
+        return row
+
+    @classmethod
+    async def get_file(cls, file_id):
+        return cls.records.get(file_id)
+
+    @classmethod
+    async def get_file_by_comfyui_filename(cls, filename):
+        return next(
+            (
+                row for row in cls.records.values()
+                if row.get("metadata", {}).get("comfyui_filename") == filename
+            ),
+            None,
+        )
 
 
 class _Redis:
     def __init__(self):
         self.calls = []
+        self.values = {}
 
     async def set(self, *args, **kwargs):
         self.calls.append((args, kwargs))
+        self.values[args[0]] = args[1]
+
+    async def get(self, key):
+        return self.values.get(key)
 
 
 class _Logger:
@@ -206,10 +228,46 @@ def _reset_fakes():
     _VersionDAO.versions = []
     _VersionDAO.created = []
     _FileDAO.created = []
+    _FileDAO.records = {}
     _Logger.warnings = []
     _Logger.infos = []
     _Logger.debugs = []
     _Logger.errors = []
+
+
+@pytest.mark.asyncio
+async def test_require_comfyui_file_access_resolves_redis_mapping_and_checks_acl():
+    _reset_fakes()
+    _FileDAO.records["file_1"] = {"file_id": "file_1", "user_id": "yuan"}
+    redis = _Redis()
+    redis.values["comfyui:file:node_file.png"] = b"file_1"
+    checked = []
+
+    async def checker(file_id, identity, role, **_kwargs):
+        checked.append((file_id, identity, role))
+        return _FileDAO.records[file_id]
+
+    row = await comfyui_file_service.require_comfyui_file_access(
+        filename="node_file.png",
+        identity="yuan",
+        file_dao=_FileDAO,
+        redis_client=redis,
+        file_access_checker=checker,
+    )
+
+    assert row["file_id"] == "file_1"
+    assert checked == [("file_1", "yuan", "readonly")]
+
+
+@pytest.mark.asyncio
+async def test_require_comfyui_file_access_rejects_unknown_filename():
+    _reset_fakes()
+    with pytest.raises(comfyui_file_service.ComfyUIFileAccessDenied):
+        await comfyui_file_service.require_comfyui_file_access(
+            filename="foreign.mp4",
+            identity="yuan",
+            file_dao=_FileDAO,
+        )
 
 
 class _Response:

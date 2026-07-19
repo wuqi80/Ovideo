@@ -7,6 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.project_access_service import ProjectAccessDenied, require_project_access
 from services.asset_service import (
     AssetCreateFailed,
     AssetNotFound,
@@ -27,12 +28,34 @@ def create_assets_router(
     entity_file_dao: Any,
     logger: logging.Logger,
     episode_dao: Any = None,
+    project_access_checker: Any = require_project_access,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
     AssetDAO = asset_dao
     EntityFileDAO = entity_file_dao
     EpisodeDAO = episode_dao
+
+    async def require_project(project_id: str, identity: str, role: str) -> None:
+        try:
+            await project_access_checker(project_id, identity, role)
+        except ProjectAccessDenied as exc:
+            raise HTTPException(status_code=404, detail="资产不存在或无权访问") from exc
+
+    async def require_episode_project(episode_id: str, project_id: str, identity: str, role: str) -> None:
+        if EpisodeDAO is None:
+            raise HTTPException(status_code=503, detail="集数服务不可用")
+        actual_project_id = await EpisodeDAO.get_project_id(episode_id)
+        if actual_project_id != project_id:
+            raise HTTPException(status_code=404, detail="集不存在")
+        await require_project(project_id, identity, role)
+
+    async def require_asset(asset_id: str, identity: str, role: str) -> dict:
+        asset = await AssetDAO.get_by_id(asset_id)
+        if not asset:
+            raise HTTPException(status_code=404, detail="资产不存在")
+        await require_project(asset['project_id'], identity, role)
+        return asset
 
     class AssetCreate(BaseModel):
         project_id: str
@@ -71,6 +94,9 @@ def create_assets_router(
         script_id: Optional[str] = None,
         user_id: str = Depends(get_current_user),
     ):
+        await require_project(project_id, user_id, 'readonly')
+        if episode_id:
+            await require_episode_project(episode_id, project_id, user_id, 'readonly')
         return await list_assets(
             project_id,
             episode_id=episode_id,
@@ -82,6 +108,9 @@ def create_assets_router(
 
     @router.post("/api/assets")
     async def create_asset(data: AssetCreate, user_id: str = Depends(get_current_user)):
+        await require_project(data.project_id, user_id, 'member')
+        if data.episode_id:
+            await require_episode_project(data.episode_id, data.project_id, user_id, 'member')
         try:
             return await create_asset_service(
                 project_id=data.project_id,
@@ -99,6 +128,9 @@ def create_assets_router(
 
     @router.put("/api/assets/{asset_id}")
     async def update_asset(asset_id: str, data: AssetUpdate, user_id: str = Depends(get_current_user)):
+        asset = await require_asset(asset_id, user_id, 'member')
+        if data.episode_id:
+            await require_episode_project(data.episode_id, asset['project_id'], user_id, 'member')
         try:
             return await update_asset_service(
                 asset_id,
@@ -110,6 +142,7 @@ def create_assets_router(
 
     @router.delete("/api/assets/{asset_id}")
     async def delete_asset(asset_id: str, user_id: str = Depends(get_current_user)):
+        await require_asset(asset_id, user_id, 'member')
         try:
             return await delete_asset_service(asset_id, asset_dao=AssetDAO)
         except AssetNotFound as exc:
@@ -118,6 +151,8 @@ def create_assets_router(
     @router.post("/api/assets/{asset_id}/share")
     async def share_asset(asset_id: str, data: AssetShareRequest, user_id: str = Depends(get_current_user)):
         """Copy an asset to a target episode/script, including linked entity files."""
+        asset = await require_asset(asset_id, user_id, 'member')
+        await require_episode_project(data.target_episode_id, asset['project_id'], user_id, 'member')
         try:
             return await share_asset_service(
                 asset_id,
@@ -138,6 +173,7 @@ def create_assets_router(
         user_id: str = Depends(get_current_user),
     ):
         """Sync same-name character/scene/prop designs from other episodes into the current episode."""
+        await require_episode_project(data.episode_id, project_id, user_id, 'member')
         return await sync_existing_designs_service(
             project_id=project_id,
             episode_id=data.episode_id,
@@ -159,6 +195,7 @@ def create_assets_router(
         asset_types: Optional[str] = None,
         user_id: str = Depends(get_current_user),
     ):
+        await require_episode_project(episode_id, project_id, user_id, 'readonly')
         requested_types = [item.strip() for item in asset_types.split(",") if item.strip()] if asset_types else None
         return await list_sync_existing_design_candidates(
             project_id=project_id,

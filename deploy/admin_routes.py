@@ -129,6 +129,11 @@ def _require_db() -> None:
         )
 
 
+async def _get_workflow_template_by_key(workflow_key: str) -> Optional[Dict[str, Any]]:
+    """Compatibility injection point for workflow repair and migration."""
+    return await WorkflowTemplateDAO.get_by_key(workflow_key)
+
+
 def _sync_workflow_to_disk(workflow_key: str, workflow_json: dict):
     """将工作流 JSON 写回 workflows/ 目录的磁盘文件"""
     if not workflow_key:
@@ -587,7 +592,7 @@ async def admin_import_workflows():
             errors.append(f"{name}: read/parse error: {e}")
             continue
 
-        existing = await WorkflowTemplateDAO.get_by_key(str(category_key))
+        existing = await _get_workflow_template_by_key(str(category_key))
         if not existing:
             existing = await WorkflowTemplateDAO.get_by_name(name)
         if existing:
@@ -636,7 +641,7 @@ async def admin_import_workflows():
         if path.name in configured_files:
             continue
         key = path.stem
-        existing = await WorkflowTemplateDAO.get_by_key(key)
+        existing = await _get_workflow_template_by_key(key)
         if not existing:
             existing = await WorkflowTemplateDAO.get_by_name(key)
         if existing:

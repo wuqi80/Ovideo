@@ -163,8 +163,9 @@ class TaskDAO:
         if not db:
             return None
         query = """
-            SELECT task_id, status, result_data, error_message, 
-                   node_id, task_type, created_at, started_at, completed_at
+            SELECT task_id, user_id, status, result_data, error_message,
+                   node_id, task_type, task_data, metadata,
+                   created_at, started_at, completed_at
             FROM tasks WHERE task_id = $1
         """
         return await db.fetchrow(query, task_id)

@@ -301,6 +301,92 @@ class CreditLedgerDAO:
         db = get_db_manager()
         async with db.acquire() as conn:
             async with conn.transaction():
+                if task_id:
+                    # Serialize retries for the same task before touching an account.
+                    # This makes task submission idempotent even when two requests
+                    # arrive before either one has committed its freeze.
+                    await conn.execute(
+                        "SELECT pg_advisory_xact_lock(hashtext($1)::bigint)",
+                        task_id,
+                    )
+                    existing_row = await conn.fetchrow(
+                        """
+                        SELECT f.*, a.owner_type AS freeze_owner_type,
+                               a.owner_id AS freeze_owner_id,
+                               a.available_credits, a.frozen_credits,
+                               a.total_used_credits, a.created_at AS account_created_at,
+                               a.updated_at AS account_updated_at
+                        FROM credit_freezes f
+                        JOIN credit_accounts a ON a.account_id = f.account_id
+                        WHERE f.task_id = $1 AND f.status = 'frozen'
+                        ORDER BY f.created_at DESC
+                        LIMIT 1
+                        FOR UPDATE OF f, a
+                        """,
+                        task_id,
+                    )
+                    if existing_row:
+                        existing = dict(existing_row)
+                        if (
+                            str(existing.get('freeze_owner_type') or '') != owner_type
+                            or str(existing.get('freeze_owner_id') or '') != owner_id
+                            or str(existing.get('feature_key') or '') != feature_key
+                            or int(existing.get('amount') or 0) != amount
+                        ):
+                            raise CreditDAOError(
+                                f"Conflicting active credit freeze for task_id={task_id}"
+                            )
+                        transaction_row = await conn.fetchrow(
+                            """
+                            SELECT * FROM credit_transactions
+                            WHERE task_id = $1 AND change_type = 'freeze'
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                            """,
+                            task_id,
+                        )
+                        account = {
+                            'account_id': existing['account_id'],
+                            'owner_type': existing['freeze_owner_type'],
+                            'owner_id': existing['freeze_owner_id'],
+                            'available_credits': existing['available_credits'],
+                            'frozen_credits': existing['frozen_credits'],
+                            'total_used_credits': existing['total_used_credits'],
+                            'created_at': existing.get('account_created_at'),
+                            'updated_at': existing.get('account_updated_at'),
+                        }
+                        transaction = _normalize(transaction_row, json_fields=('metadata',))
+                        balance_before = int(
+                            (transaction or {}).get('balance_before')
+                            if transaction and transaction.get('balance_before') is not None
+                            else int(account['available_credits'] or 0) + amount
+                        )
+                        balance_after = int(
+                            (transaction or {}).get('balance_after')
+                            if transaction and transaction.get('balance_after') is not None
+                            else account['available_credits'] or 0
+                        )
+                        freeze = {
+                            key: value
+                            for key, value in existing.items()
+                            if not key.startswith('freeze_owner_')
+                            and key not in {
+                                'available_credits', 'frozen_credits', 'total_used_credits',
+                                'account_created_at', 'account_updated_at',
+                            }
+                        }
+                        return {
+                            'freeze': freeze,
+                            'transaction': transaction,
+                            'account': account,
+                            'freeze_id': freeze['freeze_id'],
+                            'account_id': freeze['account_id'],
+                            'balance_before': balance_before,
+                            'balance_after': balance_after,
+                            'frozen_after': int(account['frozen_credits'] or 0),
+                            'idempotent': True,
+                        }
+
                 account_row = await _get_or_create_account_for_update(conn, owner_type, owner_id)
                 available = int(account_row['available_credits'] or 0)
                 if available < amount:
@@ -365,6 +451,7 @@ class CreditLedgerDAO:
             'balance_before': balance_before,
             'balance_after': balance_after,
             'frozen_after': int(updated_account['frozen_credits'] or 0),
+            'idempotent': False,
         }
 
     @staticmethod

@@ -21,12 +21,103 @@ from api_routes import get_current_user
 from dao_content import FileDAO
 from dao_task import TaskDAO
 from dao_video_reverse import VideoReverseSegmentDAO, VideoReverseTaskDAO
+from services.project_access_service import (
+    ProjectAccessDenied,
+    require_project_access,
+    resolve_user_id,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/video-reverse", tags=["video-reverse"])
 
 _REVERSE_TERMINAL_STATUSES = {'completed', 'failed', 'cancelled'}
+
+
+async def _require_video_file_access(file_record: Dict[str, Any], user_id: str) -> None:
+    """Allow the owner or a current project member without leaking file existence."""
+    canonical_user_id = await resolve_user_id(user_id)
+    file_owner = str(file_record.get('user_id') or '')
+    if file_owner and file_owner in {str(user_id), str(canonical_user_id or '')}:
+        return
+
+    project_id = str(file_record.get('project_id') or '').strip()
+    if project_id:
+        try:
+            await require_project_access(project_id, user_id, 'readonly')
+            return
+        except ProjectAccessDenied as exc:
+            logger.warning(
+                "video_reverse project permission check failed: project=%s user=%s error=%s",
+                project_id,
+                user_id,
+                exc,
+            )
+
+    raise HTTPException(status_code=404, detail='视频文件不存在')
+
+
+async def _freeze_and_submit_reverse_task(
+    *,
+    svc: Any,
+    task_id: str,
+    reverse_task_id: str,
+    task_data: Dict[str, Any],
+    user_id: str,
+    estimate: Dict[str, Any],
+    project_id: Optional[str] = None,
+) -> None:
+    """Freeze credits before enqueueing and compensate every partial failure."""
+    estimated_cost = int(estimate.get('estimated_cost') or 0)
+    frozen = False
+    try:
+        if estimate.get('enabled') and estimated_cost > 0:
+            await credit_service.freeze(
+                'user', user_id,
+                feature_key=video_reverse_service.VIDEO_REVERSE_FEATURE_KEY,
+                amount=estimated_cost,
+                task_id=task_id,
+                rule_version=estimate.get('rule_version'),
+                project_id=project_id,
+            )
+            frozen = True
+
+        submitted_task_id = await svc.submit(
+            task_type='video_reverse_prompt',
+            task_data=task_data,
+            user_id=user_id,
+            prepare=False,
+            task_id=task_id,
+        )
+        if submitted_task_id != task_id:
+            raise RuntimeError('任务服务未使用预分配的 task_id')
+    except credit_service.InsufficientCreditsError as exc:
+        await VideoReverseTaskDAO.update_status(
+            reverse_task_id, 'failed', progress=100,
+            error_message=str(exc)[:500], completed=True,
+        )
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    except Exception as exc:
+        if frozen:
+            try:
+                await credit_service.release(
+                    task_id,
+                    reason='任务入队失败，退回预冻结积分',
+                    operator=user_id,
+                    project_id=project_id,
+                )
+            except Exception as release_exc:
+                logger.error(
+                    'video_reverse enqueue compensation failed: task=%s error=%s',
+                    task_id,
+                    release_exc,
+                    exc_info=True,
+                )
+        await VideoReverseTaskDAO.update_status(
+            reverse_task_id, 'failed', progress=100,
+            error_message=str(exc)[:500], completed=True,
+        )
+        raise
 
 
 async def _reconcile_terminal_task(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -106,9 +197,12 @@ async def estimate_video_reverse(
 ):
     """估算视频反推的积分消耗。优先用 video_file_id 反查时长。"""
     duration = payload.duration_seconds
-    if (duration is None or duration <= 0) and payload.video_file_id:
+    if payload.video_file_id:
         file_record = await FileDAO.get_file(payload.video_file_id)
-        if file_record:
+        if not file_record:
+            raise HTTPException(status_code=404, detail='视频文件不存在')
+        await _require_video_file_access(file_record, user_id)
+        if duration is None or duration <= 0:
             duration = float(file_record.get('duration_seconds') or 0)
             if duration <= 0 and file_record.get('file_path'):
                 try:
@@ -143,9 +237,7 @@ async def create_video_reverse_task(
     file_record = await FileDAO.get_file(payload.video_file_id)
     if not file_record:
         raise HTTPException(status_code=404, detail='视频文件不存在')
-    if file_record.get('user_id') != user_id:
-        # 项目内成员也可以用（最小化校验）；正式版应基于 media_library_service.can_view
-        pass
+    await _require_video_file_access(file_record, user_id)
 
     ok, err = await video_reverse_service.validate_video(file_record)
     if not ok:
@@ -175,10 +267,13 @@ async def create_video_reverse_task(
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-    # 先创建 reverse_task 占位（占用一个 reverse_task_id）
+    task_id = task_service.allocate_task_id()
+
+    # 先创建 reverse_task 占位，并提前关联唯一的通用 task_id。
     task_record = await VideoReverseTaskDAO.create(
         user_id=user_id,
         video_file_id=payload.video_file_id,
+        task_id=task_id,
         project_id=payload.project_id,
         episode_id=payload.episode_id,
         duration_seconds=duration,
@@ -198,35 +293,15 @@ async def create_video_reverse_task(
         'duration_seconds': duration,
     }
 
-    task_id = await svc.submit(
-        task_type='video_reverse_prompt',
+    await _freeze_and_submit_reverse_task(
+        svc=svc,
+        task_id=task_id,
+        reverse_task_id=reverse_task_id,
         task_data=task_data,
         user_id=user_id,
-        prepare=False,  # 不走 ComfyUI prepare
+        estimate=estimate,
+        project_id=payload.project_id,
     )
-
-    # 把 task_id 回填到 video_reverse_tasks
-    db = (await _get_db())
-    await db.execute(
-        "UPDATE video_reverse_tasks SET task_id = $2 WHERE reverse_task_id = $1",
-        reverse_task_id, task_id,
-    )
-
-    # 冻结积分（在最后做，避免 task 入队失败时空冻结）
-    if estimate.get('enabled') and estimated_cost > 0:
-        try:
-            await credit_service.freeze(
-                'user', user_id,
-                feature_key=video_reverse_service.VIDEO_REVERSE_FEATURE_KEY,
-                amount=estimated_cost,
-                task_id=task_id,
-                rule_version=estimate.get('rule_version'),
-                project_id=payload.project_id,
-            )
-        except credit_service.InsufficientCreditsError as e:
-            # 罕见竞态：估算时够，提交时不够 —— 撤销任务
-            await VideoReverseTaskDAO.update_status(reverse_task_id, 'failed', error_message=str(e), completed=True)
-            raise HTTPException(status_code=402, detail=str(e))
 
     return {
         "success": True,
@@ -283,6 +358,20 @@ async def cancel_video_reverse_task(
     if task.get('status') in ('completed', 'failed', 'cancelled'):
         return {"success": True, "task": task, "note": "任务已结束"}
 
+    if task.get('task_id'):
+        try:
+            queue = task_service.get_queue()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        cancelled = await queue.cancel_task(task['task_id'])
+        if not cancelled:
+            generic_task = await TaskDAO.get_task(task['task_id'])
+            generic_status = str((generic_task or {}).get('status') or '')
+            if generic_status in _REVERSE_TERMINAL_STATUSES:
+                task = await _reconcile_terminal_task(task)
+                return {"success": True, "task": task, "note": "任务已结束，未执行退款"}
+            raise HTTPException(status_code=409, detail='底层任务未能取消，积分尚未退回，请稍后重试')
+
     await VideoReverseTaskDAO.update_status(
         reverse_task_id, 'cancelled', progress=100,
         error_message='用户取消', completed=True,
@@ -290,8 +379,8 @@ async def cancel_video_reverse_task(
     if task.get('task_id'):
         try:
             await credit_service.release(task['task_id'], reason='用户取消', operator=user_id)
-        except Exception as _e:
-            logger.warning(f"取消时释放积分失败: {_e}")
+        except Exception as exc:
+            logger.warning(f"取消时释放积分失败: {exc}")
     return {"success": True}
 
 
@@ -325,38 +414,32 @@ async def retry_video_reverse_task(
     if estimate.get('enabled') and not estimate.get('enough'):
         raise HTTPException(status_code=402, detail=f'积分不足，需要 {estimated_cost}')
 
-    task_id = await svc.submit(
-        task_type='video_reverse_prompt',
-        task_data={
-            'reverse_task_id': reverse_task_id,
-            'video_file_id': task['video_file_id'],
-            'project_id': task.get('project_id'),
-            'episode_id': task.get('episode_id'),
-            'language': task.get('language', 'zh'),
-            'frames_per_segment': 2,
-            'duration_seconds': duration,
-        },
-        user_id=user_id,
-        prepare=False,
-    )
+    task_id = task_service.allocate_task_id()
+    task_data = {
+        'reverse_task_id': reverse_task_id,
+        'video_file_id': task['video_file_id'],
+        'project_id': task.get('project_id'),
+        'episode_id': task.get('episode_id'),
+        'language': task.get('language', 'zh'),
+        'frames_per_segment': 2,
+        'duration_seconds': duration,
+    }
 
     db = await _get_db()
     await db.execute(
-        "UPDATE video_reverse_tasks SET task_id=$2, status='pending', progress=0, error_message=NULL, credit_cost=$3 WHERE reverse_task_id=$1",
+        "UPDATE video_reverse_tasks SET task_id=$2, status='pending', progress=0, error_message=NULL, completed_at=NULL, credit_cost=$3 WHERE reverse_task_id=$1",
         reverse_task_id, task_id, estimated_cost,
     )
 
-    if estimate.get('enabled') and estimated_cost > 0:
-        try:
-            await credit_service.freeze(
-                'user', user_id,
-                feature_key=video_reverse_service.VIDEO_REVERSE_FEATURE_KEY,
-                amount=estimated_cost,
-                task_id=task_id,
-                rule_version=estimate.get('rule_version'),
-            )
-        except credit_service.InsufficientCreditsError as e:
-            raise HTTPException(status_code=402, detail=str(e))
+    await _freeze_and_submit_reverse_task(
+        svc=svc,
+        task_id=task_id,
+        reverse_task_id=reverse_task_id,
+        task_data=task_data,
+        user_id=user_id,
+        estimate=estimate,
+        project_id=task.get('project_id'),
+    )
 
     return {"success": True, "reverse_task_id": reverse_task_id, "task_id": task_id}
 

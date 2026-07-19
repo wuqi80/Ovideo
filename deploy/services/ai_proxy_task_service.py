@@ -110,6 +110,7 @@ async def complete_ai_proxy_image_task(
     *,
     task_id: Optional[str],
     images_count: int,
+    reference_snapshot: Optional[list[dict[str, Any]]] = None,
     logger: Any,
     task_dao: Optional[Any] = None,
 ) -> bool:
@@ -119,10 +120,13 @@ async def complete_ai_proxy_image_task(
         return False
     try:
         dao = task_dao or await _default_task_dao()
+        result_data: Dict[str, Any] = {"images_count": images_count}
+        if reference_snapshot is not None:
+            result_data["reference_snapshot"] = reference_snapshot
         await dao.update_task_status(
             task_id=task_id,
             status="completed",
-            result_data={"images_count": images_count},
+            result_data=result_data,
         )
         logger.info("AI proxy image task completed: %s images=%s", task_id, images_count)
         return True
