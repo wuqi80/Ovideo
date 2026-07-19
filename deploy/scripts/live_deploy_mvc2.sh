@@ -249,9 +249,18 @@ run_remote_db_migrations() {
   echo "Running remote database migrations..."
   ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
     cd '$REMOTE_DIR'
-    GIT_SHA=\$(git rev-parse --short HEAD 2>/dev/null || true) \
-      .venv/bin/python scripts/apply_migrations.py \
-        --env configs/runtime.env \
+    set -a
+    . configs/runtime.env
+    set +a
+    setfacl -m u:postgres:--x /home/Administrator
+    sudo -u postgres env \
+      DB_HOST=/tmp \
+      DB_PORT=\"\${DB_PORT:-5432}\" \
+      DB_NAME=\"\${DB_NAME:-my2_db}\" \
+      DB_USER=postgres \
+      DB_PASSWORD= \
+      GIT_SHA='$RELEASE_GIT_SHA' \
+      '$REMOTE_DIR'/.venv/bin/python scripts/apply_migrations.py \
         --root . \
         sql/db_migration_files_project_episode_source.sql \
         sql/db_migration_credits.sql \
