@@ -8,6 +8,7 @@ import { parseJson } from '../../lib/json.js';
 import { allocFilePath, fileSize, uriToAbsPath } from '../../lib/storage.js';
 import { extractFrame, probeDimensions, probeDurationMs, runFfmpeg } from '../../lib/ffmpeg.js';
 import { registerExecutor, type JobExecutor } from '../job/registry.js';
+import { alsoAttachToCurrentVersion } from '../generation/late-take.js';
 import { createAsset } from '../asset/service.js';
 
 const EnhanceInputSchema = z.object({ shotId: z.string() });
@@ -20,7 +21,9 @@ interface EnhanceSpec {
 
 /** 读镜头及其 selected 的 VIDEO take（含资产）；无选定视频直接抛错（与路由提前拦截同文案） */
 async function loadSelectedVideo(db: PrismaClient, shotId: string) {
-  const shot = await db.shot.findUnique({ where: { id: shotId } });
+  // 带出 storyboard：放大/补帧跑得比生成还慢，完成时版本很可能已经翻篇，
+  // 补挂到当前版本需要 episodeId 与 version（见 alsoAttachToCurrentVersion）
+  const shot = await db.shot.findUnique({ where: { id: shotId }, include: { storyboard: true } });
   if (!shot) throw notFound('镜头');
   if (!shot.videoSelectedTakeId) throw badRequest('请先生成并选定视频片段');
   const take = await db.take.findUnique({
@@ -86,6 +89,14 @@ function makeEnhanceExecutor(spec: EnhanceSpec): JobExecutor {
       data: { shotId: shot.id, slot: 'VIDEO', assetId: asset.id, jobId: job.id },
     });
     await db.shot.update({ where: { id: shot.id }, data: { videoSelectedTakeId: newTake.id } });
+
+    /**
+     * 放大/补帧比视频生成还慢，完成时版本翻篇的概率更高。
+     * 补挂到当前版本的那条不自动选中：上面那句"无条件替换"是针对旧版本表达的意图，
+     * 当前版本上用户可能已经另选了别的——人的选择优先。函数永不 reject，
+     * 补挂失败不会把一次已经跑完的转码判成失败。
+     */
+    await alsoAttachToCurrentVersion(db, shot, 'VIDEO', asset.id, job.id);
 
     // stale 不动（既不清除也不追加）：增强是同内容的画质提升（只改分辨率/帧率，画面语义不变），
     // 不触发下游失效——§2.2 传播矩阵里换 selected 视频本就只留溯源不标 stale；

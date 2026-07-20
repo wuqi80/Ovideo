@@ -179,6 +179,42 @@ describe('UPSCALE（真 ffmpeg）', () => {
     expect(probe.height).toBe(1080);
   }, 120000);
 
+  it('增强期间版本翻篇：产物同时补挂到当前版本，且不覆盖那边已有的选择', async () => {
+    // 放大/补帧比视频生成还慢，完成时版本很可能已经不是发起时那一版。
+    // 产物若只写回旧版本，用户在当前版本上就"找不到"——与视频生成撞过的是同一个坑。
+    const { shot } = await seedShotWithSelectedVideo({
+      durationMs: 1000,
+      width: 720,
+      height: 1280,
+    });
+    await db.shot.update({ where: { id: shot.id }, data: { lineageId: shot.id } });
+    const storyboard = (await db.storyboard.findUnique({ where: { id: shot.storyboardId } }))!;
+
+    // 转码期间用户改了分镜 → 新版本诞生，镜头换了新 id 但血脉不变
+    const draft = await db.scriptDraft.findFirst({ where: { episodeId: storyboard.episodeId } });
+    const sb2 = await db.storyboard.create({
+      data: { episodeId: storyboard.episodeId, scriptDraftId: draft!.id, version: 2 },
+    });
+    const shot2 = await db.shot.create({
+      data: { storyboardId: sb2.id, sortOrder: 0, sourceText: '打斗镜头', lineageId: shot.id },
+    });
+
+    const ctx = await makeCtx('UPSCALE', { shotId: shot.id });
+    const r = await getExecutor('UPSCALE')!(ctx);
+    const outAssetId = r.outputAssetIds![0]!;
+
+    // 当前版本拿得到同一个资产
+    const ported = await db.take.findFirst({ where: { shotId: shot2.id, assetId: outAssetId } });
+    expect(ported).not.toBeNull();
+    expect(ported?.slot).toBe('VIDEO');
+    // 但不替用户做选择：旧版本上"无条件替换"的意图不该延伸到他还没看过的新版本
+    const after = await db.shot.findUnique({ where: { id: shot2.id } });
+    expect(after?.videoSelectedTakeId).toBeNull();
+    // 旧版本自身的"无条件自动选中"语义不变
+    const oldShot = await db.shot.findUnique({ where: { id: shot.id } });
+    expect(oldShot?.videoSelectedTakeId).toBe((r.output as { takeId: string }).takeId);
+  }, 120000);
+
   it('无 selected video 抛「请先生成并选定视频片段」', async () => {
     const { shot } = await seedShot();
     const ctx = await makeCtx('UPSCALE', { shotId: shot.id });
