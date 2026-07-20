@@ -11,6 +11,7 @@ import { registerExecutor, type JobExecutor } from '../job/registry.js';
 import { resolveBinding } from '../binding/service.js';
 import { createAsset } from '../asset/service.js';
 import { clearStale, onDubbingDurationChanged } from '../stale/service.js';
+import { alsoAttachToCurrentVersion } from './late-take.js';
 import type { GenModelCfg, ImageGen, TtsGen, VideoGen } from './gens.js';
 
 /** 三个可注入的生成函数（缺省 = Mock，集成阶段可换真实适配器） */
@@ -228,6 +229,9 @@ function makeKeyframeExecutor(gens: GenerationGens) {
     }
     // 仅当原本 stale 才清除，避免无意义的溯源记录
     if (shot.keyframeStale) await clearStale(db, shot.id, 'KEYFRAME', 'regenerated');
+    // 生成期间用户可能已经改出了新分镜版本，此时产物要在当前版本的同血脉镜头上也挂一份，
+    // 否则页面看的是新版本、图却落在旧版本上（自身吞掉异常，绝不让补挂拖垮已计费的生成）
+    await alsoAttachToCurrentVersion(db, shot, 'KEYFRAME', asset.id, job.id);
     await updateProgress(95);
     return { outputAssetIds: [asset.id], output: { takeId: take.id } };
   };
@@ -535,6 +539,8 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
       await db.shot.update({ where: { id: shot.id }, data: { videoSelectedTakeId: take.id } });
     }
     if (shot.videoStale) await clearStale(db, shot.id, 'VIDEO', 'regenerated');
+    // 同关键图：视频跑几分钟最容易撞上版本翻篇，产物必须在当前版本也看得见
+    await alsoAttachToCurrentVersion(db, shot, 'VIDEO', asset.id, job.id);
     await updateProgress(95);
     return { outputAssetIds: [asset.id], output: { takeId: take.id } };
   };
