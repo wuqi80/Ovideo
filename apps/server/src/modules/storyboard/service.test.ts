@@ -492,6 +492,31 @@ describe('applyPatch：版本、事务与钩子', () => {
     expect(await tdb.db.shot.count()).toBe(shotsBefore);
   });
 
+  it('update_shot 的 fields 为空 → 400，不造版本也不标记 stale（零变更不该触发重生成）', async () => {
+    const { ep, dr } = await freshEpisode();
+    const base = { episodeId: ep.id, scriptDraftId: dr.id };
+    const v1 = await apply({ ...base, patch: [{ op: 'add_shot', shot: makeShot('A') }] });
+    const shot = await tdb.db.shot.findFirstOrThrow({
+      where: { storyboardId: v1.storyboard.id },
+    });
+    const before = await tdb.db.storyboard.count({ where: { episodeId: ep.id } });
+
+    await expect(
+      apply({
+        ...base,
+        baseStoryboardId: v1.storyboard.id,
+        patch: [{ op: 'update_shot', shotId: shot.id, fields: {} }],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    // 关键不只是报错：放行的话会多出一个版本，且该镜头被标记为上游已变更，
+    // 用户照着「N 个镜头上游已变更」点批量重生成，就是为一次没发生的修改真实计费。
+    expect(await tdb.db.storyboard.count({ where: { episodeId: ep.id } })).toBe(before);
+    const after = await tdb.db.shot.findUniqueOrThrow({ where: { id: shot.id } });
+    expect(after.keyframeStale).toBe(false);
+    expect(after.videoStale).toBe(false);
+  });
+
   it('基底不存在 404；基底不属于该分集 400', async () => {
     const { ep, dr } = await freshEpisode();
     await expect(

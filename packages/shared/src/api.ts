@@ -78,14 +78,9 @@ export const CAMERA_MOVEMENTS = ['固定', '推', '拉', '摇', '跟'] as const;
 export const TRANSITIONS = ['切', '叠化', '淡入淡出'] as const;
 
 /**
- * 单镜时长的硬边界。
- * 上限 8s 不是审美偏好：两级生成里一个镜头就是一次视频调用，模型单次上限就是 8 秒，
- * 填 12s 不会得到 12s 的片子，只会在生成时被截断或降质。下限 2s 是为了避免短到装不下
- * 一句台词的碎镜。与上面几组枚举同理放在 shared：拆镜提示词、镜头检查器、镜头表三处消费，
- * 任一侧抄字面量都会随时间漂移。
+ * 单镜时长的硬边界见 ./shot-duration.js（zod 契约要用，放这里会和 storyboard-patch 循环依赖）。
+ * 从 @ovideo/shared 导入的调用方不受影响。
  */
-export const SHOT_DURATION_MIN_MS = 2000;
-export const SHOT_DURATION_MAX_MS = 8000;
 
 export type ShotSize = (typeof SHOT_SIZES)[number];
 export type CameraAngle = (typeof CAMERA_ANGLES)[number];

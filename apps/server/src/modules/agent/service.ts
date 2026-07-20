@@ -148,13 +148,38 @@ export async function createAgentRun(db: PrismaClient, input: CreateAgentRunInpu
   });
 }
 
-/** 该镜头是否已有在跑的收敛任务（路由据此拒绝重复发起） */
-export async function findRunningRun(db: PrismaClient, shotId: string): Promise<AgentRun | null> {
-  return db.agentRun.findFirst({ where: { shotId, status: 'RUNNING' } });
+/** 跨版本查询只需要镜头身份（Shot 行天然满足） */
+export interface LineageShotRef {
+  id: string;
+  lineageId: string | null;
 }
 
-export async function listAgentRuns(db: PrismaClient, shotId: string): Promise<AgentRun[]> {
-  return db.agentRun.findMany({ where: { shotId }, orderBy: { createdAt: 'desc' } });
+/**
+ * 同一逻辑镜头（lineage）在所有分镜版本里的 shot id。
+ * 写法对齐 generation/routes.ts 的 loadLineageKeyframeTakes：AgentRun 只存入队那一刻的 shotId，
+ * 而分镜是版本化的——用户编辑一次，Shot 全量复制、全部换新 id。按裸 shotId 查等于换个版本就查不到，
+ * 于是并发守卫失效、历史运行记录凭空消失。
+ * lineageId 为空（回填脚本未覆盖到的存量行）时退化为只看自身，不至于报错。
+ */
+async function lineageShotIds(db: PrismaClient, shot: LineageShotRef): Promise<string[]> {
+  if (!shot.lineageId) return [shot.id];
+  const rows = await db.shot.findMany({ where: { lineageId: shot.lineageId }, select: { id: true } });
+  return rows.length > 0 ? rows.map((s) => s.id) : [shot.id];
+}
+
+/**
+ * 该镜头是否已有在跑的收敛任务（路由据此拒绝重复发起）。
+ * 【翻倍烧钱防线】必须按血脉查：收敛跑的几分钟里用户改一次分镜，镜头 id 就变了，
+ * 按裸 id 查不到 RUNNING → 按钮重新可点 → 两条 run 并行，各跑最多 maxRounds 轮真实生图 + 视觉评审。
+ */
+export async function findRunningRun(db: PrismaClient, shot: LineageShotRef): Promise<AgentRun | null> {
+  const shotIds = await lineageShotIds(db, shot);
+  return db.agentRun.findFirst({ where: { shotId: { in: shotIds }, status: 'RUNNING' } });
+}
+
+export async function listAgentRuns(db: PrismaClient, shot: LineageShotRef): Promise<AgentRun[]> {
+  const shotIds = await lineageShotIds(db, shot);
+  return db.agentRun.findMany({ where: { shotId: { in: shotIds } }, orderBy: { createdAt: 'desc' } });
 }
 
 /** 失败落库（中文原因）；已进终态的运行不覆盖 */
@@ -372,22 +397,31 @@ export async function runKeyframeConverge(
   // 人类优先：结束前重读镜头。与"系统留下的状态"比对——不等即人手动改过，
   // 哪怕他选的正是 agent 某一轮抽出的图（候选实时出现在抽卡列表里，人完全可能
   // 中途看中第 1 轮那张）。此时一律尊重人的选择，只把候选留在列表里。
+  // 判定始终在"入队时那个版本"的镜头上做：基线 expectedSelectedTakeId 与每轮候选都长在那一行。
   const fresh = await db.shot.findUnique({ where: { id: shot.id } });
   const current = fresh?.keyframeSelectedTakeId ?? null;
   const humanOverride = current !== expectedSelectedTakeId;
+
+  // 收官指针要写在【当前版本】的同血脉镜头上。收敛跑的这几分钟里用户可能编辑过分镜，
+  // 此时 run.shotId 已是退位的历史行：往那儿写指针，用户在界面上看到的当前版本纹丝不动。
+  const target = await resolveCurrentVersionShot(db, shot);
+  const finalTakeId = finalRound ? await resolveFinalTakeId(db, target, finalRound.takeId) : null;
 
   if (humanOverride) {
     const last = rounds[rounds.length - 1];
     if (last) {
       last.action += '；检测到人工已选定，保留人工选择（本次候选全部保留，可在关键图列表中随时改选）';
     }
-  } else if (finalRound && current !== finalRound.takeId) {
-    // 与人手动点选走同一条路径：写 selected 指针 + 既有失效传播（换首帧 → 视频标 stale）
-    await db.shot.update({
-      where: { id: shot.id },
-      data: { keyframeSelectedTakeId: finalRound.takeId },
-    });
-    await onTakeSelected(db, shot.id, 'KEYFRAME');
+  } else if (target && finalTakeId) {
+    const targetShot = target.id === shot.id ? fresh : await db.shot.findUnique({ where: { id: target.id } });
+    if (targetShot?.keyframeSelectedTakeId !== finalTakeId) {
+      // 与人手动点选走同一条路径：写 selected 指针 + 既有失效传播（换首帧 → 视频标 stale）
+      await db.shot.update({
+        where: { id: target.id },
+        data: { keyframeSelectedTakeId: finalTakeId },
+      });
+      await onTakeSelected(db, target.id, 'KEYFRAME');
+    }
   }
 
   return db.agentRun.update({
@@ -395,9 +429,63 @@ export async function runKeyframeConverge(
     data: {
       status: passed ? 'PASSED' : 'NEEDS_HUMAN',
       roundsJson: toJson(rounds),
-      finalTakeId: finalRound?.takeId ?? null,
+      // 指向当前版本那条 take；血脉断代等定位不到的情况如实回落到本次抽出的原 take
+      finalTakeId: finalTakeId ?? finalRound?.takeId ?? null,
       humanOverride,
       finishedAt: new Date(),
     },
   });
+}
+
+/** 收官时的目标镜头：当前分镜版本里的同血脉镜头。血脉断代（分镜整个重生成）时返回 null */
+async function resolveCurrentVersionShot(
+  db: PrismaClient,
+  shot: { id: string; lineageId: string | null; storyboard: { episodeId: string; version: number } },
+): Promise<{ id: string } | null> {
+  // 与 late-take 同一套判断：一次查询回答"我这一版是不是已经被翻篇了"
+  const current = await db.storyboard.findFirst({
+    where: { episodeId: shot.storyboard.episodeId, version: { gt: shot.storyboard.version } },
+    orderBy: { version: 'desc' },
+  });
+  if (!current) return { id: shot.id };
+
+  const target = shot.lineageId
+    ? await db.shot.findFirst({ where: { storyboardId: current.id, lineageId: shot.lineageId } })
+    : null;
+  if (!target) {
+    // 不硬凑：宁可不写指针，也不要把选定写到一个不是同一逻辑镜头的行上。候选图全在，人可自行取用。
+    console.warn(
+      `[agent-converge] 收官指针未写入：shot=${shot.id} v${shot.storyboard.version}，` +
+        `当前版本 v${current.version} 找不到同血脉镜头（lineage=${shot.lineageId ?? 'null'}）`,
+    );
+    return null;
+  }
+  return { id: target.id };
+}
+
+/**
+ * 把"胜出那一轮的 takeId"翻译成目标镜头上真正存在的 takeId。
+ * 跨版本时旧 takeId 在新镜头下根本不存在，只能按 assetId 去找 late-take 已经补挂过去的那条
+ * （生成走的是既有关键图能力，产物落库时会同步补挂一份到当前版本）。找不到就不写，留日志。
+ */
+async function resolveFinalTakeId(
+  db: PrismaClient,
+  target: { id: string } | null,
+  finalTakeId: string,
+): Promise<string | null> {
+  if (!target) return null;
+  const source = await db.take.findUnique({ where: { id: finalTakeId } });
+  if (!source) return null;
+  if (source.shotId === target.id) return source.id;
+
+  const mirrored = await db.take.findFirst({
+    where: { shotId: target.id, slot: 'KEYFRAME', assetId: source.assetId },
+  });
+  if (!mirrored) {
+    console.warn(
+      `[agent-converge] 收官指针未写入：胜出图 asset=${source.assetId} 尚未出现在当前版本镜头 ${target.id} 上`,
+    );
+    return null;
+  }
+  return mirrored.id;
 }

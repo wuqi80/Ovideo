@@ -132,6 +132,11 @@ export async function applyPatch(
             break;
           }
           case 'update_shot': {
+            // 空 fields 不是"没改动"这么无害：它照样造一个新分镜版本，照样把该镜头的
+            // 关键帧/视频标记为上游已变更，用户被引导去为一次没发生的修改重跑付费生成。
+            if (Object.keys(op.fields).length === 0) {
+              throw badRequest(`update_shot 的 fields 为空，没有任何要修改的字段：${op.shotId}`);
+            }
             const idx = findCopyIndex(op.shotId);
             if (idx < 0) throw badRequest(`update_shot 的镜头不存在：${op.shotId}`);
             const entry = entries[idx] as Extract<Entry, { kind: 'copy' }>;

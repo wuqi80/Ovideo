@@ -272,10 +272,12 @@ export function ShotTable({
         const label = `${(ms / 1000).toFixed(1)}s`;
         if (!over) return <Text style={{ fontSize: 12 }}>{label}</Text>;
         return (
-          // 说清这红不是用户改坏的：8s 是两级生成下单镜的硬上限（一镜=一次视频生成），
-          // 超长镜头来自旧的平铺分镜数据；不给出路的告警只会让人干瞪眼，所以直接写办法
+          // 只陈述事实与出路，不断言来历。
+          // 【为什么删掉"这是早期平铺数据"那句】拆镜生成对时长是宽松校验，模型照样可能
+          // 吐出一个 12 秒的新镜头。断言它是"存量遗留"就会在那种情况下变成一句确凿的假话，
+          // 而且把人引向"重新生成一次就好"——可它恰恰就是刚生成出来的。
           <Tooltip
-            title={`超过单镜上限 ${SHOT_DURATION_MAX_MS / 1000} 秒。一个镜头对应一次视频生成，模型单次最长只能出 ${SHOT_DURATION_MAX_MS / 1000} 秒，这一镜会被截断。这不是你改出来的——它是早期平铺分镜留下的存量数据；重新生成一次分镜规划，这段会被拆成若干条合规的镜头。`}
+            title={`超过单镜上限 ${SHOT_DURATION_MAX_MS / 1000} 秒。一个镜头对应一次视频生成，模型单次最长只能出 ${SHOT_DURATION_MAX_MS / 1000} 秒，这一镜会被截断。出路有两条：在右侧检查器里把它改到 ${SHOT_DURATION_MAX_MS / 1000} 秒以内，或者把这段内容拆成几个镜头。`}
           >
             <Tag color="red" style={{ marginInlineEnd: 0 }}>
               {label}

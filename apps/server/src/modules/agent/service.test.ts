@@ -41,9 +41,33 @@ async function seedShot() {
       sortOrder: 0,
       sourceText: '阿吉走进教室',
       imagePrompt: ORIGINAL_PROMPT,
+      lineageId: crypto.randomUUID(),
     },
   });
   return { episode, storyboard, shot };
+}
+
+/**
+ * 模拟 applyPatch：建新版本分镜，镜头复制成新行（新 id）并继承 lineageId。
+ * breakLineage=true 模拟"分镜整个重新生成"，血脉断代。
+ */
+async function bumpVersion(
+  shot: { id: string; storyboardId: string; lineageId: string | null },
+  opts: { breakLineage?: boolean } = {},
+) {
+  const base = await db.storyboard.findUniqueOrThrow({ where: { id: shot.storyboardId } });
+  const next = await db.storyboard.create({
+    data: { episodeId: base.episodeId, scriptDraftId: base.scriptDraftId, version: base.version + 1 },
+  });
+  return db.shot.create({
+    data: {
+      storyboardId: next.id,
+      sortOrder: 0,
+      sourceText: '阿吉走进教室',
+      imagePrompt: ORIGINAL_PROMPT,
+      lineageId: opts.breakLineage ? crypto.randomUUID() : shot.lineageId,
+    },
+  });
 }
 
 /** 造一条已存在的关键图 take（模拟 agent 启动前人已经抽过的图） */
@@ -73,7 +97,13 @@ function verdict(v: Partial<VisionVerdict> & Pick<VisionVerdict, 'verdict'>): Vi
  * generateKeyframe 刻意复刻真实执行器的抽卡语义（新建 Asset+Take、首个 take 自动 selected），
  * 否则「人类优先」「永不删除」这两条铁律的用例就测不到真实行为。
  */
-function makeFakeDeps(script: { verdicts: VisionVerdict[]; rewritten?: string; onJudge?: () => Promise<void> }) {
+function makeFakeDeps(script: {
+  verdicts: VisionVerdict[];
+  rewritten?: string;
+  onJudge?: () => Promise<void>;
+  /** 复刻 late-take：产物落库后把同一 assetId 补挂到当前版本的同血脉镜头上（新 take 行、新 id） */
+  mirrorLateTakes?: boolean;
+}) {
   const genCalls: AgentKeyframeGenArgs[] = [];
   const judgeCalls: Array<{ prompt: string; imagePath: string; refImagePaths: string[] }> = [];
   const textPrompts: string[] = [];
@@ -94,6 +124,14 @@ function makeFakeDeps(script: { verdicts: VisionVerdict[]; rewritten?: string; o
         data: { shotId: args.shotId, slot: 'KEYFRAME', assetId: asset.id },
       });
       const shot = await db.shot.findUnique({ where: { id: args.shotId } });
+      if (script.mirrorLateTakes && shot?.lineageId) {
+        const siblings = await db.shot.findMany({
+          where: { lineageId: shot.lineageId, id: { not: shot.id } },
+        });
+        for (const sib of siblings) {
+          await db.take.create({ data: { shotId: sib.id, slot: 'KEYFRAME', assetId: asset.id } });
+        }
+      }
       if (!shot?.keyframeSelectedTakeId) {
         await db.shot.update({
           where: { id: args.shotId },
@@ -287,6 +325,61 @@ describe('runKeyframeConverge 收敛循环', () => {
     expect(finished.humanOverride).toBe(true);
     const fresh = await db.shot.findUnique({ where: { id: shot.id } });
     expect(fresh!.keyframeSelectedTakeId).toBe(firstRoundTakeId); // 人选的那张没被第 3 轮覆盖
+  });
+
+  it('跨版本收官：分镜翻篇后，选定指针写在当前版本的同血脉镜头上（按 assetId 定位补挂的 take）', async () => {
+    const { shot } = await seedShot();
+    const run = await createAgentRun(db, { projectId, shotId: shot.id, maxRounds: 2 });
+    let v2Shot: { id: string } | undefined;
+    const { deps } = makeFakeDeps({
+      verdicts: [verdict({ verdict: 'retry' }), verdict({ verdict: 'pass', identityMatch: 95, promptMatch: 95 })],
+      mirrorLateTakes: true,
+      // 第 1 轮评审时用户编辑了分镜 → v2 上线；第 2 轮产物由 late-take 补挂过去
+      onJudge: async () => {
+        if (v2Shot) return;
+        v2Shot = await bumpVersion(shot);
+      },
+    });
+
+    const finished = await runKeyframeConverge(db, deps, { runId: run.id });
+
+    expect(finished.status).toBe('PASSED');
+    expect(finished.humanOverride).toBe(false);
+    const rounds = readRounds(finished);
+    const winner = rounds[rounds.length - 1]!;
+    const winnerTake = await db.take.findUniqueOrThrow({ where: { id: winner.takeId } });
+
+    // 当前版本那条 take 是另一行（另一个 id），但指向同一张图
+    const mirrored = await db.take.findFirstOrThrow({
+      where: { shotId: v2Shot!.id, assetId: winnerTake.assetId },
+    });
+    expect(mirrored.id).not.toBe(winner.takeId);
+
+    const v2Fresh = await db.shot.findUniqueOrThrow({ where: { id: v2Shot!.id } });
+    expect(v2Fresh.keyframeSelectedTakeId).toBe(mirrored.id);
+    expect(finished.finalTakeId).toBe(mirrored.id);
+  });
+
+  it('血脉断代（分镜整个重生成）：如实不写指针，不硬凑到别的镜头上', async () => {
+    const { shot } = await seedShot();
+    const run = await createAgentRun(db, { projectId, shotId: shot.id, maxRounds: 2 });
+    let rebuilt: { id: string } | undefined;
+    const { deps } = makeFakeDeps({
+      verdicts: [verdict({ verdict: 'retry' }), verdict({ verdict: 'pass', identityMatch: 95, promptMatch: 95 })],
+      mirrorLateTakes: true,
+      onJudge: async () => {
+        if (rebuilt) return;
+        rebuilt = await bumpVersion(shot, { breakLineage: true });
+      },
+    });
+
+    const finished = await runKeyframeConverge(db, deps, { runId: run.id });
+
+    const rebuiltFresh = await db.shot.findUniqueOrThrow({ where: { id: rebuilt!.id } });
+    expect(rebuiltFresh.keyframeSelectedTakeId).toBeNull();
+    // 候选图一张不少，人可自行取用；finalTakeId 如实回落到本次抽出的那条
+    const rounds = readRounds(finished);
+    expect(finished.finalTakeId).toBe(rounds[rounds.length - 1]!.takeId);
   });
 
   it('幂等守卫：非 RUNNING 的运行再次执行直接返回，不重复生图', async () => {

@@ -82,13 +82,23 @@ export async function createCut(db: PrismaClient, input: CreateCutInput): Promis
     };
   });
 
-  // 配音快照：各镜头 READY 且有音频资产的配音行（镜头内按台词 sortOrder 排序）。
-  // 没就绪配音的镜头不阻塞合成——只混入已有的，纯画面镜头保持静音。
+  const shotIds = shots.map((s) => s.id);
   const dubbingLines = await db.dubbingLine.findMany({
-    where: { shotId: { in: shots.map((s) => s.id) }, status: 'READY', audioAssetId: { not: null } },
+    where: { shotId: { in: shotIds } },
     include: { audioAsset: true, dialogueLine: true },
   });
+
+  // 守门：逐镜头（逐台词行）检查配音完整性。
+  // 只要有台词没有对应的就绪配音，成片就会缺一句台词、画面还被按短了的配音时长硬裁一截，
+  // 且 Cut=READY / Job=SUCCEEDED 零提示——所以这里必须拦下，并说清是哪几个镜头。
+  const dialogues = await db.dialogueLine.findMany({ where: { shotId: { in: shotIds } } });
+  if (dialogues.length > 0) {
+    assertDubbingComplete(shots, dialogues, dubbingLines);
+  }
+
+  // 配音快照：READY 且有音频资产的配音行（镜头内按台词 sortOrder 排序）。
   const audioLines: CutAudioLine[] = dubbingLines
+    .filter((l) => l.status === 'READY' && l.audioAssetId !== null && l.audioAsset !== null)
     .map((l) => ({
       shotId: l.shotId,
       dubbingLineId: l.id,
@@ -98,19 +108,6 @@ export async function createCut(db: PrismaClient, input: CreateCutInput): Promis
       order: l.dialogueLine?.sortOrder ?? 0,
     }))
     .sort((a, b) => a.order - b.order || a.dubbingLineId.localeCompare(b.dubbingLineId));
-
-  // 守门：有台词却一条就绪配音都没有 → 大概率是配音漏了（而非有意做无声片），
-  // 静默合成会让人误以为"配音替换原声失效"，这里直接明确报错。
-  if (audioLines.length === 0) {
-    const dialogueCount = await db.dialogueLine.count({
-      where: { shotId: { in: shots.map((s) => s.id) } },
-    });
-    if (dialogueCount > 0) {
-      throw badRequest(
-        '该分镜版本有台词，但还没有任何已生成的配音——请先到「配音」页生成（或重新生成）配音后再合成成片',
-      );
-    }
-  }
 
   const agg = await db.cut.aggregate({ where: { episodeId }, _max: { version: true } });
   const version = (agg._max.version ?? 0) + 1;
@@ -124,6 +121,66 @@ export async function createCut(db: PrismaClient, input: CreateCutInput): Promis
       status: 'COMPOSING',
     },
   });
+}
+
+/** 未就绪台词行的档位：决定给用户哪种建议 */
+type DubGap = 'GENERATING' | 'PENDING' | 'FAILED';
+
+/** 报错时按档位分组，同一镜头只归入最需要用户动手的那一档 */
+const GAP_ORDER: DubGap[] = ['FAILED', 'PENDING', 'GENERATING'];
+const GAP_ADVICE: Record<DubGap, string> = {
+  FAILED: '配音生成失败，需重新生成',
+  PENDING: '还没有发起配音',
+  GENERATING: '配音正在生成中，请稍候',
+};
+
+/**
+ * 逐台词行核对配音覆盖：有台词却没有"READY 且带音频资产"的配音行 → 拦下，
+ * 并按 FAILED / PENDING / GENERATING 分档列出具体镜头序号（#sortOrder+1）。
+ */
+function assertDubbingComplete(
+  shots: { id: string; sortOrder: number }[],
+  dialogues: { id: string; shotId: string }[],
+  dubbingLines: { dialogueLineId: string | null; status: string; audioAssetId: string | null }[],
+): void {
+  // 同一台词行可能有多条配音行（重生成留痕），只要有一条真正就绪即算覆盖
+  const covered = new Set<string>();
+  const statesByDialogue = new Map<string, Set<string>>();
+  for (const l of dubbingLines) {
+    if (!l.dialogueLineId) continue;
+    if (l.status === 'READY' && l.audioAssetId !== null) covered.add(l.dialogueLineId);
+    const set = statesByDialogue.get(l.dialogueLineId) ?? new Set<string>();
+    set.add(l.status === 'READY' ? 'FAILED' : l.status); // READY 但没音频资产 = 坏行，得重生成
+    statesByDialogue.set(l.dialogueLineId, set);
+  }
+
+  // 每个镜头取最需要用户动手的那一档
+  const gapByShot = new Map<string, DubGap>();
+  for (const d of dialogues) {
+    if (covered.has(d.id)) continue;
+    const states = statesByDialogue.get(d.id);
+    const gap: DubGap = !states || states.size === 0
+      ? 'PENDING' // 压根没建配音行
+      : states.has('FAILED')
+        ? 'FAILED'
+        : states.has('GENERATING')
+          ? 'GENERATING'
+          : 'PENDING';
+    const prev = gapByShot.get(d.shotId);
+    if (prev === undefined || GAP_ORDER.indexOf(gap) < GAP_ORDER.indexOf(prev)) {
+      gapByShot.set(d.shotId, gap);
+    }
+  }
+  if (gapByShot.size === 0) return;
+
+  const parts: string[] = [];
+  for (const gap of GAP_ORDER) {
+    const nums = shots
+      .filter((s) => gapByShot.get(s.id) === gap)
+      .map((s) => `#${s.sortOrder + 1}`);
+    if (nums.length > 0) parts.push(`${nums.join(', ')} ${GAP_ADVICE[gap]}`);
+  }
+  throw badRequest(`以下镜头有台词但配音未就绪，无法合成：${parts.join('；')}`);
 }
 
 /** 单个 Cut 的序列化：items 解析 + outputAsset 附带 */

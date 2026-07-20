@@ -1,6 +1,11 @@
 import type { PrismaClient } from '@prisma/client';
 import type { StoryboardPatch } from '@ovideo/shared';
-import { StoryboardPatchSchema } from '@ovideo/shared';
+import {
+  SHOT_DURATION_MAX_MS,
+  SHOT_DURATION_MIN_MS,
+  SHOT_DURATION_PREFERRED_MS,
+  StoryboardPatchSchema,
+} from '@ovideo/shared';
 import { badRequest, notFound } from '../../lib/errors.js';
 
 /**
@@ -37,6 +42,8 @@ interface CompactShot {
   imagePrompt: string;
   videoPrompt: string;
   durationPlannedMs: number;
+  /** 仅超界的存量镜头才有：提醒模型别把这个非法值原样抄回补丁里 */
+  durationNote?: string;
   tags: Array<{ name: string; type: string }>;
   dialogue: Array<{ speaker?: string; isNarrator: boolean; text: string }>;
 }
@@ -78,10 +85,19 @@ export function buildChatPrompt(
     CHAT_MESSAGE_END,
     '输出格式（严格遵守）：只输出一个 JSON 对象 {"summary":"一句话说明改了什么","patch":[...]}。',
     'patch 是操作数组，每个元素必须是下列四种之一：',
-    '{"op":"add_shot","afterShotId":"插入到该镜头之后（null 或省略 = 追加到末尾）","shot":{"sourceText":"","imagePrompt":"","videoPrompt":"","durationPlannedMs":12000,"tags":[{"name":"标签名","type":"CHARACTER|SCENE|PROP"}],"dialogue":[{"speaker":"角色标签名（旁白则省略）","isNarrator":false,"text":"台词"}]}}',
+    '{"op":"add_shot","afterShotId":"插入到该镜头之后（null 或省略 = 追加到末尾）","shot":{"sourceText":"","imagePrompt":"","videoPrompt":"","durationPlannedMs":'
+      + `${SHOT_DURATION_PREFERRED_MS}`
+      + ',"tags":[{"name":"标签名","type":"CHARACTER|SCENE|PROP"}],"dialogue":[{"speaker":"角色标签名（旁白则省略）","isNarrator":false,"text":"台词"}]}}',
     '{"op":"update_shot","shotId":"镜头id","fields":{只写要改的字段，结构同 shot}}',
     '{"op":"remove_shot","shotId":"镜头id"}',
     '{"op":"reorder","shotIds":["全量镜头 id 的新顺序"]}',
+    `durationPlannedMs 必须落在 ${SHOT_DURATION_MIN_MS}~${SHOT_DURATION_MAX_MS} 毫秒之间（推荐 ${SHOT_DURATION_PREFERRED_MS}）：`
+      + `一个镜头就是一次视频生成调用，模型单次上限就是 ${SHOT_DURATION_MAX_MS / 1000} 秒；`
+      + '需要更长的内容必须拆成多个镜头，而不是写一个超长时长——超界的补丁会被服务端整条拒绝。',
+    '字段名必须与上面示例逐字一致（例如时长只能叫 durationPlannedMs，不能写成 duration 或 text）；'
+      + '出现示例之外的字段名，整条补丁会被服务端拒绝。',
+    'update_shot 的 fields 至少要包含一个真正改变的字段；没有要改的就不要输出这条操作——'
+      + '空的 fields 会被服务端拒绝（它只会造出一个内容完全相同的新版本，并把该镜头的成片标记为待重生成）。',
     'shotId / afterShotId / shotIds 必须使用上面「当前分镜」里的真实 id；未被指令触及的镜头不要输出任何操作。',
     '旁白行必须写成 {"isNarrator":true,"text":"…"} 并省略 speaker；【严禁】把「旁白」当作角色写进 tags。',
   ].join('\n');
@@ -130,6 +146,16 @@ export function createScriptChat({ textGen }: { textGen: ChatTextGenFn }) {
       imagePrompt: truncate(s.imagePrompt, 80),
       videoPrompt: truncate(s.videoPrompt, 80),
       durationPlannedMs: s.durationPlannedMs,
+      /**
+       * 存量镜头有一批是早期平铺分镜留下的超长值（库里 100 多条 12~13 秒）。
+       * 把它照实摆给模型看、同时又要求它填 2000~8000，模型改别的字段时
+       * 原样回传这个时长是最自然的举动——然后整条补丁被服务端打回，
+       * 用户只看到一句"参数校验失败"，完全不知道自己不过是想改个提示词。
+       * 所以超界的值必须当场标注"别抄"。
+       */
+      ...(s.durationPlannedMs > SHOT_DURATION_MAX_MS
+        ? { durationNote: `该值超出上限，是历史遗留；改别的字段时不要回传它，除非你要顺手把它改到 ${SHOT_DURATION_MAX_MS} 以内` }
+        : {}),
       tags: s.tags.map((st) => ({ name: st.tag.name, type: st.tag.type })),
       dialogue: s.dialogue.map((d) => {
         const speaker = d.speakerTagId ? tagNameById.get(d.speakerTagId) : undefined;
@@ -145,8 +171,15 @@ export function createScriptChat({ textGen }: { textGen: ChatTextGenFn }) {
 
     const attempt = async (): Promise<ScriptChatResult> => {
       const parsed = extractJson(await textGen(prompt)) as { summary?: unknown; patch?: unknown };
+      const patch = StoryboardPatchSchema.parse(parsed.patch);
+      // 空 fields 的 update_shot 在协议上合法，语义上却是一次零变更：
+      // 它照样会造新版本、照样把镜头标记为上游已变更。当作解析失败去重试（再不行就 400），
+      // 好过让用户看到"修改已应用"然后被引导去为一次没发生的修改重新付费生成。
+      if (patch.some((op) => op.op === 'update_shot' && Object.keys(op.fields).length === 0)) {
+        throw new Error('update_shot 的 fields 为空');
+      }
       return {
-        patch: StoryboardPatchSchema.parse(parsed.patch),
+        patch,
         summary: typeof parsed.summary === 'string' ? parsed.summary : '',
       };
     };
@@ -192,7 +225,7 @@ function extractShots(prompt: string): PromptShot[] {
         durationPlannedMs:
           typeof s.durationPlannedMs === 'number' && s.durationPlannedMs > 0
             ? Math.floor(s.durationPlannedMs)
-            : 12000,
+            : SHOT_DURATION_PREFERRED_MS,
       }));
   } catch {
     return [];
@@ -203,7 +236,7 @@ const EMPTY_SHOT = {
   sourceText: '',
   imagePrompt: '',
   videoPrompt: '',
-  durationPlannedMs: 12000,
+  durationPlannedMs: SHOT_DURATION_PREFERRED_MS,
   tags: [] as Array<{ name: string; type: string }>,
   dialogue: [] as Array<{ isNarrator: boolean; text: string }>,
 };
@@ -225,14 +258,16 @@ export async function mockChatGen(prompt: string): Promise<string> {
     const target = Number(count[1] ?? count[2]);
     if (target >= 1 && shots.length > 0) {
       if (target < shots.length) {
-        // 从尾部删多余镜头，其 sourceText 合并进保留的最后一个，时长相加（上限 15000）
+        // 从尾部删多余镜头，其 sourceText 合并进保留的最后一个，时长相加。
+        // 上限取 SHOT_DURATION_MAX_MS 而非从前的 15000：超上限的补丁现在会被契约整条拒收，
+        // 合并指令会变成一句「AI 返回的修改指令无法解析」，用户看不出是自己让它合并的。
         const kept = shots[target - 1];
         const removed = shots.slice(target);
         const mergedText = [kept.sourceText, ...removed.map((s) => s.sourceText)]
           .filter((t) => t.length > 0)
           .join('\n');
         const mergedDuration = Math.min(
-          15000,
+          SHOT_DURATION_MAX_MS,
           removed.reduce((sum, s) => sum + s.durationPlannedMs, kept.durationPlannedMs),
         );
         return reply(`已把 ${shots.length} 个镜头合并为 ${target} 个`, [

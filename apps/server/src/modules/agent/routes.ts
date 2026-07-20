@@ -37,8 +37,9 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     });
     if (!shot) throw notFound('镜头');
 
-    // 同一镜头并发跑两个收敛毫无意义（互相抢选定指针），且平白翻倍烧钱
-    const running = await findRunningRun(db, shot.id);
+    // 同一镜头并发跑两个收敛毫无意义（互相抢选定指针），且平白翻倍烧钱。
+    // 按血脉查：收敛期间用户编辑分镜会换掉镜头 id，按裸 id 查会漏判成"没在跑"。
+    const running = await findRunningRun(db, shot);
     if (running) throw badRequest('该镜头已有正在运行的自动收敛任务');
 
     const projectId = shot.storyboard.episode.projectId;
@@ -80,6 +81,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
     const shot = await db.shot.findUnique({ where: { id: req.params.id } });
     if (!shot) throw notFound('镜头');
     // roundsJson 原样回字符串：前端按 AgentRound[] 自行解析（与其他 *Json 字段一致）
-    return { runs: await listAgentRuns(db, shot.id) };
+    // 同样按血脉：换了版本仍要看得见这个逻辑镜头此前跑过的收敛
+    return { runs: await listAgentRuns(db, shot) };
   });
 };

@@ -50,6 +50,53 @@ async function selectVideoTake(db: PrismaClient, shotId: string, durationMs = 10
   return { asset, take };
 }
 
+/** 给镜头加一条台词 */
+async function addDialogue(db: PrismaClient, shotId: string, text: string, sortOrder = 0) {
+  return db.dialogueLine.create({ data: { shotId, text, sortOrder } });
+}
+
+/**
+ * 给镜头里"还没有配音行的最早一条台词"建配音行。
+ * status=READY 时默认带音频资产；withAsset:false 用于构造"READY 但资产缺失"的坏行。
+ */
+async function addDubbing(
+  db: PrismaClient,
+  shotId: string,
+  status: string,
+  opts: { withAsset?: boolean } = {},
+) {
+  const lines = await db.dialogueLine.findMany({
+    where: { shotId },
+    orderBy: { sortOrder: 'asc' },
+  });
+  const dubbed = await db.dubbingLine.findMany({ where: { shotId } });
+  const takenIds = new Set(dubbed.map((d) => d.dialogueLineId));
+  const target = lines.find((l) => !takenIds.has(l.id));
+  if (!target) throw new Error(`镜头 ${shotId} 没有可配音的台词行`);
+
+  const withAsset = opts.withAsset ?? status === 'READY';
+  const asset = withAsset
+    ? await db.asset.create({
+        data: {
+          projectId,
+          type: 'AUDIO',
+          source: 'GENERATED',
+          uri: `/storage/${projectId}/${target.id}.mp3`,
+          durationMs: 900,
+        },
+      })
+    : null;
+  return db.dubbingLine.create({
+    data: {
+      shotId,
+      dialogueLineId: target.id,
+      status,
+      audioAssetId: asset?.id ?? null,
+      durationMs: asset ? 900 : null,
+    },
+  });
+}
+
 describe('createCut', () => {
   it('有镜头未选定视频片段 → 400，文案含镜头序号', async () => {
     const { episode, storyboard, shots } = await makeStoryboard(t.db, 3);
@@ -113,6 +160,94 @@ describe('createCut', () => {
     await expect(
       createCut(t.db, { episodeId: other.id, storyboardId: storyboard.id }),
     ).rejects.toThrow('分镜 不存在');
+  });
+
+  it('一条 READY + 一条 FAILED → 拦下，文案含未就绪镜头的序号', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 2);
+    await selectVideoTake(t.db, shots[0].id);
+    await selectVideoTake(t.db, shots[1].id);
+    await addDialogue(t.db, shots[0].id, '第一句');
+    await addDialogue(t.db, shots[1].id, '第二句');
+    await addDubbing(t.db, shots[0].id, 'READY');
+    await addDubbing(t.db, shots[1].id, 'FAILED');
+
+    await expect(
+      createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id }),
+    ).rejects.toThrow('以下镜头有台词但配音未就绪，无法合成：#2 配音生成失败，需重新生成');
+  });
+
+  it('同一镜头多句台词，只有一句就绪 → 仍被拦下（不会静默少一句）', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 1);
+    await selectVideoTake(t.db, shots[0].id);
+    await addDialogue(t.db, shots[0].id, '第一句', 0);
+    await addDialogue(t.db, shots[0].id, '第二句', 1);
+    await addDubbing(t.db, shots[0].id, 'READY');
+
+    await expect(
+      createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id }),
+    ).rejects.toThrow('#1 还没有发起配音');
+  });
+
+  it('按状态分档给建议：GENERATING / PENDING / FAILED 各自列出镜头', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 3);
+    for (const s of shots) await selectVideoTake(t.db, s.id);
+    await addDialogue(t.db, shots[0].id, 'a');
+    await addDialogue(t.db, shots[1].id, 'b');
+    await addDialogue(t.db, shots[2].id, 'c');
+    await addDubbing(t.db, shots[0].id, 'GENERATING');
+    await addDubbing(t.db, shots[2].id, 'FAILED');
+    // 镜头 #2 压根没建配音行 → PENDING
+
+    await expect(
+      createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id }),
+    ).rejects.toThrow(
+      '以下镜头有台词但配音未就绪，无法合成：#3 配音生成失败，需重新生成；#2 还没有发起配音；#1 配音正在生成中，请稍候',
+    );
+  });
+
+  it('READY 但没有音频资产的坏行 → 按“需重新生成”拦下', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 1);
+    await selectVideoTake(t.db, shots[0].id);
+    await addDialogue(t.db, shots[0].id, 'a');
+    await addDubbing(t.db, shots[0].id, 'READY', { withAsset: false });
+
+    await expect(
+      createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id }),
+    ).rejects.toThrow('#1 配音生成失败，需重新生成');
+  });
+
+  it('全部台词都有就绪配音 → 通过，audioTracksJson 快照全部行', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 2);
+    await selectVideoTake(t.db, shots[0].id);
+    await selectVideoTake(t.db, shots[1].id);
+    await addDialogue(t.db, shots[0].id, 'a');
+    await addDialogue(t.db, shots[1].id, 'b');
+    await addDubbing(t.db, shots[0].id, 'READY');
+    await addDubbing(t.db, shots[1].id, 'READY');
+
+    const cut = await createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id });
+    expect(cut.status).toBe('COMPOSING');
+    const audio = JSON.parse(cut.audioTracksJson) as { shotId: string }[];
+    expect(audio.map((a) => a.shotId).sort()).toEqual([shots[0].id, shots[1].id].sort());
+  });
+
+  it('无台词的镜头不参与判定：纯画面片可直接合成', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 2);
+    await selectVideoTake(t.db, shots[0].id);
+    await selectVideoTake(t.db, shots[1].id);
+    // 只有 #1 有台词且已就绪，#2 纯画面无台词
+    await addDialogue(t.db, shots[0].id, 'a');
+    await addDubbing(t.db, shots[0].id, 'READY');
+
+    const cut = await createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id });
+    expect(cut.status).toBe('COMPOSING');
+  });
+
+  it('整片一句台词都没有 → 直接通过（无声片合法）', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 1);
+    await selectVideoTake(t.db, shots[0].id);
+    const cut = await createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id });
+    expect(JSON.parse(cut.audioTracksJson)).toEqual([]);
   });
 
   it('分镜没有镜头 → 400', async () => {

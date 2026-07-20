@@ -45,7 +45,33 @@ async function seedShot() {
     data: { episodeId: episode.id, scriptDraftId: draft.id, version: 1 },
   });
   return db.shot.create({
-    data: { storyboardId: storyboard.id, sortOrder: 0, sourceText: '镜头文本', imagePrompt: '提示词' },
+    data: {
+      storyboardId: storyboard.id,
+      sortOrder: 0,
+      sourceText: '镜头文本',
+      imagePrompt: '提示词',
+      lineageId: crypto.randomUUID(),
+    },
+  });
+}
+
+/**
+ * 模拟 applyPatch：建新版本分镜，镜头全量复制成新行（新 id）并继承 lineageId。
+ * 用户在收敛跑着的时候编辑一次分镜，现实里发生的就是这件事。
+ */
+async function bumpVersion(shot: { id: string; storyboardId: string; lineageId: string | null }) {
+  const base = await db.storyboard.findUniqueOrThrow({ where: { id: shot.storyboardId } });
+  const next = await db.storyboard.create({
+    data: { episodeId: base.episodeId, scriptDraftId: base.scriptDraftId, version: base.version + 1 },
+  });
+  return db.shot.create({
+    data: {
+      storyboardId: next.id,
+      sortOrder: 0,
+      sourceText: '镜头文本',
+      imagePrompt: '提示词',
+      lineageId: shot.lineageId,
+    },
   });
 }
 
@@ -131,6 +157,47 @@ describe('POST /api/shots/:id/agent/keyframe-converge', () => {
     expect(await db.agentRun.count({ where: { shotId: shot.id } })).toBe(1);
   });
 
+  it('跨版本并发守卫：收敛期间用户改了分镜，在新版本镜头上再次发起仍被拒（翻倍烧钱防线）', async () => {
+    const shot = await seedShot();
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/shots/${shot.id}/agent/keyframe-converge`,
+      payload: {},
+    });
+    expect(first.statusCode).toBe(202);
+    enqueue.mockClear();
+
+    // 用户编辑分镜 → 新版本，同一逻辑镜头换了一个 id；RUNNING 的 run 还挂在旧 id 上
+    const v2 = await bumpVersion(shot);
+    expect(v2.id).not.toBe(shot.id);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/shots/${v2.id}/agent/keyframe-converge`,
+      payload: {},
+    });
+    expect(second.statusCode).toBe(400);
+    expect(second.json().error).toBe('该镜头已有正在运行的自动收敛任务');
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(await db.agentRun.count({ where: { shotId: { in: [shot.id, v2.id] } } })).toBe(1);
+  });
+
+  it('血脉不同的镜头互不影响：另一个镜头有 RUNNING 不挡本镜头发起', async () => {
+    const busy = await seedShot();
+    await app.inject({
+      method: 'POST',
+      url: `/api/shots/${busy.id}/agent/keyframe-converge`,
+      payload: {},
+    });
+    const other = await seedShot();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/shots/${other.id}/agent/keyframe-converge`,
+      payload: {},
+    });
+    expect(res.statusCode).toBe(202);
+  });
+
   it('上一次运行已结束（非 RUNNING）时可再次发起', async () => {
     const shot = await seedShot();
     await db.agentRun.create({
@@ -168,6 +235,18 @@ describe('GET /api/shots/:id/agent-runs', () => {
     expect(runs.map((r) => r.id)).toEqual([newer.id, older.id]);
     expect(typeof runs[1]!.roundsJson).toBe('string');
     expect(runs[1]!.roundsJson).toBe('[{"round":1}]');
+  });
+
+  it('跨版本：新版本镜头也能看见同血脉旧版本上跑过的运行记录', async () => {
+    const shot = await seedShot();
+    const run = await db.agentRun.create({
+      data: { projectId, shotId: shot.id, kind: 'KEYFRAME_CONVERGE', status: 'PASSED' },
+    });
+    const v2 = await bumpVersion(shot);
+
+    const res = await app.inject({ method: 'GET', url: `/api/shots/${v2.id}/agent-runs` });
+    expect(res.statusCode).toBe(200);
+    expect((res.json().runs as Array<{ id: string }>).map((r) => r.id)).toEqual([run.id]);
   });
 
   it('镜头不存在 → 404', async () => {

@@ -9,6 +9,7 @@ import {
   TRANSITIONS,
   SHOT_DURATION_MIN_MS,
   SHOT_DURATION_MAX_MS,
+  SHOT_DURATION_PREFERRED_MS,
 } from '@ovideo/shared';
 import { badRequest, notFound } from '../../lib/errors.js';
 import { parseJson } from '../../lib/json.js';
@@ -29,8 +30,7 @@ export { SHOT_SIZES, CAMERA_ANGLES, CAMERA_MOVEMENTS, TRANSITIONS };
  * 单镜头时长区间同样迁到 @ovideo/shared（前端检查器与镜头表要用同一份边界），
  * 这里保留转出口，既有的 `from './generate.js'` 导入无需改动。
  */
-export { SHOT_DURATION_MIN_MS, SHOT_DURATION_MAX_MS };
-export const SHOT_DURATION_PREFERRED_MS = 4000;
+export { SHOT_DURATION_MIN_MS, SHOT_DURATION_MAX_MS, SHOT_DURATION_PREFERRED_MS };
 
 /** 与 job 模块的 JobExecutor 结构兼容（不 import，按结构类型解耦） */
 export interface StoryboardGeneratorCtx {
@@ -81,7 +81,17 @@ const GeneratedShotSchema = NewShotInputSchema.extend({
   cameraMovement: z.string().default(''),
   composition: z.string().default(''),
   transition: z.string().default(''),
-});
+  /**
+   * 时长在这里刻意放宽回「正整数」，不继承 shared 契约的 2000~8000 硬边界。
+   * 补丁契约严格是对的：那是一次廉价的、用户主动触发的编辑，越界就 400 让他重说一遍。
+   * 整本拆镜不一样——它是一次已经付过费的批量调用，为其中一个 12000ms 的镜头判全篇死刑，
+   * 用户损失的是整次生成而不是一个数字。越界镜头会在镜头表里飘红，由人工修正。
+   * 同理不在这里 clamp：解析层偷偷改写模型的产出，用户拿到的 8 秒画面配的是按 12 秒写的内容。
+   */
+  durationPlannedMs: z.number().int().positive().default(SHOT_DURATION_PREFERRED_MS),
+})
+  // 同样刻意不 strict：模型多吐一个 "notes" 字段不该让整次付费生成作废。
+  .strip();
 
 /** 场景层解析 schema */
 const GeneratedSceneSchema = z.object({
