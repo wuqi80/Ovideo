@@ -793,10 +793,17 @@ function ProviderCard({
           healthCheck.mutate(provider.id, {
             onSuccess: (r) => {
               const dead = r.models.filter((m) => m.status === 'dead').length;
+              // 实测过的才配说"检查过了"。untested 占多数时说"N 个模型已更新体检结果"
+              // 是在夸大——那正是这个功能要消灭的虚假安心，不该由它自己的提示语制造。
+              const probed = r.models.filter((m) => m.status !== 'untested').length;
+              const untested = r.models.length - probed;
+              const tail = untested > 0 ? `，另有 ${untested} 个按成本约定未实测` : '';
               if (dead > 0) {
-                message.error(`体检完成：发现 ${dead} 个模型在你的账号下不可用，请看模型列表的「体检」列`);
+                message.error(
+                  `体检完成：${dead} 个模型在你的账号下调不通，请看模型列表的「体检」列${tail}`,
+                );
               } else {
-                message.success(`体检完成：${r.models.length} 个模型已更新体检结果`);
+                message.success(`体检完成：实测 ${probed} 个模型均可调用${tail}`);
               }
               resolve();
             },
