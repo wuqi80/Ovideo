@@ -32,6 +32,49 @@ export async function pickModelForModality(db: PrismaClient, modality: Modality)
 }
 
 /**
+ * 转移链一次调用的"成交记录"：谁最终把活干成了（全挂时为 null），以及在它之前塌了哪些。
+ * 成本归因靠它——入队时写的"首选 X"只是打算，真花钱的是这里的 key。
+ */
+export interface ModelUsage {
+  /** 实际成功返回的模型 key；全部失败或回落离线通道时为 null */
+  key: string | null;
+  /** 按尝试顺序排列的失败模型 key */
+  failedKeys: string[];
+  /**
+   * 用户显式指定了模型（没有转移链）。失败文案要说清"是你点的那个没调通"，
+   * 而不是"全部失败"——后者会让人以为系统试过好几家。
+   */
+  pinned?: boolean;
+}
+
+/** 把成交记录写成人能一眼看懂的一行字（落进 Job.modelKey） */
+export function describeModelUsage(usage: ModelUsage): string {
+  const { key, failedKeys, pinned } = usage;
+  if (key) {
+    return failedKeys.length === 0 ? key : `${key}（${failedKeys.join('、')} 失败后转移）`;
+  }
+  if (pinned && failedKeys.length > 0) return `${failedKeys[0]}（指定模型，调用失败）`;
+  if (failedKeys.length > 0) return `全部失败（依次试过 ${failedKeys.join('、')}）`;
+  return '未调用真实模型（无可用候选）';
+}
+
+/**
+ * 把一个任务内的多次调用渲染成一行。
+ * 【为什么不能只记最后一次】分镜生成在 JSON 解析失败时会整条链重跑一次。
+ * 若第一次 qwen 成功返回（已经计费）但内容不可解析，第二次全挂，
+ * 只记最后一次就会写成"全部失败"——账面上一次没成交，实际已经烧掉一整篇的 token。
+ * 那正是这次改动要根治的谎报，只是从入队处挪到了重试处。
+ */
+export function describeModelUsageHistory(history: ModelUsage[]): string {
+  if (history.length === 0) return '未调用真实模型';
+  const lines = history.map(describeModelUsage);
+  // 每次结果都一样时不必编号：分镜生成解析失败会整条链重跑，全挂时会得到两条一模一样的
+  // "全部失败"，编号只是噪音。真正需要区分的是各次结果不同——那意味着有一次成交过、计过费。
+  if (new Set(lines).size === 1) return lines[0];
+  return lines.map((line, i) => `第${i + 1}次 ${line}`).join('；');
+}
+
+/**
  * 带失效转移的文本生成：依次尝试文本模态候选队列（某家网络不通/报错自动换下一家），
  * 全部失败才抛错（不静默降级）；一个真实候选都没有时走 fallback（确定性 Mock，离线可用）。
  * 对话式修改与三步生成任务共用此策略。
@@ -43,24 +86,56 @@ export function createFailoverTextGen(
    * jsonMode 默认 true 保持既有调用方（三步生成/对话式修改）行为不变；
    * 剧本创作要的是散文正文，必须显式关掉，否则 response_format 会逼模型吐 JSON。
    */
-  opts: { jsonMode?: boolean } = {},
+  opts: {
+    jsonMode?: boolean;
+    /**
+     * 单次调用的超时上限，透传给 chatComplete。
+     * 【为什么必须能配】两级分镜是全流程最重的一次文本生成，默认 60s 打不住。
+     * 此前只有"用户显式指定模型"那条路调高了上限，转移链这条漏了——
+     * 于是自动调度时千问必定卡在 60 秒超时，整条链走到底全挂。
+     */
+    timeoutMs?: number;
+    /**
+     * 可选的成交回执。设计成回调而非必填 jobId，是因为对话式修改、提示词改写这类
+     * 调用方根本不在 Job 上下文里，没有账可记——不该为了记账把它们拖下水。
+     */
+    onModelUsed?: (usage: ModelUsage) => void | Promise<void>;
+  } = {},
 ): (prompt: string) => Promise<string> {
   const jsonMode = opts.jsonMode ?? true;
+  const report = async (usage: ModelUsage) => {
+    if (!opts.onModelUsed) return;
+    // 记账是旁路：它自己炸了也不能把一次已经成功的生成拖成失败
+    try {
+      await opts.onModelUsed(usage);
+    } catch {
+      /* 已在回调内部落警告，这里兜底吞掉 */
+    }
+  };
   return async (prompt: string) => {
     const candidates = await pickCandidates(db, 'text');
-    if (candidates.length === 0) return fallback(prompt);
+    if (candidates.length === 0) {
+      await report({ key: null, failedKeys: [] });
+      return fallback(prompt);
+    }
     const failures: string[] = [];
+    const failedKeys: string[] = [];
     for (const model of candidates) {
       try {
-        return await chatComplete(
+        const out = await chatComplete(
           { baseUrl: model.provider.baseUrl, apiKey: model.provider.apiKey, model: model.key },
           [{ role: 'user', content: prompt }],
-          { jsonMode },
+          { jsonMode, ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) },
         );
+        await report({ key: model.key, failedKeys: [...failedKeys] });
+        return out;
       } catch (err) {
         failures.push(`${model.key}: ${err instanceof Error ? err.message.slice(0, 140) : '未知错误'}`);
+        failedKeys.push(model.key);
       }
     }
+    // 全军覆没也要留痕：否则失败任务的历史里看不出试过谁
+    await report({ key: null, failedKeys });
     throw new Error(`全部 ${candidates.length} 个文本模型调用失败——${failures.join('；')}`);
   };
 }

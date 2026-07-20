@@ -25,9 +25,9 @@ import { agentRoutes } from './modules/agent/routes.js';
 import { cutRoutes } from './modules/cut/routes.js';
 import { libraryRoutes } from './modules/cut/library-routes.js';
 
-import { enqueueJob, completeJob, failJob, updateJobProgress } from './modules/job/service.js';
+import { enqueueJob, completeJob, failJob, updateJobProgress, recordJobModelKey } from './modules/job/service.js';
 import { startWorker, type JobWorker } from './modules/job/worker.js';
-import { registerExecutor, getExecutor } from './modules/job/registry.js';
+import { registerExecutor, getExecutor, type JobExecutorContext } from './modules/job/registry.js';
 import { createStoryboardGenerator } from './modules/script/generate.js';
 import { makeGenerateScript } from './modules/script/write.js';
 import { createScriptChat } from './modules/script/chat.js';
@@ -35,7 +35,7 @@ import { makeRewriteScript } from './modules/script/rewrite.js';
 import { shotGroupRoutes } from './modules/shotgroup/routes.js';
 import { enhanceRoutes } from './modules/enhance/routes.js';
 import { registerEnhanceExecutors } from './modules/enhance/executors.js';
-import { chatComplete } from './modules/provider/adapters/openai-compatible.js';
+import { chatComplete, type ChatCompleteOptions } from './modules/provider/adapters/openai-compatible.js';
 import { visionJudge } from './modules/provider/adapters/vision-judge.js';
 import { registerAgentExecutors } from './modules/agent/executor.js';
 import { recoverStaleAgentRuns } from './modules/agent/service.js';
@@ -53,7 +53,13 @@ import { dashscopeTtsGenerate } from './modules/provider/adapters/dashscope-tts.
 import { registerCutExecutor } from './modules/cut/executor.js';
 import { findOrCreateTags } from './modules/tag/service.js';
 import * as stale from './modules/stale/service.js';
-import { createFailoverTextGen, pickModelForModality, AUTO_ROUTE_MODALITIES } from './modules/provider/scheduler.js';
+import {
+  createFailoverTextGen,
+  describeModelUsageHistory,
+  pickModelForModality,
+  AUTO_ROUTE_MODALITIES,
+  type ModelUsage,
+} from './modules/provider/scheduler.js';
 import type { Modality } from '@ovideo/shared';
 
 /* ---------------- 关键图自动收敛 agent 的真实能力接线 ---------------- */
@@ -209,6 +215,42 @@ export function registerExecutors(): void {
   /** 两级分镜生成的超时上限。见下方 chatComplete 调用处的说明 */
   const STORYBOARD_GEN_TIMEOUT_MS = 300_000;
 
+  /**
+   * 一次任务内的调用流水 → Job.modelKey。入队写的是"打算用谁"，这里改写成"实际是谁"。
+   * 【为什么要攒成流水而不是每次覆盖】一个任务可能调多次文本模型（分镜生成解析失败会重跑），
+   * 后写覆盖前写会把"已经成功并计费的那次"抹掉，账就又不准了。
+   */
+  const createUsageLedger = (ctx: JobExecutorContext) => {
+    const history: ModelUsage[] = [];
+    return async (usage: ModelUsage) => {
+      history.push(usage);
+      await recordJobModelKey(ctx.db, ctx.job.id, describeModelUsageHistory(history));
+    };
+  };
+
+  /**
+   * 用户显式指定模型的那条路径：不走转移链，但同样要记账——
+   * 之前这条路 modelKey 一直是 null，任务历史里根本看不出用了什么。
+   * 失败也留痕：否则排查时连"试过它"都不知道。
+   */
+  const fixedModelTextGen =
+    (
+      cfg: { baseUrl: string; apiKey: string; model: string },
+      callOpts: ChatCompleteOptions,
+      ledger: (usage: ModelUsage) => Promise<void>,
+    ) =>
+    async (prompt: string): Promise<string> => {
+      try {
+        const out = await chatComplete(cfg, [{ role: 'user', content: prompt }], callOpts);
+        // 与转移链共用同一本流水：重试时才不会把上一次已计费的调用覆盖掉
+        await ledger({ key: cfg.model, failedKeys: [] });
+        return out;
+      } catch (err) {
+        await ledger({ key: null, failedKeys: [cfg.model], pinned: true });
+        throw err;
+      }
+    };
+
   registerExecutor('GENERATE_STORYBOARD', async (ctx) => {
     const input = parseJson<{ scriptDraftId?: string; modelConfigId?: string }>(
       ctx.job.inputJson,
@@ -216,9 +258,15 @@ export function registerExecutors(): void {
     );
     // 用户显式指定模型 → 只用该模型（失败即失败，不偷换）；
     // 未指定 → 按需调度 + 失效转移；一个真实文本模型都没有 → 明确报错（无 Mock）
-    let textGen = createFailoverTextGen(ctx.db, async () => {
-      throw new Error('未配置文本模型：请在管理后台「一键接入」任一文本厂商（豆包/千问/DeepSeek…）后重试');
-    });
+    const ledger = createUsageLedger(ctx);
+    let textGen = createFailoverTextGen(
+      ctx.db,
+      async () => {
+        throw new Error('未配置文本模型：请在管理后台「一键接入」任一文本厂商（豆包/千问/DeepSeek…）后重试');
+      },
+      // 转移链这条也要用加长的上限：两级分镜无论走哪条路都是同一件重活
+      { onModelUsed: ledger, timeoutMs: STORYBOARD_GEN_TIMEOUT_MS },
+    );
     if (input.modelConfigId) {
       const model = await ctx.db.modelConfig.findUnique({
         where: { id: input.modelConfigId },
@@ -233,15 +281,14 @@ export function registerExecutors(): void {
           apiKey: model.provider.apiKey,
           model: model.key,
         };
-        textGen = async (prompt: string) =>
-          chatComplete(cfg, [{ role: 'user', content: prompt }], {
-            jsonMode: true,
-            // 两级分镜是全流程里最重的一次文本生成：整篇剧本进去，出来是
-            // 场景树 + 每场 2-5 个镜头的完整 JSON（提示词、标签、台词、五个影视语义字段）。
-            // 默认 60s 打不住——实测千问在 1650 字的剧本上就会超时，
-            // 而超时被报成"网络不可达/需要代理"，让人往连通性上排查，其实网络好得很。
-            timeoutMs: STORYBOARD_GEN_TIMEOUT_MS,
-          });
+        textGen = fixedModelTextGen(cfg, {
+          jsonMode: true,
+          // 两级分镜是全流程里最重的一次文本生成：整篇剧本进去，出来是
+          // 场景树 + 每场 2-5 个镜头的完整 JSON（提示词、标签、台词、五个影视语义字段）。
+          // 默认 60s 打不住——实测千问在 1650 字的剧本上就会超时，
+          // 而超时被报成"网络不可达/需要代理"，让人往连通性上排查，其实网络好得很。
+          timeoutMs: STORYBOARD_GEN_TIMEOUT_MS,
+        }, ledger);
       } else {
         throw badRequest('该模型所属厂商未配置 Base URL，无法调用');
       }
@@ -253,12 +300,13 @@ export function registerExecutors(): void {
   // 这里要的是散文剧本，不是 JSON。
   registerExecutor('GENERATE_SCRIPT', async (ctx) => {
     const input = parseJson<{ modelConfigId?: string }>(ctx.job.inputJson, {});
+    const ledger = createUsageLedger(ctx);
     let textGen = createFailoverTextGen(
       ctx.db,
       async () => {
         throw new Error('未配置文本模型：请在管理后台「一键接入」任一文本厂商（豆包/千问/DeepSeek…）后重试');
       },
-      { jsonMode: false },
+      { jsonMode: false, onModelUsed: ledger },
     );
     if (input.modelConfigId) {
       const model = await ctx.db.modelConfig.findUnique({
@@ -270,7 +318,7 @@ export function registerExecutors(): void {
       }
       if (!model.provider.baseUrl) throw badRequest('该模型所属厂商未配置 Base URL，无法调用');
       const cfg = { baseUrl: model.provider.baseUrl, apiKey: model.provider.apiKey, model: model.key };
-      textGen = async (prompt: string) => chatComplete(cfg, [{ role: 'user', content: prompt }]);
+      textGen = fixedModelTextGen(cfg, {}, ledger);
     }
     return makeGenerateScript({ textGen })(ctx);
   });
@@ -333,8 +381,9 @@ export async function buildApp(opts: BuildAppOptions = {}) {
     if (!payload.modelConfigId && modality && AUTO_ROUTE_MODALITIES.includes(modality)) {
       const picked = await pickModelForModality(db, modality);
       if (picked) {
-        // 文本任务不钉死单一模型：执行时走失效转移（见 GENERATE_STORYBOARD / GENERATE_SCRIPT 执行器），
-        // modelKey 仅作展示；图像任务钉队首模型（图像适配器暂无转移链）
+        // 文本任务不钉死单一模型：执行时走失效转移（见 GENERATE_STORYBOARD / GENERATE_SCRIPT 执行器）。
+        // 这里的 modelKey 只是"打算用谁"的占位，跑完由执行器回填成实际成交的模型；
+        // 图像任务钉队首模型（图像适配器暂无转移链）
         if (input.type === 'GENERATE_STORYBOARD' || input.type === 'GENERATE_SCRIPT') {
           return enqueueJob(db, {
             ...input,

@@ -36,6 +36,23 @@ export async function enqueueJob(db: PrismaClient, input: EnqueueJobInput): Prom
 }
 
 /**
+ * 回填"实际是哪个模型干完的"。入队时写的是意图（首选谁），跑完才知道真相——
+ * 转移链换过人、或用户显式指定的那条路径，都靠这次回填让成本归因落到真花钱的那家头上。
+ * 记账是旁路：这次 update 自己抛错（比如任务已被清理）绝不能把一个本已成功的生成任务判死，
+ * 所以在此吞掉并落警告，由调用方继续按生成结果本身决定成败。
+ */
+export async function recordJobModelKey(db: PrismaClient, jobId: string, modelKey: string): Promise<void> {
+  try {
+    await db.job.update({ where: { id: jobId }, data: { modelKey } });
+  } catch (err) {
+    console.warn(
+      `[job] 回填 modelKey 失败（不影响任务结果）jobId=${jobId} modelKey=${modelKey}：`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+/**
  * 事务内领取最早的 QUEUED 任务：置 RUNNING、attempts+1、startedAt 落值。
  * SQLite 下 Prisma 事务串行执行，同进程多路领取不会拿到同一条。队列空返回 null。
  */
@@ -84,7 +101,20 @@ export async function failJob(
   if (!opts.fatal && job.attempts < job.maxAttempts) {
     return db.job.update({
       where: { id: jobId },
-      data: { status: 'QUEUED', progress: 0, error: errMsg, startedAt: null },
+      data: {
+        status: 'QUEUED',
+        progress: 0,
+        error: errMsg,
+        startedAt: null,
+        /**
+         * modelKey 现在记的是"实际是谁干的"，属于结果，必须跟着 error/progress 一起清。
+         * 不清的话，重排队期间它还挂着上一轮的失败文案，
+         * 任务面板上会同时出现「排队中」和「全部失败（依次试过…）」两个自相矛盾的标签。
+         * 从前它是"自动调度（首选 X）"这种恒为意图的占位，永远不会和状态打架；
+         * 升格成结果之后，生命周期也得跟着变。
+         */
+        modelKey: null,
+      },
     });
   }
   return db.job.update({
@@ -119,6 +149,8 @@ export async function retryJob(db: PrismaClient, jobId: string): Promise<Job> {
       outputJson: null,
       startedAt: null,
       finishedAt: null,
+      // 同 failJob 的重排队分支：结果类字段一并清掉，别让上一轮的成交记录挂到新一轮头上
+      modelKey: null,
     },
   });
 }
