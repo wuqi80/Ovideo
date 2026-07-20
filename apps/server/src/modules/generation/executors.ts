@@ -8,7 +8,8 @@ import { MAX_REF_IMAGES } from '../provider/adapters/openai-image.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import { parseJson } from '../../lib/json.js';
 import { allocFilePath, fileSize, uriToAbsPath } from '../../lib/storage.js';
-import { extractFrame, probeDurationMs } from '../../lib/ffmpeg.js';
+import { extractFrame, probeDimensions, probeDurationMs } from '../../lib/ffmpeg.js';
+import { imageAssetFields } from '../../lib/image-meta.js';
 import { registerExecutor, type JobExecutor } from '../job/registry.js';
 import { recordJobModelKey } from '../job/service.js';
 import { resolveBinding } from '../binding/service.js';
@@ -248,8 +249,8 @@ function makeKeyframeExecutor(gens: GenerationGens) {
       type: 'IMAGE',
       source: 'GENERATED',
       uri: file.uri,
-      mime: 'image/png',
-      sizeBytes: fileSize(file.absPath),
+      // mime/尺寸按文件事实落库：厂商常回 JPEG 却按 .png 落盘，扩展名不可信
+      ...imageAssetFields(file.absPath, 'image/png'),
       jobId: job.id,
       parentIds: boundAssetIds,
       // 生成透明度：实际生效的完整提示词与参考图清单可查（区别于镜头上存储的 imagePrompt）
@@ -318,8 +319,7 @@ function makeDesignExecutor(gens: GenerationGens) {
       type: 'IMAGE',
       source: 'GENERATED',
       uri: file.uri,
-      mime: 'image/png',
-      sizeBytes: fileSize(file.absPath),
+      ...imageAssetFields(file.absPath, 'image/png'),
       jobId: job.id,
       parentIds: tag.canonicalAssetId ? [tag.canonicalAssetId] : [],
       // 生成透明度：与关键图一致，实际送模型的完整提示词与参考图可查
@@ -373,8 +373,8 @@ async function extractPrevSegmentTailFrame(
     type: 'FRAME',
     source: 'EXTRACTED',
     uri: file.uri,
-    mime: 'image/png',
-    sizeBytes: fileSize(file.absPath),
+    // 这张是 ffmpeg 抽的真 PNG，mime 稳；顺带把尺寸也读进去，别再留 null
+    ...imageAssetFields(file.absPath, 'image/png'),
     jobId,
     parentIds: [prevTake.assetId],
   });
@@ -564,8 +564,10 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
     const effectivePrompt = genResult?.effectivePrompt ?? prompt;
     await updateProgress(70);
 
-    // 实测时长（生成模型不保证精确出片时长），并抽帧作缩略图
+    // 实测时长与尺寸（生成模型不保证精确出片时长/尺寸），并抽帧作缩略图。
+    // 尺寸从文件 probe 出来，别让 Asset.width/height 空着——素材库要显示，画幅核验也靠它
     const actualMs = await probeDurationMs(file.absPath);
+    const dims = await probeDimensions(file.absPath);
     const thumbFile = allocFilePath(job.projectId, 'png');
     await extractFrame({
       videoPath: file.absPath,
@@ -581,6 +583,8 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
       mime: 'video/mp4',
       sizeBytes: fileSize(file.absPath),
       durationMs: actualMs,
+      width: dims?.width ?? undefined,
+      height: dims?.height ?? undefined,
       jobId: job.id,
       parentIds: firstFrameParentIds,
       // 生成透明度：与关键图/设计图一致，可在前端"实际提示词"查看

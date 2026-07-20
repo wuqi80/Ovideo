@@ -289,6 +289,21 @@ export function createStoryboardGenerator({ textGen }: { textGen: TextGenFn }) {
     }
     await updateProgress(60);
 
+    /**
+     * 一个镜头都没拆出来，就不能算生成成功。
+     * 【为什么必须显式拦】没有这道守门时：patch 为空 → applyPatch 照样建出一个 0 镜头的
+     * 新版本 → 任务 SUCCEEDED、outputJson 写着 shotCount: 0。用户看到"生成完成"，
+     * 打开分镜页却空空如也，还会以为是页面坏了。真实撞到过一次。
+     * 模型偶尔会返回空结构（剧本太短、或指令把它带偏），那时该说的是"没拆出镜头"，
+     * 而不是给一个空版本再宣布成功。
+     */
+    if (shots.length === 0) {
+      throw badRequest(
+        '模型没有从这段剧本里拆出任何镜头。常见原因：剧本正文过短或只有标题；' +
+          '也可能是补充要求把它带偏了。请把剧本正文写具体些（至少包含场景、动作或台词）后重试。',
+      );
+    }
+
     // 三步生成的产出统一转为全 add_shot 的 patch，空基底应用 → 新版本
     const patch: StoryboardPatch = shots.map((shot) => ({
       op: 'add_shot' as const,

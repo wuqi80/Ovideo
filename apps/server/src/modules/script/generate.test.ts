@@ -453,3 +453,31 @@ describe('createStoryboardGenerator', () => {
     ).rejects.toMatchObject({ statusCode: 404 });
   });
 });
+
+describe('一个镜头都没拆出来时不能算成功', () => {
+  it('模型返回空结构 → 明确报错，而不是建一个 0 镜头的版本再宣布完成', async () => {
+    // 真实撞到过：任务 SUCCEEDED、outputJson 写着 shotCount 0，
+    // 用户看到「生成完成」、打开分镜页却空空如也，会以为是页面坏了。
+    const draft = await tdb.db.scriptDraft.create({
+      data: { episodeId: episode.id, isMain: false, content: SCRIPT },
+    });
+    const before = await tdb.db.storyboard.count({ where: { episodeId: episode.id } });
+
+    const generator = createStoryboardGenerator({
+      // 真实撞到的形状：场景合法、但 shots 是空数组（该字段是 .default([])，不会被 zod 拦下）
+      textGen: async () =>
+        JSON.stringify({ scenes: [{ title: '公司前台', location: '公司前台', sourceText: '玻璃门滑开', shots: [] }] }),
+    });
+
+    await expect(
+      generator({
+        db: tdb.db,
+        job: { inputJson: toJson({ scriptDraftId: draft.id }) },
+        updateProgress: async () => {},
+      }),
+    ).rejects.toThrow(/没有从这段剧本里拆出任何镜头/);
+
+    // 且不能留下一个空版本污染这一集
+    expect(await tdb.db.storyboard.count({ where: { episodeId: episode.id } })).toBe(before);
+  });
+});
