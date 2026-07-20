@@ -45,6 +45,8 @@ export interface ModelItem {
   capabilityJson: string;
   enabled: boolean;
   sortOrder: number;
+  /** 最近一次体检结果；老接口/未体检时可能整体缺省 */
+  health?: ModelHealth;
 }
 
 export interface ProviderItem {
@@ -67,6 +69,36 @@ export interface ProviderTestResult {
   ok: boolean;
   latencyMs?: number;
   message?: string;
+}
+
+/**
+ * 模型体检状态。
+ * ok/dead/auth/unreachable/error 来自一次真实调用；untested 是按成本红线主动没测——
+ * 它绝不等于"通过"，UI 必须如实区分。
+ */
+export type HealthStatus = 'ok' | 'dead' | 'auth' | 'unreachable' | 'error' | 'untested';
+
+/** 模型上记录的最近一次体检；从未体检过时 status 为 null */
+export interface ModelHealth {
+  status: HealthStatus | null;
+  checkedAt: string | null;
+  detail: string | null;
+}
+
+export interface ModelHealthResult {
+  modelConfigId: string;
+  key: string;
+  modality: Modality;
+  status: HealthStatus;
+  detail: string;
+  latencyMs?: number;
+}
+
+export interface ProviderHealthResult {
+  providerConfigId: string;
+  providerName: string;
+  checkedAt: string;
+  models: ModelHealthResult[];
 }
 
 export interface ProviderUpsertBody {
@@ -222,6 +254,20 @@ export function useDeleteProvider() {
 export function useTestProvider() {
   return useMutation({
     mutationFn: (id: string) => api<ProviderTestResult>(`/admin/providers/${id}/test`, { method: 'POST' }),
+  });
+}
+
+/**
+ * 模型体检：对该厂商下已启用的文本/视觉模型各发一次极小的真实请求。
+ * 只在用户点击时触发——它会真的调用厂商接口，不能做成自动刷新。
+ */
+export function useHealthCheckProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api<ProviderHealthResult>(`/admin/providers/${id}/health-check`, { method: 'POST' }),
+    // 体检把结果写回了模型，列表要重取才能看到新徽标
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
   });
 }
 

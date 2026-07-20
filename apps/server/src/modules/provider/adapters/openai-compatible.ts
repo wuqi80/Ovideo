@@ -10,6 +10,37 @@ export interface ChatCompleteOptions {
   /** 要求模型输出 JSON（OpenAI response_format: json_object） */
   jsonMode?: boolean;
   timeoutMs?: number;
+  /**
+   * 生成长度上限（OpenAI max_tokens）。缺省时不下发该字段，沿用厂商默认——
+   * 体检要的是"这个模型能不能调通"，把它设成 1 可以把一次真实请求的开销压到最低。
+   */
+  maxTokens?: number;
+}
+
+/**
+ * 厂商返回了非 2xx。带上原始状态码与响应体，调用方（体检）才能区分
+ * "模型在本账号下不存在"(404) 与 "限流"(429)——只看错误文案是分不出来的。
+ */
+export class LlmHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'LlmHttpError';
+  }
+}
+
+/** 请求压根没发出去 / 没等到响应（DNS、连接被拒、超时） */
+export class LlmNetworkError extends Error {
+  constructor(
+    readonly timeout: boolean,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'LlmNetworkError';
+  }
 }
 
 /**
@@ -24,6 +55,7 @@ export async function chatComplete(
   const url = `${cfg.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const payload: Record<string, unknown> = { model: cfg.model, messages };
   if (opts?.jsonMode) payload.response_format = { type: 'json_object' };
+  if (opts?.maxTokens !== undefined) payload.max_tokens = opts.maxTokens;
 
   let res: Response;
   try {
@@ -49,7 +81,8 @@ export async function chatComplete(
     const timeoutMs = opts?.timeoutMs ?? 60000;
     // 不足 1 秒的上限（测试里会用）四舍五入成 "0 秒" 就成了废话，改用毫秒表述
     const waited = timeoutMs >= 1000 ? `${Math.round(timeoutMs / 1000)} 秒` : `${timeoutMs} 毫秒`;
-    throw new Error(
+    throw new LlmNetworkError(
+      isTimeout,
       isTimeout
         ? // 超时 ≠ 连不上：TCP 握手成功、请求也发出去了，只是模型在限定时间内没答完。
           // 从前这里也劝人"检查代理"，于是排查方向被带偏——真正该调的是超时上限或换个模型。
@@ -61,7 +94,11 @@ export async function chatComplete(
 
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`LLM 请求失败：HTTP ${res.status}，响应：${text.slice(0, 300)}`);
+    throw new LlmHttpError(
+      res.status,
+      text,
+      `LLM 请求失败：HTTP ${res.status}，响应：${text.slice(0, 300)}`,
+    );
   }
 
   let parsed: unknown;

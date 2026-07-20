@@ -12,6 +12,7 @@ import {
 import { parseJson } from '../../lib/json.js';
 import { PROVIDER_PRESETS } from './presets.js';
 import { autoConfigureKey } from './scheduler.js';
+import { healthCheckAll, healthCheckProvider } from './health.js';
 import {
   batchCreateModels,
   createModel,
@@ -56,6 +57,12 @@ function modelView(m: ModelConfig) {
     capability: parseJson<Record<string, unknown>>(m.capabilityJson, {}),
     enabled: m.enabled,
     sortOrder: m.sortOrder,
+    // 从未体检过就是 null，前端据此显示"未体检"而不是绿灯
+    health: {
+      status: m.healthStatus,
+      checkedAt: m.healthCheckedAt,
+      detail: m.healthDetail,
+    },
   };
 }
 
@@ -106,6 +113,19 @@ export const providerRoutes: FastifyPluginAsync<{ db: PrismaClient }> = async (a
   app.post('/api/admin/providers/:id/test', async (req) => {
     const { id } = IdParamsSchema.parse(req.params);
     return testProvider(db, id);
+  });
+
+  /**
+   * 模型体检：对已启用模型逐个发真实请求验证可用性。
+   * 只能由用户显式触发（无定时、无页面加载自动跑）——它会真的花钱，哪怕很少。
+   */
+  app.post('/api/admin/providers/:id/health-check', async (req) => {
+    const { id } = IdParamsSchema.parse(req.params);
+    return healthCheckProvider(db, id);
+  });
+
+  app.post('/api/admin/health-check', async () => {
+    return healthCheckAll(db);
   });
 
   /** ---------- 预置库 / 自动发现 / 批量导入 ---------- */

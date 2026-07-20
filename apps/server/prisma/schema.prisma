@@ -366,6 +366,16 @@ model ModelConfig {
   enabled          Boolean        @default(true)
   sortOrder        Int            @default(0)
 
+  /**
+   * 最近一次体检结果：ok | dead | auth | unreachable | error | untested。
+   * 三个字段都可空，且"从未体检过"必须保持 null——默认成 ok 等于凭空替厂商担保，
+   * 而这个功能的存在正是因为"看着没问题"骗过了所有人。
+   */
+  healthStatus     String?
+  healthCheckedAt  DateTime?
+  /** 体检结论的简短原因（中文，已截断）。绝不含 apiKey。 */
+  healthDetail     String?
+
   @@unique([providerConfigId, key])
 }
 

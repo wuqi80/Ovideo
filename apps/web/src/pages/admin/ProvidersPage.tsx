@@ -31,6 +31,7 @@ import {
   ApiOutlined,
   DeleteOutlined,
   EditOutlined,
+  MedicineBoxOutlined,
   PlusOutlined,
   SearchOutlined,
   ThunderboltOutlined,
@@ -44,6 +45,7 @@ import {
   useDeleteModel,
   useDeleteProvider,
   useDiscoverModels,
+  useHealthCheckProvider,
   useProviderModels,
   useProviderPresets,
   useProviders,
@@ -51,6 +53,7 @@ import {
   useUpdateModel,
   useUpdateProvider,
   type DiscoveredModel,
+  type HealthStatus,
   type ModelItem,
   type ProviderItem,
   type ProviderPreset,
@@ -79,6 +82,62 @@ const MODALITY_OPTIONS: Array<{ value: Modality; label: string }> = [
 function ModalityTag({ modality }: { modality: Modality }) {
   const meta = MODALITY_META[modality] ?? { label: modality, color: 'default' };
   return <Tag color={meta.color}>{meta.label}</Tag>;
+}
+
+/**
+ * 体检状态 → 徽标。
+ * 关键取舍：untested 用中性灰而不是绿色——它是"按成本红线主动没测"，
+ * 不是"测过没问题"。把它画成绿灯，就等于重新制造这个功能本来要消灭的那种虚假安心。
+ */
+const HEALTH_META: Record<HealthStatus, { label: string; color: string }> = {
+  ok: { label: '可用', color: 'success' },
+  dead: { label: '不可用', color: 'error' },
+  auth: { label: '鉴权失败', color: 'error' },
+  unreachable: { label: '网络不通', color: 'warning' },
+  error: { label: '未下结论', color: 'warning' },
+  untested: { label: '未实测', color: 'default' },
+};
+
+/** dead 是整个体检功能的意义所在，单独给一句可执行的下一步 */
+const DEAD_NEXT_STEP =
+  '该模型在你的账号下不可用：它出现在厂商模型清单里不代表你有权调用。请到厂商控制台确认是否需要单独开通，或改用「推理接入点 / endpoint ID」作为模型 key。';
+
+function formatCheckedAt(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('zh-CN', { hour12: false });
+}
+
+/** 模型表格里的体检单元格：从未体检过如实显示"未体检"，绝不留白让人以为没事 */
+function HealthCell({ model }: { model: ModelItem }) {
+  const health = model.health;
+  if (!health?.status) {
+    return (
+      <Tooltip title="这个模型从未体检过——它能不能用，目前谁也不知道。">
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          未体检
+        </Text>
+      </Tooltip>
+    );
+  }
+  const meta = HEALTH_META[health.status] ?? { label: health.status, color: 'default' };
+  const isDead = health.status === 'dead';
+  return (
+    <Tooltip
+      title={
+        <Space direction="vertical" size={2}>
+          {/* dead 时把"该怎么办"和厂商原话并列：只留固定文案会把唯一的证据藏起来，
+              而 Base URL 写错也可能走到这里，那时厂商原话才是识破它的关键 */}
+          {isDead && <span>{DEAD_NEXT_STEP}</span>}
+          <span>{health.detail}</span>
+          {health.checkedAt && <span>体检时间：{formatCheckedAt(health.checkedAt)}</span>}
+        </Space>
+      }
+    >
+      <Tag color={meta.color} style={isDead ? { fontWeight: 600 } : undefined}>
+        {isDead ? `⚠ ${meta.label}` : meta.label}
+      </Tag>
+    </Tooltip>
+  );
 }
 
 /** 按模态生成 capability 模板（高级折叠面板默认内容；一般无需修改） */
@@ -652,6 +711,7 @@ function ProviderCard({
   const updateProvider = useUpdateProvider();
   const deleteProvider = useDeleteProvider();
   const testProvider = useTestProvider();
+  const healthCheck = useHealthCheckProvider();
   const updateModel = useUpdateModel();
   const deleteModel = useDeleteModel();
 
@@ -690,6 +750,62 @@ function ProviderCard({
         }
       },
       onError: (err) => message.error(`连通测试失败：${err.message}`),
+    });
+  };
+
+  // 体检只覆盖已启用模型；文本/视觉理解走真实调用，其余按成本红线只标注
+  const enabledModels = models.filter((m) => m.enabled);
+  const liveCount = enabledModels.filter((m) => m.modality === 'text' || m.modality === 'vision').length;
+  const untestedCount = enabledModels.length - liveCount;
+  // 体检出的死模型顶到卡片最上方——这正是整个功能存在的理由，不能藏在表格某一列里
+  const deadModels = enabledModels.filter((m) => m.health?.status === 'dead');
+
+  /**
+   * 触发前必须把"会发生什么"讲到具体：发几次、发给谁、花多少、哪些不发。
+   * 含糊的"可能产生费用"等于没说，用户没法据此决定。
+   */
+  const handleHealthCheck = () => {
+    Modal.confirm({
+      title: `体检「${provider.name}」的 ${enabledModels.length} 个已启用模型`,
+      width: 560,
+      okText: liveCount > 0 ? `确认体检（发起 ${liveCount} 次真实请求）` : '确认体检',
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={8} style={{ marginTop: 8 }}>
+          <Text>
+            这会向厂商发出<Text strong>真实请求</Text>，不是查模型清单——清单里有，不代表你的账号调得通，
+            只有真调一次才问得出真话。
+          </Text>
+          <Text>
+            · <Text strong>{liveCount} 个</Text>文本 / 视觉理解模型：每个发 <Text code>1</Text> 次极小请求
+            （提示词 2 个字符、<Text code>max_tokens=1</Text>），单次开销约等于 0。
+          </Text>
+          <Text>
+            · <Text strong>{untestedCount} 个</Text>图像 / 视频 / 语音模型：
+            <Text strong>不会实测</Text>。出图按张、出片按秒、合成按字符计费，批量试跑一遍就是真金白银，
+            体检不替你花这笔钱，它们会被如实标为「未实测」。
+          </Text>
+          <Text type="secondary">体检只做标注，不会停用任何模型。</Text>
+        </Space>
+      ),
+      onOk: () =>
+        new Promise<void>((resolve) => {
+          healthCheck.mutate(provider.id, {
+            onSuccess: (r) => {
+              const dead = r.models.filter((m) => m.status === 'dead').length;
+              if (dead > 0) {
+                message.error(`体检完成：发现 ${dead} 个模型在你的账号下不可用，请看模型列表的「体检」列`);
+              } else {
+                message.success(`体检完成：${r.models.length} 个模型已更新体检结果`);
+              }
+              resolve();
+            },
+            onError: (err) => {
+              message.error(`体检失败：${err.message}`);
+              resolve();
+            },
+          });
+        }),
     });
   };
 
@@ -735,6 +851,17 @@ function ProviderCard({
           <Button size="small" icon={<ThunderboltOutlined />} loading={testProvider.isPending} onClick={handleTest}>
             连通测试
           </Button>
+          <Tooltip title="逐个模型发真实请求，查出「列表里有、实际调不通」的模型">
+            <Button
+              size="small"
+              icon={<MedicineBoxOutlined />}
+              loading={healthCheck.isPending}
+              disabled={enabledModels.length === 0}
+              onClick={handleHealthCheck}
+            >
+              模型体检
+            </Button>
+          </Tooltip>
           <Button size="small" icon={<EditOutlined />} onClick={onEdit}>
             编辑
           </Button>
@@ -761,6 +888,26 @@ function ProviderCard({
           {hasApiKey ? <Text code>{provider.apiKey}</Text> : <Tag color="warning">未设置</Tag>}
         </Descriptions.Item>
       </Descriptions>
+
+      {deadModels.length > 0 && (
+        <Alert
+          type="error"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`${deadModels.length} 个已启用模型在你的账号下调不通`}
+          description={
+            <Space direction="vertical" size={4}>
+              <Text>{DEAD_NEXT_STEP}</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                涉及模型：{deadModels.map((m) => m.key).join('、')}
+              </Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                它们仍处于启用状态、前台仍选得到——体检只标注不停用，是否停用由你决定。
+              </Text>
+            </Space>
+          }
+        />
+      )}
 
       <Space style={{ width: '100%', justifyContent: 'space-between', marginBottom: 8 }}>
         <Text strong>模型列表</Text>
@@ -798,6 +945,12 @@ function ProviderCard({
             dataIndex: 'modality',
             width: 90,
             render: (v: Modality) => <ModalityTag modality={v} />,
+          },
+          {
+            title: '体检',
+            key: 'health',
+            width: 100,
+            render: (_, model) => <HealthCell model={model} />,
           },
           {
             title: '启用',

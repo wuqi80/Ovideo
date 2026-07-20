@@ -377,3 +377,72 @@ describe('预置库 / 自动发现 / 批量导入路由', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('体检路由', () => {
+  it('POST /providers/:id/health-check 返回每个模型一条结果，并写回模型视图的 health 字段', async () => {
+    const p = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/admin/providers',
+        payload: {
+          name: '体检路由厂',
+          vendor: 'openai',
+          category: 'TEXT',
+          baseUrl: 'https://api.example.com/v1',
+          apiKey: 'sk-route-health-123',
+        },
+      })
+    ).json();
+
+    for (const [key, modality] of [
+      ['route-text', 'text'],
+      ['route-image', 'image'],
+    ] as const) {
+      await app.inject({
+        method: 'POST',
+        url: `/api/admin/providers/${p.id}/models`,
+        payload: { key, label: key, modality, capability: { modality, input: ['prompt'] } },
+      });
+    }
+
+    // 体检前：从未体检过，health.status 必须是 null（而不是"看起来没问题"）
+    const before = (await app.inject({ method: 'GET', url: `/api/admin/providers/${p.id}/models` })).json();
+    expect(before.every((m: { health: { status: string | null } }) => m.health.status === null)).toBe(true);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: { message: 'model not found' } }), { status: 404 })),
+    );
+
+    const res = await app.inject({ method: 'POST', url: `/api/admin/providers/${p.id}/health-check` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.providerName).toBe('体检路由厂');
+    expect(body.models).toHaveLength(2);
+    expect(body.models.find((m: { key: string }) => m.key === 'route-text').status).toBe('dead');
+    expect(body.models.find((m: { key: string }) => m.key === 'route-image').status).toBe('untested');
+    // 响应里不得出现明文 key
+    expect(JSON.stringify(body)).not.toContain('sk-route-health-123');
+
+    const after = (await app.inject({ method: 'GET', url: `/api/admin/providers/${p.id}/models` })).json();
+    const text = after.find((m: { key: string }) => m.key === 'route-text');
+    expect(text.health.status).toBe('dead');
+    expect(text.health.checkedAt).toBeTruthy();
+    expect(text.enabled).toBe(true); // 体检不自动停用
+  });
+
+  it('POST /providers/:id/health-check 厂商不存在返回 404', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/admin/providers/nope/health-check' });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('POST /health-check 全局体检返回按厂商分组的结果', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: 'h' } }] }), { status: 200 })),
+    );
+    const res = await app.inject({ method: 'POST', url: '/api/admin/health-check' });
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.json().providers)).toBe(true);
+  });
+});
