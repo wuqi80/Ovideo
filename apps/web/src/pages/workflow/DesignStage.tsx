@@ -26,7 +26,8 @@ import {
   ThunderboltOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
-import type { CapabilityEntry, TagType } from '@ovideo/shared';
+import type { AspectRatio, CapabilityEntry, TagType } from '@ovideo/shared';
+import { ASPECT_RATIOS, DEFAULT_ASPECT_RATIO, isAspectRatio, sizeForRatio } from '@ovideo/shared';
 import { useProject, useUpdateProject, type Project, type UpdateProjectInput } from '../../api/hooks';
 import { useJob } from '../../api/workflow-hooks';
 import { TagDedup } from '../../components/TagDedup';
@@ -53,16 +54,8 @@ const TAG_TYPE_LABEL: Record<TagType, string> = {
 
 const GOLD = '#faad14';
 
-/** 画幅比例 → 图像生成 size（全站统一映射；2K 档满足 Seedream 4.5/5.0 最小像素要求，按张计费不加价） */
-const RATIO_TO_SIZE: Record<string, string> = {
-  '9:16': '1440x2560',
-  '16:9': '2560x1440',
-  '1:1': '2048x2048',
-  '3:4': '1728x2304',
-  '4:3': '2304x1728',
-};
-const RATIO_OPTIONS = ['9:16', '16:9', '1:1', '3:4', '4:3'];
-const DEFAULT_RATIO = '9:16';
+/** 画幅表来自 @ovideo/shared（本文件曾自留一份副本，与分镜页各抄一遍——已删） */
+const RATIO_OPTIONS: readonly AspectRatio[] = ASPECT_RATIOS;
 
 /** 风格设定预设（点击 Tag 填充） */
 const STYLE_PRESETS: Array<{ label: string; prompt: string }> = [
@@ -340,8 +333,20 @@ function TagDesignCard({
   const [genState, setGenState] = useState<{
     prompt: string;
     modelConfigId?: string;
-    ratio: string;
+    ratio: AspectRatio;
   } | null>(null);
+
+  /**
+   * 弹窗的画幅默认值取项目画幅，不是写死的 9:16。
+   * 【为什么要紧】设计图是形象一致性的地基：向导里选了 16:9，这里却默认竖构图，
+   * 拿竖图去喂横构图的目标，模型很容易裁切重构人物，一致性从源头就塌了。
+   * 用户仍可在弹窗里临时改——只影响这一次生成。
+   */
+  const projectQuery = useProject(projectId !== '' ? projectId : undefined);
+  const projectRatio = (projectQuery.data as { aspectRatio?: string } | undefined)?.aspectRatio;
+  const defaultRatio: AspectRatio = isAspectRatio(projectRatio)
+    ? projectRatio
+    : DEFAULT_ASPECT_RATIO;
 
   const handleGenerate = () => {
     if (genState === null) return;
@@ -351,7 +356,7 @@ function TagDesignCard({
         tagId: tag.id,
         prompt: prompt !== '' ? prompt : undefined,
         modelConfigId: genState.modelConfigId,
-        size: RATIO_TO_SIZE[genState.ratio],
+        size: sizeForRatio(genState.ratio),
       },
       {
         onSuccess: (j) => {
@@ -394,7 +399,7 @@ function TagDesignCard({
             ghost
             icon={<ThunderboltOutlined />}
             loading={generating}
-            onClick={() => setGenState({ prompt: defaultPrompt, ratio: DEFAULT_RATIO })}
+            onClick={() => setGenState({ prompt: defaultPrompt, ratio: defaultRatio })}
           >
             AI 生成
           </Button>
@@ -559,12 +564,17 @@ function TagDesignCard({
             </Text>
             <div style={{ marginTop: 4 }}>
               <Segmented
-                options={RATIO_OPTIONS}
-                value={genState?.ratio ?? DEFAULT_RATIO}
+                options={[...RATIO_OPTIONS]}
+                value={genState?.ratio ?? defaultRatio}
                 onChange={(v) =>
-                  setGenState((s) => (s === null ? s : { ...s, ratio: String(v) }))
+                  setGenState((s) =>
+                    s === null || !isAspectRatio(v) ? s : { ...s, ratio: v },
+                  )
                 }
               />
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                默认跟随项目画幅（{defaultRatio}）；在这里改只影响本次生成
+              </Text>
             </div>
           </div>
           {imageCapabilities.length > 0 && (

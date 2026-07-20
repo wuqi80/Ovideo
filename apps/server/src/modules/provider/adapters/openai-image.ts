@@ -18,12 +18,19 @@ export interface OpenAiImageArgs {
   /**
    * 参考图本地绝对路径（角色/场景一致性的关键）：以 base64 data URL 经 `image` 字段上送。
    * 这是火山方舟 Seedream 等对 OpenAI images 协议的扩展；标准 OpenAI 端点会忽略未知字段。
-   * 最多取前 5 张（Ark 上限），空数组时不携带该字段。
+   * 最多取前 MAX_REF_IMAGES 张（Ark 上限），空数组时不携带该字段。
    */
   refImagePaths?: string[];
 }
 
-const MAX_REF_IMAGES = 5;
+/**
+ * 单次请求能携带的参考图上限（Ark 侧限制）。
+ * 【为什么导出】这个数原本只活在适配器里：调用方按全量参考图写提示词正文与 meta.refImages，
+ * 到这里被静默截断——提示词写着「参考图6」却没发第 6 张，而「实际提示词」弹窗还列着 7 条。
+ * 排查形象不一致的人会去怀疑模型和提示词，永远查不到问题在这一行 slice 上。
+ * 上限必须两侧同源：调用方在构造提示词之前就按它截断，并把被截掉的部分显式记账。
+ */
+export const MAX_REF_IMAGES = 5;
 
 function toDataUrl(filePath: string): string {
   const ext = path.extname(filePath).replace('.', '').toLowerCase() || 'png';

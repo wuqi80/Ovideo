@@ -28,7 +28,9 @@ import {
   ThunderboltOutlined,
   WarningOutlined,
 } from '@ant-design/icons';
-import type { CapabilityEntry, StaleReason, TagType } from '@ovideo/shared';
+import type { AspectRatio, CapabilityEntry, StaleReason, TagType } from '@ovideo/shared';
+import { ASPECT_RATIOS, DEFAULT_ASPECT_RATIO, isAspectRatio, sizeForRatio } from '@ovideo/shared';
+import { resolveLoadPhase } from '../../utils/load-phase';
 import { useApplyPatch, useStoryboards } from '../../api/workflow-hooks';
 import { useProject } from '../../api/hooks';
 import {
@@ -60,22 +62,13 @@ const TAG_COLOR: Record<TagType, string> = {
   PROP: 'gold',
 };
 
-/** 画面比例 → 图像生成尺寸（与服务端图像生成契约一致） */
-type AspectRatio = '9:16' | '16:9' | '1:1' | '3:4' | '4:3';
-
-// 2K 档：满足 Seedream 4.5/5.0 的最小像素要求（≥368.6 万），4.0 兼容且按张计费不加价
-const RATIO_TO_SIZE: Record<AspectRatio, string> = {
-  '9:16': '1440x2560',
-  '16:9': '2560x1440',
-  '1:1': '2048x2048',
-  '3:4': '1728x2304',
-  '4:3': '2304x1728',
-};
-
-const RATIO_OPTIONS = (Object.keys(RATIO_TO_SIZE) as AspectRatio[]).map((r) => ({
-  value: r,
-  label: r,
-}));
+/**
+ * 画幅表来自 @ovideo/shared，本文件不再自留副本。
+ * 【为什么】这张表原本在本页和 DesignStage 各抄了一份，服务端一份都没有——
+ * 于是不经前端的生成路径（自动收敛 agent）压根不知道项目是横是竖。
+ * 副本一多，改一处漏一处只是时间问题。
+ */
+const RATIO_OPTIONS = ASPECT_RATIOS.map((r) => ({ value: r, label: r }));
 
 function formatSeconds(ms: number): string {
   return `${(Math.round(ms / 100) / 10).toFixed(1)}s`;
@@ -148,8 +141,9 @@ export function StoryboardStage() {
   const projectQuery = useProject(projectId !== '' ? projectId : undefined);
   const projectRatio = (projectQuery.data as { aspectRatio?: string } | undefined)?.aspectRatio;
   const [ratio, setRatio] = useState<AspectRatio | null>(null);
+  // 项目画幅可能是脏值（历史数据/手改数据库），isAspectRatio 挡一道再退回默认，而不是把脏值当画幅用
   const effectiveRatio: AspectRatio =
-    ratio ?? ((projectRatio ?? '9:16') as AspectRatio);
+    ratio ?? (isAspectRatio(projectRatio) ? projectRatio : DEFAULT_ASPECT_RATIO);
 
   useEffect(() => {
     if (batchPolling && staleQuery.isSuccess && staleShots.length === 0) {
@@ -165,7 +159,7 @@ export function StoryboardStage() {
     let submitted = 0;
     for (const s of staleShots) {
       try {
-        await generateKeyframe.mutateAsync({ shotId: s.id, size: RATIO_TO_SIZE[effectiveRatio] });
+        await generateKeyframe.mutateAsync({ shotId: s.id, size: sizeForRatio(effectiveRatio) });
         submitted += 1;
       } catch (e) {
         message.error(e instanceof Error ? e.message : '提交重生成失败');
@@ -198,6 +192,21 @@ export function StoryboardStage() {
       message.error(e instanceof Error ? e.message : '更新失败');
       throw e;
     }
+  };
+
+  /**
+   * 加载/失败/空 三态互斥判定。
+   * detailQuery 在没选中版本时是 disabled 的，必须传 null 排除——
+   * 否则它永远不会 success，页面会停在转圈或错把状态判错。
+   */
+  const phase = resolveLoadPhase(
+    [storyboardsQuery, selectedStoryboardId !== null ? detailQuery : null],
+    (storyboards ?? []).length === 0,
+  );
+  const loadError = storyboardsQuery.error ?? detailQuery.error;
+  const retryLoad = () => {
+    void storyboardsQuery.refetch();
+    if (selectedStoryboardId !== null) void detailQuery.refetch();
   };
 
   const versionOptions = [...(storyboards ?? [])]
@@ -254,11 +263,50 @@ export function StoryboardStage() {
           />
         )}
 
-        {storyboardsQuery.isLoading || detailQuery.isLoading ? (
+        {phase === 'loading' ? (
           <div style={{ textAlign: 'center', padding: 48 }}>
             <Spin />
           </div>
-        ) : !storyboards || storyboards.length === 0 ? (
+        ) : phase === 'paused' ? (
+          /* 挂起 ≠ 加载中：不说清楚就只是一个永远转不完的圈 */
+          <Alert
+            type="warning"
+            showIcon
+            style={{ margin: '24px 0' }}
+            message="连接中断，正在等待网络恢复"
+            description={
+              <Space direction="vertical" size={8}>
+                <Text style={{ fontSize: 12 }}>
+                  请求已被暂挂，网络恢复后会自动继续。你之前生成的版本都还在。
+                </Text>
+                <Button size="small" onClick={retryLoad}>
+                  立即重试
+                </Button>
+              </Space>
+            }
+          />
+        ) : phase === 'error' ? (
+          /* 故障绝不能画成空态：写「暂无分镜版本」会让用户以为自己没生成过，然后再生成一遍 */
+          <Alert
+            type="error"
+            showIcon
+            style={{ margin: '24px 0' }}
+            message="分镜加载失败"
+            description={
+              <Space direction="vertical" size={8}>
+                <Text style={{ fontSize: 12 }}>
+                  {loadError instanceof Error ? loadError.message : '无法读取分镜数据'}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  这是加载出错，不是「没有分镜」——你之前生成的版本还在。
+                </Text>
+                <Button size="small" type="primary" onClick={retryLoad}>
+                  重试
+                </Button>
+              </Space>
+            }
+          />
+        ) : phase === 'empty' ? (
           <Empty description="暂无分镜版本，请先在「剧本」阶段生成分镜" style={{ margin: '48px 0' }} />
         ) : shots.length === 0 ? (
           <Empty description="该分镜版本没有镜头" style={{ margin: '48px 0' }} />
@@ -373,7 +421,7 @@ function ShotKeyframeCard({
 
   const handleGenerate = () => {
     generate.mutate(
-      { shotId: shot.id, modelConfigId, size: RATIO_TO_SIZE[ratio] },
+      { shotId: shot.id, modelConfigId, size: sizeForRatio(ratio) },
       {
         onSuccess: (job) => {
           message.success('已提交生成任务');

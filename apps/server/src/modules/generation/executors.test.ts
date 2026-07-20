@@ -15,6 +15,7 @@ import {
   type GenerationGens,
 } from './executors.js';
 import { mockImageGen, mockVideoGen, mockTtsGen, type GenModelCfg } from './gens.js';
+import { MAX_REF_IMAGES } from '../provider/adapters/openai-image.js';
 
 let t: TestDb;
 let db: PrismaClient;
@@ -76,7 +77,13 @@ async function makeCtx(type: string, input: unknown) {
 
 /** 可捕获调用参数的假 Gen：写占位文件即可（不跑真 ffmpeg 的用例用） */
 function makeFakeGens() {
-  const imageCalls: Array<{ prompt: string; refUris: string[]; outPath: string; modelCfg?: GenModelCfg }> = [];
+  const imageCalls: Array<{
+    prompt: string;
+    refUris: string[];
+    outPath: string;
+    size?: string;
+    modelCfg?: GenModelCfg;
+  }> = [];
   const gens: GenerationGens = {
     imageGen: async (args) => {
       imageCalls.push(args);
@@ -737,5 +744,155 @@ describe('GENERATE_TTS', () => {
     registerGenerationExecutors(gens);
     const ctx = await makeCtx('GENERATE_TTS', { kind: 'dubbing', dubbingLineId: 'no-such-line' });
     await expect(getExecutor('GENERATE_TTS')!(ctx)).rejects.toThrow('配音行 不存在');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 画幅：input.size 缺省时由服务端按项目画幅换算
+ * ------------------------------------------------------------------ */
+
+/** 独立项目 + 独立分镜链，用于按项目画幅取图（全局 projectId 是默认 9:16，测不出横屏） */
+const extraProjectIds: string[] = [];
+async function seedShotInProject(aspectRatio: string) {
+  const project = await db.project.create({ data: { name: `画幅测试-${aspectRatio}`, aspectRatio } });
+  extraProjectIds.push(project.id);
+  const episode = await db.episode.create({ data: { projectId: project.id, title: '测试集' } });
+  const draft = await db.scriptDraft.create({ data: { episodeId: episode.id, isMain: true } });
+  const storyboard = await db.storyboard.create({
+    data: { episodeId: episode.id, scriptDraftId: draft.id, version: 1 },
+  });
+  const shot = await db.shot.create({
+    data: { storyboardId: storyboard.id, sortOrder: 0, sourceText: '男主走进教室', imagePrompt: '男主走进教室' },
+  });
+  return { project, shot };
+}
+
+async function ctxInProject(projectId2: string, input: unknown) {
+  const job: Job = await db.job.create({
+    data: { projectId: projectId2, type: 'GENERATE_IMAGE', status: 'RUNNING', inputJson: toJson(input) },
+  });
+  return { db, job, updateProgress: async () => {} };
+}
+
+describe('GENERATE_IMAGE / kind=keyframe：画幅换算收口在服务端', () => {
+  afterAll(() => {
+    for (const id of extraProjectIds) {
+      fs.rmSync(path.join(STORAGE_ROOT, id), { recursive: true, force: true });
+    }
+  });
+
+  it('agent 路径（不传 size）：按项目 aspectRatio 换算，16:9 项目不再出竖图', async () => {
+    const { gens, imageCalls } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const { project, shot } = await seedShotInProject('16:9');
+
+    await getExecutor('GENERATE_IMAGE')!(
+      await ctxInProject(project.id, { kind: 'keyframe', shotId: shot.id }),
+    );
+
+    expect(imageCalls[0]!.size).toBe('2560x1440');
+  });
+
+  it('agent 路径 + 9:16 项目：也走 2K 档，而不是适配器写死的 1024x1792（达不到 Seedream 像素门槛）', async () => {
+    const { gens, imageCalls } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const { project, shot } = await seedShotInProject('9:16');
+
+    await getExecutor('GENERATE_IMAGE')!(
+      await ctxInProject(project.id, { kind: 'keyframe', shotId: shot.id }),
+    );
+
+    expect(imageCalls[0]!.size).toBe('1440x2560');
+    expect(imageCalls[0]!.size).not.toBe('1024x1792');
+  });
+
+  it('显式 size 优先：页面上的即时选择压过项目画幅', async () => {
+    const { gens, imageCalls } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const { project, shot } = await seedShotInProject('16:9');
+
+    await getExecutor('GENERATE_IMAGE')!(
+      await ctxInProject(project.id, { kind: 'keyframe', shotId: shot.id, size: '2048x2048' }),
+    );
+
+    expect(imageCalls[0]!.size).toBe('2048x2048');
+  });
+
+  it('项目画幅是脏值时退回默认画幅，不中断生成', async () => {
+    const { gens, imageCalls } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const { project, shot } = await seedShotInProject('bogus');
+
+    await getExecutor('GENERATE_IMAGE')!(
+      await ctxInProject(project.id, { kind: 'keyframe', shotId: shot.id }),
+    );
+
+    expect(imageCalls[0]!.size).toBe('1440x2560');
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 参考图上限：提示词正文、meta.refImages、实际上送三者同源
+ * ------------------------------------------------------------------ */
+
+describe('GENERATE_IMAGE / kind=keyframe：参考图张数上限在写提示词之前生效', () => {
+  it('挂 7 个角色标签：只写 5 条参考图说明、只送 5 张，超出的记进 meta.droppedRefs', async () => {
+    const { gens, imageCalls } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const { shot } = await seedShot();
+
+    for (let i = 0; i < 7; i++) {
+      const asset = await makeUploadedAsset();
+      const tag = await db.tag.create({
+        data: {
+          projectId,
+          type: 'CHARACTER',
+          name: `群像${i}-${crypto.randomUUID().slice(0, 6)}`,
+          canonicalAssetId: asset.id,
+        },
+      });
+      await db.shotTag.create({ data: { shotId: shot.id, tagId: tag.id } });
+    }
+
+    const r = await getExecutor('GENERATE_IMAGE')!(
+      await makeCtx('GENERATE_IMAGE', { kind: 'keyframe', shotId: shot.id }),
+    );
+
+    const call = imageCalls[0]!;
+    expect(call.refUris).toHaveLength(MAX_REF_IMAGES);
+
+    // 提示词正文不能出现一张模型收不到的「参考图6」
+    expect(call.prompt).toContain(`参考图${MAX_REF_IMAGES}：`);
+    expect(call.prompt).not.toContain(`参考图${MAX_REF_IMAGES + 1}：`);
+
+    // 「实际提示词」弹窗读的就是这份 meta：条数必须等于真正上送的条数
+    const asset = await db.asset.findUnique({ where: { id: r.outputAssetIds![0]! } });
+    const meta = parseJson<{ refImages?: string[]; droppedRefs?: string[] }>(asset!.metaJson, {});
+    expect(meta.refImages).toHaveLength(call.refUris.length);
+
+    // 被截掉的不能默默丢：弹窗要能说清"还有 N 张因超出单次上限未发送"
+    expect(meta.droppedRefs).toHaveLength(7 - MAX_REF_IMAGES);
+
+    // 血缘只认真正参与生成的那几张
+    expect(await parentIdsOf(asset!.id)).toHaveLength(MAX_REF_IMAGES);
+  });
+
+  it('未超上限时不写 droppedRefs（不给排查页面添噪音）', async () => {
+    const { gens, imageCalls } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const { shot } = await seedShot();
+    const asset0 = await makeUploadedAsset();
+    const tag = await db.tag.create({
+      data: { projectId, type: 'CHARACTER', name: `独角-${crypto.randomUUID().slice(0, 6)}`, canonicalAssetId: asset0.id },
+    });
+    await db.shotTag.create({ data: { shotId: shot.id, tagId: tag.id } });
+
+    const r = await getExecutor('GENERATE_IMAGE')!(
+      await makeCtx('GENERATE_IMAGE', { kind: 'keyframe', shotId: shot.id }),
+    );
+    const asset = await db.asset.findUnique({ where: { id: r.outputAssetIds![0]! } });
+    const meta = parseJson<{ refImages?: string[]; droppedRefs?: string[] }>(asset!.metaJson, {});
+    expect(meta.refImages).toHaveLength(imageCalls[0]!.refUris.length);
+    expect(meta.droppedRefs).toBeUndefined();
   });
 });

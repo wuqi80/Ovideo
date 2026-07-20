@@ -3,6 +3,8 @@
 // 付费产物从不物理删除：重抽只追加 take；首个 take 自动 selected。
 import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
+import { sizeForRatio } from '@ovideo/shared';
+import { MAX_REF_IMAGES } from '../provider/adapters/openai-image.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import { parseJson } from '../../lib/json.js';
 import { allocFilePath, fileSize, uriToAbsPath } from '../../lib/storage.js';
@@ -188,13 +190,36 @@ function makeKeyframeExecutor(gens: GenerationGens) {
     // @ 模式：resolved 已按分层语义过滤（角色/道具 + @!强制场景），顺序=@ 出现顺序，原样采用；
     // 自动模式：角色/道具优先，场景图只在没有任何角色参考（空镜）时进入参考位。
     const characterRefs = resolved.filter((r) => !r.isScene);
-    const chosen =
+    const candidates =
       mentions.length > 0 ? resolved : characterRefs.length > 0 ? characterRefs : resolved;
+    // 【上限在写提示词之前生效】适配器只送前 MAX_REF_IMAGES 张。若在这里按全量写
+    // refTagNotes / meta.refImages，提示词正文会写着「参考图6：…」让模型参照一张它没收到的图，
+    // 而「实际提示词」弹窗——排查形象不一致的唯一入口——也会列出没发出去的条目。
+    // 因此先截断，让「提示词正文、meta.refImages、实际请求体」三者同源。
+    const withinLimit = candidates.slice(0, MAX_REF_IMAGES);
+
+    /**
+     * 【先解析资产、再定稿三者】只截断还不够：资产行可能查不到（被删、血缘断裂、跨项目脏数据），
+     * 原来 refUris 在最后单独 filter 掉了这类，而 refTagNotes / meta.refImages 不跟着缩——
+     * 于是提示词仍写着「参考图3：…」、弹窗仍列 3 条，实际只发了 2 张。
+     * 那是同一个谎话又下沉了一层。所以以"真正解析出 uri 的那一批"为唯一基准，
+     * 三者全部由它派生。
+     */
+    const resolvedAssets = await db.asset.findMany({
+      where: { id: { in: withinLimit.map((r) => r.assetId) } },
+    });
+    const uriById = new Map(resolvedAssets.map((a) => [a.id, a.uri]));
+    const chosen = withinLimit.filter((r) => uriById.has(r.assetId));
+
+    // 被丢下的分两种，但对用户是同一个意思："这几个标签的形象没参与本次生成"
+    const droppedRefs = [
+      ...candidates.slice(MAX_REF_IMAGES).map((r) => r.note),
+      ...withinLimit.filter((r) => !uriById.has(r.assetId)).map((r) => `${r.note}（参考图资产已失效）`),
+    ];
+
     const boundAssetIds = chosen.map((r) => r.assetId);
     const refTagNotes = chosen.map((r, i) => `参考图${i + 1}：${r.note}`);
-    const boundAssets = await db.asset.findMany({ where: { id: { in: boundAssetIds } } });
-    const byId = new Map(boundAssets.map((a) => [a.id, a]));
-    const refUris = boundAssetIds.map((id) => byId.get(id)?.uri).filter((u): u is string => !!u);
+    const refUris = chosen.map((r) => uriById.get(r.assetId)!);
 
     // 一致性说明放在提示词【开头】（模型对前部 token 权重更高），并硬性禁止角色人格化；
     // @ 符号发给模型前剥掉（名字保留）
@@ -207,7 +232,12 @@ function makeKeyframeExecutor(gens: GenerationGens) {
         ? `${stylePrefix}【形象一致性】${refTagNotes.join('；')}。角色的物种与形态严格按参考图，严禁把动物/机器人角色画成人类。\n${basePrompt}`
         : `${stylePrefix}${basePrompt}`;
     const file = allocFilePath(job.projectId, 'png');
-    await gens.imageGen({ prompt, refUris, outPath: file.absPath, size: input.size, modelCfg });
+    // 【画幅在服务端收口】input.size 缺省时按项目画幅换算，而不是让适配器落到写死的竖屏兜底。
+    // 人工点「生成关键图」时前端会带 size；自动收敛 agent 那条路全程没有画幅概念——
+    // 16:9 项目会收敛出竖图，还可能被自动设为选定，视频 --ratio adaptive 跟随首帧，整条片子从此变竖屏。
+    // 补在这里而不是补在每个调用方：新增的生成路径也自动正确。显式传入的 size 是用户在页面上的即时选择，优先。
+    const size = input.size ?? sizeForRatio(project?.aspectRatio);
+    await gens.imageGen({ prompt, refUris, outPath: file.absPath, size, modelCfg });
     await updateProgress(70);
 
     const asset = await createAsset(db, {
@@ -220,7 +250,11 @@ function makeKeyframeExecutor(gens: GenerationGens) {
       jobId: job.id,
       parentIds: boundAssetIds,
       // 生成透明度：实际生效的完整提示词与参考图清单可查（区别于镜头上存储的 imagePrompt）
-      meta: { effectivePrompt: prompt.slice(0, 2000), refImages: refTagNotes },
+      meta: {
+        effectivePrompt: prompt.slice(0, 2000),
+        refImages: refTagNotes,
+        ...(droppedRefs.length > 0 ? { droppedRefs } : {}),
+      },
     });
     // 图片缩略图直接复用原图 uri（createAsset 不收 thumbUri，落库后补写）
     await db.asset.update({ where: { id: asset.id }, data: { thumbUri: file.uri } });
@@ -263,7 +297,16 @@ function makeDesignExecutor(gens: GenerationGens) {
       ? `【画风】${project.stylePrompt}。\n${input.prompt}`
       : input.prompt;
     const file = allocFilePath(job.projectId, 'png');
-    await gens.imageGen({ prompt: designPrompt, refUris, outPath: file.absPath, size: input.size, modelCfg });
+    // 与关键图同一口径：缺省时按项目画幅换算，而不是落到适配器里那个写死的竖屏兜底。
+    // 设计图是形象一致性的地基，竖构图的参考喂给横构图的目标容易被裁切重构。
+    // project 上面已经为拼 stylePrompt 查过了，这里不额外多一次查询。
+    await gens.imageGen({
+      prompt: designPrompt,
+      refUris,
+      outPath: file.absPath,
+      size: input.size ?? sizeForRatio(project?.aspectRatio),
+      modelCfg,
+    });
     await updateProgress(70);
 
     const asset = await createAsset(db, {

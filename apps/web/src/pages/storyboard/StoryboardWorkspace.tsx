@@ -10,9 +10,23 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { App, Button, ConfigProvider, Empty, Segmented, Select, Space, Spin, Tooltip, Typography } from 'antd';
+import {
+  Alert,
+  App,
+  Button,
+  ConfigProvider,
+  Empty,
+  Segmented,
+  Select,
+  Space,
+  Spin,
+  Tooltip,
+  Typography,
+} from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import type { ShotEditableFields, StoryboardPatch } from '@ovideo/shared';
+import { DEFAULT_ASPECT_RATIO } from '@ovideo/shared';
+import { resolveLoadPhase } from '../../utils/load-phase';
 import { useStoryboards, useApplyPatch, type ShotDetail } from '../../api/workflow-hooks';
 import { useStoryboardDetail } from '../../api/produce-hooks';
 import { useProject } from '../../api/hooks';
@@ -65,7 +79,8 @@ function WorkspaceInner(): JSX.Element {
   useNeutralSurface();
 
   const projectQuery = useProject(projectId !== '' ? projectId : undefined);
-  const ratio = (projectQuery.data as { aspectRatio?: string } | undefined)?.aspectRatio ?? '9:16';
+  const ratio =
+    (projectQuery.data as { aspectRatio?: string } | undefined)?.aspectRatio ?? DEFAULT_ASPECT_RATIO;
 
   const storyboardsQuery = useStoryboards(episodeId);
   const versions = useMemo(
@@ -291,7 +306,22 @@ function WorkspaceInner(): JSX.Element {
     [commitPatch, message],
   );
 
-  const loading = storyboardsQuery.isPending || detailQuery.isPending;
+  /**
+   * 四态判定。storyboardId 为 null 时 detailQuery 是 disabled 的，
+   * 必须传 null 排除在外——它的 isPending 恒为 true，算进来就是无限转圈，
+   * 下面那段带「去剧本页」的空态引导会永远见不着人。
+   */
+  const phase = resolveLoadPhase(
+    [storyboardsQuery, storyboardId !== null ? detailQuery : null],
+    storyboardId === null,
+  );
+
+  const retry = useCallback((): void => {
+    void storyboardsQuery.refetch();
+    if (storyboardId !== null) void detailQuery.refetch();
+  }, [storyboardsQuery, detailQuery, storyboardId]);
+
+  const loadError = storyboardsQuery.error ?? detailQuery.error;
 
   return (
       <div
@@ -362,11 +392,53 @@ function WorkspaceInner(): JSX.Element {
 
         {/* ---------- 三栏 ---------- */}
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          {loading ? (
+          {phase === 'loading' ? (
             <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
               <Spin tip="正在载入分镜…" />
             </div>
-          ) : storyboardId === null ? (
+          ) : phase === 'paused' ? (
+            <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 24 }}>
+              {/* 挂起 ≠ 加载中。不说清楚的话用户只会看到一个永远转不完的圈 */}
+              <Alert
+                type="warning"
+                showIcon
+                style={{ maxWidth: 520 }}
+                message="连接中断，正在等待网络恢复"
+                description={
+                  <Space direction="vertical" size={8}>
+                    <Text style={{ fontSize: 12 }}>
+                      请求已被暂挂，网络恢复后会自动继续。你之前生成的内容都还在。
+                    </Text>
+                    <Button size="small" onClick={retry}>
+                      立即重试
+                    </Button>
+                  </Space>
+                }
+              />
+            </div>
+          ) : phase === 'error' ? (
+            <div style={{ flex: 1, display: 'grid', placeItems: 'center', padding: 24 }}>
+              <Alert
+                type="error"
+                showIcon
+                style={{ maxWidth: 520 }}
+                message="分镜加载失败"
+                description={
+                  <Space direction="vertical" size={8}>
+                    <Text style={{ fontSize: 12 }}>
+                      {loadError instanceof Error ? loadError.message : '无法读取分镜数据'}
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      这是加载出错，不是「没有分镜」——你之前生成的内容还在。
+                    </Text>
+                    <Button size="small" type="primary" onClick={retry}>
+                      重试
+                    </Button>
+                  </Space>
+                }
+              />
+            </div>
+          ) : phase === 'empty' ? (
             <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
               <Empty
                 description={
