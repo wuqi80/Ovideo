@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { createTestDb, type TestDb } from '../../test/testdb.js';
-import { createCut, getCut, listCuts, type CutItem } from './service.js';
+import {
+  assertAudioSnapshotFresh,
+  createCut,
+  getCut,
+  listCuts,
+  type CutItem,
+} from './service.js';
 
 let t: TestDb;
 let projectId: string;
@@ -255,6 +261,88 @@ describe('createCut', () => {
     await expect(
       createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id }),
     ).rejects.toThrow('没有镜头');
+  });
+});
+
+describe('assertAudioSnapshotFresh —— 重试不能拿旧配音蒙混过关', () => {
+  it('配音没变过 → 放行', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 1);
+    await selectVideoTake(t.db, shots[0].id);
+    await addDialogue(t.db, shots[0].id, 'a');
+    await addDubbing(t.db, shots[0].id, 'READY');
+    const cut = await createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id });
+
+    await expect(assertAudioSnapshotFresh(t.db, cut)).resolves.toBeUndefined();
+  });
+
+  it('创建后原地换了 audioAssetId → 拦下，并点名是哪几个镜头', async () => {
+    // 这正是「合成失败 → 去配音页改配音 → 回任务面板点重试」的现场：
+    // Job 被重置了，Cut 快照没有；旧音频还在盘上，照样混得进去。
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 2);
+    for (const s of shots) await selectVideoTake(t.db, s.id);
+    await addDialogue(t.db, shots[0].id, 'a');
+    await addDialogue(t.db, shots[1].id, 'b');
+    await addDubbing(t.db, shots[0].id, 'READY');
+    const changing = await addDubbing(t.db, shots[1].id, 'READY');
+    const cut = await createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id });
+
+    const newAudio = await t.db.asset.create({
+      data: {
+        projectId,
+        type: 'AUDIO',
+        source: 'GENERATED',
+        uri: `/storage/${projectId}/${changing.id}-v2.mp3`,
+        durationMs: 1200,
+      },
+    });
+    await t.db.dubbingLine.update({
+      where: { id: changing.id },
+      data: { audioAssetId: newAudio.id, durationMs: 1200 },
+    });
+
+    const err = await assertAudioSnapshotFresh(t.db, cut).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain('#2');
+    expect((err as Error).message).not.toContain('#1'); // 没变的镜头不能被连坐
+    expect((err as Error).message).toContain('重新发起合成');
+  });
+
+  it('重新生成留痕（同一台词新增一条 READY 配音行）也算变过', async () => {
+    // 重生成不一定原地改，也可能新建一行；只认 audioAssetId 是否原地变化的话，这种就漏了
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 1);
+    await selectVideoTake(t.db, shots[0].id);
+    const dialogue = await addDialogue(t.db, shots[0].id, 'a');
+    await addDubbing(t.db, shots[0].id, 'READY');
+    const cut = await createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id });
+
+    const redoAudio = await t.db.asset.create({
+      data: {
+        projectId,
+        type: 'AUDIO',
+        source: 'GENERATED',
+        uri: `/storage/${projectId}/${dialogue.id}-redo.mp3`,
+        durationMs: 1000,
+      },
+    });
+    await t.db.dubbingLine.create({
+      data: {
+        shotId: shots[0].id,
+        dialogueLineId: dialogue.id,
+        status: 'READY',
+        audioAssetId: redoAudio.id,
+        durationMs: 1000,
+      },
+    });
+
+    await expect(assertAudioSnapshotFresh(t.db, cut)).rejects.toThrow('#1');
+  });
+
+  it('无声片（快照本来就空、现在也空）→ 放行，不误报', async () => {
+    const { episode, storyboard, shots } = await makeStoryboard(t.db, 1);
+    await selectVideoTake(t.db, shots[0].id);
+    const cut = await createCut(t.db, { episodeId: episode.id, storyboardId: storyboard.id });
+
+    await expect(assertAudioSnapshotFresh(t.db, cut)).resolves.toBeUndefined();
   });
 });
 

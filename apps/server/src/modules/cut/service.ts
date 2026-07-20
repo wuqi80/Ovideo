@@ -96,18 +96,7 @@ export async function createCut(db: PrismaClient, input: CreateCutInput): Promis
     assertDubbingComplete(shots, dialogues, dubbingLines);
   }
 
-  // 配音快照：READY 且有音频资产的配音行（镜头内按台词 sortOrder 排序）。
-  const audioLines: CutAudioLine[] = dubbingLines
-    .filter((l) => l.status === 'READY' && l.audioAssetId !== null && l.audioAsset !== null)
-    .map((l) => ({
-      shotId: l.shotId,
-      dubbingLineId: l.id,
-      assetId: l.audioAssetId!,
-      uri: l.audioAsset!.uri,
-      durationMs: l.durationMs ?? l.audioAsset!.durationMs,
-      order: l.dialogueLine?.sortOrder ?? 0,
-    }))
-    .sort((a, b) => a.order - b.order || a.dubbingLineId.localeCompare(b.dubbingLineId));
+  const audioLines = await buildAudioSnapshot(db, shotIds);
 
   const agg = await db.cut.aggregate({ where: { episodeId }, _max: { version: true } });
   const version = (agg._max.version ?? 0) + 1;
@@ -121,6 +110,77 @@ export async function createCut(db: PrismaClient, input: CreateCutInput): Promis
       status: 'COMPOSING',
     },
   });
+}
+
+/**
+ * 按当前库里的 DubbingLine 现状构造配音快照：READY 且有音频资产的行，镜头内按台词 sortOrder 排序。
+ * 【为什么单独抽出来】创建时用它建快照，合成前用它重算一遍做对照——
+ * 两处若各写一份，"快照过期"的判定迟早和"快照怎么建的"对不上账，
+ * 那时守门会开始误报或漏报，而两种都比没有守门更难查。
+ */
+async function buildAudioSnapshot(db: PrismaClient, shotIds: string[]): Promise<CutAudioLine[]> {
+  const lines = await db.dubbingLine.findMany({
+    where: { shotId: { in: shotIds } },
+    include: { audioAsset: true, dialogueLine: true },
+  });
+  return lines
+    .filter((l) => l.status === 'READY' && l.audioAssetId !== null && l.audioAsset !== null)
+    .map((l) => ({
+      shotId: l.shotId,
+      dubbingLineId: l.id,
+      assetId: l.audioAssetId!,
+      uri: l.audioAsset!.uri,
+      durationMs: l.durationMs ?? l.audioAsset!.durationMs,
+      order: l.dialogueLine?.sortOrder ?? 0,
+    }))
+    .sort((a, b) => a.order - b.order || a.dubbingLineId.localeCompare(b.dubbingLineId));
+}
+
+/** 一个镜头的配音指纹：谁、用哪个音频、按什么顺序。任一项变了，混出来的声音就是另一版。 */
+function shotAudioFingerprint(lines: CutAudioLine[]): string {
+  return lines.map((l) => `${l.dubbingLineId}:${l.assetId}`).join('|');
+}
+
+function groupByShot(lines: CutAudioLine[]): Map<string, CutAudioLine[]> {
+  const map = new Map<string, CutAudioLine[]>();
+  for (const l of lines) {
+    const list = map.get(l.shotId) ?? [];
+    list.push(l);
+    map.set(l.shotId, list);
+  }
+  return map;
+}
+
+/**
+ * 合成前校验配音快照是否还代表现在的配音。
+ *
+ * Cut.audioTracksJson 是"创建那一刻的观察"，此后再没人回头看它。
+ * COMPOSE_CUT 失败后用户去配音页改了配音、回任务面板点「重试」——retryJob 只重置 Job，
+ * 快照原封不动，旧音频文件还躺在盘上（付费产物只增不删），照样混得进去，Cut 还照样置 READY。
+ * 成片里是旧那一版，只能逐句对听才发现。所以这里必须拿现状重算一遍做对照，
+ * 不一致就明确要求重新发起合成（重建快照），而不是静默用旧的。
+ */
+export async function assertAudioSnapshotFresh(db: PrismaClient, cut: Cut): Promise<void> {
+  const items = parseJson<CutItem[]>(cut.itemsJson, []);
+  if (items.length === 0) return;
+  const shotIds = [...new Set(items.map((i) => i.shotId))];
+
+  const snapshot = groupByShot(parseJson<CutAudioLine[]>(cut.audioTracksJson, []));
+  const current = groupByShot(await buildAudioSnapshot(db, shotIds));
+
+  const changed = items.filter(
+    (it) =>
+      shotAudioFingerprint(snapshot.get(it.shotId) ?? []) !==
+      shotAudioFingerprint(current.get(it.shotId) ?? []),
+  );
+  if (changed.length === 0) return;
+
+  const nums = [...new Set(changed.map((it) => `#${it.sortOrder + 1}`))].join(', ');
+  throw badRequest(
+    `以下镜头的配音在本次成片创建之后变过：${nums}。` +
+      `成片记录的是创建那一刻的配音，重试只会拿旧音频再混一遍，成片里仍是旧那一版。` +
+      `请回到成品页重新发起合成（会按现在的配音重建），不要重试这个任务。`,
+  );
 }
 
 /** 未就绪台词行的档位：决定给用户哪种建议 */

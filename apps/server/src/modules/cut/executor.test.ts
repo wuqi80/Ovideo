@@ -513,4 +513,71 @@ describe('COMPOSE_CUT 执行器（真 ffmpeg）', () => {
     },
     120_000,
   );
+
+  it(
+    '重试时配音已换过一版 → 拦下，不拿旧快照混出一条"看起来成功"的成片',
+    async () => {
+      // 复刻真实事故：合成失败 → 用户去配音页重做配音 → 回任务面板点「重试」。
+      // retryJob 只重置 Job，Cut 快照原封不动，旧音频文件还在盘上（付费产物只增不删），
+      // 于是成片里是旧那一版、Cut 还照样置 READY，只能逐句对听才发现。
+      const draftRetry = await t.db.scriptDraft.create({ data: { episodeId, isMain: false } });
+      const sb4 = await t.db.storyboard.create({
+        data: { episodeId, scriptDraftId: draftRetry.id, version: 92 },
+      });
+      const shot = await t.db.shot.create({
+        data: { storyboardId: sb4.id, sortOrder: 0, sourceText: '会被改配音的镜头' },
+      });
+      const take = await t.db.take.create({
+        data: { shotId: shot.id, slot: 'VIDEO', assetId: segmentAssetIds[0] },
+      });
+      await t.db.shot.update({ where: { id: shot.id }, data: { videoSelectedTakeId: take.id } });
+
+      const oldWav = allocFilePath(projectId, 'wav');
+      await makeSineWav({ outPath: oldWav.absPath, durationMs: 400, freq: 440 });
+      const oldAudio = await t.db.asset.create({
+        data: {
+          projectId, type: 'AUDIO', source: 'GENERATED', uri: oldWav.uri,
+          mime: 'audio/wav', sizeBytes: fileSize(oldWav.absPath), durationMs: 400,
+        },
+      });
+      const dialogue = await t.db.dialogueLine.create({
+        data: { shotId: shot.id, text: '这句会被重配', sortOrder: 0 },
+      });
+      const dub = await t.db.dubbingLine.create({
+        data: {
+          shotId: shot.id, dialogueLineId: dialogue.id,
+          audioAssetId: oldAudio.id, durationMs: 400, status: 'READY',
+        },
+      });
+
+      const cut = await createCut(t.db, { episodeId, storyboardId: sb4.id });
+
+      // 用户改了配音：新音频落盘，DubbingLine 指向新资产（旧文件依旧健在）
+      const newWav = allocFilePath(projectId, 'wav');
+      await makeSineWav({ outPath: newWav.absPath, durationMs: 600, freq: 880 });
+      const newAudio = await t.db.asset.create({
+        data: {
+          projectId, type: 'AUDIO', source: 'GENERATED', uri: newWav.uri,
+          mime: 'audio/wav', sizeBytes: fileSize(newWav.absPath), durationMs: 600,
+        },
+      });
+      await t.db.dubbingLine.update({
+        where: { id: dub.id },
+        data: { audioAssetId: newAudio.id, durationMs: 600 },
+      });
+
+      const job = await makeJob({ cutId: cut.id });
+      await expect(
+        composeCut({ db: t.db, job, updateProgress: async () => {} }),
+      ).rejects.toThrow('重新发起合成');
+
+      // 没有偷偷产出成片，Cut 也没被置成 READY
+      const after = await t.db.cut.findUnique({ where: { id: cut.id } });
+      expect(after!.status).toBe('FAILED');
+      expect(after!.outputAssetId).toBeNull();
+      // 旧音频文件仍在（铁律：付费产物只增不删），说明拦截靠的是对账而不是删数据
+      expect(fs.existsSync(uriToAbsPath(oldAudio.uri))).toBe(true);
+    },
+    120_000,
+  );
 });

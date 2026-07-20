@@ -11,7 +11,7 @@ import { chatComplete, LlmHttpError, LlmNetworkError } from './adapters/openai-c
  * 那比没有体检更糟，因为人会以为自己查过了。所以：只有发一次真实请求才能问出真话。
  */
 
-export type HealthStatus = 'ok' | 'dead' | 'auth' | 'unreachable' | 'error' | 'untested';
+export type HealthStatus = 'ok' | 'no_json' | 'dead' | 'auth' | 'unreachable' | 'error' | 'untested';
 
 export interface ModelHealthResult {
   modelConfigId: string;
@@ -160,15 +160,54 @@ async function probeLiveModel(
   model: Pick<ModelConfig, 'key'>,
 ): Promise<{ status: HealthStatus; detail: string; latencyMs: number }> {
   const startedAt = Date.now();
+  const cfg = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: model.key };
+  const probe = [{ role: 'user' as const, content: 'hi' }];
+
   try {
-    await chatComplete(
-      { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: model.key },
-      [{ role: 'user', content: 'hi' }],
-      { timeoutMs: PROBE_TIMEOUT_MS, maxTokens: 1 },
-    );
+    /**
+     * 【第一发带 jsonMode】探针的形状必须与被查路径同源。
+     * 所有真实文本路径（剧本、分镜、提示词改写）jsonMode 默认为 true；
+     * 探针若不带它，对 response_format 回 400 的模型（deepseek-reasoner 一类）
+     * 就会给出绿色徽标，而分镜生成必挂——那又是一次"查过了"的虚假安心。
+     */
+    await chatComplete(cfg, probe, { timeoutMs: PROBE_TIMEOUT_MS, maxTokens: 1, jsonMode: true });
     return { status: 'ok', detail: '真实调用成功', latencyMs: Date.now() - startedAt };
-  } catch (err) {
-    return { ...classifyFailure(err, model.key), latencyMs: Date.now() - startedAt };
+  } catch (jsonErr) {
+    /**
+     * 网络不通/超时再探一发只是把用户的等待翻倍，结论一个字都不会变；
+     * 2xx-但结构怪（max_tokens=1 截断成 content:null）本来就算调通，更不必对照。
+     */
+    if (!(jsonErr instanceof LlmHttpError)) {
+      return { ...classifyFailure(jsonErr, model.key), latencyMs: Date.now() - startedAt };
+    }
+    /**
+     * 结论已经确定的 HTTP 错误也不必对照：
+     * 401/403 是这个 key 不行、429 是被限流，两者都与"支不支持 JSON 模式"无关，
+     * 再发一发只会把请求数与体检耗时翻倍——而成本红线是体检的立身之本。
+     */
+    if (jsonErr.status === 401 || jsonErr.status === 403 || jsonErr.status === 429) {
+      return { ...classifyFailure(jsonErr, model.key), latencyMs: Date.now() - startedAt };
+    }
+
+    // 【第二发素探做对照】用来区分"这个模型不能用"与"这个模型不支持 JSON 模式"
+    try {
+      await chatComplete(cfg, probe, { timeoutMs: PROBE_TIMEOUT_MS, maxTokens: 1 });
+      /**
+       * 素探通了 = 模型活得好好的，只是不吃 response_format。
+       * 判 ok 是骗人（分镜必挂），判 dead/error 也是骗人（模型本身没毛病）——
+       * 两种归法都会把人指向错误的排查方向，所以单列一档。
+       */
+      return {
+        status: 'no_json',
+        detail:
+          `可调用，但不支持 JSON 模式（response_format）。剧本与分镜生成必须让模型按 JSON 结构输出，` +
+          `所以这个模型无法用于分镜生成；用于纯文本改写则没问题。厂商原话：${truncate(jsonErr.body)}`,
+        latencyMs: Date.now() - startedAt,
+      };
+    } catch (plainErr) {
+      // 素探也挂 → 素探才是"这个模型能不能调"的答案，按它定性
+      return { ...classifyFailure(plainErr, model.key), latencyMs: Date.now() - startedAt };
+    }
   }
 }
 

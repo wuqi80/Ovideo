@@ -68,8 +68,13 @@ async function arkFetch(url: string, apiKey: string, init: RequestInit = {}, tim
 /**
  * 生成一段视频到 outPath。
  * 时长映射到 Seedance 支持的 5/10s 档位；分辨率 720p、比例跟随首帧（adaptive）。
+ * 回传 commandText —— 真正发出去的那份提示词（含指令后缀）。调用方拿它写生成透明度的 meta：
+ * 后缀只在这里拼出来，让调用方自己再拼一遍就等于把同一份规则写在两处，迟早对不上账。
  */
-export async function arkVideoGenerate(cfg: ArkVideoConfig, args: ArkVideoArgs): Promise<void> {
+export async function arkVideoGenerate(
+  cfg: ArkVideoConfig,
+  args: ArkVideoArgs,
+): Promise<{ commandText: string }> {
   const base = cfg.baseUrl.replace(/\/+$/, '');
   const durationS = mapSeedanceDurationS(args.durationMs);
   const commandText =
@@ -130,4 +135,5 @@ export async function arkVideoGenerate(cfg: ArkVideoConfig, args: ArkVideoArgs):
   if (!dl.ok || !dl.body) throw new Error(`视频下载失败：HTTP ${dl.status}`);
   await pipeline(Readable.fromWeb(dl.body as import('node:stream/web').ReadableStream), fs.createWriteStream(args.outPath));
   await args.onProgress?.(95);
+  return { commandText };
 }

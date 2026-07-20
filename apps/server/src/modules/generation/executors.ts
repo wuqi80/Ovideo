@@ -10,6 +10,7 @@ import { parseJson } from '../../lib/json.js';
 import { allocFilePath, fileSize, uriToAbsPath } from '../../lib/storage.js';
 import { extractFrame, probeDurationMs } from '../../lib/ffmpeg.js';
 import { registerExecutor, type JobExecutor } from '../job/registry.js';
+import { recordJobModelKey } from '../job/service.js';
 import { resolveBinding } from '../binding/service.js';
 import { createAsset } from '../asset/service.js';
 import { clearStale } from '../stale/service.js';
@@ -134,6 +135,8 @@ function makeKeyframeExecutor(gens: GenerationGens) {
     const shot = await loadShot(db, input.shotId);
     const episodeId = shot.storyboard.episodeId;
     const modelCfg = await resolveModelCfg(db, input.modelConfigId);
+    // 见 TTS 执行器同处注释：重试会清空入队时的 modelKey，不回填就丢掉成本归因
+    if (modelCfg) await recordJobModelKey(db, job.id, modelCfg.modelKey);
     await updateProgress(10);
 
     // promptOverride 只在本次运行内生效，镜头上存的 imagePrompt 一字不改
@@ -289,6 +292,7 @@ function makeDesignExecutor(gens: GenerationGens) {
     });
     if (!tag) throw notFound('标签');
     const modelCfg = await resolveModelCfg(db, input.modelConfigId);
+    if (modelCfg) await recordJobModelKey(db, job.id, modelCfg.modelKey);
     await updateProgress(10);
 
     const refUris = tag.canonicalAsset ? [tag.canonicalAsset.uri] : [];
@@ -536,6 +540,7 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
       firstFrameParentIds = [keyframeTake.assetId];
     }
     const modelCfg = await resolveModelCfg(db, input.modelConfigId);
+    if (modelCfg) await recordJobModelKey(db, job.id, modelCfg.modelKey);
     await updateProgress(10);
 
     // 时长链路（v2 §3）：配音锁定时长优先，未锁定用计划时长
@@ -545,7 +550,7 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
     const lipSync = await buildLipSyncDirective(db, shot.id);
     const prompt = lipSync ? `${basePrompt}\n${lipSync}` : basePrompt;
     const file = allocFilePath(job.projectId, 'mp4');
-    await gens.videoGen({
+    const genResult = await gens.videoGen({
       prompt,
       firstFrameUri,
       durationMs,
@@ -554,6 +559,9 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
       modelCfg,
       onProgress: updateProgress,
     });
+    // 适配器会在提示词尾部追加 --resolution/--duration 等指令，以它回传的那份为准；
+    // 没回传（无指令后缀的适配器）才回落到发出前的 prompt
+    const effectivePrompt = genResult?.effectivePrompt ?? prompt;
     await updateProgress(70);
 
     // 实测时长（生成模型不保证精确出片时长），并抽帧作缩略图
@@ -576,7 +584,7 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
       jobId: job.id,
       parentIds: firstFrameParentIds,
       // 生成透明度：与关键图/设计图一致，可在前端"实际提示词"查看
-      meta: { effectivePrompt: prompt.slice(0, 2000) },
+      meta: { effectivePrompt: effectivePrompt.slice(0, 2000) },
     });
     await db.asset.update({ where: { id: asset.id }, data: { thumbUri: thumbFile.uri } });
 
@@ -596,7 +604,12 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
 
 export { DUBBING_GAP_MS } from './late-dubbing.js';
 
-/** GENERATE_TTS：单句配音生成 + 镜头时长链路重算（任何一步失败把行置 FAILED 再抛出） */
+/**
+ * GENERATE_TTS：单句配音生成 + 镜头时长链路重算。
+ * 失败【不】在这里把行置 FAILED：worker 可能只是重排队（maxAttempts=2），
+ * 让用户提前看到「失败」会诱使他手点重生成，两条 Job 跑同一行按字符付两遍钱。
+ * 行状态由 job 侧的终止路径统一对账（见 dubbing/job-sync.ts）。
+ */
 function makeTtsExecutor(gens: GenerationGens): JobExecutor {
   return async (ctx) => {
     const { db, job, updateProgress } = ctx;
@@ -612,53 +625,50 @@ function makeTtsExecutor(gens: GenerationGens): JobExecutor {
     });
     if (!line) throw notFound('配音行');
 
-    try {
-      // DubbingLine 无独立文本列（见 schema），文本一律取关联对白行
-      const text = line.dialogueLine?.text;
-      if (!text) throw badRequest('配音行没有关联的对白文本');
-      const modelCfg = await resolveModelCfg(db, input.modelConfigId);
-      await updateProgress(10);
+    // DubbingLine 无独立文本列（见 schema），文本一律取关联对白行
+    const text = line.dialogueLine?.text;
+    if (!text) throw badRequest('配音行没有关联的对白文本');
+    const modelCfg = await resolveModelCfg(db, input.modelConfigId);
+    // 重试过的任务入队时的 modelKey 已被清空，不回填就永远是 SUCCEEDED + 无模型标签——
+    // 而重试恰恰是花钱最多的那批
+    if (modelCfg) await recordJobModelKey(db, job.id, modelCfg.modelKey);
+    await updateProgress(10);
 
-      const file = allocFilePath(job.projectId, 'wav');
-      await gens.ttsGen({
-        text,
-        speed: line.speed,
-        // 角色配置了具体音色（voiceId）则直接用；否则以 profileId 稳定哈希分配
-        voiceSeed: line.voiceProfile?.voiceId || line.voiceProfileId || 'narrator',
-        outPath: file.absPath,
-        modelCfg,
-      });
-      await updateProgress(60);
+    const file = allocFilePath(job.projectId, 'wav');
+    await gens.ttsGen({
+      text,
+      speed: line.speed,
+      // 角色配置了具体音色（voiceId）则直接用；否则以 profileId 稳定哈希分配
+      voiceSeed: line.voiceProfile?.voiceId || line.voiceProfileId || 'narrator',
+      outPath: file.absPath,
+      modelCfg,
+    });
+    await updateProgress(60);
 
-      const durationMs = await probeDurationMs(file.absPath);
-      const asset = await createAsset(db, {
-        projectId: job.projectId,
-        type: 'AUDIO',
-        source: 'GENERATED',
-        uri: file.uri,
-        mime: 'audio/wav',
-        sizeBytes: fileSize(file.absPath),
-        durationMs,
-        jobId: job.id,
-      });
-      await db.dubbingLine.update({
-        where: { id: line.id },
-        data: { status: 'READY', durationMs, audioAssetId: asset.id },
-      });
-      await updateProgress(80);
+    const durationMs = await probeDurationMs(file.absPath);
+    const asset = await createAsset(db, {
+      projectId: job.projectId,
+      type: 'AUDIO',
+      source: 'GENERATED',
+      uri: file.uri,
+      mime: 'audio/wav',
+      sizeBytes: fileSize(file.absPath),
+      durationMs,
+      jobId: job.id,
+    });
+    await db.dubbingLine.update({
+      where: { id: line.id },
+      data: { status: 'READY', durationMs, audioAssetId: asset.id },
+    });
+    await updateProgress(80);
 
-      // 时长链路（v2 §3）：全部 READY 行时长之和 + (n-1) 个行间间隔 → 锁定镜头时长
-      await recalcShotDubbingDuration(db, line.shotId);
-      // 生成期间用户可能已经改过分镜：音频与时长锁都要在当前版本再落一次，
-      // 否则当前版本这行永远停在 GENERATING，用户只能再付一次 TTS 的钱
-      await alsoWriteDubbingToCurrentVersion(db, line, asset.id, durationMs);
+    // 时长链路（v2 §3）：全部 READY 行时长之和 + (n-1) 个行间间隔 → 锁定镜头时长
+    await recalcShotDubbingDuration(db, line.shotId);
+    // 生成期间用户可能已经改过分镜：音频与时长锁都要在当前版本再落一次，
+    // 否则当前版本这行永远停在 GENERATING，用户只能再付一次 TTS 的钱
+    await alsoWriteDubbingToCurrentVersion(db, line, asset.id, durationMs);
 
-      return { outputAssetIds: [asset.id], output: { dubbingLineId: line.id, durationMs } };
-    } catch (err) {
-      // 失败落状态供配音页展示，再交给 worker 走重试/终态逻辑
-      await db.dubbingLine.update({ where: { id: line.id }, data: { status: 'FAILED' } });
-      throw err;
-    }
+    return { outputAssetIds: [asset.id], output: { dubbingLineId: line.id, durationMs } };
   };
 }
 

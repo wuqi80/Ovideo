@@ -1,5 +1,6 @@
 import type { PrismaClient, Job } from '@prisma/client';
 import type { JobType } from '@ovideo/shared';
+import { recoverDubbingLinesOnStartup } from '../dubbing/job-sync.js';
 import { getExecutor } from './registry.js';
 import { claimNextJob, completeJob, failJob, updateJobProgress } from './service.js';
 
@@ -23,17 +24,24 @@ export function startWorker(db: PrismaClient, opts: WorkerOptions = {}): JobWork
   // 启动恢复：进程重启（部署/热重载/崩溃）会遗留 RUNNING 孤儿任务——
   // 标记为失败并说明原因；不自动重跑（真实生成可能已在厂商侧扣费，重跑会重复消耗），由用户点重试。
   // 注意：必须在开始领取任务【之前】完成清扫（tick 等待此 promise），否则会误伤本 worker 刚领取的任务。
-  const recovery = db.job
-    .updateMany({
+  const recovery = (async () => {
+    // 中断的任务要先记名：updateMany 之后就再也分不出"谁是被这次重启判死的"，
+    // 而配音行对这两类的处理不同（见 recoverDubbingLinesOnStartup）
+    const interrupted = await db.job.findMany({
+      where: { status: 'RUNNING' },
+      select: { type: true, inputJson: true },
+    });
+    const r = await db.job.updateMany({
       where: { status: 'RUNNING' },
       data: { status: 'FAILED', error: '服务重启导致任务中断；如需继续请手动重试（真实生成可能已在厂商侧计费）', finishedAt: new Date() },
-    })
-    .then((r) => {
-      if (r.count > 0) console.warn(`[job-worker] 启动恢复：${r.count} 个中断任务已标记失败`);
-    })
-    .catch((err) => {
-      console.error('[job-worker] 启动恢复失败：', err);
     });
+    if (r.count > 0) console.warn(`[job-worker] 启动恢复：${r.count} 个中断任务已标记失败`);
+    // Job 表清干净了还不够：入队时写下的 DubbingLine.GENERATING 此刻已无任何任务照看，
+    // 不清扫的话那些行永远卡死（原逻辑压根不知道 DubbingLine 的存在）
+    await recoverDubbingLinesOnStartup(db, interrupted);
+  })().catch((err) => {
+    console.error('[job-worker] 启动恢复失败：', err);
+  });
 
   async function runJob(job: Job): Promise<void> {
     const executor = getExecutor(job.type as JobType);

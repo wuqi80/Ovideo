@@ -76,7 +76,7 @@ export interface ProviderTestResult {
  * ok/dead/auth/unreachable/error 来自一次真实调用；untested 是按成本红线主动没测——
  * 它绝不等于"通过"，UI 必须如实区分。
  */
-export type HealthStatus = 'ok' | 'dead' | 'auth' | 'unreachable' | 'error' | 'untested';
+export type HealthStatus = 'ok' | 'no_json' | 'dead' | 'auth' | 'unreachable' | 'error' | 'untested';
 
 /** 模型上记录的最近一次体检；从未体检过时 status 为 null */
 export interface ModelHealth {

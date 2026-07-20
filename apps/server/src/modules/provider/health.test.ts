@@ -215,6 +215,65 @@ describe('healthCheckProvider —— 各状态分支', () => {
   });
 });
 
+describe('探针形状必须与真实文本路径同源', () => {
+  it('探针带 response_format: json_object（真实文本路径一律 jsonMode）', async () => {
+    // 探针不带 JSON 模式，就是去查了一条没人走的路：徽标绿、分镜生成挂。
+    const p = await makeProvider();
+    await addModel(p.id, 'json-ok', 'text');
+    const calls = stubFetch(() => okChat());
+
+    await healthCheckProvider(db, p.id);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.body.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('支持调用但 response_format 回 400 → no_json，明说不能用于分镜生成', async () => {
+    // deepseek-reasoner 一类：/chat/completions 通、JSON 模式不通。
+    // 判 ok 是骗人（分镜必挂），判 error/dead 也是骗人（模型本身活着）。
+    const p = await makeProvider();
+    const m = await addModel(p.id, 'reasoner-no-json', 'text');
+    const calls = stubFetch((_model, _url, init) => {
+      const body = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+      return body.response_format
+        ? errChat(400, { error: { message: 'response_format is unavailable for this model' } })
+        : okChat();
+    });
+
+    const result = await healthCheckProvider(db, p.id);
+
+    expect(calls).toHaveLength(2); // 带 JSON 探一发 + 素探一发做对照
+    expect(result.models[0]!.status).toBe('no_json');
+    expect(result.models[0]!.detail).toContain('不支持 JSON 模式');
+    expect(result.models[0]!.detail).toContain('分镜生成');
+    const saved = await db.modelConfig.findUniqueOrThrow({ where: { id: m.id } });
+    expect(saved.healthStatus).toBe('no_json');
+    expect(saved.enabled).toBe(true); // 仍然只标注不停用
+  });
+
+  it('两发都挂 → 按素探结论定性（dead），不误报成 no_json', async () => {
+    const p = await makeProvider();
+    await addModel(p.id, 'ghost-model', 'text');
+    stubFetch(() => errChat(404, { error: { message: 'The model does not exist' } }));
+
+    const result = await healthCheckProvider(db, p.id);
+    expect(result.models[0]!.status).toBe('dead');
+  });
+
+  it('网络不通只发一发：对照探不会把用户的等待翻倍', async () => {
+    const p = await makeProvider();
+    await addModel(p.id, 'offline-2', 'text');
+    const fn = vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    });
+    vi.stubGlobal('fetch', fn);
+
+    const result = await healthCheckProvider(db, p.id);
+    expect(result.models[0]!.status).toBe('unreachable');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('成本红线', () => {
   it('图像/视频/语音一律 untested，且确实没有发出任何真实请求', async () => {
     const p = await makeProvider();
@@ -357,5 +416,37 @@ describe('healthCheckAll', () => {
     } finally {
       await t2.cleanup();
     }
+  });
+});
+
+describe('对照探只在有意义时才发第二发（成本红线）', () => {
+  it('401 鉴权失败：结论已定，不再发对照探', async () => {
+    const p = await makeProvider();
+    await addModel(p.id, 'auth-fail', 'text');
+    let calls = 0;
+    stubFetch(() => {
+      calls += 1;
+      return new Response(JSON.stringify({ error: { message: 'invalid api key' } }), { status: 401 });
+    });
+
+    const result = await healthCheckProvider(db, p.id);
+
+    // 鉴权失败与「支不支持 JSON 模式」无关，再探一发只把请求数与等待翻倍
+    expect(calls).toBe(1);
+    expect(result.models[0]?.status).toBe('auth');
+  });
+
+  it('429 限流：同理，不对照', async () => {
+    const p = await makeProvider();
+    await addModel(p.id, 'rate-limited', 'text');
+    let calls = 0;
+    stubFetch(() => {
+      calls += 1;
+      return new Response(JSON.stringify({ error: { message: 'rate limited' } }), { status: 429 });
+    });
+
+    await healthCheckProvider(db, p.id);
+
+    expect(calls).toBe(1);
   });
 });

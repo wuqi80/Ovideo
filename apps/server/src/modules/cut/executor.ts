@@ -18,7 +18,7 @@ import {
   type JobExecutorContext,
   type JobExecutorResult,
 } from '../job/registry.js';
-import type { CutAudioLine, CutItem } from './service.js';
+import { assertAudioSnapshotFresh, type CutAudioLine, type CutItem } from './service.js';
 
 const FPS = 24;
 
@@ -116,6 +116,8 @@ async function doCompose(
   const { audioMixMode, ratio, bgmAssetId, bgmVolume } = input;
   const items = parseJson<CutItem[]>(cut.itemsJson, []);
   if (items.length === 0) throw badRequest('成片没有可合成的片段');
+  // 快照对账放在烧 CPU 之前：重试路径上配音可能已经换过一版，那时候旧快照混出来的是错的成片
+  await assertAudioSnapshotFresh(db, cut);
   const canvas = await resolveCanvas(ratio, uriToAbsPath(items[0].uri));
 
   // BGM 资产解析（执行时实时读，缺失给明确中文错误）

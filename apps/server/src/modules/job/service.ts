@@ -7,6 +7,7 @@ import {
 } from '@ovideo/shared';
 import { toJson } from '../../lib/json.js';
 import { badRequest, notFound } from '../../lib/errors.js';
+import { syncDubbingLineForJob } from '../dubbing/job-sync.js';
 import type { JobExecutorResult } from './registry.js';
 
 export interface EnqueueJobInput {
@@ -99,6 +100,9 @@ export async function failJob(
   const job = await db.job.findUnique({ where: { id: jobId } });
   if (!job) throw notFound('任务');
   if (!opts.fatal && job.attempts < job.maxAttempts) {
+    // 重排队【不】动配音行：这一轮只是要再试一次，行仍应停在 GENERATING。
+    // 从前执行器一失败就把行置 FAILED，用户看到「失败」立刻手点重生成，
+    // 于是两条 Job 跑同一行，按字符付两遍钱。
     return db.job.update({
       where: { id: jobId },
       data: {
@@ -117,10 +121,13 @@ export async function failJob(
       },
     });
   }
-  return db.job.update({
+  const failed = await db.job.update({
     where: { id: jobId },
     data: { status: 'FAILED', error: errMsg, finishedAt: new Date() },
   });
+  // 终态失败才把配音行判死——此时确实不会再有人跑它了
+  await syncDubbingLineForJob(db, failed, 'FAILED');
+  return failed;
 }
 
 /** M1 仅支持取消排队中的任务；RUNNING 的中断留待执行器支持取消信号后实现 */
@@ -132,14 +139,21 @@ export async function cancelJob(db: PrismaClient, jobId: string): Promise<Job> {
       job.status === 'RUNNING' ? '任务已在运行，M1 暂不支持中断' : `状态为 ${job.status} 的任务不能取消`,
     );
   }
-  return db.job.update({ where: { id: jobId }, data: { status: 'CANCELED', finishedAt: new Date() } });
+  const canceled = await db.job.update({
+    where: { id: jobId },
+    data: { status: 'CANCELED', finishedAt: new Date() },
+  });
+  // 取消的任务从未开跑，配音行必须打回待生成：否则它永远停在 GENERATING，
+  // 语速改不了、单行重生成锁死，页面还会一直空轮询
+  await syncDubbingLineForJob(db, canceled, 'PENDING');
+  return canceled;
 }
 
 export async function retryJob(db: PrismaClient, jobId: string): Promise<Job> {
   const job = await db.job.findUnique({ where: { id: jobId } });
   if (!job) throw notFound('任务');
   if (job.status !== 'FAILED') throw badRequest(`仅失败的任务可重试（当前状态 ${job.status}）`);
-  return db.job.update({
+  const requeued = await db.job.update({
     where: { id: jobId },
     data: {
       status: 'QUEUED',
@@ -153,6 +167,9 @@ export async function retryJob(db: PrismaClient, jobId: string): Promise<Job> {
       modelKey: null,
     },
   });
+  // 重新排上队了，配音行也跟着回到"处理中"，别让页面停在失败态
+  await syncDubbingLineForJob(db, requeued, 'GENERATING');
+  return requeued;
 }
 
 export async function updateJobProgress(db: PrismaClient, jobId: string, progress: number): Promise<void> {

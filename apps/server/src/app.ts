@@ -176,7 +176,7 @@ export function registerExecutors(): void {
     if (!isArk) {
       throw new Error('该厂商的视频生成适配器尚未接入（当前支持：火山方舟 Seedance），请选择 Seedance 模型');
     }
-    await arkVideoGenerate(
+    const { commandText } = await arkVideoGenerate(
       { baseUrl: args.modelCfg.baseUrl, apiKey: args.modelCfg.apiKey, model: args.modelCfg.modelKey },
       {
         prompt: args.prompt,
@@ -187,6 +187,8 @@ export function registerExecutors(): void {
         onProgress: args.onProgress,
       },
     );
+    // 指令后缀（--resolution/--duration…）由适配器拼出，原样回传给执行器写 meta
+    return { effectivePrompt: commandText };
   };
   const smartTtsGen: TtsGen = async (args) => {
     if (!args.modelCfg?.baseUrl) {
@@ -375,16 +377,17 @@ export async function buildApp(opts: BuildAppOptions = {}) {
     GENERATE_VIDEO: 'video',
     GENERATE_TTS: 'tts',
   };
+  const isTextJob = (type: string) => type === 'GENERATE_STORYBOARD' || type === 'GENERATE_SCRIPT';
   const enqueue = async (input: Parameters<typeof enqueueJob>[1]) => {
     const payload = (input.inputPayload ?? {}) as Record<string, unknown>;
     const modality = MODALITY_BY_JOB_TYPE[input.type];
+    let resolved = input;
     if (!payload.modelConfigId && modality && AUTO_ROUTE_MODALITIES.includes(modality)) {
       const picked = await pickModelForModality(db, modality);
       if (picked) {
         // 文本任务不钉死单一模型：执行时走失效转移（见 GENERATE_STORYBOARD / GENERATE_SCRIPT 执行器）。
-        // 这里的 modelKey 只是"打算用谁"的占位，跑完由执行器回填成实际成交的模型；
-        // 图像任务钉队首模型（图像适配器暂无转移链）
-        if (input.type === 'GENERATE_STORYBOARD' || input.type === 'GENERATE_SCRIPT') {
+        // 这里的 modelKey 只是"打算用谁"的占位，跑完由执行器回填成实际成交的模型。
+        if (isTextJob(input.type)) {
           return enqueueJob(db, {
             ...input,
             executor: 'API',
@@ -392,16 +395,32 @@ export async function buildApp(opts: BuildAppOptions = {}) {
             modelKey: `自动调度（首选 ${picked.key}）`,
           });
         }
-        return enqueueJob(db, {
-          ...input,
-          executor: 'API',
-          inputPayload: { ...payload, modelConfigId: picked.id },
-          providerConfigId: picked.providerConfigId,
-          modelKey: picked.key,
-        });
+        // 非文本：把选中的模型钉进 payload，下面按 modelConfigId 统一补标签
+        resolved = { ...input, executor: 'API', inputPayload: { ...payload, modelConfigId: picked.id } };
       }
     }
-    return enqueueJob(db, input);
+
+    /**
+     * 模型标签的写入统一收口在这里，按【最终】payload 里的 modelConfigId 回填。
+     * 从前这段只长在"自动调度"分支里：同一个任务面板，不选模型的任务有模型标签、
+     * 显式选了模型的反而没有——用户最想知道"这次到底用了哪个"的恰恰是后者。
+     */
+    const finalPayload = (resolved.inputPayload ?? {}) as Record<string, unknown>;
+    const modelConfigId = finalPayload.modelConfigId;
+    if (resolved.modelKey === undefined && typeof modelConfigId === 'string' && modelConfigId) {
+      const model = await db.modelConfig.findUnique({ where: { id: modelConfigId } });
+      if (model) {
+        resolved = {
+          ...resolved,
+          executor: resolved.executor ?? 'API',
+          providerConfigId: resolved.providerConfigId ?? model.providerConfigId,
+          // 文本任务的 modelKey 由 ledger 在执行时按实际成交回填，那是事实；
+          // 入队时的这次查询只是意图，写进去会被误读成"已经用它跑过了"，故留空等回填。
+          modelKey: isTextJob(resolved.type) ? undefined : model.key,
+        };
+      }
+    }
+    return enqueueJob(db, resolved);
   };
 
   // 对话式剧本：按需调度 + 失效转移（与三步生成任务共用 scheduler 的同一策略）

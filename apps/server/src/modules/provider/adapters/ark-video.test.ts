@@ -56,7 +56,7 @@ describe('arkVideoGenerate', () => {
     );
 
     const progress: number[] = [];
-    await arkVideoGenerate(cfg, {
+    const ret = await arkVideoGenerate(cfg, {
       prompt: '镜头缓推',
       firstFramePath: framePath,
       durationMs: 12000,
@@ -77,6 +77,9 @@ describe('arkVideoGenerate', () => {
     expect(img.url.startsWith('data:image/png;base64,')).toBe(true);
     expect(content[1].role).toBe('first_frame');
     expect(progress.length).toBeGreaterThan(0);
+    // 回传的必须【就是】发出去那份：调用方拿它写 meta.effectivePrompt，
+    // 自己再拼一遍后缀就等于把同一份规则写在两处，480p/1080p 的 take 会显示成一模一样
+    expect(ret.commandText).toBe(content[0].text as string);
     fs.rmSync(framePath);
     fs.rmSync(outPath);
   });

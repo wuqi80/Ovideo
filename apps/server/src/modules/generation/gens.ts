@@ -18,6 +18,17 @@ export type ImageGen = (args: {
   modelCfg?: GenModelCfg;
 }) => Promise<void>;
 
+/**
+ * 视频适配器的回执。
+ * effectivePrompt 是【最终发出去那一份】——适配器还会往提示词尾部追加 --resolution/--duration
+ * 等指令（7 秒镜头向上取到 10 秒档）。执行器写 meta 时若只记发出前的那份，
+ * 同一镜头 480p 与 1080p 两条 take 的「实际提示词」会一字不差，
+ * 而那个弹窗的全部意义就是"看清实际发出去的是什么"。
+ */
+export interface VideoGenResult {
+  effectivePrompt?: string;
+}
+
 export type VideoGen = (args: {
   prompt: string;
   firstFrameUri: string | null;
@@ -28,7 +39,8 @@ export type VideoGen = (args: {
   modelCfg?: GenModelCfg;
   /** 长耗时的真实视频生成用于回报任务进度（Mock 忽略） */
   onProgress?: (percent: number) => Promise<void> | void;
-}) => Promise<void>;
+  // void 返回值仍然合法：不产生指令后缀的适配器无须回传，执行器回落到入参 prompt
+}) => Promise<VideoGenResult | void>;
 
 export type TtsGen = (args: {
   text: string;

@@ -91,6 +91,9 @@ function ModalityTag({ modality }: { modality: Modality }) {
  */
 const HEALTH_META: Record<HealthStatus, { label: string; color: string }> = {
   ok: { label: '可用', color: 'success' },
+  // 能调通，但不支持 JSON 模式 → 分镜/剧本生成必挂。绝不能是绿的：
+  // 画成"可用"就等于把一个注定失败的选项推荐给用户
+  no_json: { label: '不支持 JSON', color: 'warning' },
   dead: { label: '不可用', color: 'error' },
   auth: { label: '鉴权失败', color: 'error' },
   unreachable: { label: '网络不通', color: 'warning' },
@@ -797,11 +800,21 @@ function ProviderCard({
               // 是在夸大——那正是这个功能要消灭的虚假安心，不该由它自己的提示语制造。
               const probed = r.models.filter((m) => m.status !== 'untested').length;
               const untested = r.models.length - probed;
+              /**
+               * no_json 不算"可调用"。它能调通，但不支持 response_format，
+               * 而剧本与分镜生成必须让模型吐 JSON——选它就是注定失败。
+               * 把它算进绿色提示，等于重新制造这个功能刚消灭的那种虚假安心。
+               */
+              const noJson = r.models.filter((m) => m.status === 'no_json').length;
+              const ok = r.models.filter((m) => m.status === 'ok').length;
               const tail = untested > 0 ? `，另有 ${untested} 个按成本约定未实测` : '';
+              const noJsonTail = noJson > 0 ? `，${noJson} 个不支持 JSON 模式（不能用于分镜生成）` : '';
               if (dead > 0) {
                 message.error(
-                  `体检完成：${dead} 个模型在你的账号下调不通，请看模型列表的「体检」列${tail}`,
+                  `体检完成：${dead} 个模型在你的账号下调不通，请看模型列表的「体检」列${noJsonTail}${tail}`,
                 );
+              } else if (noJson > 0) {
+                message.warning(`体检完成：实测 ${probed} 个，其中 ${ok} 个可用${noJsonTail}${tail}`);
               } else {
                 message.success(`体检完成：实测 ${probed} 个模型均可调用${tail}`);
               }

@@ -2,6 +2,7 @@
 // 错误处理与超时风格同 openai-compatible.ts（AbortSignal.timeout，错误带状态码与响应片段）。
 import fs from 'node:fs';
 import path from 'node:path';
+import { badRequest } from '../../../lib/errors.js';
 
 export interface OpenAiImageConfig {
   baseUrl: string;
@@ -32,6 +33,14 @@ export interface OpenAiImageArgs {
  */
 export const MAX_REF_IMAGES = 5;
 
+/**
+ * 该厂商/模型是否支持 image 字段上送参考图。
+ * 判据与视频（isArk）、语音（isDashScope）的门禁同源：认域名或认模型名，不新造能力位模型。
+ */
+function supportsRefImages(cfg: OpenAiImageConfig): boolean {
+  return cfg.baseUrl.includes('volces.com') || /seedream|seededit/i.test(cfg.model);
+}
+
 function toDataUrl(filePath: string): string {
   const ext = path.extname(filePath).replace('.', '').toLowerCase() || 'png';
   const mime = ext === 'jpg' ? 'jpeg' : ext;
@@ -45,6 +54,23 @@ export async function openaiImageGenerate(
   cfg: OpenAiImageConfig,
   args: OpenAiImageArgs,
 ): Promise<void> {
+  /**
+   * 参考图门禁（对齐 smartVideoGen / smartTtsGen 的写法）。
+   * image 是方舟对 OpenAI images 协议的私有扩展：宽松网关会把它当未知字段忽略，
+   * 照样出图、照样计费，出来的却是没有任何形象约束的图——形象全漂而无处可察，
+   * 排查的人只会去怀疑提示词；严格端点则直接 400。两种结局都不该由用户自己撞上，
+   * 所以在花钱之前拦下，并说清接下来该怎么办。
+   */
+  const refPaths = args.refImagePaths ?? [];
+  if (refPaths.length > 0 && !supportsRefImages(cfg)) {
+    throw badRequest(
+      `图像模型「${cfg.model}」不支持参考图：参考图靠火山方舟私有的 image 字段上送，` +
+        `换到其他 OpenAI 兼容出图厂商后，这 ${refPaths.length} 张参考图要么被网关静默丢弃（照常计费，但角色/场景形象不再一致），` +
+        `要么直接被拒。请到管理后台把图像模型换回火山方舟 Seedream 系列，` +
+        `或先解除该镜头/标签的参考图绑定（会失去形象一致性）后再生成。`,
+    );
+  }
+
   const url = `${cfg.baseUrl.replace(/\/+$/, '')}/images/generations`;
   const res = await fetch(url, {
     method: 'POST',
@@ -57,9 +83,7 @@ export async function openaiImageGenerate(
       prompt: args.prompt,
       size: args.size ?? '1024x1792',
       response_format: 'b64_json',
-      ...(args.refImagePaths && args.refImagePaths.length > 0
-        ? { image: args.refImagePaths.slice(0, MAX_REF_IMAGES).map(toDataUrl) }
-        : {}),
+      ...(refPaths.length > 0 ? { image: refPaths.slice(0, MAX_REF_IMAGES).map(toDataUrl) } : {}),
     }),
     signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
   });

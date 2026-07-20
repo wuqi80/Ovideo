@@ -707,7 +707,11 @@ describe('GENERATE_TTS', () => {
     expect(reasons.some((x) => x.source === 'dubbing_duration_changed')).toBe(true);
   }, 60000);
 
-  it('生成中途抛错：行状态置 FAILED 并向上抛出', async () => {
+  // 下面两例原本断言"执行器自己把行置 FAILED"。那正是重复计费的病根：
+  // worker 可能只是重排队（maxAttempts=2），用户看到「失败」就去点重生成，
+  // 两条 Job 跑同一行按字符付两遍钱。行状态改由 job 侧的终止路径统一对账
+  // （终态失败才 FAILED，见 dubbing/job-sync.test.ts），执行器只负责把错误抛上去。
+  it('生成中途抛错：向上抛出，且【不】自作主张把行判死（可能只是要重排队）', async () => {
     registerGenerationExecutors({
       imageGen: mockImageGen,
       videoGen: mockVideoGen,
@@ -719,24 +723,26 @@ describe('GENERATE_TTS', () => {
     const dlg = await db.dialogueLine.create({
       data: { shotId: shot.id, isNarrator: true, text: '一句话', sortOrder: 0 },
     });
-    const line = await db.dubbingLine.create({ data: { shotId: shot.id, dialogueLineId: dlg.id } });
+    const line = await db.dubbingLine.create({
+      data: { shotId: shot.id, dialogueLineId: dlg.id, status: 'GENERATING' },
+    });
 
     const ctx = await makeCtx('GENERATE_TTS', { kind: 'dubbing', dubbingLineId: line.id });
     await expect(getExecutor('GENERATE_TTS')!(ctx)).rejects.toThrow('TTS 服务不可用');
     const after = await db.dubbingLine.findUnique({ where: { id: line.id } });
-    expect(after?.status).toBe('FAILED');
+    expect(after?.status).toBe('GENERATING');
   });
 
-  it('配音行没有关联对白文本：置 FAILED 并抛错', async () => {
+  it('配音行没有关联对白文本：抛错，行状态同样交给 job 侧对账', async () => {
     const { gens } = makeFakeGens();
     registerGenerationExecutors(gens);
     const { shot } = await seedShot();
-    const line = await db.dubbingLine.create({ data: { shotId: shot.id } });
+    const line = await db.dubbingLine.create({ data: { shotId: shot.id, status: 'GENERATING' } });
 
     const ctx = await makeCtx('GENERATE_TTS', { kind: 'dubbing', dubbingLineId: line.id });
     await expect(getExecutor('GENERATE_TTS')!(ctx)).rejects.toThrow('配音行没有关联的对白文本');
     const after = await db.dubbingLine.findUnique({ where: { id: line.id } });
-    expect(after?.status).toBe('FAILED');
+    expect(after?.status).toBe('GENERATING');
   });
 
   it('配音行不存在抛 404 文案', async () => {
@@ -895,4 +901,163 @@ describe('GENERATE_IMAGE / kind=keyframe：参考图张数上限在写提示词�
     expect(meta.refImages).toHaveLength(imageCalls[0]!.refUris.length);
     expect(meta.droppedRefs).toBeUndefined();
   });
+});
+
+/** 一个可用的图像/视频/语音模型（三个执行器共用同一套断言口径） */
+async function seedModel(modality: string, key: string) {
+  const provider = await db.providerConfig.create({
+    data: {
+      name: `厂商-${crypto.randomUUID().slice(0, 6)}`,
+      vendor: 'openai-compatible',
+      category: 'IMAGE',
+      baseUrl: 'https://example.test',
+      apiKey: 'k',
+      enabled: true,
+    },
+  });
+  return db.modelConfig.create({
+    data: { providerConfigId: provider.id, key, label: key, modality, enabled: true },
+  });
+}
+
+describe('图像/视频/TTS 的 modelKey 回填（重试过的任务不能变成无模型标签）', () => {
+  // 重排队与手动重试都会清空 Job.modelKey（结果类字段），从前只有两个文本执行器接了回填，
+  // 于是图像/视频/TTS 一旦重试过，终态就是 SUCCEEDED + modelKey=null——
+  // 而重试恰恰是花钱最多的那批。
+  it('关键图执行器把实际模型写回 Job.modelKey', async () => {
+    const { gens } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const { shot } = await seedShot();
+    const model = await seedModel('image', 'seedream-4-0');
+    const ctx = await makeCtx('GENERATE_IMAGE', {
+      kind: 'keyframe',
+      shotId: shot.id,
+      modelConfigId: model.id,
+    });
+    // 模拟"重试过"：入队时的 modelKey 已被清空
+    await db.job.update({ where: { id: ctx.job.id }, data: { modelKey: null } });
+    await getExecutor('GENERATE_IMAGE')!(ctx);
+    expect((await db.job.findUnique({ where: { id: ctx.job.id } }))?.modelKey).toBe('seedream-4-0');
+  });
+
+  it('设计图执行器同样回填', async () => {
+    const { gens } = makeFakeGens();
+    registerGenerationExecutors(gens);
+    const tag = await db.tag.create({
+      data: { projectId, type: 'CHARACTER', name: `设计-${crypto.randomUUID().slice(0, 6)}` },
+    });
+    const model = await seedModel('image', 'seedream-design');
+    const ctx = await makeCtx('GENERATE_IMAGE', {
+      kind: 'design',
+      tagId: tag.id,
+      prompt: '一个角色',
+      modelConfigId: model.id,
+    });
+    await db.job.update({ where: { id: ctx.job.id }, data: { modelKey: null } });
+    await getExecutor('GENERATE_IMAGE')!(ctx);
+    expect((await db.job.findUnique({ where: { id: ctx.job.id } }))?.modelKey).toBe('seedream-design');
+  });
+
+  it('视频执行器回填（真 ffmpeg）', async () => {
+    registerGenerationExecutors({
+      imageGen: mockImageGen,
+      ttsGen: mockTtsGen,
+      videoGen: async (args) => {
+        await makePlaceholderVideo({ outPath: args.outPath, durationMs: 1000 });
+      },
+    });
+    const { shot } = await seedShot();
+    const keyframeAsset = await makeUploadedAsset();
+    const take = await db.take.create({
+      data: { shotId: shot.id, slot: 'KEYFRAME', assetId: keyframeAsset.id },
+    });
+    await db.shot.update({ where: { id: shot.id }, data: { keyframeSelectedTakeId: take.id } });
+    const model = await seedModel('video', 'seedance-1-0-pro');
+    const ctx = await makeCtx('GENERATE_VIDEO', { shotId: shot.id, modelConfigId: model.id });
+    await db.job.update({ where: { id: ctx.job.id }, data: { modelKey: null } });
+    await getExecutor('GENERATE_VIDEO')!(ctx);
+    expect((await db.job.findUnique({ where: { id: ctx.job.id } }))?.modelKey).toBe('seedance-1-0-pro');
+  }, 60000);
+
+  it('TTS 执行器回填（真 ffmpeg）', async () => {
+    registerGenerationExecutors({
+      imageGen: mockImageGen,
+      videoGen: mockVideoGen,
+      ttsGen: mockTtsGen,
+    });
+    const { shot } = await seedShot();
+    const dialogue = await db.dialogueLine.create({
+      data: { shotId: shot.id, isNarrator: true, text: '这是一句旁白。', sortOrder: 0 },
+    });
+    const line = await db.dubbingLine.create({
+      data: { shotId: shot.id, dialogueLineId: dialogue.id, status: 'GENERATING' },
+    });
+    const model = await seedModel('tts', 'qwen-tts');
+    const ctx = await makeCtx('GENERATE_TTS', {
+      kind: 'dubbing',
+      dubbingLineId: line.id,
+      modelConfigId: model.id,
+    });
+    await db.job.update({ where: { id: ctx.job.id }, data: { modelKey: null } });
+    await getExecutor('GENERATE_TTS')!(ctx);
+    expect((await db.job.findUnique({ where: { id: ctx.job.id } }))?.modelKey).toBe('qwen-tts');
+  }, 60000);
+});
+
+describe('视频 meta.effectivePrompt 记的是最终发出去那份', () => {
+  it('适配器追加的 --resolution/--duration 后缀必须进 meta，否则 480p 与 1080p 两条 take 一字不差（真 ffmpeg）', async () => {
+    // 这个弹窗的全部意义就是"看清实际发出去的是什么"
+    const makeGens = (resolution: string): GenerationGens => ({
+      imageGen: mockImageGen,
+      ttsGen: mockTtsGen,
+      videoGen: async (args) => {
+        await makePlaceholderVideo({ outPath: args.outPath, durationMs: 1000 });
+        return {
+          effectivePrompt: `${args.prompt} --resolution ${resolution} --duration 10 --ratio adaptive`,
+        };
+      },
+    });
+
+    const { shot } = await seedShot();
+    const keyframeAsset = await makeUploadedAsset();
+    const take = await db.take.create({
+      data: { shotId: shot.id, slot: 'KEYFRAME', assetId: keyframeAsset.id },
+    });
+    await db.shot.update({ where: { id: shot.id }, data: { keyframeSelectedTakeId: take.id } });
+
+    const metaPromptOf = async (resolution: string) => {
+      registerGenerationExecutors(makeGens(resolution));
+      const r = await getExecutor('GENERATE_VIDEO')!(
+        await makeCtx('GENERATE_VIDEO', { shotId: shot.id, resolution }),
+      );
+      const asset = await db.asset.findUnique({ where: { id: r.outputAssetIds![0]! } });
+      return parseJson<{ effectivePrompt?: string }>(asset!.metaJson, {}).effectivePrompt!;
+    };
+
+    const low = await metaPromptOf('480p');
+    const high = await metaPromptOf('1080p');
+    expect(low).toContain('--resolution 480p');
+    expect(high).toContain('--resolution 1080p');
+    expect(low).not.toBe(high);
+  }, 60000);
+
+  it('适配器不回传时回落到发出前的提示词（不产生指令后缀的适配器照常工作）', async () => {
+    const { gens } = makeFakeGens();
+    registerGenerationExecutors({
+      ...gens,
+      videoGen: async (args) => {
+        await makePlaceholderVideo({ outPath: args.outPath, durationMs: 1000 });
+      },
+    });
+    const { shot } = await seedShot({ videoPrompt: '镜头缓缓推进' });
+    const keyframeAsset = await makeUploadedAsset();
+    const take = await db.take.create({
+      data: { shotId: shot.id, slot: 'KEYFRAME', assetId: keyframeAsset.id },
+    });
+    await db.shot.update({ where: { id: shot.id }, data: { keyframeSelectedTakeId: take.id } });
+
+    const r = await getExecutor('GENERATE_VIDEO')!(await makeCtx('GENERATE_VIDEO', { shotId: shot.id }));
+    const asset = await db.asset.findUnique({ where: { id: r.outputAssetIds![0]! } });
+    expect(parseJson<{ effectivePrompt?: string }>(asset!.metaJson, {}).effectivePrompt).toBe('镜头缓缓推进');
+  }, 60000);
 });
