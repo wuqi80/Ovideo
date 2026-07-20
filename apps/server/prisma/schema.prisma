@@ -282,7 +282,13 @@ model DubbingLine {
   audioAsset     Asset?        @relation(fields: [audioAssetId], references: [id])
   durationMs     Int?
   status         String        @default("PENDING") // DubbingStatus
+  // 跨版本的"逻辑配音行"身份，与 Shot.lineageId 同义：applyPatch 复制出的新行继承基底的
+  // lineageId，使同一句台词在 v1..vN 的所有分身可互相关联。没有它，TTS 跑的这几分钟里
+  // 用户改一次分镜，音频就写回已退位的旧行，当前版本那行永远停在 GENERATING。
+  lineageId      String?
   createdAt      DateTime      @default(now())
+
+  @@index([lineageId])
 }
 
 // ---------- 产物槽位（抽卡语义：N 个 take，一个 selected） ----------

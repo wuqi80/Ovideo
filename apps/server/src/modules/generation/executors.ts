@@ -10,8 +10,13 @@ import { extractFrame, probeDurationMs } from '../../lib/ffmpeg.js';
 import { registerExecutor, type JobExecutor } from '../job/registry.js';
 import { resolveBinding } from '../binding/service.js';
 import { createAsset } from '../asset/service.js';
-import { clearStale, onDubbingDurationChanged } from '../stale/service.js';
+import { clearStale } from '../stale/service.js';
 import { alsoAttachToCurrentVersion } from './late-take.js';
+import {
+  DUBBING_GAP_MS,
+  alsoWriteDubbingToCurrentVersion,
+  recalcShotDubbingDuration,
+} from './late-dubbing.js';
 import type { GenModelCfg, ImageGen, TtsGen, VideoGen } from './gens.js';
 
 /** 三个可注入的生成函数（缺省 = Mock，集成阶段可换真实适配器） */
@@ -335,7 +340,7 @@ async function extractPrevSegmentTailFrame(
  * HEAD_PAD 让台词不顶着切镜开口，LINE_GAP 是行间静音，TAIL_PAD 让尾句说完再切镜。
  */
 const LIP_HEAD_PAD_MS = 200;
-const LIP_LINE_GAP_MS = 300; // = DUBBING_GAP_MS（本文件下方声明，此处不能前向引用）
+const LIP_LINE_GAP_MS = DUBBING_GAP_MS;
 const LIP_TAIL_PAD_MS = 500;
 
 /** 时间轴上的一行：具名说话人名（旁白/无标签为 null）+ 已就绪的配音时长（未就绪为 null） */
@@ -546,8 +551,7 @@ function makeVideoExecutor(gens: GenerationGens): JobExecutor {
   };
 }
 
-/** 行间静音间隔（重算镜头配音总时长用） */
-export const DUBBING_GAP_MS = 300;
+export { DUBBING_GAP_MS } from './late-dubbing.js';
 
 /** GENERATE_TTS：单句配音生成 + 镜头时长链路重算（任何一步失败把行置 FAILED 再抛出） */
 function makeTtsExecutor(gens: GenerationGens): JobExecutor {
@@ -556,7 +560,12 @@ function makeTtsExecutor(gens: GenerationGens): JobExecutor {
     const input = TtsInputSchema.parse(parseJson<unknown>(job.inputJson, {}));
     const line = await db.dubbingLine.findUnique({
       where: { id: input.dubbingLineId },
-      include: { dialogueLine: true, voiceProfile: true },
+      // storyboard 坐标供跨版本写回判断"我这一版是不是已经被翻篇了"
+      include: {
+        dialogueLine: true,
+        voiceProfile: true,
+        shot: { include: { storyboard: true } },
+      },
     });
     if (!line) throw notFound('配音行');
 
@@ -596,13 +605,10 @@ function makeTtsExecutor(gens: GenerationGens): JobExecutor {
       await updateProgress(80);
 
       // 时长链路（v2 §3）：全部 READY 行时长之和 + (n-1) 个行间间隔 → 锁定镜头时长
-      const readyLines = await db.dubbingLine.findMany({
-        where: { shotId: line.shotId, status: 'READY' },
-      });
-      const totalMs =
-        readyLines.reduce((sum, l) => sum + (l.durationMs ?? 0), 0) +
-        Math.max(0, readyLines.length - 1) * DUBBING_GAP_MS;
-      await onDubbingDurationChanged(db, line.shotId, totalMs);
+      await recalcShotDubbingDuration(db, line.shotId);
+      // 生成期间用户可能已经改过分镜：音频与时长锁都要在当前版本再落一次，
+      // 否则当前版本这行永远停在 GENERATING，用户只能再付一次 TTS 的钱
+      await alsoWriteDubbingToCurrentVersion(db, line, asset.id, durationMs);
 
       return { outputAssetIds: [asset.id], output: { dubbingLineId: line.id, durationMs } };
     } catch (err) {

@@ -90,8 +90,17 @@ export async function syncDubbingLines(
       }
       voiceProfileId = profileCache.get(dialogue.speakerTagId) ?? null;
     }
-    await db.dubbingLine.create({
-      data: { shotId, dialogueLineId: dialogue.id, voiceProfileId },
+    /**
+     * 新行开启一条新血脉，以自身 id 为锚点（cuid 由库生成，只能建后回填）。
+     * 【为什么要事务】两次写若不在一个事务里，create 成功而 update 失败就留下
+     * 一行 lineageId=null。它此后既享受不到跨版本写回，又会在下次跑回填脚本时
+     * 被按 sortOrder 重新归组——正好落进"把两句不同台词焊成一条血脉"那个口子。
+     */
+    await db.$transaction(async (tx) => {
+      const created = await tx.dubbingLine.create({
+        data: { shotId, dialogueLineId: dialogue.id, voiceProfileId },
+      });
+      await tx.dubbingLine.update({ where: { id: created.id }, data: { lineageId: created.id } });
     });
   }
   return listDubbingLines(db, shotId);

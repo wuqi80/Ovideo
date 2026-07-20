@@ -297,6 +297,9 @@ export async function applyPatch(
                   audioAssetId: line.audioAssetId,
                   durationMs: line.durationMs,
                   status: line.status,
+                  // 与 Shot 同一套：继承基底血脉，存量行（lineageId 引入前）以自身 id 开锚。
+                  // TTS 落库时靠它找回"当前版本的这一句"，否则音频写死在旧版本行上。
+                  lineageId: line.lineageId ?? line.id,
                 },
               });
             }
