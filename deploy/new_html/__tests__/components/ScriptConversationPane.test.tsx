@@ -14,6 +14,13 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('继续输入修改意见');
   });
 
+  it('keeps the single model selector beside the send action', () => {
+    expect(source).not.toContain('完整上下文');
+    expect(source).not.toContain('{modelOption.runtime}');
+    expect(source).toContain('className="relative ml-auto min-w-0"');
+    expect(source).toContain('aria-label="发送"');
+  });
+
   it('keeps immutable reply actions together', () => {
     expect(source).toContain('生成镜头设计');
     expect(source).toContain('编辑分镜脚本');

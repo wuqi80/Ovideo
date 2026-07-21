@@ -80,7 +80,6 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const composerResizeOriginRef = useRef({ y: 0, height: 132 });
   const initializedScriptRef = useRef<string | null>(null);
 
-  const modelOption = SCRIPT_MODEL_OPTIONS.find(option => option.value === aiModel) || SCRIPT_MODEL_OPTIONS[2];
   const versionByMessageId = useMemo(() => new Map(
     (conversation?.versions || [])
       .filter(version => version.messageId)
@@ -356,8 +355,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             className="min-h-0 flex-1 resize-none bg-transparent px-4 pb-2 pt-4 pr-12 text-sm leading-6 text-n800 outline-none placeholder:text-n100 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <div className="flex min-h-11 items-center gap-2 px-3 py-2">
-            <span className="inline-flex h-7 items-center rounded px-2 text-[10px] text-success">完整上下文</span>
-            <label className="relative min-w-0">
+            <label className="relative ml-auto min-w-0">
               <span className="sr-only">选择剧本模型</span>
               <select
                 value={aiModel}
@@ -371,14 +369,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
             </label>
-            <span className="hidden min-w-0 truncate text-[10px] text-n100 lg:block">{modelOption.runtime}</span>
             <button
               type="button"
               onClick={() => void submit()}
               disabled={!selectedFile || !draft.trim() || isSending}
               title="发送"
               aria-label="发送"
-              className="ml-auto inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-n800 text-white hover:bg-n700 disabled:cursor-not-allowed disabled:bg-n100"
+              className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-n800 text-white hover:bg-n700 disabled:cursor-not-allowed disabled:bg-n100"
             >
               {isSending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
