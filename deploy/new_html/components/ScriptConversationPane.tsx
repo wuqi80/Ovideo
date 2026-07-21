@@ -475,11 +475,16 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
         <FileText className="h-4 w-4 text-primary" />
         <div className="truncate text-sm font-semibold text-n800">{selectedFile?.name || '请选择剧本任务'}</div>
+        {isLoading && conversation && (
+          <span className="ml-auto inline-flex flex-shrink-0 items-center gap-1 text-[10px] text-n300" title="正在后台同步最新对话">
+            <LoaderCircle className="h-3 w-3 animate-spin text-primary" /> 后台同步
+          </span>
+        )}
         <button
           type="button"
           onClick={onOpenStoryboard}
           disabled={!selectedFile || storyboardItemCount === 0}
-          className="ml-auto inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded border border-primary bg-primary-light px-3 text-xs font-medium text-primary hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:border-n40 disabled:bg-n20 disabled:text-n100"
+          className={`${isLoading && conversation ? '' : 'ml-auto'} inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded border border-primary bg-primary-light px-3 text-xs font-medium text-primary hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:border-n40 disabled:bg-n20 disabled:text-n100`}
         >
           <PanelRightOpen className="h-3.5 w-3.5" />
           展开镜头设计{storyboardItemCount > 0 ? ` (${storyboardItemCount})` : ''}
@@ -494,7 +499,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       >
         {!selectedFile ? (
           <div className="flex h-full items-center justify-center text-sm text-n100">请从左侧选择一个剧本任务</div>
-        ) : isLoading ? (
+        ) : isLoading && !conversation ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-n300">
             <LoaderCircle className="h-4 w-4 animate-spin text-primary" /> 正在加载对话
           </div>

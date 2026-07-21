@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import pytest
 
 from services import script_conversation_service as service
@@ -60,6 +61,34 @@ async def test_get_conversation_returns_messages_versions_and_current_pointer():
     assert result["current_version_id"] == "ver_1"
     assert result["messages"][0]["message_id"] == "msg_1"
     assert result["versions"][0]["version_id"] == "ver_1"
+
+
+async def test_get_conversation_loads_messages_and_versions_concurrently():
+    class ConcurrentDAO:
+        active = 0
+        max_active = 0
+
+        @classmethod
+        async def _load(cls, value):
+            cls.active += 1
+            cls.max_active = max(cls.max_active, cls.active)
+            await asyncio.sleep(0)
+            cls.active -= 1
+            return value
+
+        @classmethod
+        async def list_messages(cls, script_id):
+            return await cls._load([{"message_id": "msg_1", "script_id": script_id}])
+
+        @classmethod
+        async def list_versions(cls, script_id):
+            return await cls._load([{"version_id": "ver_1", "script_id": script_id}])
+
+    await service.get_script_conversation(
+        {"script_id": "script_1"},
+        conversation_dao=ConcurrentDAO,
+    )
+    assert ConcurrentDAO.max_active == 2
 
 
 async def test_create_version_forwards_model_and_storyboard_snapshot():

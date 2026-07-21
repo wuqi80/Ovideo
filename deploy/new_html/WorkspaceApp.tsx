@@ -142,6 +142,50 @@ function normalizeVersionStoryboardItems(rows: any[]): StoryboardItem[] {
   });
 }
 
+function buildLocalScriptConversation(file: ProjectFile): ScriptConversation {
+  const now = Date.now();
+  const fallbackVersion: ScriptStoryboardVersion | undefined = file.scriptContent ? {
+    id: `legacy_${file.id}`,
+    scriptId: file.id,
+    versionNo: 1,
+    content: file.scriptContent,
+    storyboardItems: file.storyboard?.items || [],
+    source: 'legacy',
+    status: 'ready',
+    modelAlias: '历史版本',
+    provider: 'legacy',
+    modelName: 'legacy',
+    createdAt: file.lastUpdated || now,
+    updatedAt: file.lastUpdated || now,
+    messageId: `legacy_assistant_${file.id}`,
+  } : undefined;
+  return {
+    scriptId: file.id,
+    currentVersionId: fallbackVersion?.id,
+    messages: [
+      ...(file.originalContent ? [{
+        id: `legacy_user_${file.id}`,
+        role: 'user' as const,
+        content: file.originalContent,
+        status: 'completed' as const,
+        createdAt: file.lastUpdated || now,
+        updatedAt: file.lastUpdated || now,
+      }] : []),
+      ...(fallbackVersion ? [{
+        id: fallbackVersion.messageId!,
+        role: 'assistant' as const,
+        content: fallbackVersion.content,
+        status: 'completed' as const,
+        modelAlias: '历史版本',
+        modelName: 'legacy',
+        createdAt: file.lastUpdated || now,
+        updatedAt: file.lastUpdated || now,
+      }] : []),
+    ],
+    versions: fallbackVersion ? [fallbackVersion] : [],
+  };
+}
+
 function parseStoryboardVersionContent(content: string): StoryboardItem[] {
   if (!content.trim()) return [];
   const separated = ensureStoryboardCutSeparators(content);
@@ -362,6 +406,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const [conversationSendingId, setConversationSendingId] = useState<string | null>(null);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [storyboardDrawerOpen, setStoryboardDrawerOpen] = useState(false);
+  const loadedConversationKeysRef = useRef<Set<string>>(new Set());
+  const conversationRequestsRef = useRef<Map<string, Promise<ScriptConversation>>>(new Map());
   
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
@@ -382,12 +428,30 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
   useEffect(() => {
     if (!selectedFileId || selectedFileId.startsWith('local_')) return;
+    const cacheKey = `${propEpisodeId}:${selectedFileId}`;
+    if (loadedConversationKeysRef.current.has(cacheKey)) {
+      setConversationLoadingId(current => current === selectedFileId ? null : current);
+      return;
+    }
     let cancelled = false;
+    const localFile = filesRef.current.find(item => item.id === selectedFileId);
+    if (!scriptConversations[selectedFileId] && localFile) {
+      const fallbackConversation = buildLocalScriptConversation(localFile);
+      setScriptConversations(prev => prev[selectedFileId]
+        ? prev
+        : { ...prev, [selectedFileId]: fallbackConversation });
+    }
     setConversationLoadingId(selectedFileId);
     setConversationError(null);
-    getScriptConversation(propEpisodeId, selectedFileId)
+    let request = conversationRequestsRef.current.get(cacheKey);
+    if (!request) {
+      request = getScriptConversation(propEpisodeId, selectedFileId);
+      conversationRequestsRef.current.set(cacheKey, request);
+    }
+    request
       .then(conversation => {
         if (cancelled) return;
+        loadedConversationKeysRef.current.add(cacheKey);
         setScriptConversations(prev => ({ ...prev, [selectedFileId]: conversation }));
         const persistedSnapshots = collectConversationStoryboardSnapshots(conversation);
         setFiles(prev => {
@@ -407,54 +471,17 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         console.error('加载剧本对话失败:', error);
         const file = filesRef.current.find(item => item.id === selectedFileId);
         if (file) {
-          const now = Date.now();
-          const fallbackVersion: ScriptStoryboardVersion | undefined = file.scriptContent ? {
-            id: `legacy_${file.id}`,
-            scriptId: file.id,
-            versionNo: 1,
-            content: file.scriptContent,
-            storyboardItems: file.storyboard?.items || [],
-            source: 'legacy',
-            status: 'ready',
-            modelAlias: '历史版本',
-            provider: 'legacy',
-            modelName: 'legacy',
-            createdAt: file.lastUpdated || now,
-            updatedAt: file.lastUpdated || now,
-          } : undefined;
-          if (fallbackVersion) fallbackVersion.messageId = `legacy_assistant_${file.id}`;
           setScriptConversations(prev => ({
             ...prev,
-            [file.id]: {
-              scriptId: file.id,
-              currentVersionId: fallbackVersion?.id,
-              messages: [
-                ...(file.originalContent ? [{
-                  id: `legacy_user_${file.id}`,
-                  role: 'user' as const,
-                  content: file.originalContent,
-                  status: 'completed' as const,
-                  createdAt: file.lastUpdated || now,
-                  updatedAt: file.lastUpdated || now,
-                }] : []),
-                ...(fallbackVersion ? [{
-                  id: fallbackVersion.messageId!,
-                  role: 'assistant' as const,
-                  content: fallbackVersion.content,
-                  status: 'completed' as const,
-                  modelAlias: '历史版本',
-                  modelName: 'legacy',
-                  createdAt: file.lastUpdated || now,
-                  updatedAt: file.lastUpdated || now,
-                }] : []),
-              ],
-              versions: fallbackVersion ? [fallbackVersion] : [],
-            },
+            [file.id]: prev[file.id] || buildLocalScriptConversation(file),
           }));
         }
         setConversationError('对话历史暂时无法从服务器加载，已显示当前剧本内容。');
       })
       .finally(() => {
+        if (conversationRequestsRef.current.get(cacheKey) === request) {
+          conversationRequestsRef.current.delete(cacheKey);
+        }
         if (!cancelled) setConversationLoadingId(null);
       });
     return () => { cancelled = true; };

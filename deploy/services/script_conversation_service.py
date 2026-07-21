@@ -1,6 +1,7 @@
 """Business rules for per-script conversations and immutable versions."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, Optional
 
 
@@ -18,8 +19,10 @@ async def get_script_conversation(
     conversation_dao: Any,
 ) -> Dict[str, Any]:
     script_id = str(script["script_id"])
-    messages = await conversation_dao.list_messages(script_id)
-    versions = await conversation_dao.list_versions(script_id)
+    messages, versions = await asyncio.gather(
+        conversation_dao.list_messages(script_id),
+        conversation_dao.list_versions(script_id),
+    )
     return {
         "success": True,
         "script": dict(script),

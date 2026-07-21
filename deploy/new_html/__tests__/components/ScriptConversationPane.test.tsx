@@ -127,6 +127,14 @@ describe('ScriptConversationPane workflow', () => {
     expect(workspace).not.toContain('<LoadingOverlay />');
   });
 
+  it('shows cached script content immediately while conversations sync in the background', () => {
+    expect(workspace).toContain('function buildLocalScriptConversation(file: ProjectFile)');
+    expect(workspace).toContain('loadedConversationKeysRef.current.has(cacheKey)');
+    expect(workspace).toContain('conversationRequestsRef.current.get(cacheKey)');
+    expect(source).toContain('isLoading && !conversation');
+    expect(source).toContain('正在后台同步最新对话');
+  });
+
   it('isolates undo and redo inside the active storyboard version', () => {
     expect(workspace).toContain('buildVersionHistoryScopeKey(selectedFileId, selectedConversationVersion?.id)');
     expect(workspace).toContain('fileHistory[selectedHistoryScopeKey]');
