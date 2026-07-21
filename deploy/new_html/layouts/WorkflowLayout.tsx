@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Outlet, useParams, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LogOut, LayoutGrid, Wand2, Library, Clapperboard } from 'lucide-react';
+import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LogOut, LayoutGrid, Wand2, Library, Clapperboard, Coins, UserRound } from 'lucide-react';
 import { EpisodeProvider } from '../contexts/EpisodeContext';
 import type { SourcePage } from '../types';
 import { TaskBadge } from '../components/TaskBadge';
 import { NotificationPanel } from '../components/NotificationPanel';
+import { getCreditBalance } from '../services/creditService';
 
 // 2026-05-20 (Task System Overhaul M1)：每个 nav item 关联 sourcePage，用于 per-page TaskBadge。
 // 2026-05-26 Slice 1/3：插入"视频反推"（剧本之后）与"素材库"（历史之前）。
@@ -27,6 +28,28 @@ const NAV_ITEMS: { path: string; label: string; icon: any; sourcePage: SourcePag
 export const WorkflowLayout: React.FC = () => {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
   const navigate = useNavigate();
+  const username = localStorage.getItem('username') || '用户';
+  const [availableCredits, setAvailableCredits] = useState<number | null>(null);
+
+  const refreshCredits = useCallback(async () => {
+    try {
+      const balance = await getCreditBalance();
+      setAvailableCredits(balance.available_credits);
+    } catch (error) {
+      console.warn('获取用户积分失败:', error);
+      setAvailableCredits(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCredits();
+    const intervalId = window.setInterval(() => void refreshCredits(), 60_000);
+    window.addEventListener('focus', refreshCredits);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshCredits);
+    };
+  }, [refreshCredits]);
 
   return (
     <EpisodeProvider>
@@ -71,6 +94,26 @@ export const WorkflowLayout: React.FC = () => {
           {/* 2026-05-20：通知铃铛（统一面板） */}
           <div className="ml-1">
             <NotificationPanel compact />
+          </div>
+          <div className="ml-1 flex shrink-0 items-center gap-1 border-l border-n40 pl-2">
+            <div
+              className="inline-flex h-8 max-w-[132px] items-center gap-1.5 rounded px-2 text-xs text-n500"
+              title={`当前用户：${username}`}
+              aria-label={`当前用户：${username}`}
+            >
+              <UserRound className="h-4 w-4 shrink-0 text-n300" />
+              <span className="truncate font-medium">{username}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/credits')}
+              className="inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs font-medium text-n500 hover:bg-y50 hover:text-warning"
+              title="查看我的积分"
+              aria-label={`可用积分：${availableCredits ?? '加载中'}`}
+            >
+              <Coins className="h-4 w-4 shrink-0 text-warning" />
+              <span className="tabular-nums">{availableCredits === null ? '--' : availableCredits.toLocaleString()}</span>
+            </button>
           </div>
           <button
             onClick={() => {
