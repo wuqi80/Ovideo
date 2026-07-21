@@ -57,6 +57,16 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('max-w-[1600px]');
   });
 
+  it('edits storyboard scripts beside a collapsible initial-script reference', () => {
+    expect(source).toContain("message.role === 'user' && message.content.trim()");
+    expect(source).toContain("firstUserMessage?.content || selectedFile?.originalContent || ''");
+    expect(source).toContain('分镜脚本（可编辑）');
+    expect(source).toContain('文字剧本（对照）');
+    expect(source).toContain('最初输入 · 只读');
+    expect(source).toContain("isReferenceScriptCollapsed ? '展开文字剧本' : '收起文字剧本'");
+    expect(source).toContain("isReferenceScriptCollapsed ? 'grid-cols-1 grid-rows-1' : 'grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1'");
+  });
+
   it('moves the composer resize handle to the upper right and follows the latest reply', () => {
     expect(source).toContain('data-testid="composer-resize-handle"');
     expect(source).toContain('absolute right-3 top-2');

@@ -16,6 +16,7 @@ import {
   Layers3,
   LoaderCircle,
   MessageSquare,
+  PanelRightClose,
   PanelRightOpen,
   Pencil,
   Send,
@@ -90,6 +91,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [editingVersion, setEditingVersion] = useState<ScriptStoryboardVersion | null>(null);
   const [editValue, setEditValue] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isReferenceScriptCollapsed, setIsReferenceScriptCollapsed] = useState(false);
   const [composerHeight, setComposerHeight] = useState(132);
   const [isResizingComposer, setIsResizingComposer] = useState(false);
   const [scrollControls, setScrollControls] = useState({ canScrollUp: false, canScrollDown: false });
@@ -110,6 +112,12 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     () => conversation?.messages.find(message => message.role === 'user')?.id,
     [conversation?.messages],
   );
+  const initialScriptContent = useMemo(() => {
+    const firstUserMessage = conversation?.messages.find(message => (
+      message.role === 'user' && message.content.trim()
+    ));
+    return firstUserMessage?.content || selectedFile?.originalContent || '';
+  }, [conversation?.messages, selectedFile?.originalContent]);
   const conversationTurns = useMemo(() => {
     const turns: ConversationTurn[] = [];
     for (const message of conversation?.messages || []) {
@@ -273,6 +281,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const openEditor = (version: ScriptStoryboardVersion) => {
     setEditingVersion(version);
     setEditValue(version.content);
+    setIsReferenceScriptCollapsed(false);
   };
 
   const saveEdit = async () => {
@@ -634,11 +643,43 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 <div className="text-sm font-semibold text-n800">编辑分镜脚本</div>
                 <div className="text-[10px] text-n100">保存后创建新版本，历史回复不会被覆盖</div>
               </div>
-              <button type="button" onClick={() => setEditingVersion(null)} className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800" aria-label="关闭">
+              <button
+                type="button"
+                onClick={() => setIsReferenceScriptCollapsed(current => !current)}
+                className="ml-auto inline-flex h-8 items-center gap-1.5 rounded border border-n40 bg-n0 px-3 text-xs text-n700 hover:border-primary hover:text-primary"
+                aria-label={isReferenceScriptCollapsed ? '展开文字剧本对照' : '收起文字剧本对照'}
+              >
+                {isReferenceScriptCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+                {isReferenceScriptCollapsed ? '展开文字剧本' : '收起文字剧本'}
+              </button>
+              <button type="button" onClick={() => setEditingVersion(null)} className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800" aria-label="关闭">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <textarea value={editValue} onChange={event => setEditValue(event.target.value)} className="min-h-0 flex-1 resize-none bg-n0 p-5 font-mono text-sm leading-7 text-n800 outline-none" />
+            <div className={`grid min-h-0 flex-1 overflow-hidden ${isReferenceScriptCollapsed ? 'grid-cols-1 grid-rows-1' : 'grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1'}`}>
+              <section className="flex min-h-0 min-w-0 flex-col bg-n0">
+                <div className="flex h-10 flex-shrink-0 items-center border-b border-n40 px-5 text-xs font-semibold text-n700">
+                  分镜脚本（可编辑）
+                </div>
+                <textarea
+                  value={editValue}
+                  onChange={event => setEditValue(event.target.value)}
+                  className="min-h-0 flex-1 resize-none bg-n0 p-5 font-mono text-sm leading-7 text-n800 outline-none"
+                  aria-label="编辑分镜脚本内容"
+                />
+              </section>
+              {!isReferenceScriptCollapsed && (
+                <aside className="flex min-h-0 min-w-0 flex-col border-t border-n40 bg-n20 lg:border-l lg:border-t-0">
+                  <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-n40 px-5">
+                    <span className="text-xs font-semibold text-n700">文字剧本（对照）</span>
+                    <span className="text-[10px] text-n100">最初输入 · 只读</span>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words p-5 text-sm leading-7 text-n700 custom-scrollbar">
+                    {initialScriptContent || '暂无最初输入的文字剧本'}
+                  </div>
+                </aside>
+              )}
+            </div>
             <div className="flex h-14 flex-shrink-0 items-center justify-end gap-2 border-t border-n40 px-4">
               <button type="button" onClick={() => setEditingVersion(null)} className="h-8 rounded border border-n40 px-4 text-xs text-n700 hover:bg-n20">取消</button>
               <button type="button" onClick={() => void saveEdit()} disabled={isSavingEdit || !editValue.trim()} className="inline-flex h-8 items-center gap-1.5 rounded bg-primary px-4 text-xs text-white hover:bg-primary-hover disabled:opacity-50">
