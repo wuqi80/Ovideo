@@ -142,6 +142,23 @@ def test_explicit_model_overrides_runtime_model_env(monkeypatch):
     assert config.source["model"] == "request"
 
 
+def test_deepseek_frontend_models_resolve_to_their_exact_runtime_model(monkeypatch):
+    env_key = get_provider_env_key("deepseek")
+    assert env_key
+    model_env = get_model_env_key(env_key)
+
+    monkeypatch.setenv(env_key, "shared-deepseek-key")
+    monkeypatch.setenv(model_env, "deepseek-reasoner")
+
+    reasoner = resolve_provider("deepseek", "deepseek-reasoner")
+    chat = resolve_provider("deepseek", "deepseek-chat")
+
+    assert reasoner.api_key == chat.api_key == "shared-deepseek-key"
+    assert reasoner.model_name == "deepseek-reasoner"
+    assert chat.model_name == "deepseek-chat"
+    assert reasoner.source["model"] == chat.source["model"] == "request"
+
+
 class _ImageResponse:
     status_code = 200
     text = ""

@@ -969,6 +969,10 @@ function mergeMissingKnownModelBindings(
     return Array.from(byOperation.values());
 }
 
+function providerRequiresCompleteModelBindings(provider: string): boolean {
+    return ['deepseek', 'gemini-image'].includes(normalizeProvider(provider));
+}
+
 function defaultModelBindings(meta?: ProviderMeta): ApiModelBinding[] {
     return normalizeApiModelBindings(meta?.model_binding_options, meta?.default_model_name || '', meta?.model_binding_options || []);
 }
@@ -980,7 +984,7 @@ function apiConfigModelBindings(config: ApiConfig, meta?: ProviderMeta): ApiMode
         meta?.model_binding_options || [],
     );
     const provider = normalizeProvider(config.provider);
-    if (provider === 'gemini-image') {
+    if (providerRequiresCompleteModelBindings(provider)) {
         return mergeMissingKnownModelBindings(bindings, meta?.model_binding_options || []);
     }
     return bindings;
@@ -1029,6 +1033,14 @@ function configToForm(
 ): ApiConfigFormState {
     const requestTemplate = jsonRecordFrom(config.request_template);
     const headers = jsonRecordFrom(config.headers);
+    const normalizedBindings = normalizeApiModelBindings(
+        config.model_bindings,
+        config.model_name || '',
+        bindingOptions,
+    );
+    const modelBindings = providerRequiresCompleteModelBindings(config.provider)
+        ? mergeMissingKnownModelBindings(normalizedBindings, bindingOptions)
+        : normalizedBindings;
     return {
         config_id: config.config_id,
         name: config.name || '',
@@ -1040,11 +1052,7 @@ function configToForm(
         bulk_api_keys: '',
         bulk_mode: false,
         model_name: config.model_name || '',
-        model_bindings: normalizeApiModelBindings(
-            config.model_bindings,
-            config.model_name || '',
-            bindingOptions,
-        ),
+        model_bindings: modelBindings,
         proxy_mode: config.proxy_mode || 'direct',
         custom_proxy: config.custom_proxy || '',
         request_template: jsonTextFrom(config.request_template),

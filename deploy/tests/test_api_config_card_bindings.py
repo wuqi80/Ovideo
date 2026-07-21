@@ -6,6 +6,43 @@ from unittest.mock import AsyncMock
 import pytest
 
 
+def test_deepseek_binding_options_match_frontend_model_choices():
+    from services.api_provider_registry import get_provider_model_binding_options
+
+    assert get_provider_model_binding_options("deepseek") == [
+        {
+            "operation": "deepseek-reasoner",
+            "label": "DeepSeek Reasoner",
+            "model_name": "deepseek-reasoner",
+        },
+        {
+            "operation": "deepseek-chat",
+            "label": "DeepSeek Chat",
+            "model_name": "deepseek-chat",
+        },
+    ]
+
+
+def test_deepseek_legacy_reasoner_card_is_completed_with_chat_binding():
+    from services.api_provider_registry import normalize_model_bindings
+
+    bindings = normalize_model_bindings(
+        "deepseek",
+        [
+            {
+                "operation": "deepseek-reasoner",
+                "label": "DeepSeek Reasoner",
+                "model_name": "deepseek-reasoner",
+            }
+        ],
+    )
+
+    assert [(item["operation"], item["model_name"]) for item in bindings] == [
+        ("deepseek-reasoner", "deepseek-reasoner"),
+        ("deepseek-chat", "deepseek-chat"),
+    ]
+
+
 def test_seedance_binding_options_are_explicit():
     from services.api_provider_registry import get_provider_model_binding_options
 

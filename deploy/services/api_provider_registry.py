@@ -270,6 +270,20 @@ DASHSCOPE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "happyhorse": "DASHSCOPE_MODEL_HAPPYHORSE",
 }
 
+DEEPSEEK_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
+    {
+        "operation": "deepseek-reasoner",
+        "label": "DeepSeek Reasoner",
+        "model_name": "deepseek-reasoner",
+    },
+    {
+        "operation": "deepseek-chat",
+        "label": "DeepSeek Chat",
+        "model_name": "deepseek-chat",
+    },
+]
+
+
 SEEDANCE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "standard",
@@ -761,6 +775,11 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": "deepseek-reasoner",
     },
     {
+        "name": "DeepSeek Chat",
+        "provider": "deepseek",
+        "model_name": "deepseek-chat",
+    },
+    {
         "name": "化神1阶（快速）",
         "provider": "gemini-image",
         "operation": "gemini-2.5-flash-image",
@@ -1111,6 +1130,8 @@ def get_api_model_preset(provider: str, model_name: Optional[str] = None) -> Opt
 def get_provider_model_binding_options(provider: str) -> List[Dict[str, str]]:
     """Return the front-end operation/model choices supported by one API card."""
     provider_id = normalize_provider(provider)
+    if provider_id == "deepseek":
+        return deepcopy(DEEPSEEK_MODEL_BINDING_OPTIONS)
     if provider_id == "doubao":
         return deepcopy(DOUBAO_IMAGE_MODEL_BINDING_OPTIONS)
     if provider_id == "seedance":
@@ -1211,7 +1232,7 @@ def normalize_model_bindings(
             "label": option_labels.get(operation) or operation,
             "model_name": fallback_model,
         }
-    if provider_id == "gemini-image" and normalized:
+    if provider_id in {"gemini-image", "deepseek"} and normalized:
         for option in get_provider_model_binding_options(provider_id):
             operation = option["operation"]
             if operation not in normalized:
