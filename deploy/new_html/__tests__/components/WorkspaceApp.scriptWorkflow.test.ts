@@ -36,4 +36,13 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('onExportProject={handleExportProject}');
     expect(source).toContain('window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)');
   });
+
+  it('appends persistent storyboard snapshots after generation and manual saves', () => {
+    expect(source).toContain('const persistStoryboardSnapshot = useCallback');
+    expect(source).toContain('{ [STORYBOARD_SNAPSHOTS_METADATA_KEY]: snapshots }');
+    expect(source).toContain("source: 'auto'");
+    expect(source).toContain("source: 'manual'");
+    expect(source).toContain('collectConversationStoryboardSnapshots(conversation)');
+    expect(source).toContain('handleConversationGenerateDesign(version, { autoSnapshot: false })');
+  });
 });

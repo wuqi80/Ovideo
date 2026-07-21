@@ -18,6 +18,14 @@ import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getS
 import { getAuthToken } from './services/httpClient';
 import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
 import { ensureStoryboardCutSeparators, validateStoryboardIterationCount } from './utils/scriptIteration';
+import {
+  STORYBOARD_SNAPSHOTS_METADATA_KEY,
+  cloneStoryboardSnapshot,
+  collectConversationStoryboardSnapshots,
+  createStoryboardSnapshot,
+  getVersionStoryboardSnapshots,
+  mergeStoryboardSnapshots,
+} from './utils/storyboardSnapshots';
 
 const loadAiModelService = () => import('./services/aiModelService');
 
@@ -381,6 +389,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       .then(conversation => {
         if (cancelled) return;
         setScriptConversations(prev => ({ ...prev, [selectedFileId]: conversation }));
+        const persistedSnapshots = collectConversationStoryboardSnapshots(conversation);
+        setFiles(prev => {
+          const next = prev.map(file => (
+            file.id === selectedFileId
+              ? { ...file, versions: persistedSnapshots }
+              : file
+          ));
+          filesRef.current = next;
+          return next;
+        });
         const matchingModel = resolveScriptAiModel(conversation.defaultModel);
         if (matchingModel) setAiModel(matchingModel);
       })
@@ -1023,27 +1041,72 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
   // --- Version Control ---
 
-  const handleSaveVersion = (id: string, customName?: string) => {
-      setFiles(prev => prev.map(f => {
-          if (f.id !== id) return f;
-          const newVersion: FileVersion = {
-              id: uuidv4(),
-              timestamp: Date.now(),
-              name: customName || `版本 ${f.versions ? f.versions.length + 1 : 1}`,
-              data: {
-                  name: f.name,
-                  originalContent: f.originalContent,
-                  scriptContent: f.scriptContent,
-                  storyboard: f.storyboard,
-                  extractedCharacters: f.extractedCharacters,
-                  extractedScenes: f.extractedScenes,
-                  extractedProps: f.extractedProps,
-                  lastUpdated: f.lastUpdated,
-              }
-          };
-          return { ...f, versions: [...(f.versions || []), newVersion] };
-      }));
-  };
+  const persistStoryboardSnapshot = useCallback(async (
+    fileId: string,
+    options: {
+      name?: string;
+      source: 'auto' | 'manual';
+      version?: ScriptStoryboardVersion;
+    },
+  ): Promise<FileVersion> => {
+    const file = filesRef.current.find(item => item.id === fileId);
+    if (!file?.storyboard?.items?.some(item => !item.isPlaceholder)) {
+      throw new Error('当前没有可保存的镜头设计');
+    }
+
+    const conversation = scriptConversations[fileId];
+    const targetVersion = options.version
+      || conversation?.versions.find(version => version.id === conversation.currentVersionId)
+      || conversation?.versions[conversation.versions.length - 1];
+    const timestamp = Date.now();
+    const snapshot = createStoryboardSnapshot(file, {
+      id: uuidv4(),
+      timestamp,
+      name: options.name || `${options.source === 'auto' ? '自动存档' : '镜头存档'} · ${new Date(timestamp).toLocaleString('zh-CN')}`,
+      source: options.source,
+      scriptVersionId: targetVersion?.id,
+    });
+
+    if (targetVersion && !targetVersion.id.startsWith('legacy_') && !fileId.startsWith('local_')) {
+      const snapshots = mergeStoryboardSnapshots(
+        getVersionStoryboardSnapshots(targetVersion),
+        [snapshot],
+      );
+      const updatedVersion = await updateScriptVersionMetadata(
+        propEpisodeId,
+        fileId,
+        targetVersion.id,
+        { [STORYBOARD_SNAPSHOTS_METADATA_KEY]: snapshots },
+      );
+      setScriptConversations(prev => prev[fileId] ? ({
+        ...prev,
+        [fileId]: {
+          ...prev[fileId],
+          versions: prev[fileId].versions.map(version => (
+            version.id === updatedVersion.id ? updatedVersion : version
+          )),
+        },
+      }) : prev);
+    }
+
+    setFiles(prev => {
+      const next = prev.map(item => (
+        item.id === fileId
+          ? { ...item, versions: mergeStoryboardSnapshots(item.versions || [], [snapshot]) }
+          : item
+      ));
+      filesRef.current = next;
+      return next;
+    });
+    return snapshot;
+  }, [propEpisodeId, scriptConversations]);
+
+  const handleSaveVersion = useCallback(async (id: string, customName?: string) => {
+    await persistStoryboardSnapshot(id, {
+      name: customName,
+      source: 'manual',
+    });
+  }, [persistStoryboardSnapshot]);
 
   const handleRestoreVersion = (fileId: string, version: FileVersion) => {
       updateFileWithHistory(fileId, (f) => ({
@@ -1059,22 +1122,52 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           alert("该版本没有分镜数据");
           return;
       }
+      const restoredVersion = cloneStoryboardSnapshot(version);
       updateFileWithHistory(fileId, (f) => ({
           ...f,
-          storyboard: version.data.storyboard
+          storyboard: restoredVersion.data.storyboard
       }), { recordHistory: false, resetHistory: true });
   };
 
-  const handleDeleteVersion = (fileId: string, versionId: string) => {
-      setFiles(prev => prev.map(f => {
-          if (f.id !== fileId) return f;
-          return {
-              ...f,
-              versions: (f.versions || []).filter(v => v.id !== versionId)
-          };
-      }));
-      console.log(`🗑️ 已删除版本 ${versionId}`);
-  };
+  const handleDeleteVersion = useCallback(async (fileId: string, versionId: string) => {
+    const file = filesRef.current.find(item => item.id === fileId);
+    const snapshot = file?.versions?.find(version => version.id === versionId);
+    if (!snapshot) return;
+
+    const conversation = scriptConversations[fileId];
+    const targetVersion = conversation?.versions.find(version => (
+      version.id === snapshot.scriptVersionId
+      || getVersionStoryboardSnapshots(version).some(item => item.id === versionId)
+    ));
+    if (targetVersion && !targetVersion.id.startsWith('legacy_') && !fileId.startsWith('local_')) {
+      const remaining = getVersionStoryboardSnapshots(targetVersion)
+        .filter(version => version.id !== versionId);
+      const updatedVersion = await updateScriptVersionMetadata(
+        propEpisodeId,
+        fileId,
+        targetVersion.id,
+        { [STORYBOARD_SNAPSHOTS_METADATA_KEY]: remaining },
+      );
+      setScriptConversations(prev => prev[fileId] ? ({
+        ...prev,
+        [fileId]: {
+          ...prev[fileId],
+          versions: prev[fileId].versions.map(version => (
+            version.id === updatedVersion.id ? updatedVersion : version
+          )),
+        },
+      }) : prev);
+    }
+
+    setFiles(prev => {
+      const next = prev.map(item => item.id === fileId ? {
+        ...item,
+        versions: (item.versions || []).filter(version => version.id !== versionId),
+      } : item);
+      filesRef.current = next;
+      return next;
+    });
+  }, [propEpisodeId, scriptConversations]);
 
 
 
@@ -1553,7 +1646,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     });
   }, [propEpisodeId, selectedFileId]);
 
-  const handleConversationGenerateDesign = useCallback(async (version: ScriptStoryboardVersion) => {
+  const handleConversationGenerateDesign = useCallback(async (
+    version: ScriptStoryboardVersion,
+    options: { autoSnapshot?: boolean } = {},
+  ) => {
     const fileId = selectedFileId;
     if (!fileId) return;
     setConversationError(null);
@@ -1585,7 +1681,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setHighlightedStoryboardItemIds(new Set());
       setStoryboardDrawerOpen(true);
     });
-  }, [propEpisodeId, selectedFileId, updateFileWithHistory]);
+    if (options.autoSnapshot !== false) {
+      try {
+        await persistStoryboardSnapshot(fileId, {
+          source: 'auto',
+          version: selectedVersion,
+          name: `自动存档 · 分镜脚本 V${selectedVersion.versionNo} · ${new Date().toLocaleString('zh-CN')}`,
+        });
+      } catch (error) {
+        console.error('自动保存镜头设计失败:', error);
+        setConversationError(`镜头设计已生成，但自动存档失败：${summarizePipelineError(error)}`);
+      }
+    }
+  }, [persistStoryboardSnapshot, propEpisodeId, selectedFileId, updateFileWithHistory]);
 
   const handleOpenStoryboardDrawer = useCallback(() => {
     if (!selectedFileId) return;
@@ -2945,6 +3053,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       const conversation = scriptConversations[fileId];
       const currentVersion = conversation?.versions.find(version => version.id === conversation.currentVersionId)
         || conversation?.versions[conversation.versions.length - 1];
+      let snapshotVersion = currentVersion;
       if (currentVersion && !currentVersion.id.startsWith('legacy_')) {
         const previousBillings = Array.isArray(currentVersion.metadata?.storyboardDesignBillings)
           ? currentVersion.metadata.storyboardDesignBillings
@@ -2960,6 +3069,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             { taskId: billingTaskId, cost: credit.charged_credits, usage: billingParams, createdAt: Date.now() },
           ].slice(-20),
         });
+        snapshotVersion = updatedVersion;
         setScriptConversations(prev => prev[fileId] ? ({
           ...prev,
           [fileId]: {
@@ -2967,6 +3077,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             versions: prev[fileId].versions.map(version => version.id === updatedVersion.id ? updatedVersion : version),
           },
         }) : prev);
+      }
+      try {
+        await persistStoryboardSnapshot(fileId, {
+          source: 'auto',
+          version: snapshotVersion,
+          name: `自动存档 · 镜头详情 · ${new Date().toLocaleString('zh-CN')}`,
+        });
+      } catch (error) {
+        console.error('自动保存镜头详情失败:', error);
+        alert(`镜头详情已生成，但自动存档失败：${summarizePipelineError(error)}`);
       }
       
     } catch (error) {
@@ -2977,7 +3097,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setProcessingType(null); // 🆕 清空处理类型
       setShotGenerationProgress(null);
     }
-  }, [aiModel, files, propEpisodeId, scriptConversations, updateFileWithHistory, urlProjectId]);
+  }, [aiModel, files, persistStoryboardSnapshot, propEpisodeId, scriptConversations, updateFileWithHistory, urlProjectId]);
 
   const handleExtractMetadata = useCallback(async (targetFileId?: string) => {
     setIsProcessing(true);
@@ -3349,7 +3469,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         scriptVersions={selectedConversation?.versions || []}
                         currentScriptVersionId={selectedConversation?.currentVersionId}
                         generationCreditCost={Number(selectedConversationVersion?.metadata?.storyboardDesignCreditCost || 0)}
-                        onRestoreScriptVersion={handleConversationGenerateDesign}
+                        onRestoreScriptVersion={(version) => handleConversationGenerateDesign(version, { autoSnapshot: false })}
                     />
                     </React.Suspense>
                     </aside>

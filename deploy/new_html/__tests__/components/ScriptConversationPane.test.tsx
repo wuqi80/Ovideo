@@ -119,7 +119,7 @@ describe('ScriptConversationPane workflow', () => {
 
   it('shows persisted storyboard versions in the drawer history and can restore them', () => {
     expect(workspace).toContain('scriptVersions={selectedConversation?.versions || []}');
-    expect(workspace).toContain('onRestoreScriptVersion={handleConversationGenerateDesign}');
+    expect(workspace).toContain('onRestoreScriptVersion={(version) => handleConversationGenerateDesign(version, { autoSnapshot: false })}');
     expect(storyboardColumn).toContain('分镜脚本 V{version.versionNo}');
     expect(storyboardColumn).toContain('恢复此版本');
   });

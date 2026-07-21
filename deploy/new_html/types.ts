@@ -146,6 +146,8 @@ export interface FileVersion {
   id: string;
   timestamp: number;
   name: string;
+  source?: 'auto' | 'manual';
+  scriptVersionId?: string;
   data: Omit<ProjectFile, 'id' | 'versions' | 'status'>; // Store content snapshot
 }
 

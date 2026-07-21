@@ -16,6 +16,7 @@ import {
   selectScriptVersion,
   updateScriptMessage,
   updateEpisodeScriptById,
+  updateScriptVersionMetadata,
   updateTimelineTrack,
 } from '../../services/scriptTimelineService';
 
@@ -208,5 +209,30 @@ describe('script timeline service', () => {
       expect.objectContaining({ id: 'shot_1', originalText: '第一镜' }),
     ]);
     expect(conversation.versions[0].metadata).toEqual({ source: 'legacy' });
+  });
+
+  it('persists append-only storyboard snapshots in version metadata', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      version: {
+        version_id: 'ver_1',
+        script_id: 'script_1',
+        version_no: 1,
+        storyboard_items: [],
+        metadata: { storyboardSnapshots: [{ id: 'snapshot_1' }] },
+      },
+    }));
+
+    const version = await updateScriptVersionMetadata('ep_1', 'script_1', 'ver_1', {
+      storyboardSnapshots: [{ id: 'snapshot_1' }],
+    });
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_1/metadata');
+    expect(opts.method).toBe('PATCH');
+    expect(JSON.parse(opts.body)).toEqual({
+      metadata: { storyboardSnapshots: [{ id: 'snapshot_1' }] },
+    });
+    expect(version.metadata?.storyboardSnapshots).toEqual([{ id: 'snapshot_1' }]);
   });
 });

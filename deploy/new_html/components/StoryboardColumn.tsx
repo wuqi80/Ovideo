@@ -29,9 +29,9 @@ interface StoryboardColumnProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  onSaveVersion: (name: string) => void;
+  onSaveVersion: (name: string) => Promise<void> | void;
   onRestoreStoryboard: (version: FileVersion) => void;
-  onDeleteVersion: (versionId: string) => void;  // 🆕 删除版本
+  onDeleteVersion: (versionId: string) => Promise<void> | void;  // 🆕 删除版本
   scriptVersions?: ScriptStoryboardVersion[];
   currentScriptVersionId?: string;
   generationCreditCost?: number;
@@ -85,6 +85,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   const [showHistory, setShowHistory] = useState(false);
   const [isNamingVersion, setIsNamingVersion] = useState(false);
   const [versionName, setVersionName] = useState('');
+  const [isSavingVersion, setIsSavingVersion] = useState(false);
   
   
   // 🆕 配置模板系统
@@ -294,13 +295,20 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   const handleSaveClick = () => {
       setIsNamingVersion(true);
       const count = selectedFile?.versions?.length || 0;
-      setVersionName(`项目存档 v${count + 1} - ${new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}`);
+      setVersionName(`镜头设计存档 v${count + 1} - ${new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}`);
   };
 
-  const submitVersionSave = () => {
-      if(versionName.trim()) {
-          onSaveVersion(versionName);
+  const submitVersionSave = async () => {
+      if (!versionName.trim() || isSavingVersion) return;
+      setIsSavingVersion(true);
+      try {
+          await onSaveVersion(versionName.trim());
           setIsNamingVersion(false);
+      } catch (error) {
+          console.error('保存镜头设计版本失败:', error);
+          alert(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+          setIsSavingVersion(false);
       }
   };
 
@@ -440,7 +448,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
       {isNamingVersion && (
           <div className="absolute top-14 right-4 z-50 bg-n0 border border-n40 shadow-bottom rounded-lg p-3 w-64 animate-in fade-in slide-in-from-top-2">
               <h4 className="text-xs font-bold text-n700 mb-1">保存当前版本</h4>
-              <p className="text-[10px] text-n100 mb-2">包含剧本、分镜、提示词等所有内容</p>
+              <p className="text-[10px] text-n100 mb-2">每次保存都会创建独立存档，不覆盖已有版本</p>
               <input
                   type="text"
                   value={versionName}
@@ -448,13 +456,15 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                   className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs text-n800 mb-2 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   autoFocus
                   onKeyDown={(e) => {
-                      if (e.key === 'Enter') submitVersionSave();
+                      if (e.key === 'Enter') void submitVersionSave();
                       if (e.key === 'Escape') setIsNamingVersion(false);
                   }}
               />
               <div className="flex gap-2">
-                  <button onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-n30 text-n700 text-xs rounded hover:bg-n20">取消</button>
-                  <button onClick={submitVersionSave} className="flex-1 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover">确认保存</button>
+                  <button disabled={isSavingVersion} onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-n30 text-n700 text-xs rounded hover:bg-n20 disabled:opacity-50">取消</button>
+                  <button disabled={isSavingVersion} onClick={() => void submitVersionSave()} className="flex-1 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover disabled:opacity-50">
+                    {isSavingVersion ? '保存中...' : '确认保存'}
+                  </button>
               </div>
           </div>
       )}
@@ -524,12 +534,17 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
 
                    {selectedFile.versions && selectedFile.versions.length > 0 && (
                      <section className="space-y-2">
-                       <div className="px-1 pt-2 text-[10px] font-semibold text-n300">手动存档</div>
+                       <div className="px-1 pt-2 text-[10px] font-semibold text-n300">镜头设计存档</div>
                        {[...selectedFile.versions].reverse().map(ver => (
                            <div key={ver.id} className="bg-n30 border border-n40 rounded-lg p-3 hover:bg-n20 transition-colors group">
                                <div className="flex justify-between items-start mb-2">
                                    <div>
-                                       <div className="text-xs font-bold text-n700">{ver.name}</div>
+                                       <div className="flex items-center gap-1.5 text-xs font-bold text-n700">
+                                         <span>{ver.name}</span>
+                                         <span className={`rounded border px-1 py-0.5 text-[9px] font-medium ${ver.source === 'auto' ? 'border-primary/30 bg-primary-light text-primary' : 'border-n40 bg-n0 text-n300'}`}>
+                                           {ver.source === 'auto' ? '自动' : '手动'}
+                                         </span>
+                                       </div>
                                        <div className="text-[10px] text-n100 font-mono mt-0.5">
                                            {new Date(ver.timestamp).toLocaleString()}
                                        </div>
@@ -551,9 +566,14 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                    </button>
                                    {/* 🆕 删除按钮 */}
                                    <button 
-                                      onClick={() => {
+                                      onClick={async () => {
                                           if(confirm(`确定要删除存档 "${ver.name}" 吗？\n此操作不可恢复。`)) {
-                                              onDeleteVersion(ver.id);
+                                              try {
+                                                await onDeleteVersion(ver.id);
+                                              } catch (error) {
+                                                console.error('删除镜头设计版本失败:', error);
+                                                alert(`删除失败：${error instanceof Error ? error.message : String(error)}`);
+                                              }
                                           }
                                       }}
                                       className="p-1.5 bg-r50 hover:bg-danger border border-r75 rounded text-danger hover:text-white transition-colors flex items-center justify-center"
