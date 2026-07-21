@@ -229,8 +229,8 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
                 ref={triggerRef}
                 onClick={handleToggle}
                 className={`group ${triggerCls}`}
-                title={totalActive > 0 ? `${totalActive} 个任务运行中` : '任务通知'}
-                aria-label={totalActive > 0 ? `${totalActive} 个任务运行中` : '任务通知'}
+                title={unreadCount > 0 ? `任务通知，${unreadCount} 条新消息` : (totalActive > 0 ? `${totalActive} 个任务运行中` : '任务通知')}
+                aria-label={unreadCount > 0 ? `任务通知，${unreadCount} 条新消息` : (totalActive > 0 ? `${totalActive} 个任务运行中` : '任务通知')}
                 aria-haspopup="dialog"
                 aria-expanded={open}
             >
@@ -244,11 +244,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
                     <span className="absolute inset-0 rounded-md ring-1 ring-b400/30 animate-pulse motion-reduce:hidden pointer-events-none" />
                 )}
                 {/* 计数徽章 */}
-                {totalActive > 0 ? (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-b400 rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums">
-                        {totalActive > 99 ? '99+' : totalActive}
-                    </span>
-                ) : unreadCount > 0 ? (
+                {unreadCount > 0 ? (
                     <span className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 ${failed.length > 0 ? 'bg-danger' : 'bg-success'} rounded-full flex items-center justify-center text-[9px] font-bold text-white tabular-nums`}>
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>

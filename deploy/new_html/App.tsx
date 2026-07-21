@@ -20,7 +20,7 @@
  */
 
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskProvider } from './contexts/TaskContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
@@ -64,7 +64,6 @@ const AdminLoginPage = React.lazy(() => import('./admin/AdminLoginPage'));
 const AdminHubPage = React.lazy(() => import('./admin/AdminHubPage'));
 const AdminSettingsPage = React.lazy(() => import('./admin/AdminSettingsPage'));
 const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));
-const GlobalToast = React.lazy(() => import('./components/GlobalToast').then(m => ({ default: m.GlobalToast })));
 
 const RouteFallback: React.FC = () => (
     <div className="h-screen w-full bg-n20 flex items-center justify-center text-sm text-n300">
@@ -92,32 +91,6 @@ const AdminFeaturesPanel: React.FC = () => {
     return <AdminFeatureTabs embedTab={tab} />;
 };
 
-const DeferredGlobalToastWithNav: React.FC = () => {
-    const navigate = useNavigate();
-    const [mounted, setMounted] = React.useState(false);
-
-    React.useEffect(() => {
-        try {
-            if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-                return;
-            }
-        } catch {}
-
-        return runWhenIdle(() => setMounted(true), { timeout: 1200, fallbackDelayMs: 250 });
-    }, []);
-
-    if (!mounted) return null;
-    return (
-        <React.Suspense fallback={null}>
-        <GlobalToast onNavigate={(view, projectId) => {
-            if (projectId) {
-                navigate(`/projects/${projectId}/episodes`);
-            }
-        }} />
-        </React.Suspense>
-    );
-};
-
 const DeferredCrmHost: React.FC = () => {
     const [mounted, setMounted] = React.useState(false);
     React.useEffect(() => {
@@ -138,7 +111,6 @@ const App: React.FC = () => {
         <BrowserRouter>
             <WorkspaceProvider>
             <TaskProvider>
-                <DeferredGlobalToastWithNav />
                 <DeferredCrmHost />
                 <React.Suspense fallback={<RouteFallback />}>
                 <Routes>
