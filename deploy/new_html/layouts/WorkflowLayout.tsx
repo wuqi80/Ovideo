@@ -44,10 +44,17 @@ export const WorkflowLayout: React.FC = () => {
   useEffect(() => {
     void refreshCredits();
     const intervalId = window.setInterval(() => void refreshCredits(), 60_000);
+    const handleCreditsUpdated = (event: Event) => {
+      const rawBalance = (event as CustomEvent<{ balance?: number | null }>).detail?.balance;
+      if (typeof rawBalance === 'number' && Number.isFinite(rawBalance)) setAvailableCredits(rawBalance);
+      else void refreshCredits();
+    };
     window.addEventListener('focus', refreshCredits);
+    window.addEventListener('credits:updated', handleCreditsUpdated);
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener('focus', refreshCredits);
+      window.removeEventListener('credits:updated', handleCreditsUpdated);
     };
   }, [refreshCredits]);
 

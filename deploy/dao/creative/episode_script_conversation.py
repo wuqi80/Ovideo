@@ -261,3 +261,26 @@ class EpisodeScriptConversationDAO:
                     version["content"],
                 )
                 return dict(version)
+
+    @staticmethod
+    async def merge_version_metadata(
+        script_id: str,
+        version_id: str,
+        metadata: dict,
+    ) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """
+            UPDATE episode_script_versions
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE script_id = $1 AND version_id = $2
+            RETURNING *
+            """,
+            script_id,
+            version_id,
+            _json(metadata, {}),
+        )
+        return dict(row) if row else None

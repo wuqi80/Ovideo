@@ -13,6 +13,7 @@ Persistence and row-locking transactions live in dao.business.credit.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Dict, Optional
 
 from dao_credit import (
@@ -22,6 +23,7 @@ from dao_credit import (
     CreditFreezeNotFound,
     CreditLedgerDAO,
     CreditRuleDAO,
+    CreditTransactionDAO,
     InsufficientCreditBalance,
 )
 
@@ -96,12 +98,48 @@ def _eval_factor(factor: Dict[str, Any], params: Dict[str, Any]) -> float:
     return 1.0
 
 
+def _eval_additive_factor(factor: Dict[str, Any], params: Dict[str, Any]) -> float:
+    """Evaluate additive usage factors while keeping legacy multipliers intact."""
+    if not isinstance(factor, dict):
+        return 0.0
+    key = factor.get('key')
+    if not key:
+        return 0.0
+    try:
+        value = max(0.0, float(params.get(key, 0) or 0))
+        cost_per_unit = float(factor.get('cost_per_unit', 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+    ftype = factor.get('type')
+    if ftype == 'linear_add':
+        return value * cost_per_unit
+    if ftype == 'per_unit_add':
+        try:
+            unit_size = max(0.000001, float(factor.get('unit_size', 1) or 1))
+        except (TypeError, ValueError):
+            unit_size = 1.0
+        units = value / unit_size
+        if factor.get('rounding', 'ceil') == 'floor':
+            units = math.floor(units)
+        elif factor.get('rounding') == 'exact':
+            pass
+        else:
+            units = math.ceil(units)
+        return units * cost_per_unit
+    return 0.0
+
+
 def compute_cost(rule: Dict[str, Any], params: Dict[str, Any]) -> int:
     base = int(rule.get('base_cost', 0) or 0)
     factors = rule.get('factors') or []
     total = float(base)
-    for f in factors:
-        total *= _eval_factor(f, params)
+    for factor in factors:
+        if isinstance(factor, dict) and factor.get('type') in {'linear_add', 'per_unit_add'}:
+            total += _eval_additive_factor(factor, params)
+    for factor in factors:
+        if not isinstance(factor, dict) or factor.get('type') not in {'linear_add', 'per_unit_add'}:
+            total *= _eval_factor(factor, params)
     cost = int(round(total))
     min_c = int(rule.get('min_cost', 0) or 0)
     max_c = rule.get('max_cost')
@@ -241,6 +279,100 @@ async def confirm(
         'final_amount': result['final_amount'],
         'refund': result['refund'],
         'balance_after': result['balance_after'],
+        'transaction_id': (result.get('consume_transaction') or {}).get('transaction_id'),
+    }
+
+
+async def consume_usage(
+    owner_type: str,
+    owner_id: str,
+    *,
+    feature_key: str,
+    params: Optional[Dict[str, Any]],
+    task_id: str,
+    project_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Estimate and settle one successful usage event exactly once."""
+    existing = await CreditTransactionDAO.get_consumption_for_task(
+        task_id,
+        owner_type=owner_type,
+        owner_id=owner_id,
+        feature_key=feature_key,
+    )
+    if existing:
+        return {
+            'task_id': task_id,
+            'feature_key': feature_key,
+            'charged_credits': int(existing.get('amount') or 0),
+            'transaction_id': existing.get('transaction_id'),
+            'balance_after': int(existing.get('balance_after') or 0),
+            'idempotent': True,
+        }
+
+    quote = await estimate(
+        feature_key,
+        params or {},
+        owner_type=owner_type,
+        owner_id=owner_id,
+    )
+    amount = int(quote.get('estimated_cost') or 0)
+    if not quote.get('enabled') or amount <= 0:
+        return {
+            'task_id': task_id,
+            'feature_key': feature_key,
+            'charged_credits': 0,
+            'transaction_id': None,
+            'balance_after': quote.get('balance'),
+            'idempotent': False,
+            'billing_disabled': not quote.get('enabled'),
+        }
+
+    usage_metadata = {
+        **(metadata or {}),
+        'billing_params': params or {},
+        'rule_id': quote.get('rule_id'),
+    }
+    await freeze(
+        owner_type,
+        owner_id,
+        feature_key=feature_key,
+        amount=amount,
+        task_id=task_id,
+        rule_version=quote.get('rule_version'),
+        project_id=project_id,
+        metadata=usage_metadata,
+    )
+    try:
+        settled = await confirm(
+            task_id,
+            amount,
+            operator=owner_id,
+            project_id=project_id,
+            metadata=usage_metadata,
+        )
+    except CreditServiceError:
+        existing = await CreditTransactionDAO.get_consumption_for_task(
+            task_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            feature_key=feature_key,
+        )
+        if not existing:
+            raise
+        settled = {
+            'transaction_id': existing.get('transaction_id'),
+            'balance_after': int(existing.get('balance_after') or 0),
+        }
+
+    return {
+        'task_id': task_id,
+        'feature_key': feature_key,
+        'charged_credits': amount,
+        'transaction_id': settled.get('transaction_id'),
+        'balance_after': settled.get('balance_after'),
+        'rule_version': quote.get('rule_version'),
+        'idempotent': False,
     }
 
 

@@ -63,6 +63,59 @@ export async function estimateCredits(
   }, 'estimateCredits');
 }
 
+export interface CreditConsumeResult {
+  success: boolean;
+  task_id: string;
+  feature_key: string;
+  charged_credits: number;
+  transaction_id?: string | null;
+  balance_after?: number | null;
+  rule_version?: string | null;
+  idempotent: boolean;
+  billing_disabled?: boolean;
+}
+
+export function estimateTextTokens(text: string): number {
+  if (!text) return 0;
+  const cjkCount = (text.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+  const nonCjkLength = Math.max(0, text.replace(/[\u3400-\u9fff\uf900-\ufaff]/g, '').trim().length);
+  return Math.max(1, cjkCount + Math.ceil(nonCjkLength / 4));
+}
+
+export async function assertEnoughCredits(
+  featureKey: string,
+  params: Record<string, any>,
+): Promise<CreditEstimateResult> {
+  const quote = await estimateCredits(featureKey, params);
+  if (quote.enabled && !quote.enough) {
+    throw new Error(`积分不足：本次预计需要 ${quote.estimated_cost} 积分，当前可用 ${quote.balance ?? 0} 积分`);
+  }
+  return quote;
+}
+
+export async function consumeCredits(payload: {
+  featureKey: string;
+  taskId: string;
+  params: Record<string, any>;
+  projectId?: string | null;
+  metadata?: Record<string, any>;
+}): Promise<CreditConsumeResult> {
+  const result = await apiJson<CreditConsumeResult>('/api/credits/consume', {
+    method: 'POST',
+    body: JSON.stringify({
+      feature_key: payload.featureKey,
+      task_id: payload.taskId,
+      params: payload.params,
+      project_id: payload.projectId || undefined,
+      metadata: payload.metadata || {},
+    }),
+  }, 'consumeCredits');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('credits:updated', { detail: { balance: result.balance_after } }));
+  }
+  return result;
+}
+
 export interface ListTransactionsParams {
   feature_key?: string;
   change_type?: string;

@@ -123,5 +123,11 @@ VALUES
       20, 100, '2026-05-26-001', '基础 20 积分/任务；按时长 1x / 1.5x / 2x'),
     ('rule_video_generation_v1',     'video_generation',     '视频生成',       TRUE, 50, 'task',  '[]'::jsonb, 50, 500, '2026-05-26-001', '基础 50 积分/任务'),
     ('rule_audio_tts_v1',            'audio_generation_tts', '语音合成',       TRUE, 2,  'task',  '[]'::jsonb, 2,  50,  '2026-05-26-001', '基础 2 积分/任务'),
-    ('rule_prompt_optimize_v1',      'prompt_optimize',      '提示词优化',     TRUE, 2,  'task',  '[]'::jsonb, 2,  20,  '2026-05-26-001', '基础 2 积分/任务')
+    ('rule_prompt_optimize_v1',      'prompt_optimize',      '提示词优化',     TRUE, 2,  'task',  '[]'::jsonb, 2,  20,  '2026-05-26-001', '基础 2 积分/任务'),
+    ('rule_script_model_call_v1',    'script_model_call',     '剧本模型调用',   TRUE, 1,  'token',
+      '[{"key":"input_tokens","type":"per_unit_add","unit_size":1000,"cost_per_unit":1},{"key":"output_tokens","type":"per_unit_add","unit_size":1000,"cost_per_unit":2},{"key":"model","type":"enum","rules":[],"default_multiplier":1}]'::jsonb,
+      1, 500, '2026-07-22-001', '基础积分 + 输入/输出每千 Token 积分；可按模型设置倍率'),
+    ('rule_storyboard_design_v1',    'storyboard_design_generation', '镜头设计生成', TRUE, 1, 'shot',
+      '[{"key":"shot_count","type":"linear_add","cost_per_unit":1},{"key":"input_tokens","type":"per_unit_add","unit_size":1000,"cost_per_unit":1},{"key":"output_tokens","type":"per_unit_add","unit_size":1000,"cost_per_unit":2},{"key":"model","type":"enum","rules":[],"default_multiplier":1}]'::jsonb,
+      1, 1000, '2026-07-22-001', '基础积分 + 每镜头积分 + 输入/输出每千 Token 积分；可按模型设置倍率')
 ON CONFLICT (rule_id) DO NOTHING;

@@ -31,6 +31,14 @@ class CreditEstimateRequest(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 
+class CreditConsumeRequest(BaseModel):
+    feature_key: str
+    task_id: str
+    params: Optional[Dict[str, Any]] = None
+    project_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
 # ============================================
 # 路由
 # ============================================
@@ -71,6 +79,34 @@ async def estimate_credits(
     except Exception as e:
         logger.error(f"积分估算失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/consume")
+async def consume_credits(
+    payload: CreditConsumeRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """按后台规则结算一次成功的模型调用；task_id 保证重复请求不会重复扣分。"""
+    if not payload.feature_key or not payload.task_id:
+        raise HTTPException(status_code=400, detail="feature_key 和 task_id 不能为空")
+    try:
+        result = await credit_service.consume_usage(
+            'user',
+            user_id,
+            feature_key=payload.feature_key,
+            params=payload.params or {},
+            task_id=payload.task_id,
+            project_id=payload.project_id,
+            metadata=payload.metadata or {},
+        )
+        return {"success": True, **result}
+    except credit_service.InsufficientCreditsError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    except credit_service.CreditServiceError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("积分结算失败: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="积分结算失败") from exc
 
 
 @router.get("/transactions")

@@ -280,6 +280,20 @@ export async function selectScriptVersion(
   return mapVersion(response?.version);
 }
 
+export async function updateScriptVersionMetadata(
+  episodeId: string,
+  scriptId: string,
+  versionId: string,
+  metadata: Record<string, any>,
+): Promise<ScriptStoryboardVersion> {
+  const response = await apiJson<any>(
+    `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/metadata`,
+    { method: 'PATCH', body: JSON.stringify({ metadata }) },
+    'updateScriptVersionMetadata',
+  );
+  return mapVersion(response?.version);
+}
+
 export async function getTimelineTracks(episodeId: string) {
   return apiJson<any>(`/api/episodes/${episodeId}/timeline-tracks`, { method: 'GET' }, 'getTimelineTracks');
 }

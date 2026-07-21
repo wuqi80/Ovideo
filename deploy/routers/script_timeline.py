@@ -32,6 +32,7 @@ from services.script_conversation_service import (
     append_script_message,
     create_script_version,
     get_script_conversation,
+    merge_script_version_metadata,
     revise_script_message,
     select_script_version,
 )
@@ -133,6 +134,10 @@ def create_script_timeline_router(
         model_name: Optional[str] = None
         metadata: Optional[dict] = None
         set_current: bool = True
+
+
+    class ScriptVersionMetadataUpdate(BaseModel):
+        metadata: dict = Field(default_factory=dict)
 
 
     # ---------- 剧本分段 API（2026-05-29 三步生成 Stage 1 产物）----------
@@ -335,6 +340,26 @@ def create_script_timeline_router(
             return await select_script_version(
                 script_id=script_id,
                 version_id=version_id,
+                conversation_dao=EpisodeScriptConversationDAO,
+            )
+        except ScriptConversationItemNotFound as exc:
+            raise HTTPException(status_code=404, detail="分镜脚本版本不存在") from exc
+
+
+    @router.patch("/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/metadata")
+    async def update_version_metadata(
+        episode_id: str,
+        script_id: str,
+        version_id: str,
+        data: ScriptVersionMetadataUpdate,
+        user_id: str = Depends(get_current_user),
+    ):
+        await require_script(episode_id, script_id, user_id)
+        try:
+            return await merge_script_version_metadata(
+                script_id=script_id,
+                version_id=version_id,
+                metadata=data.metadata,
                 conversation_dao=EpisodeScriptConversationDAO,
             )
         except ScriptConversationItemNotFound as exc:

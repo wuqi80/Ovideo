@@ -127,3 +127,16 @@ async def select_script_version(
     if not version:
         raise ScriptConversationItemNotFound("Script version not found")
     return {"success": True, "version": version}
+
+
+async def merge_script_version_metadata(
+    *,
+    script_id: str,
+    version_id: str,
+    metadata: dict,
+    conversation_dao: Any,
+) -> Dict[str, Any]:
+    version = await conversation_dao.merge_version_metadata(script_id, version_id, metadata)
+    if not version:
+        raise ScriptConversationItemNotFound("Script version not found")
+    return {"success": True, "version": version}

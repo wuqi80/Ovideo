@@ -11,7 +11,8 @@ import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, Material
 import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
-import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments, getScriptConversation, createScriptMessage, updateScriptMessage, createScriptVersion, selectScriptVersion } from './services/scriptTimelineService';
+import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments, getScriptConversation, createScriptMessage, updateScriptMessage, createScriptVersion, selectScriptVersion, updateScriptVersionMetadata } from './services/scriptTimelineService';
+import { assertEnoughCredits, consumeCredits, estimateTextTokens } from './services/creditService';
 import { exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
 import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
@@ -1324,12 +1325,30 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     };
     const modelInfo = getScriptModelInfo(aiModel);
     const requestId = `script_turn_${uuidv4()}`;
+    const isFirstTurn = conversation.versions.length === 0;
+    const currentVersion = conversation.versions.find(version => version.id === conversation.currentVersionId)
+      || conversation.versions[conversation.versions.length - 1];
+    const conversationContext = conversation.messages.slice(-10)
+      .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
+      .join('\n');
+    const billingInput = isFirstTurn
+      ? content
+      : [currentVersion?.content || file.scriptContent || file.originalContent, content, conversationContext].join('\n');
+    const forecastOutputTokens = Math.max(
+      1000,
+      estimateTextTokens(currentVersion?.content || file.scriptContent || content) * (isFirstTurn ? 2 : 1),
+    );
     setConversationSendingId(fileId);
     setConversationError(null);
 
     let assistantMessageId: string | null = null;
     let streamedContent = '';
     try {
+      await assertEnoughCredits('script_model_call', {
+        input_tokens: estimateTextTokens(billingInput),
+        output_tokens: forecastOutputTokens,
+        model: modelInfo.runtime,
+      });
       const userMessage = await createScriptMessage(propEpisodeId, fileId, {
         role: 'user',
         content,
@@ -1347,9 +1366,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         },
       }));
 
-      const isFirstTurn = conversation.versions.length === 0;
-      const currentVersion = conversation.versions.find(version => version.id === conversation.currentVersionId)
-        || conversation.versions[conversation.versions.length - 1];
       if (isFirstTurn) {
         updateFileWithHistory(fileId, current => ({ ...current, originalContent: content }));
         await updateEpisodeScriptById(propEpisodeId, fileId, { original_content: content });
@@ -1394,14 +1410,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           });
         });
       } else {
-        const context = conversation.messages.slice(-10)
-          .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
-          .join('\n');
         result = await aiService.aiIterateFullScript(
           aiModel,
           currentVersion?.content || file.scriptContent || file.originalContent,
           content,
-          context || '（首次修改，无历史意见）',
+          conversationContext || '（首次修改，无历史意见）',
         );
       }
 
@@ -1417,11 +1430,30 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           throw new Error(`${validation.message || '模型返回的镜头数量不符合本轮要求'} 已阻止保存此异常版本，请重试。`);
         }
       }
+      const billingParams = {
+        input_tokens: estimateTextTokens(billingInput),
+        output_tokens: estimateTextTokens(finalContent),
+        model: modelInfo.runtime,
+      };
+      const credit = await consumeCredits({
+        featureKey: 'script_model_call',
+        taskId: requestId,
+        params: billingParams,
+        projectId: urlProjectId,
+        metadata: { episode_id: propEpisodeId, script_id: fileId, operation: isFirstTurn ? 'create' : 'iterate' },
+      });
+      const billingMetadata = {
+        requestId,
+        creditCost: credit.charged_credits,
+        creditTransactionId: credit.transaction_id,
+        creditFeatureKey: credit.feature_key,
+        creditUsage: billingParams,
+      };
       const completedMessage = await updateScriptMessage(
         propEpisodeId,
         fileId,
         assistantMessage.id,
-        { content: finalContent, status: 'completed' },
+        { content: finalContent, status: 'completed', metadata: billingMetadata },
       );
       const version = await createScriptVersion(propEpisodeId, fileId, {
         messageId: assistantMessage.id,
@@ -1432,7 +1464,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
         modelName: modelInfo.runtime,
-        metadata: { requestId },
+        metadata: billingMetadata,
         setCurrent: true,
       });
       setScriptConversations(prev => {
@@ -2819,12 +2851,33 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       return;
     }
 
+    const billingTaskId = `storyboard_design_${uuidv4()}`;
+    const forecastInputTokens = file.storyboard.items.reduce(
+      (total, item) => total + estimateTextTokens(`${item.originalText || ''}\n${item.scriptSegment || ''}`),
+      0,
+    );
+    const modelInfo = getScriptModelInfo(aiModel);
+    try {
+      await assertEnoughCredits('storyboard_design_generation', {
+        shot_count: file.storyboard.items.length,
+        input_tokens: forecastInputTokens,
+        output_tokens: Math.max(500, file.storyboard.items.length * 500),
+        model: modelInfo.runtime,
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '积分校验失败');
+      return;
+    }
+
     setIsProcessing(true);
     setProcessingType('generate-shots'); // 🆕 标记为生成详细分镜
     setShotGenerationProgress({ current: 0, total: file.storyboard.items.length });
 
     try {
       const updatedItems: StoryboardItem[] = [];
+      let billingSuccessfulShots = 0;
+      let billingInputTokens = 0;
+      let billingOutputTokens = 0;
       
       // 🔄 for循环逐个生成
       for (let i = 0; i < file.storyboard.items.length; i++) {
@@ -2848,6 +2901,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             ...details,
             timestamp: Date.now()
           };
+          billingSuccessfulShots += 1;
+          billingInputTokens += estimateTextTokens(`${item.originalText || ''}\n${item.scriptSegment || ''}`);
+          billingOutputTokens += estimateTextTokens(JSON.stringify(details));
           
           updatedItems.push(completeItem);
           
@@ -2870,6 +2926,48 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       }
       
       console.log('🎉 所有分镜生成完成！');
+      if (billingSuccessfulShots === 0) {
+        throw new Error('所有镜头详情均生成失败，本次未扣除积分');
+      }
+      const billingParams = {
+        shot_count: billingSuccessfulShots,
+        input_tokens: billingInputTokens,
+        output_tokens: billingOutputTokens,
+        model: modelInfo.runtime,
+      };
+      const credit = await consumeCredits({
+        featureKey: 'storyboard_design_generation',
+        taskId: billingTaskId,
+        params: billingParams,
+        projectId: urlProjectId,
+        metadata: { episode_id: propEpisodeId, script_id: fileId, operation: 'generate_shot_details' },
+      });
+      const conversation = scriptConversations[fileId];
+      const currentVersion = conversation?.versions.find(version => version.id === conversation.currentVersionId)
+        || conversation?.versions[conversation.versions.length - 1];
+      if (currentVersion && !currentVersion.id.startsWith('legacy_')) {
+        const previousBillings = Array.isArray(currentVersion.metadata?.storyboardDesignBillings)
+          ? currentVersion.metadata.storyboardDesignBillings
+          : [];
+        const updatedVersion = await updateScriptVersionMetadata(propEpisodeId, fileId, currentVersion.id, {
+          storyboardDesignCreditCost: credit.charged_credits,
+          storyboardDesignCreditTransactionId: credit.transaction_id,
+          storyboardDesignCreditTaskId: billingTaskId,
+          storyboardDesignUsage: billingParams,
+          storyboardDesignGeneratedAt: Date.now(),
+          storyboardDesignBillings: [
+            ...previousBillings,
+            { taskId: billingTaskId, cost: credit.charged_credits, usage: billingParams, createdAt: Date.now() },
+          ].slice(-20),
+        });
+        setScriptConversations(prev => prev[fileId] ? ({
+          ...prev,
+          [fileId]: {
+            ...prev[fileId],
+            versions: prev[fileId].versions.map(version => version.id === updatedVersion.id ? updatedVersion : version),
+          },
+        }) : prev);
+      }
       
     } catch (error) {
       console.error('❌ 批量生成失败:', error);
@@ -2879,7 +2977,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setProcessingType(null); // 🆕 清空处理类型
       setShotGenerationProgress(null);
     }
-  }, [files, aiModel, updateFileWithHistory]);
+  }, [aiModel, files, propEpisodeId, scriptConversations, updateFileWithHistory, urlProjectId]);
 
   const handleExtractMetadata = useCallback(async (targetFileId?: string) => {
     setIsProcessing(true);
@@ -3250,6 +3348,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         onDeleteVersion={(versionId) => selectedFileId && handleDeleteVersion(selectedFileId, versionId)}
                         scriptVersions={selectedConversation?.versions || []}
                         currentScriptVersionId={selectedConversation?.currentVersionId}
+                        generationCreditCost={Number(selectedConversationVersion?.metadata?.storyboardDesignCreditCost || 0)}
                         onRestoreScriptVersion={handleConversationGenerateDesign}
                     />
                     </React.Suspense>

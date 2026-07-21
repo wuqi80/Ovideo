@@ -10,6 +10,7 @@ class FakeConversationDAO:
     updated_message = None
     created_version = None
     selected_version = None
+    merged_version = None
 
     @staticmethod
     async def list_messages(script_id):
@@ -42,6 +43,13 @@ class FakeConversationDAO:
         if version_id == "missing":
             return None
         return {"version_id": version_id, "script_id": script_id}
+
+    @classmethod
+    async def merge_version_metadata(cls, script_id, version_id, metadata):
+        cls.merged_version = (script_id, version_id, metadata)
+        if version_id == "missing":
+            return None
+        return {"version_id": version_id, "script_id": script_id, "metadata": metadata}
 
 
 async def test_get_conversation_returns_messages_versions_and_current_pointer():
@@ -91,3 +99,15 @@ async def test_missing_message_and_version_raise_not_found():
             version_id="missing",
             conversation_dao=FakeConversationDAO,
         )
+
+
+async def test_merge_version_metadata_persists_billing_snapshot():
+    result = await service.merge_script_version_metadata(
+        script_id="script_1",
+        version_id="ver_1",
+        metadata={"storyboardDesignCreditCost": 12},
+        conversation_dao=FakeConversationDAO,
+    )
+
+    assert result["version"]["metadata"]["storyboardDesignCreditCost"] == 12
+    assert FakeConversationDAO.merged_version[0:2] == ("script_1", "ver_1")

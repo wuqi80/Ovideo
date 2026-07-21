@@ -16,7 +16,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   Users, FolderTree, Coins, ScrollText, Image as ImageIcon,
   ShieldCheck, RefreshCw, Plus, Trash2, ToggleLeft, ToggleRight, KeyRound,
-  X, Check, Building2,
+  X, Check, Building2, Settings2,
 } from 'lucide-react';
 import {
   adminListCreditRules, adminCreateCreditRule, adminUpdateCreditRule, adminDeleteCreditRule,
@@ -487,8 +487,8 @@ const CreditRulesTab: React.FC = () => {
     await adminUpdateCreditRule(rule.rule_id, { enabled: !rule.enabled });
     reload();
   };
-  const handleSaveCost = async (rule: CreditRule, base_cost: number, min_cost: number, max_cost: number | null) => {
-    await adminUpdateCreditRule(rule.rule_id, { base_cost, min_cost, max_cost });
+  const handleSaveCost = async (rule: CreditRule, updates: Partial<CreditRule>) => {
+    await adminUpdateCreditRule(rule.rule_id, updates);
     reload();
   };
   const handleDelete = async (rule: CreditRule) => {
@@ -540,31 +540,89 @@ const CreditRulesTab: React.FC = () => {
 const CreditRuleRow: React.FC<{
   rule: CreditRule;
   onToggle: () => void;
-  onSave: (rule: CreditRule, base: number, min_: number, max_: number | null) => void;
+  onSave: (rule: CreditRule, updates: Partial<CreditRule>) => Promise<void>;
   onDelete: () => void;
 }> = ({ rule, onToggle, onSave, onDelete }) => {
   const [base, setBase] = useState(rule.base_cost);
   const [min_, setMin] = useState(rule.min_cost);
   const [max_, setMax] = useState<number | null>(rule.max_cost);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [billingUnit, setBillingUnit] = useState(rule.billing_unit || 'task');
+  const [description, setDescription] = useState(rule.description || '');
+  const [factorsText, setFactorsText] = useState(JSON.stringify(rule.factors || [], null, 2));
+
+  const saveRule = async () => {
+    let factors: any[];
+    try {
+      const parsed = JSON.parse(factorsText || '[]');
+      if (!Array.isArray(parsed)) throw new Error('动态因子必须是 JSON 数组');
+      factors = parsed;
+    } catch (error) {
+      crmMessage.error(error instanceof Error ? error.message : '动态因子 JSON 格式错误');
+      return;
+    }
+    try {
+      await onSave(rule, {
+        base_cost: base,
+        min_cost: min_,
+        max_cost: max_,
+        billing_unit: billingUnit,
+        description,
+        factors,
+      });
+      crmMessage.success('计费规则已保存');
+    } catch (error: any) {
+      crmMessage.error(`保存失败：${await readApiError(error)}`);
+    }
+  };
   return (
-    <tr className="hover:bg-n10">
-      <td className="p-2.5 font-mono text-[10px] text-n700">{rule.feature_key}</td>
-      <td className="p-2.5 text-n800">{rule.feature_name}</td>
-      <td className="p-2.5">
-        <button onClick={onToggle}>
-          {rule.enabled ? <ToggleRight size={20} className="text-success" /> : <ToggleLeft size={20} className="text-n100" />}
-        </button>
-      </td>
-      <td className="p-2.5"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="w-16 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
-      <td className="p-2.5"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
-      <td className="p-2.5"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
-      <td className="p-2.5 text-n100 text-[10px]">{rule.rule_version}</td>
-      <td className="p-2.5 text-right whitespace-nowrap">
-        <CrmActionLink type="primary" onClick={() => onSave(rule, base, min_, max_)}>保存</CrmActionLink>
-        <CrmActionSep />
-        <CrmActionLink type="danger" onClick={onDelete}>删除</CrmActionLink>
-      </td>
-    </tr>
+    <>
+      <tr className="hover:bg-n10">
+        <td className="p-2.5 font-mono text-[10px] text-n700">{rule.feature_key}</td>
+        <td className="p-2.5 text-n800">{rule.feature_name}</td>
+        <td className="p-2.5">
+          <button onClick={onToggle}>
+            {rule.enabled ? <ToggleRight size={20} className="text-success" /> : <ToggleLeft size={20} className="text-n100" />}
+          </button>
+        </td>
+        <td className="p-2.5"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="w-16 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
+        <td className="p-2.5"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
+        <td className="p-2.5"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
+        <td className="p-2.5 text-n100 text-[10px]">{rule.rule_version}</td>
+        <td className="p-2.5 text-right whitespace-nowrap">
+          <button type="button" onClick={() => setAdvancedOpen(value => !value)} className="inline-flex items-center gap-1 text-[11px] text-n500 hover:text-primary">
+            <Settings2 size={12} /> 计费逻辑
+          </button>
+          <CrmActionSep />
+          <CrmActionLink type="primary" onClick={saveRule}>保存</CrmActionLink>
+          <CrmActionSep />
+          <CrmActionLink type="danger" onClick={onDelete}>删除</CrmActionLink>
+        </td>
+      </tr>
+      {advancedOpen && (
+        <tr className="bg-n10">
+          <td colSpan={8} className="border-t border-n40 p-3">
+            <div className="grid gap-3 lg:grid-cols-[160px_1fr]">
+              <label className="text-xs text-n500">
+                计费单位
+                <input value={billingUnit} onChange={event => setBillingUnit(event.target.value)} className="mt-1 h-8 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n800 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-xs text-n500">
+                规则说明
+                <input value={description} onChange={event => setDescription(event.target.value)} className="mt-1 h-8 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n800 focus:border-primary focus:outline-none" />
+              </label>
+            </div>
+            <label className="mt-3 block text-xs text-n500">
+              动态因子 JSON
+              <textarea value={factorsText} onChange={event => setFactorsText(event.target.value)} rows={7} className="mt-1 w-full resize-y rounded border border-n40 bg-n0 p-2 font-mono text-[11px] leading-5 text-n800 focus:border-primary focus:outline-none" />
+            </label>
+            <p className="mt-1 text-[10px] leading-5 text-n300">
+              支持 per_unit_add（按每千 Token 等阶梯累加）、linear_add（按镜头数线性累加）、enum/range/multiplier（倍率）。剧本规则可使用 input_tokens、output_tokens、model；镜头设计还可使用 shot_count。
+            </p>
+          </td>
+        </tr>
+      )}
+    </>
   );
 };
 

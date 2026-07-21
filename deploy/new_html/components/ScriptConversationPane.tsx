@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Film,
   Copy,
+  Coins,
   Download,
   FileText,
   GripHorizontal,
@@ -290,6 +291,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     const isAssistant = message.role === 'assistant';
     const isCollapsed = collapsed.has(message.id);
     const canCollapse = message.content.length > 240;
+    const creditCost = Number(message.metadata?.creditCost || 0);
     return (
       <article
         key={message.id}
@@ -387,11 +389,18 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </button>
-                {conversation?.currentVersionId === version.id && (
-                  <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-success">
-                    <Check className="h-3.5 w-3.5" /> {isWorkflowScript ? '当前采用版本' : '当前版本'}
-                  </span>
-                )}
+                <span className="ml-auto inline-flex items-center gap-3">
+                  {Number.isFinite(creditCost) && creditCost > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning" title="本轮模型调用实际扣除积分">
+                      <Coins className="h-3.5 w-3.5" /> 本次消耗 {creditCost} 积分
+                    </span>
+                  )}
+                  {conversation?.currentVersionId === version.id && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-success">
+                      <Check className="h-3.5 w-3.5" /> {isWorkflowScript ? '当前采用版本' : '当前版本'}
+                    </span>
+                  )}
+                </span>
               </div>
             )}
           </div>

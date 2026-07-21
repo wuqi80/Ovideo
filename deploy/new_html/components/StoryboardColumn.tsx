@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ProjectFile, StoryboardItem, FileVersion, ScriptStoryboardVersion } from '../types';
-import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box } from 'lucide-react';
+import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box, Coins } from 'lucide-react';
 
 interface StoryboardColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -34,6 +34,7 @@ interface StoryboardColumnProps {
   onDeleteVersion: (versionId: string) => void;  // 🆕 删除版本
   scriptVersions?: ScriptStoryboardVersion[];
   currentScriptVersionId?: string;
+  generationCreditCost?: number;
   onRestoreScriptVersion?: (version: ScriptStoryboardVersion) => void;
   onImportProject?: () => void;
   onInsertShot: (position: number, shotData: Omit<StoryboardItem, 'id'>) => Promise<void>;
@@ -70,6 +71,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   onDeleteVersion,  // 🆕 删除版本
   scriptVersions = [],
   currentScriptVersionId,
+  generationCreditCost,
   onRestoreScriptVersion,
   onImportProject,
   onInsertShot,
@@ -423,6 +425,11 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
           <div className="w-full flex items-center gap-2 px-3 py-2 bg-primary-light border border-primary rounded-lg text-xs text-primary">
             <Film className="w-4 h-4" />
             <span>共 {selectedFile.storyboard.items.filter(i => !i.isPlaceholder).length} 个镜头</span>
+            {Number.isFinite(generationCreditCost) && Number(generationCreditCost) > 0 && (
+              <span className="ml-auto inline-flex items-center gap-1 rounded border border-warning/30 bg-y50 px-2 py-1 text-[10px] font-medium text-warning" title="最近一次镜头详情生成实际扣除积分">
+                <Coins className="h-3.5 w-3.5" /> 本次消耗 {generationCreditCost} 积分
+              </span>
+            )}
           </div>
         ) : (
           <div className="w-full text-center text-xs text-n100">等待分镜生成...</div>

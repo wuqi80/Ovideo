@@ -883,6 +883,36 @@ class CreditFreezeDAO:
 class CreditTransactionDAO:
 
     @staticmethod
+    async def get_consumption_for_task(
+        task_id: str,
+        *,
+        owner_type: str,
+        owner_id: str,
+        feature_key: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        params: List[Any] = [task_id, owner_type, owner_id]
+        feature_clause = ''
+        if feature_key:
+            params.append(feature_key)
+            feature_clause = 'AND ct.feature_key = $4'
+        row = await db.fetchrow(
+            f"""
+            SELECT ct.* FROM credit_transactions ct
+            JOIN credit_accounts ca ON ca.account_id = ct.account_id
+            WHERE ct.task_id = $1
+              AND ca.owner_type = $2
+              AND ca.owner_id = $3
+              AND ct.change_type = 'consume'
+              {feature_clause}
+            ORDER BY ct.created_at DESC
+            LIMIT 1
+            """,
+            *params,
+        )
+        return _normalize(row, json_fields=('metadata',))
+
+    @staticmethod
     async def create(
         account_id: str,
         change_type: str,
