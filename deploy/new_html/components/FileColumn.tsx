@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProjectFile, FileStatus, FileVersion } from '../types';
-import { Upload, CheckCircle2, CircleDashed, AlertCircle, Trash2, ChevronUp, ChevronDown, Plus, History, Save, RotateCcw, X, Download, Edit2, FileDown, FilePlus, GripVertical } from 'lucide-react';
+import { Upload, CheckCircle2, CircleDashed, AlertCircle, Trash2, ChevronUp, ChevronDown, History, Save, RotateCcw, X, Download, Edit2, FileDown, FilePlus, GripVertical } from 'lucide-react';
 
 interface FileColumnProps {
   files: ProjectFile[];
@@ -20,10 +20,10 @@ interface FileColumnProps {
   onMoveFile: (e: React.MouseEvent, id: string, direction: 'up' | 'down') => void;
   onSaveVersion: (id: string) => void;
   onRestoreVersion: (fileId: string, version: FileVersion) => void;
-  onSaveAs: (id: string) => void;
+  onSaveAs?: (id: string) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  onExportProject: () => void;
+  onExportProject?: () => void;
   onReorderFiles?: (fromIndex: number, toIndex: number) => void;  // 🆕 拖拽排序
 }
 
@@ -56,8 +56,8 @@ export const FileColumn: React.FC<FileColumnProps> = ({
   const [activatingFileId, setActivatingFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // 🆕 拖拽排序状态
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  // Keep the dragged file identifiable while the parent reorders the array live.
+  const [draggedFileId, setDraggedFileId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Handle Paste
@@ -85,12 +85,14 @@ export const FileColumn: React.FC<FileColumnProps> = ({
   }, [onFileUpload]);
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
+    if (!isDragging) return;
     e.preventDefault();
     e.stopPropagation();
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
@@ -98,12 +100,11 @@ export const FileColumn: React.FC<FileColumnProps> = ({
   };
 
   const handleDrop = (e: React.DragEvent) => {
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      onFileUpload(e.dataTransfer.files);
-    }
+    onFileUpload(e.dataTransfer.files);
   };
 
   const getStatusIcon = (status: FileStatus) => {
@@ -115,7 +116,6 @@ export const FileColumn: React.FC<FileColumnProps> = ({
     }
   };
 
-  const allChecked = files.length > 0 && files.every(f => checkedFileIds.has(f.id));
   const activeFileForHistory = files.find(f => f.id === showHistoryModal);
   const deleteFile = files.find(f => f.id === deleteConfirmId);
   
@@ -165,49 +165,40 @@ export const FileColumn: React.FC<FileColumnProps> = ({
         </div>
       )}
 
-      {/* Standard Header */}
-      <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex-shrink-0 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-n700 uppercase tracking-wider pl-1">
-            1. 文件列表
-            </h2>
-             {files.length > 0 && <span className="text-xs text-n100 font-mono">({files.length})</span>}
-            {files.length > 0 && (
-                <div className="flex items-center gap-1.5 ml-2">
-                     <input 
-                        type="checkbox" 
-                        checked={allChecked}
-                        onChange={(e) => onCheckAll(e.target.checked)}
-                        className="w-3.5 h-3.5 rounded bg-n0 border-n40 text-primary focus:ring-primary/20 cursor-pointer"
-                        title="全选/取消全选"
-                     />
-                </div>
-            )}
+      {/* Header uses stable rows so narrow columns and macOS fonts never wrap controls. */}
+      <div className="flex-shrink-0 border-b border-n40 bg-n0">
+        <div
+          data-testid="file-column-title-row"
+          className="flex h-11 min-w-0 items-center gap-2 px-4"
+        >
+          <h2 className="whitespace-nowrap text-sm font-semibold text-n700">
+            文件列表
+          </h2>
+          <span className="whitespace-nowrap font-mono text-xs text-n100">({files.length})</span>
         </div>
-        
-        <div className="flex items-center gap-1">
-             <button 
-                onClick={onCreateBlankFile}
-                className="p-1.5 bg-n0 hover:bg-success text-n300 hover:text-white rounded transition-colors"
-                title="新建空白文件"
+
+        <div
+          data-testid="file-column-action-row"
+          className="flex h-10 items-center justify-end gap-1 border-t border-n40 px-4"
+        >
+            <button
+              type="button"
+              onClick={onCreateBlankFile}
+              className="inline-flex h-8 w-8 items-center justify-center rounded text-n300 transition-colors hover:bg-success hover:text-white"
+              title="新建空白文件"
+              aria-label="新建空白文件"
             >
-                <FilePlus className="w-3.5 h-3.5" />
+              <FilePlus className="h-4 w-4" />
             </button>
-             <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="p-1.5 bg-n0 hover:bg-primary text-n300 hover:text-white rounded transition-colors"
-                title="上传文件"
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex h-8 w-8 items-center justify-center rounded text-n300 transition-colors hover:bg-primary hover:text-white"
+              title="上传文件"
+              aria-label="上传文件"
             >
-                <Plus className="w-3.5 h-3.5" />
+              <Upload className="h-4 w-4" />
             </button>
-        </div>
-      </div>
-      
-      {/* Toolbar - 固定高度52px，与其他栏目对齐 */}
-      <div className="h-[52px] px-3 border-b border-n40 bg-n0 flex items-center">
-        <div className="w-full flex items-center gap-2 px-3 py-2 bg-n30 border border-n40 rounded-lg text-xs text-n100">
-          <Upload className="w-4 h-4" />
-          <span>拖拽或粘贴文件上传</span>
         </div>
       </div>
       
@@ -232,93 +223,99 @@ export const FileColumn: React.FC<FileColumnProps> = ({
             {files.map((file, index) => (
               <div
                 key={file.id}
-                draggable={!!onReorderFiles}
+                data-file-card={file.id}
                 onDragStart={(e) => {
                   if (!onReorderFiles) return;
-                  setDraggedIndex(index);
+                  e.stopPropagation();
+                  setDraggedFileId(file.id);
                   e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('text/plain', index.toString());
+                  e.dataTransfer.setData('application/x-mecha-script-file', file.id);
+                  e.dataTransfer.setDragImage(e.currentTarget, 18, 18);
                 }}
-                onDragEnd={() => {
-                  setDraggedIndex(null);
+                onDragEnd={(e) => {
+                  e.stopPropagation();
+                  setDraggedFileId(null);
                   setDragOverIndex(null);
                 }}
                 onDragOver={(e) => {
-                  if (!onReorderFiles || draggedIndex === null) return;
+                  if (!onReorderFiles || draggedFileId === null) return;
                   e.preventDefault();
+                  e.stopPropagation();
                   e.dataTransfer.dropEffect = 'move';
-                  if (index !== draggedIndex) {
+                  setDragOverIndex(index);
+                }}
+                onDragEnter={(e) => {
+                  if (!onReorderFiles || draggedFileId === null || draggedFileId === file.id) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const fromIndex = files.findIndex(item => item.id === draggedFileId);
+                  if (fromIndex !== -1 && fromIndex !== index) {
+                    onReorderFiles(fromIndex, index);
                     setDragOverIndex(index);
                   }
                 }}
-                onDragLeave={() => {
+                onDragLeave={(e) => {
+                  e.stopPropagation();
                   setDragOverIndex(null);
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
-                  if (!onReorderFiles || draggedIndex === null || draggedIndex === index) return;
-                  onReorderFiles(draggedIndex, index);
-                  setDraggedIndex(null);
+                  e.stopPropagation();
+                  setDraggedFileId(null);
                   setDragOverIndex(null);
                 }}
                 onClick={() => onFileSelect(file.id)}
-                className={`group relative flex items-start gap-2 p-3 rounded-lg cursor-pointer transition-all duration-200 border ${
+                className={`group relative flex flex-col gap-2 rounded-lg border p-2.5 cursor-pointer transition-all duration-200 ${
                   selectedFileId === file.id
                     ? 'bg-primary-light border-primary shadow-sm'
                     : 'hover:bg-n20 border-transparent hover:border-n40'
                 } ${activeFileId === file.id
                     ? 'ring-2 ring-success/30 border-success'
                     : ''
-                } ${draggedIndex === index ? 'opacity-50 scale-95' : ''} ${
+                } ${draggedFileId === file.id ? 'border-primary shadow-sm ring-2 ring-primary/20' : ''} ${
                   dragOverIndex === index
                     ? 'border-primary bg-primary-light ring-2 ring-primary/20'
                     : ''
                 }`}
                 onContextMenu={(e) => {
                     e.preventDefault();
-                    if(confirm(`将 "${file.name}" 另存为新文件?`)) {
+                    if(onSaveAs && confirm(`将 "${file.name}" 另存为新文件?`)) {
                         onSaveAs(file.id);
                     }
                 }}
               >
-                {/* 🆕 拖拽手柄 */}
-                {onReorderFiles && (
-                  <div 
-                    className="mt-1 cursor-grab active:cursor-grabbing text-n100 hover:text-n300 transition-colors"
-                    title="拖拽排序"
-                  >
-                    <GripVertical className="w-3.5 h-3.5" />
-                  </div>
-                )}
-                
-                {/* Checkbox */}
-                 <div className="mt-0.5" onClick={(e) => e.stopPropagation()}>
-                    <input 
-                        type="checkbox" 
-                        checked={checkedFileIds.has(file.id)}
-                        onChange={(e) => onFileCheck(file.id, e.target.checked)}
-                        className="w-3.5 h-3.5 rounded bg-n0 border-n40 text-primary focus:ring-0 focus:ring-offset-0 cursor-pointer"
-                    />
+                <div
+                  data-testid="file-card-control-row"
+                  className="flex h-6 w-full items-center gap-2 pr-[118px]"
+                >
+                  {onReorderFiles && (
+                    <div
+                      draggable
+                      className="cursor-grab text-n100 transition-colors hover:text-n300 active:cursor-grabbing"
+                      title="拖拽排序"
+                      aria-label={`拖动 ${file.name} 调整顺序`}
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </div>
+                  )}
+
+                  <span className={`min-w-[20px] font-mono text-[10px] font-bold ${selectedFileId === file.id ? 'text-primary' : 'text-n100'}`}>
+                    {(index + 1).toString().padStart(2, '0')}
+                  </span>
+                  {getStatusIcon(file.status)}
                 </div>
 
-                <div className={`text-[10px] font-mono font-bold mt-0.5 min-w-[18px] ${selectedFileId === file.id ? 'text-primary' : 'text-n100'}`}>
-                  {(index + 1).toString().padStart(2, '0')}
-                </div>
-
-                <div className="flex-1 min-w-0 select-none">
-                  <div className="flex items-center justify-between mb-0.5">
-                     <h3 className={`text-sm font-medium truncate pr-2 ${selectedFileId === file.id ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
+                <div data-testid="file-card-content" className="w-full min-w-0 select-none">
+                  <div className="mb-1 flex min-w-0 items-center gap-2">
+                    <h3 className={`min-w-0 flex-1 truncate text-sm font-medium ${selectedFileId === file.id ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
                       {file.name}
                     </h3>
-                    <div className="flex items-center gap-2">
-                        {activeFileId === file.id && (
-                          <span className="shrink-0 inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-semibold text-success bg-g50 border border-success/40">
-                            <CheckCircle2 className="w-3 h-3" />
-                            当前主剧本
-                          </span>
-                        )}
-                        {getStatusIcon(file.status)}
-                    </div>
+                    {activeFileId === file.id && (
+                      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border border-success/40 bg-g50 px-2 py-1 text-[10px] font-semibold text-success">
+                        <CheckCircle2 className="h-3 w-3" />
+                        当前主剧本
+                      </span>
+                    )}
                   </div>
                   <p className="text-[10px] text-n100 line-clamp-2 font-serif leading-relaxed opacity-80 group-hover:opacity-100">
                     {file.originalContent.slice(0, 60).replace(/\n/g, ' ')}...
@@ -355,9 +352,9 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   </div>
                 </div>
 
-                {/* Hover Actions - 水平布局 */}
-                <div 
-                  className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity bg-n0 rounded-md backdrop-blur-sm shadow-bottom px-1 py-0.5 border border-n40 z-30 flex items-center gap-0.5"
+                {/* Actions stay visible so they are discoverable on touch devices and narrow layouts. */}
+                <div
+                  className="absolute right-2 top-2.5 z-30 flex items-center gap-0.5 rounded-md border border-n40 bg-n0 px-1 py-0.5 opacity-100 shadow-bottom backdrop-blur-sm"
                 >
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleStartRename(e, file); }}
