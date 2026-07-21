@@ -31,6 +31,7 @@ import {
   ScriptConversationMessage,
   ScriptStoryboardVersion,
 } from '../types';
+import { estimateCredits, estimateTextTokens } from '../services/creditService';
 
 export const SCRIPT_MODEL_OPTIONS = [
   { value: AiModel.Gemini, label: '化神', runtime: 'Gemini 2.5 Flash', provider: 'google' },
@@ -96,6 +97,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [isResizingComposer, setIsResizingComposer] = useState(false);
   const [scrollControls, setScrollControls] = useState({ canScrollUp: false, canScrollDown: false });
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+  const [estimatedCreditCost, setEstimatedCreditCost] = useState<number | null>(null);
+  const [isEstimatingCredits, setIsEstimatingCredits] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<string, HTMLElement>>(new Map());
   const composerFileInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +150,55 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     }
     return turns;
   }, [conversation?.messages, versionByMessageId]);
+  const creditEstimateParams = useMemo(() => {
+    if (!selectedFile) return null;
+    const versions = conversation?.versions || [];
+    const isFirstTurn = versions.length === 0;
+    const currentVersion = versions.find(version => version.id === conversation?.currentVersionId)
+      || versions[versions.length - 1];
+    const conversationContext = (conversation?.messages || []).slice(-10)
+      .map(message => `${message.role}:${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
+      .join('\n');
+    const billingInput = isFirstTurn
+      ? draft
+      : [currentVersion?.content || selectedFile.scriptContent || selectedFile.originalContent, draft, conversationContext].join('\n');
+    const forecastOutputTokens = Math.max(
+      1000,
+      estimateTextTokens(currentVersion?.content || selectedFile.scriptContent || draft) * (isFirstTurn ? 2 : 1),
+    );
+    const model = SCRIPT_MODEL_OPTIONS.find(option => option.value === aiModel)?.runtime || String(aiModel);
+    return {
+      input_tokens: estimateTextTokens(billingInput),
+      output_tokens: forecastOutputTokens,
+      model,
+    };
+  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, selectedFile]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!creditEstimateParams || isSending) {
+      setEstimatedCreditCost(null);
+      setIsEstimatingCredits(false);
+      return undefined;
+    }
+    setIsEstimatingCredits(true);
+    const timer = window.setTimeout(() => {
+      void estimateCredits('script_model_call', creditEstimateParams)
+        .then(result => {
+          if (!cancelled) setEstimatedCreditCost(result.enabled ? result.estimated_cost : 0);
+        })
+        .catch(() => {
+          if (!cancelled) setEstimatedCreditCost(null);
+        })
+        .finally(() => {
+          if (!cancelled) setIsEstimatingCredits(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [creditEstimateParams, isSending]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -534,6 +586,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             </div>
             <h3 className="text-sm font-semibold text-n800">开始生成分镜脚本</h3>
             <p className="mt-2 text-xs leading-6 text-n300">在下方输入剧本文本。生成后可继续发送修改意见，每次回复都会保留为独立版本。</p>
+            <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-warning">
+              <Coins className="h-3.5 w-3.5" /> 每次生成都会扣除一定数量的积分
+            </p>
           </div>
         )}
       </div>
@@ -607,6 +662,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             >
               <Upload className="h-4 w-4" />
             </button>
+            <span
+              className="inline-flex flex-shrink-0 items-center gap-1 text-xs font-medium text-warning"
+              title="根据当前输入、历史上下文、预计输出和所选模型动态计算"
+            >
+              <Coins className="h-3.5 w-3.5" />
+              预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
+            </span>
             <label className="relative ml-auto min-w-0">
               <span className="sr-only">选择剧本模型</span>
               <select

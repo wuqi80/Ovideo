@@ -21,6 +21,14 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('aria-label="发送"');
   });
 
+  it('shows a dynamic credit estimate before each script generation', () => {
+    expect(source).toContain("estimateCredits('script_model_call', creditEstimateParams)");
+    expect(source).toContain('input_tokens: estimateTextTokens(billingInput)');
+    expect(source).toContain('output_tokens: forecastOutputTokens');
+    expect(source).toContain('每次生成都会扣除一定数量的积分');
+    expect(source).toContain("预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}");
+  });
+
   it('uploads a text file into the current draft without creating or sending a task', () => {
     expect(source).toContain('aria-label="上传文本到输入框"');
     expect(source).toContain('accept=".txt,.md,.json"');
