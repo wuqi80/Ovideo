@@ -21,6 +21,14 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('aria-label="发送"');
   });
 
+  it('uploads a text file into the current draft without creating or sending a task', () => {
+    expect(source).toContain('aria-label="上传文本到输入框"');
+    expect(source).toContain('accept=".txt,.md,.json"');
+    expect(source).toContain('reader.readAsText(file)');
+    expect(source).toContain("if (typeof text === 'string') setDraft(text)");
+    expect(source).toContain('composerFileInputRef.current?.click()');
+  });
+
   it('keeps immutable reply actions together', () => {
     expect(source).toContain('生成镜头设计');
     expect(source).toContain('编辑分镜脚本');

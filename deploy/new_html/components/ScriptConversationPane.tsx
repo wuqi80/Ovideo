@@ -14,6 +14,7 @@ import {
   PanelRightOpen,
   Pencil,
   Send,
+  Upload,
   User,
   X,
 } from 'lucide-react';
@@ -80,6 +81,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [isResizingComposer, setIsResizingComposer] = useState(false);
   const [scrollControls, setScrollControls] = useState({ canScrollUp: false, canScrollDown: false });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerFileInputRef = useRef<HTMLInputElement>(null);
   const composerResizeOriginRef = useRef({ y: 0, height: 132 });
   const keepLatestVisibleOnResizeRef = useRef(true);
   const initializedScriptRef = useRef<string | null>(null);
@@ -179,6 +181,20 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     } catch {
       setDraft(content);
     }
+  };
+
+  const handleComposerFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = loadEvent => {
+      const text = loadEvent.target?.result;
+      if (typeof text === 'string') setDraft(text);
+    };
+    reader.onerror = () => window.alert('读取文本文件失败，请确认文件格式后重试。');
+    reader.readAsText(file);
   };
 
   const toggleCollapsed = (id: string) => {
@@ -422,6 +438,23 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             className="min-h-0 flex-1 resize-none bg-transparent px-4 pb-2 pt-4 pr-12 text-sm leading-6 text-n800 outline-none placeholder:text-n100 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <div className="flex min-h-11 items-center gap-2 px-3 py-2">
+            <input
+              ref={composerFileInputRef}
+              type="file"
+              className="hidden"
+              accept=".txt,.md,.json"
+              onChange={handleComposerFileUpload}
+            />
+            <button
+              type="button"
+              onClick={() => composerFileInputRef.current?.click()}
+              disabled={!selectedFile || isSending}
+              title="上传文本到输入框"
+              aria-label="上传文本到输入框"
+              className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-primary disabled:cursor-not-allowed disabled:text-n100"
+            >
+              <Upload className="h-4 w-4" />
+            </button>
             <label className="relative ml-auto min-w-0">
               <span className="sr-only">选择剧本模型</span>
               <select
