@@ -6,11 +6,15 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Film,
   Copy,
   Download,
   FileText,
   GripHorizontal,
+  History,
+  Layers3,
   LoaderCircle,
+  MessageSquare,
   PanelRightOpen,
   Pencil,
   Send,
@@ -56,6 +60,14 @@ const formatTime = (value: number) => new Date(value).toLocaleString('zh-CN', {
   minute: '2-digit',
 });
 
+interface ConversationTurn {
+  id: string;
+  anchorMessageId: string;
+  number: number;
+  preview: string;
+  versionNo?: number;
+}
+
 export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   selectedFile,
   conversation,
@@ -80,7 +92,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [composerHeight, setComposerHeight] = useState(132);
   const [isResizingComposer, setIsResizingComposer] = useState(false);
   const [scrollControls, setScrollControls] = useState({ canScrollUp: false, canScrollDown: false });
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<string, HTMLElement>>(new Map());
   const composerFileInputRef = useRef<HTMLInputElement>(null);
   const composerResizeOriginRef = useRef({ y: 0, height: 132 });
   const keepLatestVisibleOnResizeRef = useRef(true);
@@ -95,6 +109,35 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     () => conversation?.messages.find(message => message.role === 'user')?.id,
     [conversation?.messages],
   );
+  const conversationTurns = useMemo(() => {
+    const turns: ConversationTurn[] = [];
+    for (const message of conversation?.messages || []) {
+      if (message.role === 'user') {
+        const number = turns.length + 1;
+        turns.push({
+          id: `turn-${message.id}`,
+          anchorMessageId: message.id,
+          number,
+          preview: message.content.replace(/\s+/g, ' ').trim().slice(0, 42) || '未命名对话',
+        });
+        continue;
+      }
+      if (message.role !== 'assistant') continue;
+      let turn = turns[turns.length - 1];
+      if (!turn) {
+        turn = {
+          id: `turn-${message.id}`,
+          anchorMessageId: message.id,
+          number: 1,
+          preview: '分镜脚本',
+        };
+        turns.push(turn);
+      }
+      const version = versionByMessageId.get(message.id);
+      if (version) turn.versionNo = version.versionNo;
+    }
+    return turns;
+  }, [conversation?.messages, versionByMessageId]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -120,11 +163,22 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     const node = scrollRef.current;
     if (!node) return;
     const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+    const threshold = node.getBoundingClientRect().top + Math.min(180, node.clientHeight * 0.35);
+    let visibleTurnId = conversationTurns[0]?.id || null;
+    for (const turn of conversationTurns) {
+      const element = messageRefs.current.get(turn.anchorMessageId);
+      if (!element || element.getBoundingClientRect().top > threshold) break;
+      visibleTurnId = turn.id;
+    }
+    if (node.scrollTop >= maxScrollTop - 4 && conversationTurns.length > 0) {
+      visibleTurnId = conversationTurns[conversationTurns.length - 1].id;
+    }
+    setActiveTurnId(current => current === visibleTurnId ? current : visibleTurnId);
     setScrollControls({
       canScrollUp: node.scrollTop > 4,
       canScrollDown: node.scrollTop < maxScrollTop - 4,
     });
-  }, []);
+  }, [conversationTurns]);
 
   useEffect(() => {
     const node = scrollRef.current;
@@ -155,6 +209,15 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       top: position === 'top' ? 0 : node.scrollHeight,
       behavior: 'smooth',
     });
+  };
+
+  const scrollToTurn = (turn: ConversationTurn) => {
+    const node = scrollRef.current;
+    const target = messageRefs.current.get(turn.anchorMessageId);
+    if (!node || !target) return;
+    const top = node.scrollTop + target.getBoundingClientRect().top - node.getBoundingClientRect().top - 12;
+    setActiveTurnId(turn.id);
+    node.scrollTo({ top, behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -230,7 +293,11 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     return (
       <article
         key={message.id}
-        className={`mx-auto w-[calc(100%-24px)] max-w-6xl border-b border-n40 px-4 py-5 ${isAssistant ? 'bg-n0' : 'bg-n20'}`}
+        ref={element => {
+          if (element) messageRefs.current.set(message.id, element);
+          else messageRefs.current.delete(message.id);
+        }}
+        className={`w-full scroll-mt-4 rounded-lg border border-n40 px-4 py-5 shadow-sm ${isAssistant ? 'bg-n0' : 'bg-n20'}`}
       >
         <div className="flex items-start gap-3">
           <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded ${isAssistant ? 'bg-primary text-white' : 'border border-n40 bg-n0 text-n500'}`}>
@@ -337,10 +404,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-n20" data-testid="script-conversation-pane">
       <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
         <FileText className="h-4 w-4 text-primary" />
-        <div className="flex min-w-0 items-baseline gap-2">
-          <div className="truncate text-sm font-semibold text-n800">{selectedFile?.name || '请选择剧本任务'}</div>
-          {selectedFile && <div className="flex-shrink-0 text-[10px] text-n100">{(conversation?.messages || []).length} 条对话 · {(conversation?.versions || []).length} 个分镜版本</div>}
-        </div>
+        <div className="truncate text-sm font-semibold text-n800">{selectedFile?.name || '请选择剧本任务'}</div>
         <button
           type="button"
           onClick={onOpenStoryboard}
@@ -352,7 +416,12 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
         </button>
       </header>
 
-      <div ref={scrollRef} onScroll={updateScrollControls} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+      <div
+        ref={scrollRef}
+        onScroll={updateScrollControls}
+        className="min-h-0 flex-1 overflow-y-auto custom-scrollbar"
+        style={{ paddingBottom: composerHeight + 36 }}
+      >
         {!selectedFile ? (
           <div className="flex h-full items-center justify-center text-sm text-n100">请从左侧选择一个剧本任务</div>
         ) : isLoading ? (
@@ -360,7 +429,86 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             <LoaderCircle className="h-4 w-4 animate-spin text-primary" /> 正在加载对话
           </div>
         ) : (conversation?.messages || []).length > 0 ? (
-          <div>{conversation!.messages.map(renderMessage)}</div>
+          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-4 px-3 py-4 2xl:grid-cols-[150px_minmax(0,1fr)_210px]">
+            <aside className="hidden min-w-0 2xl:block" data-testid="conversation-turn-rail">
+              <div className="sticky top-4 border-r border-n40 pr-3">
+                <div className="mb-2 flex h-7 items-center gap-1">
+                  <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[11px] font-semibold text-n700">对话轮次</span>
+                  <span className="text-[10px] tabular-nums text-n100">{conversationTurns.length}</span>
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={() => scrollConversationTo('top')}
+                    disabled={!scrollControls.canScrollUp}
+                    title="回到对话顶部"
+                    aria-label="回到对话顶部"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n0 hover:text-primary disabled:cursor-default disabled:text-n50"
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => scrollConversationTo('bottom')}
+                    disabled={!scrollControls.canScrollDown}
+                    title="前往最新对话"
+                    aria-label="前往最新对话"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n0 hover:text-primary disabled:cursor-default disabled:text-n50"
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <nav className="max-h-[calc(100vh-250px)] space-y-1 overflow-y-auto pr-1 custom-scrollbar" aria-label="对话轮次快速导航">
+                  {conversationTurns.map(turn => (
+                    <button
+                      key={turn.id}
+                      type="button"
+                      onClick={() => scrollToTurn(turn)}
+                      title={turn.preview}
+                      className={`w-full rounded px-2 py-2 text-left transition-colors ${activeTurnId === turn.id ? 'bg-n0 text-primary shadow-sm' : 'text-n300 hover:bg-n0 hover:text-n700'}`}
+                    >
+                      <span className="flex items-center gap-1.5 text-[10px] font-semibold">
+                        <span>{turn.number === 1 ? '初始剧本' : `第 ${turn.number} 轮`}</span>
+                        {turn.versionNo && <span className="rounded bg-primary-light px-1 py-0.5 text-[9px] text-primary">V{turn.versionNo}</span>}
+                      </span>
+                      <span className="mt-1 block truncate text-[10px] leading-4 text-n100">{turn.preview}</span>
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            </aside>
+
+            <main className="min-w-0 space-y-3">{conversation!.messages.map(renderMessage)}</main>
+
+            <aside className="hidden min-w-0 2xl:block" data-testid="conversation-summary-rail">
+              <div className="sticky top-4 border-l border-n40 pl-3">
+                <div className="mb-3 text-[11px] font-semibold text-n700">当前任务</div>
+                <dl className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <MessageSquare className="mt-0.5 h-3.5 w-3.5 text-n300" />
+                    <div><dt className="text-[10px] text-n100">对话数量</dt><dd className="text-xs font-medium tabular-nums text-n700">{conversation!.messages.length} 条 · {conversationTurns.length} 轮</dd></div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Layers3 className="mt-0.5 h-3.5 w-3.5 text-n300" />
+                    <div><dt className="text-[10px] text-n100">分镜版本</dt><dd className="text-xs font-medium tabular-nums text-n700">{conversation!.versions.length} 个</dd></div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Film className={`mt-0.5 h-3.5 w-3.5 ${storyboardItemCount > 0 ? 'text-success' : 'text-n100'}`} />
+                    <div>
+                      <dt className="text-[10px] text-n100">镜头设计</dt>
+                      <dd className={`text-xs font-medium ${storyboardItemCount > 0 ? 'text-success' : 'text-n300'}`}>
+                        {storyboardItemCount > 0 ? `已生成 · ${storyboardItemCount} 个镜头` : '尚未生成'}
+                      </dd>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <History className="mt-0.5 h-3.5 w-3.5 text-n300" />
+                    <div><dt className="text-[10px] text-n100">镜头设计历史</dt><dd className="text-xs font-medium tabular-nums text-n700">{selectedFile?.versions?.length || 0} 个存档</dd></div>
+                  </div>
+                </dl>
+              </div>
+            </aside>
+          </div>
         ) : (
           <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center px-8 text-center">
             <div className="mb-4 flex h-10 w-10 items-center justify-center rounded border border-n40 bg-n0 text-primary">
@@ -372,38 +520,24 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
         )}
       </div>
 
-      {(scrollControls.canScrollUp || scrollControls.canScrollDown) && (
-        <div
-          data-testid="conversation-scroll-controls"
-          className="absolute left-2 top-1/2 z-20 flex -translate-y-1/2 flex-col overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom"
+      {scrollControls.canScrollDown && (
+        <button
+          type="button"
+          data-testid="conversation-jump-to-latest"
+          onClick={() => scrollConversationTo('bottom')}
+          title="前往最新对话"
+          aria-label="前往最新对话"
+          className="absolute left-1/2 z-40 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-n40 bg-n0 text-n500 shadow-bottom hover:border-primary hover:text-primary"
+          style={{ bottom: composerHeight + 28 }}
         >
-          <button
-            type="button"
-            onClick={() => scrollConversationTo('top')}
-            disabled={!scrollControls.canScrollUp}
-            title="回到分镜脚本顶部"
-            aria-label="回到分镜脚本顶部"
-            className="inline-flex h-8 w-8 items-center justify-center text-n300 hover:bg-n20 hover:text-primary disabled:cursor-default disabled:text-n50"
-          >
-            <ArrowUp className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => scrollConversationTo('bottom')}
-            disabled={!scrollControls.canScrollDown}
-            title="前往分镜脚本底部"
-            aria-label="前往分镜脚本底部"
-            className="inline-flex h-8 w-8 items-center justify-center border-t border-n40 text-n300 hover:bg-n20 hover:text-primary disabled:cursor-default disabled:text-n50"
-          >
-            <ArrowDown className="h-4 w-4" />
-          </button>
-        </div>
+          <ArrowDown className="h-4 w-4" />
+        </button>
       )}
 
-      <div className="flex-shrink-0 bg-n20 px-3 pb-3 pt-2">
-        {error && <div className="mx-auto mb-2 w-[calc(100%-24px)] max-w-6xl rounded border border-danger/30 bg-r50 px-3 py-2 text-xs text-danger">{error}</div>}
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 px-3" data-testid="floating-conversation-composer">
+        {error && <div className="pointer-events-auto mx-auto mb-2 w-[calc(100%-24px)] max-w-6xl rounded border border-danger/30 bg-r50 px-3 py-2 text-xs text-danger shadow-sm">{error}</div>}
         <div
-          className="relative mx-auto flex w-[calc(100%-24px)] max-w-6xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-bottom focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10"
+          className="pointer-events-auto relative mx-auto flex w-[calc(100%-24px)] max-w-6xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-[0_18px_55px_rgba(15,23,42,0.16)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10"
           style={{ height: composerHeight }}
         >
           <button

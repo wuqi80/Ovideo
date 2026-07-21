@@ -64,21 +64,44 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('node.scrollTop = node.scrollHeight');
   });
 
-  it('shrinks the conversation viewport instead of covering the latest reply while resizing', () => {
+  it('floats the composer while reserving enough viewport space for the latest reply', () => {
     expect(source).toContain('h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden');
+    expect(source).toContain('data-testid="floating-conversation-composer"');
+    expect(source).toContain('pointer-events-none absolute inset-x-0 bottom-4');
+    expect(source).toContain('style={{ paddingBottom: composerHeight + 36 }}');
     expect(source).toContain('keepLatestVisibleOnResizeRef');
     expect(source).toContain('scrollNode.scrollHeight - scrollNode.scrollTop - scrollNode.clientHeight < 48');
     expect(source).toContain('useLayoutEffect(() =>');
     expect(source).toContain('}, [composerHeight, updateScrollControls]);');
   });
 
-  it('provides quick navigation for long storyboard replies', () => {
-    expect(source).toContain('data-testid="conversation-scroll-controls"');
-    expect(source).toContain('aria-label="回到分镜脚本顶部"');
-    expect(source).toContain('aria-label="前往分镜脚本底部"');
+  it('provides turn navigation and a floating jump-to-latest action', () => {
+    expect(source).toContain('data-testid="conversation-turn-rail"');
+    expect(source).toContain('aria-label="对话轮次快速导航"');
+    expect(source).toContain('onClick={() => scrollToTurn(turn)}');
+    expect(source).toContain('data-testid="conversation-jump-to-latest"');
+    expect(source).toContain('scrollControls.canScrollDown');
+    expect(source).toContain('style={{ bottom: composerHeight + 28 }}');
+    expect(source).toContain('aria-label="回到对话顶部"');
+    expect(source).toContain('aria-label="前往最新对话"');
     expect(source).toContain("scrollConversationTo('top')");
     expect(source).toContain("scrollConversationTo('bottom')");
     expect(source).toContain("behavior: 'smooth'");
+  });
+
+  it('summarizes conversation and storyboard progress in the right rail', () => {
+    expect(source).toContain('data-testid="conversation-summary-rail"');
+    expect(source).toContain('对话数量');
+    expect(source).toContain('分镜版本');
+    expect(source).toContain('镜头设计历史');
+    expect(source).toContain("storyboardItemCount > 0 ? `已生成 · ${storyboardItemCount} 个镜头` : '尚未生成'");
+    expect(source).toContain('selectedFile?.versions?.length || 0');
+    expect(workspace).toContain('storyboardTotalsByFileId[selectedFileId] ?? 0');
+  });
+
+  it('uses separated rounded cards for long conversation messages', () => {
+    expect(source).toContain('rounded-lg border border-n40 px-4 py-5 shadow-sm');
+    expect(source).toContain('<main className="min-w-0 space-y-3">');
   });
 
   it('does not block entry with the decorative loading overlay', () => {

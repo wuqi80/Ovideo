@@ -3203,7 +3203,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         onEditVersion={handleConversationEditVersion}
                         onExportVersion={handleConversationExportVersion}
                         onOpenStoryboard={handleOpenStoryboardDrawer}
-                        storyboardItemCount={selectedStoryboardItemCount}
+                        storyboardItemCount={Math.max(
+                          selectedStoryboardItemCount,
+                          selectedFileId ? (storyboardTotalsByFileId[selectedFileId] ?? 0) : 0,
+                        )}
                     />
                     </React.Suspense>
 
