@@ -23,7 +23,7 @@ interface FileColumnProps {
   onSaveAs?: (id: string) => void;
   isExpanded: boolean;
   onToggleExpand: () => void;
-  onExportProject?: () => void;
+  onExportProject: () => void;
   onReorderFiles?: (fromIndex: number, toIndex: number) => void;  // 🆕 拖拽排序
 }
 

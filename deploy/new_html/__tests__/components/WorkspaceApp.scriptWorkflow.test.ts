@@ -23,4 +23,17 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('preserve_existing_storyboards: true');
     expect(source).toContain('storyboard_items: []');
   });
+
+  it('downloads a complete JSON workspace backup from the file column', () => {
+    expect(source).toContain("format: 'mecha-project-backup'");
+    expect(source).toContain('const BACKUP_STORYBOARD_PAGE_SIZE = 200');
+    expect(source).toContain('offset: storyboardRows.length');
+    expect(source).toContain('mapWorkspaceStoryboardRowsToItems(persistedRows)');
+    expect(source).toContain('files: exportedFiles');
+    expect(source).toContain('material_library: materialLibraryRef.current');
+    expect(source).toContain('script_conversations: exportedConversations');
+    expect(source).toContain('JSON.stringify(payload, null, 2)');
+    expect(source).toContain('onExportProject={handleExportProject}');
+    expect(source).toContain('window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)');
+  });
 });

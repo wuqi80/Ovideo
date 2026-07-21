@@ -21,6 +21,7 @@ import { ensureStoryboardCutSeparators, validateStoryboardIterationCount } from 
 const loadAiModelService = () => import('./services/aiModelService');
 
 const WORKSPACE_INITIAL_STORYBOARD_COUNT = 10;
+const BACKUP_STORYBOARD_PAGE_SIZE = 200;
 const WORKING_HISTORY_SCOPE = 'working';
 
 function buildVersionHistoryScopeKey(fileId: string, versionId?: string): string {
@@ -693,6 +694,101 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       console.error('❌ 保存分集数据失败:', error);
     }
   }, [propEpisodeId, isLoadingProjects, getScriptPersistenceSignature, storyboardTotalsByFileId]);
+
+  const handleExportProject = async () => {
+    try {
+      await saveEpisodeToBackend();
+      const exportedAt = new Date();
+      const currentFiles = filesRef.current;
+      const storyboardRows: any[] = [];
+      let storyboardTotal: number | null = null;
+
+      do {
+        const response = await getStoryboardItems(propEpisodeId, undefined, {
+          limit: BACKUP_STORYBOARD_PAGE_SIZE,
+          offset: storyboardRows.length,
+          includeTotal: storyboardRows.length === 0,
+        });
+        if (!response?.success || !Array.isArray(response.items)) {
+          throw new Error('无法读取完整镜头数据');
+        }
+        storyboardRows.push(...response.items);
+        if (typeof response.total === 'number') storyboardTotal = response.total;
+        if (response.items.length < BACKUP_STORYBOARD_PAGE_SIZE) break;
+      } while (storyboardTotal === null || storyboardRows.length < storyboardTotal);
+
+      const rowsByScriptId = new Map<string | null, any[]>();
+      storyboardRows.forEach(row => {
+        const scriptId = row.script_id ?? row.scriptId ?? null;
+        const rows = rowsByScriptId.get(scriptId) || [];
+        rows.push(row);
+        rowsByScriptId.set(scriptId, rows);
+      });
+      const firstPersistedFileIndex = currentFiles.findIndex(file => !file.id.startsWith('local_'));
+      const exportedFiles = currentFiles.map((file, fileIndex) => {
+        if (file.id.startsWith('local_')) return file;
+        const persistedRows = [
+          ...(rowsByScriptId.get(file.id) || []),
+          ...(fileIndex === firstPersistedFileIndex ? (rowsByScriptId.get(null) || []) : []),
+        ];
+        const persistedItems = mapWorkspaceStoryboardRowsToItems(persistedRows);
+        const currentItems = (file.storyboard?.items || []).filter(item => !item.isPlaceholder);
+        const currentItemsById = new Map(currentItems.map(item => [item.id, item]));
+        const persistedIds = new Set(persistedItems.map(item => item.id));
+        const mergedItems = [
+          ...persistedItems.map(item => currentItemsById.get(item.id) || item),
+          ...currentItems.filter(item => !persistedIds.has(item.id)),
+        ].map((item, index) => ({ ...item, shotNumber: index + 1 }));
+        return {
+          ...file,
+          storyboard: mergedItems.length > 0
+            ? { ...(file.storyboard || {}), items: mergedItems }
+            : file.storyboard,
+        };
+      });
+
+      const exportedConversations: Record<string, ScriptConversation> = { ...scriptConversations };
+      await Promise.all(currentFiles
+        .filter(file => !file.id.startsWith('local_'))
+        .map(async file => {
+          try {
+            exportedConversations[file.id] = await getScriptConversation(propEpisodeId, file.id);
+          } catch (error) {
+            console.warn(`无法刷新剧本“${file.name}”的对话记录，使用当前已加载内容。`, error);
+          }
+        }));
+
+      const payload = {
+        format: 'mecha-project-backup',
+        version: 1,
+        exported_at: exportedAt.toISOString(),
+        project_id: urlProjectId,
+        episode_id: propEpisodeId,
+        workflow: {
+          active_script_id: activeScriptId || null,
+          selected_file_id: selectedFileId,
+        },
+        files: exportedFiles,
+        material_library: materialLibraryRef.current,
+        script_conversations: exportedConversations,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = exportedAt.toISOString().replace(/[:.]/g, '-');
+      link.href = objectUrl;
+      link.download = `mecha-project-${urlProjectId || 'unknown'}-episode-${propEpisodeId}-${timestamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+      console.error('下载项目备份失败:', error);
+      window.alert(`下载项目备份失败：${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
 
   /**
    * 初始化：加载分集数据
@@ -3086,6 +3182,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     isExpanded={false}
                     onToggleExpand={() => {}}
                     onReorderFiles={handleReorderFiles}
+                    onExportProject={handleExportProject}
                     />
                     </React.Suspense>
                 </div>
