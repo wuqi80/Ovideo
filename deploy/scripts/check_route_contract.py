@@ -21,16 +21,10 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 250
-DEFAULT_EXPECTED_OPERATIONS = 307
+DEFAULT_EXPECTED_PATHS = 258
+DEFAULT_EXPECTED_OPERATIONS = 315
 
-# Known legacy overlap: routers.projects still owns the old project JSON model
-# while routers.project_core exposes the newer DAO-backed project model. This is
-# high coupling and tracked as a later migration, so the checker allows it but
-# reports it.
-ALLOWED_DUPLICATES = {
-    ("/api/projects/{project_id}", "GET"),
-}
+ALLOWED_DUPLICATES = set()
 
 EXPECTED_ENDPOINTS = {
     ("/api/login", "POST"): ("routers.auth", "login"),
@@ -138,7 +132,8 @@ EXPECTED_ENDPOINTS = {
     ("/api/projects", "GET"): ("routers.project_core", "get_user_projects"),
     ("/api/projects/save", "POST"): ("routers.projects", "save_project"),
     ("/api/projects/list", "GET"): ("routers.projects", "list_projects"),
-    ("/api/projects/{project_id}", "GET"): ("routers.projects", "get_project"),
+    ("/api/projects/{project_id}", "GET"): ("routers.project_core", "get_project_detail"),
+    ("/api/projects/{project_id}/workspace", "GET"): ("routers.projects", "get_project"),
     ("/api/projects/{project_id}", "DELETE"): ("routers.projects", "delete_project"),
     ("/api/projects/{project_id}/images/{shot_id}", "GET"): ("routers.projects", "get_shot_images"),
     ("/api/projects/{project_id}/export-to-video", "POST"): ("routers.projects", "export_to_video"),
@@ -1063,12 +1058,13 @@ def check_task_stale_cleanup_notification_contract(root: Path) -> int:
 
 
 def check_task_notification_toast_dedupe_contract(root: Path) -> int:
-    """Global toast polling must not replay historical terminal tasks as new failures."""
+    """Task notifications use a deduped unread badge without delayed popups."""
     manager_text = (root / "new_html" / "services" / "globalTaskManager.ts").read_text(encoding="utf-8")
     context_text = (root / "new_html" / "contexts" / "TaskContext.tsx").read_text(encoding="utf-8")
     test_text = (root / "new_html" / "__tests__" / "services" / "globalTaskManager.test.ts").read_text(encoding="utf-8")
-    toast_text = (root / "new_html" / "components" / "GlobalToast.tsx").read_text(encoding="utf-8")
-    toast_test_text = (root / "new_html" / "__tests__" / "components" / "GlobalToast.test.tsx").read_text(encoding="utf-8")
+    indicator_test_text = (
+        root / "new_html" / "__tests__" / "components" / "TaskNotificationIndicator.test.ts"
+    ).read_text(encoding="utf-8")
 
     required_snippets = {
         "notificationBaselineReady": "global task manager tracks notification baseline",
@@ -1076,13 +1072,14 @@ def check_task_notification_toast_dedupe_contract(root: Path) -> int:
         "!isBaselinePoll": "baseline poll does not emit toast notifications",
         "rememberNotificationId": "transport-level task notification id dedupe",
         "seenNotificationIdsRef": "TaskContext unread count dedupes notification events",
-        "FAILURE_BURST_INDIVIDUAL_LIMIT": "GlobalToast folds failure bursts instead of rendering every failed task",
-        "failure-burst-": "GlobalToast uses a synthetic id for folded failure bursts",
         "does not toast historical failures": "unit test covers historical failure burst",
         "emits only new notification ids": "unit test covers duplicate terminal task suppression",
-        "folds failed notification bursts": "unit test covers failure burst folding",
+        "does not mount delayed in-app or browser notification popups": "unit test blocks delayed popup regressions",
+        "shows the unread notification count beside the bell": "unit test covers the unread badge",
+        "not.toContain('GlobalToast')": "application must not remount the legacy in-app toast",
+        "not.toContain('Notification.requestPermission')": "application must not request browser notifications",
     }
-    sources = "\n".join([manager_text, context_text, test_text, toast_text, toast_test_text])
+    sources = "\n".join([manager_text, context_text, test_text, indicator_test_text])
     missing = [
         f"{label}: missing {snippet}"
         for snippet, label in required_snippets.items()
@@ -1317,7 +1314,8 @@ def check_audio_stage_lightweight_storyboard_contract(root: Path) -> int:
         "offset: nextOffset": "AudioStagePage background paged audio-stage field query",
         "loadRemainingAudioStageStoryboardPages": "AudioStagePage idle background storyboard completion",
         "waitForIdle()": "AudioStagePage shared idle background paging",
-        "normalizeAudioStageStoryboardItem": "AudioStagePage audio-stage normalizer",
+        "normalizeStoryboardRecord": "AudioStagePage shared storyboard normalizer",
+        "applyStoryboardRecordPatch": "AudioStagePage shared storyboard patch mapper",
         "updateAudioStageStoryboardItem": "AudioStagePage local patch helper",
         "forceReloadSlices('assets', 'characterVoices', 'script', 'audioTracks')": "AudioStagePage non-storyboard force refresh",
         "DUBBING_INITIAL_ITEM_COUNT = 20": "bounded initial dubbing card render",
@@ -1364,7 +1362,8 @@ def check_materials_lightweight_storyboard_contract(root: Path) -> int:
         "offset: nextOffset": "MaterialsPage background paged material field query",
         "loadRemainingMaterialsStoryboardPages": "MaterialsPage idle background storyboard completion",
         "waitForIdle()": "MaterialsPage shared idle background paging",
-        "normalizeMaterialsStoryboardItem": "MaterialsPage material normalizer",
+        "normalizeStoryboardRecord": "MaterialsPage shared storyboard normalizer",
+        "applyStoryboardRecordPatch": "MaterialsPage shared storyboard patch mapper",
         "updateMaterialsStoryboardItem": "MaterialsPage local patch helper",
         "forceReloadSlices('assets', 'script')": "MaterialsPage non-storyboard force refresh",
         "MATERIAL_INITIAL_SHOT_COUNT = 20": "bounded initial material shot render",
@@ -1910,7 +1909,7 @@ def check_project_routes_extracted(root: Path) -> int:
         if snippet in router_text:
             fail(f"routers/projects.py must delegate project image persistence to service: {snippet}")
 
-    project_detail_start = router_text.index('@router.get("/api/projects/{project_id}")')
+    project_detail_start = router_text.index('@router.get("/api/projects/{project_id}/workspace")')
     project_detail_end = router_text.index('@router.delete("/api/projects/{project_id}")')
     project_detail_text = router_text[project_detail_start:project_detail_end]
     shot_images_start = router_text.index('@router.get("/api/projects/{project_id}/images/{shot_id}")')
@@ -1925,7 +1924,7 @@ def check_project_routes_extracted(root: Path) -> int:
         "def fix_image_urls(",
         "img['url'] = img['thumbnail']",
     ]
-    for section, label in [(project_detail_text, "project detail"), (shot_images_text, "shot images")]:
+    for section, label in [(project_detail_text, "project workspace"), (shot_images_text, "shot images")]:
         for snippet in read_route_forbidden:
             if snippet in section:
                 fail(f"routers/projects.py must delegate {label} read shaping to service: {snippet}")
@@ -3205,6 +3204,12 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
         "/api/episodes/{episode_id}/script",
         "/api/episodes/{episode_id}/scripts",
         "/api/episodes/{episode_id}/scripts/{script_id}",
+        "/api/episodes/{episode_id}/scripts/{script_id}/conversation",
+        "/api/episodes/{episode_id}/scripts/{script_id}/messages",
+        "/api/episodes/{episode_id}/scripts/{script_id}/messages/{message_id}",
+        "/api/episodes/{episode_id}/scripts/{script_id}/versions",
+        "/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/select",
+        "/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/metadata",
         "/api/episodes/{episode_id}/timeline-tracks",
         "/api/timeline-tracks/{track_id}",
     }
@@ -3238,8 +3243,8 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 12:
-        fail(f"routers/script_timeline.py should own 12 script/timeline route registrations, found {route_count}")
+    if route_count != 18:
+        fail(f"routers/script_timeline.py should own 18 script/timeline route registrations, found {route_count}")
 
     router_text = script_timeline_path.read_text(encoding="utf-8")
     service_text = script_timeline_service_path.read_text(encoding="utf-8")
@@ -3253,6 +3258,7 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
         (router_text, "create_script_file(", script_timeline_path),
         (router_text, "update_script_file(", script_timeline_path),
         (router_text, "delete_script_file(", script_timeline_path),
+        (router_text, "merge_script_version_metadata(", script_timeline_path),
         (router_text, "list_timeline_tracks(", script_timeline_path),
         (router_text, "create_timeline_track_service(", script_timeline_path),
         (router_text, "update_timeline_track_service(", script_timeline_path),
@@ -5981,11 +5987,10 @@ def check_frontend_workflow_chunk_contract(root: Path) -> int:
         (workspace_text, "const LegacyAdminPage = React.lazy(() => import('./components/AdminPage')", "WorkspaceApp lazy-loads legacy AdminPage"),
         (workspace_text, "const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage')", "WorkspaceApp lazy-loads legacy HistoryPage"),
         (workspace_text, "const FileColumn = React.lazy(() => import('./components/FileColumn')", "WorkspaceApp lazy-loads FileColumn"),
-        (workspace_text, "const ViewerColumn = React.lazy(() => import('./components/ViewerColumn')", "WorkspaceApp lazy-loads ViewerColumn"),
-        (workspace_text, "const ScriptColumn = React.lazy(() => import('./components/ScriptColumn')", "WorkspaceApp lazy-loads ScriptColumn"),
+        (workspace_text, "const ScriptConversationPane = React.lazy(() => import('./components/ScriptConversationPane')", "WorkspaceApp lazy-loads ScriptConversationPane"),
         (workspace_text, "const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn')", "WorkspaceApp lazy-loads StoryboardColumn"),
         (workspace_text, '<React.Suspense fallback={<LegacyViewFallback label="video" />}>', "WorkspaceApp wraps lazy legacy VideoPage locally"),
-        (workspace_text, '<React.Suspense fallback={<LegacyColumnFallback label="script" />}>', "WorkspaceApp wraps lazy ScriptColumn locally"),
+        (workspace_text, '<React.Suspense fallback={<LegacyColumnFallback label="conversation" />}>', "WorkspaceApp wraps lazy ScriptConversationPane locally"),
         (video_text, '<React.Suspense fallback={<WorkflowChunkFallback label="加载视频工作台..." />}>', "VideoGenPage wraps VideoPage in Suspense"),
     ]
     forbidden_snippets = [
@@ -6000,6 +6005,7 @@ def check_frontend_workflow_chunk_contract(root: Path) -> int:
         (workspace_text, "import { FileColumn } from './components/FileColumn';", "WorkspaceApp must not statically import FileColumn"),
         (workspace_text, "import { ViewerColumn } from './components/ViewerColumn';", "WorkspaceApp must not statically import ViewerColumn"),
         (workspace_text, "import { ScriptColumn } from './components/ScriptColumn';", "WorkspaceApp must not statically import ScriptColumn"),
+        (workspace_text, "import { ScriptConversationPane } from './components/ScriptConversationPane';", "WorkspaceApp must not statically import ScriptConversationPane"),
         (workspace_text, "import { StoryboardColumn } from './components/StoryboardColumn';", "WorkspaceApp must not statically import StoryboardColumn"),
     ]
 
@@ -6279,10 +6285,6 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
         "const DeferredCrmHost: React.FC = () => {",
         "runWhenIdle(() => setMounted(true), { timeout: 1500, fallbackDelayMs: 300 })",
         "<DeferredCrmHost />",
-        "const GlobalToast = React.lazy(() => import('./components/GlobalToast').then(m => ({ default: m.GlobalToast })));",
-        "const DeferredGlobalToastWithNav: React.FC = () => {",
-        "runWhenIdle(() => setMounted(true), { timeout: 1200, fallbackDelayMs: 250 })",
-        "<DeferredGlobalToastWithNav />",
         "import('../services/taskControlService')",
         "import('../services/globalTaskManager')",
         "import('../services/taskNotificationService')",

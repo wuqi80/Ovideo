@@ -172,7 +172,7 @@ async def main() -> int:
         presets = service.get_api_config_presets()
         preset_count = len(presets.get("presets") or [])
         provider_count = len(presets.get("providers") or [])
-        if preset_count != 21:
+        if preset_count != 22:
             fail(f"preset facade count changed: {preset_count}")
         if provider_count != 12:
             fail(f"provider facade count changed: {provider_count}")
