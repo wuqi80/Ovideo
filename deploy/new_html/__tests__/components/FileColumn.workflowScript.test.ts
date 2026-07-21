@@ -23,6 +23,11 @@ describe('FileColumn workflow script control', () => {
     expect(source).not.toContain('1. 文件列表');
   });
 
+  it('labels completed files as generated', () => {
+    expect(source).toContain('data-testid="file-generated-status"');
+    expect(source).toContain('已生成');
+  });
+
   it('keeps every file action visible without hover', () => {
     expect(source).toContain('Actions stay visible');
     expect(source).toContain('opacity-100 shadow-bottom');
