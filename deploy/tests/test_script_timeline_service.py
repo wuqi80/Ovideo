@@ -39,6 +39,7 @@ class FakeEpisodeScriptDAO:
     ]
     saved = None
     created = None
+    source_created = None
     updated = None
     deleted = []
 
@@ -70,6 +71,11 @@ class FakeEpisodeScriptDAO:
         if kwargs["episode_id"] == "fail":
             return None
         return {"script_id": "script_new", **kwargs}
+
+    @classmethod
+    async def get_or_create_by_source(cls, episode_id, **kwargs):
+        cls.source_created = {"episode_id": episode_id, **kwargs}
+        return ({"script_id": "script_source", "episode_id": episode_id, **kwargs}, False)
 
     @classmethod
     async def update(cls, script_id, **kwargs):
@@ -115,6 +121,7 @@ def setup_function():
     FakeEpisodeScriptSegmentDAO.delete_calls = []
     FakeEpisodeScriptDAO.saved = None
     FakeEpisodeScriptDAO.created = None
+    FakeEpisodeScriptDAO.source_created = None
     FakeEpisodeScriptDAO.updated = None
     FakeEpisodeScriptDAO.deleted = []
     FakeTimelineDAO.created = None
@@ -171,6 +178,49 @@ async def test_create_script_file_resolves_sort_order():
 
     assert result["script"]["script_id"] == "script_new"
     assert FakeEpisodeScriptDAO.created["sort_order"] == 9
+
+
+async def test_create_script_file_is_idempotent_for_external_source():
+    result = await script_timeline_service.create_script_file(
+        "ep_1",
+        file_name="reverse candidate",
+        original_content="raw",
+        adapted_script="script",
+        sort_order=None,
+        metadata={"source": "reverse"},
+        source_type="video_reverse",
+        source_id="reverse_1",
+        episode_script_dao=FakeEpisodeScriptDAO,
+    )
+
+    assert result["script"]["script_id"] == "script_source"
+    assert result["created"] is False
+    assert FakeEpisodeScriptDAO.created is None
+    assert FakeEpisodeScriptDAO.source_created == {
+        "episode_id": "ep_1",
+        "source_type": "video_reverse",
+        "source_id": "reverse_1",
+        "file_name": "reverse candidate",
+        "original_content": "raw",
+        "adapted_script": "script",
+        "sort_order": 9,
+        "metadata": {"source": "reverse"},
+    }
+
+
+async def test_create_script_file_requires_complete_source_identity():
+    with pytest.raises(script_timeline_service.ScriptFileCreateFailed):
+        await script_timeline_service.create_script_file(
+            "ep_1",
+            file_name="reverse candidate",
+            original_content="raw",
+            adapted_script="script",
+            sort_order=1,
+            metadata=None,
+            source_type="video_reverse",
+            source_id=None,
+            episode_script_dao=FakeEpisodeScriptDAO,
+        )
 
 
 async def test_update_script_file_raises_when_missing():

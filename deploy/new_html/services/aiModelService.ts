@@ -10,6 +10,7 @@ import { callAI, callAIForJSON } from './aiService';
 import * as PROMPTS from '../prompts';
 import type { ScriptSegment, ExtractedStoryboardPrompt } from '../types';
 import { parseScriptSegments, parseStoryboardPromptExtractions } from '../utils/scriptPipelineParsers';
+import { normalizeScriptIterationResult } from '../utils/scriptIteration';
 
 /**
  * 改写小说为剧本
@@ -73,6 +74,23 @@ export const aiRefineScriptSegment = async (
     PROMPTS.REFINE_SCRIPT_SEGMENT,
     { selection, instruction, context }
   );
+};
+
+/**
+ * 根据多轮意见生成完整剧本候选稿。调用方确认后再写回当前文件。
+ */
+export const aiIterateFullScript = async (
+  model: AiModel,
+  currentScript: string,
+  instruction: string,
+  conversationContext: string,
+): Promise<string> => {
+  const result = await callAI(
+    model,
+    PROMPTS.ITERATE_FULL_SCRIPT,
+    { currentScript, instruction, conversationContext },
+  );
+  return normalizeScriptIterationResult(result);
 };
 
 /**

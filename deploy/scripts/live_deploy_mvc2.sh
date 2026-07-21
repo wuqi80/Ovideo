@@ -7,7 +7,9 @@ SSH_KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)
 SERVICE="${SERVICE:-drama.service}"
 FRONTEND_TAR_REMOTE="/tmp/mecha-new_html-src.tgz"
+BACKEND_TAR_REMOTE="/tmp/mecha-backend-src.tgz"
 FRONTEND_HASH_REMOTE="${FRONTEND_HASH_REMOTE:-$REMOTE_DIR/.new_html_build_source.sha256}"
+FRONTEND_DIST_HASH_REMOTE="${FRONTEND_DIST_HASH_REMOTE:-$REMOTE_DIR/dist/.new_html_build_source.sha256}"
 RELEASE_METADATA_REMOTE_CANDIDATE="/tmp/mecha-release-metadata.json"
 FORCE_FRONTEND_BUILD="${FORCE_FRONTEND_BUILD:-0}"
 RUN_REMOTE_CONTRACTS="${RUN_REMOTE_CONTRACTS:-1}"
@@ -35,6 +37,7 @@ FILES=(
   "admin_recycle_bin_routes.py"
   "api_routes.py"
   "dao_character_voice.py"
+  "dao_episode_script_conversation.py"
   "media_library_routes.py"
   "video_reverse_routes.py"
   "dao_video_voice_reference.py"
@@ -48,6 +51,7 @@ FILES=(
   "routers"
   "schemas"
   "services"
+  "db_build"
   "sql"
   "utils"
   "workflows"
@@ -167,9 +171,11 @@ for path in "${FILES[@]}"; do
 done
 
 STAGING_DIR=$(mktemp -d)
+BACKEND_TAR_LOCAL="${STAGING_DIR}.tgz"
 RELEASE_METADATA_LOCAL=""
 cleanup() {
   rm -rf "$STAGING_DIR"
+  rm -f "$BACKEND_TAR_LOCAL"
   if [ -n "$RELEASE_METADATA_LOCAL" ]; then
     rm -f "$RELEASE_METADATA_LOCAL"
   fi
@@ -235,10 +241,10 @@ run_remote_smoke_test() {
     cd /home/Administrator
     if [ -z \"\${ADMIN_PASSWORD:-}\" ]; then
       echo 'ADMIN_PASSWORD is not set on remote; running required public/security smoke checks'
-      python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' --public-only
+      PYTHONIOENCODING=utf-8 PYTHONUTF8=1 python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' --public-only
       exit \$?
     fi
-    python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' \"\$ADMIN_PASSWORD\"
+    PYTHONIOENCODING=utf-8 PYTHONUTF8=1 python3 /tmp/smoke_test.py '$SMOKE_BASE_URL' \"\$ADMIN_PASSWORD\"
   "
 }
 
@@ -259,12 +265,7 @@ run_remote_db_migrations() {
       GIT_SHA='$RELEASE_GIT_SHA' \
       '$REMOTE_DIR'/.venv/bin/python scripts/apply_migrations.py \
         --root . \
-        sql/db_migration_files_project_episode_source.sql \
-        sql/db_migration_credits.sql \
-        sql/db_migration_credit_onboarding.sql \
-        sql/db_migration_video_voice_references.sql \
-        sql/db_migration_storyboard_reference_config.sql \
-        sql/db_migration_provider_remote_objects.sql
+        --manifest db_build/manifest.txt
   "
 }
 
@@ -311,9 +312,20 @@ if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
 fi
 
 echo "Uploading MVC/API management files..."
-if ! scp -r "${SSH_OPTS[@]}" "$STAGING_DIR"/. "$REMOTE:$REMOTE_DIR/"; then
+tar -C "$STAGING_DIR" -czf "$BACKEND_TAR_LOCAL" .
+if ! scp "${SSH_OPTS[@]}" "$BACKEND_TAR_LOCAL" "$REMOTE:$BACKEND_TAR_REMOTE"; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: backend upload failed"
+  exit 1
+fi
+
+if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+  mkdir -p '$REMOTE_DIR'
+  tar -xzf '$BACKEND_TAR_REMOTE' -C '$REMOTE_DIR'
+  rm -f '$BACKEND_TAR_REMOTE'
+"; then
+  rollback_remote
+  echo "Deployment rolled back: backend extract failed"
   exit 1
 fi
 
@@ -358,6 +370,7 @@ REMOTE_FRONTEND_HASH=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   fi
 ")
 REMOTE_DIST_PRESENT=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "if [ -d '$REMOTE_DIR'/dist ]; then echo 1; else echo 0; fi")
+REMOTE_DIST_HASH=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "if [ -f '$FRONTEND_DIST_HASH_REMOTE' ]; then cat '$FRONTEND_DIST_HASH_REMOTE'; fi")
 BUILD_FRONTEND=0
 if [ "$FORCE_FRONTEND_BUILD" = "1" ]; then
   BUILD_FRONTEND=1
@@ -368,6 +381,9 @@ elif [ "$REMOTE_DIST_PRESENT" != "1" ]; then
 elif [ "$FRONTEND_SOURCE_HASH" != "$REMOTE_FRONTEND_HASH" ]; then
   BUILD_FRONTEND=1
   echo "Frontend source changed: local=$FRONTEND_SOURCE_HASH remote=${REMOTE_FRONTEND_HASH:-missing}"
+elif [ "$FRONTEND_SOURCE_HASH" != "$REMOTE_DIST_HASH" ]; then
+  BUILD_FRONTEND=1
+  echo "Frontend dist marker missing or stale: local=$FRONTEND_SOURCE_HASH dist=${REMOTE_DIST_HASH:-missing}"
 else
   echo "Skipping frontend build: new_html source hash unchanged ($FRONTEND_SOURCE_HASH)"
   ssh "${SSH_OPTS[@]}" "$REMOTE" "printf '%s\n' '$FRONTEND_SOURCE_HASH' > '$FRONTEND_HASH_REMOTE'"
@@ -404,6 +420,7 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   cd '$REMOTE_DIR'/new_html
   npm run build || (npm ci && npm run build)
   printf '%s\n' '$FRONTEND_SOURCE_HASH' > '$FRONTEND_HASH_REMOTE'
+  printf '%s\n' '$FRONTEND_SOURCE_HASH' > '$FRONTEND_DIST_HASH_REMOTE'
 "; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: frontend build failed"

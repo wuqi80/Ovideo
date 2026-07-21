@@ -26,6 +26,48 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 LOCK_NAME = "mecha:schema_migrations"
 TRANSACTION_CONTROL = re.compile(r"^\s*(BEGIN|COMMIT|ROLLBACK)\s*;\s*$", re.IGNORECASE | re.MULTILINE)
 
+# These migrations predate the checksum ledger on the production database.
+# Existing installations adopt them once; fresh databases still execute them.
+LEGACY_BASELINE_FILENAMES = frozenset({
+    "database_schema.sql",
+    "db_migration_add_permissions.sql",
+    "db_migration_unified_files.sql",
+    "db_migration_project_soft_delete.sql",
+    "db_migration_episodes.sql",
+    "db_migration_episode_scripts.sql",
+    "db_migration_episode_script_segments.sql",
+    "db_migration_multi_scripts.sql",
+    "db_migration_storyboard_items.sql",
+    "db_migration_assets.sql",
+    "db_migration_script_id.sql",
+    "db_migration_storyboard_audio_mix.sql",
+    "db_migration_storyboard_pipeline_fields.sql",
+    "db_migration_storyboard_reference_config.sql",
+    "db_migration_clean_storyboard_data_urls.sql",
+    "db_migration_files_project_episode_source.sql",
+    "db_migration_character_voices.sql",
+    "db_migration_video_segments.sql",
+    "db_migration_video_voice_references.sql",
+    "db_migration_timeline_tracks.sql",
+    "db_migration_project_hub.sql",
+    "db_migration_audio_tracks.sql",
+    "db_migration_admin_users_groups.sql",
+    "db_migration_credits.sql",
+    "db_migration_credit_onboarding.sql",
+    "db_migration_notifications.sql",
+    "db_migration_organizations.sql",
+    "db_migration_media_library.sql",
+    "db_migration_media_library_folders.sql",
+    "db_migration_admin.sql",
+    "db_migration_api_config_category.sql",
+    "db_migration_api_config_model_bindings.sql",
+    "db_migration_gpt_image_providers.sql",
+    "db_migration_provider_remote_objects.sql",
+    "db_migration_admin_extra.sql",
+    "db_migration_visibility_columns.sql",
+    "db_migration_video_reverse.sql",
+})
+
 
 def load_env_file(path: Path) -> None:
     if not path.exists():
@@ -53,23 +95,39 @@ def migration_id(path: Path, root: Path) -> str:
         return path.name
 
 
-def validate_migration_sql(path: Path, sql: str) -> None:
-    if TRANSACTION_CONTROL.search(sql):
-        raise ValueError(
-            f"{path} contains explicit transaction control; migrations are wrapped atomically by the runner"
-        )
+def read_manifest(path: Path, *, root: Path) -> list[Path]:
+    """Read an ordered migration manifest relative to the deployment root."""
+    migrations: list[Path] = []
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        migration = Path(line)
+        migrations.append(migration if migration.is_absolute() else root / migration)
+    return migrations
+
+
+def prepare_migration_sql(sql: str) -> str:
+    """Remove legacy outer transaction markers before the runner wraps the file."""
+    return TRANSACTION_CONTROL.sub("", sql)
 
 
 async def ensure_ledger(conn: Any) -> None:
     await conn.execute(LEDGER_DDL)
 
 
-async def apply_one(conn: Any, path: Path, *, root: Path, git_sha: str = "") -> str:
+async def apply_one(
+    conn: Any,
+    path: Path,
+    *,
+    root: Path,
+    git_sha: str = "",
+    adopt_legacy_baseline: bool = False,
+) -> str:
     if not path.is_file():
         raise FileNotFoundError(path)
 
-    sql = path.read_text(encoding="utf-8")
-    validate_migration_sql(path, sql)
+    sql = prepare_migration_sql(path.read_text(encoding="utf-8"))
     checksum = migration_checksum(path)
     version = migration_id(path, root)
     existing = await conn.fetchrow(
@@ -83,6 +141,20 @@ async def apply_one(conn: Any, path: Path, *, root: Path, git_sha: str = "") -> 
                 f"Migration checksum mismatch for {version}: recorded={recorded}, current={checksum}"
             )
         return "skipped"
+
+    if adopt_legacy_baseline and path.name in LEGACY_BASELINE_FILENAMES:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                INSERT INTO schema_migrations (
+                    migration_id, checksum_sha256, execution_ms, git_sha
+                ) VALUES ($1, $2, 0, NULLIF($3, ''))
+                """,
+                version,
+                checksum,
+                git_sha or "legacy-baseline",
+            )
+        return "baselined"
 
     started = time.monotonic()
     async with conn.transaction():
@@ -109,12 +181,19 @@ async def apply_migrations(
     root: Path,
     git_sha: str = "",
 ) -> list[tuple[str, str]]:
+    existing_schema = bool(await conn.fetchval("SELECT to_regclass('public.users') IS NOT NULL"))
     await ensure_ledger(conn)
     await conn.execute("SELECT pg_advisory_lock(hashtext($1))", LOCK_NAME)
     results: list[tuple[str, str]] = []
     try:
         for path in paths:
-            state = await apply_one(conn, path, root=root, git_sha=git_sha)
+            state = await apply_one(
+                conn,
+                path,
+                root=root,
+                git_sha=git_sha,
+                adopt_legacy_baseline=existing_schema,
+            )
             results.append((migration_id(path, root), state))
     finally:
         await conn.execute("SELECT pg_advisory_unlock(hashtext($1))", LOCK_NAME)
@@ -137,6 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("migrations", nargs="*", help="SQL migration files in execution order")
     parser.add_argument("--env", action="append", default=[], help="Environment file to load")
     parser.add_argument("--root", default=".", help="Root used for stable migration ids")
+    parser.add_argument("--manifest", help="Ordered migration manifest relative to --root")
     parser.add_argument("--status", action="store_true", help="Print the migration ledger")
     return parser
 
@@ -160,10 +240,11 @@ async def async_main(args: argparse.Namespace) -> int:
                     f"{row['applied_at']} {row['execution_ms']}ms {row['git_sha'] or '-'}"
                 )
             return 0
-        if not args.migrations:
-            raise ValueError("At least one migration path is required unless --status is used")
         root = Path(args.root)
-        paths = [Path(item) for item in args.migrations]
+        paths = read_manifest(Path(args.manifest), root=root) if args.manifest else []
+        paths.extend(Path(item) for item in args.migrations)
+        if not paths:
+            raise ValueError("Provide migrations or --manifest unless --status is used")
         for version, state in await apply_migrations(
             conn,
             paths,

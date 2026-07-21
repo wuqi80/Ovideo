@@ -43,6 +43,19 @@ export interface ParseResult {
   rawBlocks: ShotBlockFields[]; // 原始解析的字段
 }
 
+export function estimateDialogueDurationSeconds(dialogue: string | undefined): number {
+  const raw = String(dialogue || '').trim();
+  if (!raw || raw === '无') return 0;
+
+  const quotedSegments = [...raw.matchAll(/[“"]([^”"]+)[”"]/g)].map(match => match[1]);
+  const spokenText = (quotedSegments.length > 0 ? quotedSegments.join('') : raw.replace(/^[^：:\n]{1,24}[：:]\s*/, ''))
+    .replace(/\s+/g, '');
+  const chineseCharacters = (spokenText.match(/[\u3400-\u9fff]/g) || []).length;
+  const englishCharacters = (spokenText.match(/[A-Za-z0-9]/g) || []).length;
+  if (chineseCharacters === 0 && englishCharacters === 0) return 0;
+  return Math.max(1, Math.ceil(chineseCharacters / 4 + englishCharacters / 8));
+}
+
 /**
  * 从流式文本中解析镜头块
  * 返回已完成的镜头块和剩余的缓冲区
@@ -247,7 +260,12 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
   // 🔧 兼容新旧字段名
   const 角度 = fields.角度 || fields.摄像机角度 || '';
   const 运动 = fields.运动 || fields.镜头运动 || '';
-  const 时长 = fields.时长 || fields.时间 || '';
+  const originalDuration = fields.时长 || fields.时间 || '';
+  const dialogueDurationFloor = estimateDialogueDurationSeconds(fields.人声);
+  const parsedDuration = Number.parseFloat(originalDuration);
+  const 时长 = dialogueDurationFloor > 0 && (!Number.isFinite(parsedDuration) || parsedDuration < dialogueDurationFloor)
+    ? `${dialogueDurationFloor}秒`
+    : originalDuration;
   
   // 🔧 生图提示词: 取景 + 角度 + 机位 + 站位与构图 + 氛围与特效
   const imagePromptParts = [

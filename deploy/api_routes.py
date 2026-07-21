@@ -16,6 +16,7 @@ from dao_episode import EpisodeDAO
 from dao_storyboard import StoryboardDAO
 from dao_episode_script import EpisodeScriptDAO
 from dao_episode_script_segment import EpisodeScriptSegmentDAO
+from dao_episode_script_conversation import EpisodeScriptConversationDAO
 from dao_video_segment import VideoSegmentDAO
 from dao_entity_file import EntityFileDAO
 from dao_timeline import TimelineDAO
@@ -127,6 +128,7 @@ router.include_router(
         get_current_user_dependency=get_current_user,
         episode_script_dao=EpisodeScriptDAO,
         episode_script_segment_dao=EpisodeScriptSegmentDAO,
+        episode_script_conversation_dao=EpisodeScriptConversationDAO,
         timeline_dao=TimelineDAO,
     )
 )

@@ -1,7 +1,7 @@
 
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ProjectFile, StoryboardItem, FileVersion } from '../types';
+import { ProjectFile, StoryboardItem, FileVersion, ScriptStoryboardVersion } from '../types';
 import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box } from 'lucide-react';
 
 interface StoryboardColumnProps {
@@ -32,9 +32,13 @@ interface StoryboardColumnProps {
   onSaveVersion: (name: string) => void;
   onRestoreStoryboard: (version: FileVersion) => void;
   onDeleteVersion: (versionId: string) => void;  // 🆕 删除版本
-  onImportProject: () => void;
+  scriptVersions?: ScriptStoryboardVersion[];
+  currentScriptVersionId?: string;
+  onRestoreScriptVersion?: (version: ScriptStoryboardVersion) => void;
+  onImportProject?: () => void;
   onInsertShot: (position: number, shotData: Omit<StoryboardItem, 'id'>) => Promise<void>;
   onInsertShotWithAI: (position: number, originalText: string) => Promise<void>;
+  onClose?: () => void;
   // 🔧 已移除 userRequirements - 新流程中镜头详情由规则自动解析生成
 }
 
@@ -64,9 +68,13 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   onSaveVersion,
   onRestoreStoryboard,
   onDeleteVersion,  // 🆕 删除版本
+  scriptVersions = [],
+  currentScriptVersionId,
+  onRestoreScriptVersion,
   onImportProject,
   onInsertShot,
-  onInsertShotWithAI
+  onInsertShotWithAI,
+  onClose,
 }) => {
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [regenInputId, setRegenInputId] = useState<string | null>(null);
@@ -342,8 +350,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   return (
     <div className="flex flex-col h-full bg-n0 relative">
        <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex-shrink-0 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-n700 uppercase tracking-wider flex items-center gap-2">
-                4. 镜头设计
+            <h2 className="text-sm font-semibold text-n700 flex items-center gap-2">
+                镜头设计
             </h2>
              <div className="flex items-center gap-2">
                  {/* 🔧 分镜详情由解析器自动填入，无需单独按钮 */}
@@ -394,6 +402,17 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                         {!isExporting && isWorkflowScript && <ArrowRight className="w-3 h-3" />}
                       </button>
                     </>
+                )}
+                {onClose && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    title="关闭镜头设计"
+                    aria-label="关闭镜头设计"
+                    className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 )}
             </div>
       </div>
@@ -449,8 +468,57 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                    <p className="text-[10px] text-n100">包含剧本、分镜、提示词等所有内容</p>
                </div>
                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                   {selectedFile.versions && selectedFile.versions.length > 0 ? (
-                       [...selectedFile.versions].reverse().map(ver => (
+                   {scriptVersions.length > 0 && (
+                     <section className="space-y-2">
+                       <div className="px-1 pt-1 text-[10px] font-semibold text-n300">分镜脚本版本</div>
+                       {[...scriptVersions].reverse().map(version => {
+                         const isCurrent = version.id === currentScriptVersionId;
+                         return (
+                           <div key={version.id} className={`rounded-lg border p-3 transition-colors ${isCurrent ? 'border-success/40 bg-success-light' : 'border-n40 bg-n30 hover:bg-n20'}`}>
+                             <div className="mb-2 flex items-start justify-between gap-2">
+                               <div className="min-w-0">
+                                 <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold text-n700">
+                                   <span>分镜脚本 V{version.versionNo}</span>
+                                   {isCurrent && (
+                                     <span className="inline-flex items-center gap-1 rounded border border-success/30 bg-n0 px-1.5 py-0.5 text-[9px] font-medium text-success">
+                                       <Check className="h-3 w-3" /> 当前采用
+                                     </span>
+                                   )}
+                                 </div>
+                                 <div className="mt-1 text-[10px] text-n100">
+                                   {version.storyboardItems.length} 个镜头
+                                   {version.modelAlias ? ` · ${version.modelAlias}` : ''}
+                                   {version.modelName ? ` · ${version.modelName}` : ''}
+                                 </div>
+                                 <div className="mt-0.5 font-mono text-[10px] text-n100">
+                                   {new Date(version.createdAt).toLocaleString()}
+                                 </div>
+                               </div>
+                             </div>
+                             <button
+                               type="button"
+                               onClick={() => {
+                                 if (!isCurrent && onRestoreScriptVersion && confirm(`确定恢复分镜脚本 V${version.versionNo} 吗？\n恢复后它将成为本集当前采用版本。`)) {
+                                   onRestoreScriptVersion(version);
+                                   setShowHistory(false);
+                                 }
+                               }}
+                               disabled={isCurrent || !onRestoreScriptVersion || version.storyboardItems.length === 0}
+                               className="flex w-full items-center justify-center gap-1 rounded border border-primary bg-primary-light py-1.5 text-[10px] text-primary transition-colors hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:border-n40 disabled:bg-n20 disabled:text-n100"
+                             >
+                               <RefreshCw className="h-3 w-3" />
+                               {isCurrent ? '当前版本' : version.storyboardItems.length > 0 ? '恢复此版本' : '无镜头数据'}
+                             </button>
+                           </div>
+                         );
+                       })}
+                     </section>
+                   )}
+
+                   {selectedFile.versions && selectedFile.versions.length > 0 && (
+                     <section className="space-y-2">
+                       <div className="px-1 pt-2 text-[10px] font-semibold text-n300">手动存档</div>
+                       {[...selectedFile.versions].reverse().map(ver => (
                            <div key={ver.id} className="bg-n30 border border-n40 rounded-lg p-3 hover:bg-n20 transition-colors group">
                                <div className="flex justify-between items-start mb-2">
                                    <div>
@@ -488,13 +556,16 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                    </button>
                                </div>
                            </div>
-                       ))
-                   ) : (
+                       ))}
+                     </section>
+                   )}
+
+                   {scriptVersions.length === 0 && (!selectedFile.versions || selectedFile.versions.length === 0) && (
                        <div className="flex flex-col items-center justify-center py-10 text-n100 gap-2">
                            <History className="w-8 h-8 opacity-20" />
                            <div className="text-center text-xs">
-                               暂无保存的历史记录<br/>
-                               请点击上方 <span className="text-primary font-bold">保存</span> 按钮创建存档
+                               暂无历史版本<br/>
+                               生成或编辑分镜脚本后会自动保存版本
                            </div>
                        </div>
                    )}

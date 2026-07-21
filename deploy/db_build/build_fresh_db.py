@@ -30,22 +30,17 @@ if str(DEPLOY_DIR) not in sys.path:
     sys.path.insert(0, str(DEPLOY_DIR))
 
 from core.db_config_loader import get_db_config_value
+from scripts.apply_migrations import apply_migrations, read_manifest as read_ordered_manifest
 
 MANIFEST = Path(__file__).resolve().parent / "manifest.txt"
 
 
 def read_manifest() -> list[str]:
-    files: list[str] = []
-    for raw in MANIFEST.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        # 去掉行尾的 "# 注释"
-        if "#" in line:
-            line = line.split("#", 1)[0].strip()
-        if line:
-            files.append(line)
-    return files
+    return [path.relative_to(DEPLOY_DIR).as_posix() for path in read_manifest_paths()]
+
+
+def read_manifest_paths() -> list[Path]:
+    return read_ordered_manifest(MANIFEST, root=DEPLOY_DIR)
 
 
 def check(files: list[str]) -> int:
@@ -86,16 +81,17 @@ async def run(files: list[str]) -> int:
         return 3
 
     try:
-        for i, f in enumerate(files, 1):
-            sql = (DEPLOY_DIR / f).read_text(encoding="utf-8")
-            try:
-                # 无参数 → asyncpg 走简单查询协议，可执行整文件多条语句（含 $$ 函数体）
-                await conn.execute(sql)
-                print(f"  [{i:>2}/{len(files)}] ✅ {f}")
-            except Exception as e:
-                print(f"  [{i:>2}/{len(files)}] ❌ {f}")
-                print(f"      {type(e).__name__}: {e}")
-                return 4
+        try:
+            results = await apply_migrations(
+                conn,
+                [DEPLOY_DIR / item for item in files],
+                root=DEPLOY_DIR,
+            )
+            for i, (migration_id, state) in enumerate(results, 1):
+                print(f"  [{i:>2}/{len(results)}] {state}: {migration_id}")
+        except Exception as e:
+            print(f"  ❌ migration failed: {type(e).__name__}: {e}")
+            return 4
     finally:
         await conn.close()
 

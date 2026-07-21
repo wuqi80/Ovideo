@@ -4,6 +4,14 @@
 - **Schema**: `database_schema.sql`, `db_migration_*.sql`
 - **DAO files**: `dao_asset.py`, `dao_audio_track.py`, `dao_canvas.py`, `dao_character_voice.py`, `dao_content.py`, `dao_episode.py`, `dao_file.py`, `dao_project.py`, `dao_storyboard.py`, `dao_user.py`, `dao_video.py`, `dao_agent.py`, `dao_api_config.py`
 
+## Migration execution
+
+- `db_build/manifest.txt` is the only ordered migration source of truth.
+- `auto_deploy.sh`, `scripts/live_deploy_mvc2.sh`, and `db_build/build_fresh_db.py` all execute that manifest through `scripts/apply_migrations.py`.
+- The runner records checksums in `schema_migrations`, holds a PostgreSQL advisory lock, and applies each pending file in a transaction.
+- New migrations must be mirrored under `deploy/` and `deploy/sql/`, then added once to the manifest. Do not add per-script migration lists to deployment scripts.
+- Generated script candidates use `episode_scripts.source_type` and `source_id`; the partial unique index on `(episode_id, source_type, source_id)` keeps one canonical candidate per external source without deleting user-created drafts.
+
 ---
 
 ## 1. User & Auth

@@ -51,6 +51,8 @@ class EpisodeScriptDAO:
         adapted_script: str = '',
         sort_order: int = 0,
         metadata: Optional[dict] = None,
+        source_type: Optional[str] = None,
+        source_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
@@ -58,15 +60,85 @@ class EpisodeScriptDAO:
         script_id = f"script_{uuid.uuid4().hex[:12]}"
         query = """
             INSERT INTO episode_scripts
-                (script_id, episode_id, file_name, original_content, adapted_script, sort_order, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+                (script_id, episode_id, file_name, original_content, adapted_script,
+                 sort_order, metadata, source_type, source_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
             RETURNING *
         """
         return await db.fetchrow(
             query, script_id, episode_id, file_name,
             original_content, adapted_script, sort_order,
-            json.dumps(metadata or {}, ensure_ascii=False)
+            json.dumps(metadata or {}, ensure_ascii=False), source_type, source_id
         )
+
+    @staticmethod
+    async def get_or_create_by_source(
+        episode_id: str,
+        *,
+        source_type: str,
+        source_id: str,
+        file_name: str,
+        original_content: str,
+        adapted_script: str,
+        sort_order: int,
+        metadata: Optional[dict] = None,
+    ) -> tuple[Optional[Dict[str, Any]], bool]:
+        """Atomically return the canonical script for an external source."""
+        db = get_db_manager()
+        if not db:
+            return None, False
+
+        lock_key = f"episode-script-source:{episode_id}:{source_type}:{source_id}"
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", lock_key)
+                existing = await conn.fetchrow(
+                    """
+                    SELECT * FROM episode_scripts
+                    WHERE episode_id = $1 AND source_type = $2 AND source_id = $3
+                    LIMIT 1
+                    """,
+                    episode_id,
+                    source_type,
+                    source_id,
+                )
+                if existing:
+                    return dict(existing), False
+
+                script_id = f"script_{uuid.uuid4().hex[:12]}"
+                created = await conn.fetchrow(
+                    """
+                    INSERT INTO episode_scripts
+                        (script_id, episode_id, file_name, original_content, adapted_script,
+                         sort_order, metadata, source_type, source_id)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
+                    ON CONFLICT DO NOTHING
+                    RETURNING *
+                    """,
+                    script_id,
+                    episode_id,
+                    file_name,
+                    original_content,
+                    adapted_script,
+                    sort_order,
+                    json.dumps(metadata or {}, ensure_ascii=False),
+                    source_type,
+                    source_id,
+                )
+                if created:
+                    return dict(created), True
+
+                existing = await conn.fetchrow(
+                    """
+                    SELECT * FROM episode_scripts
+                    WHERE episode_id = $1 AND source_type = $2 AND source_id = $3
+                    LIMIT 1
+                    """,
+                    episode_id,
+                    source_type,
+                    source_id,
+                )
+                return (dict(existing), False) if existing else (None, False)
 
     @staticmethod
     async def update(

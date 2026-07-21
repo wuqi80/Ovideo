@@ -220,6 +220,49 @@ export interface Material {
   isIdentityReference?: boolean;
 }
 
+export type ScriptConversationRole = 'user' | 'assistant' | 'system';
+export type ScriptConversationStatus = 'pending' | 'streaming' | 'completed' | 'failed' | 'cancelled';
+
+export interface ScriptConversationMessage {
+  id: string;
+  role: ScriptConversationRole;
+  content: string;
+  status: ScriptConversationStatus;
+  modelAlias?: string;
+  provider?: string;
+  modelName?: string;
+  replyToMessageId?: string;
+  requestId?: string;
+  metadata?: Record<string, any>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ScriptStoryboardVersion {
+  id: string;
+  scriptId: string;
+  messageId?: string;
+  versionNo: number;
+  content: string;
+  storyboardItems: StoryboardItem[];
+  source: 'ai' | 'manual' | 'legacy';
+  status: 'draft' | 'ready' | 'failed';
+  modelAlias?: string;
+  provider?: string;
+  modelName?: string;
+  metadata?: Record<string, any>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ScriptConversation {
+  scriptId: string;
+  currentVersionId?: string;
+  defaultModel?: string;
+  messages: ScriptConversationMessage[];
+  versions: ScriptStoryboardVersion[];
+}
+
 // Key is the tag name (e.g., "Main Character", "Living Room")
 export type MaterialLibrary = Record<string, Material[]>;
 

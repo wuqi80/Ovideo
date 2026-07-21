@@ -4,7 +4,7 @@
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from services.project_access_service import ProjectAccessDenied, require_project_access
 from services.script_timeline_service import (
@@ -26,6 +26,15 @@ from services.script_timeline_service import (
     update_script_file,
     update_timeline_track as update_timeline_track_service,
 )
+from services.script_conversation_service import (
+    ScriptConversationError,
+    ScriptConversationItemNotFound,
+    append_script_message,
+    create_script_version,
+    get_script_conversation,
+    revise_script_message,
+    select_script_version,
+)
 
 
 def create_script_timeline_router(
@@ -33,6 +42,7 @@ def create_script_timeline_router(
     get_current_user_dependency: Any,
     episode_script_dao: Any,
     episode_script_segment_dao: Any,
+    episode_script_conversation_dao: Any,
     timeline_dao: Any,
     episode_dao: Any = None,
     project_access_checker: Any = require_project_access,
@@ -41,6 +51,7 @@ def create_script_timeline_router(
     get_current_user = get_current_user_dependency
     EpisodeScriptDAO = episode_script_dao
     EpisodeScriptSegmentDAO = episode_script_segment_dao
+    EpisodeScriptConversationDAO = episode_script_conversation_dao
     TimelineDAO = timeline_dao
     if episode_dao is None:
         from dao_episode import EpisodeDAO as DefaultEpisodeDAO
@@ -83,6 +94,45 @@ def create_script_timeline_router(
         adapted_script: str = ''
         sort_order: Optional[int] = None
         metadata: Optional[dict] = None
+        source_type: Optional[str] = None
+        source_id: Optional[str] = None
+
+
+    class ScriptMessageCreate(BaseModel):
+        class Config:
+            protected_namespaces = ()
+
+        role: str
+        content: str = ''
+        status: str = 'completed'
+        model_alias: Optional[str] = None
+        provider: Optional[str] = None
+        model_name: Optional[str] = None
+        reply_to_message_id: Optional[str] = None
+        request_id: Optional[str] = None
+        metadata: Optional[dict] = None
+
+
+    class ScriptMessageUpdate(BaseModel):
+        content: Optional[str] = None
+        status: Optional[str] = None
+        metadata: Optional[dict] = None
+
+
+    class ScriptVersionCreate(BaseModel):
+        class Config:
+            protected_namespaces = ()
+
+        message_id: Optional[str] = None
+        content: str
+        storyboard_items: list = Field(default_factory=list)
+        source: str = 'ai'
+        status: str = 'ready'
+        model_alias: Optional[str] = None
+        provider: Optional[str] = None
+        model_name: Optional[str] = None
+        metadata: Optional[dict] = None
+        set_current: bool = True
 
 
     # ---------- 剧本分段 API（2026-05-29 三步生成 Stage 1 产物）----------
@@ -142,6 +192,8 @@ def create_script_timeline_router(
                 adapted_script=data.adapted_script,
                 metadata=data.metadata,
                 episode_script_dao=EpisodeScriptDAO,
+                source_type=data.source_type,
+                source_id=data.source_id,
             )
         except ScriptSaveFailed as exc:
             raise HTTPException(status_code=500, detail="保存剧本失败") from exc
@@ -195,6 +247,98 @@ def create_script_timeline_router(
             return await delete_script_file(script_id, episode_script_dao=EpisodeScriptDAO)
         except ScriptFileNotFound as exc:
             raise HTTPException(status_code=404, detail="剧本文件不存在") from exc
+
+
+    # ---------- Script conversation API ----------
+
+    @router.get("/api/episodes/{episode_id}/scripts/{script_id}/conversation")
+    async def get_conversation(episode_id: str, script_id: str,
+                               user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
+        script = await EpisodeScriptDAO.get_by_id(script_id)
+        return await get_script_conversation(
+            dict(script),
+            conversation_dao=EpisodeScriptConversationDAO,
+        )
+
+
+    @router.post("/api/episodes/{episode_id}/scripts/{script_id}/messages")
+    async def create_message(episode_id: str, script_id: str, data: ScriptMessageCreate,
+                             user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
+        try:
+            return await append_script_message(
+                episode_id=episode_id,
+                script_id=script_id,
+                role=data.role,
+                content=data.content,
+                status=data.status,
+                model_alias=data.model_alias,
+                provider=data.provider,
+                model_name=data.model_name,
+                reply_to_message_id=data.reply_to_message_id,
+                request_id=data.request_id,
+                metadata=data.metadata,
+                conversation_dao=EpisodeScriptConversationDAO,
+            )
+        except ScriptConversationError as exc:
+            raise HTTPException(status_code=500, detail="保存剧本对话失败") from exc
+
+
+    @router.patch("/api/episodes/{episode_id}/scripts/{script_id}/messages/{message_id}")
+    async def update_message(episode_id: str, script_id: str, message_id: str,
+                             data: ScriptMessageUpdate,
+                             user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
+        try:
+            return await revise_script_message(
+                script_id=script_id,
+                message_id=message_id,
+                content=data.content,
+                status=data.status,
+                metadata=data.metadata,
+                conversation_dao=EpisodeScriptConversationDAO,
+            )
+        except ScriptConversationItemNotFound as exc:
+            raise HTTPException(status_code=404, detail="剧本对话消息不存在") from exc
+
+
+    @router.post("/api/episodes/{episode_id}/scripts/{script_id}/versions")
+    async def create_version(episode_id: str, script_id: str, data: ScriptVersionCreate,
+                             user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
+        try:
+            return await create_script_version(
+                episode_id=episode_id,
+                script_id=script_id,
+                message_id=data.message_id,
+                content=data.content,
+                storyboard_items=data.storyboard_items,
+                source=data.source,
+                status=data.status,
+                model_alias=data.model_alias,
+                provider=data.provider,
+                model_name=data.model_name,
+                metadata=data.metadata,
+                set_current=data.set_current,
+                conversation_dao=EpisodeScriptConversationDAO,
+            )
+        except ScriptConversationError as exc:
+            raise HTTPException(status_code=500, detail="保存分镜脚本版本失败") from exc
+
+
+    @router.put("/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/select")
+    async def select_version(episode_id: str, script_id: str, version_id: str,
+                             user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
+        try:
+            return await select_script_version(
+                script_id=script_id,
+                version_id=version_id,
+                conversation_dao=EpisodeScriptConversationDAO,
+            )
+        except ScriptConversationItemNotFound as exc:
+            raise HTTPException(status_code=404, detail="分镜脚本版本不存在") from exc
 
 
     # ============================================

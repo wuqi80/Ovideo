@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
 
 const WorkspaceApp = React.lazy(() => import('../WorkspaceApp'));
@@ -12,7 +12,9 @@ const ScriptWorkspaceFallback: React.FC = () => (
 
 export const ScriptPage: React.FC = () => {
   const { episodeId } = useParams<{ episodeId: string }>();
+  const [searchParams] = useSearchParams();
   const { selectedScriptId, setSelectedScriptId, forceReloadSlices } = useEpisode();
+  const browseScriptId = searchParams.get('browseScriptId');
   const handleAfterExport = useCallback(async () => {
     try {
       await forceReloadSlices('assets', 'script', 'storyboardItems');
@@ -26,7 +28,7 @@ export const ScriptPage: React.FC = () => {
         <WorkspaceApp
           hideHeader
           episodeId={episodeId}
-          initialScriptId={selectedScriptId}
+          initialScriptId={browseScriptId || selectedScriptId}
           activeScriptId={selectedScriptId}
           onActivateScript={setSelectedScriptId}
           onAfterExport={handleAfterExport}

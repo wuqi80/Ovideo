@@ -6,24 +6,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
-import { LoadingOverlay } from './components/LoadingOverlay';
 import { SkeletonScreen } from './components/SkeletonScreen';
-import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock } from './types';
+import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock, ScriptConversation, ScriptStoryboardVersion } from './types';
 import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
-import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments } from './services/scriptTimelineService';
+import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments, getScriptConversation, createScriptMessage, updateScriptMessage, createScriptVersion, selectScriptVersion } from './services/scriptTimelineService';
 import { exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
 import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
 import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
+import { ensureStoryboardCutSeparators, validateStoryboardIterationCount } from './utils/scriptIteration';
 
 const loadAiModelService = () => import('./services/aiModelService');
 
 const WORKSPACE_INITIAL_STORYBOARD_COUNT = 10;
 const FileColumn = React.lazy(() => import('./components/FileColumn').then(m => ({ default: m.FileColumn })));
-const ViewerColumn = React.lazy(() => import('./components/ViewerColumn').then(m => ({ default: m.ViewerColumn })));
-const ScriptColumn = React.lazy(() => import('./components/ScriptColumn').then(m => ({ default: m.ScriptColumn })));
+const ScriptConversationPane = React.lazy(() => import('./components/ScriptConversationPane').then(m => ({ default: m.ScriptConversationPane })));
 const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn').then(m => ({ default: m.StoryboardColumn })));
 const LegacyMaterialPage = React.lazy(() => import('./components/MaterialPage').then(m => ({ default: m.MaterialPage })));
 const LegacyGenerationPage = React.lazy(() => import('./components/GenerationPage').then(m => ({ default: m.GenerationPage })));
@@ -105,6 +104,66 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
       timestamp: Date.now(),
     };
   });
+}
+
+function normalizeVersionStoryboardItems(rows: any[]): StoryboardItem[] {
+  return (rows || []).map((row: any, index: number) => {
+    if (row?.originalText !== undefined || row?.scriptSegment !== undefined) {
+      return { ...row, id: row.id || uuidv4(), shotNumber: row.shotNumber ?? index + 1 } as StoryboardItem;
+    }
+    return mapWorkspaceStoryboardRowsToItems([row])[0];
+  });
+}
+
+function parseStoryboardVersionContent(content: string): StoryboardItem[] {
+  if (!content.trim()) return [];
+  const separated = ensureStoryboardCutSeparators(content);
+  const normalized = separated.endsWith('---CUT---') ? separated : `${separated}\n---CUT---`;
+  const parsed = parseStreamingBlocks(normalized);
+  return parsed.completedBlocks.map((block, index) => {
+    const item = convertToStoryboardItem(block);
+    return { ...item, shotNumber: item.shotNumber || `镜头${String(index + 1).padStart(2, '0')}` };
+  });
+}
+
+function exportStoryboardVersionCsv(file: ProjectFile, version: ScriptStoryboardVersion): void {
+  const headers = ['镜头', '时长', '画面描述', '人物', '场景', '道具', '生图 Prompt', '视频 Prompt', '人物台词'];
+  const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const rows = version.storyboardItems.map((item, index) => [
+    item.shotNumber || index + 1,
+    item.duration || '',
+    item.scriptSegment || item.originalText || '',
+    (item.characters || []).join('、'),
+    item.scene || '',
+    (item.props || []).join('、'),
+    item.imagePrompt || '',
+    item.videoPrompt || '',
+    item.dialogue || '',
+  ].map(escape).join(','));
+  const blob = new Blob([`\ufeff${[headers.map(escape).join(','), ...rows].join('\n')}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${file.name.replace(/\.[^.]+$/, '')}-分镜脚本-V${version.versionNo}.csv`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getScriptModelInfo(model: AiModel) {
+  if (model === AiModel.Gemini) return { alias: '化神', provider: 'google', runtime: 'gemini-2.5-flash' };
+  if (model === AiModel.Deepseek) return { alias: '筑基', provider: 'deepseek', runtime: 'deepseek-reasoner' };
+  return { alias: '金丹', provider: 'deepseek', runtime: 'deepseek-chat' };
+}
+
+function resolveScriptAiModel(modelName?: string): AiModel | null {
+  const normalized = String(modelName || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes('gemini')) return AiModel.Gemini;
+  if (normalized.includes('reasoner')) return AiModel.Deepseek;
+  if (normalized.includes('deepseek')) return AiModel.DeepseekChat;
+  return null;
 }
 
 /**
@@ -271,11 +330,95 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const [colWidths, setColWidths] = useState<number[]>([15, 25, 30, 30]); // 文件列表10%, 文字脚本20%, 分镜脚本30%, 镜头设计40%
   const [visibleColumns, setVisibleColumns] = useState<boolean[]>([true, true, true, true]);  // ✅ 强制所有列始终显示
   const [aiModel, setAiModel] = useState<AiModel>(AiModel.DeepseekChat);  // 🔧 默认改为DK金丹
+  const [scriptConversations, setScriptConversations] = useState<Record<string, ScriptConversation>>({});
+  const [conversationLoadingId, setConversationLoadingId] = useState<string | null>(null);
+  const [conversationSendingId, setConversationSendingId] = useState<string | null>(null);
+  const [conversationError, setConversationError] = useState<string | null>(null);
+  const [storyboardDrawerOpen, setStoryboardDrawerOpen] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
 
   const selectedFile = files.find(f => f.id === selectedFileId);
+  const selectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined;
+  const selectedConversationVersion = selectedConversation?.versions.find(
+    version => version.id === selectedConversation.currentVersionId,
+  ) || selectedConversation?.versions[selectedConversation.versions.length - 1];
+  const selectedStoryboardItemCount = (
+    selectedConversationVersion?.storyboardItems
+    || selectedFile?.storyboard?.items
+    || []
+  ).filter(item => !item.isPlaceholder).length;
+
+  useEffect(() => {
+    if (!selectedFileId || selectedFileId.startsWith('local_')) return;
+    let cancelled = false;
+    setConversationLoadingId(selectedFileId);
+    setConversationError(null);
+    getScriptConversation(propEpisodeId, selectedFileId)
+      .then(conversation => {
+        if (cancelled) return;
+        setScriptConversations(prev => ({ ...prev, [selectedFileId]: conversation }));
+        const matchingModel = resolveScriptAiModel(conversation.defaultModel);
+        if (matchingModel) setAiModel(matchingModel);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        console.error('加载剧本对话失败:', error);
+        const file = filesRef.current.find(item => item.id === selectedFileId);
+        if (file) {
+          const now = Date.now();
+          const fallbackVersion: ScriptStoryboardVersion | undefined = file.scriptContent ? {
+            id: `legacy_${file.id}`,
+            scriptId: file.id,
+            versionNo: 1,
+            content: file.scriptContent,
+            storyboardItems: file.storyboard?.items || [],
+            source: 'legacy',
+            status: 'ready',
+            modelAlias: '历史版本',
+            provider: 'legacy',
+            modelName: 'legacy',
+            createdAt: file.lastUpdated || now,
+            updatedAt: file.lastUpdated || now,
+          } : undefined;
+          if (fallbackVersion) fallbackVersion.messageId = `legacy_assistant_${file.id}`;
+          setScriptConversations(prev => ({
+            ...prev,
+            [file.id]: {
+              scriptId: file.id,
+              currentVersionId: fallbackVersion?.id,
+              messages: [
+                ...(file.originalContent ? [{
+                  id: `legacy_user_${file.id}`,
+                  role: 'user' as const,
+                  content: file.originalContent,
+                  status: 'completed' as const,
+                  createdAt: file.lastUpdated || now,
+                  updatedAt: file.lastUpdated || now,
+                }] : []),
+                ...(fallbackVersion ? [{
+                  id: fallbackVersion.messageId!,
+                  role: 'assistant' as const,
+                  content: fallbackVersion.content,
+                  status: 'completed' as const,
+                  modelAlias: '历史版本',
+                  modelName: 'legacy',
+                  createdAt: file.lastUpdated || now,
+                  updatedAt: file.lastUpdated || now,
+                }] : []),
+              ],
+              versions: fallbackVersion ? [fallbackVersion] : [],
+            },
+          }));
+        }
+        setConversationError('对话历史暂时无法从服务器加载，已显示当前剧本内容。');
+      })
+      .finally(() => {
+        if (!cancelled) setConversationLoadingId(null);
+      });
+    return () => { cancelled = true; };
+  }, [propEpisodeId, selectedFileId]);
   
   // 保存定时器引用
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1010,8 +1153,293 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       updateFileWithHistory(id, (f) => ({ ...f, originalContent: newContent }));
   };
 
+  const handleIterateScript = useCallback(async (
+    currentScript: string,
+    instruction: string,
+    conversationContext: string,
+  ): Promise<string> => {
+    if (!currentScript.trim()) throw new Error('当前文件没有可修改的剧本内容');
+    if (!instruction.trim()) throw new Error('请输入本轮修改意见');
+    const { aiIterateFullScript } = await loadAiModelService();
+    return await aiIterateFullScript(
+      aiModel,
+      currentScript,
+      instruction,
+      conversationContext,
+    );
+  }, [aiModel]);
+
+  const handleConversationSend = useCallback(async (content: string) => {
+    const fileId = selectedFileId;
+    const file = filesRef.current.find(item => item.id === fileId);
+    if (!fileId || !file) throw new Error('请先选择剧本任务');
+    if (fileId.startsWith('local_')) throw new Error('剧本任务尚未保存，请稍后重试');
+
+    const conversation = scriptConversations[fileId] || {
+      scriptId: fileId,
+      messages: [],
+      versions: [],
+    };
+    const modelInfo = getScriptModelInfo(aiModel);
+    const requestId = `script_turn_${uuidv4()}`;
+    setConversationSendingId(fileId);
+    setConversationError(null);
+
+    let assistantMessageId: string | null = null;
+    let streamedContent = '';
+    try {
+      const userMessage = await createScriptMessage(propEpisodeId, fileId, {
+        role: 'user',
+        content,
+        status: 'completed',
+        modelAlias: modelInfo.alias,
+        provider: modelInfo.provider,
+        modelName: modelInfo.runtime,
+        requestId: `${requestId}_user`,
+      });
+      setScriptConversations(prev => ({
+        ...prev,
+        [fileId]: {
+          ...(prev[fileId] || conversation),
+          messages: [...(prev[fileId]?.messages || conversation.messages), userMessage],
+        },
+      }));
+
+      const isFirstTurn = conversation.versions.length === 0;
+      const currentVersion = conversation.versions.find(version => version.id === conversation.currentVersionId)
+        || conversation.versions[conversation.versions.length - 1];
+      if (isFirstTurn) {
+        updateFileWithHistory(fileId, current => ({ ...current, originalContent: content }));
+        await updateEpisodeScriptById(propEpisodeId, fileId, { original_content: content });
+      }
+
+      const assistantMessage = await createScriptMessage(propEpisodeId, fileId, {
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        modelAlias: modelInfo.alias,
+        provider: modelInfo.provider,
+        modelName: modelInfo.runtime,
+        replyToMessageId: userMessage.id,
+        requestId: `${requestId}_assistant`,
+      });
+      assistantMessageId = assistantMessage.id;
+      setScriptConversations(prev => ({
+        ...prev,
+        [fileId]: {
+          ...(prev[fileId] || conversation),
+          messages: [...(prev[fileId]?.messages || [...conversation.messages, userMessage]), assistantMessage],
+        },
+      }));
+
+      const aiService = await loadAiModelService();
+      let result = '';
+      if (isFirstTurn) {
+        result = await aiService.aiGenerateStoryboardScript(aiModel, content, '', chunk => {
+          streamedContent += chunk;
+          setScriptConversations(prev => {
+            const current = prev[fileId];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [fileId]: {
+                ...current,
+                messages: current.messages.map(message => message.id === assistantMessage.id
+                  ? { ...message, content: streamedContent, status: 'streaming', updatedAt: Date.now() }
+                  : message),
+              },
+            };
+          });
+        });
+      } else {
+        const context = conversation.messages.slice(-10)
+          .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
+          .join('\n');
+        result = await aiService.aiIterateFullScript(
+          aiModel,
+          currentVersion?.content || file.scriptContent || file.originalContent,
+          content,
+          context || '（首次修改，无历史意见）',
+        );
+      }
+
+      const finalContent = ensureStoryboardCutSeparators(result || streamedContent);
+      const parsedItems = parseStoryboardVersionContent(finalContent);
+      if (!finalContent || parsedItems.length === 0) {
+        throw new Error('模型返回内容无法识别为分镜脚本，请重新描述要求后再试');
+      }
+      if (!isFirstTurn && currentVersion) {
+        const previousCount = normalizeVersionStoryboardItems(currentVersion.storyboardItems).filter(item => !item.isPlaceholder).length;
+        const validation = validateStoryboardIterationCount(previousCount, parsedItems.length, content);
+        if (!validation.valid) {
+          throw new Error(`${validation.message || '模型返回的镜头数量不符合本轮要求'} 已阻止保存此异常版本，请重试。`);
+        }
+      }
+      const completedMessage = await updateScriptMessage(
+        propEpisodeId,
+        fileId,
+        assistantMessage.id,
+        { content: finalContent, status: 'completed' },
+      );
+      const version = await createScriptVersion(propEpisodeId, fileId, {
+        messageId: assistantMessage.id,
+        content: finalContent,
+        storyboardItems: parsedItems,
+        source: 'ai',
+        status: 'ready',
+        modelAlias: modelInfo.alias,
+        provider: modelInfo.provider,
+        modelName: modelInfo.runtime,
+        metadata: { requestId },
+        setCurrent: true,
+      });
+      setScriptConversations(prev => {
+        const current = prev[fileId] || conversation;
+        return {
+          ...prev,
+          [fileId]: {
+            ...current,
+            currentVersionId: version.id,
+            defaultModel: modelInfo.runtime,
+            messages: current.messages.map(message => message.id === assistantMessage.id ? completedMessage : message),
+            versions: [...current.versions.filter(item => item.id !== version.id), version],
+          },
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '生成分镜脚本失败';
+      setConversationError(message);
+      if (assistantMessageId) {
+        void updateScriptMessage(propEpisodeId, fileId, assistantMessageId, {
+          content: streamedContent,
+          status: 'failed',
+          metadata: { error: message },
+        }).catch(() => undefined);
+        setScriptConversations(prev => {
+          const current = prev[fileId];
+          if (!current) return prev;
+          return {
+            ...prev,
+            [fileId]: {
+              ...current,
+              messages: current.messages.map(item => item.id === assistantMessageId
+                ? { ...item, content: streamedContent, status: 'failed', metadata: { error: message }, updatedAt: Date.now() }
+                : item),
+            },
+          };
+        });
+      }
+      throw error;
+    } finally {
+      setConversationSendingId(null);
+    }
+  }, [aiModel, propEpisodeId, scriptConversations, selectedFileId, updateFileWithHistory]);
+
+  const handleConversationEditVersion = useCallback(async (
+    sourceVersion: ScriptStoryboardVersion,
+    content: string,
+  ) => {
+    const fileId = selectedFileId;
+    if (!fileId) return;
+    const parsedItems = parseStoryboardVersionContent(content);
+    const storyboardItems = parsedItems.length > 0 ? parsedItems : normalizeVersionStoryboardItems(sourceVersion.storyboardItems);
+    const message = await createScriptMessage(propEpisodeId, fileId, {
+      role: 'assistant',
+      content,
+      status: 'completed',
+      modelAlias: '手动编辑',
+      provider: 'manual',
+      modelName: 'manual',
+      requestId: `manual_${uuidv4()}`,
+      metadata: { sourceVersionId: sourceVersion.id },
+    });
+    const version = await createScriptVersion(propEpisodeId, fileId, {
+      messageId: message.id,
+      content,
+      storyboardItems,
+      source: 'manual',
+      status: 'ready',
+      modelAlias: '手动编辑',
+      provider: 'manual',
+      modelName: 'manual',
+      metadata: { sourceVersionId: sourceVersion.id },
+      setCurrent: true,
+    });
+    setScriptConversations(prev => {
+      const current = prev[fileId] || { scriptId: fileId, messages: [], versions: [] };
+      return {
+        ...prev,
+        [fileId]: {
+          ...current,
+          currentVersionId: version.id,
+          messages: [...current.messages, message],
+          versions: [...current.versions, version],
+        },
+      };
+    });
+  }, [propEpisodeId, selectedFileId]);
+
+  const handleConversationGenerateDesign = useCallback(async (version: ScriptStoryboardVersion) => {
+    const fileId = selectedFileId;
+    if (!fileId) return;
+    setConversationError(null);
+    const selectedVersion = version.source === 'legacy' && version.id.startsWith('legacy_')
+      ? version
+      : await selectScriptVersion(propEpisodeId, fileId, version.id);
+    const items = normalizeVersionStoryboardItems(selectedVersion.storyboardItems);
+    if (items.length === 0) {
+      setConversationError('当前分镜版本没有可展示的镜头内容，请先生成分镜脚本。');
+      return;
+    }
+    flushSync(() => {
+      updateFileWithHistory(fileId, current => ({
+        ...current,
+        scriptContent: selectedVersion.content,
+        storyboard: { items },
+        status: FileStatus.Completed,
+        lastUpdated: Date.now(),
+      }));
+      setScriptConversations(prev => prev[fileId] ? ({
+        ...prev,
+        [fileId]: { ...prev[fileId], currentVersionId: selectedVersion.id },
+      }) : prev);
+      setHighlightedScriptSegments(new Set());
+      setHighlightedStoryboardItemIds(new Set());
+      setStoryboardDrawerOpen(true);
+    });
+  }, [propEpisodeId, selectedFileId, updateFileWithHistory]);
+
+  const handleOpenStoryboardDrawer = useCallback(() => {
+    if (!selectedFileId) return;
+    const conversation = scriptConversations[selectedFileId];
+    const version = conversation?.versions.find(item => item.id === conversation.currentVersionId)
+      || conversation?.versions[conversation.versions.length - 1];
+    if (version) {
+      void handleConversationGenerateDesign(version);
+      return;
+    }
+    const file = filesRef.current.find(item => item.id === selectedFileId);
+    const existingItems = (file?.storyboard?.items || []).filter(item => !item.isPlaceholder);
+    if (existingItems.length > 0) {
+      setConversationError(null);
+      setStoryboardDrawerOpen(true);
+      return;
+    }
+    setConversationError('当前还没有可展示的镜头设计。');
+  }, [handleConversationGenerateDesign, scriptConversations, selectedFileId]);
+
+  const handleConversationExportVersion = useCallback((version: ScriptStoryboardVersion) => {
+    const file = filesRef.current.find(item => item.id === selectedFileId);
+    if (!file) return;
+    exportStoryboardVersionCsv(file, {
+      ...version,
+      storyboardItems: normalizeVersionStoryboardItems(version.storyboardItems),
+    });
+  }, [selectedFileId]);
+
   const handleFileSelect = (id: string) => {
-    setSelectedFileId(id);
+      setSelectedFileId(id);
+      setStoryboardDrawerOpen(false);
     const file = filesRef.current.find(f => f.id === id);
     if (!file?.storyboard?.items?.length && storyboardTotalsByFileId[id] !== 0) {
       loadWorkspaceStoryboardPage(id, WORKSPACE_INITIAL_STORYBOARD_COUNT);
@@ -2586,11 +3014,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           {/* Editor - 懒挂载 + display 切换，永不卸载 */}
           {mountedViews.has(AppView.Editor) && (
             <div style={{ display: currentView === AppView.Editor ? 'contents' : 'none' }}>
-                {visibleColumns[0] && (
-                <div 
-                    style={{ width: isFullView ? `${colWidths[0]}%` : undefined }} 
-                    className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300`}
-                >
+                <div className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
                     <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
                     <FileColumn 
                     files={files} 
@@ -2609,135 +3033,42 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     onMoveFile={handleMoveFile}
                     onSaveVersion={handleSaveVersion}
                     onRestoreVersion={handleRestoreVersion}
-                    isExpanded={!isFullView && visibleColumns[0]}
+                    isExpanded={false}
                     onToggleExpand={() => {}}
                     onReorderFiles={handleReorderFiles}
                     />
                     </React.Suspense>
                 </div>
-                )}
 
-                {isFullView && (
-                    <div onMouseDown={() => startResizing(0)} className="w-1 bg-n0 hover:bg-primary cursor-col-resize z-20 flex-shrink-0 transition-colors" />
-                )}
-
-                {visibleColumns[1] && (
-                <div 
-                    style={{ width: isFullView ? `${colWidths[1]}%` : undefined }}
-                    className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300 flex flex-col`}
-                >
-                    <div className="flex-1 min-h-0 overflow-hidden relative">
-                    <React.Suspense fallback={<LegacyColumnFallback label="viewer" />}>
-                    <ViewerColumn 
+                <div className="relative flex h-full min-w-0 flex-1 overflow-hidden">
+                    <React.Suspense fallback={<LegacyColumnFallback label="conversation" />}>
+                    <ScriptConversationPane
                         selectedFile={selectedFile}
-                        files={files}
-                        checkedCount={checkedFileIds.size}
-                        onRewrite={handleRewrite}
-                        onUpdateContent={handleUpdateContent}
-                        isProcessing={isProcessing}
-                        isExpanded={!isFullView && visibleColumns[1]}
-                        onToggleExpand={() => {}}
-                        onUndo={handleUndo}
-                        onRedo={handleRedo}
-                        canUndo={canUndo}
-                        canRedo={canRedo}
+                        conversation={selectedConversation}
                         aiModel={aiModel}
                         onChangeModel={setAiModel}
+                        isWorkflowScript={selectedFileId === activeScriptId}
+                        isLoading={conversationLoadingId === selectedFileId}
+                        isSending={conversationSendingId === selectedFileId}
+                        error={conversationError}
+                        onSend={handleConversationSend}
+                        onGenerateDesign={handleConversationGenerateDesign}
+                        onEditVersion={handleConversationEditVersion}
+                        onExportVersion={handleConversationExportVersion}
+                        onOpenStoryboard={handleOpenStoryboardDrawer}
+                        storyboardItemCount={selectedStoryboardItemCount}
                     />
                     </React.Suspense>
-                    </div>
-                    {selectedFile && (
-                      <div className="flex-shrink-0 m-2 rounded-md border border-n40 bg-n0 p-3 text-sm shadow-card">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-bold text-n700">三步生成</span>
-                          <button
-                            className="px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-xs font-bold disabled:opacity-50"
-                            disabled={!selectedFile.originalContent?.trim()}
-                            onClick={() => handleRunThreeStagePipeline(selectedFile.id)}
-                          >按三步生成</button>
-                        </div>
 
-                        {([
-                          { key: 'split', label: '1. 拆分剧本', action: () => handleSplitScript(selectedFile.id),
-                            metric: `分段数: ${selectedFile.scriptSegments?.length ?? 0}` },
-                          { key: 'videoScript', label: '2. 生成视频脚本', action: () => handleGenerateVideoScript(selectedFile.id),
-                            metric: `已生成: ${(selectedFile.scriptSegments || []).filter(s => s.videoScript).length}/${selectedFile.scriptSegments?.length ?? 0}` },
-                          { key: 'storyboardPrompt', label: '3. 提取分镜提示词', action: () => handleExtractStoryboardPrompts(selectedFile.id),
-                            metric: `分镜提示词: ${(selectedFile.storyboard?.items || []).filter(i => i.imagePrompt).length}` },
-                        ] as const).map(row => {
-                          const st = selectedFile.generationStages?.[row.key];
-                          const statusText = st?.status === 'running'
-                            ? `进行中 ${st.completed ?? 0}/${st.total ?? '?'}`
-                            : st?.status === 'done' ? '完成'
-                            : st?.status === 'error' ? `失败: ${st.errorMessage || ''}` : '未开始';
-                          const statusColor = st?.status === 'done' ? 'text-success'
-                            : st?.status === 'error' ? 'text-danger'
-                            : st?.status === 'running' ? 'text-warning' : 'text-n300';
-                          return (
-                            <div key={row.key} className="flex items-center justify-between py-1.5 border-t border-n40">
-                              <div className="flex items-center gap-2">
-                                <button
-                                  className="px-2 py-1 rounded bg-n0 hover:bg-n20 text-n700 text-xs disabled:opacity-50"
-                                  disabled={st?.status === 'running'}
-                                  onClick={row.action}
-                                >{row.label.replace(/^\d+\.\s*/, '')}</button>
-                                <span className="text-xs text-n300">{row.metric}</span>
-                              </div>
-                              <span className={`text-xs ${statusColor}`}>{statusText}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                    {storyboardDrawerOpen && (
+                      <button
+                        type="button"
+                        className="absolute inset-0 z-30 bg-n900/20 lg:hidden"
+                        onClick={() => setStoryboardDrawerOpen(false)}
+                        aria-label="关闭镜头设计"
+                      />
                     )}
-                </div>
-                )}
-
-                {isFullView && (
-                    <div onMouseDown={() => startResizing(1)} className="w-1 bg-n0 hover:bg-primary cursor-col-resize z-20 flex-shrink-0 transition-colors" />
-                )}
-
-                {visibleColumns[2] && (
-                <div 
-                    style={{ width: isFullView ? `${colWidths[2]}%` : undefined }}
-                    className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300`}
-                >
-                    <React.Suspense fallback={<LegacyColumnFallback label="script" />}>
-                    <ScriptColumn 
-                        selectedFile={selectedFile}
-                        checkedCount={checkedFileIds.size}
-                        onGenerateStoryboard={handleGenerateStoryboard}
-                        onExtractMetadata={handleExtractMetadata}
-                        onRefineScript={handleRefineScript}
-                        onRestructure={handleRestructure}
-                        onUpdateScript={handleUpdateScript}
-                        onUpdateStoryboardItems={handleUpdateStoryboardItems}
-                        isProcessing={isProcessing}
-                        onExtractShots={handleExtractShots}
-                        isShotExtracting={isShotExtracting}
-                        aiModel={aiModel}
-                        isExpanded={!isFullView && visibleColumns[2]}
-                        onToggleExpand={() => {}}
-                        highlightedTextSegments={highlightedScriptSegments}
-                        highlightedItemIds={highlightedStoryboardItemIds}
-                        onSelectionChange={handleScriptSelectionChange}
-                        onUndo={handleUndo}
-                        onRedo={handleRedo}
-                        canUndo={canUndo}
-                        canRedo={canRedo}
-                    />
-                    </React.Suspense>
-                </div>
-                )}
-
-                {isFullView && (
-                    <div onMouseDown={() => startResizing(2)} className="w-1 bg-n0 hover:bg-primary cursor-col-resize z-20 flex-shrink-0 transition-colors" />
-                )}
-
-                {visibleColumns[3] && (
-                <div 
-                    style={{ width: isFullView ? `${colWidths[3]}%` : undefined }}
-                    className={`${isFullView ? 'flex-shrink-0' : 'flex-1'} h-full overflow-hidden relative transition-all duration-300`}
-                >
+                    <aside className={`absolute inset-y-0 right-0 z-40 w-full border-l border-n40 bg-n0 shadow-bottom transition-transform duration-200 sm:w-[min(720px,72vw)] ${storyboardDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                     <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
                     <StoryboardColumn 
                         selectedFile={selectedFile}
@@ -2746,8 +3077,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         generationProgress={shotGenerationProgress}
                         processingType={processingType}
                         aiModel={aiModel}
-                        isExpanded={!isFullView && visibleColumns[3]}
+                        isExpanded={false}
                         onToggleExpand={() => {}}
+                        onClose={() => setStoryboardDrawerOpen(false)}
                         onHighlightScript={handleStoryboardSelectionChange}
                         highlightedItemIds={highlightedStoryboardItemIds}
                         onLockItem={handleLockItem}
@@ -2766,10 +3098,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         onSaveVersion={(name) => selectedFileId && handleSaveVersion(selectedFileId, name)}
                         onRestoreStoryboard={(version) => selectedFileId && handleRestoreStoryboard(selectedFileId, version)}
                         onDeleteVersion={(versionId) => selectedFileId && handleDeleteVersion(selectedFileId, versionId)}
+                        scriptVersions={selectedConversation?.versions || []}
+                        currentScriptVersionId={selectedConversation?.currentVersionId}
+                        onRestoreScriptVersion={handleConversationGenerateDesign}
                     />
                     </React.Suspense>
+                    </aside>
                 </div>
-                )}
             </div>
           )}
 
@@ -2896,8 +3231,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
          <div className="workspace-view-frame w-full h-full flex">
          {renderAllViews()}
          </div>
-         {/* 🚀 优化：仅在初次加载项目列表时显示Loading，视图切换不阻塞 */}
-         {isLoadingProjects && <LoadingOverlay />}
       </main>
     </div>
   );

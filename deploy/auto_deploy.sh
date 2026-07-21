@@ -37,35 +37,10 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs 2>/dev/null)
 fi
 
-SQL_FILES=(
-    "sql/database_schema.sql"
-    "sql/db_migration_project_hub.sql"
-    "sql/db_migration_add_permissions.sql"
-    "sql/db_migration_notifications.sql"
-    "sql/db_migration_episodes.sql"
-    "sql/db_migration_assets.sql"
-    "sql/db_migration_episode_scripts.sql"
-    "sql/db_migration_storyboard_items.sql"
-    "sql/db_migration_video_segments.sql"
-    "sql/db_migration_timeline_tracks.sql"
-    "sql/db_migration_audio_tracks.sql"
-    "sql/db_migration_files_project_episode_source.sql"
-    "sql/db_migration_credits.sql"
-    "sql/db_migration_credit_onboarding.sql"
-    "sql/db_migration_video_voice_references.sql"
-    "sql/db_migration_storyboard_reference_config.sql"
-    "sql/db_migration_provider_remote_objects.sql"
-    "sql/db_migration_admin.sql"
-)
-
-for f in "${SQL_FILES[@]}"; do
-    if [ ! -f "$f" ]; then
-        echo "ERROR: missing required migration: $f"
-        exit 1
-    fi
-done
-
-python3 scripts/apply_migrations.py --env .env --root . "${SQL_FILES[@]}"
+python3 scripts/apply_migrations.py \
+    --env .env \
+    --root . \
+    --manifest db_build/manifest.txt
 echo "  迁移完成"
 
 echo ""

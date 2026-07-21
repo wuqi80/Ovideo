@@ -110,21 +110,38 @@ async def create_script_file(
     sort_order: Optional[int],
     metadata: Optional[dict],
     episode_script_dao: Any,
+    source_type: Optional[str] = None,
+    source_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     resolved_sort_order = sort_order
     if resolved_sort_order is None:
         resolved_sort_order = await episode_script_dao.get_next_sort_order(episode_id)
-    script = await episode_script_dao.create(
-        episode_id=episode_id,
-        file_name=file_name,
-        original_content=original_content,
-        adapted_script=adapted_script,
-        sort_order=resolved_sort_order,
-        metadata=metadata,
-    )
+    if bool(source_type) != bool(source_id):
+        raise ScriptFileCreateFailed("source_type and source_id must be provided together")
+    created = True
+    if source_type and source_id:
+        script, created = await episode_script_dao.get_or_create_by_source(
+            episode_id,
+            source_type=source_type,
+            source_id=source_id,
+            file_name=file_name,
+            original_content=original_content,
+            adapted_script=adapted_script,
+            sort_order=resolved_sort_order,
+            metadata=metadata,
+        )
+    else:
+        script = await episode_script_dao.create(
+            episode_id=episode_id,
+            file_name=file_name,
+            original_content=original_content,
+            adapted_script=adapted_script,
+            sort_order=resolved_sort_order,
+            metadata=metadata,
+        )
     if not script:
         raise ScriptFileCreateFailed("Script file create failed")
-    return {"success": True, "script": dict(script)}
+    return {"success": True, "script": dict(script), "created": created}
 
 
 async def update_script_file(

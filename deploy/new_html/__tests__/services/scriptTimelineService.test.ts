@@ -2,14 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   batchSaveScriptSegments,
   createEpisodeScript,
+  createScriptMessage,
+  createScriptVersion,
   createTimelineTrack,
   deleteEpisodeScript,
   deleteScriptSegments,
   getWorkflowScript,
+  getScriptConversation,
   getTimelineTracks,
   listEpisodeScriptSegments,
   listEpisodeScripts,
   selectWorkflowScript,
+  selectScriptVersion,
+  updateScriptMessage,
   updateEpisodeScriptById,
   updateTimelineTrack,
 } from '../../services/scriptTimelineService';
@@ -52,6 +57,27 @@ describe('script timeline service', () => {
     expect(url).toBe('/api/episodes/ep_1/scripts');
     expect(opts.method).toBe('POST');
     expect(JSON.parse(opts.body).adapted_script).toBe('body');
+  });
+
+  it('sends source identity for idempotent generated candidates', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      created: false,
+      script: { script_id: 'script_existing' },
+    }));
+
+    await createEpisodeScript('ep_1', {
+      file_name: 'reverse candidate',
+      adapted_script: 'body',
+      source_type: 'video_reverse',
+      source_id: 'reverse_1',
+    });
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual(expect.objectContaining({
+      source_type: 'video_reverse',
+      source_id: 'reverse_1',
+    }));
   });
 
   it('updates and deletes episode scripts by id', async () => {
@@ -126,5 +152,61 @@ describe('script timeline service', () => {
     expect(JSON.parse(mockFetch.mock.calls[1][1].body).track_type).toBe('audio');
     expect(mockFetch.mock.calls[2][0]).toBe('/api/timeline-tracks/track_1');
     expect(mockFetch.mock.calls[2][1].method).toBe('PUT');
+  });
+
+  it('persists conversation messages and immutable versions', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        script: { script_id: 'script_1', current_version_id: 'ver_1' },
+        messages: [{ message_id: 'msg_1', role: 'user', content: '原稿', status: 'completed' }],
+        versions: [{ version_id: 'ver_1', script_id: 'script_1', version_no: 1, storyboard_items: [] }],
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, message: { message_id: 'msg_2', role: 'assistant', status: 'streaming' } }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, message: { message_id: 'msg_2', role: 'assistant', status: 'completed', content: '镜头01' } }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, version: { version_id: 'ver_2', script_id: 'script_1', version_no: 2, storyboard_items: [{ id: 'shot_1' }] } }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, version: { version_id: 'ver_2', script_id: 'script_1', version_no: 2, storyboard_items: [] } }));
+
+    const conversation = await getScriptConversation('ep_1', 'script_1');
+    await createScriptMessage('ep_1', 'script_1', { role: 'assistant', content: '', status: 'streaming' });
+    await updateScriptMessage('ep_1', 'script_1', 'msg_2', { content: '镜头01', status: 'completed' });
+    await createScriptVersion('ep_1', 'script_1', { content: '镜头01', storyboardItems: [{ id: 'shot_1', originalText: '', scriptSegment: '' }] });
+    await selectScriptVersion('ep_1', 'script_1', 'ver_2');
+
+    expect(conversation.currentVersionId).toBe('ver_1');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/episodes/ep_1/scripts/script_1/messages');
+    expect(mockFetch.mock.calls[2][0]).toBe('/api/episodes/ep_1/scripts/script_1/messages/msg_2');
+    expect(mockFetch.mock.calls[2][1].method).toBe('PATCH');
+    expect(mockFetch.mock.calls[3][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions');
+    expect(JSON.parse(mockFetch.mock.calls[3][1].body).storyboard_items[0].id).toBe('shot_1');
+    expect(mockFetch.mock.calls[4][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/select');
+  });
+
+  it('decodes jsonb strings returned by asyncpg for storyboard versions', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      script: { script_id: 'script_1', current_version_id: 'ver_1' },
+      messages: [{
+        message_id: 'msg_1',
+        role: 'assistant',
+        content: '镜头01',
+        metadata: '{"requestId":"req_1"}',
+      }],
+      versions: [{
+        version_id: 'ver_1',
+        script_id: 'script_1',
+        version_no: 1,
+        storyboard_items: '[{"id":"shot_1","originalText":"第一镜"}]',
+        metadata: '{"source":"legacy"}',
+      }],
+    }));
+
+    const conversation = await getScriptConversation('ep_1', 'script_1');
+
+    expect(conversation.messages[0].metadata).toEqual({ requestId: 'req_1' });
+    expect(conversation.versions[0].storyboardItems).toEqual([
+      expect.objectContaining({ id: 'shot_1', originalText: '第一镜' }),
+    ]);
+    expect(conversation.versions[0].metadata).toEqual({ source: 'legacy' });
   });
 });
