@@ -23,6 +23,9 @@ if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ !
 fi
 
 FILES=(
+  # Keep root-level compatibility modules and route entrypoints in lockstep.
+  # New modules must not require a manual deploy-list update.
+  *.py
   "cluster_main.py"
   "cluster_config.py"
   "cluster_config_generated.py"
