@@ -61,7 +61,16 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('keepLatestVisibleOnResizeRef');
     expect(source).toContain('scrollNode.scrollHeight - scrollNode.scrollTop - scrollNode.clientHeight < 48');
     expect(source).toContain('useLayoutEffect(() =>');
-    expect(source).toContain('}, [composerHeight]);');
+    expect(source).toContain('}, [composerHeight, updateScrollControls]);');
+  });
+
+  it('provides quick navigation for long storyboard replies', () => {
+    expect(source).toContain('data-testid="conversation-scroll-controls"');
+    expect(source).toContain('aria-label="回到分镜脚本顶部"');
+    expect(source).toContain('aria-label="前往分镜脚本底部"');
+    expect(source).toContain("scrollConversationTo('top')");
+    expect(source).toContain("scrollConversationTo('bottom')");
+    expect(source).toContain("behavior: 'smooth'");
   });
 
   it('does not block entry with the decorative loading overlay', () => {

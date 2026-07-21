@@ -1,5 +1,7 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   Bot,
   Check,
   ChevronDown,
@@ -76,6 +78,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [composerHeight, setComposerHeight] = useState(132);
   const [isResizingComposer, setIsResizingComposer] = useState(false);
+  const [scrollControls, setScrollControls] = useState({ canScrollUp: false, canScrollDown: false });
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerResizeOriginRef = useRef({ y: 0, height: 132 });
   const keepLatestVisibleOnResizeRef = useRef(true);
@@ -111,20 +114,46 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
 
   const latestMessage = conversation?.messages?.[conversation.messages.length - 1];
 
+  const updateScrollControls = useCallback(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+    setScrollControls({
+      canScrollUp: node.scrollTop > 4,
+      canScrollDown: node.scrollTop < maxScrollTop - 4,
+    });
+  }, []);
+
   useEffect(() => {
     const node = scrollRef.current;
     if (!node) return;
     const frame = window.requestAnimationFrame(() => {
       node.scrollTop = node.scrollHeight;
+      updateScrollControls();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [selectedFile?.id, latestMessage?.id, latestMessage?.content, latestMessage?.status, isSending]);
+  }, [selectedFile?.id, latestMessage?.id, latestMessage?.content, latestMessage?.status, isSending, updateScrollControls]);
 
   useLayoutEffect(() => {
     const node = scrollRef.current;
     if (!node || !keepLatestVisibleOnResizeRef.current) return;
     node.scrollTop = node.scrollHeight;
-  }, [composerHeight]);
+    updateScrollControls();
+  }, [composerHeight, updateScrollControls]);
+
+  useLayoutEffect(() => {
+    const frame = window.requestAnimationFrame(updateScrollControls);
+    return () => window.cancelAnimationFrame(frame);
+  }, [collapsed, conversation?.messages?.length, selectedFile?.id, updateScrollControls]);
+
+  const scrollConversationTo = (position: 'top' | 'bottom') => {
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTo({
+      top: position === 'top' ? 0 : node.scrollHeight,
+      behavior: 'smooth',
+    });
+  };
 
   useEffect(() => {
     if (!isResizingComposer) return;
@@ -307,7 +336,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
         </button>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+      <div ref={scrollRef} onScroll={updateScrollControls} className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
         {!selectedFile ? (
           <div className="flex h-full items-center justify-center text-sm text-n100">请从左侧选择一个剧本任务</div>
         ) : isLoading ? (
@@ -326,6 +355,34 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
           </div>
         )}
       </div>
+
+      {(scrollControls.canScrollUp || scrollControls.canScrollDown) && (
+        <div
+          data-testid="conversation-scroll-controls"
+          className="absolute left-2 top-1/2 z-20 flex -translate-y-1/2 flex-col overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom"
+        >
+          <button
+            type="button"
+            onClick={() => scrollConversationTo('top')}
+            disabled={!scrollControls.canScrollUp}
+            title="回到分镜脚本顶部"
+            aria-label="回到分镜脚本顶部"
+            className="inline-flex h-8 w-8 items-center justify-center text-n300 hover:bg-n20 hover:text-primary disabled:cursor-default disabled:text-n50"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollConversationTo('bottom')}
+            disabled={!scrollControls.canScrollDown}
+            title="前往分镜脚本底部"
+            aria-label="前往分镜脚本底部"
+            className="inline-flex h-8 w-8 items-center justify-center border-t border-n40 text-n300 hover:bg-n20 hover:text-primary disabled:cursor-default disabled:text-n50"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       <div className="flex-shrink-0 bg-n20 px-3 pb-3 pt-2">
         {error && <div className="mx-auto mb-2 w-[calc(100%-24px)] max-w-6xl rounded border border-danger/30 bg-r50 px-3 py-2 text-xs text-danger">{error}</div>}
