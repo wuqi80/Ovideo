@@ -21,6 +21,23 @@ import { ensureStoryboardCutSeparators, validateStoryboardIterationCount } from 
 const loadAiModelService = () => import('./services/aiModelService');
 
 const WORKSPACE_INITIAL_STORYBOARD_COUNT = 10;
+const WORKING_HISTORY_SCOPE = 'working';
+
+function buildVersionHistoryScopeKey(fileId: string, versionId?: string): string {
+  return `${fileId}::${versionId || WORKING_HISTORY_SCOPE}`;
+}
+
+type ProjectFileHistory = {
+  past: ProjectFile[];
+  future: ProjectFile[];
+};
+
+type HistoryUpdateOptions = {
+  recordHistory?: boolean;
+  resetHistory?: boolean;
+  versionId?: string;
+};
+
 const FileColumn = React.lazy(() => import('./components/FileColumn').then(m => ({ default: m.FileColumn })));
 const ScriptConversationPane = React.lazy(() => import('./components/ScriptConversationPane').then(m => ({ default: m.ScriptConversationPane })));
 const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn').then(m => ({ default: m.StoryboardColumn })));
@@ -319,8 +336,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     await onActivateScript(scriptId);
   }, [activeScriptId, onActivateScript]);
 
-  // Undo/Redo History State: Map<FileID, { past, future }>
-  const [fileHistory, setFileHistory] = useState<Record<string, { past: ProjectFile[], future: ProjectFile[] }>>({});
+  // Undo/Redo history is isolated by file and storyboard version.
+  const [fileHistory, setFileHistory] = useState<Record<string, ProjectFileHistory>>({});
 
   // Highlighting State
   const [highlightedScriptSegments, setHighlightedScriptSegments] = useState<Set<string>>(new Set());
@@ -344,6 +361,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const selectedConversationVersion = selectedConversation?.versions.find(
     version => version.id === selectedConversation.currentVersionId,
   ) || selectedConversation?.versions[selectedConversation.versions.length - 1];
+  const selectedHistoryScopeKey = selectedFileId
+    ? buildVersionHistoryScopeKey(selectedFileId, selectedConversationVersion?.id)
+    : null;
   const selectedStoryboardItemCount = (
     selectedConversationVersion?.storyboardItems
     || selectedFile?.storyboard?.items
@@ -803,21 +823,38 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
   // --- History Management (Undo/Redo) ---
   
-  const pushToHistory = (fileId: string, currentFile: ProjectFile) => {
+  const resolveHistoryScopeKey = (fileId: string, versionId?: string) => {
+      if (versionId) return buildVersionHistoryScopeKey(fileId, versionId);
+      const conversation = scriptConversations[fileId];
+      const currentVersion = conversation?.versions.find(item => item.id === conversation.currentVersionId)
+          || conversation?.versions[conversation.versions.length - 1];
+      return buildVersionHistoryScopeKey(fileId, currentVersion?.id);
+  };
+
+  const pushToHistory = (historyScopeKey: string, currentFile: ProjectFile) => {
       setFileHistory(prev => {
-          const history = prev[fileId] || { past: [], future: [] };
+          const history = prev[historyScopeKey] || { past: [], future: [] };
           // Keep max 10 steps
           const newPast = [...history.past, currentFile].slice(-10);
           return {
               ...prev,
-              [fileId]: { past: newPast, future: [] }
+              [historyScopeKey]: { past: newPast, future: [] }
           };
       });
   };
 
+  const resetHistory = (historyScopeKey: string) => {
+      setFileHistory(prev => {
+          if (!prev[historyScopeKey]) return prev;
+          const next = { ...prev };
+          delete next[historyScopeKey];
+          return next;
+      });
+  };
+
   const handleUndo = () => {
-      if (!selectedFileId) return;
-      const history = fileHistory[selectedFileId];
+      if (!selectedFileId || !selectedHistoryScopeKey) return;
+      const history = fileHistory[selectedHistoryScopeKey];
       if (!history || history.past.length === 0) return;
 
       const previous = history.past[history.past.length - 1];
@@ -826,7 +863,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       if (current && previous) {
           setFileHistory(prev => ({
               ...prev,
-              [selectedFileId]: {
+              [selectedHistoryScopeKey]: {
                   past: history.past.slice(0, -1),
                   future: [current, ...history.future].slice(0, 10)
               }
@@ -836,8 +873,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   };
 
   const handleRedo = () => {
-      if (!selectedFileId) return;
-      const history = fileHistory[selectedFileId];
+      if (!selectedFileId || !selectedHistoryScopeKey) return;
+      const history = fileHistory[selectedHistoryScopeKey];
       if (!history || history.future.length === 0) return;
 
       const next = history.future[0];
@@ -846,7 +883,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       if (current && next) {
           setFileHistory(prev => ({
               ...prev,
-              [selectedFileId]: {
+              [selectedHistoryScopeKey]: {
                   past: [...history.past, current].slice(-10),
                   future: history.future.slice(1)
               }
@@ -855,17 +892,26 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       }
   };
 
-  const canUndo = !!(selectedFileId && fileHistory[selectedFileId]?.past.length > 0);
-  const canRedo = !!(selectedFileId && fileHistory[selectedFileId]?.future.length > 0);
+  const canUndo = !!(selectedHistoryScopeKey && fileHistory[selectedHistoryScopeKey]?.past.length > 0);
+  const canRedo = !!(selectedHistoryScopeKey && fileHistory[selectedHistoryScopeKey]?.future.length > 0);
 
   // Helper to update file with history tracking
-  const updateFileWithHistory = (fileId: string, updateFn: (file: ProjectFile) => ProjectFile) => {
+  const updateFileWithHistory = (
+      fileId: string,
+      updateFn: (file: ProjectFile) => ProjectFile,
+      options: HistoryUpdateOptions = {},
+  ) => {
+      const historyScopeKey = resolveHistoryScopeKey(fileId, options.versionId);
       setFiles(prev => {
           const fileIndex = prev.findIndex(f => f.id === fileId);
           if (fileIndex === -1) return prev;
           
           const currentFile = prev[fileIndex];
-          pushToHistory(fileId, currentFile); // Save state before update
+          if (options.resetHistory) {
+              resetHistory(historyScopeKey);
+          } else if (options.recordHistory !== false) {
+              pushToHistory(historyScopeKey, currentFile);
+          }
 
           const newFile = updateFn(currentFile);
           const newFiles = [...prev];
@@ -908,7 +954,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           ...version.data,
           // Keep existing versions list
           versions: f.versions
-      }));
+      }), { recordHistory: false, resetHistory: true });
   };
 
   const handleRestoreStoryboard = (fileId: string, version: FileVersion) => {
@@ -919,7 +965,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       updateFileWithHistory(fileId, (f) => ({
           ...f,
           storyboard: version.data.storyboard
-      }));
+      }), { recordHistory: false, resetHistory: true });
   };
 
   const handleDeleteVersion = (fileId: string, versionId: string) => {
@@ -1398,7 +1444,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         storyboard: { items },
         status: FileStatus.Completed,
         lastUpdated: Date.now(),
-      }));
+      }), {
+        recordHistory: false,
+        resetHistory: true,
+        versionId: selectedVersion.id,
+      });
       setScriptConversations(prev => prev[fileId] ? ({
         ...prev,
         [fileId]: { ...prev[fileId], currentVersionId: selectedVersion.id },
@@ -1411,18 +1461,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
   const handleOpenStoryboardDrawer = useCallback(() => {
     if (!selectedFileId) return;
-    const conversation = scriptConversations[selectedFileId];
-    const version = conversation?.versions.find(item => item.id === conversation.currentVersionId)
-      || conversation?.versions[conversation.versions.length - 1];
-    if (version) {
-      void handleConversationGenerateDesign(version);
-      return;
-    }
     const file = filesRef.current.find(item => item.id === selectedFileId);
     const existingItems = (file?.storyboard?.items || []).filter(item => !item.isPlaceholder);
     if (existingItems.length > 0) {
       setConversationError(null);
       setStoryboardDrawerOpen(true);
+      return;
+    }
+    const conversation = scriptConversations[selectedFileId];
+    const version = conversation?.versions.find(item => item.id === conversation.currentVersionId)
+      || conversation?.versions[conversation.versions.length - 1];
+    if (version) {
+      void handleConversationGenerateDesign(version);
       return;
     }
     setConversationError('当前还没有可展示的镜头设计。');

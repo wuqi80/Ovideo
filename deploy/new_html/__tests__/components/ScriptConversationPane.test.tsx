@@ -54,6 +54,14 @@ describe('ScriptConversationPane workflow', () => {
     expect(workspace).not.toContain('<LoadingOverlay />');
   });
 
+  it('isolates undo and redo inside the active storyboard version', () => {
+    expect(workspace).toContain('buildVersionHistoryScopeKey(selectedFileId, selectedConversationVersion?.id)');
+    expect(workspace).toContain('fileHistory[selectedHistoryScopeKey]');
+    expect(workspace).toContain('recordHistory: false');
+    expect(workspace).toContain('resetHistory: true');
+    expect(workspace).toContain('versionId: selectedVersion.id');
+  });
+
   it('shows persisted storyboard versions in the drawer history and can restore them', () => {
     expect(workspace).toContain('scriptVersions={selectedConversation?.versions || []}');
     expect(workspace).toContain('onRestoreScriptVersion={handleConversationGenerateDesign}');
