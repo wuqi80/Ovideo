@@ -56,6 +56,14 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('node.scrollTop = node.scrollHeight');
   });
 
+  it('shrinks the conversation viewport instead of covering the latest reply while resizing', () => {
+    expect(source).toContain('h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden');
+    expect(source).toContain('keepLatestVisibleOnResizeRef');
+    expect(source).toContain('scrollNode.scrollHeight - scrollNode.scrollTop - scrollNode.clientHeight < 48');
+    expect(source).toContain('useLayoutEffect(() =>');
+    expect(source).toContain('}, [composerHeight]);');
+  });
+
   it('does not block entry with the decorative loading overlay', () => {
     expect(workspace).not.toContain("import { LoadingOverlay }");
     expect(workspace).not.toContain('<LoadingOverlay />');

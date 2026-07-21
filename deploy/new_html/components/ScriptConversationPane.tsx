@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot,
   Check,
@@ -78,6 +78,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [isResizingComposer, setIsResizingComposer] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerResizeOriginRef = useRef({ y: 0, height: 132 });
+  const keepLatestVisibleOnResizeRef = useRef(true);
   const initializedScriptRef = useRef<string | null>(null);
 
   const versionByMessageId = useMemo(() => new Map(
@@ -118,6 +119,12 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedFile?.id, latestMessage?.id, latestMessage?.content, latestMessage?.status, isSending]);
+
+  useLayoutEffect(() => {
+    const node = scrollRef.current;
+    if (!node || !keepLatestVisibleOnResizeRef.current) return;
+    node.scrollTop = node.scrollHeight;
+  }, [composerHeight]);
 
   useEffect(() => {
     if (!isResizingComposer) return;
@@ -282,7 +289,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   };
 
   return (
-    <section className="relative flex h-full min-w-0 flex-1 flex-col bg-n20" data-testid="script-conversation-pane">
+    <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-n20" data-testid="script-conversation-pane">
       <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
         <FileText className="h-4 w-4 text-primary" />
         <div className="flex min-w-0 items-baseline gap-2">
@@ -331,6 +338,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             data-testid="composer-resize-handle"
             onPointerDown={event => {
               event.preventDefault();
+              const scrollNode = scrollRef.current;
+              keepLatestVisibleOnResizeRef.current = !scrollNode
+                || scrollNode.scrollHeight - scrollNode.scrollTop - scrollNode.clientHeight < 48;
               composerResizeOriginRef.current = { y: event.clientY, height: composerHeight };
               setIsResizingComposer(true);
             }}
