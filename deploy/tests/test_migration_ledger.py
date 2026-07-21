@@ -61,6 +61,32 @@ async def test_changed_applied_migration_is_blocked(tmp_path):
         await runner.apply_migrations(conn, [path], root=tmp_path)
 
 
+@pytest.mark.asyncio
+async def test_line_ending_only_change_is_accepted(tmp_path):
+    path = tmp_path / "001.sql"
+    path.write_bytes(b"SELECT 1;\nSELECT 2;\n")
+    conn = FakeConnection()
+    conn.ledger["001.sql"] = hashlib.sha256(b"SELECT 1;\r\nSELECT 2;\r\n").hexdigest()
+
+    result = await runner.apply_migrations(conn, [path], root=tmp_path)
+
+    assert result == [("001.sql", "skipped")]
+
+
+@pytest.mark.asyncio
+async def test_known_precommit_migration_checksum_is_accepted():
+    deploy_dir = Path(__file__).resolve().parents[1]
+    path = deploy_dir / "sql" / "db_migration_episode_script_sources.sql"
+    conn = FakeConnection()
+    conn.ledger["sql/db_migration_episode_script_sources.sql"] = (
+        "bbe14ea12b6cc44d39e312d7fb3250b6957c33eab64b3ffe400c40fdd989d1e1"
+    )
+
+    result = await runner.apply_migrations(conn, [path], root=deploy_dir)
+
+    assert result == [("sql/db_migration_episode_script_sources.sql", "skipped")]
+
+
 def test_explicit_outer_transaction_control_is_removed():
     sql = "BEGIN;\nSELECT 1;\nCOMMIT;"
     assert runner.prepare_migration_sql(sql).strip() == "SELECT 1;"

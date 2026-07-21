@@ -26,6 +26,20 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 LOCK_NAME = "mecha:schema_migrations"
 TRANSACTION_CONTROL = re.compile(r"^\s*(BEGIN|COMMIT|ROLLBACK)\s*;\s*$", re.IGNORECASE | re.MULTILINE)
 
+# These two migrations were first applied from a pre-commit production build.
+# The deployed schema matches the canonical files, but the ledger retained the
+# hashes of that build. Keep the exception exact so unrelated edits still fail.
+LEGACY_CHECKSUM_ALIASES = {
+    "sql/db_migration_episode_script_sources.sql": {
+        "bbe14ea12b6cc44d39e312d7fb3250b6957c33eab64b3ffe400c40fdd989d1e1":
+            "96bd7022d476a3c5a3ca1b7cd34cb042632678b4c7c1ecf7afad72e64dfa0c00",
+    },
+    "sql/db_migration_script_conversations.sql": {
+        "67a78fefe7467ae02c227d1a04de20be78875ed5bd2ed917032eefea6bed72eb":
+            "64e2638039fcbcae56fb1375b217af28a738b238fa8f4c87013926db46284f9d",
+    },
+}
+
 # These migrations predate the checksum ledger on the production database.
 # Existing installations adopt them once; fresh databases still execute them.
 LEGACY_BASELINE_FILENAMES = frozenset({
@@ -88,6 +102,26 @@ def migration_checksum(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def migration_checksum_variants(path: Path) -> set[str]:
+    """Return content-equivalent hashes for LF and CRLF checkouts."""
+    raw = path.read_bytes()
+    lf = raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    crlf = lf.replace(b"\n", b"\r\n")
+    return {
+        hashlib.sha256(raw).hexdigest(),
+        hashlib.sha256(lf).hexdigest(),
+        hashlib.sha256(crlf).hexdigest(),
+    }
+
+
+def migration_checksum_matches(path: Path, version: str, recorded: str) -> bool:
+    variants = migration_checksum_variants(path)
+    if recorded in variants:
+        return True
+    canonical = LEGACY_CHECKSUM_ALIASES.get(version, {}).get(recorded)
+    return bool(canonical and canonical in variants)
+
+
 def migration_id(path: Path, root: Path) -> str:
     try:
         return path.resolve().relative_to(root.resolve()).as_posix()
@@ -136,7 +170,7 @@ async def apply_one(
     )
     if existing:
         recorded = str(existing["checksum_sha256"])
-        if recorded != checksum:
+        if not migration_checksum_matches(path, version, recorded):
             raise RuntimeError(
                 f"Migration checksum mismatch for {version}: recorded={recorded}, current={checksum}"
             )
