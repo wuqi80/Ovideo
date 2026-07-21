@@ -50,6 +50,7 @@ type HistoryUpdateOptions = {
 
 const FileColumn = React.lazy(() => import('./components/FileColumn').then(m => ({ default: m.FileColumn })));
 const ScriptConversationPane = React.lazy(() => import('./components/ScriptConversationPane').then(m => ({ default: m.ScriptConversationPane })));
+const StoryboardScriptColumn = React.lazy(() => import('./components/StoryboardScriptColumn').then(m => ({ default: m.StoryboardScriptColumn })));
 const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn').then(m => ({ default: m.StoryboardColumn })));
 const LegacyMaterialPage = React.lazy(() => import('./components/MaterialPage').then(m => ({ default: m.MaterialPage })));
 const LegacyGenerationPage = React.lazy(() => import('./components/GenerationPage').then(m => ({ default: m.GenerationPage })));
@@ -1972,8 +1973,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           }
       });
       setHighlightedScriptSegments(segments);
-      // 🔧 点击卡片时，StoryboardColumn会手动滚动
-      // 框选脚本时，不会触发滚动（因为移除了useEffect的自动滚动）
+      // 双栏共用选中 ID；脚本栏和镜头栏分别监听它并滚动到对应位置。
   };
 
   // --- Manual Update Handlers (Script & Storyboard) ---
@@ -3455,17 +3455,21 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     />
                     </React.Suspense>
 
-                    {storyboardDrawerOpen && (
-                      <button
-                        type="button"
-                        className="absolute inset-0 z-30 bg-n900/20 lg:hidden"
-                        onClick={() => setStoryboardDrawerOpen(false)}
-                        aria-label="关闭镜头设计"
-                      />
-                    )}
-                    <aside className={`absolute inset-y-0 right-0 z-40 w-full border-l border-n40 bg-n0 shadow-bottom transition-transform duration-200 sm:w-[min(720px,72vw)] ${storyboardDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-                    <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
-                    <StoryboardColumn 
+                    <aside
+                      className={`absolute inset-0 z-40 w-full overflow-x-auto border-l border-n40 bg-n0 shadow-bottom transition-transform duration-200 ${storyboardDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                      data-testid="storyboard-workspace-drawer"
+                      aria-hidden={!storyboardDrawerOpen}
+                    >
+                    <div className="grid h-full min-w-[860px] grid-cols-[minmax(360px,1.2fr)_minmax(420px,1fr)]">
+                      <React.Suspense fallback={<LegacyColumnFallback label="storyboard-script" />}>
+                        <StoryboardScriptColumn
+                          selectedFile={selectedFile}
+                          highlightedItemIds={highlightedStoryboardItemIds}
+                          onSelectItemIds={handleStoryboardSelectionChange}
+                        />
+                      </React.Suspense>
+                      <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
+                      <StoryboardColumn
                         selectedFile={selectedFile}
                         onGenerateStoryboard={handleGenerateStoryboard}
                         isProcessing={isProcessing}
@@ -3497,8 +3501,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         currentScriptVersionId={selectedConversation?.currentVersionId}
                         generationCreditCost={Number(selectedConversationVersion?.metadata?.storyboardDesignCreditCost || 0)}
                         onRestoreScriptVersion={(version) => handleConversationGenerateDesign(version, { autoSnapshot: false })}
-                    />
-                    </React.Suspense>
+                      />
+                      </React.Suspense>
+                    </div>
                     </aside>
                 </div>
             </div>

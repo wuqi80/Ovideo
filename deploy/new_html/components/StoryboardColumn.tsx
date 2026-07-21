@@ -189,20 +189,6 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
     }
   }, [highlightedItemIds]);
 
-  // 🔧 恢复自动滚动功能 - 框选脚本和点击卡片都需要滚动
-  useEffect(() => {
-    if (highlightedItemIds.size > 0) {
-      const firstId = Array.from(highlightedItemIds)[0];
-      const element = itemRefs.current.get(firstId);
-      if (element) {
-        // 使用 setTimeout 避免与其他 DOM 操作冲突
-        setTimeout(() => {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-      }
-    }
-  }, [highlightedItemIds]);
-
   const handleCardClick = (e: React.MouseEvent, id: string) => {
     const target = e.target as HTMLElement;
     if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;

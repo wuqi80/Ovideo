@@ -58,6 +58,15 @@ describe('ScriptConversationPane workflow', () => {
     expect(workspace).toContain('onOpenStoryboard={handleOpenStoryboardDrawer}');
   });
 
+  it('expands storyboard design across the workspace beside the file list with linked script and design columns', () => {
+    expect(workspace).toContain('data-testid="storyboard-workspace-drawer"');
+    expect(workspace).toContain('absolute inset-0 z-40 w-full');
+    expect(workspace).toContain('grid-cols-[minmax(360px,1.2fr)_minmax(420px,1fr)]');
+    expect(workspace).toContain('<StoryboardScriptColumn');
+    expect(workspace).toContain('onSelectItemIds={handleStoryboardSelectionChange}');
+    expect(workspace).toContain('onHighlightScript={handleStoryboardSelectionChange}');
+  });
+
   it('keeps long replies foldable from both ends and opens the editor nearly full screen', () => {
     expect(source).toContain("isCollapsed ? '展开内容' : '折叠内容'");
     expect(source).toContain("isCollapsed ? '展开完整内容' : '收起内容'");
