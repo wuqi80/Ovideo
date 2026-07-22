@@ -48,9 +48,11 @@ export function ensureStoryboardCutSeparators(value: string): string {
 
   lines.forEach((line) => {
     const isShotHeader = /^\s*镜头\s*\d+\s*$/.test(line);
-    if (isShotHeader && hasShot) {
+    const isSegmentHeader = /^\s*(?:分段|段落)\s*\d+\s*$/.test(line);
+    if ((isShotHeader || isSegmentHeader) && hasShot) {
       const previous = [...output].reverse().find(item => item.trim())?.trim();
-      if (previous !== '---CUT---') output.push('---CUT---');
+      const previousIsSegmentHeader = /^(?:分段|段落)\s*\d+$/.test(previous || '');
+      if (previous !== '---CUT---' && !(isShotHeader && previousIsSegmentHeader)) output.push('---CUT---');
     }
     if (isShotHeader) hasShot = true;
     output.push(line);
@@ -64,6 +66,31 @@ export interface ShotCountValidation {
   message?: string;
 }
 
+const REFERENCES_PREVIOUS_INSTRUCTION = /(?:按照|依照|根据).{0,10}(?:要求|意见|修改)|(?:重新|继续).{0,10}(?:生成|修改|调整)|(?:上轮|上一轮|前面|之前|刚才).{0,10}(?:要求|意见|修改)/;
+
+/**
+ * Referential retries inherit only the immediately preceding user request.
+ * This keeps an old shot-count instruction from leaking into unrelated edits.
+ */
+export function buildStoryboardValidationInstruction(
+  instruction: string,
+  previousUserInstructions?: string | string[],
+): string {
+  const current = String(instruction || '').trim();
+  const previous = (Array.isArray(previousUserInstructions) ? previousUserInstructions : [previousUserInstructions])
+    .map(value => String(value || '').trim())
+    .filter(Boolean);
+  if (previous.length === 0 || !REFERENCES_PREVIOUS_INSTRUCTION.test(current)) return current;
+
+  const inherited: string[] = [];
+  for (let index = previous.length - 1; index >= 0; index -= 1) {
+    const candidate = previous[index];
+    inherited.unshift(candidate);
+    if (!REFERENCES_PREVIOUS_INSTRUCTION.test(candidate)) break;
+  }
+  return [...inherited, current].join('\n');
+}
+
 function requestedShotTarget(instruction: string): number | null {
   const match = instruction.match(/(?:减少到|压缩到|保留|调整为|改成|变为)\s*(\d+)\s*(?:个)?镜头/);
   if (!match) return null;
@@ -73,8 +100,9 @@ function requestedShotTarget(instruction: string): number | null {
 
 /**
  * Prevent an ordinary rewrite from silently collapsing a complete storyboard.
- * Explicit numeric targets win; vague structural edits are allowed a bounded
- * change, while non-structural edits must preserve the existing shot count.
+ * Explicit numeric targets win. When the user explicitly asks to reduce or add
+ * shots, any positive change in that direction is valid; ordinary rewrites keep
+ * the current version's count.
  */
 export function validateStoryboardIterationCount(
   previousCount: number,
@@ -94,22 +122,20 @@ export function validateStoryboardIterationCount(
   const asksToAdd = /(?:增加|新增|添加|拆分|扩充).{0,8}(?:镜头|分镜)|(?:镜头|分镜).{0,8}(?:增加|新增|添加|拆分|扩充)/.test(instruction);
 
   if (asksToReduce) {
-    const minimum = Math.max(1, Math.ceil(previousCount * 0.7));
-    return nextCount >= minimum && nextCount <= previousCount
+    return nextCount > 0 && nextCount <= previousCount
       ? { valid: true }
       : {
           valid: false,
-          message: `模型把 ${previousCount} 个镜头异常改成了 ${nextCount} 个；“减少几个”最多允许缩减约 30%。`,
+          message: `本轮要求减少镜头，但模型从 ${previousCount} 个调整成了 ${nextCount} 个。`,
         };
   }
 
   if (asksToAdd) {
-    const maximum = Math.max(previousCount + 1, Math.ceil(previousCount * 1.5));
-    return nextCount >= previousCount && nextCount <= maximum
+    return nextCount >= previousCount
       ? { valid: true }
       : {
           valid: false,
-          message: `模型把 ${previousCount} 个镜头异常改成了 ${nextCount} 个，超出本轮增补范围。`,
+          message: `本轮要求增加镜头，但模型从 ${previousCount} 个调整成了 ${nextCount} 个。`,
         };
   }
 

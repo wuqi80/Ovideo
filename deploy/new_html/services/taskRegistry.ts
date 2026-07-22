@@ -471,10 +471,16 @@ class TaskRegistry {
             } else {
                 // 内存终态 + 后端终态：用后端时间戳补全（不改 status）
                 this.tasks.set(incoming.taskId, {
+                    ...incoming,
                     ...existing,
                     createdAt: existing.createdAt || incoming.createdAt,
                     startedAt: existing.startedAt || incoming.startedAt,
                     completedAt: existing.completedAt || incoming.completedAt,
+                    notificationId: incoming.notificationId || existing.notificationId,
+                    metadata: {
+                        ...(incoming.metadata || {}),
+                        ...(existing.metadata || {}),
+                    },
                 });
                 updated++;
             }

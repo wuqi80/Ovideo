@@ -829,6 +829,7 @@ app.include_router(
     create_ai_proxy_router(
         require_auth_dependency=require_auth,
         get_main_event_loop=lambda: MAIN_EVENT_LOOP,
+        get_redis_client=lambda: redis_client,
     )
 )
 logger.info("✅ AI Proxy API 路由已注册 (/api/deepseek, /api/gemini, /api/gpt-image, /api/materials/doubao)")

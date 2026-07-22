@@ -272,5 +272,5 @@ async def dismiss_notification(
     user_id: str,
     notification_dao: Any,
 ) -> Dict[str, Any]:
-    await notification_dao.dismiss(notification_id, user_id)
-    return {"success": True}
+    dismissed = await notification_dao.dismiss(notification_id, user_id)
+    return {"success": True, "dismissed": bool(dismissed)}

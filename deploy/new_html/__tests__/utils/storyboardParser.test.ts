@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   convertToStoryboardItem,
   estimateDialogueDurationSeconds,
+  parseStreamingBlocks,
 } from '../../utils/storyboardParser';
 
 describe('storyboard dialogue duration', () => {
@@ -30,5 +31,23 @@ describe('storyboard dialogue duration', () => {
     });
 
     expect(item.duration).toBe('4秒');
+  });
+
+  it('carries standalone segment headings across shot blocks', () => {
+    const parsed = parseStreamingBlocks([
+      '分段01',
+      '镜头01',
+      '时间：4秒',
+      '---CUT---',
+      '镜头02',
+      '时间：5秒',
+      '---CUT---',
+      '分段02',
+      '镜头03',
+      '时间：4秒',
+      '---CUT---',
+    ].join('\n'));
+
+    expect(parsed.completedBlocks.map(block => block.segmentNo)).toEqual([1, 1, 2]);
   });
 });

@@ -1,16 +1,22 @@
 import { v4 as uuidv4 } from 'uuid';
 import { StoryboardData, StoryboardItem } from '../types';
 import { apiFetch } from './httpClient';
+import type { TextTaskContext } from './textTaskContext';
+import { toTextTaskPayload } from './textTaskContext';
 
 type ResponseFormat = 'text' | 'json';
 
 const MAX_DEEPSEEK_ATTEMPTS = 3;
+const DEEPSEEK_REQUEST_TIMEOUT_MS = 180_000;
+const DEEPSEEK_STREAM_IDLE_TIMEOUT_MS = 90_000;
+
+class DeepseekTimeoutError extends Error {}
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const isRetryableDeepseekError = (error: unknown): boolean => {
     const message = error instanceof Error ? error.message : String(error || '');
-    if (/未登录|未配置|endpoint\s*未配置|api\s*key|401|403|unauthor/i.test(message)) {
+    if (/未登录|未配置|endpoint\s*未配置|api\s*key|401|403|unauthor|未扣积分|手动重试/i.test(message)) {
         return false;
     }
     return /请求失败|调用失败|超时|timeout|network|failed to fetch|fetch failed|econn|socket|stream|流式|空内容|429|500|502|503|504|rate|busy|overload|temporar/i.test(message);
@@ -41,11 +47,12 @@ export const callDeepseekWithRetry = async (
     prompt: string,
     systemPrompt?: string,
     onStream?: (chunk: string) => void,
-    model: string = 'deepseek-reasoner'
+    model: string = 'deepseek-reasoner',
+    taskContext?: TextTaskContext,
 ): Promise<string> => {
     // 组合系统提示词和用户提示词
     const finalPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
-    return await callDeepseek(finalPrompt, 'text', onStream, model);
+    return await callDeepseek(finalPrompt, 'text', onStream, model, taskContext);
 };
 
 /**
@@ -59,57 +66,85 @@ export const callDeepseekWithRetry = async (
 export const callDeepseekChatWithRetry = async (
     prompt: string,
     systemPrompt?: string,
-    onStream?: (chunk: string) => void
+    onStream?: (chunk: string) => void,
+    taskContext?: TextTaskContext,
 ): Promise<string> => {
     // 组合系统提示词和用户提示词
     const finalPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
-    return await callDeepseek(finalPrompt, 'text', onStream, 'deepseek-chat');
+    return await callDeepseek(finalPrompt, 'text', onStream, 'deepseek-chat', taskContext);
 };
 
 const callDeepseekOnce = async (
     prompt: string, 
     responseFormat: ResponseFormat = 'text',
     onStream?: (chunk: string) => void,  // 🔧 流式回调
-    model: string = 'deepseek-reasoner'  // 🆕 支持指定模型
+    model: string = 'deepseek-reasoner',  // 🆕 支持指定模型
+    taskContext?: TextTaskContext,
 ): Promise<string> => {
-    const response = await apiFetch('/api/deepseek/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-            prompt,
-            response_format: responseFormat,
-            model  // 🆕 传递模型参数
-        })
-    }, { apiName: 'DeepSeek', authErrorMessage: '未登录，无法调用 DeepSeek 服务' });
+    const controller = new AbortController();
+    let requestTimedOut = false;
+    const requestTimer = window.setTimeout(() => {
+        requestTimedOut = true;
+        controller.abort();
+    }, DEEPSEEK_REQUEST_TIMEOUT_MS);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
-    if (!response.ok) {
-        const detail = await readErrorDetail(response);
-        throw new Error(detail || `DeepSeek 请求失败 (HTTP ${response.status})`);
-    }
+    try {
+        const response = await apiFetch('/api/deepseek/chat', {
+            method: 'POST',
+            signal: controller.signal,
+            body: JSON.stringify({
+                prompt,
+                response_format: responseFormat,
+                model,  // 🆕 传递模型参数
+                ...toTextTaskPayload(taskContext),
+            })
+        }, { apiName: 'DeepSeek', authErrorMessage: '未登录，无法调用 DeepSeek 服务' });
+
+        if (!response.ok) {
+            const detail = await readErrorDetail(response);
+            throw new Error(detail || `DeepSeek 请求失败 (HTTP ${response.status})`);
+        }
     
     // 🔧 处理流式响应
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-    let fullContent = '';
-    let buffer = '';
-    let streamError = '';
+        reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = '';
+        let buffer = '';
+        let streamError = '';
+        let streamFinished = false;
     
-    if (!reader) {
-        throw new Error('无法获取响应流');
-    }
+        if (!reader) {
+            throw new Error('无法获取响应流');
+        }
     
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        while (!streamFinished) {
+            let idleTimer: number | undefined;
+            const readResult = await Promise.race([
+                reader.read(),
+                new Promise<never>((_, reject) => {
+                    idleTimer = window.setTimeout(() => {
+                        requestTimedOut = true;
+                        controller.abort();
+                        reject(new DeepseekTimeoutError('DeepSeek 响应长时间没有新内容'));
+                    }, DEEPSEEK_STREAM_IDLE_TIMEOUT_MS);
+                }),
+            ]).finally(() => {
+                if (idleTimer !== undefined) window.clearTimeout(idleTimer);
+            });
+            const { done, value } = readResult;
+            if (done) break;
         
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';  // 保留最后一行未完成的数据
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';  // 保留最后一行未完成的数据
         
-        for (const line of lines) {
-            if (line.startsWith('data: ')) {
-                const data = line.slice(6);
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    const data = line.slice(5).trimStart();
                 if (data === '[DONE]') {
-                    break;
+                        streamFinished = true;
+                        break;
                 }
                 
                 try {
@@ -126,24 +161,36 @@ const callDeepseekOnce = async (
                 } catch (e) {
                     // 忽略解析错误
                 }
+                }
             }
         }
-    }
     
-    if (streamError) {
-        throw new Error(streamError);
+        if (streamError) {
+            throw new Error(streamError);
+        }
+        if (!fullContent.trim()) {
+            throw new Error('DeepSeek 返回空内容，请稍后重试');
+        }
+        return fullContent;
+    } catch (error) {
+        if (requestTimedOut || error instanceof DeepseekTimeoutError || (error as { name?: string } | null)?.name === 'AbortError') {
+            throw new Error('DeepSeek 生成超时或连接中断，本次未扣积分，请手动重试');
+        }
+        throw error;
+    } finally {
+        window.clearTimeout(requestTimer);
+        if (requestTimedOut) {
+            void reader?.cancel().catch(() => undefined);
+        }
     }
-    if (!fullContent.trim()) {
-        throw new Error('DeepSeek 返回空内容，请稍后重试');
-    }
-    return fullContent;
 };
 
 const callDeepseek = async (
     prompt: string,
     responseFormat: ResponseFormat = 'text',
     onStream?: (chunk: string) => void,
-    model: string = 'deepseek-reasoner'
+    model: string = 'deepseek-reasoner',
+    taskContext?: TextTaskContext,
 ): Promise<string> => {
     // Streaming UI writes chunks directly to the page, so only retry non-streaming calls.
     const maxAttempts = onStream ? 1 : MAX_DEEPSEEK_ATTEMPTS;
@@ -151,7 +198,7 @@ const callDeepseek = async (
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            return await callDeepseekOnce(prompt, responseFormat, onStream, model);
+            return await callDeepseekOnce(prompt, responseFormat, onStream, model, taskContext);
         } catch (error) {
             lastError = error;
             if (attempt >= maxAttempts || !isRetryableDeepseekError(error)) {

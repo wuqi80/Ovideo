@@ -317,6 +317,7 @@ async def create_video_reverse_task(
 async def list_video_reverse_tasks(
     user_id: str = Depends(get_current_user),
     project_id: Optional[str] = None,
+    episode_id: Optional[str] = None,
     status_filter: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
@@ -324,7 +325,12 @@ async def list_video_reverse_tasks(
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     rows = await VideoReverseTaskDAO.list_for_user(
-        user_id, project_id=project_id, status=status_filter, limit=limit, offset=offset,
+        user_id,
+        project_id=project_id,
+        episode_id=episode_id,
+        status=status_filter,
+        limit=limit,
+        offset=offset,
     )
     return {"success": True, "tasks": rows, "limit": limit, "offset": offset}
 

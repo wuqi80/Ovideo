@@ -73,7 +73,7 @@ class NotificationDAO:
             return []
         return await db.fetch(
             """SELECT * FROM notifications
-               WHERE user_id=$1
+               WHERE user_id=$1 AND status <> 'dismissed'
                ORDER BY created_at DESC LIMIT $2 OFFSET $3""",
             user_id, limit, offset
         )
@@ -110,9 +110,14 @@ class NotificationDAO:
         db = get_db_manager()
         if not db:
             return False
-        await db.execute(
+        result = await db.execute(
             """UPDATE notifications SET status='dismissed'
-               WHERE notification_id=$1 AND user_id=$2""",
+               WHERE user_id=$2
+                 AND (notification_id=$1 OR task_id=$1)
+                 AND status <> 'dismissed'""",
             notification_id, user_id
         )
-        return True
+        try:
+            return int(result.split()[-1]) > 0
+        except Exception:
+            return False

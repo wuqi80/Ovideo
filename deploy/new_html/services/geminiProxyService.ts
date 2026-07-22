@@ -4,6 +4,8 @@
  */
 
 import { apiJson } from './httpClient';
+import type { TextTaskContext } from './textTaskContext';
+import { toTextTaskPayload } from './textTaskContext';
 
 interface GeminiTextResponse {
   content?: string;
@@ -15,7 +17,8 @@ interface GeminiTextResponse {
 export const callGeminiProxy = async (
   prompt: string,
   systemPrompt?: string,
-  model?: string
+  model?: string,
+  taskContext?: TextTaskContext,
 ): Promise<string> => {
   try {
     console.log('📤 发送请求到后端Gemini代理');
@@ -23,7 +26,8 @@ export const callGeminiProxy = async (
     const body: Record<string, unknown> = {
       prompt,
       system_prompt: systemPrompt,
-      temperature: 0.7
+      temperature: 0.7,
+      ...toTextTaskPayload(taskContext),
     };
     if (model?.trim()) {
       body.model = model.trim();
@@ -56,13 +60,14 @@ export const callGeminiProxyWithRetry = async (
   prompt: string,
   systemPrompt?: string,
   maxRetries: number = 3,
-  model?: string
+  model?: string,
+  taskContext?: TextTaskContext,
 ): Promise<string> => {
   let lastError: Error | null = null;
   
   for (let i = 0; i < maxRetries; i++) {
     try {
-      return await callGeminiProxy(prompt, systemPrompt, model);
+      return await callGeminiProxy(prompt, systemPrompt, model, taskContext);
     } catch (error) {
       lastError = error as Error;
       console.warn(`⚠️ Gemini中转站调用失败（第${i + 1}次），重试中...`);

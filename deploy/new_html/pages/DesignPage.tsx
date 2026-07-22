@@ -28,6 +28,13 @@ import { apiBlob, secureApiUrl } from '../services/httpClient';
 import { isAssetImageFileRole } from '../utils/assetImageRoles';
 import { filterAssetsForDesignScope } from '../utils/assetScope';
 import { GpuNodeSelector, type GpuNodeSelection } from '../components/GpuNodeSelector';
+import {
+  standardTurnaroundAspectRatio,
+  standardTurnaroundLabel,
+  supportsStandardTurnaround,
+  withStandardTurnaround,
+} from '../utils/assetGenerationStandards';
+import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 
 type AssetTab = 'character' | 'scene' | 'prop';
 type MaterialAIEngine = 'nanobanana' | 'doubao';
@@ -48,8 +55,6 @@ const STYLE_PRESETS = [
   { id: 'render3d', label: '3D渲染', suffix: IMAGE_QUALITY_SUFFIX.render3d },
   { id: 'highQuality', label: '高质量', suffix: IMAGE_QUALITY_SUFFIX.highQuality },
 ];
-
-const THREE_VIEW_SUFFIX = '\nCreate a character turnaround sheet showing frontal view, right side view, left side view and back view, on a clean white background.';
 
 /* ---- localStorage helpers ---- */
 const LS = {
@@ -435,7 +440,7 @@ export const DesignPage: React.FC = () => {
       if (payload.engine === 'nanobanana') {
         await generateGeminiImageVariant({ model: payload.geminiModel, prompt: payload.prompt, references: payload.references, aspectRatio: payload.aspectRatio, ...entityOpts });
       } else {
-        await generateDoubaoImages({ prompt: payload.prompt, references: payload.references, size: payload.resolution, sequential: payload.sequential as any, count: payload.count, ...entityOpts });
+        await generateDoubaoImages({ prompt: payload.prompt, references: payload.references, size: recommendDoubaoImageSize(payload.aspectRatio, payload.resolution), sequential: payload.sequential as any, count: payload.count, ...entityOpts });
       }
       await forceReloadSlices('assets');
     } catch (err: any) { console.error('AI生成失败:', err); crmMessage.error(err?.message || 'AI生成失败'); }
@@ -541,13 +546,21 @@ export const DesignPage: React.FC = () => {
           }
         }
         const styleSuffix = STYLE_PRESETS.find(s => s.id === config.style)?.suffix || '';
-        let prompt = desc + styleSuffix;
-        if (config.threeView && asset.assetType === 'character') prompt += THREE_VIEW_SUFFIX;
+        const prompt = withStandardTurnaround(
+          desc + styleSuffix,
+          asset.assetType,
+          config.threeView,
+        );
+        const aspectRatio = standardTurnaroundAspectRatio(
+          asset.assetType,
+          config.aspectRatio,
+          config.threeView,
+        );
         const entityOpts = { entityType: 'asset' as const, entityId: asset.assetId, fileRole: 'reference_image' as const, episodeId: episodeId || undefined };
         if (config.engine === 'nanobanana') {
-          await generateGeminiImageVariant({ model: config.geminiModel, prompt, references: [], aspectRatio: config.threeView && asset.assetType === 'character' ? '16:9' : config.aspectRatio, ...entityOpts });
+          await generateGeminiImageVariant({ model: config.geminiModel, prompt, references: [], aspectRatio, ...entityOpts });
         } else {
-          await generateDoubaoImages({ prompt, references: [], size: config.resolution, ...entityOpts });
+          await generateDoubaoImages({ prompt, references: [], size: recommendDoubaoImageSize(aspectRatio, config.resolution), ...entityOpts });
         }
         okCount++;
       } catch (err: any) {
@@ -890,6 +903,9 @@ const UnifiedAIModal: React.FC<{
   const [sequential, setSequential] = useState<'disabled' | 'auto'>('disabled');
   const [count, setCount] = useState(1);
   const [activeStyle, setActiveStyle] = useState(savedStyle());
+  const [standardTurnaround, setStandardTurnaround] = useState(
+    supportsStandardTurnaround(asset.assetType),
+  );
   const [isRefining, setIsRefining] = useState(false);
   const [refineModel, setRefineModel] = useState(savedRefineModel());
   const persistedPromptRef = useRef(initialPrompt);
@@ -993,6 +1009,17 @@ const UnifiedAIModal: React.FC<{
               <div className="grid grid-cols-2 gap-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => (<button key={r} onClick={() => setAspectRatio(r)} className={`py-1 rounded text-[11px] border ${aspectRatio === r ? 'bg-primary text-white font-semibold' : 'border-n40 text-n300 hover:text-n800'}`}>{r}</button>))}</div>
               <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select>
             </div>
+            {supportsStandardTurnaround(asset.assetType) && (
+              <label className="flex items-center gap-2 text-xs text-n700">
+                <input
+                  type="checkbox"
+                  checked={standardTurnaround}
+                  onChange={e => setStandardTurnaround(e.target.checked)}
+                  className="accent-indigo-500"
+                />
+                {standardTurnaroundLabel(asset.assetType)}
+              </label>
+            )}
             {engine === 'doubao' && (
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-xs text-n700"><input type="checkbox" checked={sequential === 'auto'} onChange={e => setSequential(e.target.checked ? 'auto' : 'disabled')} /> 关联组图</label>
@@ -1009,7 +1036,7 @@ const UnifiedAIModal: React.FC<{
         </div>
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
           <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button onClick={() => { if (!prompt.trim()) { crmMessage.error('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: prompt.trim(), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio, resolution, sequential, count }); }}
+          <button onClick={() => { if (!prompt.trim()) { crmMessage.error('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: withStandardTurnaround(prompt, asset.assetType, standardTurnaround), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio: standardTurnaroundAspectRatio(asset.assetType, aspectRatio, standardTurnaround), resolution, sequential, count }); }}
             className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">开始生成</button>
         </div>
       </div>
@@ -1104,7 +1131,7 @@ const BatchGenerateModal: React.FC<{
             <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value={AiModel.Gemini}>Gemini</option><option value={AiModel.DeepseekChat}>DeepSeek</option></select></div>
             <label className="flex items-center gap-2 text-xs text-n700 p-3 bg-n30 rounded-lg border border-n40">
               <input type="checkbox" checked={threeView} onChange={e => setThreeView(e.target.checked)} className="accent-indigo-500" />
-              人物默认生成三视图（正面/侧面/背面设定图）
+              人物/道具默认生成白底四视图
             </label>
             <div className="text-xs text-n100 bg-n30 rounded-lg p-3 border border-n40">
               已选 <strong className="text-n800">{checked.size}</strong> 项

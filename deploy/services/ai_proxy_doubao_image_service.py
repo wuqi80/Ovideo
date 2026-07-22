@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import time
 from typing import Any, Dict, List, Optional
@@ -43,7 +44,9 @@ def normalize_doubao_image_size(size: str, *, minimum_square: Optional[int] = No
         width = int(match.group(1))
         height = int(match.group(2))
         if minimum_square and width * height < minimum_square * minimum_square:
-            return f"{minimum_square}x{minimum_square}"
+            scale = math.sqrt((minimum_square * minimum_square) / (width * height))
+            width = math.ceil((width * scale) / 16) * 16
+            height = math.ceil((height * scale) / 16) * 16
         return f"{width}x{height}"
 
     if minimum_square:

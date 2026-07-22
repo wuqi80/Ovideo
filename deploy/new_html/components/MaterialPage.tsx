@@ -11,6 +11,13 @@ import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoSer
 import { generateThumbnail } from '../utils/imageOptimization';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
+import {
+  standardTurnaroundAspectRatio,
+  standardTurnaroundLabel,
+  supportsStandardTurnaround,
+  withStandardTurnaround,
+} from '../utils/assetGenerationStandards';
+import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 
 type MaterialAIEngine = 'nanobanana' | 'doubao';
 type BindingAssetType = 'character' | 'scene' | 'prop';
@@ -444,7 +451,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             results = await generateDoubaoImages({
                 prompt: payload.prompt,
                 references,
-                size: payload.resolution,
+                size: recommendDoubaoImageSize(payload.aspectRatio, payload.resolution),
                 sequential: payload.sequential,
                 count: payload.count,
                 ...entityOpts,
@@ -602,7 +609,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   const handleThreeViewGenerate = async (materialId: string, prompt: string) => {
     if (!threeViewModalConfig) return;
     
-    const { tagName, materials } = threeViewModalConfig;
+    const { tagName, materials, type } = threeViewModalConfig;
     const targetMaterial = materials.find(m => m.id === materialId);
 
     if (!targetMaterial) {
@@ -632,9 +639,10 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         const targetAssetId = assetNameToId?.[tagName];
         const { generateGeminiImageVariant } = await import('../services/geminiImageGenerationService');
         const results = await generateGeminiImageVariant({
-            prompt: prompt,
+            prompt: withStandardTurnaround(prompt, type),
             references: [targetMaterial.url],
             model: 'gemini-2.5-flash-image',
+            aspectRatio: '16:9',
             entityType: 'asset',
             entityId: targetAssetId,
             fileRole: 'material_image',
@@ -662,7 +670,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             [tagName]: [...existing, newMaterial]
         });
 
-        alert('三视图生成完成！');
+        alert(`${standardTurnaroundLabel(type)}生成完成！`);
     } catch (error: any) {
         console.error('Three-view generation failed', error);
         alert(error?.message || '生成失败，请稍后再试。');
@@ -1711,14 +1719,13 @@ const MaterialCard: React.FC<{
                     )}
                     <span>去水印</span>
                 </button>
-                {/* 三视图仅对角色启用 */}
-                {type === 'character' && (
+                {supportsStandardTurnaround(type) && (
                     <button
                         onClick={() => onProcessMaterial('three_view')}
                         disabled={!hasMaterials}
                         className="flex items-center justify-center gap-2 py-2 bg-success/10 hover:bg-success/20 text-success rounded-lg text-xs font-semibold border border-success/30 hover:border-success transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                        <span>三视图</span>
+                        <span>四视图</span>
                     </button>
                 )}
             </div>
@@ -1740,12 +1747,16 @@ const MaterialAIModal: React.FC<{
     const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
     const [sequential, setSequential] = useState<'disabled' | 'auto'>('disabled');
     const [count, setCount] = useState(1);
+    const [standardTurnaround, setStandardTurnaround] = useState(
+        supportsStandardTurnaround(config.type),
+    );
 
     const maxRefs = engine === 'nanobanana' ? 6 : 10;
 
     useEffect(() => {
         setPrompt(config.defaultPrompt);
         setSelectedRefs(new Set());
+        setStandardTurnaround(supportsStandardTurnaround(config.type));
     }, [config]);
 
     useEffect(() => {
@@ -1782,10 +1793,10 @@ const MaterialAIModal: React.FC<{
         onSubmit({
             tagName: config.tagName,
             engine,
-            prompt: prompt.trim(),
+            prompt: withStandardTurnaround(prompt, config.type, standardTurnaround),
             references,
             geminiModel,
-            aspectRatio,
+            aspectRatio: standardTurnaroundAspectRatio(config.type, aspectRatio, standardTurnaround),
             resolution,
             sequential,
             count
@@ -1873,6 +1884,18 @@ const MaterialAIModal: React.FC<{
                                 <option value="4K">4K 输出</option>
                             </select>
                         </div>
+
+                        {supportsStandardTurnaround(config.type) && (
+                            <label className="flex items-center gap-2 text-xs text-n700">
+                                <input
+                                    type="checkbox"
+                                    checked={standardTurnaround}
+                                    onChange={(e) => setStandardTurnaround(e.target.checked)}
+                                    className="accent-indigo-500"
+                                />
+                                {standardTurnaroundLabel(config.type)}
+                            </label>
+                        )}
 
                         {engine === 'doubao' && (
                             <div className="space-y-2">
@@ -2277,7 +2300,9 @@ const ThreeViewModal: React.FC<{
     onSubmit: (materialId: string, prompt: string) => void;
 }> = ({ config, onClose, onSubmit }) => {
     const [selectedMaterialId, setSelectedMaterialId] = useState<string>(config.selectedMaterialId);
-    const [prompt, setPrompt] = useState<string>('Create a four-panel turnaround for this figure to show frontal, right side, left side and back, in a white background.');
+    const [prompt, setPrompt] = useState<string>(
+        withStandardTurnaround(config.tagName, config.type),
+    );
 
     const currentMaterial = config.materials.find(m => m.id === selectedMaterialId) || config.materials[0];
     
@@ -2298,6 +2323,7 @@ const ThreeViewModal: React.FC<{
 
     useEffect(() => {
         setSelectedMaterialId(config.selectedMaterialId || config.materials[0]?.id);
+        setPrompt(withStandardTurnaround(config.tagName, config.type));
     }, [config]);
 
     const handleSubmit = () => {
@@ -2329,8 +2355,7 @@ const ThreeViewModal: React.FC<{
             <div className="w-full max-w-3xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-lg font-bold text-n800">三视图生成 - {config.tagName}</h3>
-                        <p className="text-xs text-n300 mt-1">为角色生成正面、侧面、背面的四视图参考</p>
+                        <h3 className="text-lg font-bold text-n800">{standardTurnaroundLabel(config.type)} - {config.tagName}</h3>
                     </div>
                     <button onClick={onClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />

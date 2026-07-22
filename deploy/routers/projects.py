@@ -107,6 +107,7 @@ def create_projects_router(
             return {"success": False, "projects": []}
 
     @router.get("/api/projects/{project_id}")
+    @router.get("/api/projects/{project_id}/workspace")
     async def get_project(
         project_id: str,
         thumbnail_only: bool = True,

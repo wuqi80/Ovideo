@@ -11,7 +11,7 @@ export interface DoubaoGenerationOptions {
     prompt: string;
     referenceMetadata?: GeminiImageReferenceMetadata[];
     references?: string[];
-    size?: '1K' | '2K' | '4K';
+    size?: string;
     sequential?: 'disabled' | 'auto';
     count?: number;
     entityType?: string;

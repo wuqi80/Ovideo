@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { MaterialPage } from '../components/MaterialPage';
 import {
+  applyStoryboardRecordPatch,
   scriptToProjectFile,
   assetsToMaterialLibrary,
   dbItemToStoryboardItem,
+  normalizeStoryboardRecord,
 } from '../utils/episodeAdapters';
 import {
   updateAsset as apiUpdateAsset,
@@ -17,58 +19,14 @@ import { Image as ImageIcon, Loader } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { MaterialLibrary, Material, FileVersion, StoryboardItemDB } from '../types';
 
-function safeBoundAssets(v: unknown): string[] {
-  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string');
-  if (typeof v === 'string') {
-    try {
-      const parsed = JSON.parse(v);
-      if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === 'string');
-    } catch {}
-  }
-  return [];
-}
-
-function normalizeMaterialsStoryboardItem(r: any): StoryboardItemDB {
-  return {
-    itemId: r.item_id ?? r.itemId ?? '',
-    episodeId: r.episode_id ?? r.episodeId ?? '',
-    sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
-    sceneHeading: r.scene_heading ?? r.sceneHeading ?? '',
-    actionText: r.action_text ?? r.actionText ?? '',
-    dialogue: r.dialogue ?? '',
-    cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
-    imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
-    videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
-    generatedImageUrl: r.generated_image_url ?? r.generatedImageUrl ?? null,
-    boundAssets: safeBoundAssets(r.bound_assets ?? r.boundAssets),
-    status: r.status ?? 'draft',
-    dialogueAudioUrl: null,
-    narrationAudioUrl: null,
-    sfxAudioUrl: null,
-    audioDurationMs: null,
-    plannedDurationMs: null,
-  };
-}
-
-function applyMaterialsStoryboardPatch(item: StoryboardItemDB, patch: Record<string, any>): StoryboardItemDB {
-  return {
-    ...item,
-    sceneHeading: patch.scene_heading ?? patch.sceneHeading ?? item.sceneHeading,
-    actionText: patch.action_text ?? patch.actionText ?? item.actionText,
-    dialogue: patch.dialogue ?? item.dialogue,
-    cameraMovement: patch.camera_movement ?? patch.cameraMovement ?? item.cameraMovement,
-    imagePrompt: patch.image_prompt ?? patch.imagePrompt ?? item.imagePrompt,
-    videoPrompt: patch.video_prompt ?? patch.videoPrompt ?? item.videoPrompt,
-    generatedImageUrl: patch.generated_image_url ?? patch.generatedImageUrl ?? item.generatedImageUrl,
-    boundAssets: patch.bound_assets !== undefined || patch.boundAssets !== undefined
-      ? safeBoundAssets(patch.bound_assets ?? patch.boundAssets)
-      : item.boundAssets,
-    status: patch.status ?? item.status,
-  };
-}
-
 const MATERIALS_STORYBOARD_INITIAL_LOAD_LIMIT = 20;
 const MATERIALS_STORYBOARD_BACKGROUND_PAGE_SIZE = 80;
+
+function normalizeMaterialsStoryboardItem(record: Record<string, any>): StoryboardItemDB {
+  return normalizeStoryboardRecord(record);
+}
+const MATERIALS_AUTO_PATCH_MAX_ATTEMPTS = 3;
+const MATERIALS_AUTO_PATCH_RETRY_DELAY_MS = 1200;
 
 function sortMaterialsStoryboardItems(items: StoryboardItemDB[]): StoryboardItemDB[] {
   return [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -169,7 +127,7 @@ export const MaterialsPage: React.FC = () => {
   const updateMaterialsStoryboardItem = useCallback(async (itemId: string, data: Record<string, any>) => {
     await apiUpdateStoryboardItem(itemId, data);
     setStoryboardItems(prev => prev.map(item =>
-      item.itemId === itemId ? applyMaterialsStoryboardPatch(item, data) : item
+      item.itemId === itemId ? applyStoryboardRecordPatch(item, data) : item
     ));
   }, []);
 
@@ -195,9 +153,19 @@ export const MaterialsPage: React.FC = () => {
 
   // Auto-patch: add char:/scene:/prop: tags to storyboard items that lack them
   const patchedItemIdsRef = useRef<Set<string>>(new Set());
+  const patchAttemptsRef = useRef<Map<string, number>>(new Map());
+  const patchRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoPatchRevision, setAutoPatchRevision] = useState(0);
   useEffect(() => {
     patchedItemIdsRef.current.clear();
+    patchAttemptsRef.current.clear();
+    if (patchRetryTimerRef.current) clearTimeout(patchRetryTimerRef.current);
+    patchRetryTimerRef.current = null;
   }, [episodeId, selectedScriptId]);
+
+  useEffect(() => () => {
+    if (patchRetryTimerRef.current) clearTimeout(patchRetryTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!storyboardItems.length || !assets.length) return;
@@ -207,14 +175,15 @@ export const MaterialsPage: React.FC = () => {
     if (!charAssets.length && !sceneAssets.length && !propAssets.length) return;
 
     const uncheckedItems = storyboardItems.filter(item =>
-      item.itemId && !patchedItemIdsRef.current.has(item.itemId)
+      item.itemId
+      && !patchedItemIdsRef.current.has(item.itemId)
+      && (patchAttemptsRef.current.get(item.itemId) || 0) < MATERIALS_AUTO_PATCH_MAX_ATTEMPTS
     );
     if (!uncheckedItems.length) return;
 
-    uncheckedItems.forEach(item => patchedItemIdsRef.current.add(item.itemId));
-
     const doPatch = async () => {
       let patched = 0;
+      let retryNeeded = false;
       for (const item of uncheckedItems) {
         const searchText = [
           item.sceneHeading, item.actionText, item.dialogue,
@@ -239,21 +208,34 @@ export const MaterialsPage: React.FC = () => {
           : [];
         tags.push(...matchedProps.map(a => `prop:${a.name}`).filter(tag => !hasTag(tag)));
 
-        if (tags.length > existing.length) {
-          try {
-            await updateMaterialsStoryboardItem(item.itemId, { bound_assets: tags, boundAssets: tags });
-            patched++;
-          } catch (e) {
-            console.error('Auto-patch bound_assets failed:', e);
-          }
+        if (tags.length <= existing.length) {
+          patchedItemIdsRef.current.add(item.itemId);
+          continue;
+        }
+
+        const attempts = (patchAttemptsRef.current.get(item.itemId) || 0) + 1;
+        patchAttemptsRef.current.set(item.itemId, attempts);
+        try {
+          await updateMaterialsStoryboardItem(item.itemId, { bound_assets: tags, boundAssets: tags });
+          patchedItemIdsRef.current.add(item.itemId);
+          patched++;
+        } catch (e) {
+          retryNeeded ||= attempts < MATERIALS_AUTO_PATCH_MAX_ATTEMPTS;
+          console.error(`Auto-patch bound_assets failed (attempt ${attempts}):`, e);
         }
       }
       if (patched > 0) {
         console.log(`Auto-patched ${patched} storyboard items with char/scene/prop tags`);
       }
+      if (retryNeeded && !patchRetryTimerRef.current) {
+        patchRetryTimerRef.current = setTimeout(() => {
+          patchRetryTimerRef.current = null;
+          setAutoPatchRevision(value => value + 1);
+        }, MATERIALS_AUTO_PATCH_RETRY_DELAY_MS);
+      }
     };
-    doPatch();
-  }, [storyboardItems, assets, updateMaterialsStoryboardItem]);
+    void doPatch();
+  }, [autoPatchRevision, storyboardItems, assets, updateMaterialsStoryboardItem]);
 
   const handleUpdateLibrary = useCallback(async (newLibrary: MaterialLibrary) => {
 

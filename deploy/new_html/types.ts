@@ -466,6 +466,8 @@ export type TaskKind =
 export interface RegisteredTask {
   /** 后端任务 id（comfyui taskId / seedance taskId / 等） */
   taskId: string;
+  /** 持久化通知 id；与 taskId 不同，关闭通知时优先使用。 */
+  notificationId?: string;
   /** 细粒度类型，用于 UI 图标 + 显示 */
   kind: TaskKind;
   /** 用户可读的标题，例如 "视频生成 镜头3 (Seedance)" */

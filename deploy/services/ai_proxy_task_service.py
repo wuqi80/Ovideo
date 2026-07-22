@@ -1,11 +1,23 @@
 """Task persistence helpers for AI proxy routes."""
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Callable, Dict, Optional
 
 
 TimestampMsProvider = Callable[[], int]
+
+_TEXT_CONTEXT_KEYS = (
+    "operation",
+    "display_name",
+    "project_id",
+    "episode_id",
+    "source_page",
+    "source_item_id",
+    "entity_type",
+    "entity_id",
+)
 
 
 def _default_timestamp_ms() -> int:
@@ -20,6 +32,101 @@ async def _default_task_dao() -> Any:
     from dao_task import TaskDAO
 
     return TaskDAO
+
+
+async def _default_notification_dao() -> Any:
+    from dao_notification import NotificationDAO
+
+    return NotificationDAO
+
+
+def _normalize_text_context(task_context: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    if not isinstance(task_context, dict):
+        return {}
+    normalized: Dict[str, str] = {}
+    for key in _TEXT_CONTEXT_KEYS:
+        value = task_context.get(key)
+        if isinstance(value, str) and value.strip():
+            normalized[key] = value.strip()[:200]
+    return normalized
+
+
+async def _emit_text_task_terminal(
+    *,
+    task_id: str,
+    user_id: Optional[str],
+    task_type: str,
+    status: str,
+    task_context: Optional[Dict[str, Any]],
+    logger: Any,
+    error_message: str = "",
+    redis_client: Optional[Any] = None,
+    notification_dao: Optional[Any] = None,
+) -> None:
+    """Publish the same terminal event shape used by queued tasks and persist it."""
+
+    if not user_id:
+        return
+
+    context = _normalize_text_context(task_context)
+    display_name = context.get("display_name") or (
+        "DeepSeek 文本生成" if task_type.startswith("deepseek") else "Gemini 文本生成"
+    )
+    project_id = context.get("project_id", "")
+    source_page = context.get("source_page", "global")
+    event_type = "task_complete" if status == "completed" else "task_failed"
+    payload = {
+        "type": event_type,
+        "task_id": task_id,
+        "status": status,
+        "task_type": task_type,
+        "display_name": display_name,
+        "project_id": project_id,
+        "source_page": source_page,
+        "source_item_id": context.get("source_item_id", ""),
+        "entity_type": context.get("entity_type", ""),
+        "entity_id": context.get("entity_id", ""),
+        "file_role": "",
+        "episode_id": context.get("episode_id", ""),
+    }
+    if error_message:
+        payload["error"] = error_message[:1000]
+
+    if redis_client is not None:
+        try:
+            await redis_client.publish(
+                f"{event_type}:{user_id}",
+                json.dumps(payload, ensure_ascii=False),
+            )
+        except Exception as exc:
+            logger.warning("AI proxy text terminal event publish failed: %s", exc)
+
+    try:
+        dao = notification_dao or await _default_notification_dao()
+        succeeded = status == "completed"
+        await dao.create(
+            user_id=user_id,
+            title=f"{display_name} {'已完成' if succeeded else '失败'}",
+            message=(
+                f"任务 {task_id} 执行成功"
+                if succeeded
+                else f"任务 {task_id} 执行失败: {error_message[:200]}"
+            ),
+            category="text",
+            task_id=task_id,
+            target_view="Script",
+            target_project_id=project_id or None,
+            target_page=source_page,
+            target_item_id=context.get("source_item_id") or None,
+            metadata={
+                "operation": context.get("operation", ""),
+                "episode_id": context.get("episode_id", ""),
+                "entity_type": context.get("entity_type", ""),
+                "entity_id": context.get("entity_id", ""),
+            },
+        )
+    except Exception as exc:
+        logger.warning("AI proxy text notification persistence failed: %s", exc)
 
 
 async def create_ai_proxy_task(
@@ -56,6 +163,11 @@ async def complete_ai_proxy_text_task(
     text_content: str,
     logger: Any,
     task_dao: Optional[Any] = None,
+    user_id: Optional[str] = None,
+    task_type: str = "text",
+    task_context: Optional[Dict[str, Any]] = None,
+    redis_client: Optional[Any] = None,
+    notification_dao: Optional[Any] = None,
 ) -> bool:
     """Persist a completed streaming/text result back to the task table."""
 
@@ -67,6 +179,16 @@ async def complete_ai_proxy_text_task(
             result_data={"text": _truncate_text(text_content), "full_length": len(text_content)},
         )
         logger.info("AI proxy text task completed: %s length=%s", task_id, len(text_content))
+        await _emit_text_task_terminal(
+            task_id=task_id,
+            user_id=user_id,
+            task_type=task_type,
+            status="completed",
+            task_context=task_context,
+            logger=logger,
+            redis_client=redis_client,
+            notification_dao=notification_dao,
+        )
         return True
     except Exception as exc:
         logger.error("AI proxy text task completion failed: %s", exc, exc_info=True)
@@ -141,6 +263,11 @@ async def fail_ai_proxy_task(
     error_message: str,
     logger: Any,
     task_dao: Optional[Any] = None,
+    user_id: Optional[str] = None,
+    task_type: str = "text",
+    task_context: Optional[Dict[str, Any]] = None,
+    redis_client: Optional[Any] = None,
+    notification_dao: Optional[Any] = None,
 ) -> bool:
     """Persist a failed AI proxy task without masking the original error."""
 
@@ -154,6 +281,18 @@ async def fail_ai_proxy_task(
             error_message=error_message[:1000],
         )
         logger.info("AI proxy task failed: %s", task_id)
+        if user_id:
+            await _emit_text_task_terminal(
+                task_id=task_id,
+                user_id=user_id,
+                task_type=task_type,
+                status="failed",
+                task_context=task_context,
+                logger=logger,
+                error_message=error_message,
+                redis_client=redis_client,
+                notification_dao=notification_dao,
+            )
         return True
     except Exception as exc:
         logger.error("AI proxy task failure persistence failed: %s", exc, exc_info=True)
@@ -167,18 +306,53 @@ async def create_deepseek_text_task(
     response_format: Optional[str],
     temperature: float,
     logger: Any,
+    model: Optional[str] = None,
     task_dao: Optional[Any] = None,
     timestamp_ms_provider: TimestampMsProvider = _default_timestamp_ms,
+    task_context: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
-    return await create_ai_proxy_task(
+    task_data = {
+        "prompt": prompt[:500],
+        "response_format": response_format,
+        "temperature": temperature,
+        "model": model,
+    }
+    task_data.update(_normalize_text_context(task_context))
+    return await start_ai_proxy_task(
         task_id_prefix="deepseek_text",
         user_id=user_id,
         task_type="deepseek_text",
-        task_data={
-            "prompt": prompt[:500],
-            "response_format": response_format,
-            "temperature": temperature,
-        },
+        task_data=task_data,
+        logger=logger,
+        task_dao=task_dao,
+        timestamp_ms_provider=timestamp_ms_provider,
+    )
+
+
+async def create_gemini_text_task(
+    *,
+    user_id: str,
+    prompt: str,
+    system_prompt: Optional[str],
+    temperature: float,
+    model: Optional[str],
+    logger: Any,
+    task_dao: Optional[Any] = None,
+    timestamp_ms_provider: TimestampMsProvider = _default_timestamp_ms,
+    task_context: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    task_data = {
+        "prompt": prompt[:500],
+        "system_prompt": system_prompt[:200] if system_prompt else None,
+        "temperature": temperature,
+        "model": model,
+    }
+    task_data.update(_normalize_text_context(task_context))
+    return await start_ai_proxy_task(
+        task_id_prefix="gemini_text",
+        user_id=user_id,
+        task_type="gemini_text",
+        task_data=task_data,
         logger=logger,
         task_dao=task_dao,
         timestamp_ms_provider=timestamp_ms_provider,
@@ -196,20 +370,20 @@ async def create_completed_gemini_text_task(
     logger: Any,
     task_dao: Optional[Any] = None,
     timestamp_ms_provider: TimestampMsProvider = _default_timestamp_ms,
+    task_context: Optional[Dict[str, Any]] = None,
+    redis_client: Optional[Any] = None,
+    notification_dao: Optional[Any] = None,
 ) -> Optional[str]:
-    task_id = await create_ai_proxy_task(
-        task_id_prefix="gemini_text",
+    task_id = await create_gemini_text_task(
         user_id=user_id,
-        task_type="gemini_text",
-        task_data={
-            "prompt": prompt[:500],
-            "system_prompt": system_prompt[:200] if system_prompt else None,
-            "temperature": temperature,
-            "model": model,
-        },
+        prompt=prompt,
+        system_prompt=system_prompt,
+        temperature=temperature,
+        model=model,
         logger=logger,
         task_dao=task_dao,
         timestamp_ms_provider=timestamp_ms_provider,
+        task_context=task_context,
     )
     if task_id:
         await complete_ai_proxy_text_task(
@@ -217,6 +391,11 @@ async def create_completed_gemini_text_task(
             text_content=content,
             logger=logger,
             task_dao=task_dao,
+            user_id=user_id,
+            task_type="gemini_text",
+            task_context=task_context,
+            redis_client=redis_client,
+            notification_dao=notification_dao,
         )
     return task_id
 

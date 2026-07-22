@@ -17,7 +17,16 @@ import { exportScript, deleteStoryboardItem } from './services/storyboardMutatio
 import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
 import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
-import { ensureStoryboardCutSeparators, validateStoryboardIterationCount } from './utils/scriptIteration';
+import {
+  buildStoryboardValidationInstruction,
+  ensureStoryboardCutSeparators,
+  validateStoryboardIterationCount,
+} from './utils/scriptIteration';
+import {
+  buildStoryboardSegmentGroups,
+  normalizeStoryboardItemsForWorkflow,
+  serializeStoryboardItemsWithSegments,
+} from './utils/storyboardSegments';
 import {
   STORYBOARD_SNAPSHOTS_METADATA_KEY,
   cloneStoryboardSnapshot,
@@ -26,6 +35,11 @@ import {
   getVersionStoryboardSnapshots,
   mergeStoryboardSnapshots,
 } from './utils/storyboardSnapshots';
+import {
+  buildShotDurationInstruction,
+  DEFAULT_SHOT_DURATION_MODE,
+  type ShotDurationMode,
+} from './utils/shotDurationMode';
 
 const loadAiModelService = () => import('./services/aiModelService');
 
@@ -50,6 +64,7 @@ type HistoryUpdateOptions = {
 
 const FileColumn = React.lazy(() => import('./components/FileColumn').then(m => ({ default: m.FileColumn })));
 const ScriptConversationPane = React.lazy(() => import('./components/ScriptConversationPane').then(m => ({ default: m.ScriptConversationPane })));
+const VideoReversePage = React.lazy(() => import('./pages/VideoReversePage').then(m => ({ default: m.VideoReversePage })));
 const StoryboardScriptColumn = React.lazy(() => import('./components/StoryboardScriptColumn').then(m => ({ default: m.StoryboardScriptColumn })));
 const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn').then(m => ({ default: m.StoryboardColumn })));
 const LegacyMaterialPage = React.lazy(() => import('./components/MaterialPage').then(m => ({ default: m.MaterialPage })));
@@ -135,12 +150,13 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
 }
 
 function normalizeVersionStoryboardItems(rows: any[]): StoryboardItem[] {
-  return (rows || []).map((row: any, index: number) => {
+  const normalized = (rows || []).map((row: any, index: number) => {
     if (row?.originalText !== undefined || row?.scriptSegment !== undefined) {
       return { ...row, id: row.id || uuidv4(), shotNumber: row.shotNumber ?? index + 1 } as StoryboardItem;
     }
     return mapWorkspaceStoryboardRowsToItems([row])[0];
   });
+  return normalizeStoryboardItemsForWorkflow(normalized);
 }
 
 function buildLocalScriptConversation(file: ProjectFile): ScriptConversation {
@@ -192,17 +208,26 @@ function parseStoryboardVersionContent(content: string): StoryboardItem[] {
   const separated = ensureStoryboardCutSeparators(content);
   const normalized = separated.endsWith('---CUT---') ? separated : `${separated}\n---CUT---`;
   const parsed = parseStreamingBlocks(normalized);
-  return parsed.completedBlocks.map((block, index) => {
+  const items = parsed.completedBlocks.map((block, index) => {
     const item = convertToStoryboardItem(block);
-    return { ...item, shotNumber: item.shotNumber || `镜头${String(index + 1).padStart(2, '0')}` };
+    return { ...item, shotNumber: `镜头${String(index + 1).padStart(2, '0')}` };
   });
+  return normalizeStoryboardItemsForWorkflow(items);
 }
 
 function exportStoryboardVersionCsv(file: ProjectFile, version: ScriptStoryboardVersion): void {
-  const headers = ['镜头', '时长', '画面描述', '人物', '场景', '道具', '生图 Prompt', '视频 Prompt', '人物台词'];
+  const normalizedItems = normalizeVersionStoryboardItems(version.storyboardItems);
+  const segmentGroups = buildStoryboardSegmentGroups(normalizedItems);
+  const segmentByItemId = new Map(segmentGroups.flatMap(group => group.entries.map(entry => [entry.item.id, {
+    segmentNo: group.segmentNo,
+    localShotNo: entry.localShotNo,
+  }] as const)));
+  const headers = ['分段', '段内镜头', '全局序号', '时长', '画面描述', '人物', '场景', '道具', '生图 Prompt', '视频 Prompt', '人物台词'];
   const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-  const rows = version.storyboardItems.map((item, index) => [
-    item.shotNumber || index + 1,
+  const rows = normalizedItems.map((item, index) => [
+    segmentByItemId.get(item.id)?.segmentNo || 1,
+    segmentByItemId.get(item.id)?.localShotNo || index + 1,
+    index + 1,
     item.duration || '',
     item.scriptSegment || item.originalText || '',
     (item.characters || []).join('、'),
@@ -407,6 +432,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const [conversationSendingId, setConversationSendingId] = useState<string | null>(null);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [storyboardDrawerOpen, setStoryboardDrawerOpen] = useState(false);
+  const [videoReverseOpen, setVideoReverseOpen] = useState(false);
   const loadedConversationKeysRef = useRef<Set<string>>(new Set());
   const conversationRequestsRef = useRef<Map<string, Promise<ScriptConversation>>>(new Map());
   
@@ -496,7 +522,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   /**
    * 分集模式：加载当前分集的所有文件（多文件支持）
    */
-  const loadEpisodeData = async () => {
+  const loadEpisodeData = async (preferredScriptId?: string) => {
     if (!propEpisodeId) return;
     setIsLoadingProjects(true);
     try {
@@ -506,10 +532,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       ]);
 
       const scripts: any[] = scriptsRes.success ? (scriptsRes.scripts || []) : [];
+      const requestedScriptId = preferredScriptId || initialScriptId;
       const initialStoryboardScriptId = (
-        initialScriptId && scripts.some((script: any) => (script.script_id ?? script.scriptId) === initialScriptId)
+        requestedScriptId && scripts.some((script: any) => (script.script_id ?? script.scriptId) === requestedScriptId)
       )
-        ? initialScriptId
+        ? requestedScriptId
         : (scripts[0]?.script_id ?? scripts[0]?.scriptId ?? undefined);
       const sbRes = await getStoryboardItems(propEpisodeId, initialStoryboardScriptId, {
         limit: WORKSPACE_INITIAL_STORYBOARD_COUNT,
@@ -605,8 +632,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         }];
       }
 
-      const restoreId = initialScriptId && projectFiles.some(f => f.id === initialScriptId)
-        ? initialScriptId
+      const restoreId = requestedScriptId && projectFiles.some(f => f.id === requestedScriptId)
+        ? requestedScriptId
         : projectFiles[0]?.id || null;
       const storyboardTotal = typeof (sbRes as any).total === 'number'
         ? (sbRes as any).total
@@ -1430,10 +1457,24 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       currentScript,
       instruction,
       conversationContext,
+      undefined,
+      {
+        operation: 'script_rewrite',
+        displayName: '剧本修改',
+        projectId: urlProjectId,
+        episodeId: propEpisodeId,
+        sourcePage: 'script',
+        sourceItemId: selectedFileId || undefined,
+        entityType: 'episode_script',
+        entityId: selectedFileId || undefined,
+      },
     );
-  }, [aiModel]);
+  }, [aiModel, propEpisodeId, selectedFileId, urlProjectId]);
 
-  const handleConversationSend = useCallback(async (content: string) => {
+  const handleConversationSend = useCallback(async (
+    content: string,
+    shotDurationMode: ShotDurationMode = DEFAULT_SHOT_DURATION_MODE,
+  ) => {
     const fileId = selectedFileId;
     const file = filesRef.current.find(item => item.id === fileId);
     if (!fileId || !file) throw new Error('请先选择剧本任务');
@@ -1452,9 +1493,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const conversationContext = conversation.messages.slice(-10)
       .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
+    const durationInstruction = buildShotDurationInstruction(shotDurationMode);
     const billingInput = isFirstTurn
-      ? content
-      : [currentVersion?.content || file.scriptContent || file.originalContent, content, conversationContext].join('\n');
+      ? [content, durationInstruction].join('\n')
+      : [currentVersion?.content || file.scriptContent || file.originalContent, content, durationInstruction, conversationContext].join('\n');
     const forecastOutputTokens = Math.max(
       1000,
       estimateTextTokens(currentVersion?.content || file.scriptContent || content) * (isFirstTurn ? 2 : 1),
@@ -1464,12 +1506,15 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
     let assistantMessageId: string | null = null;
     let streamedContent = '';
+    let estimatedCreditCost = 0;
+    let chargedCreditCost = 0;
     try {
-      await assertEnoughCredits('script_model_call', {
+      const creditQuote = await assertEnoughCredits('script_model_call', {
         input_tokens: estimateTextTokens(billingInput),
         output_tokens: forecastOutputTokens,
         model: modelInfo.runtime,
       });
+      estimatedCreditCost = Number(creditQuote.estimated_cost || 0);
       const userMessage = await createScriptMessage(propEpisodeId, fileId, {
         role: 'user',
         content,
@@ -1501,6 +1546,12 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         modelName: modelInfo.runtime,
         replyToMessageId: userMessage.id,
         requestId: `${requestId}_assistant`,
+        metadata: {
+          requestId,
+          estimatedCreditCost,
+          creditCharged: false,
+          shotDurationMode,
+        },
       });
       assistantMessageId = assistantMessage.id;
       setScriptConversations(prev => ({
@@ -1513,44 +1564,76 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
       const aiService = await loadAiModelService();
       let result = '';
-      if (isFirstTurn) {
-        result = await aiService.aiGenerateStoryboardScript(aiModel, content, '', chunk => {
-          streamedContent += chunk;
-          setScriptConversations(prev => {
-            const current = prev[fileId];
-            if (!current) return prev;
-            return {
-              ...prev,
-              [fileId]: {
-                ...current,
-                messages: current.messages.map(message => message.id === assistantMessage.id
-                  ? { ...message, content: streamedContent, status: 'streaming', updatedAt: Date.now() }
-                  : message),
-              },
-            };
-          });
+      const appendStreamChunk = (chunk: string) => {
+        streamedContent += chunk;
+        setScriptConversations(prev => {
+          const current = prev[fileId];
+          if (!current) return prev;
+          return {
+            ...prev,
+            [fileId]: {
+              ...current,
+              messages: current.messages.map(message => message.id === assistantMessage.id
+                ? { ...message, content: streamedContent, status: 'streaming', updatedAt: Date.now() }
+                : message),
+            },
+          };
         });
+      };
+      if (isFirstTurn) {
+        result = await aiService.aiGenerateStoryboardScript(
+          aiModel,
+          content,
+          durationInstruction,
+          appendStreamChunk,
+          {
+            operation: 'storyboard_script_generate',
+            displayName: '分镜脚本生成',
+            projectId: urlProjectId,
+            episodeId: propEpisodeId,
+            sourcePage: 'script',
+            sourceItemId: fileId,
+            entityType: 'episode_script',
+            entityId: fileId,
+          },
+        );
       } else {
         result = await aiService.aiIterateFullScript(
           aiModel,
           currentVersion?.content || file.scriptContent || file.originalContent,
-          content,
+          `${content}\n\n${durationInstruction}`,
           conversationContext || '（首次修改，无历史意见）',
+          appendStreamChunk,
+          {
+            operation: 'script_rewrite',
+            displayName: '剧本修改',
+            projectId: urlProjectId,
+            episodeId: propEpisodeId,
+            sourcePage: 'script',
+            sourceItemId: fileId,
+            entityType: 'episode_script',
+            entityId: fileId,
+          },
         );
       }
 
-      const finalContent = ensureStoryboardCutSeparators(result || streamedContent);
-      const parsedItems = parseStoryboardVersionContent(finalContent);
-      if (!finalContent || parsedItems.length === 0) {
+      const rawFinalContent = ensureStoryboardCutSeparators(result || streamedContent);
+      const parsedItems = parseStoryboardVersionContent(rawFinalContent);
+      if (!rawFinalContent || parsedItems.length === 0) {
         throw new Error('模型返回内容无法识别为分镜脚本，请重新描述要求后再试');
       }
       if (!isFirstTurn && currentVersion) {
         const previousCount = normalizeVersionStoryboardItems(currentVersion.storyboardItems).filter(item => !item.isPlaceholder).length;
-        const validation = validateStoryboardIterationCount(previousCount, parsedItems.length, content);
+        const previousUserInstructions = conversation.messages
+          .filter(message => message.role === 'user')
+          .map(message => message.content);
+        const validationInstruction = buildStoryboardValidationInstruction(content, previousUserInstructions);
+        const validation = validateStoryboardIterationCount(previousCount, parsedItems.length, validationInstruction);
         if (!validation.valid) {
-          throw new Error(`${validation.message || '模型返回的镜头数量不符合本轮要求'} 已阻止保存此异常版本，请重试。`);
+          throw new Error(`${validation.message || '模型返回的镜头数量不符合本轮要求'} 本次结果未保存、未扣积分，请重试。`);
         }
       }
+      const finalContent = serializeStoryboardItemsWithSegments(parsedItems);
       const billingParams = {
         input_tokens: estimateTextTokens(billingInput),
         output_tokens: estimateTextTokens(finalContent),
@@ -1563,12 +1646,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         projectId: urlProjectId,
         metadata: { episode_id: propEpisodeId, script_id: fileId, operation: isFirstTurn ? 'create' : 'iterate' },
       });
+      chargedCreditCost = Number(credit.charged_credits || 0);
       const billingMetadata = {
         requestId,
-        creditCost: credit.charged_credits,
+        estimatedCreditCost,
+        creditCharged: true,
+        creditCost: chargedCreditCost,
         creditTransactionId: credit.transaction_id,
         creditFeatureKey: credit.feature_key,
         creditUsage: billingParams,
+        shotDurationMode,
       };
       const completedMessage = await updateScriptMessage(
         propEpisodeId,
@@ -1603,12 +1690,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : '生成分镜脚本失败';
-      setConversationError(message);
+      setConversationError(assistantMessageId ? null : message);
       if (assistantMessageId) {
-        void updateScriptMessage(propEpisodeId, fileId, assistantMessageId, {
+        const failedMetadata = {
+          requestId,
+          error: message,
+          estimatedCreditCost,
+          creditCharged: chargedCreditCost > 0,
+          creditCost: chargedCreditCost,
+        };
+        await updateScriptMessage(propEpisodeId, fileId, assistantMessageId, {
           content: streamedContent,
           status: 'failed',
-          metadata: { error: message },
+          metadata: failedMetadata,
         }).catch(() => undefined);
         setScriptConversations(prev => {
           const current = prev[fileId];
@@ -1618,7 +1712,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             [fileId]: {
               ...current,
               messages: current.messages.map(item => item.id === assistantMessageId
-                ? { ...item, content: streamedContent, status: 'failed', metadata: { error: message }, updatedAt: Date.now() }
+                ? { ...item, content: streamedContent, status: 'failed', metadata: failedMetadata, updatedAt: Date.now() }
                 : item),
             },
           };
@@ -1628,7 +1722,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     } finally {
       setConversationSendingId(null);
     }
-  }, [aiModel, propEpisodeId, scriptConversations, selectedFileId, updateFileWithHistory]);
+  }, [aiModel, propEpisodeId, scriptConversations, selectedFileId, updateFileWithHistory, urlProjectId]);
 
   const handleConversationEditVersion = useCallback(async (
     sourceVersion: ScriptStoryboardVersion,
@@ -2319,8 +2413,12 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const handleInsertShot = async (position: number, shotData: Omit<StoryboardItem, 'id'>) => {
     if (!selectedFileId || !selectedFile?.storyboard) return;
 
+    const adjacentItem = position > 0
+      ? selectedFile.storyboard.items[position - 1]
+      : selectedFile.storyboard.items[position];
     const newItem: StoryboardItem = {
       ...shotData,
+      scriptSegmentId: shotData.scriptSegmentId || adjacentItem?.scriptSegmentId,
       id: uuidv4()
     };
 
@@ -2331,7 +2429,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       return {
         ...f,
         storyboard: {
-          items: newItems
+          items: normalizeStoryboardItemsForWorkflow(newItems, f.scriptSegments || [])
         }
       };
     });
@@ -2363,6 +2461,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       const newItem: StoryboardItem = {
         ...newData,
         originalText,
+        scriptSegmentId: prevItem?.scriptSegmentId || nextItem?.scriptSegmentId,
         id: uuidv4()
       };
 
@@ -2373,7 +2472,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         return {
           ...f,
           storyboard: {
-            items: newItems
+            items: normalizeStoryboardItemsForWorkflow(newItems, f.scriptSegments || [])
           }
         };
       });
@@ -3443,11 +3542,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         isLoading={conversationLoadingId === selectedFileId}
                         isSending={conversationSendingId === selectedFileId}
                         error={conversationError}
+                        onDismissError={() => setConversationError(null)}
                         onSend={handleConversationSend}
                         onGenerateDesign={handleConversationGenerateDesign}
                         onEditVersion={handleConversationEditVersion}
                         onExportVersion={handleConversationExportVersion}
                         onOpenStoryboard={handleOpenStoryboardDrawer}
+                        onOpenVideoReverse={() => setVideoReverseOpen(true)}
                         storyboardItemCount={Math.max(
                           selectedStoryboardItemCount,
                           selectedFileId ? (storyboardTotalsByFileId[selectedFileId] ?? 0) : 0,
@@ -3456,11 +3557,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     </React.Suspense>
 
                     <aside
-                      className={`absolute inset-0 z-40 w-full overflow-x-auto border-l border-n40 bg-n0 shadow-bottom transition-transform duration-200 ${storyboardDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                      className={`absolute inset-0 z-40 w-full overflow-x-auto overflow-y-hidden border-l border-n40 bg-n0 shadow-bottom transition-transform duration-200 ${storyboardDrawerOpen ? 'translate-x-0' : 'translate-x-full'}`}
                       data-testid="storyboard-workspace-drawer"
                       aria-hidden={!storyboardDrawerOpen}
                     >
-                    <div className="grid h-full min-w-[860px] grid-cols-[minmax(360px,1.2fr)_minmax(420px,1fr)]">
+                    <div className="grid h-full min-h-0 min-w-[860px] grid-cols-[minmax(360px,1.2fr)_minmax(420px,1fr)] overflow-hidden">
                       <React.Suspense fallback={<LegacyColumnFallback label="storyboard-script" />}>
                         <StoryboardScriptColumn
                           selectedFile={selectedFile}
@@ -3505,6 +3606,24 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       </React.Suspense>
                     </div>
                     </aside>
+
+                    {videoReverseOpen && (
+                      <div className="absolute inset-0 z-[90] bg-n900/45 p-3 sm:p-5" data-testid="video-reverse-tool-dialog">
+                        <div className="h-full w-full overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom">
+                          <React.Suspense fallback={<LegacyViewFallback label="video-reverse" />}>
+                            <VideoReversePage
+                              embedded
+                              onClose={() => setVideoReverseOpen(false)}
+                              onCandidateCreated={async (scriptId) => {
+                                setVideoReverseOpen(false);
+                                loadedConversationKeysRef.current.delete(`${propEpisodeId}:${scriptId}`);
+                                await loadEpisodeData(scriptId);
+                              }}
+                            />
+                          </React.Suspense>
+                        </div>
+                      </div>
+                    )}
                 </div>
             </div>
           )}

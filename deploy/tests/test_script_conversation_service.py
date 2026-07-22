@@ -12,6 +12,12 @@ class FakeConversationDAO:
     created_version = None
     selected_version = None
     merged_version = None
+    stale_call = None
+
+    @classmethod
+    async def fail_stale_messages(cls, script_id, *, stale_after_seconds):
+        cls.stale_call = (script_id, stale_after_seconds)
+        return 1
 
     @staticmethod
     async def list_messages(script_id):
@@ -61,12 +67,17 @@ async def test_get_conversation_returns_messages_versions_and_current_pointer():
     assert result["current_version_id"] == "ver_1"
     assert result["messages"][0]["message_id"] == "msg_1"
     assert result["versions"][0]["version_id"] == "ver_1"
+    assert FakeConversationDAO.stale_call == ("script_1", 120)
 
 
 async def test_get_conversation_loads_messages_and_versions_concurrently():
     class ConcurrentDAO:
         active = 0
         max_active = 0
+
+        @staticmethod
+        async def fail_stale_messages(script_id, *, stale_after_seconds):
+            return 0
 
         @classmethod
         async def _load(cls, value):

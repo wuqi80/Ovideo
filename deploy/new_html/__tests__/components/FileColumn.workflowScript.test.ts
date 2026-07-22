@@ -30,7 +30,10 @@ describe('FileColumn workflow script control', () => {
 
   it('keeps every file action visible without hover', () => {
     expect(source).toContain('Actions stay visible');
-    expect(source).toContain('opacity-100 shadow-bottom');
+    expect(source).toContain('data-testid="file-card-actions"');
+    expect(source).toContain('className="absolute right-2 top-2.5 z-30 flex items-center gap-0.5"');
+    expect(source).not.toContain('rounded-md border border-n40 bg-n0 px-1 py-0.5 opacity-100 shadow-bottom backdrop-blur-sm');
+    expect(source).not.toContain('w-px h-4 bg-n40 mx-0.5');
     expect(source).not.toContain('group-focus-within:opacity-100 group-hover:opacity-100');
   });
 

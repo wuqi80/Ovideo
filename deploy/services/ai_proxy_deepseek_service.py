@@ -116,6 +116,7 @@ def stream_deepseek_chat(
     temperature: float = 0.2,
     model: Optional[str] = None,
     on_complete: Optional[Callable[[str], None]] = None,
+    on_error: Optional[Callable[[str], None]] = None,
 ) -> Iterator[str]:
     """Yield DeepSeek chat chunks in the route's existing SSE event format."""
     try:
@@ -128,6 +129,8 @@ def stream_deepseek_chat(
             stream=True,
         )
     except AIProxyError as e:
+        if on_error:
+            on_error(e.detail)
         yield _sse_event({"type": "error", "message": e.detail})
         yield "data: [DONE]\n\n"
         return
@@ -137,17 +140,20 @@ def stream_deepseek_chat(
             label="DeepSeek stream",
             url=url,
             payload=payload,
-            timeout=(20, 600),
+            timeout=(20, 180),
             timeout_message="DeepSeek API 调用超时，请稍后重试",
             request_error_detail=lambda e: f"DeepSeek API 调用失败: {str(e)[:200]}",
             request_kwargs=request_kwargs,
         )
     except AIProxyUpstreamError as e:
+        if on_error:
+            on_error(e.detail)
         yield _sse_event({"type": "error", "message": e.detail})
         yield "data: [DONE]\n\n"
         return
 
     full_content: List[str] = []
+    stream_error: Optional[str] = None
     try:
         _ensure_stream_response_ok(
             label="DeepSeek",
@@ -183,16 +189,24 @@ def stream_deepseek_chat(
                 full_content.append(content_piece)
                 yield _sse_event({"type": "content", "content": content_piece})
     except AIProxyUpstreamError as e:
+        stream_error = e.detail
         yield _sse_event({"type": "error", "message": e.detail})
+    except GeneratorExit:
+        if on_error:
+            on_error("客户端中断 DeepSeek 流式连接")
+        raise
     except Exception as e:
         logger.error("DeepSeek stream read failed: %s", e, exc_info=True)
-        yield _sse_event({"type": "error", "message": f"DeepSeek 流式读取失败: {str(e)[:200]}"})
+        stream_error = f"DeepSeek 流式读取失败: {str(e)[:200]}"
+        yield _sse_event({"type": "error", "message": stream_error})
     finally:
         response.close()
 
-    yield "data: [DONE]\n\n"
-
     if on_complete and full_content:
         on_complete("".join(full_content))
+    elif on_error:
+        on_error(stream_error or "DeepSeek 返回空内容")
+
+    yield "data: [DONE]\n\n"
 
 

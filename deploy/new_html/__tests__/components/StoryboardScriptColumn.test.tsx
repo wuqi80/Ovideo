@@ -1,8 +1,12 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { StoryboardScriptColumn } from '../../components/StoryboardScriptColumn';
 import type { ProjectFile } from '../../types';
+
+const designColumnSource = readFileSync(resolve(__dirname, '../../components/StoryboardColumn.tsx'), 'utf-8');
 
 const file = {
   id: 'script-1',
@@ -17,7 +21,9 @@ const file = {
       },
       {
         id: 'shot-2',
-        shotNumber: 2,
+        // Legacy imports may repeat shotNumber=1. Visible numbering follows list order,
+        // matching the design cards on the right.
+        shotNumber: 1,
         originalText: '镜头02\n主角走向桌边。',
         scriptSegment: '主角走向桌边',
       },
@@ -41,11 +47,11 @@ describe('StoryboardScriptColumn', () => {
     expect(Array.from(onSelectItemIds.mock.calls[0][0])).toEqual(['shot-1']);
   });
 
-  it('scrolls the corresponding script block into view when a design card is selected', () => {
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+  it('scrolls only the script column when a design card is selected', () => {
+    const scrollTo = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
       configurable: true,
-      value: scrollIntoView,
+      value: scrollTo,
     });
 
     const { rerender } = render(
@@ -63,7 +69,55 @@ describe('StoryboardScriptColumn', () => {
       />,
     );
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
     expect(screen.getByRole('button', { name: /镜头 02/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('uses visible item order when legacy shot numbers are duplicated', () => {
+    render(
+      <StoryboardScriptColumn
+        selectedFile={file}
+        highlightedItemIds={new Set()}
+        onSelectItemIds={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /镜头 01/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /镜头 02/ })).toBeInTheDocument();
+  });
+
+  it('keeps linked scrolling inside each independent column', () => {
+    expect(designColumnSource).toContain('data-testid="storyboard-design-scroll-container"');
+    expect(designColumnSource).toContain('const scrollContainerRef = useRef<HTMLDivElement>(null)');
+    expect(designColumnSource).toContain('container.scrollTo({');
+    expect(designColumnSource).not.toContain('.scrollIntoView(');
+    expect(designColumnSource).not.toContain('scale-[1.02]');
+  });
+
+  it('shows explicit segment numbers and restarts shot numbering per segment', () => {
+    const segmentedFile = {
+      ...file,
+      storyboard: {
+        items: [
+          { ...file.storyboard.items[0], id: 'segment-a-1', scriptSegmentId: 'segment-a' },
+          { ...file.storyboard.items[1], id: 'segment-a-2', scriptSegmentId: 'segment-a' },
+          { ...file.storyboard.items[0], id: 'segment-b-1', scriptSegmentId: 'segment-b' },
+        ],
+      },
+    } as ProjectFile;
+
+    render(
+      <StoryboardScriptColumn
+        selectedFile={segmentedFile}
+        highlightedItemIds={new Set()}
+        onSelectItemIds={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('共 2 个分段 · 3 个镜头')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分段 01 镜头 02' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分段 02 镜头 01' })).toBeInTheDocument();
+    expect(screen.getAllByText('01', { selector: '.text-warning' })).toHaveLength(1);
+    expect(screen.getAllByText('02', { selector: '.text-warning' })).toHaveLength(1);
   });
 });

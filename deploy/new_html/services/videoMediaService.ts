@@ -154,7 +154,7 @@ export async function uploadVideoFile(file: File, options?: UploadOptions): Prom
 
 export async function getProjectVideoTasks(projectId: string): Promise<ProjectVideoTask[]> {
   const data = await apiJson<{ success?: boolean; project?: { video_tasks?: ProjectVideoTask[] } }>(
-    `/api/projects/${projectId}`,
+    `/api/projects/${projectId}/workspace`,
     { method: 'GET' },
     'getProjectVideoTasks',
   );

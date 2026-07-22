@@ -52,6 +52,14 @@ class DeepseekChatRequest(BaseModel):
     response_format: str = Field("text", pattern="^(text|json)$")
     temperature: float = Field(0.2, ge=0, le=1)
     model: Optional[str] = Field(None, description="DeepSeek model override; omitted uses admin runtime config")
+    operation: Optional[str] = Field(None, description="业务操作标识，用于通知展示")
+    display_name: Optional[str] = Field(None, description="用户可读的任务名称")
+    project_id: Optional[str] = None
+    episode_id: Optional[str] = None
+    source_page: Optional[str] = None
+    source_item_id: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
 
 
 class ImageReferenceMetadata(BaseModel):
@@ -85,6 +93,14 @@ class GeminiTextRequest(BaseModel):
     system_prompt: Optional[str] = None
     temperature: float = Field(1.0, ge=0, le=2)
     model: Optional[str] = Field(None, description="Gemini text model override; omitted uses admin runtime config")
+    operation: Optional[str] = Field(None, description="业务操作标识，用于通知展示")
+    display_name: Optional[str] = Field(None, description="用户可读的任务名称")
+    project_id: Optional[str] = None
+    episode_id: Optional[str] = None
+    source_page: Optional[str] = None
+    source_item_id: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
 
 
 class GeminiImageReferenceMetadata(BaseModel):

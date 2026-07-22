@@ -11,6 +11,7 @@ import * as PROMPTS from '../prompts';
 import type { ScriptSegment, ExtractedStoryboardPrompt } from '../types';
 import { parseScriptSegments, parseStoryboardPromptExtractions } from '../utils/scriptPipelineParsers';
 import { normalizeScriptIterationResult } from '../utils/scriptIteration';
+import type { TextTaskContext } from './textTaskContext';
 
 /**
  * 改写小说为剧本
@@ -84,11 +85,19 @@ export const aiIterateFullScript = async (
   currentScript: string,
   instruction: string,
   conversationContext: string,
+  onStream?: (chunk: string) => void,
+  taskContext?: TextTaskContext,
 ): Promise<string> => {
   const result = await callAI(
     model,
     PROMPTS.ITERATE_FULL_SCRIPT,
     { currentScript, instruction, conversationContext },
+    onStream,
+    {
+      operation: 'script_rewrite',
+      displayName: '剧本修改',
+      ...taskContext,
+    },
   );
   return normalizeScriptIterationResult(result);
 };
@@ -226,7 +235,8 @@ export const aiGenerateStoryboardScript = async (
   model: AiModel,
   novelText: string,
   userRequirements: string = '',
-  onStream?: (chunk: string) => void
+  onStream?: (chunk: string) => void,
+  taskContext?: TextTaskContext,
 ): Promise<string> => {
   return await callAI(
     model,
@@ -235,7 +245,12 @@ export const aiGenerateStoryboardScript = async (
       novelText,
       userRequirements: userRequirements ? `\n**用户要求：**\n${userRequirements}` : ''
     },
-    onStream
+    onStream,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '分镜脚本生成',
+      ...taskContext,
+    },
   );
 };
 
@@ -248,7 +263,8 @@ export const aiContinueStoryboardScript = async (
   nextShotId: string,
   remainingText: string,
   previousShotsContext: string = '',
-  onStream?: (chunk: string) => void
+  onStream?: (chunk: string) => void,
+  taskContext?: TextTaskContext,
 ): Promise<string> => {
   return await callAI(
     model,
@@ -258,7 +274,12 @@ export const aiContinueStoryboardScript = async (
       remainingText,
       previousShotsContext: previousShotsContext.trim() || '（无 — 这是首次续写）'
     },
-    onStream
+    onStream,
+    {
+      operation: 'storyboard_script_continue',
+      displayName: '分镜脚本续写',
+      ...taskContext,
+    },
   );
 };
 

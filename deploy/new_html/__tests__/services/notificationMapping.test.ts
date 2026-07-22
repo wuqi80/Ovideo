@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
     mapNotificationToTask,
     mapNotificationsToTasks,
+    mapRuntimeNotificationToTask,
     type ServerNotificationRow,
 } from '../../services/notificationMapping';
 
@@ -36,6 +37,7 @@ describe('notificationMapping', () => {
             const t = mapNotificationToTask(row());
             expect(t).not.toBeNull();
             expect(t!.taskId).toBe('task_001');
+            expect(t!.notificationId).toBe('notif_abc');
             expect(t!.status).toBe('completed');
             expect(t!.targetPage).toBe('video');
             expect(t!.targetProjectId).toBe('p1');
@@ -133,6 +135,48 @@ describe('notificationMapping', () => {
             const after = Date.now();
             expect(t!.createdAt).toBeGreaterThanOrEqual(before);
             expect(t!.createdAt).toBeLessThanOrEqual(after);
+        });
+    });
+
+    describe('mapRuntimeNotificationToTask', () => {
+        it('adds an unregistered terminal task to the notification list', () => {
+            const t = mapRuntimeNotificationToTask({
+                id: 'task_new',
+                taskId: 'task_new',
+                type: 'text',
+                status: 'completed',
+                message: 'DeepSeek 剧本分镜 已完成',
+                targetView: 'Editor' as any,
+                targetPage: 'script',
+                targetProjectId: 'proj_1',
+                timestamp: Date.UTC(2026, 6, 22, 8, 0, 0),
+            });
+
+            expect(t).toMatchObject({
+                taskId: 'task_new',
+                title: 'DeepSeek 剧本分镜',
+                kind: 'auto-storyboard',
+                status: 'completed',
+                targetPage: 'script',
+                targetProjectId: 'proj_1',
+            });
+            expect(t!.completedAt).toBe(Date.UTC(2026, 6, 22, 8, 0, 0));
+        });
+
+        it('keeps a distinct persistent notification id when available', () => {
+            const t = mapRuntimeNotificationToTask({
+                id: 'notif_new',
+                taskId: 'task_new',
+                type: 'video',
+                status: 'failed',
+                message: '视频生成失败',
+                targetView: 'Video' as any,
+                timestamp: Date.now(),
+            });
+
+            expect(t!.notificationId).toBe('notif_new');
+            expect(t!.taskId).toBe('task_new');
+            expect(t!.status).toBe('failed');
         });
     });
 

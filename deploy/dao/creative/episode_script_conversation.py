@@ -14,6 +14,35 @@ def _json(value: Any, fallback: Any) -> str:
 
 class EpisodeScriptConversationDAO:
     @staticmethod
+    async def fail_stale_messages(script_id: str, *, stale_after_seconds: int = 120) -> int:
+        """Close browser-owned generations that can no longer be resumed."""
+        db = get_db_manager()
+        if not db:
+            return 0
+        status = await db.execute(
+            """
+            UPDATE episode_script_messages
+            SET status = 'failed',
+                metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+                    'error', '页面刷新、网络中断或生成超时，任务未完成',
+                    'interrupted', true,
+                    'creditCharged', false
+                ),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE script_id = $1
+              AND role = 'assistant'
+              AND status IN ('pending', 'streaming')
+              AND updated_at < CURRENT_TIMESTAMP - ($2::integer * INTERVAL '1 second')
+            """,
+            script_id,
+            max(1, int(stale_after_seconds)),
+        )
+        try:
+            return int(str(status).rsplit(" ", 1)[-1])
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
     async def list_messages(script_id: str) -> List[Dict[str, Any]]:
         db = get_db_manager()
         if not db:

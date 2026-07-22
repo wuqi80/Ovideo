@@ -20,44 +20,15 @@ import {
 } from '../services/scriptTimelineService';
 import type { AssetItem, StoryboardItemDB, VideoSegment, AudioTrack, EpisodeScript, CharacterVoice } from '../types';
 import { filterAssetsForEpisodeScope, type AssetScopeMode } from '../utils/assetScope';
+import {
+  normalizeStoryboardRecord,
+  parseRecord,
+  parseStringArray,
+} from '../utils/episodeAdapters';
 
 const EPISODE_CONTEXT_INITIAL_STORYBOARD_COUNT = 10;
 
 /* ============ snake_case → camelCase 规范化 ============ */
-
-function safeArr(v: unknown): string[] {
-  if (Array.isArray(v)) return v;
-  if (typeof v === 'string') { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} }
-  return [];
-}
-function safeObj(v: unknown): Record<string, any> {
-  if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, any>;
-  if (typeof v === 'string') { try { const p = JSON.parse(v); if (p && typeof p === 'object') return p; } catch {} }
-  return {};
-}
-
-function normalizeStoryboardItem(r: any): StoryboardItemDB {
-  return {
-    itemId: r.item_id ?? r.itemId ?? '',
-    episodeId: r.episode_id ?? r.episodeId ?? '',
-    sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
-    sceneHeading: r.scene_heading ?? r.sceneHeading ?? '',
-    actionText: r.action_text ?? r.actionText ?? '',
-    dialogue: r.dialogue ?? '',
-    cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
-    imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
-    videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
-    generatedImageUrl: r.generated_image_url ?? r.generatedImageUrl ?? null,
-    boundAssets: safeArr(r.bound_assets ?? r.boundAssets),
-    configuredReferences: safeArr(r.configured_references ?? r.configuredReferences),
-    status: r.status ?? 'draft',
-    dialogueAudioUrl: r.dialogue_audio_url ?? r.dialogueAudioUrl ?? null,
-    narrationAudioUrl: r.narration_audio_url ?? r.narrationAudioUrl ?? null,
-    sfxAudioUrl: r.sfx_audio_url ?? r.sfxAudioUrl ?? null,
-    audioDurationMs: r.audio_duration_ms ?? r.audioDurationMs ?? null,
-    plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
-  };
-}
 
 function normalizeAsset(r: any): AssetItem {
   return {
@@ -69,9 +40,9 @@ function normalizeAsset(r: any): AssetItem {
     name: String(r.name ?? ''),
     description: String(r.description ?? ''),
     thumbnailUrl: r.thumbnail_url ?? r.thumbnailUrl ?? null,
-    referenceImages: safeArr(r.reference_images ?? r.referenceImages),
-    styleParams: safeObj(r.style_params ?? r.styleParams),
-    tags: safeArr(r.tags),
+    referenceImages: parseStringArray(r.reference_images ?? r.referenceImages),
+    styleParams: parseRecord(r.style_params ?? r.styleParams),
+    tags: parseStringArray(r.tags),
     entityFiles: Array.isArray(r.entity_files)
       ? r.entity_files.map((f: any) => ({
           fileId: String(f.file_id ?? f.fileId ?? ''),
@@ -95,7 +66,7 @@ function normalizeVideoSegment(r: any): VideoSegment {
     sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
     generationMode: r.generation_mode ?? r.generationMode ?? '',
     model: r.model ?? '',
-    inputParams: safeObj(r.input_params ?? r.inputParams),
+    inputParams: parseRecord(r.input_params ?? r.inputParams),
     videoUrl: r.video_url ?? r.videoUrl ?? null,
     thumbnailUrl: r.thumbnail_url ?? r.thumbnailUrl ?? null,
     durationMs: r.duration_ms ?? r.durationMs ?? null,
@@ -114,7 +85,7 @@ function normalizeAudioTrack(r: any): AudioTrack {
     durationMs: r.duration_ms ?? r.durationMs ?? null,
     startItemId: r.start_item_id ?? r.startItemId ?? null,
     endItemId: r.end_item_id ?? r.endItemId ?? null,
-    generationParams: safeObj(r.generation_params ?? r.generationParams),
+    generationParams: parseRecord(r.generation_params ?? r.generationParams),
   };
 }
 
@@ -124,7 +95,7 @@ function normalizeEpisodeScript(r: any): EpisodeScript {
     episodeId: r.episode_id ?? r.episodeId ?? '',
     originalContent: r.original_content ?? r.originalContent ?? '',
     adaptedScript: r.adapted_script ?? r.adaptedScript ?? '',
-    metadata: safeObj(r.metadata),
+    metadata: parseRecord(r.metadata),
   };
 }
 
@@ -137,7 +108,7 @@ function normalizeCharacterVoice(r: any): CharacterVoice {
     voiceProvider: r.voice_provider ?? r.voiceProvider ?? null,
     voiceModelId: r.voice_model_id ?? r.voiceModelId ?? null,
     voiceName: r.voice_name ?? r.voiceName ?? null,
-    voiceParams: safeObj(r.voice_params ?? r.voiceParams),
+    voiceParams: parseRecord(r.voice_params ?? r.voiceParams),
     sampleAudioUrl: r.sample_audio_url ?? r.sampleAudioUrl ?? null,
     createdAt: r.created_at ?? r.createdAt ?? '',
     updatedAt: r.updated_at ?? r.updatedAt ?? '',
@@ -317,7 +288,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
           includeTotal: true,
         }).catch(() => ({ success: false, items: [], total: 0 }));
         if (res.success) {
-          const items = (res.items || []).map(normalizeStoryboardItem);
+          const items = (res.items || []).map(normalizeStoryboardRecord);
           setStoryboardItems(items);
           setStoryboardTotalCount(typeof (res as any).total === 'number' ? (res as any).total : items.length);
         }
@@ -422,7 +393,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       includeTotal: options.includeTotal !== false,
     }).catch(() => ({ success: false, items: [], total: 0 }));
     if (!res.success) return;
-    const nextItems = (res.items || []).map(normalizeStoryboardItem);
+    const nextItems = (res.items || []).map(normalizeStoryboardRecord);
     setStoryboardItems(prev => {
       if (offset <= 0) return nextItems;
       const byId = new Map(prev.map(item => [item.itemId, item]));

@@ -108,6 +108,7 @@ class VideoReverseTaskDAO:
         user_id: str,
         *,
         project_id: Optional[str] = None,
+        episode_id: Optional[str] = None,
         status: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
@@ -117,6 +118,8 @@ class VideoReverseTaskDAO:
         idx = 2
         if project_id:
             where.append(f"vrt.project_id = ${idx}"); params.append(project_id); idx += 1
+        if episode_id:
+            where.append(f"vrt.episode_id = ${idx}"); params.append(episode_id); idx += 1
         if status:
             where.append(f"vrt.status = ${idx}"); params.append(status); idx += 1
         params.extend([limit, offset])

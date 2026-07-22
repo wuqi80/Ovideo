@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
  */
 export interface ShotBlockFields {
   shotId: string;       // 镜头01, 镜头02 等
+  segmentNo?: number;   // 分段01；段内镜头允许重新从 01 编号
   时长?: string;
   时间?: string;        // 🆕 新字段名
   取景?: string;
@@ -81,10 +82,19 @@ export function parseStreamingBlocks(buffer: string): {
 
   // 按 ---CUT--- 分割
   const parts = remainingBuffer.split(/---CUT---/);
+  let activeSegmentNo: number | undefined;
+
+  const parsePart = (part: string): ShotBlockFields | null => {
+    const segmentMatch = part.match(/(?:^|\n)\s*(?:分段|段落)\s*0*(\d+)\s*(?:\n|$)/);
+    if (segmentMatch) activeSegmentNo = Number.parseInt(segmentMatch[1], 10);
+    const block = parseBlockFields(part.trim());
+    if (block && activeSegmentNo) block.segmentNo = activeSegmentNo;
+    return block;
+  };
   
   // 除了最后一个部分，其他都是完整的镜头块
   for (let i = 0; i < parts.length - 1; i++) {
-    const block = parseBlockFields(parts[i].trim());
+    const block = parsePart(parts[i]);
     if (block) {
       completedBlocks.push(block);
       // 添加到显示文本（不包含 ---CUT---）
@@ -96,7 +106,7 @@ export function parseStreamingBlocks(buffer: string): {
   const lastPart = parts[parts.length - 1];
   if (buffer.endsWith('---CUT---') || buffer.trim().endsWith('---CUT---')) {
     // 最后一个也是完整的
-    const block = parseBlockFields(lastPart.trim());
+    const block = parsePart(lastPart);
     if (block) {
       completedBlocks.push(block);
       displayText += lastPart.trim() + '\n\n';
@@ -147,6 +157,9 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
     // 🔧 去除行首空格 + 列表标记（- * • · ◦ → 等），兼容用户/AI 用 markdown 列表语法
     // 例: "- 取景：中景" / "* 站位与构图：xxx" / "• 人声：xxx" 都能被后续匹配到
     line = line.replace(/^[\s\-\*•·◦→●○]+/, '');
+
+    // 分段标题由 parseStreamingBlocks 维护，不属于镜头字段。
+    if (/^(?:分段|段落)\s*0*\d+\s*$/.test(line)) continue;
 
     // 检查是否是镜头ID行 (如 "镜头01" 或 "镜头 01")
     const shotIdMatch = line.match(/^镜头\s*(\d+)/);
@@ -337,6 +350,8 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
     scene: fields.场景名称 || '',
     props,
     shotNumber: fields.shotId,
+    scriptSegmentId: fields.segmentNo ? `storyboard-segment-${fields.segmentNo}` : undefined,
+    sourceVideoShotNo: fields.shotId,
     duration: 时长  // 🔧 兼容 时长/时间 两种字段名
   };
 }

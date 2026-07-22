@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -42,8 +42,8 @@ from services.ai_proxy_task_service import (
     complete_ai_proxy_image_task,
     complete_ai_proxy_text_task,
     create_completed_image_task,
-    create_completed_gemini_text_task,
     create_deepseek_text_task,
+    create_gemini_text_task,
     fail_ai_proxy_task,
     start_ai_proxy_task,
 )
@@ -62,10 +62,51 @@ def create_ai_proxy_router(
     *,
     require_auth_dependency,
     get_main_event_loop: Callable[[], Optional[asyncio.AbstractEventLoop]],
+    get_redis_client: Callable[[], Optional[Any]],
 ) -> APIRouter:
     router = APIRouter()
 
-    def _schedule_text_result_save(task_id: Optional[str], complete_text: str):
+    text_operation_names = {
+        "storyboard_script_generate": "分镜脚本生成",
+        "storyboard_script_continue": "分镜脚本续写",
+        "script_rewrite": "剧本修改",
+        "script_generate": "剧本生成",
+        "shot_design_generate": "镜头设计生成",
+        "script_metadata_extract": "剧本元素提取",
+        "prompt_rewrite": "提示词改写",
+    }
+
+    def _text_task_context(request, *, provider: str) -> dict[str, str]:
+        operation = (getattr(request, "operation", None) or "").strip()
+        requested_name = (getattr(request, "display_name", None) or "").strip()
+        fallback_name = "DeepSeek 文本生成" if provider == "deepseek" else "Gemini 文本生成"
+        values = {
+            "operation": operation,
+            "display_name": requested_name[:80] or text_operation_names.get(operation, fallback_name),
+            "project_id": getattr(request, "project_id", None),
+            "episode_id": getattr(request, "episode_id", None),
+            "source_page": getattr(request, "source_page", None) or "global",
+            "source_item_id": getattr(request, "source_item_id", None),
+            "entity_type": getattr(request, "entity_type", None),
+            "entity_id": getattr(request, "entity_id", None),
+        }
+        return {key: value for key, value in values.items() if isinstance(value, str) and value.strip()}
+
+    def _current_redis_client():
+        try:
+            return get_redis_client()
+        except Exception as exc:
+            logger.warning("获取 Redis 客户端失败，文本通知将仅写入数据库: %s", exc)
+            return None
+
+    def _schedule_text_result_save(
+        task_id: Optional[str],
+        complete_text: str,
+        *,
+        user_id: str,
+        task_type: str,
+        task_context: dict[str, str],
+    ):
         if not task_id or not complete_text:
             return
         loop = get_main_event_loop()
@@ -76,6 +117,10 @@ def create_ai_proxy_router(
                         task_id=task_id,
                         text_content=complete_text,
                         logger=logger,
+                        user_id=user_id,
+                        task_type=task_type,
+                        task_context=task_context,
+                        redis_client=_current_redis_client(),
                     ),
                     loop,
                 )
@@ -83,6 +128,36 @@ def create_ai_proxy_router(
                 logger.error("⚠️ 提交保存任务到主事件循环失败: %s", e, exc_info=True)
         else:
             logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过 DeepSeek 文本结果持久化")
+
+    def _schedule_text_task_failure(
+        task_id: Optional[str],
+        error_message: str,
+        *,
+        user_id: str,
+        task_type: str,
+        task_context: dict[str, str],
+    ):
+        if not task_id:
+            return
+        loop = get_main_event_loop()
+        if loop is not None and not loop.is_closed():
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    fail_ai_proxy_task(
+                        task_id=task_id,
+                        error_message=error_message,
+                        logger=logger,
+                        user_id=user_id,
+                        task_type=task_type,
+                        task_context=task_context,
+                        redis_client=_current_redis_client(),
+                    ),
+                    loop,
+                )
+            except Exception as e:
+                logger.error("⚠️ 提交 DeepSeek 失败状态到主事件循环失败: %s", e, exc_info=True)
+        else:
+            logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过 DeepSeek 失败状态持久化")
 
     def _image_task_data(request, *, provider: str, model: Optional[str] = None, **extra):
         reference_metadata = [
@@ -119,12 +194,15 @@ def create_ai_proxy_router(
             raise HTTPException(status_code=e.status_code, detail=e.detail)
 
         try:
+            task_context = _text_task_context(request, provider="deepseek")
             task_id = await create_deepseek_text_task(
                 user_id=username,
                 prompt=request.prompt,
                 response_format=request.response_format,
                 temperature=request.temperature,
+                model=request.model,
                 logger=logger,
+                task_context=task_context,
             )
 
             return StreamingResponse(
@@ -133,7 +211,20 @@ def create_ai_proxy_router(
                     response_format=request.response_format,
                     temperature=request.temperature,
                     model=request.model,
-                    on_complete=lambda text: _schedule_text_result_save(task_id, text),
+                    on_complete=lambda text: _schedule_text_result_save(
+                        task_id,
+                        text,
+                        user_id=username,
+                        task_type="deepseek_text",
+                        task_context=task_context,
+                    ),
+                    on_error=lambda error: _schedule_text_task_failure(
+                        task_id,
+                        error,
+                        user_id=username,
+                        task_type="deepseek_text",
+                        task_context=task_context,
+                    ),
                 ),
                 media_type="text/event-stream",
                 headers={
@@ -151,6 +242,16 @@ def create_ai_proxy_router(
     @router.post("/api/gemini/text")
     async def gemini_text_chat(request: GeminiTextRequest, username: str = Depends(require_auth_dependency)):
         """Gemini文本生成接口（代理）"""
+        task_context = _text_task_context(request, provider="gemini")
+        task_id = await create_gemini_text_task(
+            user_id=username,
+            prompt=request.prompt,
+            system_prompt=request.system_prompt,
+            temperature=request.temperature,
+            model=request.model,
+            logger=logger,
+            task_context=task_context,
+        )
         try:
             text_result = await generate_gemini_text_result(
                 prompt=request.prompt,
@@ -160,14 +261,15 @@ def create_ai_proxy_router(
             )
             content = text_result.content
 
-            await create_completed_gemini_text_task(
-                user_id=username,
-                prompt=request.prompt,
-                system_prompt=request.system_prompt,
-                temperature=request.temperature,
-                model=request.model,
-                content=content,
+            if task_id:
+                await complete_ai_proxy_text_task(
+                task_id=task_id,
+                text_content=content,
                 logger=logger,
+                user_id=username,
+                task_type="gemini_text",
+                task_context=task_context,
+                redis_client=_current_redis_client(),
             )
 
             return {
@@ -178,9 +280,27 @@ def create_ai_proxy_router(
             }
 
         except AIProxyError as e:
+            await fail_ai_proxy_task(
+                task_id=task_id,
+                error_message=e.detail,
+                logger=logger,
+                user_id=username,
+                task_type="gemini_text",
+                task_context=task_context,
+                redis_client=_current_redis_client(),
+            )
             logger.error("文本生成失败: %s | upstream: %s", e, e.upstream)
             raise HTTPException(status_code=e.status_code, detail=e.detail)
         except Exception as e:
+            await fail_ai_proxy_task(
+                task_id=task_id,
+                error_message=str(e),
+                logger=logger,
+                user_id=username,
+                task_type="gemini_text",
+                task_context=task_context,
+                redis_client=_current_redis_client(),
+            )
             logger.error("文本生成失败: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail="文本生成失败，请稍后重试")
 

@@ -29,21 +29,25 @@ def test_credit_onboarding_is_one_time_and_audited():
 
 def test_live_deploy_runs_credit_prerequisites_before_onboarding():
     script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
-    credits = script.index("sql/db_migration_credits.sql")
-    onboarding = script.index("sql/db_migration_credit_onboarding.sql")
+    manifest = (DEPLOY_DIR / "db_build" / "manifest.txt").read_text(encoding="utf-8")
+    credits = manifest.index("sql/db_migration_credits.sql")
+    onboarding = manifest.index("sql/db_migration_credit_onboarding.sql")
 
     assert credits < onboarding
-    assert "sql/db_migration_files_project_episode_source.sql" in script
+    assert "sql/db_migration_files_project_episode_source.sql" in manifest
     assert '"scripts/apply_migrations.py"' in script
+    assert "--manifest db_build/manifest.txt" in script
 
 
 def test_auto_deploy_does_not_ignore_required_migration_failures():
     script = (DEPLOY_DIR / "auto_deploy.sh").read_text(encoding="utf-8")
-    credits = script.index('"sql/db_migration_credits.sql"')
-    onboarding = script.index('"sql/db_migration_credit_onboarding.sql"')
+    manifest = (DEPLOY_DIR / "db_build" / "manifest.txt").read_text(encoding="utf-8")
+    credits = manifest.index("sql/db_migration_credits.sql")
+    onboarding = manifest.index("sql/db_migration_credit_onboarding.sql")
 
     assert credits < onboarding
-    assert '"sql/db_migration_files_project_episode_source.sql"' in script
+    assert "sql/db_migration_files_project_episode_source.sql" in manifest
     assert "scripts/apply_migrations.py" in script
+    assert "--manifest db_build/manifest.txt" in script
     runner_line = next(line for line in script.splitlines() if "python3 scripts/apply_migrations.py" in line)
     assert "|| true" not in runner_line

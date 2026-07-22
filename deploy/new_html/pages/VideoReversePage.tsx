@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Upload, RefreshCw, Play, X, RotateCcw, Coins, Film,
+  Upload, RefreshCw, X, RotateCcw, Coins, Film, FilePlus2,
   Copy, Check, ChevronRight, Loader2, AlertTriangle,
 } from 'lucide-react';
 import {
@@ -27,6 +27,12 @@ import {
 import { uploadMediaItem } from '../services/mediaLibraryService';
 import { CreditEstimateModal } from '../components/CreditEstimateModal';
 import { LazyVideo } from '../components/LazyVideo';
+import { createEpisodeScript } from '../services/scriptTimelineService';
+import {
+  buildVideoReverseCandidateMetadata,
+  buildVideoReverseCandidateName,
+  buildVideoReverseCandidateScript,
+} from '../utils/videoReverseCandidate';
 
 const STATUS_LABEL: Record<VideoReverseStatus, { label: string; color: string }> = {
   pending:          { label: '排队中',     color: 'bg-n50' },
@@ -39,8 +45,18 @@ const STATUS_LABEL: Record<VideoReverseStatus, { label: string; color: string }>
   cancelled:        { label: '已取消',     color: 'bg-n50' },
 };
 
-export const VideoReversePage: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+interface VideoReversePageProps {
+  embedded?: boolean;
+  onClose?: () => void;
+  onCandidateCreated?: (scriptId: string) => Promise<void> | void;
+}
+
+export const VideoReversePage: React.FC<VideoReversePageProps> = ({
+  embedded = false,
+  onClose,
+  onCandidateCreated,
+}) => {
+  const { projectId, episodeId } = useParams<{ projectId: string; episodeId?: string }>();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -51,6 +67,7 @@ export const VideoReversePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [creatingCandidate, setCreatingCandidate] = useState(false);
   const detailPollFailuresRef = useRef(0);
 
   // 上传 + 估算 + 创建
@@ -65,7 +82,11 @@ export const VideoReversePage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const r = await listVideoReverseTasks({ project_id: projectId, limit: 50 });
+      const r = await listVideoReverseTasks({
+        project_id: projectId,
+        episode_id: episodeId,
+        limit: 50,
+      });
       setTasks(r.tasks || []);
       if (!selectedTaskId && r.tasks?.length) setSelectedTaskId(r.tasks[0].reverse_task_id);
     } catch (e: any) {
@@ -73,7 +94,7 @@ export const VideoReversePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [projectId, selectedTaskId]);
+  }, [episodeId, projectId, selectedTaskId]);
 
   const loadDetail = useCallback(async (rid: string) => {
     try {
@@ -142,6 +163,7 @@ export const VideoReversePage: React.FC = () => {
       const r = await createVideoReverseTask({
         video_file_id: pendingVideoFileId,
         project_id: projectId,
+        episode_id: episodeId,
         language: 'zh',
       });
       setSelectedTaskId(r.reverse_task_id);
@@ -180,12 +202,46 @@ export const VideoReversePage: React.FC = () => {
     });
   };
 
+  const handleCreateCandidate = async () => {
+    if (!episodeId || !selectedTask || selectedTask.status !== 'completed') return;
+    const content = buildVideoReverseCandidateScript(selectedTask, segments);
+    if (!content) {
+      setError('反推任务没有可导入的内容，请重新执行视频反推。');
+      return;
+    }
+
+    setCreatingCandidate(true);
+    setError(null);
+    try {
+      const result = await createEpisodeScript(episodeId, {
+        file_name: buildVideoReverseCandidateName(selectedTask),
+        original_content: content,
+        metadata: buildVideoReverseCandidateMetadata(selectedTask),
+        source_type: 'video_reverse',
+        source_id: selectedTask.reverse_task_id,
+      });
+      const scriptId = result?.script?.script_id ?? result?.script?.scriptId;
+      if (!scriptId) throw new Error('候选剧本已创建，但接口未返回剧本 ID');
+      if (onCandidateCreated) {
+        await onCandidateCreated(scriptId);
+      } else {
+        navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script?browseScriptId=${encodeURIComponent(scriptId)}`);
+      }
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setCreatingCandidate(false);
+    }
+  };
+
   return (
-    <div className="layout-safe flex flex-col h-screen bg-n20 text-n800">
+    <div className={`layout-safe flex flex-col bg-n20 text-n800 ${embedded ? 'h-full' : 'h-screen'}`}>
       <div className="responsive-toolbar flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
-        <button onClick={() => navigate(`/projects/${projectId}/episodes`)} className="text-sm text-n300 hover:text-n800">
-          ← 返回项目
-        </button>
+        {!embedded && (
+          <button onClick={() => navigate(`/projects/${projectId}/episodes`)} className="text-sm text-n300 hover:text-n800">
+            ← 返回项目
+          </button>
+        )}
         <div className="text-sm font-medium ml-2 flex items-center gap-2">
           <Film size={16} className="text-primary" />
           视频反推提示词
@@ -203,6 +259,17 @@ export const VideoReversePage: React.FC = () => {
             <Upload size={14} />
             {uploading ? '上传中…' : '上传视频反推'}
           </button>
+          {embedded && onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              title="关闭视频反推"
+              aria-label="关闭视频反推"
+              className="inline-flex h-8 w-8 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800"
+            >
+              <X size={16} />
+            </button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -272,6 +339,9 @@ export const VideoReversePage: React.FC = () => {
               onRetry={() => handleRetry(selectedTask.reverse_task_id)}
               onCopy={copyText}
               copiedId={copied}
+              canCreateCandidate={Boolean(episodeId)}
+              creatingCandidate={creatingCandidate}
+              onCreateCandidate={handleCreateCandidate}
             />
           )}
         </main>
@@ -299,7 +369,20 @@ const TaskDetail: React.FC<{
   onRetry: () => void;
   onCopy: (id: string, text: string) => void;
   copiedId: string | null;
-}> = ({ task, segments, onCancel, onRetry, onCopy, copiedId }) => {
+  canCreateCandidate: boolean;
+  creatingCandidate: boolean;
+  onCreateCandidate: () => void;
+}> = ({
+  task,
+  segments,
+  onCancel,
+  onRetry,
+  onCopy,
+  copiedId,
+  canCreateCandidate,
+  creatingCandidate,
+  onCreateCandidate,
+}) => {
   const inProgress = !['completed', 'failed', 'cancelled'].includes(task.status);
 
   return (
@@ -355,7 +438,20 @@ const TaskDetail: React.FC<{
                 <RotateCcw size={12} /> 重试
               </button>
             )}
+            {task.status === 'completed' && canCreateCandidate && (
+              <button
+                onClick={onCreateCandidate}
+                disabled={creatingCandidate}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-primary hover:bg-primary-hover text-white disabled:opacity-60"
+              >
+                {creatingCandidate ? <Loader2 size={13} className="animate-spin" /> : <FilePlus2 size={13} />}
+                {creatingCandidate ? '正在创建…' : '创建候选剧本'}
+              </button>
+            )}
           </div>
+          {task.status === 'completed' && !canCreateCandidate && (
+            <div className="text-xs text-n300">请从具体分集的视频反推页面进入，才能创建候选剧本。</div>
+          )}
         </div>
       </div>
 

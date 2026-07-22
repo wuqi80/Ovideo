@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from services.ai_proxy_task_service import (
@@ -14,6 +16,7 @@ from services.ai_proxy_task_service import (
 class _Logger:
     infos = []
     errors = []
+    warnings = []
 
     @classmethod
     def info(cls, *args, **kwargs):
@@ -22,6 +25,10 @@ class _Logger:
     @classmethod
     def error(cls, *args, **kwargs):
         cls.errors.append((args, kwargs))
+
+    @classmethod
+    def warning(cls, *args, **kwargs):
+        cls.warnings.append((args, kwargs))
 
 
 class _TaskDAO:
@@ -43,23 +50,43 @@ class _TaskDAO:
         cls.updated.append(kwargs)
 
 
+class _NotificationDAO:
+    created = []
+
+    @classmethod
+    async def create(cls, **kwargs):
+        cls.created.append(kwargs)
+
+
+class _Redis:
+    published = []
+
+    @classmethod
+    async def publish(cls, channel, payload):
+        cls.published.append((channel, payload))
+
+
 @pytest.fixture(autouse=True)
 def _reset_state():
     _Logger.infos = []
     _Logger.errors = []
+    _Logger.warnings = []
     _TaskDAO.created = []
     _TaskDAO.updated = []
     _TaskDAO.create_error = None
     _TaskDAO.update_error = None
+    _NotificationDAO.created = []
+    _Redis.published = []
 
 
 @pytest.mark.asyncio
-async def test_create_deepseek_text_task_truncates_prompt_and_returns_id():
+async def test_create_deepseek_text_task_truncates_prompt_and_starts_task():
     task_id = await create_deepseek_text_task(
         user_id="yuan",
         prompt="x" * 600,
         response_format="json",
         temperature=0.3,
+        model="deepseek-chat",
         logger=_Logger,
         task_dao=_TaskDAO,
         timestamp_ms_provider=lambda: 123,
@@ -75,9 +102,46 @@ async def test_create_deepseek_text_task_truncates_prompt_and_returns_id():
                 "prompt": "x" * 500,
                 "response_format": "json",
                 "temperature": 0.3,
+                "model": "deepseek-chat",
             },
         }
     ]
+    assert _TaskDAO.updated == [
+        {"task_id": "deepseek_text_123", "status": "processing"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_deepseek_text_task_persists_business_context():
+    await create_deepseek_text_task(
+        user_id="yuan",
+        prompt="prompt",
+        response_format="text",
+        temperature=0.2,
+        model="deepseek-chat",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        timestamp_ms_provider=lambda: 124,
+        task_context={
+            "operation": "storyboard_script_generate",
+            "display_name": "分镜脚本生成",
+            "project_id": "proj_1",
+            "episode_id": "ep_1",
+            "source_page": "script",
+            "source_item_id": "script_1",
+        },
+    )
+
+    expected_context = {
+        "operation": "storyboard_script_generate",
+        "display_name": "分镜脚本生成",
+        "project_id": "proj_1",
+        "episode_id": "ep_1",
+        "source_page": "script",
+        "source_item_id": "script_1",
+    }
+    task_data = _TaskDAO.created[0]["task_data"]
+    assert {key: task_data[key] for key in expected_context} == expected_context
 
 
 @pytest.mark.asyncio
@@ -97,6 +161,38 @@ async def test_complete_ai_proxy_text_task_truncates_result():
             "result_data": {"text": "a" * 2000, "full_length": 2500},
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_complete_text_task_writes_notification_and_publishes_event():
+    ok = await complete_ai_proxy_text_task(
+        task_id="deepseek_text_1",
+        text_content="answer",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        user_id="wuqi80",
+        task_type="deepseek_text",
+        task_context={
+            "operation": "script_rewrite",
+            "display_name": "剧本修改",
+            "project_id": "proj_1",
+            "episode_id": "ep_1",
+            "source_page": "script",
+            "source_item_id": "script_1",
+        },
+        redis_client=_Redis,
+        notification_dao=_NotificationDAO,
+    )
+
+    assert ok is True
+    assert _Redis.published[0][0] == "task_complete:wuqi80"
+    event = json.loads(_Redis.published[0][1])
+    assert event["type"] == "task_complete"
+    assert event["display_name"] == "剧本修改"
+    assert event["source_page"] == "script"
+    assert _NotificationDAO.created[0]["title"] == "剧本修改 已完成"
+    assert _NotificationDAO.created[0]["target_project_id"] == "proj_1"
+    assert _NotificationDAO.created[0]["target_item_id"] == "script_1"
 
 
 @pytest.mark.asyncio
@@ -120,8 +216,14 @@ async def test_create_completed_gemini_text_task_creates_and_completes():
         "temperature": 0.7,
         "model": "gemini-model",
     }
-    assert _TaskDAO.updated[0]["task_id"] == "gemini_text_456"
-    assert _TaskDAO.updated[0]["result_data"] == {"text": "answer", "full_length": 6}
+    assert _TaskDAO.updated == [
+        {"task_id": "gemini_text_456", "status": "processing"},
+        {
+            "task_id": "gemini_text_456",
+            "status": "completed",
+            "result_data": {"text": "answer", "full_length": 6},
+        },
+    ]
 
 
 @pytest.mark.asyncio
@@ -179,6 +281,33 @@ async def test_start_and_fail_ai_proxy_task_updates_status():
         "status": "failed",
         "error_message": "upstream failed",
     }
+
+
+@pytest.mark.asyncio
+async def test_failed_text_task_writes_notification_and_publishes_event():
+    ok = await fail_ai_proxy_task(
+        task_id="gemini_text_1",
+        error_message="upstream failed",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        user_id="wuqi80",
+        task_type="gemini_text",
+        task_context={
+            "operation": "storyboard_script_generate",
+            "display_name": "分镜脚本生成",
+            "source_page": "script",
+        },
+        redis_client=_Redis,
+        notification_dao=_NotificationDAO,
+    )
+
+    assert ok is True
+    assert _Redis.published[0][0] == "task_failed:wuqi80"
+    event = json.loads(_Redis.published[0][1])
+    assert event["status"] == "failed"
+    assert event["display_name"] == "分镜脚本生成"
+    assert event["error"] == "upstream failed"
+    assert _NotificationDAO.created[0]["title"] == "分镜脚本生成 失败"
 
 
 @pytest.mark.asyncio

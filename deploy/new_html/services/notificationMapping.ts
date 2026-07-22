@@ -15,7 +15,7 @@
 // 注意：后端 notification_id 与 task_id 是不同概念。RegisteredTask.taskId 用 task_id 优先（与
 // 内存中正在跑的 RegisteredTask 同键，避免重复），缺失时回退到 notification_id。
 
-import type { RegisteredTask, SourcePage, TaskKind, GlobalTaskStatus } from '../types';
+import type { RegisteredTask, SourcePage, TaskKind, GlobalTaskStatus, TaskNotification } from '../types';
 
 // 后端 dao_notification row 的 JSON 形态
 export interface ServerNotificationRow {
@@ -142,6 +142,7 @@ export function mapNotificationToTask(n: ServerNotificationRow): RegisteredTask 
 
     return {
         taskId,
+        notificationId: n.notification_id,
         kind: inferKindFromCategoryAndTitle(n.category, n.title),
         title: stripStatusSuffix(n.title),
         status,
@@ -159,6 +160,39 @@ export function mapNotificationToTask(n: ServerNotificationRow): RegisteredTask 
         // @ts-ignore 不污染 RegisteredTask 公共形态，只是个内部 hint
         _fromServer: true,
     } as RegisteredTask;
+}
+
+/**
+ * SSE / 任务轮询的终态通知 -> RegisteredTask。
+ * 部分后台任务没有经过当前页面的 register 流程，必须在收到终态通知时补进注册表，
+ * 否则铃铛徽标会增加，但面板中找不到对应任务。
+ */
+export function mapRuntimeNotificationToTask(n: TaskNotification): RegisteredTask | null {
+    const taskId = n.taskId || n.id;
+    if (!taskId) return null;
+    const timestamp = Number.isFinite(n.timestamp) ? n.timestamp : Date.now();
+    const title = stripStatusSuffix(n.message || taskId);
+    const status: GlobalTaskStatus = n.status === 'failed' ? 'failed' : 'completed';
+
+    return {
+        taskId,
+        notificationId: n.id && n.id !== taskId ? n.id : undefined,
+        kind: inferKindFromCategoryAndTitle(n.type, title),
+        title,
+        status,
+        progress: status === 'completed' ? 1 : undefined,
+        createdAt: timestamp,
+        startedAt: timestamp,
+        completedAt: timestamp,
+        targetPage: n.targetPage || 'global',
+        targetProjectId: n.targetProjectId,
+        targetItemId: n.targetItemId,
+        targetEntityType: n.entityType,
+        targetEntityId: n.entityId,
+        episodeId: n.episodeId,
+        fileRole: n.fileRole,
+        error: status === 'failed' ? (n.message || '任务失败') : undefined,
+    };
 }
 
 /**

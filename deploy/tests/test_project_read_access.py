@@ -88,7 +88,7 @@ async def test_admin_can_read_private_owner_project():
     app = _build_app("admin")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/projects/proj_1")
+        response = await client.get("/api/projects/proj_1/workspace")
 
     assert response.status_code == 200
     payload = response.json()
@@ -103,7 +103,7 @@ async def test_project_member_can_read_private_owner_project():
     app = _build_app("editor")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/projects/proj_1")
+        response = await client.get("/api/projects/proj_1/workspace")
 
     assert response.status_code == 200
     assert response.json()["project"]["name"] == "Owner project"
@@ -114,7 +114,7 @@ async def test_non_member_non_admin_cannot_read_private_owner_project():
     app = _build_app("visitor")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/projects/proj_1")
+        response = await client.get("/api/projects/proj_1/workspace")
 
     assert response.status_code == 403
     assert response.json()["detail"] == "无权访问此项目"

@@ -46,7 +46,7 @@ describe('video media service', () => {
     ]);
     await clearProjectVideoTasks('proj_1');
 
-    expect(mockFetch.mock.calls[0][0]).toBe('/api/projects/proj_1');
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/projects/proj_1/workspace');
     expect(mockFetch.mock.calls[0][1].method).toBe('GET');
     expect(mockFetch.mock.calls[1][0]).toBe('/api/projects/proj_1/clear-video-tasks');
     expect(mockFetch.mock.calls[1][1].method).toBe('POST');

@@ -5,7 +5,7 @@ import {
     Image as ImageIcon, ChevronDown, Download, Maximize, Mic, Scissors,
     LayoutGrid, List, X, Loader2, Check, Music, Eye, Volume2, Plus,
     History, ArrowRight, Maximize2, Database, ImageOff, RotateCw, Settings,
-    Combine, Split
+    Combine, Split, SkipBack, SkipForward
 } from 'lucide-react';
 import {
     ALL_MODELS,
@@ -82,6 +82,7 @@ import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
 import { hasStoredVideoResult, mergeStoredVideoResult } from '../utils/videoResultPresentation';
+import { canCreateFirstLastPair, canMergeAdjacentGroups } from '../utils/videoTaskMerge';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
@@ -89,6 +90,11 @@ import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import { clampSec, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
+import {
+    getVideoFrameLabel,
+    resolveVideoFrameTime,
+    type VideoFramePosition,
+} from '../utils/videoFrameExtraction';
 import {
     createVideoVoiceReference,
     extractVideoReferenceAudio,
@@ -309,6 +315,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const [voicePrompt, setVoicePrompt] = useState('');
     const [cropStartTime, setCropStartTime] = useState(0);
     const [cropEndTime, setCropEndTime] = useState(5);
+    const [isExtractingFrame, setIsExtractingFrame] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isBatchRunning, setIsBatchRunning] = useState(false);
     const [beautifyApplyingKey, setBeautifyApplyingKey] = useState<string | null>(null);
@@ -1421,17 +1428,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }, []);
     
     const linkGroups = useCallback((index: number) => {
-        if (index >= taskGroups.length - 1) return;
+        if (!canCreateFirstLastPair(taskGroups, index)) {
+            showToast('首尾帧需要相邻的两张单图卡片，且模型必须相同');
+            return;
+        }
         
         const groupA = taskGroups[index];
         const groupB = taskGroups[index + 1];
         
-        if (groupA.ids.length !== 1 || groupB.ids.length !== 1) return;
-        
         const newGroup: TaskGroup = {
             uuid: generateUUID(),
             ids: [groupA.ids[0], groupB.ids[0]],
-            model: groupA.model
+            model: groupA.model,
+            duration: groupA.duration,
+            durationUserOverride: groupA.durationUserOverride,
+            shotType: groupA.shotType,
         };
         
         setTaskGroups(prev => {
@@ -1446,7 +1457,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             delete next[groupB.uuid];
             return next;
         });
-    }, [taskGroups]);
+        showToast('已合并为首尾帧任务');
+    }, [taskGroups, showToast]);
     
     const unlinkGroup = useCallback((index: number) => {
         const group = taskGroups[index];
@@ -1484,10 +1496,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     );
     // 相邻 + 同模型 + 可合并模型，才允许把 index 与 index+1 合并
     const canMergeWithNext = useCallback((index: number): boolean => {
-        if (index < 0 || index >= taskGroups.length - 1) return false;
-        const a = taskGroups[index];
-        const b = taskGroups[index + 1];
-        return !!a && !!b && a.model === b.model && isMergeableModel(a.model);
+        return canMergeAdjacentGroups(taskGroups, index, isMergeableModel);
     }, [taskGroups, isMergeableModel]);
 
     const mergeWithNext = useCallback((index: number) => {
@@ -2547,7 +2556,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return status.videos[selectedVideoIndex] || status.videos[0] || '';
     };
     
-    const extractCurrentFrame = useCallback(async () => {
+    const extractVideoFrame = useCallback(async (position: VideoFramePosition) => {
         const videoElement = editVideoRef.current;
         if (!videoElement || !editModalUuid) {
             showToast('没有视频');
@@ -2555,7 +2564,39 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
         
         try {
-            showToast('正在抽取帧...');
+            setIsExtractingFrame(true);
+            const label = getVideoFrameLabel(position);
+            showToast(`正在抽取${label}...`);
+
+            const targetTime = resolveVideoFrameTime(
+                position,
+                videoElement.currentTime,
+                videoElement.duration,
+            );
+            if (Math.abs(videoElement.currentTime - targetTime) > 0.01) {
+                await new Promise<void>((resolve, reject) => {
+                    const timeoutId = window.setTimeout(() => {
+                        cleanup();
+                        reject(new Error('定位视频帧超时'));
+                    }, 5000);
+                    const cleanup = () => {
+                        window.clearTimeout(timeoutId);
+                        videoElement.removeEventListener('seeked', handleSeeked);
+                        videoElement.removeEventListener('error', handleError);
+                    };
+                    const handleSeeked = () => {
+                        cleanup();
+                        resolve();
+                    };
+                    const handleError = () => {
+                        cleanup();
+                        reject(new Error('定位视频帧失败'));
+                    };
+                    videoElement.addEventListener('seeked', handleSeeked, { once: true });
+                    videoElement.addEventListener('error', handleError, { once: true });
+                    videoElement.currentTime = targetTime;
+                });
+            }
             
             const canvas = document.createElement('canvas');
             canvas.width = videoElement.videoWidth;
@@ -2569,9 +2610,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 canvas.toBlob((b) => b ? resolve(b) : reject(new Error('转换失败')), 'image/jpeg', 0.95);
             });
             
-            const imageFile = new File([blob], `frame_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            const imageFile = new File([blob], `${position}_frame_${Date.now()}.jpg`, { type: 'image/jpeg' });
             const id = `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const imageUrl = URL.createObjectURL(imageFile);
             
             // 上传图片
             const uploadResult = await uploadImage(imageFile);
@@ -2585,7 +2625,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 isUploading: false
             }]);
             
-            setImagePrompts(prev => ({ ...prev, [id]: `抽帧时间: ${videoElement.currentTime.toFixed(2)}s` }));
+            setImagePrompts(prev => ({ ...prev, [id]: `${label}抽取 · ${targetTime.toFixed(2)}s` }));
             setTaskGroups(prev => [...prev, {
                 uuid: generateUUID(),
                 ids: [id],
@@ -2593,11 +2633,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 shotType: 'multi'
             }]);
             
-            showToast('✅ 已抽取帧并添加到左侧');
-            URL.revokeObjectURL(imageUrl);
+            showToast(`✅ ${label}已抽取并添加到左侧`);
         } catch (error: any) {
             console.error('抽帧失败:', error);
             showToast('抽帧失败: ' + error.message);
+        } finally {
+            setIsExtractingFrame(false);
         }
     }, [editModalUuid, globalModel, showToast]);
     
@@ -3461,6 +3502,53 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         />
                     )}
                 </div>
+
+                <div className="mt-2 pt-2 border-t border-n40 shrink-0 flex items-center justify-end gap-2">
+                    {isPair ? (
+                        <button
+                            type="button"
+                            onClick={() => unlinkGroup(index)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-n40 bg-n0 text-[10px] text-n700 hover:border-warning hover:text-warning"
+                            title="拆开当前首尾帧任务"
+                        >
+                            <Unlink className="w-3.5 h-3.5" />
+                            拆开首尾帧
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => linkGroups(index)}
+                            disabled={!canCreateFirstLastPair(taskGroups, index)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-n40 bg-n0 text-[10px] text-n700 hover:border-primary hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={canCreateFirstLastPair(taskGroups, index) ? '与下一张卡片组成首尾帧任务' : '需要下一张为相同模型的单图卡片'}
+                        >
+                            <Link className="w-3.5 h-3.5" />
+                            首尾帧
+                        </button>
+                    )}
+                    {group.mergedFrom && group.mergedFrom.length > 0 ? (
+                        <button
+                            type="button"
+                            onClick={() => splitMergedCard(index)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-n40 bg-n0 text-[10px] text-n700 hover:border-warning hover:text-warning"
+                            title={`拆分为 ${group.mergedFrom.length} 张原始卡片`}
+                        >
+                            <Split className="w-3.5 h-3.5" />
+                            拆分合并
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => mergeWithNext(index)}
+                            disabled={!canMergeWithNext(index)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-[10px] text-white hover:bg-primary-hover disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={canMergeWithNext(index) ? '追加下一张的提示词和素材，可继续合并更多卡片' : '需要下一张为相同且支持合并的模型'}
+                        >
+                            <Combine className="w-3.5 h-3.5" />
+                            合并
+                        </button>
+                    )}
+                </div>
             </div>
         );
     };
@@ -3780,6 +3868,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {promptText || <span className="italic opacity-50">无描述...</span>}
                     </div>
                 </div>
+
             </div>
         );
     };
@@ -4206,13 +4295,35 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 抽帧功能 */}
                     <div className="mb-4 p-4 bg-n20/50 rounded-lg">
                         <h4 className="text-sm font-medium text-n800 mb-3">抽取帧</h4>
-                        <button
-                            onClick={extractCurrentFrame}
-                            className="w-full px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded flex items-center justify-center gap-2"
-                        >
-                            <ImageIcon className="w-4 h-4" />
-                            抽取当前帧为图片
-                        </button>
+                        <div className="grid grid-cols-3 gap-2">
+                            <button
+                                onClick={() => extractVideoFrame('first')}
+                                disabled={isExtractingFrame}
+                                className="px-3 py-2 bg-n0 hover:bg-n20 border border-n40 text-n700 rounded flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                title="抽取视频第一帧"
+                            >
+                                <SkipBack className="w-4 h-4" />
+                                首帧
+                            </button>
+                            <button
+                                onClick={() => extractVideoFrame('current')}
+                                disabled={isExtractingFrame}
+                                className="px-3 py-2 bg-primary hover:bg-primary-hover text-white rounded flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                title="抽取播放器当前画面"
+                            >
+                                {isExtractingFrame ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                                当前帧
+                            </button>
+                            <button
+                                onClick={() => extractVideoFrame('last')}
+                                disabled={isExtractingFrame}
+                                className="px-3 py-2 bg-n0 hover:bg-n20 border border-n40 text-n700 rounded flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                title="抽取视频最后一帧"
+                            >
+                                <SkipForward className="w-4 h-4" />
+                                尾帧
+                            </button>
+                        </div>
                         <p className="text-xs text-n100 mt-2">抽取的图片将添加到左侧分镜板</p>
                     </div>
                     
@@ -4452,23 +4563,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     <React.Fragment key={group.uuid}>
                                         {renderStoryboardCard(group, originalIndex)}
                                         
-                                        {/* 链接按钮 - 使用原始索引查找下一个任务 */}
-                                        {originalIndex < taskGroups.length - 1 && 
-                                         group.ids?.length === 1 && 
-                                         taskGroups[originalIndex + 1]?.ids?.length === 1 && (
-                                            // 2026-05-19 (Task C): match right-side placeholder geometry EXACTLY
-                                            // (h-[18px] -mt-3 mb-2). Button absolute, not in flow → per-row delta = 0.
-                                            <div className="h-[18px] -mt-3 mb-2 relative pointer-events-none">
-                                                <button
-                                                    onClick={() => linkGroups(originalIndex)}
-                                                    className="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-n0 hover:bg-primary-hover text-n300 hover:text-white border border-n40 hover:border-primary rounded-full p-1 transition-all shadow-lg hover:scale-110 z-10"
-                                                    title="合并为首尾帧任务"
-                                                >
-                                                    <Link className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        )}
-
                                         {/* 2026-05-25 (Task B2)：每张卡之后的"+ 插入空卡"按钮 */}
                                         <InsertEmptyCardButton onClick={() => insertEmptyTaskGroup(originalIndex)} />
                                     </React.Fragment>

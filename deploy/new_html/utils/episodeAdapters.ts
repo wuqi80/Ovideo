@@ -16,6 +16,82 @@ const PROP_PREFIX = 'prop:';
 const SEL_PREFIX = 'sel:';
 const NOSEL_PREFIX = 'nosel:';
 
+export function parseStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === 'string');
+    } catch {}
+  }
+  return [];
+}
+
+export function parseArray<T = unknown>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed as T[];
+    } catch {}
+  }
+  return [];
+}
+
+export function parseRecord(value: unknown): Record<string, any> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch {}
+  }
+  return {};
+}
+
+export function normalizeStoryboardRecord(record: any): StoryboardItemDB {
+  return {
+    itemId: record.item_id ?? record.itemId ?? '',
+    episodeId: record.episode_id ?? record.episodeId ?? '',
+    sortOrder: typeof (record.sort_order ?? record.sortOrder) === 'number'
+      ? (record.sort_order ?? record.sortOrder)
+      : 0,
+    sceneHeading: record.scene_heading ?? record.sceneHeading ?? '',
+    actionText: record.action_text ?? record.actionText ?? '',
+    dialogue: record.dialogue ?? '',
+    cameraMovement: record.camera_movement ?? record.cameraMovement ?? '',
+    imagePrompt: record.image_prompt ?? record.imagePrompt ?? '',
+    videoPrompt: record.video_prompt ?? record.videoPrompt ?? '',
+    generatedImageUrl: record.generated_image_url ?? record.generatedImageUrl ?? null,
+    boundAssets: parseStringArray(record.bound_assets ?? record.boundAssets),
+    configuredReferences: parseArray<GenerationReference>(
+      record.configured_references ?? record.configuredReferences,
+    ),
+    status: record.status ?? 'draft',
+    dialogueAudioUrl: record.dialogue_audio_url ?? record.dialogueAudioUrl ?? null,
+    narrationAudioUrl: record.narration_audio_url ?? record.narrationAudioUrl ?? null,
+    sfxAudioUrl: record.sfx_audio_url ?? record.sfxAudioUrl ?? null,
+    audioDurationMs: record.audio_duration_ms ?? record.audioDurationMs ?? null,
+    plannedDurationMs: record.planned_duration_ms ?? record.plannedDurationMs ?? null,
+  };
+}
+
+export function applyStoryboardRecordPatch(
+  item: StoryboardItemDB,
+  patch: Record<string, any>,
+): StoryboardItemDB {
+  return normalizeStoryboardRecord({
+    ...item,
+    ...patch,
+    item_id: item.itemId,
+    episode_id: item.episodeId,
+    sort_order: patch.sort_order ?? patch.sortOrder ?? item.sortOrder,
+    bound_assets: patch.bound_assets ?? patch.boundAssets ?? item.boundAssets,
+    configured_references:
+      patch.configured_references ?? patch.configuredReferences ?? item.configuredReferences,
+  });
+}
+
 export function parseBoundAssetTags(boundAssets: string[]): {
   charNames: string[];
   sceneName: string;

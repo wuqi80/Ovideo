@@ -1,8 +1,9 @@
 
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ProjectFile, StoryboardItem, FileVersion, ScriptStoryboardVersion } from '../types';
 import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box, Coins } from 'lucide-react';
+import { buildStoryboardSegmentGroups, buildStoryboardSegmentLookup } from '../utils/storyboardSegments';
 
 interface StoryboardColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -78,6 +79,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   onInsertShotWithAI,
   onClose,
 }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [regenInputId, setRegenInputId] = useState<string | null>(null);
   const [regenInstruction, setRegenInstruction] = useState('');
@@ -178,14 +180,25 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
     navigator.clipboard.writeText(text);
   };
   
-  // 🔧 恢复自动滚动：无论是点击卡片还是框选脚本，都滚动到第一个高亮项
+  // 双栏联动只滚动镜头栏自身，避免 scrollIntoView 带动抽屉或页面错位。
   useEffect(() => {
     if (highlightedItemIds.size > 0) {
       const firstId = Array.from(highlightedItemIds)[0];
-      const element = itemRefs.current.get(firstId);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      const container = scrollContainerRef.current;
+      const target = itemRefs.current.get(firstId);
+      if (!container || !target) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const centeredTop = container.scrollTop
+        + targetRect.top
+        - containerRect.top
+        - Math.max(0, (container.clientHeight - targetRect.height) / 2);
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      container.scrollTo({
+        top: Math.min(Math.max(0, centeredTop), maxScrollTop),
+        behavior: 'smooth',
+      });
     }
   }, [highlightedItemIds]);
 
@@ -343,8 +356,23 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
       }
   };
 
+  const segmentGroups = useMemo(
+    () => buildStoryboardSegmentGroups(
+      selectedFile?.storyboard?.items || [],
+      selectedFile?.scriptSegments || [],
+    ),
+    [selectedFile?.scriptSegments, selectedFile?.storyboard?.items],
+  );
+  const segmentLookup = useMemo(
+    () => buildStoryboardSegmentLookup(
+      selectedFile?.storyboard?.items || [],
+      selectedFile?.scriptSegments || [],
+    ),
+    [selectedFile?.scriptSegments, selectedFile?.storyboard?.items],
+  );
+
   return (
-    <div className="flex flex-col h-full bg-n0 relative">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-n0">
        <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex-shrink-0 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-n700 flex items-center gap-2">
                 镜头设计
@@ -418,7 +446,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
         {selectedFile?.storyboard ? (
           <div className="w-full flex items-center gap-2 px-3 py-2 bg-primary-light border border-primary rounded-lg text-xs text-primary">
             <Film className="w-4 h-4" />
-            <span>共 {selectedFile.storyboard.items.filter(i => !i.isPlaceholder).length} 个镜头</span>
+            <span>共 {segmentGroups.length} 个分段 · {selectedFile.storyboard.items.filter(i => !i.isPlaceholder).length} 个镜头</span>
             {Number.isFinite(generationCreditCost) && Number(generationCreditCost) > 0 && (
               <span className="ml-auto inline-flex items-center gap-1 rounded border border-warning/30 bg-y50 px-2 py-1 text-[10px] font-medium text-warning" title="最近一次镜头详情生成实际扣除积分">
                 <Coins className="h-3.5 w-3.5" /> 本次消耗 {generationCreditCost} 积分
@@ -588,7 +616,11 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
 
       {selectedFile?.storyboard && selectedFile.storyboard.items.length > 0 ? (
         /* 有分镜数据 - 显示卡片列表（生成中也显示） */
-        <div className="flex-1 overflow-y-auto p-4 bg-n20 custom-scrollbar space-y-4 relative">
+        <div
+          ref={scrollContainerRef}
+          className="custom-scrollbar relative min-h-0 flex-1 space-y-4 overflow-y-auto bg-n20 p-4"
+          data-testid="storyboard-design-scroll-container"
+        >
 
           {/* 🆕 顶部进度条（生成中时显示） */}
           {isProcessing && generationProgress && (
@@ -631,6 +663,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
             const isHighlighted = highlightedItemIds.has(item.id);
             const isGenerating = isProcessing && generationProgress && idx >= generationProgress.current;
             const hasDetails = !!item.imagePrompt;
+            const segmentInfo = segmentLookup.get(item.id);
 
             // 🆕 正在生成中的卡片（Loading占位符）
             if (isGenerating && !hasDetails) {
@@ -642,7 +675,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                       <Sparkles className="w-8 h-8 text-primary relative animate-spin" style={{ animationDuration: '2s' }} />
                     </div>
                     <span className="text-sm font-medium text-n300">
-                      镜头 #{idx + 1} 生成中...
+                      {segmentInfo ? `${segmentInfo.segmentLabel} · ${segmentInfo.localShotLabel}` : `镜头 #${idx + 1}`} 生成中...
                     </span>
                     <div className="flex items-center gap-1">
                       <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" />
@@ -681,10 +714,13 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
             return (
               <React.Fragment key={item.id}>
               <div
-                  ref={(el) => { if (el) itemRefs.current.set(item.id, el); }}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(item.id, el);
+                    else itemRefs.current.delete(item.id);
+                  }}
                   className={`group relative bg-n0 border rounded-md overflow-hidden transition-all duration-300 shadow-card
                     ${isHighlighted
-                        ? 'border-primary shadow-[0_0_15px_rgba(99,102,241,0.3)] ring-1 ring-primary/50 scale-[1.02]'
+                        ? 'border-primary bg-primary-light/20 shadow-[0_0_12px_rgba(99,102,241,0.18)] ring-1 ring-primary/40'
                         : 'border-n40 hover:border-primary hover:shadow-atlas'
                     }
                   `}
@@ -695,8 +731,13 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                       ${isHighlighted ? 'bg-primary-light border-primary' : 'bg-n0 border-n40'}
                   `}>
                       <div className="flex items-center gap-2">
+                        {segmentInfo && (
+                          <span className="inline-flex items-baseline gap-1 rounded border border-warning/30 bg-y50 px-1.5 py-0.5 text-[10px] font-semibold text-n500">
+                            分段 <span className="font-mono text-warning">{String(segmentInfo.segmentNo).padStart(2, '0')}</span>
+                          </span>
+                        )}
                         <span className={`text-xs font-bold transition-colors ${isHighlighted ? 'text-primary' : 'text-n300 group-hover:text-primary'}`}>
-                            镜头 {String(idx + 1).padStart(2, '0')}
+                            {segmentInfo?.localShotLabel || `镜头 ${String(idx + 1).padStart(2, '0')}`}
                         </span>
                         {item.isLocked && <Lock className="w-3 h-3 text-warning" />}
                       </div>
@@ -1022,7 +1063,9 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                 {showScriptSelector && (
                   <div className="mb-3 p-3 bg-n20 border border-primary rounded max-h-48 overflow-y-auto">
                     <p className="text-xs text-n100 mb-2">点击选择段落：</p>
-                    {selectedFile?.storyboard?.items.map((item, idx) => (
+                    {selectedFile?.storyboard?.items.map((item, idx) => {
+                      const segmentInfo = segmentLookup.get(item.id);
+                      return (
                       <button
                         key={item.id}
                         type="button"
@@ -1032,10 +1075,11 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                         }}
                         className="w-full text-left p-2 mb-2 bg-n0 hover:bg-primary-light border border-n40 hover:border-primary rounded transition-all text-xs text-n300 hover:text-n800"
                       >
-                        <span className="text-primary font-mono">镜头 {String(idx + 1).padStart(2, '0')}</span>
+                        <span className="font-mono text-warning">{segmentInfo?.segmentLabel || '分段 01'}</span>
+                        <span className="ml-2 text-primary font-mono">{segmentInfo?.localShotLabel || `镜头 ${String(idx + 1).padStart(2, '0')}`}</span>
                         <span className="ml-2 line-clamp-2">{(item.originalText || item.scriptSegment).substring(0, 100)}...</span>
                       </button>
-                    ))}
+                    )})}
                   </div>
                 )}
                 

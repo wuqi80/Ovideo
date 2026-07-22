@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 const source = readFileSync(resolve(__dirname, '../../components/ScriptConversationPane.tsx'), 'utf-8');
 const workspace = readFileSync(resolve(__dirname, '../../WorkspaceApp.tsx'), 'utf-8');
 const storyboardColumn = readFileSync(resolve(__dirname, '../../components/StoryboardColumn.tsx'), 'utf-8');
+const videoReversePage = readFileSync(resolve(__dirname, '../../pages/VideoReversePage.tsx'), 'utf-8');
+const workflowLayout = readFileSync(resolve(__dirname, '../../layouts/WorkflowLayout.tsx'), 'utf-8');
+const app = readFileSync(resolve(__dirname, '../../App.tsx'), 'utf-8');
 
 describe('ScriptConversationPane workflow', () => {
   it('uses a persistent conversation composer with runtime model labels', () => {
@@ -35,6 +38,18 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('reader.readAsText(file)');
     expect(source).toContain("if (typeof text === 'string') setDraft(text)");
     expect(source).toContain('composerFileInputRef.current?.click()');
+  });
+
+  it('integrates video reverse as a script composer tool and refreshes the imported candidate', () => {
+    expect(source).toContain('aria-label="打开视频反推"');
+    expect(source).toContain('视频反推：上传视频并生成候选剧本');
+    expect(workspace).toContain('data-testid="video-reverse-tool-dialog"');
+    expect(workspace).toContain('onOpenVideoReverse={() => setVideoReverseOpen(true)}');
+    expect(workspace).toContain('await loadEpisodeData(scriptId)');
+    expect(videoReversePage).toContain('onCandidateCreated?: (scriptId: string) => Promise<void> | void');
+    expect(videoReversePage).toContain('await onCandidateCreated(scriptId)');
+    expect(workflowLayout).not.toContain("path: 'video-reverse'");
+    expect(app).toContain('<Navigate to="../script" replace />');
   });
 
   it('keeps immutable reply actions together', () => {
@@ -102,6 +117,15 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('}, [composerHeight, updateScrollControls]);');
   });
 
+  it('aligns the floating composer with the center conversation column', () => {
+    expect(source).toContain('data-testid="conversation-composer-grid"');
+    expect(source).toContain('lg:grid-cols-[124px_minmax(0,1fr)_172px]');
+    expect(source).toContain('xl:grid-cols-[140px_minmax(0,1fr)_196px]');
+    expect(source).toContain('min-w-0 lg:col-start-2');
+    expect(source).toContain('pointer-events-auto relative flex w-full flex-col');
+    expect(source).not.toContain('w-[calc(100%-24px)] max-w-6xl');
+  });
+
   it('provides turn navigation and a floating jump-to-latest action', () => {
     expect(source).toContain('data-testid="conversation-turn-rail"');
     expect(source).toContain('aria-label="对话轮次快速导航"');
@@ -116,6 +140,20 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain("behavior: 'smooth'");
   });
 
+  it('keeps card-level top and bottom controls on the text right edge and fades them near each boundary', () => {
+    expect(source).toContain("const scrollMessageBoundary = (messageId: string, boundary: 'top' | 'bottom')");
+    expect(source).toContain('data-testid={`script-card-scroll-controls-${message.id}`}');
+    expect(source).toContain("onClick={() => scrollMessageBoundary(message.id, 'top')}");
+    expect(source).toContain("onClick={() => scrollMessageBoundary(message.id, 'bottom')}");
+    expect(source).toContain('flex w-9 flex-shrink-0 self-stretch flex-col items-center');
+    expect(source).toContain('sticky top-1/2');
+    expect(source).toContain("messageControls.canJumpTop || messageControls.canJumpBottom ? 'opacity-100' : 'pointer-events-none opacity-0'");
+    expect(source).toContain("messageControls.canJumpTop ? 'scale-100 opacity-100' : 'pointer-events-none scale-90 opacity-0'");
+    expect(source).toContain("messageControls.canJumpBottom ? 'scale-100 opacity-100' : 'pointer-events-none scale-90 opacity-0'");
+    expect(source).toContain('const visibleBottom = nodeRect.bottom - composerHeightRef.current - 44');
+    expect(source).toContain('composerHeight + 48');
+  });
+
   it('summarizes conversation and storyboard progress in the right rail', () => {
     expect(source).toContain('data-testid="conversation-summary-rail"');
     expect(source).toContain('对话数量');
@@ -124,6 +162,11 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain("storyboardItemCount > 0 ? `已生成 · ${storyboardItemCount} 个镜头` : '尚未生成'");
     expect(source).toContain('selectedFile?.versions?.length || 0');
     expect(workspace).toContain('storyboardTotalsByFileId[selectedFileId] ?? 0');
+  });
+
+  it('shows both information rails on common Mac desktop viewport widths', () => {
+    expect(source).toContain('hidden min-w-0 lg:block');
+    expect(source).not.toContain('hidden min-w-0 2xl:block');
   });
 
   it('uses separated rounded cards for long conversation messages', () => {

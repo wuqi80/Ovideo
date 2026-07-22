@@ -1257,6 +1257,25 @@ def test_deepseek_stream_uses_shared_runtime_request(monkeypatch):
     assert response.closed is True
 
 
+def test_deepseek_stream_reports_empty_result_as_failure(monkeypatch):
+    env_key = get_provider_env_key("deepseek")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    failures = []
+    response = _DeepseekStreamResponse()
+    response.iter_lines = lambda decode_unicode=True: iter(["data: [DONE]"])
+
+    monkeypatch.setenv(env_key, "test-deepseek-key")
+    monkeypatch.setenv(endpoint_env, "https://deepseek-runtime.example.test/v1")
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", lambda *args, **kwargs: response)
+
+    events = list(ai_proxy_service.stream_deepseek_chat(prompt="hello", on_error=failures.append))
+
+    assert events[-1] == "data: [DONE]\n\n"
+    assert failures == ["DeepSeek 返回空内容"]
+    assert response.closed is True
+
+
 @pytest.mark.asyncio
 async def test_gemini_text_result_uses_shared_runtime_chat_completion(monkeypatch):
     env_key = get_provider_env_key("gemini-text")

@@ -100,6 +100,7 @@ export async function createVideoReverseTask(payload: {
 
 export async function listVideoReverseTasks(params: {
   project_id?: string;
+  episode_id?: string;
   status_filter?: string;
   limit?: number;
   offset?: number;

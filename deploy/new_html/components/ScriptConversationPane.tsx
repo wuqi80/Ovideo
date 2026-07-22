@@ -22,6 +22,7 @@ import {
   Send,
   Upload,
   User,
+  Wand2,
   X,
 } from 'lucide-react';
 import {
@@ -32,6 +33,13 @@ import {
   ScriptStoryboardVersion,
 } from '../types';
 import { estimateCredits, estimateTextTokens } from '../services/creditService';
+import { buildStoryboardSegmentGroups } from '../utils/storyboardSegments';
+import {
+  buildShotDurationInstruction,
+  DEFAULT_SHOT_DURATION_MODE,
+  SHOT_DURATION_MODE_STORAGE_KEY,
+  type ShotDurationMode,
+} from '../utils/shotDurationMode';
 
 export const SCRIPT_MODEL_OPTIONS = [
   { value: AiModel.Gemini, label: '化神', runtime: 'Gemini 2.5 Flash', provider: 'google' },
@@ -47,12 +55,14 @@ interface ScriptConversationPaneProps {
   isLoading: boolean;
   isSending: boolean;
   error?: string | null;
+  onDismissError?: () => void;
   onChangeModel: (model: AiModel) => void;
-  onSend: (content: string) => Promise<void>;
+  onSend: (content: string, shotDurationMode: ShotDurationMode) => Promise<void>;
   onGenerateDesign: (version: ScriptStoryboardVersion) => Promise<void> | void;
   onEditVersion: (version: ScriptStoryboardVersion, content: string) => Promise<void>;
   onExportVersion: (version: ScriptStoryboardVersion) => void;
   onOpenStoryboard: () => void;
+  onOpenVideoReverse?: () => void;
   storyboardItemCount: number;
 }
 
@@ -71,6 +81,35 @@ interface ConversationTurn {
   versionNo?: number;
 }
 
+const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion }> = ({ version }) => {
+  const groups = buildStoryboardSegmentGroups(version.storyboardItems || []);
+  if (groups.length === 0) return <>{version.content}</>;
+
+  return (
+    <div className="space-y-4">
+      {groups.map(group => (
+        <section key={group.key} className="overflow-hidden rounded-md border border-n40 bg-n0">
+          <header className="flex items-center gap-2 border-b border-n40 bg-n20 px-3 py-2">
+            <span className="text-xs font-semibold text-n500">分段</span>
+            <span className="font-mono text-sm font-bold text-warning">{String(group.segmentNo).padStart(2, '0')}</span>
+            <span className="text-[10px] text-n100">{group.entries.length} 个镜头 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒</span>
+          </header>
+          <div className="divide-y divide-n40">
+            {group.entries.map(entry => (
+              <div key={entry.item.id} className="px-3 py-3">
+                <div className="mb-1 text-xs font-semibold text-primary">{entry.localShotLabel}</div>
+                <div className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-n700">
+                  {entry.item.originalText || entry.item.videoScriptBlock || entry.item.scriptSegment}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+};
+
 export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   selectedFile,
   conversation,
@@ -79,15 +118,26 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   isLoading,
   isSending,
   error,
+  onDismissError,
   onChangeModel,
   onSend,
   onGenerateDesign,
   onEditVersion,
   onExportVersion,
   onOpenStoryboard,
+  onOpenVideoReverse,
   storyboardItemCount,
 }) => {
   const [draft, setDraft] = useState('');
+  const [shotDurationMode, setShotDurationMode] = useState<ShotDurationMode>(() => {
+    try {
+      return window.localStorage.getItem(SHOT_DURATION_MODE_STORAGE_KEY) === 'fragmented'
+        ? 'fragmented'
+        : DEFAULT_SHOT_DURATION_MODE;
+    } catch {
+      return DEFAULT_SHOT_DURATION_MODE;
+    }
+  });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingVersion, setEditingVersion] = useState<ScriptStoryboardVersion | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -96,15 +146,22 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [composerHeight, setComposerHeight] = useState(132);
   const [isResizingComposer, setIsResizingComposer] = useState(false);
   const [scrollControls, setScrollControls] = useState({ canScrollUp: false, canScrollDown: false });
+  const [messageScrollControls, setMessageScrollControls] = useState<Record<string, {
+    canJumpTop: boolean;
+    canJumpBottom: boolean;
+  }>>({});
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [estimatedCreditCost, setEstimatedCreditCost] = useState<number | null>(null);
   const [isEstimatingCredits, setIsEstimatingCredits] = useState(false);
+  const [dismissedFailureIds, setDismissedFailureIds] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<string, HTMLElement>>(new Map());
   const composerFileInputRef = useRef<HTMLInputElement>(null);
   const composerResizeOriginRef = useRef({ y: 0, height: 132 });
+  const composerHeightRef = useRef(composerHeight);
   const keepLatestVisibleOnResizeRef = useRef(true);
   const initializedScriptRef = useRef<string | null>(null);
+  composerHeightRef.current = composerHeight;
 
   const versionByMessageId = useMemo(() => new Map(
     (conversation?.versions || [])
@@ -159,9 +216,10 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     const conversationContext = (conversation?.messages || []).slice(-10)
       .map(message => `${message.role}:${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
+    const durationInstruction = buildShotDurationInstruction(shotDurationMode);
     const billingInput = isFirstTurn
-      ? draft
-      : [currentVersion?.content || selectedFile.scriptContent || selectedFile.originalContent, draft, conversationContext].join('\n');
+      ? [draft, durationInstruction].join('\n')
+      : [currentVersion?.content || selectedFile.scriptContent || selectedFile.originalContent, draft, durationInstruction, conversationContext].join('\n');
     const forecastOutputTokens = Math.max(
       1000,
       estimateTextTokens(currentVersion?.content || selectedFile.scriptContent || draft) * (isFirstTurn ? 2 : 1),
@@ -172,7 +230,15 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       output_tokens: forecastOutputTokens,
       model,
     };
-  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, selectedFile]);
+  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, selectedFile, shotDurationMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SHOT_DURATION_MODE_STORAGE_KEY, shotDurationMode);
+    } catch {
+      // Storage can be unavailable in private browsing; the in-memory selection still works.
+    }
+  }, [shotDurationMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -224,7 +290,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     const node = scrollRef.current;
     if (!node) return;
     const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
-    const threshold = node.getBoundingClientRect().top + Math.min(180, node.clientHeight * 0.35);
+    const nodeRect = node.getBoundingClientRect();
+    const threshold = nodeRect.top + Math.min(180, node.clientHeight * 0.35);
     let visibleTurnId = conversationTurns[0]?.id || null;
     for (const turn of conversationTurns) {
       const element = messageRefs.current.get(turn.anchorMessageId);
@@ -238,6 +305,26 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     setScrollControls({
       canScrollUp: node.scrollTop > 4,
       canScrollDown: node.scrollTop < maxScrollTop - 4,
+    });
+
+    const visibleTop = nodeRect.top + 28;
+    const visibleBottom = nodeRect.bottom - composerHeightRef.current - 44;
+    const nextMessageControls: Record<string, { canJumpTop: boolean; canJumpBottom: boolean }> = {};
+    messageRefs.current.forEach((element, messageId) => {
+      const rect = element.getBoundingClientRect();
+      nextMessageControls[messageId] = {
+        canJumpTop: rect.top < visibleTop - 36,
+        canJumpBottom: rect.bottom > visibleBottom + 36,
+      };
+    });
+    setMessageScrollControls(current => {
+      const currentIds = Object.keys(current);
+      const nextIds = Object.keys(nextMessageControls);
+      const unchanged = currentIds.length === nextIds.length && nextIds.every(messageId => (
+        current[messageId]?.canJumpTop === nextMessageControls[messageId].canJumpTop
+        && current[messageId]?.canJumpBottom === nextMessageControls[messageId].canJumpBottom
+      ));
+      return unchanged ? current : nextMessageControls;
     });
   }, [conversationTurns]);
 
@@ -281,6 +368,22 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     node.scrollTo({ top, behavior: 'smooth' });
   };
 
+  const scrollMessageBoundary = (messageId: string, boundary: 'top' | 'bottom') => {
+    const node = scrollRef.current;
+    const target = messageRefs.current.get(messageId);
+    if (!node || !target) return;
+
+    const nodeRect = node.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetTop = node.scrollTop + targetRect.top - nodeRect.top;
+    const composerReserve = composerHeight + 48;
+    const top = boundary === 'top'
+      ? targetTop - 12
+      : targetTop + target.offsetHeight - node.clientHeight + composerReserve;
+
+    node.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  };
+
   useEffect(() => {
     if (!isResizingComposer) return;
     const handlePointerMove = (event: PointerEvent) => {
@@ -301,7 +404,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     if (!content || isSending || !selectedFile) return;
     setDraft('');
     try {
-      await onSend(content);
+      await onSend(content, shotDurationMode);
     } catch {
       setDraft(content);
     }
@@ -353,6 +456,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     const isCollapsed = collapsed.has(message.id);
     const canCollapse = message.content.length > 240;
     const creditCost = Number(message.metadata?.creditCost || 0);
+    const failureMessage = String(message.metadata?.error || '生成未完成，请重新发送');
+    const creditCharged = message.metadata?.creditCharged === true;
+    const versionSegmentCount = version ? buildStoryboardSegmentGroups(version.storyboardItems || []).length : 0;
+    const messageControls = messageScrollControls[message.id] || {
+      canJumpTop: false,
+      canJumpBottom: false,
+    };
     return (
       <article
         key={message.id}
@@ -363,8 +473,10 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
         className={`w-full scroll-mt-4 rounded-lg border border-n40 px-4 py-5 shadow-sm ${isAssistant ? 'bg-n0' : 'bg-n20'}`}
       >
         <div className="flex items-start gap-3">
-          <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded ${isAssistant ? 'bg-primary text-white' : 'border border-n40 bg-n0 text-n500'}`}>
-            {isAssistant ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+          <div className="flex w-7 flex-shrink-0 self-stretch flex-col items-center">
+            <div className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded ${isAssistant ? 'bg-primary text-white' : 'border border-n40 bg-n0 text-n500'}`}>
+              {isAssistant ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+            </div>
           </div>
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex min-h-6 flex-wrap items-center gap-2">
@@ -378,7 +490,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               )}
               {version && (
                 <span className="rounded border border-primary/30 bg-primary-light px-1.5 py-0.5 text-[10px] text-primary">
-                  V{version.versionNo} · {version.storyboardItems.length} 个镜头
+                  V{version.versionNo} · {versionSegmentCount} 个分段 · {version.storyboardItems.length} 个镜头
                 </span>
               )}
               {version && isWorkflowScript && conversation?.currentVersionId === version.id && (
@@ -403,8 +515,27 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               </span>
             </div>
             <div className={`whitespace-pre-wrap break-words text-sm leading-7 text-n700 ${isCollapsed ? 'max-h-28 overflow-hidden' : ''}`}>
-              {message.content || (message.status === 'streaming' ? '正在生成分镜脚本…' : '')}
+              {version && message.status === 'completed'
+                ? <StoryboardVersionBody version={version} />
+                : message.content || (message.status === 'streaming' ? '正在生成分镜脚本…' : message.status === 'failed' ? failureMessage : '')}
             </div>
+            {message.status === 'failed' && !dismissedFailureIds.has(message.id) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded border border-danger/20 bg-danger-light px-3 py-2 text-xs text-danger">
+                <span>{failureMessage}</span>
+                <span className="ml-auto font-medium">
+                  {creditCharged ? `已扣除 ${creditCost} 积分` : '本次未扣积分'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDismissedFailureIds(current => new Set(current).add(message.id))}
+                  title="关闭错误提示"
+                  aria-label="关闭错误提示"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-danger/10"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             {canCollapse && (
               <button
                 type="button"
@@ -465,6 +596,33 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               </div>
             )}
           </div>
+          {isAssistant && version && canCollapse && !isCollapsed && (
+            <div
+              className="flex w-9 flex-shrink-0 self-stretch flex-col items-center"
+              data-testid={`script-card-scroll-controls-${message.id}`}
+            >
+              <div className={`sticky top-1/2 z-10 flex -translate-y-1/2 flex-col gap-1 rounded-full border border-n40 bg-n0 p-1 shadow-md transition-opacity duration-200 ${messageControls.canJumpTop || messageControls.canJumpBottom ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+                <button
+                  type="button"
+                  onClick={() => scrollMessageBoundary(message.id, 'top')}
+                  title="跳到本卡片顶部"
+                  aria-label="跳到本卡片顶部"
+                  className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-n400 transition-all duration-200 hover:bg-primary-light hover:text-primary ${messageControls.canJumpTop ? 'scale-100 opacity-100' : 'pointer-events-none scale-90 opacity-0'}`}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollMessageBoundary(message.id, 'bottom')}
+                  title="跳到本卡片底部"
+                  aria-label="跳到本卡片底部"
+                  className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-n400 transition-all duration-200 hover:bg-primary-light hover:text-primary ${messageControls.canJumpBottom ? 'scale-100 opacity-100' : 'pointer-events-none scale-90 opacity-0'}`}
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </article>
     );
@@ -504,8 +662,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             <LoaderCircle className="h-4 w-4 animate-spin text-primary" /> 正在加载对话
           </div>
         ) : (conversation?.messages || []).length > 0 ? (
-          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-4 px-3 py-4 2xl:grid-cols-[150px_minmax(0,1fr)_210px]">
-            <aside className="hidden min-w-0 2xl:block" data-testid="conversation-turn-rail">
+          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 py-4 lg:grid-cols-[124px_minmax(0,1fr)_172px] xl:grid-cols-[140px_minmax(0,1fr)_196px]">
+            <aside className="hidden min-w-0 lg:block" data-testid="conversation-turn-rail">
               <div className="sticky top-4 border-r border-n40 pr-3">
                 <div className="mb-2 flex h-7 items-center gap-1">
                   <MessageSquare className="h-3.5 w-3.5 text-primary" />
@@ -555,7 +713,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
 
             <main className="min-w-0 space-y-3">{conversation!.messages.map(renderMessage)}</main>
 
-            <aside className="hidden min-w-0 2xl:block" data-testid="conversation-summary-rail">
+            <aside className="hidden min-w-0 lg:block" data-testid="conversation-summary-rail">
               <div className="sticky top-4 border-l border-n40 pl-3">
                 <div className="mb-3 text-[11px] font-semibold text-n700">当前任务</div>
                 <dl className="space-y-3">
@@ -612,12 +770,30 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
         </button>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 px-3" data-testid="floating-conversation-composer">
-        {error && <div className="pointer-events-auto mx-auto mb-2 w-[calc(100%-24px)] max-w-6xl rounded border border-danger/30 bg-r50 px-3 py-2 text-xs text-danger shadow-sm">{error}</div>}
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30" data-testid="floating-conversation-composer">
         <div
-          className="pointer-events-auto relative mx-auto flex w-[calc(100%-24px)] max-w-6xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-[0_18px_55px_rgba(15,23,42,0.16)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10"
-          style={{ height: composerHeight }}
+          className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[124px_minmax(0,1fr)_172px] xl:grid-cols-[140px_minmax(0,1fr)_196px]"
+          data-testid="conversation-composer-grid"
         >
+          <div className="min-w-0 lg:col-start-2">
+            {error && (
+              <div className="pointer-events-auto mb-2 flex w-full items-center gap-3 rounded border border-danger/30 bg-r50 px-3 py-2 text-xs text-danger shadow-sm">
+                <span className="min-w-0 flex-1">{error}</span>
+                <button
+                  type="button"
+                  onClick={onDismissError}
+                  title="关闭错误提示"
+                  aria-label="关闭错误提示"
+                  className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded hover:bg-danger/10"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+            <div
+              className="pointer-events-auto relative flex w-full flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-[0_18px_55px_rgba(15,23,42,0.16)] focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10"
+              style={{ height: composerHeight }}
+            >
           <button
             type="button"
             data-testid="composer-resize-handle"
@@ -667,6 +843,43 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             >
               <Upload className="h-4 w-4" />
             </button>
+            {onOpenVideoReverse && (
+              <button
+                type="button"
+                onClick={onOpenVideoReverse}
+                disabled={!selectedFile || isSending}
+                title="视频反推：上传视频并生成候选剧本"
+                aria-label="打开视频反推"
+                className="inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs text-n300 hover:bg-n20 hover:text-primary disabled:cursor-not-allowed disabled:text-n100"
+              >
+                <Wand2 className="h-4 w-4" />
+                视频反推
+              </button>
+            )}
+            <div
+              className="inline-flex h-8 flex-shrink-0 overflow-hidden rounded border border-n40 bg-n10"
+              role="group"
+              aria-label="选择镜头时长模式"
+            >
+              <button
+                type="button"
+                onClick={() => setShotDurationMode('complete')}
+                disabled={isSending}
+                title="直接完善：优先生成 10-15 秒的完整镜头"
+                className={`px-2 text-xs transition-colors ${shotDurationMode === 'complete' ? 'bg-primary text-white' : 'text-n400 hover:bg-n20 hover:text-primary'}`}
+              >
+                直接完善
+              </button>
+              <button
+                type="button"
+                onClick={() => setShotDurationMode('fragmented')}
+                disabled={isSending}
+                title="细碎 + 合并：先生成 3-5 秒基础镜头，再按不超过 15 秒组织分段"
+                className={`border-l border-n40 px-2 text-xs transition-colors ${shotDurationMode === 'fragmented' ? 'bg-primary text-white' : 'text-n400 hover:bg-n20 hover:text-primary'}`}
+              >
+                细碎 + 合并
+              </button>
+            </div>
             <span
               className="inline-flex flex-shrink-0 items-center gap-1 text-xs font-medium text-warning"
               title="根据当前输入、历史上下文、预计输出和所选模型动态计算"
@@ -698,6 +911,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             >
               {isSending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
+          </div>
+            </div>
           </div>
         </div>
       </div>

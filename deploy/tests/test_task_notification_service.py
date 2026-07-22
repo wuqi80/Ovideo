@@ -287,6 +287,6 @@ async def test_mark_and_dismiss_notifications_delegate_to_notification_dao():
 
     assert marked == {"success": True}
     assert all_marked == {"success": True, "count": 7}
-    assert dismissed == {"success": True}
+    assert dismissed == {"success": True, "dismissed": True}
     assert FakeNotificationDAO.read == [{"notification_id": "n_1", "user_id": "user_1"}]
     assert FakeNotificationDAO.dismissed == [{"notification_id": "n_2", "user_id": "user_1"}]

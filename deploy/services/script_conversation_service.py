@@ -19,6 +19,7 @@ async def get_script_conversation(
     conversation_dao: Any,
 ) -> Dict[str, Any]:
     script_id = str(script["script_id"])
+    await conversation_dao.fail_stale_messages(script_id, stale_after_seconds=120)
     messages, versions = await asyncio.gather(
         conversation_dao.list_messages(script_id),
         conversation_dao.list_versions(script_id),

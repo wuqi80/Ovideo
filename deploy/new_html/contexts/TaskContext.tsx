@@ -8,7 +8,7 @@ import React, {
   useState,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { GlobalTask, RegisteredTask, SourcePage, TaskNotification } from '../types';
+import type { GlobalTask, RegisteredTask, SourcePage, TaskKind, TaskNotification } from '../types';
 import { taskRegistry, type RegisterInput } from '../services/taskRegistry';
 import type { ServerNotificationRow } from '../services/notificationMapping';
 
@@ -23,6 +23,7 @@ interface TaskContextValue {
   dismissNotification: (id: string) => void;
   clearNotifications: () => void;
   markAllRead: () => void;
+  refreshNotifications: () => Promise<void>;
 
   registerTask: (input: RegisterInput) => RegisteredTask;
   updateTask: (taskId: string, updates: Partial<RegisteredTask>) => RegisteredTask | null;
@@ -46,6 +47,7 @@ const STUB_VALUE: TaskContextValue = {
   dismissNotification: () => {},
   clearNotifications: () => {},
   markAllRead: () => {},
+  refreshNotifications: async () => {},
   registerTask: (() => { throw new Error('TaskProvider missing'); }) as any,
   updateTask: () => null,
   completeTask: () => null,
@@ -108,6 +110,23 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const startedRef = useRef(false);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
 
+  const refreshNotifications = useCallback(async () => {
+    const [
+      { getNotifications },
+      { mapNotificationsToTasks },
+    ] = await Promise.all([
+      import('../services/taskNotificationService'),
+      import('../services/notificationMapping'),
+    ]);
+    const res = await getNotifications(undefined, 50, 0);
+    if (!res?.success || !Array.isArray(res.notifications)) return;
+    const tasks = mapNotificationsToTasks(res.notifications as ServerNotificationRow[]);
+    const stats = taskRegistry.mergeFromServer(tasks);
+    if (stats.added > 0 || stats.updated > 0) {
+      setRegisteredTasks(taskRegistry.list());
+    }
+  }, []);
+
   useEffect(() => {
     if (isAdminRoute()) return;
     if (startedRef.current) return;
@@ -134,7 +153,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           getNotifications,
           getUnreadNotificationCount,
         },
-        { mapNotificationsToTasks },
+        { mapNotificationsToTasks, mapRuntimeNotificationToTask },
       ] = await Promise.all([
         import('../services/globalTaskManager'),
         import('../services/taskNotificationService'),
@@ -221,10 +240,16 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
 
           if (n.taskId) {
-            if (n.status === 'completed') {
-              taskRegistry.complete(n.taskId);
-            } else if (n.status === 'failed') {
-              taskRegistry.fail(n.taskId, n.message || '任务失败');
+            const existing = taskRegistry.get(n.taskId);
+            if (existing) {
+              if (n.status === 'completed') {
+                taskRegistry.complete(n.taskId);
+              } else if (n.status === 'failed') {
+                taskRegistry.fail(n.taskId, n.message || '任务失败');
+              }
+            } else {
+              const terminalTask = mapRuntimeNotificationToTask(n);
+              if (terminalTask) taskRegistry.mergeFromServer([terminalTask]);
             }
           }
 
@@ -314,7 +339,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     taskRegistry.remove(taskId);
     if (target && (target.status === 'completed' || target.status === 'failed' || target.status === 'cancelled')) {
       import('../services/taskNotificationService')
-        .then(({ dismissNotification: apiDismissNotification }) => apiDismissNotification(taskId))
+        .then(({ dismissNotification: apiDismissNotification }) => apiDismissNotification(target.notificationId || taskId))
         .catch(() => {});
     }
   }, []);
@@ -332,6 +357,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dismissNotification,
     clearNotifications,
     markAllRead,
+    refreshNotifications,
     registerTask,
     updateTask,
     completeTask,

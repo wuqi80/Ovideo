@@ -27,7 +27,11 @@ function resolveMinimaxVoiceId(modelId?: string | null): string {
   if (!raw) return MINIMAX_DEFAULT_VOICE;
   return LEGACY_VOICE_ALIAS[raw] || raw;
 }
-import { parseBoundAssetTags } from '../utils/episodeAdapters';
+import {
+  applyStoryboardRecordPatch,
+  normalizeStoryboardRecord,
+  parseBoundAssetTags,
+} from '../utils/episodeAdapters';
 import { stripDialogueMarkers, extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import { waitForIdle } from '../utils/idleScheduler';
 import { VoiceSidebar } from '../components/audio/VoiceSidebar';
@@ -49,62 +53,12 @@ function resolveUrl(path: string) {
   return `/${path}`;
 }
 
-function safeBoundAssets(v: unknown): string[] {
-  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string');
-  if (typeof v === 'string') {
-    try {
-      const parsed = JSON.parse(v);
-      if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === 'string');
-    } catch {}
-  }
-  return [];
-}
-
-function normalizeAudioStageStoryboardItem(r: any): StoryboardItemDB {
-  return {
-    itemId: r.item_id ?? r.itemId ?? '',
-    episodeId: r.episode_id ?? r.episodeId ?? '',
-    sortOrder: typeof (r.sort_order ?? r.sortOrder) === 'number' ? (r.sort_order ?? r.sortOrder) : 0,
-    sceneHeading: r.scene_heading ?? r.sceneHeading ?? '',
-    actionText: r.action_text ?? r.actionText ?? '',
-    dialogue: r.dialogue ?? '',
-    cameraMovement: r.camera_movement ?? r.cameraMovement ?? '',
-    imagePrompt: r.image_prompt ?? r.imagePrompt ?? '',
-    videoPrompt: r.video_prompt ?? r.videoPrompt ?? '',
-    generatedImageUrl: null,
-    boundAssets: safeBoundAssets(r.bound_assets ?? r.boundAssets),
-    status: r.status ?? 'draft',
-    dialogueAudioUrl: r.dialogue_audio_url ?? r.dialogueAudioUrl ?? null,
-    narrationAudioUrl: r.narration_audio_url ?? r.narrationAudioUrl ?? null,
-    sfxAudioUrl: r.sfx_audio_url ?? r.sfxAudioUrl ?? null,
-    audioDurationMs: r.audio_duration_ms ?? r.audioDurationMs ?? null,
-    plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
-  };
-}
-
-function applyAudioStageStoryboardPatch(item: StoryboardItemDB, patch: Record<string, any>): StoryboardItemDB {
-  return {
-    ...item,
-    sceneHeading: patch.scene_heading ?? patch.sceneHeading ?? item.sceneHeading,
-    actionText: patch.action_text ?? patch.actionText ?? item.actionText,
-    dialogue: patch.dialogue ?? item.dialogue,
-    cameraMovement: patch.camera_movement ?? patch.cameraMovement ?? item.cameraMovement,
-    imagePrompt: patch.image_prompt ?? patch.imagePrompt ?? item.imagePrompt,
-    videoPrompt: patch.video_prompt ?? patch.videoPrompt ?? item.videoPrompt,
-    boundAssets: patch.bound_assets !== undefined || patch.boundAssets !== undefined
-      ? safeBoundAssets(patch.bound_assets ?? patch.boundAssets)
-      : item.boundAssets,
-    dialogueAudioUrl: patch.dialogue_audio_url ?? patch.dialogueAudioUrl ?? item.dialogueAudioUrl,
-    narrationAudioUrl: patch.narration_audio_url ?? patch.narrationAudioUrl ?? item.narrationAudioUrl,
-    sfxAudioUrl: patch.sfx_audio_url ?? patch.sfxAudioUrl ?? item.sfxAudioUrl,
-    audioDurationMs: patch.audio_duration_ms ?? patch.audioDurationMs ?? item.audioDurationMs,
-    plannedDurationMs: patch.planned_duration_ms ?? patch.plannedDurationMs ?? item.plannedDurationMs,
-    status: patch.status ?? item.status,
-  };
-}
-
 const AUDIO_STAGE_STORYBOARD_INITIAL_LOAD_LIMIT = 20;
 const AUDIO_STAGE_STORYBOARD_BACKGROUND_PAGE_SIZE = 80;
+
+function normalizeAudioStageStoryboardItem(record: Record<string, any>): StoryboardItemDB {
+  return normalizeStoryboardRecord(record);
+}
 
 function sortAudioStageStoryboardItems(items: StoryboardItemDB[]): StoryboardItemDB[] {
   return [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -165,7 +119,7 @@ export const AudioStagePage: React.FC = () => {
   const updateAudioStageStoryboardItem = useCallback(async (itemId: string, data: Record<string, any>) => {
     await apiUpdateStoryboardItem(itemId, data);
     setStoryboardItems(prev => prev.map(item =>
-      item.itemId === itemId ? applyAudioStageStoryboardPatch(item, data) : item
+      item.itemId === itemId ? applyStoryboardRecordPatch(item, data) : item
     ));
   }, []);
 

@@ -140,8 +140,8 @@ const App: React.FC = () => {
                             <Route path="workflow" element={<WorkflowLayout />}>
                                 <Route index element={<Navigate to="script" replace />} />
                                 <Route path="script" element={<ScriptPage />} />
-                                {/* 2026-05-26 Slice 3：视频反推（项目级页面，挂在 workflow 下复用顶部导航） */}
-                                <Route path="video-reverse" element={<VideoReversePage />} />
+                                {/* 旧工作流链接兼容：视频反推现已整合到剧本对话工具。 */}
+                                <Route path="video-reverse" element={<Navigate to="../script" replace />} />
                                 <Route path="design" element={<DesignPage />} />
                                 <Route path="materials" element={<MaterialsPage />} />
                                 <Route path="audio" element={<AudioStagePage />} />

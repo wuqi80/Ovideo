@@ -1,12 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ProjectFile, AiModel } from '../types';
-import { BookOpen, Wand2, Undo2, Redo2 } from 'lucide-react';
+import { BookOpen, MessageSquareText, Wand2, Undo2, Redo2 } from 'lucide-react';
+import { ScriptIterationPanel } from './ScriptIterationPanel';
 
 interface ViewerColumnProps {
   selectedFile: ProjectFile | undefined;
   files: ProjectFile[];
   checkedCount: number;
   onRewrite: (targetFileId?: string) => Promise<void>;
+  onIterateScript: (
+    currentScript: string,
+    instruction: string,
+    conversationContext: string,
+  ) => Promise<string>;
   onUpdateContent: (id: string, content: string) => void;
   isProcessing: boolean;
   isExpanded: boolean;
@@ -24,6 +30,7 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
   files,
   checkedCount,
   onRewrite,
+  onIterateScript,
   onUpdateContent,
   isProcessing,
   isExpanded,
@@ -35,6 +42,7 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
   aiModel,
   onChangeModel
 }) => {
+  const [isIterationOpen, setIsIterationOpen] = useState(false);
   
   const handleMainAction = async () => {
     if (isProcessing) return;
@@ -100,12 +108,12 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
       </div>
 
       {/* Toolbar - 固定高度52px，与其他栏目对齐 */}
-      <div className="h-[52px] px-3 border-b border-n40 bg-n0 flex items-center">
+      <div className="h-[52px] px-3 border-b border-n40 bg-n0 grid grid-cols-2 gap-2 items-center">
            {/* AI改写按钮 */}
            <button
                 onClick={handleMainAction}
                 disabled={(!selectedFile && checkedCount === 0) || isProcessing}
-                className={`w-full flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-bold tracking-wide transition-all
+                className={`min-w-0 h-9 flex items-center justify-center gap-1.5 px-2 rounded-lg text-xs font-bold tracking-wide transition-all whitespace-nowrap
                     ${(!selectedFile && checkedCount === 0) || isProcessing
                     ? 'bg-n0 text-n100 cursor-not-allowed'
                     : 'bg-primary hover:bg-primary-hover text-white shadow-lg shadow-indigo-900/50'
@@ -123,6 +131,16 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
                     {getButtonText()}
                     </>
                 )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsIterationOpen(true)}
+              disabled={!selectedFile?.originalContent?.trim() || isProcessing}
+              className="min-w-0 h-9 flex items-center justify-center gap-1.5 rounded-lg border border-primary px-2 text-xs font-bold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:border-n40 disabled:text-n100 whitespace-nowrap"
+              title="通过多轮对话生成候选版本，确认后再应用"
+            >
+              <MessageSquareText className="h-3.5 w-3.5 flex-shrink-0" />
+              AI 对话修改
             </button>
       </div>
 
@@ -142,6 +160,16 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
             <p>请先选择一个文件查看内容</p>
             <p className="text-xs mt-2">点击内容区域可直接修改文本</p>
           </div>
+        )}
+        {selectedFile && isIterationOpen && (
+          <ScriptIterationPanel
+            key={selectedFile.id}
+            fileId={selectedFile.id}
+            script={selectedFile.originalContent}
+            onGenerate={onIterateScript}
+            onApply={(content) => onUpdateContent(selectedFile.id, content)}
+            onClose={() => setIsIterationOpen(false)}
+          />
         )}
       </div>
     </div>

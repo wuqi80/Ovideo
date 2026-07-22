@@ -9,6 +9,7 @@ import { AiModel } from '../types';
 import { callGeminiProxyWithRetry } from './geminiProxyService';
 import { callDeepseekWithRetry, callDeepseekChatWithRetry } from './deepseekService';
 import { PromptTemplate, fillPrompt } from '../prompts';
+import type { TextTaskContext } from './textTaskContext';
 
 /**
  * 通用AI调用（文本生成）
@@ -23,7 +24,8 @@ export async function callAI(
   model: AiModel,
   promptTemplate: PromptTemplate,
   variables: Record<string, string> = {},
-  onStream?: (chunk: string) => void
+  onStream?: (chunk: string) => void,
+  taskContext?: TextTaskContext,
 ): Promise<string> {
   // 替换提示词中的占位符
   const userPrompt = fillPrompt(promptTemplate.user, variables);
@@ -31,11 +33,11 @@ export async function callAI(
 
   // 根据模型选择对应的服务
   if (model === AiModel.Deepseek) {
-    return await callDeepseekWithRetry(userPrompt, systemPrompt, onStream);
+    return await callDeepseekWithRetry(userPrompt, systemPrompt, onStream, 'deepseek-reasoner', taskContext);
   } else if (model === AiModel.DeepseekChat) {
-    return await callDeepseekChatWithRetry(userPrompt, systemPrompt, onStream);
+    return await callDeepseekChatWithRetry(userPrompt, systemPrompt, onStream, taskContext);
   } else {
-    return await callGeminiProxyWithRetry(userPrompt, systemPrompt);
+    return await callGeminiProxyWithRetry(userPrompt, systemPrompt, 3, undefined, taskContext);
   }
 }
 
@@ -50,9 +52,10 @@ export async function callAI(
 export async function callAIForJSON<T = any>(
   model: AiModel,
   promptTemplate: PromptTemplate,
-  variables: Record<string, string> = {}
+  variables: Record<string, string> = {},
+  taskContext?: TextTaskContext,
 ): Promise<T> {
-  const response = await callAI(model, promptTemplate, variables);
+  const response = await callAI(model, promptTemplate, variables, undefined, taskContext);
   
   // 清理可能的markdown代码块标记
   const cleanResponse = response

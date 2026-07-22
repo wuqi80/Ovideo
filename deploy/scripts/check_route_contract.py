@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 257
-DEFAULT_EXPECTED_OPERATIONS = 314
+DEFAULT_EXPECTED_PATHS = 258
+DEFAULT_EXPECTED_OPERATIONS = 315
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -1815,6 +1815,7 @@ def check_project_routes_extracted(root: Path) -> int:
         "/api/projects/save",
         "/api/projects/list",
         "/api/projects/{project_id}",
+        "/api/projects/{project_id}/workspace",
         "/api/projects/{project_id}/images/{shot_id}",
         "/api/projects/{project_id}/export-to-video",
         "/api/projects/{project_id}/clear-video-tasks",
@@ -1849,8 +1850,8 @@ def check_project_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 7:
-        fail(f"routers/projects.py should own 7 project route registrations, found {route_count}")
+    if route_count != 8:
+        fail(f"routers/projects.py should own 8 project route registrations, found {route_count}")
 
     router_text = projects_path.read_text(encoding="utf-8")
     image_service_text = project_image_service_path.read_text(encoding="utf-8")
@@ -4519,7 +4520,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "from services.ai_proxy_task_service import (",
         "create_deepseek_text_task(",
         "complete_ai_proxy_text_task(",
-        "create_completed_gemini_text_task(",
+        "create_gemini_text_task(",
         "create_completed_image_task(",
     ):
         if snippet not in router_text:

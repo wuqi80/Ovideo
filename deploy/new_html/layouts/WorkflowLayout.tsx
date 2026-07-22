@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Outlet, useParams, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LogOut, LayoutGrid, Wand2, Library, Clapperboard, Coins, UserRound } from 'lucide-react';
+import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LogOut, LayoutGrid, Library, Clapperboard, Coins, UserRound } from 'lucide-react';
 import { EpisodeProvider } from '../contexts/EpisodeContext';
 import type { SourcePage } from '../types';
 import { TaskBadge } from '../components/TaskBadge';
@@ -8,10 +8,9 @@ import { NotificationPanel } from '../components/NotificationPanel';
 import { getCreditBalance } from '../services/creditService';
 
 // 2026-05-20 (Task System Overhaul M1)：每个 nav item 关联 sourcePage，用于 per-page TaskBadge。
-// 2026-05-26 Slice 1/3：插入"视频反推"（剧本之后）与"素材库"（历史之前）。
+// 视频反推已整合到剧本对话工具栏；素材库保留为独立工作流阶段。
 const NAV_ITEMS: { path: string; label: string; icon: any; sourcePage: SourcePage }[] = [
   { path: 'script',         label: '剧本',     icon: FileText,   sourcePage: 'script' },
-  { path: 'video-reverse',  label: '视频反推', icon: Wand2,      sourcePage: 'video-reverse' },
   { path: 'design',         label: '设计',     icon: Palette,    sourcePage: 'design' },
   { path: 'materials',      label: '素材',     icon: Image,      sourcePage: 'materials' },
   { path: 'audio',          label: '配音',     icon: Mic,        sourcePage: 'audio' },

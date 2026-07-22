@@ -130,6 +130,7 @@ def test_doubao_agent_plan_size_keeps_valid_k_and_expands_small_values() -> None
     assert doubao_service._normalize_agent_plan_size("2K") == "2k"
     assert doubao_service._normalize_agent_plan_size("1K") == "2048x2048"
     assert doubao_service._normalize_agent_plan_size("1024x1024") == "2048x2048"
+    assert doubao_service._normalize_agent_plan_size("2048x1152") == "2736x1536"
     assert doubao_service._normalize_agent_plan_size("4096x4096") == "4096x4096"
 
 

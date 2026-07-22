@@ -362,27 +362,27 @@ export const FileColumn: React.FC<FileColumnProps> = ({
 
                 {/* Actions stay visible so they are discoverable on touch devices and narrow layouts. */}
                 <div
-                  className="absolute right-2 top-2.5 z-30 flex items-center gap-0.5 rounded-md border border-n40 bg-n0 px-1 py-0.5 opacity-100 shadow-bottom backdrop-blur-sm"
+                  data-testid="file-card-actions"
+                  className="absolute right-2 top-2.5 z-30 flex items-center gap-0.5"
                 >
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleStartRename(e, file); }}
-                    className="p-1 text-n300 hover:text-primary hover:bg-n20 rounded"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-primary-light hover:text-primary"
                     title="重命名"
                   >
                       <Edit2 className="w-3 h-3" />
                   </button>
                   <button 
                     onClick={(e) => { e.stopPropagation(); onDownloadFile(file.id); }}
-                    className="p-1 text-n300 hover:text-success hover:bg-n20 rounded"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-g50 hover:text-success"
                     title="下载"
                   >
                       <FileDown className="w-3 h-3" />
                   </button>
-                  <div className="w-px h-4 bg-n40 mx-0.5" />
                   <button
                     onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'up'); }}
                     disabled={index === 0}
-                    className="p-1 text-n300 hover:text-n800 hover:bg-n20 rounded disabled:opacity-20 disabled:cursor-not-allowed"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
                     title="上移"
                   >
                       <ChevronUp className="w-3 h-3" />
@@ -390,15 +390,14 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   <button 
                     onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'down'); }}
                     disabled={index === files.length - 1}
-                    className="p-1 text-n300 hover:text-n800 hover:bg-n20 rounded disabled:opacity-20 disabled:cursor-not-allowed"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
                     title="下移"
                   >
                       <ChevronDown className="w-3 h-3" />
                   </button>
-                  <div className="w-px h-4 bg-n40 mx-0.5" />
                   <button
                     onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(file.id); }}
-                    className="p-1 text-danger hover:text-danger hover:bg-r50 rounded"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-danger hover:bg-r50 hover:text-danger"
                     title="删除"
                   >
                     <Trash2 className="w-3 h-3" />

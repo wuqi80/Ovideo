@@ -136,6 +136,7 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
         registeredTasks,
         unreadCount,
         markAllRead,
+        refreshNotifications,
         removeTask,
         cancelTask,
     } = useTaskManager();
@@ -208,11 +209,12 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
             const next = !prev;
             if (next) {
                 computeMenuPos();
+                void refreshNotifications();
                 if (unreadCount > 0) markAllRead();
             }
             return next;
         });
-    }, [unreadCount, markAllRead, computeMenuPos]);
+    }, [unreadCount, markAllRead, refreshNotifications, computeMenuPos]);
 
     const handleNavigate = useCallback((task: RegisteredTask) => {
         const url = buildTargetUrl(task);

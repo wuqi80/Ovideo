@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import {
   assetsToMaterialLibrary,
+  applyStoryboardRecordPatch,
   dbItemToStoryboardItem,
   newShotToDbFields,
+  normalizeStoryboardRecord,
   storyboardItemToDbUpdate,
 } from '../../utils/episodeAdapters';
+
+describe('EpisodeContext adapter wiring', () => {
+  it('does not retain the removed safeObj runtime helper', () => {
+    const source = readFileSync(resolve(__dirname, '../../contexts/EpisodeContext.tsx'), 'utf-8');
+    expect(source).not.toContain('safeObj(');
+    expect(source).toContain('generationParams: parseRecord(');
+    expect(source).toContain('metadata: parseRecord(');
+    expect(source).toContain('voiceParams: parseRecord(');
+  });
+});
 
 describe('assetsToMaterialLibrary', () => {
   it('includes generated material_image files alongside reference images', () => {
@@ -178,6 +192,42 @@ describe('storyboard configured references', () => {
     } as any);
 
     expect(item.configuredReferences).toEqual(references);
+  });
+
+  it('normalizes JSON encoded references and audio fields without dropping objects', () => {
+    const item = normalizeStoryboardRecord({
+      item_id: 'sb_1',
+      episode_id: 'ep_1',
+      sort_order: 2,
+      bound_assets: JSON.stringify(['char:hero']),
+      configured_references: JSON.stringify(references),
+      dialogue_audio_url: '/audio/dialogue.mp3',
+      planned_duration_ms: 4200,
+    });
+
+    expect(item.boundAssets).toEqual(['char:hero']);
+    expect(item.configuredReferences).toEqual(references);
+    expect(item.dialogueAudioUrl).toBe('/audio/dialogue.mp3');
+    expect(item.plannedDurationMs).toBe(4200);
+  });
+
+  it('applies snake-case patches while preserving references and audio metadata', () => {
+    const item = normalizeStoryboardRecord({
+      item_id: 'sb_1',
+      episode_id: 'ep_1',
+      configured_references: references,
+      dialogue_audio_url: '/audio/dialogue.mp3',
+      bound_assets: ['char:hero'],
+    });
+    const patched = applyStoryboardRecordPatch(item, {
+      image_prompt: 'updated prompt',
+      bound_assets: ['char:hero', 'scene:classroom'],
+    });
+
+    expect(patched.imagePrompt).toBe('updated prompt');
+    expect(patched.boundAssets).toEqual(['char:hero', 'scene:classroom']);
+    expect(patched.configuredReferences).toEqual(references);
+    expect(patched.dialogueAudioUrl).toBe('/audio/dialogue.mp3');
   });
 
   it('writes configured references for updates and new shots', () => {
