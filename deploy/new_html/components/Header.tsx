@@ -1,10 +1,18 @@
 
-import React, { useState, useCallback } from 'react';
-import { Sparkles, BookOpen, ScrollText, LayoutDashboard, FileText, Settings, Play, StopCircle, Layers, Image as ImageIcon, Video, ShieldCheck, History, LogOut, ChevronDown, FolderOpen } from 'lucide-react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Sparkles, BookOpen, ScrollText, LayoutDashboard, FileText, Settings, Play, StopCircle, Layers, Image as ImageIcon, Video, ShieldCheck, History, LogOut, ChevronDown, FolderOpen, Coins } from 'lucide-react';
 import { AppView, AiModel, TaskNotification } from '../types';
 import { NotificationPanel } from './NotificationPanel';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { apiFetch } from '../services/httpClient';
+import { getCreditBalance } from '../services/creditService';
+
+// 与 ScriptConversationPane 的 SCRIPT_MODEL_OPTIONS 保持一致：业务名 · 实际模型名。
+const AI_MODEL_DISPLAY: Record<AiModel, string> = {
+  [AiModel.Gemini]: '化神 · Gemini 2.5 Flash',
+  [AiModel.Deepseek]: '筑基 · DeepSeek Reasoner',
+  [AiModel.DeepseekChat]: '金丹 · DeepSeek Chat',
+};
 
 interface HeaderProps {
   visibleColumns: boolean[];
@@ -42,6 +50,35 @@ export const Header: React.FC<HeaderProps> = ({
   
   // 用户菜单状态
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // 积分余额：与 WorkflowLayout 同一刷新模式（挂载 + 60s 轮询 + focus + credits:updated 事件）
+  const [availableCredits, setAvailableCredits] = useState<number | null>(null);
+  const refreshCredits = useCallback(async () => {
+    try {
+      const balance = await getCreditBalance();
+      setAvailableCredits(balance.available_credits);
+    } catch (error) {
+      console.warn('获取用户积分失败:', error);
+      setAvailableCredits(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCredits();
+    const intervalId = window.setInterval(() => void refreshCredits(), 60_000);
+    const handleCreditsUpdated = (event: Event) => {
+      const rawBalance = (event as CustomEvent<{ balance?: number | null }>).detail?.balance;
+      if (typeof rawBalance === 'number' && Number.isFinite(rawBalance)) setAvailableCredits(rawBalance);
+      else void refreshCredits();
+    };
+    window.addEventListener('focus', refreshCredits);
+    window.addEventListener('credits:updated', handleCreditsUpdated);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshCredits);
+      window.removeEventListener('credits:updated', handleCreditsUpdated);
+    };
+  }, [refreshCredits]);
   
   // 登出处理
   const handleLogout = useCallback(async () => {
@@ -243,12 +280,27 @@ export const Header: React.FC<HeaderProps> = ({
               旧的 props.notifications / props.onDismissNotification 仍向后兼容，但不再用于渲染。 */}
           <NotificationPanel />
           
-          <span className="flex items-center gap-1">
+          <span className="flex items-center gap-1" title={`当前剧本模型：${AI_MODEL_DISPLAY[aiModel] || aiModel}`}>
             <Sparkles className="w-3.5 h-3.5 text-warning" />
             <span className="hidden sm:inline text-xs font-medium">
-              {aiModel === AiModel.Gemini ? 'GI化神' : aiModel === AiModel.DeepseekChat ? 'DK金丹' : 'DK筑基'}
+              {AI_MODEL_DISPLAY[aiModel] || aiModel}
             </span>
           </span>
+
+          {/* 积分余额：点击跳转积分页，消费后通过 credits:updated 事件即时刷新 */}
+          <button
+            type="button"
+            onClick={() => { window.location.href = '/credits'; }}
+            className="flex items-center gap-1 rounded px-1.5 py-1 hover:bg-n20 transition-colors"
+            title="当前可用积分，点击查看积分明细"
+            data-testid="header-credit-balance"
+          >
+            <Coins className="w-3.5 h-3.5 text-warning" />
+            <span className="text-xs font-semibold text-n700">
+              {availableCredits === null ? '--' : availableCredits.toLocaleString()}
+            </span>
+            <span className="hidden sm:inline text-[10px] text-n100">积分</span>
+          </button>
           
           {/* 用户菜单 */}
           <div className="h-6 w-px bg-n40 mx-1"></div>
