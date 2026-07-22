@@ -1,0 +1,154 @@
+import { describe, expect, it } from 'vitest';
+import type { StoryboardItem } from '../../types';
+import {
+  buildStoryboardSegmentGroups,
+  estimateDialogueDurationSeconds,
+  getStoryboardItemDurationSeconds,
+  normalizeStoryboardItemsForWorkflow,
+  serializeStoryboardItemsWithSegments,
+} from '../../utils/storyboardSegments';
+import { convertToStoryboardItem, parseStreamingBlocks } from '../../utils/storyboardParser';
+
+const shot = (id: string, duration: string, scriptSegmentId?: string): StoryboardItem => ({
+  id,
+  duration,
+  scriptSegmentId,
+  originalText: `${id}\n时间：${duration}`,
+  scriptSegment: id,
+  imagePrompt: '',
+  videoPrompt: '',
+  dialogue: '',
+  characters: [],
+});
+
+describe('storyboard segment normalization', () => {
+  it('infers sequential groups close to the 15-second limit for legacy rows', () => {
+    const groups = buildStoryboardSegmentGroups([
+      shot('a', '6秒'),
+      shot('b', '7秒'),
+      shot('c', '5秒'),
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].entries.map(entry => entry.localShotNo)).toEqual([1, 2]);
+    expect(groups[0].estimatedDurationSec).toBe(13);
+    expect(groups[1].entries[0].localShotNo).toBe(1);
+  });
+
+  it('preserves explicit segment ids and resets the user-facing shot number', () => {
+    const normalized = normalizeStoryboardItemsForWorkflow([
+      shot('a', '4秒', 'segment-a'),
+      shot('b', '4秒', 'segment-a'),
+      shot('c', '4秒', 'segment-b'),
+    ]);
+
+    expect(normalized.map(item => item.shotNumber)).toEqual(['镜头01', '镜头02', '镜头03']);
+    expect(normalized.map(item => item.sourceVideoShotNo)).toEqual(['镜头01', '镜头02', '镜头01']);
+    expect(normalized[2].originalText.startsWith('镜头01')).toBe(true);
+  });
+
+  it('serializes visible segment headings and restarts shot numbers per segment', () => {
+    const content = serializeStoryboardItemsWithSegments([
+      shot('a', '8秒', 'segment-a'),
+      shot('b', '7秒', 'segment-a'),
+      shot('c', '6秒', 'segment-b'),
+    ]);
+
+    expect(content).toContain('分段01\n镜头01');
+    expect(content).toContain('镜头02\nb\n时间：7秒');
+    expect(content).toContain('分段02\n镜头01\nc\n时间：6秒');
+  });
+
+  it('renumbers globally numbered model output inside every explicit segment', () => {
+    const modelOutput = [
+      '分段01',
+      '镜头16',
+      '时间：8秒',
+      '---CUT---',
+      '镜头17',
+      '时间：7秒',
+      '---CUT---',
+      '分段02',
+      '镜头18',
+      '时间：6秒',
+      '---CUT---',
+    ].join('\n');
+    const parsed = parseStreamingBlocks(modelOutput).completedBlocks.map(convertToStoryboardItem);
+    const content = serializeStoryboardItemsWithSegments(parsed);
+
+    expect(content).toContain('分段01\n镜头01\n时间：8秒');
+    expect(content).toContain('镜头02\n时间：7秒');
+    expect(content).toContain('分段02\n镜头01\n时间：6秒');
+    expect(content).not.toMatch(/镜头(?:16|17|18)/);
+  });
+});
+
+describe('dialogue duration estimation', () => {
+  it('estimates 1 second per 4 CJK chars or 8 latin chars', () => {
+    expect(estimateDialogueDurationSeconds('')).toBe(0);
+    expect(estimateDialogueDurationSeconds('你为什么要这样做')).toBe(2); // 8 个中文字
+    expect(estimateDialogueDurationSeconds('hellowor')).toBe(1); // 8 个英文字母
+    // 混合：4 中文字(1s) + 8 英文字符(1s)
+    expect(estimateDialogueDurationSeconds('这是真的abcdefgh')).toBe(2);
+  });
+
+  it('uses dialogue estimate when no explicit duration is present', () => {
+    const item: StoryboardItem = {
+      id: 'x',
+      originalText: '办公室内',
+      scriptSegment: '办公室内',
+      dialogue: '你为什么要这样做我已经告诉过你很多次了', // 19 个中文字 → 4.75 秒
+      characters: [],
+    };
+    expect(getStoryboardItemDurationSeconds(item)).toBe(4.75);
+  });
+
+  it('keeps the 3-second floor for short or missing dialogue', () => {
+    const shortDialogue: StoryboardItem = {
+      id: 'y',
+      originalText: '走廊',
+      scriptSegment: '走廊',
+      dialogue: '好', // 1 字 → 0.25 秒，低于 3 秒底线
+      characters: [],
+    };
+    const noDialogue: StoryboardItem = {
+      id: 'z',
+      originalText: '空镜头：城市夜景',
+      scriptSegment: '空镜头：城市夜景',
+      characters: [],
+    };
+    expect(getStoryboardItemDurationSeconds(shortDialogue)).toBe(3);
+    expect(getStoryboardItemDurationSeconds(noDialogue)).toBe(3);
+  });
+
+  it('falls back to quoted dialogue inside the script text', () => {
+    const item: StoryboardItem = {
+      id: 'q',
+      originalText: '小明说："你为什么要这样做"', // 引号内 8 字 → 2 秒，低于底线
+      scriptSegment: '小明说："你为什么要这样做"',
+      characters: [],
+    };
+    expect(getStoryboardItemDurationSeconds(item)).toBe(3);
+    const longQuote: StoryboardItem = {
+      id: 'q2',
+      originalText: '小明说："你为什么要这样做我已经告诉过你很多次了"', // 引号内 19 字 → 4.75 秒
+      scriptSegment: '',
+      characters: [],
+    };
+    expect(getStoryboardItemDurationSeconds(longQuote)).toBe(4.75);
+  });
+
+  it('explicit duration fields always win over dialogue estimate', () => {
+    const item: StoryboardItem = {
+      id: 'e',
+      duration: '10秒',
+      originalText: '时间：10秒',
+      scriptSegment: '时间：10秒',
+      dialogue: '你为什么要这样做我已经告诉过你很多次了',
+      characters: [],
+    };
+    expect(getStoryboardItemDurationSeconds(item)).toBe(10);
+    const planned: StoryboardItem = { ...item, id: 'e2', plannedDurationMs: 7000 };
+    expect(getStoryboardItemDurationSeconds(planned)).toBe(7);
+  });
+});
