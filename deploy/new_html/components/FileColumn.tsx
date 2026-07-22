@@ -294,7 +294,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
               >
                 <div
                   data-testid="file-card-control-row"
-                  className="flex h-6 w-full min-w-0 items-center gap-2 pr-[118px]"
+                  className="flex h-6 w-full min-w-0 items-center gap-2 pr-[132px]"
                 >
                   {onReorderFiles && (
                     <div
