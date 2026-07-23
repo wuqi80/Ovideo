@@ -84,6 +84,20 @@ interface ConversationTurn {
   versionNo?: number;
 }
 
+export const setCollapsedEntry = (
+  current: Set<string>,
+  key: string,
+  shouldCollapse: boolean,
+): Set<string> => {
+  const alreadyCollapsed = current.has(key);
+  if (alreadyCollapsed === shouldCollapse) return current;
+
+  const next = new Set(current);
+  if (shouldCollapse) next.add(key);
+  else next.delete(key);
+  return next;
+};
+
 const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion }> = ({ version }) => {
   const displayItems = useMemo(
     () => mergeStoryboardDisplayItems(version.content, version.storyboardItems || []),
@@ -249,6 +263,10 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       // Storage can be unavailable in private browsing; the in-memory selection still works.
     }
   }, [shotDurationMode]);
+
+  useEffect(() => {
+    setCollapsed(new Set());
+  }, [selectedFile?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -434,13 +452,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     reader.readAsText(file);
   };
 
-  const toggleCollapsed = (id: string) => {
-    setCollapsed(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const setMessageCollapsed = (key: string, shouldCollapse: boolean) => {
+    setCollapsed(current => setCollapsedEntry(current, key, shouldCollapse));
   };
 
   const openEditor = (version: ScriptStoryboardVersion) => {
@@ -463,8 +476,11 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const renderMessage = (message: ScriptConversationMessage) => {
     const version = versionByMessageId.get(message.id);
     const isAssistant = message.role === 'assistant';
-    const isCollapsed = collapsed.has(message.id);
-    const canCollapse = message.content.length > 240;
+    const collapseKey = version
+      ? `${selectedFile?.id || 'file'}:version:${version.id}`
+      : `${selectedFile?.id || 'file'}:message:${message.id}`;
+    const isCollapsed = collapsed.has(collapseKey);
+    const canCollapse = (version?.content || message.content).length > 240;
     const creditCost = Number(message.metadata?.creditCost || 0);
     const failureMessage = String(message.metadata?.error || '生成未完成，请重新发送');
     const creditCharged = message.metadata?.creditCharged === true;
@@ -514,7 +530,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 {canCollapse && (
                   <button
                     type="button"
-                    onClick={() => toggleCollapsed(message.id)}
+                    onClick={event => {
+                      event.stopPropagation();
+                      setMessageCollapsed(collapseKey, !isCollapsed);
+                    }}
+                    aria-expanded={!isCollapsed}
+                    aria-controls={`script-message-content-${message.id}`}
+                    data-testid={`script-message-collapse-top-${message.id}`}
                     className="inline-flex h-6 items-center gap-1 rounded px-1.5 text-[10px] text-n300 hover:bg-n20 hover:text-primary"
                   >
                     {isCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
@@ -524,7 +546,11 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 <span className="text-[10px] text-n100">{formatTime(message.createdAt)}</span>
               </span>
             </div>
-            <div className={`whitespace-pre-wrap break-words text-sm leading-7 text-n700 ${isCollapsed ? 'max-h-28 overflow-hidden' : ''}`}>
+            <div
+              id={`script-message-content-${message.id}`}
+              data-testid={`script-message-content-${message.id}`}
+              className={`whitespace-pre-wrap break-words text-sm leading-7 text-n700 ${isCollapsed ? 'max-h-28 overflow-hidden' : ''}`}
+            >
               {version && message.status === 'completed'
                 ? <StoryboardVersionBody version={version} />
                 : message.content || (message.status === 'streaming' ? '正在生成分镜脚本…' : message.status === 'failed' ? failureMessage : '')}
@@ -549,7 +575,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             {canCollapse && (
               <button
                 type="button"
-                onClick={() => toggleCollapsed(message.id)}
+                onClick={event => {
+                  event.stopPropagation();
+                  setMessageCollapsed(collapseKey, !isCollapsed);
+                }}
+                aria-expanded={!isCollapsed}
+                aria-controls={`script-message-content-${message.id}`}
+                data-testid={`script-message-collapse-bottom-${message.id}`}
                 className="mt-2 inline-flex h-7 items-center gap-1 text-xs text-primary hover:text-primary-hover"
               >
                 {isCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}

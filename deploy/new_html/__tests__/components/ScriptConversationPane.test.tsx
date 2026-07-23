@@ -85,6 +85,9 @@ describe('ScriptConversationPane workflow', () => {
   it('keeps long replies foldable from both ends and opens the editor nearly full screen', () => {
     expect(source).toContain("isCollapsed ? '展开内容' : '折叠内容'");
     expect(source).toContain("isCollapsed ? '展开完整内容' : '收起内容'");
+    expect(source).toContain('setCollapsedEntry(current, key, shouldCollapse)');
+    expect(source).toContain('aria-expanded={!isCollapsed}');
+    expect(source).not.toContain('toggleCollapsed');
     expect(source).toContain('fixed inset-0 z-[100]');
     expect(source).toContain('max-w-[1600px]');
   });
