@@ -9,6 +9,23 @@ from typing import List, Dict, Any, Optional
 from db_manager import get_db_manager
 
 
+def _decode_items(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return row
+    normalized = dict(row)
+    items = normalized.get("items")
+    if isinstance(items, str):
+        try:
+            normalized["items"] = json.loads(items)
+        except (TypeError, ValueError):
+            pass
+    return normalized
+
+
+def _decode_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [_decode_items(row) for row in rows]
+
+
 class TimelineDAO:
 
     @staticmethod
@@ -29,9 +46,11 @@ class TimelineDAO:
             VALUES ($1, $2, $3, $4, $5, $6::jsonb)
             RETURNING *
         """
-        return await db.fetchrow(
-            query, track_id, episode_id, track_type, track_name, sort_order,
-            json.dumps(items or [], ensure_ascii=False)
+        return _decode_items(
+            await db.fetchrow(
+                query, track_id, episode_id, track_type, track_name, sort_order,
+                json.dumps(items or [], ensure_ascii=False)
+            )
         )
 
     @staticmethod
@@ -39,9 +58,12 @@ class TimelineDAO:
         db = get_db_manager()
         if not db:
             return []
-        return await db.fetch(
-            "SELECT * FROM timeline_tracks WHERE episode_id = $1 ORDER BY sort_order ASC",
-            episode_id
+        return _decode_rows(
+            await db.fetch(
+                "SELECT * FROM timeline_tracks "
+                "WHERE episode_id = $1 ORDER BY sort_order ASC",
+                episode_id
+            )
         )
 
     @staticmethod
@@ -49,8 +71,10 @@ class TimelineDAO:
         db = get_db_manager()
         if not db:
             return None
-        return await db.fetchrow(
-            "SELECT * FROM timeline_tracks WHERE track_id = $1", track_id
+        return _decode_items(
+            await db.fetchrow(
+                "SELECT * FROM timeline_tracks WHERE track_id = $1", track_id
+            )
         )
 
     @staticmethod
@@ -74,7 +98,7 @@ class TimelineDAO:
             return await TimelineDAO.get_by_id(track_id)
         vals.append(track_id)
         query = f"UPDATE timeline_tracks SET {', '.join(sets)} WHERE track_id = ${idx} RETURNING *"
-        return await db.fetchrow(query, *vals)
+        return _decode_items(await db.fetchrow(query, *vals))
 
     @staticmethod
     async def delete(track_id: str) -> bool:

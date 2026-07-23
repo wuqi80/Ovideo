@@ -29,9 +29,39 @@ def req(path, method="GET", body=None, token=None, timeout=15):
     except Exception as e:
         return None, str(e).encode()
 
+
+def req_with_network_retry(
+    path,
+    *,
+    method="GET",
+    body=None,
+    token=None,
+    timeout=30,
+    attempts=3,
+):
+    """Retry transport failures without hiding a real HTTP/dependency failure."""
+    last_status, last_body = None, b""
+    for attempt in range(attempts):
+        last_status, last_body = req(
+            path,
+            method=method,
+            body=body,
+            token=token,
+            timeout=timeout,
+        )
+        if last_status is not None:
+            break
+        if attempt + 1 < attempts:
+            time.sleep(attempt + 1)
+    return last_status, last_body
+
 def check(name, cond, detail=""):
     results.append((name, cond, detail))
-    print(f"  {'✅' if cond else '❌'} {name}" + (f"  [{detail}]" if detail and not cond else ""))
+    # Keep the smoke test portable across Windows consoles whose active code
+    # page cannot encode emoji. The runner captures UTF-8, but operators also
+    # invoke this script directly from GBK/CP936 PowerShell sessions.
+    marker = "[PASS]" if cond else "[FAIL]"
+    print(f"  {marker} {name}" + (f"  [{detail}]" if detail and not cond else ""))
     return cond
 
 def forged_token():
@@ -42,7 +72,7 @@ def forged_token():
 
 def run():
     # Release gate: dependencies and migration ledger must be ready.
-    st, b = req("/health", timeout=30)
+    st, b = req_with_network_retry("/health", timeout=30)
     health = {}
     try:
         health = json.loads(b) if b else {}
@@ -50,6 +80,9 @@ def run():
         health = {}
     database = health.get("database") or {}
     migrations = database.get("migrations") or {}
+    queue = health.get("queue") or {}
+    providers = health.get("providers") or {}
+    gpu_agents = health.get("gpu_agents") or {}
     health_ok = (
         st == 200
         and health.get("status") == "healthy"
@@ -62,7 +95,9 @@ def run():
         health_ok,
         (
             f"http={st} status={health.get('status')} redis={health.get('redis')} "
-            f"database={database.get('status')} migrations={migrations.get('status')}"
+            f"database={database.get('status')} migrations={migrations.get('status')} "
+            f"queue={queue.get('status')} providers={providers.get('status')} "
+            f"gpu_agents={gpu_agents.get('status')}"
         ),
     )
 
@@ -81,35 +116,39 @@ def run():
             return  # 后续都依赖 token
 
     # 2. 安全项
-    st, _ = req("/api/debug/auth-status")
+    st, _ = req_with_network_retry("/api/debug/auth-status", timeout=15)
     check("debug 接口已移除(404)", st == 404, f"http={st}")
     st, _ = req("/api/auth/register", "POST", {"username": "smoke_x", "password": "x"})
     check("公开注册已关闭(403)", st == 403, f"http={st}")
-    st, _ = req("/api/admin/dashboard")
+    st, _ = req_with_network_retry("/api/admin/dashboard", timeout=15)
     check("admin 无 token 被拒(401/403)", st in (401, 403), f"http={st}")
     if tok:
-        st, _ = req("/api/admin/dashboard", token=tok)
+        st, _ = req_with_network_retry("/api/admin/dashboard", token=tok, timeout=15)
         check("admin 带 token 可访问(200)", st == 200, f"http={st}")
-    st, _ = req("/api/projects", token=forged_token())
+    st, _ = req_with_network_retry("/api/projects", token=forged_token(), timeout=15)
     check("旧密钥伪造令牌被拒(401)", st == 401, f"http={st}")
 
     if tok:
         # 3. 核心流程
-        st, b = req("/api/projects", token=tok)
+        st, b = req_with_network_retry("/api/projects", token=tok, timeout=15)
         ok = st == 200
         try: ok = ok and json.loads(b).get("success", False)
         except Exception: ok = False
         check("项目列表 /api/projects 正常", ok, f"http={st}")
 
         # 只读核查（不写库，避免软删除残留 cruft，保证冒烟可重复跑无副作用）
-        st, b = req("/api/projects?include_archived=false", token=tok)
+        st, b = req_with_network_retry(
+            "/api/projects?include_archived=false",
+            token=tok,
+            timeout=15,
+        )
         ok = st == 200
         try: ok = ok and isinstance(json.loads(b).get("projects"), list)
         except Exception: ok = False
         check("项目读路径(含过滤参数)正常", ok, f"http={st}")
 
     # 4. 首页/SPA
-    st, b = req("/projects")
+    st, b = req_with_network_retry("/projects", timeout=15)
     html = b.decode("utf-8", "ignore") if b else ""
     ok = st == 200 and "Application is not built" not in html and "/assets/" in html
     check("SPA 首页为已构建产物", ok, f"http={st}")

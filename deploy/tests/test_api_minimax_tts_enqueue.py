@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 import api_routes
 
@@ -36,11 +36,16 @@ def test_app():
 
 
 @pytest.fixture
-def client(test_app):
-    return TestClient(test_app)
+async def client(test_app):
+    async with AsyncClient(
+        transport=ASGITransport(app=test_app),
+        base_url="http://test",
+    ) as async_client:
+        yield async_client
 
 
-def test_post_minimax_tts_returns_task_id_immediately(client):
+@pytest.mark.asyncio
+async def test_post_minimax_tts_returns_task_id_immediately(client):
     """POST /api/minimax/tts 必须立刻返回 {success, task_id}，不能阻塞到下载完成。
 
     入队参数核对：task_type=='minimax_tts', task_data 含 text/voice_id,
@@ -51,7 +56,7 @@ def test_post_minimax_tts_returns_task_id_immediately(client):
         svc = mock_svc.return_value
         svc.submit = AsyncMock(return_value='uuid-task-1')
 
-        resp = client.post(
+        resp = await client.post(
             "/api/minimax/tts",
             json={"text": "你好", "voice_id": "female-shaonv"},
         )
@@ -70,7 +75,8 @@ def test_post_minimax_tts_returns_task_id_immediately(client):
     assert call_kwargs['user_id'] == 'u-test'
 
 
-def test_post_minimax_tts_passes_bind_to_character_voice_id(client):
+@pytest.mark.asyncio
+async def test_post_minimax_tts_passes_bind_to_character_voice_id(client):
     """试听场景：bind_to_character_voice_id 必须透传给 worker，
     让 worker 完成时回写 character_voices.sample_audio_url。"""
     with patch('api_routes.task_service.get') as mock_svc, \
@@ -78,7 +84,7 @@ def test_post_minimax_tts_passes_bind_to_character_voice_id(client):
         svc = mock_svc.return_value
         svc.submit = AsyncMock(return_value='uuid-task-2')
 
-        resp = client.post(
+        resp = await client.post(
             "/api/minimax/tts",
             json={
                 "text": "试听文本",
@@ -92,7 +98,8 @@ def test_post_minimax_tts_passes_bind_to_character_voice_id(client):
     assert call_kwargs['task_data']['bind_to_character_voice_id'] == 'cv-99'
 
 
-def test_post_minimax_tts_503_when_minimax_not_configured(client):
+@pytest.mark.asyncio
+async def test_post_minimax_tts_503_when_minimax_not_configured(client):
     """_require_minimax_client 抛 HTTPException(503) 时直接 503 返回，不入队。"""
 
     def fail_client():
@@ -106,7 +113,7 @@ def test_post_minimax_tts_503_when_minimax_not_configured(client):
         svc = mock_svc.return_value
         svc.submit = AsyncMock()
 
-        resp = client.post(
+        resp = await client.post(
             "/api/minimax/tts",
             json={"text": "x", "voice_id": "v"},
         )

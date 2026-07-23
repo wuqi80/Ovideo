@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 from urllib.parse import urlencode
 
@@ -203,7 +203,7 @@ def api_health_result(
             "model_name": model_name or None,
             "method": "GET",
             "urls_tried": urls_tried,
-            "checked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         },
     }
 
@@ -241,7 +241,7 @@ def api_real_generation_result(
             "provider": provider or None,
             "model_name": model_name or None,
             "method": "POST",
-            "checked_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "real_generation": True,
             "billable": True,
             "latency_ms": latency_ms,
@@ -978,7 +978,7 @@ async def check_provider_health(
         "headers": {},
     }
     urls_to_try = api_config_health_urls(row)
-    checked_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    checked_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
     if not config.has_key:
         return {

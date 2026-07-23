@@ -57,9 +57,12 @@ async def test_delete_sets_item_folder_null(test_db):
     f = await MediaLibraryFolderDAO.create(project_id, "临时", conn=test_db)
     # 建一个 file + media item 挂到该文件夹
     await test_db.execute(
-        "INSERT INTO files (file_id, user_id, file_type, file_name) VALUES ($1,$2,$3,$4) "
+        "INSERT INTO files "
+        "(file_id, user_id, file_type, file_name, file_path, file_url) "
+        "VALUES ($1,$2,$3,$4,$5,$6) "
         "ON CONFLICT (file_id) DO NOTHING",
         "file_mlf_test", "user_mlf_test", "image", "x.png",
+        "/tmp/x.png", "/files/x.png",
     )
     await test_db.execute(
         "INSERT INTO media_library_items (library_item_id, file_id, user_id, project_id, item_type, source, folder_id) "

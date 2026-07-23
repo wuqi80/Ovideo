@@ -10,6 +10,24 @@ from typing import Any, Dict, List, Optional
 from db_manager import get_db_manager
 
 
+def _decode_json_fields(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return row
+    normalized = dict(row)
+    for field in ("comfyui_instances", "system_info", "stats"):
+        value = normalized.get(field)
+        if isinstance(value, str):
+            try:
+                normalized[field] = json.loads(value)
+            except (TypeError, ValueError):
+                pass
+    return normalized
+
+
+def _decode_json_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [_decode_json_fields(row) for row in rows]
+
+
 class AgentDAO:
 
     @staticmethod
@@ -23,19 +41,23 @@ class AgentDAO:
             return None
         agent_id = f"agent_{uuid.uuid4().hex[:12]}"
         query = """
-            INSERT INTO comfyui_agents (agent_id, name, token)
-            VALUES ($1, $2, $3)
+            INSERT INTO comfyui_agents (agent_id, name, token, created_at)
+            VALUES ($1, $2, $3, clock_timestamp())
             RETURNING *
         """
-        return await db.fetchrow(query, agent_id, name, token)
+        return _decode_json_fields(
+            await db.fetchrow(query, agent_id, name, token)
+        )
 
     @staticmethod
     async def get_by_id(agent_id: str) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
             return None
-        return await db.fetchrow(
-            "SELECT * FROM comfyui_agents WHERE agent_id = $1", agent_id
+        return _decode_json_fields(
+            await db.fetchrow(
+                "SELECT * FROM comfyui_agents WHERE agent_id = $1", agent_id
+            )
         )
 
     @staticmethod
@@ -43,8 +65,10 @@ class AgentDAO:
         db = get_db_manager()
         if not db:
             return None
-        return await db.fetchrow(
-            "SELECT * FROM comfyui_agents WHERE token = $1", token
+        return _decode_json_fields(
+            await db.fetchrow(
+                "SELECT * FROM comfyui_agents WHERE token = $1", token
+            )
         )
 
     @staticmethod
@@ -77,7 +101,9 @@ class AgentDAO:
             WHERE agent_id = $1
             RETURNING *
         """
-        return await db.fetchrow(query, agent_id, status, ci_json, si_json)
+        return _decode_json_fields(
+            await db.fetchrow(query, agent_id, status, ci_json, si_json)
+        )
 
     @staticmethod
     async def update_stats(
@@ -86,15 +112,17 @@ class AgentDAO:
         db = get_db_manager()
         if not db:
             return None
-        return await db.fetchrow(
-            """
-            UPDATE comfyui_agents
-            SET stats = $2::jsonb
-            WHERE agent_id = $1
-            RETURNING *
-            """,
-            agent_id,
-            json.dumps(stats, ensure_ascii=False),
+        return _decode_json_fields(
+            await db.fetchrow(
+                """
+                UPDATE comfyui_agents
+                SET stats = $2::jsonb
+                WHERE agent_id = $1
+                RETURNING *
+                """,
+                agent_id,
+                json.dumps(stats, ensure_ascii=False),
+            )
         )
 
     @staticmethod
@@ -102,8 +130,10 @@ class AgentDAO:
         db = get_db_manager()
         if not db:
             return []
-        return await db.fetch(
-            "SELECT * FROM comfyui_agents ORDER BY created_at DESC"
+        return _decode_json_rows(
+            await db.fetch(
+                "SELECT * FROM comfyui_agents ORDER BY created_at DESC"
+            )
         )
 
     @staticmethod
@@ -112,18 +142,20 @@ class AgentDAO:
         db = get_db_manager()
         if not db:
             return []
-        return await db.fetch(
-            """
-            SELECT a.*,
-                   COALESCE((
-                       SELECT COUNT(*)::int
-                       FROM tasks t
-                       WHERE t.node_id = a.agent_id
-                         AND t.status IN ('processing', 'running')
-                   ), 0) AS active_tasks
-            FROM comfyui_agents a
-            ORDER BY a.created_at DESC
-            """
+        return _decode_json_rows(
+            await db.fetch(
+                """
+                SELECT a.*,
+                       COALESCE((
+                           SELECT COUNT(*)::int
+                           FROM tasks t
+                           WHERE t.node_id = a.agent_id
+                             AND t.status IN ('processing', 'running')
+                       ), 0) AS active_tasks
+                FROM comfyui_agents a
+                ORDER BY a.created_at DESC
+                """
+            )
         )
 
     @staticmethod
@@ -131,12 +163,14 @@ class AgentDAO:
         db = get_db_manager()
         if not db:
             return []
-        return await db.fetch(
-            """
-            SELECT * FROM comfyui_agents
-            WHERE status = 'online' AND enabled = true
-            ORDER BY created_at DESC
-            """
+        return _decode_json_rows(
+            await db.fetch(
+                """
+                SELECT * FROM comfyui_agents
+                WHERE status = 'online' AND enabled = true
+                ORDER BY created_at DESC
+                """
+            )
         )
 
     @staticmethod
@@ -146,14 +180,16 @@ class AgentDAO:
         db = get_db_manager()
         if not db:
             return None
-        return await db.fetchrow(
-            """
-            UPDATE comfyui_agents SET enabled = $2
-            WHERE agent_id = $1
-            RETURNING *
-            """,
-            agent_id,
-            enabled,
+        return _decode_json_fields(
+            await db.fetchrow(
+                """
+                UPDATE comfyui_agents SET enabled = $2
+                WHERE agent_id = $1
+                RETURNING *
+                """,
+                agent_id,
+                enabled,
+            )
         )
 
     @staticmethod

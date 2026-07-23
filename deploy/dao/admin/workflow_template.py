@@ -12,6 +12,24 @@ from db_manager import get_db_manager
 _PLACEHOLDER_RE = re.compile(r"^\{.+\}$")
 
 
+def _decode_json_fields(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return row
+    normalized = dict(row)
+    for field in ("workflow_json", "placeholders"):
+        value = normalized.get(field)
+        if isinstance(value, str):
+            try:
+                normalized[field] = json.loads(value)
+            except (TypeError, ValueError):
+                pass
+    return normalized
+
+
+def _decode_json_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [_decode_json_fields(row) for row in rows]
+
+
 class WorkflowTemplateDAO:
     """workflow_templates CRUD 与 ComfyUI workflow 占位符解析"""
 
@@ -43,18 +61,20 @@ class WorkflowTemplateDAO:
             VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10)
             RETURNING *
         """
-        return await db.fetchrow(
-            query,
-            template_id,
-            name,
-            category,
-            description,
-            wf_s,
-            ph_s,
-            node_type,
-            estimated_time,
-            enabled,
-            workflow_key or None,
+        return _decode_json_fields(
+            await db.fetchrow(
+                query,
+                template_id,
+                name,
+                category,
+                description,
+                wf_s,
+                ph_s,
+                node_type,
+                estimated_time,
+                enabled,
+                workflow_key or None,
+            )
         )
 
     @staticmethod
@@ -62,8 +82,11 @@ class WorkflowTemplateDAO:
         db = get_db_manager()
         if not db:
             return None
-        return await db.fetchrow(
-            "SELECT * FROM workflow_templates WHERE template_id = $1", template_id
+        return _decode_json_fields(
+            await db.fetchrow(
+                "SELECT * FROM workflow_templates WHERE template_id = $1",
+                template_id,
+            )
         )
 
     @staticmethod
@@ -71,8 +94,10 @@ class WorkflowTemplateDAO:
         db = get_db_manager()
         if not db:
             return None
-        return await db.fetchrow(
-            "SELECT * FROM workflow_templates WHERE name = $1", name
+        return _decode_json_fields(
+            await db.fetchrow(
+                "SELECT * FROM workflow_templates WHERE name = $1", name
+            )
         )
 
     @staticmethod
@@ -89,7 +114,7 @@ class WorkflowTemplateDAO:
             """,
             workflow_key,
         )
-        return dict(row) if row else None
+        return _decode_json_fields(row)
 
     @staticmethod
     async def get_enabled_by_key(workflow_key: str) -> Optional[Dict[str, Any]]:
@@ -105,20 +130,17 @@ class WorkflowTemplateDAO:
             """,
             workflow_key,
         )
-        if row and isinstance(row.get("workflow_json"), str):
-            try:
-                row["workflow_json"] = json.loads(row["workflow_json"])
-            except Exception:
-                pass
-        return row
+        return _decode_json_fields(row)
 
     @staticmethod
     async def list_all() -> List[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
             return []
-        return await db.fetch(
-            "SELECT * FROM workflow_templates ORDER BY category, name"
+        return _decode_json_rows(
+            await db.fetch(
+                "SELECT * FROM workflow_templates ORDER BY category, name"
+            )
         )
 
     @staticmethod
@@ -126,12 +148,14 @@ class WorkflowTemplateDAO:
         db = get_db_manager()
         if not db:
             return []
-        return await db.fetch(
-            """
-            SELECT * FROM workflow_templates
-            WHERE enabled = TRUE
-            ORDER BY category, name
-            """
+        return _decode_json_rows(
+            await db.fetch(
+                """
+                SELECT * FROM workflow_templates
+                WHERE enabled = TRUE
+                ORDER BY category, name
+                """
+            )
         )
 
     @staticmethod
@@ -189,7 +213,7 @@ class WorkflowTemplateDAO:
             f"UPDATE workflow_templates SET {', '.join(sets)} "
             f"WHERE template_id = ${idx} RETURNING *"
         )
-        return await db.fetchrow(query, *vals)
+        return _decode_json_fields(await db.fetchrow(query, *vals))
 
     @staticmethod
     async def delete(template_id: str) -> bool:

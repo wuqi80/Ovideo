@@ -4,7 +4,7 @@
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from services.project_access_service import ProjectAccessDenied, require_project_access
 from services.script_timeline_service import (
@@ -100,8 +100,7 @@ def create_script_timeline_router(
 
 
     class ScriptMessageCreate(BaseModel):
-        class Config:
-            protected_namespaces = ()
+        model_config = ConfigDict(protected_namespaces=())
 
         role: str
         content: str = ''
@@ -121,8 +120,7 @@ def create_script_timeline_router(
 
 
     class ScriptVersionCreate(BaseModel):
-        class Config:
-            protected_namespaces = ()
+        model_config = ConfigDict(protected_namespaces=())
 
         message_id: Optional[str] = None
         content: str

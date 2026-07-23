@@ -1,5 +1,6 @@
+import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from routers import storyboard_quality
 from services.project_access_service import ProjectAccessDenied
@@ -44,7 +45,8 @@ def _app(project_access_checker):
     return app
 
 
-def test_quality_review_rejects_non_project_member(monkeypatch):
+@pytest.mark.asyncio
+async def test_quality_review_rejects_non_project_member(monkeypatch):
     called = False
 
     async def deny(*_args, **_kwargs):
@@ -56,16 +58,21 @@ def test_quality_review_rejects_non_project_member(monkeypatch):
         return {"status": "passed"}
 
     monkeypatch.setattr(storyboard_quality, "review_storyboard_image", review)
-    response = TestClient(_app(deny)).post(
-        "/api/storyboard-items/sb_1/quality-review",
-        json={"image_url": "/storage/candidate.webp"},
-    )
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(deny)),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/storyboard-items/sb_1/quality-review",
+            json={"image_url": "/storage/candidate.webp"},
+        )
 
     assert response.status_code == 404
     assert called is False
 
 
-def test_quality_review_allows_project_member(monkeypatch):
+@pytest.mark.asyncio
+async def test_quality_review_allows_project_member(monkeypatch):
     async def allow(project_id, identity, role):
         assert (project_id, identity, role) == ("project_1", "user_1", "readonly")
         return {"project_id": project_id}
@@ -74,10 +81,14 @@ def test_quality_review_allows_project_member(monkeypatch):
         return {"status": "passed"}
 
     monkeypatch.setattr(storyboard_quality, "review_storyboard_image", review)
-    response = TestClient(_app(allow)).post(
-        "/api/storyboard-items/sb_1/quality-review",
-        json={"image_url": "/storage/candidate.webp"},
-    )
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(allow)),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/storyboard-items/sb_1/quality-review",
+            json={"image_url": "/storage/candidate.webp"},
+        )
 
     assert response.status_code == 200
     assert response.json() == {"status": "passed"}
