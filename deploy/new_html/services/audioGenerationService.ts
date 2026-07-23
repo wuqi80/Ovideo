@@ -7,6 +7,13 @@ export async function createAudioTrack(episodeId: string, data: any) {
     }, 'createAudioTrack');
 }
 
+export async function updateAudioTrack(trackId: string, data: Record<string, any>) {
+    return apiJson<any>(`/api/audio-tracks/${trackId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+    }, 'updateAudioTrack');
+}
+
 export async function deleteAudioTrack(trackId: string) {
     return apiJson<any>(`/api/audio-tracks/${trackId}`, { method: 'DELETE' }, 'deleteAudioTrack');
 }

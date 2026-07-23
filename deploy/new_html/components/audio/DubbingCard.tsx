@@ -56,14 +56,17 @@ export interface DubbingCardProps {
   onTogglePlay: () => void;
   plannedDurationMs: number | null;
   allCharNames: string[];
-  onTextPersist?: (itemId: string, speaker: string, newText: string) => void;
+  onClipPersist?: (
+    clip: AudioClipInfo,
+    patch: { speaker?: string; text?: string },
+  ) => void;
 }
 
 export const DubbingCard: React.FC<DubbingCardProps> = ({
   clip, clipKey, voice, charAsset, override, onOverrideChange,
   audioUrl, audioDurationMs, isGenerating, error, isPlaying,
   onGenerate, onTogglePlay, plannedDurationMs, allCharNames,
-  onTextPersist,
+  onClipPersist,
 }) => {
   const [editing, setEditing] = useState(false);
   const editRef = useRef<HTMLTextAreaElement>(null);
@@ -81,9 +84,9 @@ export const DubbingCard: React.FC<DubbingCardProps> = ({
     const trimmed = editRef.current?.value.trim() ?? '';
     if (trimmed !== clip.text) {
       onOverrideChange(clipKey, { text: trimmed });
-      onTextPersist?.(clip.itemId, displaySpeaker, trimmed);
+      onClipPersist?.(clip, { text: trimmed });
     }
-  }, [clip.text, clip.itemId, clipKey, onOverrideChange, onTextPersist, displaySpeaker]);
+  }, [clip, clip.text, clipKey, onOverrideChange, onClipPersist]);
 
   return (
     <div className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg bg-n30 border border-n40 shadow-card">
@@ -101,7 +104,16 @@ export const DubbingCard: React.FC<DubbingCardProps> = ({
         <div className="relative shrink-0">
           <select
             value={displaySpeaker}
-            onChange={e => onOverrideChange(clipKey, { speaker: e.target.value })}
+            onChange={e => {
+              const speaker = e.target.value;
+              onOverrideChange(clipKey, {
+                speaker,
+                emotion: undefined,
+                speed: undefined,
+                pitch: undefined,
+              });
+              onClipPersist?.(clip, { speaker });
+            }}
             className="appearance-none bg-transparent text-xs font-semibold text-primary pr-4 cursor-pointer focus:outline-none"
           >
             {allCharNames.map(n => <option key={n} value={n}>{n}</option>)}
@@ -156,6 +168,12 @@ export const DubbingCard: React.FC<DubbingCardProps> = ({
 
       {/* Row 2: emotion + speed + pitch + duration */}
       <div className="flex items-center gap-3 pl-11 text-xs">
+        <span
+          className={voice ? 'text-success' : 'text-n100'}
+          title={voice?.voiceModelId || '未绑定人物音色，生成时使用默认音色'}
+        >
+          音色：{voice?.voiceName || '默认音色'}
+        </span>
         <select
           value={override.emotion || ''}
           onChange={e => onOverrideChange(clipKey, { emotion: e.target.value || undefined })}

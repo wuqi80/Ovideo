@@ -52,13 +52,13 @@ describe('assetsToMaterialLibrary', () => {
       expect.objectContaining({
         id: 'asset_1_0',
         url: '/storage/legacy/original.webp',
-        source: 'asset',
+        source: 'entity_file:reference_image',
         fileId: 'file_ref',
       }),
       expect.objectContaining({
         id: 'asset_1_1',
         url: '/storage/generated/angle.webp',
-        source: 'asset',
+        source: 'entity_file:material_image',
         fileId: 'file_angle',
       }),
     ]);
@@ -93,6 +93,62 @@ describe('assetsToMaterialLibrary', () => {
         url: '/storage/generated/angle.webp',
         source: 'entity_file:material_image',
       }),
+    ]);
+  });
+
+  it('appends newer design images after existing material-stage variants', () => {
+    const library = assetsToMaterialLibrary([
+      {
+        assetId: 'asset_3',
+        name: '角色B',
+        referenceImages: [
+          '/storage/design/original.webp',
+          '/storage/material/upscale.webp',
+          '/storage/design/new.webp',
+        ],
+        thumbnailUrl: null,
+        entityFiles: [
+          {
+            fileId: 'file_original',
+            fileUrl: '/storage/design/original.webp',
+            fileType: 'image',
+            fileRole: 'reference_image',
+            createdAt: '2026-07-04T01:00:00',
+          },
+          {
+            fileId: 'file_upscale',
+            fileUrl: '/storage/material/upscale.webp',
+            fileType: 'image',
+            fileRole: 'material_image',
+            createdAt: '2026-07-04T02:00:00',
+          },
+          {
+            fileId: 'file_new_design',
+            fileUrl: '/storage/design/new.webp',
+            fileType: 'image',
+            fileRole: 'reference_image',
+            createdAt: '2026-07-04T03:00:00',
+          },
+        ],
+      } as any,
+    ]);
+
+    expect(library['角色B'].map(material => ({
+      url: material.url,
+      source: material.source,
+    }))).toEqual([
+      {
+        url: '/storage/design/original.webp',
+        source: 'entity_file:reference_image',
+      },
+      {
+        url: '/storage/material/upscale.webp',
+        source: 'entity_file:material_image',
+      },
+      {
+        url: '/storage/design/new.webp',
+        source: 'entity_file:reference_image',
+      },
     ]);
   });
 });
@@ -209,6 +265,35 @@ describe('storyboard configured references', () => {
     expect(item.configuredReferences).toEqual(references);
     expect(item.dialogueAudioUrl).toBe('/audio/dialogue.mp3');
     expect(item.plannedDurationMs).toBe(4200);
+  });
+
+  it('round-trips ordered storyboard audio segments', () => {
+    const audioSegments = [
+      {
+        segmentId: 'speech-1',
+        kind: 'speech',
+        sequenceIndex: 0,
+        speaker: '小悟',
+        text: '先说话',
+        durationMs: 3200,
+      },
+      {
+        segmentId: 'silence-1',
+        kind: 'silence',
+        sequenceIndex: 1,
+        label: '转身',
+        durationMs: 1200,
+      },
+    ];
+    const item = normalizeStoryboardRecord({
+      item_id: 'sb_1',
+      episode_id: 'ep_1',
+      audio_segments: JSON.stringify(audioSegments),
+    });
+
+    expect(item.audioSegments).toEqual(audioSegments);
+    expect(storyboardItemToDbUpdate({ audioSegments } as any))
+      .toEqual({ audio_segments: audioSegments });
   });
 
   it('applies snake-case patches while preserving references and audio metadata', () => {

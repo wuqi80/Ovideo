@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion } from '../types';
-import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, ChevronDown, ChevronUp, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box, ShieldCheck, Maximize, Scissors } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle } from '../services/comfyuiGenerationService';
@@ -18,6 +18,8 @@ import {
   withStandardTurnaround,
 } from '../utils/assetGenerationStandards';
 import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
+import { usePersistedPageState } from '../hooks/usePersistedPageState';
+import { deleteEntityFile, uploadEntityFile } from '../services/entityFileService';
 
 type MaterialAIEngine = 'nanobanana' | 'doubao';
 type BindingAssetType = 'character' | 'scene' | 'prop';
@@ -166,7 +168,7 @@ interface MaterialPageProps {
   files: ProjectFile[];
   selectedFileId: string | null;
   materialLibrary: MaterialLibrary;
-  onUpdateLibrary: (newLibrary: MaterialLibrary) => void;
+  onUpdateLibrary: (newLibrary: MaterialLibrary) => void | Promise<void>;
   onBindMaterial: (shotId: string, tagName: string, materialId: string) => void;
   onUnbindMaterial: (shotId: string, tagName: string) => void;
   onNextStep: () => void;
@@ -223,6 +225,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   // Resizable Sidebar State
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
+  const [isContextExpanded, setIsContextExpanded] = usePersistedPageState<boolean>({
+    page: 'MaterialPage:shotContext',
+    episodeId: selectedFileId,
+    version: 1,
+    defaultValue: false,
+  });
 
   const storyboardIdSignature = useMemo(
     () => storyboardItems.map(item => item.id).join('|'),
@@ -387,9 +395,14 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       try {
-        const { uploadEntityFile } = await import('../services/entityFileService');
-        const shotId = selectedShot?.id || 'temp';
-        const saved = await uploadEntityFile(file, 'storyboard_item', shotId, `${type}_ref`, episodeId);
+        const targetAssetId = assetNameToId?.[tagName];
+        const saved = await uploadEntityFile(
+          file,
+          targetAssetId ? 'asset' : 'storyboard_item',
+          targetAssetId || selectedShot?.id || 'temp',
+          'material_image',
+          selectedFileId || undefined,
+        );
         const newId = getNextMaterialId(tagName, 0, saved.fileId);
         const newMaterial: Material = {
           id: newId,
@@ -397,10 +410,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
           thumbnail: saved.fileUrl,
           type: 'image',
           source: 'upload',
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          fileId: saved.fileId,
         };
         const existing = materialLibrary[tagName] || [];
-        onUpdateLibrary({
+        await onUpdateLibrary({
           ...materialLibrary,
           [tagName]: [...existing, newMaterial]
         });
@@ -466,10 +480,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             url: r.url,
             type: 'image',
             source: 'ai',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            fileId: r.fileId,
         }));
 
-        onUpdateLibrary({
+        await onUpdateLibrary({
             ...materialLibrary,
             [payload.tagName]: [...existing, ...newMaterials]
         });
@@ -584,10 +599,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             url: resultUrl,
             type: 'image',
             source: 'ai',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            fileId: results[0]?.fileId,
         };
 
-        onUpdateLibrary({
+        await onUpdateLibrary({
             ...materialLibrary,
             [tagName]: [...existing, newMaterial]
         });
@@ -662,10 +678,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             url: imageUrl,
             type: 'image',
             source: 'ai',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            fileId: results[0].fileId,
         };
 
-        onUpdateLibrary({
+        await onUpdateLibrary({
             ...materialLibrary,
             [tagName]: [...existing, newMaterial]
         });
@@ -724,10 +741,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             url: resultUrl,
             type: 'image',
             source: 'ai',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            fileId: results[0]?.fileId,
         };
 
-        onUpdateLibrary({
+        await onUpdateLibrary({
             ...materialLibrary,
             [payload.tagName]: [...existing, newMaterial]
         });
@@ -741,14 +759,39 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     }
   };
 
-  const removeMaterialFromLibrary = (tagName: string, materialId: string) => {
+  const removeMaterialFromLibrary = async (tagName: string, materialId: string) => {
       const existing = materialLibrary[tagName] || [];
+      const targetMaterial = existing.find(material => material.id === materialId);
+      if (!targetMaterial) return;
+
+      const isMaterialStageImage = (
+        targetMaterial.source === 'entity_file:material_image'
+        || targetMaterial.source === 'ai'
+        || targetMaterial.source === 'upload'
+      );
+      if (!isMaterialStageImage) {
+        alert('\u8bbe\u8ba1\u9636\u6bb5\u7684\u539f\u59cb\u56fe\u7247\u8bf7\u5728\u8bbe\u8ba1\u9875\u7ba1\u7406\uff0c\u7d20\u6750\u9875\u53ea\u5220\u9664\u672c\u9636\u6bb5\u65b0\u589e\u7684\u56fe\u7247\u3002');
+        return;
+      }
+      if (!targetMaterial.fileId) {
+        alert('\u8be5\u56fe\u7247\u5c1a\u672a\u5b8c\u6210\u6301\u4e45\u5316\uff0c\u8bf7\u5237\u65b0\u540e\u91cd\u8bd5\u3002');
+        return;
+      }
+
+      try {
+        await deleteEntityFile(targetMaterial.fileId);
+      } catch (error) {
+        console.error('Failed to delete material-stage image:', error);
+        alert('\u5220\u9664\u7d20\u6750\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002');
+        return;
+      }
+
       const updated = existing.filter(m => m.id !== materialId);
-      onUpdateLibrary({
+      await onUpdateLibrary({
           ...materialLibrary,
           [tagName]: updated
       });
-      if (selectedShot.materialSelections?.[tagName] === materialId) {
+      if (selectedShot?.materialSelections?.[tagName] === materialId) {
           onUnbindMaterial(selectedShot.id, tagName);
       }
   };
@@ -953,7 +996,18 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                 </h3>
              </div>
 
-             <div className="flex items-center gap-4">
+             <div className="flex items-center gap-2">
+                 <button
+                   type="button"
+                   onClick={() => setIsContextExpanded(expanded => !expanded)}
+                   aria-expanded={isContextExpanded}
+                   aria-controls="material-shot-context"
+                   className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded border border-primary bg-primary-light px-3 text-xs font-medium text-primary transition-colors hover:bg-primary hover:text-white"
+                   title={isContextExpanded ? '收起剧本描述和提示词' : '展开剧本描述和提示词'}
+                 >
+                   {isContextExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                   {isContextExpanded ? '收起提示词' : '展开提示词'}
+                 </button>
                  {onAssetScopeModeChange && (
                    <div className="flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n20" title="素材可见范围">
                      <button
@@ -1052,7 +1106,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         {/* History Panel */}
         {!hideVersionArchive && showHistory && renderHistoryPanel()}
 
-         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 xl:p-6">
              {!selectedShot ? (
                 <div className="flex flex-col items-center justify-center h-full text-n100">
                   <LayoutDashboard className="w-16 h-16 mb-4 opacity-20" />
@@ -1064,7 +1118,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
              ) : (
                <div className="w-full">
              {/* Context Section - 3 Column Layout */}
-             <div className="bg-n0 rounded-md p-1 border border-n40 mb-8 shadow-card">
+             {isContextExpanded && (
+             <div id="material-shot-context" className="bg-n0 rounded-md p-1 border border-n40 mb-6 shadow-card">
                  <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-n40">
                     {/* Script */}
                     <div className="p-4 flex flex-col min-h-[140px]">
@@ -1106,13 +1161,16 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     </div>
                  </div>
              </div>
+             )}
 
-             <h4 className="text-sm font-bold text-n700 mb-4 flex items-center gap-2 px-1">
+             <div className="space-y-6 pb-20" data-testid="material-category-grid">
+             <section className="min-w-0" aria-labelledby="material-characters-heading">
+             <h4 id="material-characters-heading" className="text-sm font-bold text-n700 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1">
                  <Users className="w-4 h-4 text-primary" />
                  角色素材 (Characters)
-                 <span className="text-[10px] font-normal text-n100 ml-2">绑定后将自动应用于后续同名角色</span>
+                 <span className="text-[10px] font-normal text-n100">绑定后将自动应用于后续同名角色</span>
              </h4>
-             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch" data-testid="material-character-cards">
                  {!selectedShot || (selectedShot.characters || []).length === 0 ? (
                      <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
                         <span className="text-xs">本镜头无登场角色</span>
@@ -1139,13 +1197,15 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                   ))
                  )}
              </div>
+             </section>
 
-             <h4 className="text-sm font-bold text-n700 mb-4 flex items-center gap-2 px-1">
+             <section className="min-w-0" aria-labelledby="material-scene-heading">
+             <h4 id="material-scene-heading" className="text-sm font-bold text-n700 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1">
                  <MapPin className="w-4 h-4 text-orange-400" />
                  场景素材 (Scene)
-                 <span className="text-[10px] font-normal text-n100 ml-2">为该场景绑定背景参考</span>
+                 <span className="text-[10px] font-normal text-n100">为该场景绑定背景参考</span>
              </h4>
-             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch" data-testid="material-scene-cards">
                  {!selectedShot.scene ? (
                      <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
                          <span className="text-xs">本镜头无特定场景描述</span>
@@ -1167,15 +1227,17 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                         onUnbind={() => onUnbindMaterial(selectedShot.id, selectedShot.scene)}
                        onViewImage={(url) => setLightboxImage(url)}
                      />
-                 )}
+                  )}
              </div>
+             </section>
 
-             <h4 className="text-sm font-bold text-n700 mb-4 flex items-center gap-2 px-1">
+             <section className="min-w-0" aria-labelledby="material-props-heading">
+             <h4 id="material-props-heading" className="text-sm font-bold text-n700 mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1">
                  <Box className="w-4 h-4 text-yellow-500" />
                  道具素材 (Props)
-                 <span className="text-[10px] font-normal text-n100 ml-2">手持物、武器、关键陈设等独立参考</span>
+                 <span className="text-[10px] font-normal text-n100">手持物、武器、关键陈设等独立参考</span>
              </h4>
-             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-20">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch" data-testid="material-prop-cards">
                  {!selectedShot || (selectedShot.props || []).length === 0 ? (
                      <div className="col-span-full py-8 border-2 border-dashed border-n40 rounded-md flex items-center justify-center text-n100 bg-n0">
                          <span className="text-xs">本镜头无特定道具</span>
@@ -1200,9 +1262,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                           onViewImage={(url) => setLightboxImage(url)}
                        />
                     ))
-                 )}
+                  )}
              </div>
-                     </div>
+             </section>
+             </div>
+                      </div>
                  )}
              </div>
       </div>
@@ -1544,8 +1608,8 @@ const MaterialCard: React.FC<{
     const style = typeStyles[type];
 
     return (
-        <div className="bg-n0 border border-n40 rounded-md overflow-hidden flex flex-col h-[520px] shadow-card hover:shadow-atlas hover:border-n40 transition-all group">
-            <div className={`px-4 py-3 border-b border-n40 flex justify-between items-center ${style.header}`}>
+        <div className="bg-n0 border border-n40 rounded-md overflow-hidden flex min-w-0 flex-col h-full shadow-card hover:shadow-atlas hover:border-n40 transition-all group">
+            <div className={`px-3 py-2.5 border-b border-n40 flex justify-between items-center ${style.header}`}>
                 <div className="flex items-center gap-2">
                     <div className="font-bold text-sm text-n800">{name}</div>
                     {selectedMaterialId && <CheckCircle className="w-3.5 h-3.5 text-success" />}
@@ -1556,8 +1620,8 @@ const MaterialCard: React.FC<{
             </div>
             
             {/* Selected Area */}
-            <div className="p-4 border-b border-n40 bg-n20 h-[160px] flex gap-4">
-                 <div className="w-[120px] flex-shrink-0 bg-n20 rounded-lg overflow-hidden border border-n40 relative flex items-center justify-center group-hover:border-n40 transition-colors">
+            <div className="p-3 border-b border-n40 bg-n20 min-h-[132px] flex gap-3">
+                 <div className="w-24 h-24 flex-shrink-0 bg-n20 rounded-lg overflow-hidden border border-n40 relative flex items-center justify-center group-hover:border-n40 transition-colors">
                      {boundMaterial ? (
                          <>
                             <img 
@@ -1580,7 +1644,7 @@ const MaterialCard: React.FC<{
                          </div>
                      )}
                  </div>
-                 <div className="flex-1 flex flex-col justify-center gap-3">
+                 <div className="min-w-0 flex-1 flex flex-col justify-center gap-2">
                      <div>
                         <span className="text-[10px] font-bold text-n100 uppercase tracking-wide block mb-1">当前状态</span>
                         <p className={`text-xs leading-relaxed ${boundMaterial ? 'text-success' : 'text-n300'}`}>
@@ -1600,7 +1664,7 @@ const MaterialCard: React.FC<{
                      {boundMaterial && (
                          <button 
                             onClick={onUnbind}
-                            className="text-[10px] bg-r50 hover:bg-r50 text-danger hover:text-danger border border-danger/20 hover:border-danger/40 px-3 py-1.5 rounded-md self-start flex items-center gap-1.5 transition-all"
+                            className="text-[10px] bg-r50 hover:bg-r50 text-danger hover:text-danger border border-danger/20 hover:border-danger/40 px-2.5 py-1 rounded-md self-start flex items-center gap-1.5 transition-all"
                          >
                              <Trash2 className="w-3 h-3" />
                              解除锁定 (及后续)
@@ -1610,9 +1674,9 @@ const MaterialCard: React.FC<{
             </div>
 
             {/* Library Grid */}
-            <div className="flex-1 bg-n20 p-3 overflow-y-auto custom-scrollbar">
+            <div className={`bg-n20 p-3 ${materials.length > 3 ? 'max-h-[104px] overflow-y-auto custom-scrollbar' : 'overflow-hidden'}`}>
                 {materials.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-n100 border-2 border-dashed border-n40 rounded-lg m-1">
+                    <div className="h-20 flex flex-col items-center justify-center text-n100 border-2 border-dashed border-n40 rounded-lg m-1">
                         <AlertCircle className="w-5 h-5 mb-2 opacity-40" />
                         <span className="text-[10px]">暂无素材，请上传或生成</span>
                     </div>
@@ -1623,7 +1687,7 @@ const MaterialCard: React.FC<{
                             return (
                                 <div 
                                     key={m.id} 
-                                    className={`relative group/item aspect-square rounded-lg overflow-hidden border cursor-pointer transition-all ${isCurrent ? 'border-success ring-2 ring-green-500/30' : 'border-n40 hover:border-primary'}`}
+                                    className={`relative group/item h-20 rounded-lg overflow-hidden border cursor-pointer transition-all ${isCurrent ? 'border-success ring-2 ring-green-500/30' : 'border-n40 hover:border-primary'}`}
                                     onClick={() => onBind(m.id)}
                                 >
                                     <img 
@@ -1665,57 +1729,57 @@ const MaterialCard: React.FC<{
             </div>
 
             {/* Action Footer */}
-            <div className="p-3 border-t border-n40 bg-n0 grid grid-cols-2 gap-3">
-                <label className="flex items-center justify-center gap-2 py-2 bg-n0 hover:bg-n20 border border-n40 hover:border-n40 rounded-lg cursor-pointer transition-colors text-xs text-n700 font-medium group/btn">
-                    <Upload className="w-3.5 h-3.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-                    <span>本地上传</span>
-                    <input type="file" className="hidden" accept="image/*" onChange={onUpload} />
-                </label>
-                <button 
+            <div className="p-3 border-t border-n40 bg-n0 flex flex-wrap gap-1.5">
+                <button
                     onClick={onOpenAI}
                     disabled={aiGenerating}
-                    className="flex items-center justify-center gap-2 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-bold shadow-lg shadow-indigo-900/30 hover:shadow-indigo-900/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group/btn"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-light border border-primary text-primary rounded-lg text-[11px] font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {aiGenerating ? (
-                        <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
+                        <span className="animate-spin w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full"></span>
                     ) : (
-                        <Sparkles className="w-3.5 h-3.5 group-hover/btn:rotate-12 transition-transform" />
+                        <Sparkles className="w-3 h-3" />
                     )}
-                    <span>AI 生成</span>
+                    <span>AI 生图</span>
                 </button>
+                <label className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-n0 hover:bg-n20 border border-n40 rounded-lg cursor-pointer transition-colors text-[11px] text-n300 font-medium">
+                    <Upload className="w-3 h-3" />
+                    <span>上传</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={onUpload} />
+                </label>
                 <button
                     onClick={onOpenCamera}
                     disabled={!hasMaterials || cameraGenerating}
-                    className="flex items-center justify-center gap-2 py-2 mt-2 bg-n0 hover:bg-n20 text-n700 rounded-lg text-xs font-semibold border border-n40 hover:border-n40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-n0 hover:bg-n20 text-n300 rounded-lg text-[11px] font-medium border border-n40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {cameraGenerating ? (
                         <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
                     ) : (
-                        <Camera className="w-3.5 h-3.5" />
+                        <Camera className="w-3 h-3" />
                     )}
-                    <span>角度调整</span>
+                    <span>角度</span>
                 </button>
                 <button
                     onClick={() => onProcessMaterial('upscale_hd')}
                     disabled={!hasMaterials || cameraGenerating}
-                    className="flex items-center justify-center gap-2 py-2 mt-2 bg-b50 hover:bg-b75 text-b400 rounded-lg text-xs font-semibold border border-b75 hover:border-b75 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-n0 hover:bg-n20 text-n300 rounded-lg text-[11px] font-medium border border-n40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {cameraGenerating ? (
                         <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
                     ) : (
-                        <ZoomIn className="w-3.5 h-3.5" />
+                        <Maximize className="w-3 h-3" />
                     )}
                     <span>高清放大</span>
                 </button>
                 <button
                     onClick={() => onProcessMaterial('remove_watermark')}
                     disabled={!hasMaterials || cameraGenerating}
-                    className="flex items-center justify-center gap-2 py-2 bg-primary-light hover:bg-primary-light text-primary rounded-lg text-xs font-semibold border border-primary/30 hover:border-primary transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-n0 hover:bg-n20 text-n300 rounded-lg text-[11px] font-medium border border-n40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                     {cameraGenerating ? (
                         <span className="animate-spin w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full"></span>
                     ) : (
-                        <Sparkles className="w-3.5 h-3.5" />
+                        <Scissors className="w-3 h-3" />
                     )}
                     <span>去水印</span>
                 </button>
@@ -1723,8 +1787,9 @@ const MaterialCard: React.FC<{
                     <button
                         onClick={() => onProcessMaterial('three_view')}
                         disabled={!hasMaterials}
-                        className="flex items-center justify-center gap-2 py-2 bg-success/10 hover:bg-success/20 text-success rounded-lg text-xs font-semibold border border-success/30 hover:border-success transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-n0 hover:bg-n20 text-n300 rounded-lg text-[11px] font-medium border border-n40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
+                        <Layers className="w-3 h-3" />
                         <span>四视图</span>
                     </button>
                 )}
@@ -2218,7 +2283,7 @@ const ProcessModal: React.FC<{
 
     return (
         <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-            <div className="w-full max-w-3xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-bold text-n800">{workflowInfo.title} - {config.tagName}</h3>
@@ -2230,7 +2295,7 @@ const ProcessModal: React.FC<{
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* 左侧：当前素材预览 */}
+                    {/* 左侧：当前素材预览与统一缩略图选择 */}
                     <div className="space-y-4">
                         <div className="relative rounded-md overflow-hidden border border-n40 h-72 bg-n20 flex items-center justify-center">
                             {currentMaterial ? (
@@ -2383,67 +2448,49 @@ const ThreeViewModal: React.FC<{
                                 </span>
                             )}
                         </div>
-                        <div className="text-center text-xs text-n300">
-                            当前选中的素材
+                        <div className="grid grid-cols-5 gap-2 max-h-32 overflow-y-auto pr-1">
+                            {config.materials.map((mat) => (
+                                <button
+                                    key={mat.id}
+                                    onClick={() => setSelectedMaterialId(mat.id)}
+                                    className={`relative h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                                        selectedMaterialId === mat.id
+                                            ? 'border-success ring-2 ring-success/30'
+                                            : 'border-n40 hover:border-primary'
+                                    }`}
+                                    aria-label={`选择素材 ${mat.id}`}
+                                >
+                                    {mat.url ? (
+                                        <img
+                                            src={mat.thumbnail || mat.url}
+                                            loading="lazy"
+                                            className="w-full h-full object-cover"
+                                            alt="素材"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-n30">
+                                            <span className="text-xs text-n100">无效</span>
+                                        </div>
+                                    )}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    {/* 右侧：素材选择 */}
+                    {/* 右侧：提示词编辑 */}
                     <div className="space-y-4">
-                        <div>
-                            <span className="text-[11px] font-bold text-n100 uppercase mb-2 block">选择要处理的素材</span>
-                            <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto p-2 bg-n20 rounded-lg border border-n40">
-                                {config.materials.map((mat) => (
-                                    <button
-                                        key={mat.id}
-                                        onClick={() => setSelectedMaterialId(mat.id)}
-                                        className={`relative rounded-lg overflow-hidden border-2 transition-all ${
-                                            selectedMaterialId === mat.id
-                                                ? 'border-success shadow-lg shadow-green-900/50'
-                                                : 'border-transparent hover:border-n40'
-                                        }`}
-                                    >
-                                        {mat.url ? (
-                                            <img 
-                                                src={mat.url} 
-                                                loading="lazy" 
-                                                className="w-full h-20 object-cover" 
-                                                alt="素材"
-                                                onError={(e) => {
-                                                    e.currentTarget.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>';
-                                                    console.error('❌ 缩略图加载失败:', mat.id, mat.url);
-                                                }}
-                                            />
-                                        ) : (
-                                            <div className="w-full h-20 flex items-center justify-center bg-n30">
-                                                <span className="text-xs text-n100">无效</span>
-                                            </div>
-                                        )}
-                                        {selectedMaterialId === mat.id && (
-                                            <div className="absolute inset-0 bg-success/20 flex items-center justify-center">
-                                                <CheckCircle className="w-5 h-5 text-success" />
-                                            </div>
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                        <label className="text-xs font-bold text-n300 uppercase">生成提示词</label>
+                        <textarea
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder="输入生成提示词..."
+                            className="w-full h-72 bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n800 placeholder:text-n100 resize-none focus:outline-none focus:border-success transition-colors"
+                            spellCheck={false}
+                        />
+                        <p className="text-[10px] text-n100">
+                            提示：人物和道具会按白底四视图标准生成，选中素材仅以绿色边框标识。
+                        </p>
                     </div>
-                </div>
-
-                {/* 提示词输入 */}
-                <div className="space-y-2">
-                    <label className="text-xs font-bold text-n300 uppercase">生成提示词</label>
-                    <textarea
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="输入生成提示词..."
-                        className="w-full h-24 bg-n0 border border-n40 rounded-lg px-3 py-2 text-sm text-n800 placeholder:text-n100 resize-none focus:outline-none focus:border-success transition-colors"
-                        spellCheck={false}
-                    />
-                    <p className="text-[10px] text-n100">
-                        💡 提示：描述需要生成的视图角度和背景要求
-                    </p>
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">

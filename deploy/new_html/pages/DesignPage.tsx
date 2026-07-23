@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   User, Mountain, Sword, Plus, Trash2, Loader, Palette, ArrowRight, Check,
   Upload, ZoomIn, X, Sparkles, Camera, Maximize, Grid3X3,
-  Wand2, Scissors, CheckCircle, Layers, Square, CheckSquare, RefreshCw,
+  Wand2, Scissors, Layers, Square, CheckSquare, RefreshCw,
+  ChevronDown,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import {
@@ -25,7 +26,10 @@ import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
 import type { AssetItem } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
-import { isAssetImageFileRole } from '../utils/assetImageRoles';
+import {
+  isDesignAssetImageFileRole,
+  isMaterialStageAssetImageFileRole,
+} from '../utils/assetImageRoles';
 import { filterAssetsForDesignScope } from '../utils/assetScope';
 import { GpuNodeSelector, type GpuNodeSelection } from '../components/GpuNodeSelector';
 import {
@@ -35,9 +39,25 @@ import {
   withStandardTurnaround,
 } from '../utils/assetGenerationStandards';
 import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
+import { assertEnoughCredits, consumeCredits } from '../services/creditService';
+import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
+import {
+  DESIGN_IMAGE_MODEL_OPTIONS,
+  findDesignImageModel,
+  normalizeDesignImageResolution,
+  type DesignImageEngine,
+  type DesignImageResolution,
+} from '../utils/designImageModels';
+import {
+  DESIGN_CREDIT_DEFAULTS,
+  DESIGN_CREDIT_FEATURES,
+  designImageCreditParams,
+  designOperationCreditParams,
+  newDesignCreditUsageId,
+} from '../utils/designCredits';
 
 type AssetTab = 'character' | 'scene' | 'prop';
-type MaterialAIEngine = 'nanobanana' | 'doubao';
+type MaterialAIEngine = DesignImageEngine;
 interface ModalMaterial { id: string; url: string; thumbnail?: string; name?: string }
 type AssetEntityFile = NonNullable<AssetItem['entityFiles']>[number];
 type RawAssetImage = { key: string; rawUrl: string; fileId?: string };
@@ -65,7 +85,7 @@ const savedEngine = () => LS.get('design_ai_engine', 'nanobanana') as MaterialAI
 const savedGeminiModel = () => LS.get('design_ai_gemini_model', 'gemini-2.5-flash-image');
 const savedStyle = () => LS.get('design_ai_style', '');
 const savedAspect = () => LS.get('design_ai_aspect_ratio', '1:1');
-const savedResolution = () => LS.get('design_ai_resolution', '2K') as '1K' | '2K' | '4K';
+const savedResolution = () => LS.get('design_ai_resolution', '1K') as DesignImageResolution;
 const savedRefineModel = () => LS.get('design_ai_refine_model', 'gemini') as AiModel;
 
 function savePrefs(p: { engine?: string; geminiModel?: string; style?: string; aspect?: string; resolution?: string; refineModel?: string }) {
@@ -103,14 +123,26 @@ function isAssetNotFoundError(error: unknown): boolean {
 }
 
 function getLegacyAssetImageUrls(asset: AssetItem): string[] {
-  const urls = [...(asset.referenceImages || [])];
-  if (asset.thumbnailUrl && !urls.includes(asset.thumbnailUrl)) urls.unshift(asset.thumbnailUrl);
+  const materialStageUrls = new Set(
+    (asset.entityFiles || [])
+      .filter(file => isMaterialStageAssetImageFileRole(file.fileRole))
+      .map(file => file.fileUrl)
+      .filter(Boolean),
+  );
+  const urls = [...(asset.referenceImages || [])].filter(url => !materialStageUrls.has(url));
+  if (
+    asset.thumbnailUrl
+    && !materialStageUrls.has(asset.thumbnailUrl)
+    && !urls.includes(asset.thumbnailUrl)
+  ) {
+    urls.unshift(asset.thumbnailUrl);
+  }
   return urls.filter(Boolean);
 }
 
 function getSortedAssetImageFiles(entityFiles: AssetEntityFile[] | undefined): AssetEntityFile[] {
   return (entityFiles || [])
-    .filter(f => isAssetImageFileRole(f.fileRole) && Boolean(f.fileUrl))
+    .filter(f => isDesignAssetImageFileRole(f.fileRole) && Boolean(f.fileUrl))
     .sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
 }
 
@@ -432,23 +464,86 @@ export const DesignPage: React.FC = () => {
     references: string[]; aspectRatio: string; resolution: '1K' | '2K' | '4K';
     sequential: string; count: number;
   }) => {
+    const requestedImageCount = payload.engine === 'doubao' && payload.sequential === 'auto'
+      ? Math.max(1, payload.count)
+      : 1;
+    const model = payload.engine === 'nanobanana' ? payload.geminiModel : 'doubao-seedream';
+    const estimateParams = designImageCreditParams({
+      imageCount: requestedImageCount,
+      model,
+      resolution: payload.resolution,
+      aspectRatio: payload.aspectRatio,
+    });
+    try {
+      await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, estimateParams);
+    } catch (err: any) {
+      crmMessage.error(err?.message || '积分校验失败');
+      return;
+    }
+
     setAiModal(null);
     savePrefs({ engine: payload.engine, geminiModel: payload.geminiModel, aspect: payload.aspectRatio, resolution: payload.resolution });
     setBusyAssetId(payload.assetId); setBusyLabel('AI 生图中...');
+    let generatedCount = 0;
     try {
       const entityOpts = { entityType: 'asset' as const, entityId: payload.assetId, fileRole: 'reference_image' as const, episodeId: episodeId || undefined };
+      let generated: GeneratedFileResult[];
       if (payload.engine === 'nanobanana') {
-        await generateGeminiImageVariant({ model: payload.geminiModel, prompt: payload.prompt, references: payload.references, aspectRatio: payload.aspectRatio, ...entityOpts });
+        generated = await generateGeminiImageVariant({
+          model: payload.geminiModel,
+          prompt: payload.prompt,
+          references: payload.references,
+          aspectRatio: payload.aspectRatio,
+          imageSize: payload.resolution,
+          ...entityOpts,
+        });
       } else {
-        await generateDoubaoImages({ prompt: payload.prompt, references: payload.references, size: recommendDoubaoImageSize(payload.aspectRatio, payload.resolution), sequential: payload.sequential as any, count: payload.count, ...entityOpts });
+        generated = await generateDoubaoImages({ prompt: payload.prompt, references: payload.references, size: recommendDoubaoImageSize(payload.aspectRatio, payload.resolution), sequential: payload.sequential as any, count: payload.count, ...entityOpts });
       }
+      if (generated.length === 0) {
+        throw new Error('生成接口未返回有效图片，本次不扣积分');
+      }
+      generatedCount = generated.length;
+      const settlement = await consumeCredits({
+        featureKey: DESIGN_CREDIT_FEATURES.imageGeneration,
+        taskId: newDesignCreditUsageId('design-image'),
+        params: designImageCreditParams({
+          imageCount: generatedCount,
+          model,
+          resolution: payload.resolution,
+          aspectRatio: payload.aspectRatio,
+        }),
+        projectId,
+        metadata: {
+          episode_id: episodeId || null,
+          asset_id: payload.assetId,
+          engine: payload.engine,
+        },
+      });
       await forceReloadSlices('assets');
-    } catch (err: any) { console.error('AI生成失败:', err); crmMessage.error(err?.message || 'AI生成失败'); }
+      crmMessage.success(`生成 ${generatedCount} 张图片，已扣除 ${settlement.charged_credits} 积分`);
+    } catch (err: any) {
+      console.error('AI生成失败:', err);
+      if (generatedCount > 0) {
+        await forceReloadSlices('assets').catch(() => undefined);
+        crmMessage.warning(`图片已生成，但积分结算失败：${err?.message || String(err)}`);
+      } else {
+        crmMessage.error(err?.message || 'AI生成失败');
+      }
+    }
     finally { setBusyAssetId(null); }
-  }, [episodeId, forceReloadSlices]);
+  }, [episodeId, projectId, forceReloadSlices]);
 
   /* ---- Camera ---- */
   const handleCameraGenerate = useCallback(async (payload: { assetId: string; imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number; gpu: GpuNodeSelection }) => {
+    const creditParams = designOperationCreditParams('angle_adjustment');
+    try {
+      await assertEnoughCredits(DESIGN_CREDIT_FEATURES.angleAdjustment, creditParams);
+    } catch (err: any) {
+      crmMessage.error(err?.message || '积分校验失败');
+      return;
+    }
+
     setCameraModal(null);
     setBusyAssetId(payload.assetId); setBusyLabel('角度调整中...');
     try {
@@ -476,7 +571,19 @@ export const DesignPage: React.FC = () => {
         episodeId: episodeId || undefined,
         fileRole: 'reference_image',
       });
+      const settlement = await consumeCredits({
+        featureKey: DESIGN_CREDIT_FEATURES.angleAdjustment,
+        taskId: `design-angle:${taskId}`,
+        params: creditParams,
+        projectId,
+        metadata: {
+          episode_id: episodeId || null,
+          asset_id: payload.assetId,
+          workflow: 'angle_adjustment',
+        },
+      });
       await forceReloadSlices('assets');
+      crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 积分`);
     } catch (err: any) { console.error('角度调整失败:', err); crmMessage.error(err?.message || '角度调整失败'); }
     finally { setBusyAssetId(null); }
   }, [episodeId, projectId, forceReloadSlices]);
@@ -484,6 +591,17 @@ export const DesignPage: React.FC = () => {
   /* ---- Process (upscale/watermark) ---- */
   const handleProcessSubmit = useCallback(async (payload: { materialUrl: string; gpu: GpuNodeSelection }) => {
     if (!processModal) return;
+    const isUpscale = processModal.workflow === 'upscale_hd';
+    const creditParams = designOperationCreditParams('upscale_hd');
+    if (isUpscale) {
+      try {
+        await assertEnoughCredits(DESIGN_CREDIT_FEATURES.upscaleHd, creditParams);
+      } catch (err: any) {
+        crmMessage.error(err?.message || '积分校验失败');
+        return;
+      }
+    }
+
     setProcessModal(null);
     setBusyAssetId(processModal.asset.assetId); setBusyLabel(processModal.workflow === 'upscale_hd' ? '高清放大中...' : '去水印中...');
     try {
@@ -504,6 +622,20 @@ export const DesignPage: React.FC = () => {
         episodeId: episodeId || undefined,
         fileRole: 'reference_image',
       });
+      if (isUpscale) {
+        const settlement = await consumeCredits({
+          featureKey: DESIGN_CREDIT_FEATURES.upscaleHd,
+          taskId: `design-upscale:${taskId}`,
+          params: creditParams,
+          projectId,
+          metadata: {
+            episode_id: episodeId || null,
+            asset_id: processModal.asset.assetId,
+            workflow: 'upscale_hd',
+          },
+        });
+        crmMessage.success(`高清放大完成，已扣除 ${settlement.charged_credits} 积分`);
+      }
       await forceReloadSlices('assets');
     } catch (err: any) { console.error('处理失败:', err); crmMessage.error(err?.message || '处理失败'); }
     finally { setBusyAssetId(null); }
@@ -515,10 +647,25 @@ export const DesignPage: React.FC = () => {
     aspectRatio: string; resolution: '1K' | '2K' | '4K'; threeView: boolean;
     refineModel: AiModel;
   }) => {
+    const targets = designAssets.filter(a => config.assetIds.includes(a.assetId));
+    const model = config.engine === 'nanobanana' ? config.geminiModel : 'doubao-seedream';
+    const estimateParams = designImageCreditParams({
+      imageCount: targets.length,
+      model,
+      resolution: config.resolution,
+      aspectRatio: config.aspectRatio,
+    });
+    try {
+      await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, estimateParams);
+    } catch (err: any) {
+      crmMessage.error(err?.message || '积分校验失败');
+      return;
+    }
+
     setBatchModal(false);
     savePrefs({ engine: config.engine, geminiModel: config.geminiModel, style: config.style, aspect: config.aspectRatio, resolution: config.resolution, refineModel: config.refineModel });
-    const targets = designAssets.filter(a => config.assetIds.includes(a.assetId));
     let okCount = 0;
+    let generatedCount = 0;
     const errors: string[] = [];
     for (let i = 0; i < targets.length; i++) {
       const asset = targets[i];
@@ -557,11 +704,23 @@ export const DesignPage: React.FC = () => {
           config.threeView,
         );
         const entityOpts = { entityType: 'asset' as const, entityId: asset.assetId, fileRole: 'reference_image' as const, episodeId: episodeId || undefined };
+        let generated: GeneratedFileResult[];
         if (config.engine === 'nanobanana') {
-          await generateGeminiImageVariant({ model: config.geminiModel, prompt, references: [], aspectRatio, ...entityOpts });
+          generated = await generateGeminiImageVariant({
+            model: config.geminiModel,
+            prompt,
+            references: [],
+            aspectRatio,
+            imageSize: config.resolution,
+            ...entityOpts,
+          });
         } else {
-          await generateDoubaoImages({ prompt, references: [], size: recommendDoubaoImageSize(aspectRatio, config.resolution), ...entityOpts });
+          generated = await generateDoubaoImages({ prompt, references: [], size: recommendDoubaoImageSize(aspectRatio, config.resolution), ...entityOpts });
         }
+        if (generated.length === 0) {
+          throw new Error('生成接口未返回有效图片，本项不扣积分');
+        }
+        generatedCount += generated.length;
         okCount++;
       } catch (err: any) {
         // 不再静默吞错：累计失败原因，循环结束后用 toast 汇总暴露给用户。
@@ -569,90 +728,167 @@ export const DesignPage: React.FC = () => {
         console.error(`批量生成 ${asset.name} 失败:`, err);
       }
     }
+    let chargedCredits = 0;
+    if (generatedCount > 0) {
+      try {
+        const settlement = await consumeCredits({
+          featureKey: DESIGN_CREDIT_FEATURES.imageGeneration,
+          taskId: newDesignCreditUsageId('design-image-batch'),
+          params: designImageCreditParams({
+            imageCount: generatedCount,
+            model,
+            resolution: config.resolution,
+            aspectRatio: config.aspectRatio,
+          }),
+          projectId,
+          metadata: {
+            episode_id: episodeId || null,
+            asset_ids: targets.map(asset => asset.assetId),
+            engine: config.engine,
+            batch: true,
+          },
+        });
+        chargedCredits = settlement.charged_credits;
+      } catch (err: any) {
+        errors.push(`积分结算失败：${err?.message || String(err)}`);
+      }
+    }
     await forceReloadSlices('assets');
     setBusyAssetId(null); setBusyLabel('');
     if (!errors.length) {
-      crmMessage.success(`批量生成完成：成功 ${okCount} 项`);
+      crmMessage.success(`批量生成完成：成功 ${okCount} 项，已扣除 ${chargedCredits} 积分`);
     } else if (okCount > 0) {
       crmMessage.warning(`批量生成：成功 ${okCount}，失败 ${errors.length}。首个失败 → ${errors[0]}`);
     } else {
       crmMessage.error(`批量生成全部失败（${errors.length} 项）。原因 → ${errors[0]}`);
     }
-  }, [designAssets, scriptText, episodeId, forceReloadSlices]);
+  }, [designAssets, scriptText, episodeId, projectId, forceReloadSlices]);
 
   const tabLabel = tab === 'character' ? '人物' : tab === 'scene' ? '场景' : '道具';
 
   return (
-    <div className="min-h-full bg-n20 text-n800 p-6">
-      <header className="mb-6 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">资产设计工作台</h1>
-          <p className="text-sm text-n100 mt-1">
-            AI 辅助设计人物、场景、道具 ·
-            <span className="text-success ml-1">共 {totalDesignedCount}/{designAssets.length} 已设计</span>
-            {filtered.length - tabDesignedCount > 0 && <span className="text-warning ml-2">当前分类 {tabDesignedCount}/{filtered.length}</span>}
-          </p>
+    <div className="h-full min-h-0 bg-n20 text-n800 flex flex-col overflow-hidden">
+      <header className="shrink-0 min-h-[52px] bg-n0 border-b border-n40 flex items-stretch">
+        <div className="w-80 shrink-0 px-4 py-2 border-r border-n40 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Grid3X3 size={16} className="text-primary shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-sm font-bold text-n700 truncate">设计列表</h1>
+              <p className="text-[10px] text-n100 truncate">人物、场景与道具</p>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-[10px] text-n100">已设计</div>
+            <div className="text-xs font-semibold text-success">{totalDesignedCount}/{designAssets.length}</div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleOpenSyncExistingDesigns}
-            disabled={syncingExisting || !projectId || !episodeId}
-            className="flex items-center gap-2 px-4 py-2 bg-n0 hover:bg-n20 text-n700 text-sm rounded-lg transition-colors border border-n40 disabled:opacity-50"
-          >
-            {syncingExisting ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            同步已有设计
-          </button>
-          {selectedIds.size > 0 && (
-            <button onClick={() => setBatchModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors">
-              <Layers size={14} /> 批量生成 ({selectedIds.size})
+
+        <div className="min-w-0 flex-1 px-4 py-2 flex flex-wrap items-center gap-3">
+          <div className="flex items-baseline gap-2 shrink-0">
+            <h2 className="text-sm font-bold text-n700">{tabLabel}设计</h2>
+            <span className="text-[10px] text-n100">{tabDesignedCount}/{filtered.length}</span>
+          </div>
+          <div className="inline-flex overflow-hidden rounded-md border border-n40 bg-n0 shadow-sm" role="tablist" aria-label="设计分类">
+            {TAB_CONFIG.map(({ key, label, Icon }) => {
+              const active = tab === key; const count = designAssets.filter(a => a.assetType === key).length;
+              return (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => { setTab(key); setSelectedIds(new Set()); }}
+                  className={`h-8 inline-flex items-center gap-1.5 px-3 text-xs font-medium border-r border-n40 last:border-r-0 transition-colors ${
+                    active ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:bg-n20 hover:text-n700'
+                  }`}
+                >
+                  <Icon size={13} />
+                  {label}
+                  {count > 0 && (
+                    <span className={`min-w-4 px-1 py-0.5 rounded text-[9px] leading-none ${active ? 'bg-white/20 text-white' : 'bg-n30 text-n300'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            <div className="inline-flex overflow-hidden rounded-md border border-n40 bg-n0 shadow-sm" role="group" aria-label="批量选择">
+              <button
+                onClick={selectAllFiltered}
+                className="h-8 px-3 text-xs font-medium text-n700 border-r border-n40 hover:bg-primary hover:text-white transition-colors"
+              >
+                全选
+              </button>
+              <button
+                onClick={selectUndesigned}
+                className="h-8 px-3 text-xs font-medium text-n700 border-r border-n40 hover:bg-primary hover:text-white transition-colors"
+              >
+                选未设计
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                disabled={selectedIds.size === 0}
+                className="h-8 px-3 text-xs font-medium text-n700 hover:bg-primary hover:text-white transition-colors disabled:text-n100 disabled:hover:bg-n0"
+              >
+                清空
+              </button>
+            </div>
+            <button
+              onClick={handleOpenSyncExistingDesigns}
+              disabled={syncingExisting || !projectId || !episodeId}
+              className="h-8 flex items-center gap-1.5 px-3 bg-n0 hover:bg-n20 text-n700 text-xs rounded-md transition-colors border border-n40 disabled:opacity-50"
+            >
+              {syncingExisting ? <Loader size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              同步已有设计
             </button>
-          )}
-          <button onClick={() => setBatchModal(true)} className="flex items-center gap-2 px-4 py-2 bg-n0 hover:bg-n20 text-n700 text-sm rounded-lg transition-colors border border-n40">
-            <Layers size={14} /> 批量生成
-          </button>
-          <button onClick={() => navigate(`/projects/${projectId}/ep/${episodeId}/workflow/materials`)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors">
-            导出到素材绑定 <ArrowRight size={14} />
-          </button>
+            <button
+              onClick={() => setBatchModal(true)}
+              className={`h-8 flex items-center gap-1.5 px-3 text-xs rounded-md transition-colors border ${
+                selectedIds.size > 0
+                  ? 'bg-primary hover:bg-primary-hover text-white border-primary'
+                  : 'bg-n0 hover:bg-n20 text-n700 border-n40'
+              }`}
+            >
+              <Layers size={13} />
+              {selectedIds.size > 0 ? `批量生成 (${selectedIds.size})` : '批量生成'}
+            </button>
+            <button
+              onClick={() => navigate(`/projects/${projectId}/ep/${episodeId}/workflow/materials`)}
+              className="h-8 flex items-center gap-1.5 px-3 bg-primary hover:bg-primary-hover text-white text-xs rounded-md transition-colors"
+            >
+              导出到素材绑定 <ArrowRight size={13} />
+            </button>
+          </div>
         </div>
       </header>
 
-      {error && <div className="mb-4 px-4 py-3 rounded-lg bg-r50 border border-r75 text-sm text-danger">{error}</div>}
-
-      <div className="flex gap-2 mb-4 flex-wrap items-center" role="tablist">
-        {TAB_CONFIG.map(({ key, label, Icon }) => {
-          const active = tab === key; const count = designAssets.filter(a => a.assetType === key).length;
-          return (<button key={key} role="tab" aria-selected={active} onClick={() => { setTab(key); setSelectedIds(new Set()); }}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border ${active ? 'bg-primary-light border-primary text-primary' : 'bg-n0 border-n40 text-n100 hover:text-n700 hover:border-n40'}`}>
-            <Icon size={16} /> {label} {count > 0 && <span className="text-xs bg-n0 px-1.5 py-0.5 rounded">{count}</span>}
-          </button>);
-        })}
-        <div className="ml-auto flex items-center gap-2 text-xs text-n100">
-          <button onClick={selectAllFiltered} className="hover:text-n800 transition-colors">全选</button>
-          <span>|</span>
-          <button onClick={selectUndesigned} className="hover:text-n800 transition-colors">选未设计</button>
-          <span>|</span>
-          <button onClick={() => setSelectedIds(new Set())} className="hover:text-n800 transition-colors">清空</button>
+      {error && (
+        <div className="shrink-0 mx-4 mt-3 px-4 py-3 rounded-lg bg-r50 border border-r75 text-sm text-danger">
+          {error}
         </div>
-      </div>
+      )}
 
-      <div className="flex gap-6 items-start flex-col lg:flex-row">
-        <aside className="w-full lg:w-72 shrink-0 bg-n0 rounded-md p-5 border border-n40 shadow-card">
-          <div className="flex items-center gap-2 mb-4"><Plus size={18} className="text-primary" /><span className="font-semibold text-sm">新建{tabLabel}</span></div>
-          <label className="block text-xs text-n100 mb-1.5">名称</label>
-          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="例如：主角 / 客厅 / 古剑"
-            className="w-full px-3 py-2.5 rounded-lg bg-n0 border border-n40 text-n800 text-sm placeholder:text-n100 focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4" />
-          <label className="block text-xs text-n100 mb-1.5">描述</label>
-          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="外观、风格等" rows={3}
-            className="w-full px-3 py-2.5 rounded-lg bg-n0 border border-n40 text-n800 text-sm placeholder:text-n100 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4" />
-          {formError && <p className="text-xs text-danger mb-3">{formError}</p>}
-          <button onClick={handleCreate} disabled={isCreating || !projectId}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/20">
-            {isCreating && <Loader size={16} className="animate-spin" />} {isCreating ? '创建中...' : '创建'}
-          </button>
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        <aside className="w-full lg:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-n40 bg-n20 p-4 lg:overflow-y-auto custom-scrollbar">
+          <div className="bg-n0 rounded-md p-5 border border-n40 shadow-card">
+            <div className="flex items-center gap-2 mb-4"><Plus size={18} className="text-primary" /><span className="font-semibold text-sm">新建{tabLabel}</span></div>
+            <label className="block text-xs text-n100 mb-1.5">名称</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="例如：主角 / 客厅 / 古剑"
+              className="w-full px-3 py-2.5 rounded-lg bg-n0 border border-n40 text-n800 text-sm placeholder:text-n100 focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4" />
+            <label className="block text-xs text-n100 mb-1.5">描述</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="外观、风格、材质、色彩与氛围等" rows={7}
+              className="w-full min-h-40 px-3 py-2.5 rounded-lg bg-n0 border border-n40 text-n800 text-sm leading-relaxed placeholder:text-n100 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 mb-4" />
+            {formError && <p className="text-xs text-danger mb-3">{formError}</p>}
+            <button onClick={handleCreate} disabled={isCreating || !projectId}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-primary hover:bg-primary-hover text-white font-semibold text-sm transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/20">
+              {isCreating && <Loader size={16} className="animate-spin" />} {isCreating ? '创建中...' : '创建'}
+            </button>
+          </div>
         </aside>
 
-        <section className="flex-1 min-w-0">
+        <section className="flex-1 min-w-0 p-4 lg:overflow-y-auto custom-scrollbar">
           {isLoading ? (
             <div className="flex items-center justify-center gap-3 py-16 text-n100 text-sm"><Loader size={20} className="animate-spin" /> 加载资产...</div>
           ) : filtered.length === 0 ? (
@@ -898,7 +1134,12 @@ const UnifiedAIModal: React.FC<{
   const [geminiModel, setGeminiModel] = useState(savedGeminiModel());
   const [prompt, setPrompt] = useState(initialPrompt);
   const [aspectRatio, setAspectRatio] = useState(savedAspect());
-  const [resolution, setResolution] = useState(savedResolution());
+  const [resolution, setResolution] = useState<DesignImageResolution>(() => (
+    normalizeDesignImageResolution(
+      findDesignImageModel(savedEngine(), savedGeminiModel()),
+      savedResolution(),
+    )
+  ));
   const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
   const [sequential, setSequential] = useState<'disabled' | 'auto'>('disabled');
   const [count, setCount] = useState(1);
@@ -910,9 +1151,39 @@ const UnifiedAIModal: React.FC<{
   const [refineModel, setRefineModel] = useState(savedRefineModel());
   const persistedPromptRef = useRef(initialPrompt);
   const materials = useMemo(() => assetToMaterials(asset), [asset]);
-  const maxRefs = engine === 'nanobanana' ? 6 : 14;
+  const generationModel = useMemo(
+    () => findDesignImageModel(engine, geminiModel),
+    [engine, geminiModel],
+  );
+  const maxRefs = generationModel.maxReferences;
+  const generatedImageCount = engine === 'doubao' && sequential === 'auto' ? count : 1;
+  const finalAspectRatio = standardTurnaroundAspectRatio(asset.assetType, aspectRatio, standardTurnaround);
+  const imageCreditParams = useMemo(() => designImageCreditParams({
+    imageCount: generatedImageCount,
+    model: engine === 'nanobanana' ? geminiModel : 'doubao-seedream',
+    resolution,
+    aspectRatio: finalAspectRatio,
+  }), [engine, finalAspectRatio, geminiModel, generatedImageCount, resolution]);
 
-  useEffect(() => { if (engine === 'nanobanana') { setSequential('disabled'); setCount(1); } }, [engine]);
+  useEffect(() => {
+    setResolution(current => normalizeDesignImageResolution(generationModel, current));
+    if (!generationModel.supportsImageToImageBatch) {
+      setSequential('disabled');
+      setCount(1);
+    }
+    setSelectedRefs(current => {
+      if (current.size <= generationModel.maxReferences) return current;
+      return new Set(Array.from(current).slice(0, generationModel.maxReferences));
+    });
+  }, [generationModel]);
+
+  const selectGenerationModel = (modelId: string) => {
+    const nextModel = DESIGN_IMAGE_MODEL_OPTIONS.find(option => option.id === modelId);
+    if (!nextModel) return;
+    setEngine(nextModel.engine);
+    setGeminiModel(nextModel.geminiModel);
+    setResolution(current => normalizeDesignImageResolution(nextModel, current));
+  };
 
   const persistPrompt = useCallback(async (newPrompt: string) => {
     const text = (newPrompt || '').trim();
@@ -957,87 +1228,205 @@ const UnifiedAIModal: React.FC<{
 
   return (
     <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={handleClose}>
-      <div className="w-full max-w-4xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 relative max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
+      <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom relative max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-6 pb-4">
           <div><h3 className="text-lg font-bold text-n800">AI 生成素材 - {asset.name}</h3><p className="text-xs text-n300 mt-1">基于剧本内容智能生成，支持风格预设和参考图。提示词会自动保存。</p></div>
           <button onClick={handleClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button>
         </div>
 
-        {/* Prompt + Refine */}
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold text-n100 uppercase">提示词</span>
-            <div className="flex items-center gap-1.5">
-              <select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="text-[10px] bg-n0 border border-n40 rounded px-1.5 py-0.5 text-n300">
-                <option value={AiModel.Gemini}>Gemini</option><option value={AiModel.DeepseekChat}>DeepSeek</option>
-              </select>
-              <button onClick={handleRefine} disabled={isRefining} className="flex items-center gap-1 px-2 py-1 rounded text-[11px] bg-primary-light border border-primary text-primary hover:bg-primary-light transition-all disabled:opacity-50">
-                {isRefining ? <Loader size={10} className="animate-spin" /> : <Wand2 size={10} />} AI 润色
-              </button>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5 space-y-5">
+          {/* Existing generated images / references */}
+          <section>
+            <div className="flex items-center justify-between text-[11px] text-n100 mb-2">
+              <span className="font-bold uppercase">生成图 / 参考图 (最多 {maxRefs})</span>
+              <span className={selectedRefs.size > 0 ? 'text-success font-semibold' : ''}>{selectedRefs.size}/{maxRefs}</span>
             </div>
-          </div>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={4}
-            className="w-full bg-n0 border border-n40 rounded-md text-sm text-n800 p-3 focus:outline-none focus:border-primary resize-none" placeholder="描述你想要生成的内容..." />
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            <span className="text-[10px] text-n100 self-center mr-1">风格：</span>
-            {STYLE_PRESETS.map(s => (
-              <button key={s.id} onClick={() => appendStyle(s.id, s.suffix)}
-                className={`text-[10px] px-2 py-1 rounded border transition-colors ${activeStyle === s.id ? 'bg-primary text-white border-primary' : 'bg-n0 text-n300 border-n40 hover:border-primary hover:text-n800'}`}>{s.label}</button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="col-span-1 space-y-3 border border-n40 rounded-md p-4">
-            <span className="text-[11px] font-bold text-n100 uppercase">引擎</span>
-            <div className="flex gap-2">
-              <button onClick={() => setEngine('nanobanana')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}>化神进阶</button>
-              <button onClick={() => setEngine('doubao')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}>筑基境界</button>
-            </div>
-            {engine === 'nanobanana' && (
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-n100 uppercase">模型</span>
-                {[{ id: 'gemini-2.5-flash-image', label: '化神1阶', desc: '快速' }, { id: 'gemini-3-pro-image-preview', label: '化神2阶', desc: '高质量' }].map(m => (
-                  <label key={m.id} className={`flex items-center gap-2 text-xs p-2 rounded border cursor-pointer ${geminiModel === m.id ? 'bg-primary-light border-primary text-primary' : 'border-n40 text-n300'}`}>
-                    <input type="radio" name="gm" value={m.id} checked={geminiModel === m.id} onChange={() => setGeminiModel(m.id)} /><span className="font-semibold">{m.label}</span><span className="text-[10px] text-n100">({m.desc})</span>
-                  </label>
-                ))}
+            {materials.length === 0 ? (
+              <div className="border border-dashed border-n40 rounded-md text-center py-6 text-xs text-n100">暂无素材</div>
+            ) : (
+              <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2 max-h-44 overflow-y-auto pr-1">
+                {materials.map(material => {
+                  const active = selectedRefs.has(material.id);
+                  return (
+                    <button
+                      key={material.id}
+                      type="button"
+                      onClick={() => toggleRef(material.id)}
+                      title={active ? '取消参考图' : '设为参考图'}
+                      className={`relative aspect-square rounded-lg overflow-hidden border transition-colors ${active ? 'border-success ring-2 ring-success/40' : 'border-n40 hover:border-primary'}`}
+                    >
+                      <img
+                        src={secureMediaUrl(material.thumbnail || material.url) || ''}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
+                      {active && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-success/25">
+                          <Check className="h-5 w-5 text-white drop-shadow" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-n100 uppercase">输出</span>
-              <div className="grid grid-cols-2 gap-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => (<button key={r} onClick={() => setAspectRatio(r)} className={`py-1 rounded text-[11px] border ${aspectRatio === r ? 'bg-primary text-white font-semibold' : 'border-n40 text-n300 hover:text-n800'}`}>{r}</button>))}</div>
-              <select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select>
+          </section>
+
+          {/* Prompt + refine */}
+          <section>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold text-n100 uppercase">提示词</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleRefine}
+                  disabled={isRefining}
+                  className="flex h-8 items-center gap-1.5 rounded-l-md border border-primary bg-primary-light px-3 text-xs font-medium text-primary hover:bg-primary-light transition-all disabled:opacity-50"
+                >
+                  {isRefining ? <Loader size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                  AI 润色
+                </button>
+                <label className="relative -ml-px">
+                  <span className="sr-only">选择润色模型</span>
+                  <select
+                    value={refineModel}
+                    onChange={event => setRefineModel(event.target.value as AiModel)}
+                    className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                  >
+                    <option value={AiModel.Gemini}>化神 · Gemini 2.5 Flash</option>
+                    <option value={AiModel.DeepseekChat}>金丹 · DeepSeek Chat</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
+                </label>
+              </div>
             </div>
+            <textarea
+              value={prompt}
+              onChange={event => setPrompt(event.target.value)}
+              rows={5}
+              className="w-full bg-n0 border border-n40 rounded-md text-sm text-n800 p-3 focus:outline-none focus:border-primary resize-y min-h-[132px]"
+              placeholder="描述你想要生成的内容..."
+            />
+          </section>
+
+          {/* Styles and generation parameters */}
+          <section className="border-y border-n40 py-3">
+            <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-3">
+              <div className="min-w-0">
+                <span className="mb-1.5 block text-[11px] font-bold text-n100 uppercase">风格</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {STYLE_PRESETS.map(style => (
+                    <button
+                      key={style.id}
+                      type="button"
+                      onClick={() => appendStyle(style.id, style.suffix)}
+                      className={`h-8 px-3 rounded-md border text-xs transition-colors ${activeStyle === style.id ? 'bg-primary text-white border-primary' : 'bg-n0 text-n300 border-n40 hover:border-primary hover:text-n800'}`}
+                    >
+                      {style.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+                <label className="relative min-w-[255px]">
+                  <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
+                  <select
+                    value={generationModel.id}
+                    onChange={event => selectGenerationModel(event.target.value)}
+                    className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                  >
+                    {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
+                      <option key={option.id} value={option.id}>{option.label} · {option.runtime}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 bottom-2.5 h-4 w-4 text-n300" />
+                </label>
+
+                <label className="relative w-[100px]">
+                  <span className="mb-1.5 block text-[10px] font-medium text-n300">比例</span>
+                  <select
+                    value={aspectRatio}
+                    onChange={event => setAspectRatio(event.target.value)}
+                    className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                  >
+                    {['1:1', '3:4', '4:3', '9:16', '16:9'].map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 bottom-2.5 h-4 w-4 text-n300" />
+                </label>
+
+                <label className="relative w-[90px]">
+                  <span className="mb-1.5 block text-[10px] font-medium text-n300">尺寸</span>
+                  <select
+                    value={resolution}
+                    onChange={event => setResolution(event.target.value as DesignImageResolution)}
+                    className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                  >
+                    {generationModel.resolutions.map(size => <option key={size} value={size}>{size}</option>)}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 bottom-2.5 h-4 w-4 text-n300" />
+                </label>
+
+                {generationModel.supportsImageToImageBatch && (
+                  <div className="min-w-[235px]">
+                    <span className="mb-1.5 block text-[10px] font-medium text-n300">生成方式</span>
+                    <div className="flex h-9 items-center gap-2">
+                      <label className="inline-flex h-9 items-center gap-2 rounded-md border border-n40 px-3 text-xs text-n700">
+                        <input
+                          type="checkbox"
+                          checked={sequential === 'auto'}
+                          onChange={event => setSequential(event.target.checked ? 'auto' : 'disabled')}
+                          className="accent-primary"
+                        />
+                        图生图
+                      </label>
+                      {sequential === 'auto' && (
+                        <>
+                          <label className="inline-flex items-center gap-1 text-xs text-n700">
+                            <span>张数</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={15}
+                              value={count}
+                              onChange={event => setCount(Math.min(15, Math.max(1, +event.target.value)))}
+                              className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
+                            />
+                          </label>
+                          <span className="whitespace-nowrap text-[10px] text-n100">参考图+生成≤15</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {supportsStandardTurnaround(asset.assetType) && (
-              <label className="flex items-center gap-2 text-xs text-n700">
+              <label className="mt-3 inline-flex items-center gap-2 text-xs text-n700">
                 <input
                   type="checkbox"
                   checked={standardTurnaround}
-                  onChange={e => setStandardTurnaround(e.target.checked)}
-                  className="accent-indigo-500"
+                  onChange={event => setStandardTurnaround(event.target.checked)}
+                  className="accent-primary"
                 />
                 {standardTurnaroundLabel(asset.assetType)}
               </label>
             )}
-            {engine === 'doubao' && (
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs text-n700"><input type="checkbox" checked={sequential === 'auto'} onChange={e => setSequential(e.target.checked ? 'auto' : 'disabled')} /> 关联组图</label>
-                {sequential === 'auto' && <div className="flex items-center gap-2 text-xs text-n700"><span>张数</span><input type="number" min={1} max={15} value={count} onChange={e => setCount(Math.min(15, Math.max(1, +e.target.value)))} className="w-16 bg-n0 border border-n40 rounded px-2 py-1" /><span className="text-[10px] text-n100">参考图+生成≤15</span></div>}
-              </div>
-            )}
-          </div>
-          <div className="col-span-2">
-            <div className="flex items-center justify-between text-[11px] text-n100 mb-2"><span className="font-bold uppercase">参考图 (最多 {maxRefs})</span><span className={selectedRefs.size > 0 ? "text-success font-semibold" : ""}>{selectedRefs.size}/{maxRefs}</span></div>
-            {materials.length === 0 ? <div className="border border-dashed border-n40 rounded-md text-center py-6 text-xs text-n100">暂无素材</div> : (
-              <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">{materials.map(m => { const a = selectedRefs.has(m.id); return (<button key={m.id} onClick={() => toggleRef(m.id)} className={`relative aspect-square rounded-lg overflow-hidden border ${a ? 'border-success ring-2 ring-success/40' : 'border-n40'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} loading="lazy" className="w-full h-full object-cover" />{a && <div className="absolute inset-0 bg-success/30" />}</button>); })}</div>
-            )}
-          </div>
+          </section>
         </div>
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
-          <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button onClick={() => { if (!prompt.trim()) { crmMessage.error('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: withStandardTurnaround(prompt, asset.assetType, standardTurnaround), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio: standardTurnaroundAspectRatio(asset.assetType, aspectRatio, standardTurnaround), resolution, sequential, count }); }}
-            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">开始生成</button>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-n40 px-6 py-4">
+          <InlineCreditEstimate
+            featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
+            params={imageCreditParams}
+            fallbackCost={generatedImageCount * DESIGN_CREDIT_DEFAULTS.imageGenerationPerImage}
+          />
+          <div className="flex items-center gap-3">
+            <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+            <button onClick={() => { if (!prompt.trim()) { crmMessage.error('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: withStandardTurnaround(prompt, asset.assetType, standardTurnaround), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio: finalAspectRatio, resolution, sequential, count }); }}
+              className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">开始生成</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1062,6 +1451,12 @@ const BatchGenerateModal: React.FC<{
   const charCount = assets.filter(a => a.assetType === 'character' && checked.has(a.assetId)).length;
   const sceneCount = assets.filter(a => a.assetType === 'scene' && checked.has(a.assetId)).length;
   const propCount = assets.filter(a => a.assetType === 'prop' && checked.has(a.assetId)).length;
+  const batchCreditParams = useMemo(() => designImageCreditParams({
+    imageCount: checked.size,
+    model: engine === 'nanobanana' ? geminiModel : 'doubao-seedream',
+    resolution,
+    aspectRatio,
+  }), [aspectRatio, checked.size, engine, geminiModel, resolution]);
 
   const grouped = useMemo(() => {
     const g: Record<string, AssetItem[]> = { character: [], scene: [], prop: [] };
@@ -1142,17 +1537,121 @@ const BatchGenerateModal: React.FC<{
             </div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button onClick={() => { if (!checked.size) { crmMessage.error('请至少选择一个资产'); return; } onSubmit({ assetIds: Array.from(checked), engine, geminiModel, style, aspectRatio, resolution, threeView, refineModel }); }}
-            disabled={!checked.size} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50">
-            开始批量生成 ({checked.size} 项)
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">
+          {checked.size > 0 ? (
+            <InlineCreditEstimate
+              featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
+              params={batchCreditParams}
+              fallbackCost={checked.size * DESIGN_CREDIT_DEFAULTS.imageGenerationPerImage}
+            />
+          ) : (
+            <span className="text-xs text-n100">请选择要生成的资产</span>
+          )}
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+            <button onClick={() => { if (!checked.size) { crmMessage.error('请至少选择一个资产'); return; } onSubmit({ assetIds: Array.from(checked), engine, geminiModel, style, aspectRatio, resolution, threeView, refineModel }); }}
+              disabled={!checked.size} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50">
+              开始批量生成 ({checked.size} 项)
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
+/* ======================== Image operation controls ======================== */
+const OperationMaterialPicker: React.FC<{
+  materials: ModalMaterial[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+  emptyLabel?: string;
+}> = ({ materials, selectedId, onSelect, emptyLabel = '暂无可用素材' }) => {
+  const selected = materials.find(material => material.id === selectedId) || materials[0];
+
+  return (
+    <div className="space-y-3">
+      <div className="h-64 overflow-hidden rounded-2xl border border-n40 bg-n30 flex items-center justify-center">
+        {selected ? (
+          <img
+            src={secureMediaUrl(selected.url) || ''}
+            alt={selected.name || '当前素材'}
+            className="h-full w-full object-contain"
+          />
+        ) : (
+          <span className="text-xs text-n100">{emptyLabel}</span>
+        )}
+      </div>
+      {materials.length > 0 && (
+        <div>
+          <span className="mb-2 block text-[11px] font-semibold text-n300">选择素材</span>
+          <div className="grid max-h-28 grid-cols-5 gap-2 overflow-y-auto p-0.5">
+            {materials.map(material => {
+              const active = selected?.id === material.id;
+              return (
+                <button
+                  key={material.id}
+                  type="button"
+                  aria-label={`选择素材 ${material.name || material.id}`}
+                  aria-pressed={active}
+                  onClick={() => onSelect(material.id)}
+                  className={`aspect-square min-w-0 overflow-hidden rounded-lg border-2 bg-n30 transition-colors ${
+                    active
+                      ? 'border-success ring-2 ring-success/30'
+                      : 'border-n40 hover:border-n100'
+                  }`}
+                >
+                  <img
+                    src={secureMediaUrl(material.thumbnail || material.url) || ''}
+                    alt={material.name || '素材缩略图'}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const DiscreteChoiceControl: React.FC<{
+  label: string;
+  value: number;
+  options: Array<{ value: number; label: string; title?: string }>;
+  onChange: (value: number) => void;
+}> = ({ label, value, options, onChange }) => (
+  <div className="space-y-2">
+    <span className="block text-[11px] font-semibold text-n300">{label}</span>
+    <div
+      className="grid overflow-hidden rounded-lg border border-n40 bg-n0"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+    >
+      {options.map((option, index) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            title={option.title}
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+            className={`min-h-9 px-2 text-[11px] font-medium transition-colors ${
+              index > 0 ? 'border-l border-n40' : ''
+            } ${
+              active
+                ? 'bg-primary text-white'
+                : 'bg-n0 text-n500 hover:bg-n20 hover:text-n800'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+);
 
 /* ======================== CameraModal ======================== */
 const CameraModal: React.FC<{
@@ -1168,41 +1667,79 @@ const CameraModal: React.FC<{
   const [seed, setSeed] = useState(randomSeed());
   const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
   const cur = materials.find(m => m.id === selId) || materials[0];
+  const creditParams = useMemo(() => designOperationCreditParams('angle_adjustment'), []);
   const promptExamples = ["镜头向前移动", "镜头向左移动", "转为俯视", "转为广角", "转为特写"];
-  const Slider: React.FC<{ label: string; values: number[]; value: number; onChange: (v: number) => void }> = ({ label, values, value, onChange }) => {
-    const idx = values.indexOf(value); const di = idx === -1 ? 0 : idx;
-    return (<div className="space-y-1"><div className="flex justify-between text-[11px] text-n300"><span>{label}</span><span className="text-n800 font-semibold">{value}</span></div><input type="range" min={0} max={values.length - 1} step={1} value={di} onChange={e => onChange(values[+e.target.value])} className="w-full accent-indigo-500" /></div>);
-  };
   return (
     <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
       <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-n800">角度调整 - {asset.name}</h3></div><button onClick={onClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button></div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="space-y-3">
-            <div className="rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">{cur ? <img src={secureMediaUrl(cur.url) || ''} className="w-full h-full object-contain" /> : <span className="text-xs text-n100">无</span>}</div>
-            <div className="grid grid-cols-5 gap-2">{materials.map(m => (<button key={m.id} onClick={() => setSelId(m.id)} className={`aspect-square rounded-lg overflow-hidden border ${selId === m.id ? 'border-success ring-2 ring-success/40' : 'border-n40'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} className="w-full h-full object-cover" /></button>))}</div>
-          </div>
+          <OperationMaterialPicker materials={materials} selectedId={cur?.id} onSelect={setSelId} />
           <div className="space-y-4">
-            <div className="bg-n30 border border-n40 rounded-md p-4 space-y-3">
-              <Slider label="水平旋转 (°)" values={[-90, -45, 0, 45, 90]} value={rotate} onChange={setRotate} />
-              <Slider label="推进距离" values={[0, 5, 10]} value={move} onChange={setMove} />
-              <Slider label="垂直角度" values={[-1, 0, 1]} value={vertical} onChange={setVertical} />
-              <label className="flex items-center gap-2 text-xs text-n700"><input type="checkbox" checked={wideAngle} onChange={e => setWideAngle(e.target.checked)} /> 广角</label>
+            <div className="bg-n30 border border-n40 rounded-lg p-4 space-y-4">
+              <DiscreteChoiceControl
+                label="水平旋转"
+                value={rotate}
+                onChange={setRotate}
+                options={[
+                  { value: -90, label: '左转 90°' },
+                  { value: -45, label: '左转 45°' },
+                  { value: 0, label: '正面' },
+                  { value: 45, label: '右转 45°' },
+                  { value: 90, label: '右转 90°' },
+                ]}
+              />
+              <DiscreteChoiceControl
+                label="推进距离"
+                value={move}
+                onChange={setMove}
+                options={[
+                  { value: 0, label: '不推进' },
+                  { value: 5, label: '推进 5' },
+                  { value: 10, label: '推进 10' },
+                ]}
+              />
+              <DiscreteChoiceControl
+                label="垂直视角"
+                value={vertical}
+                onChange={setVertical}
+                options={[
+                  { value: -1, label: '俯视' },
+                  { value: 0, label: '平视' },
+                  { value: 1, label: '仰视' },
+                ]}
+              />
+              <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-n40 bg-n0 px-3 text-xs text-n700 hover:bg-n20">
+                <input type="checkbox" checked={wideAngle} onChange={e => setWideAngle(e.target.checked)} className="accent-primary" />
+                使用广角镜头
+              </label>
             </div>
             <textarea rows={2} value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-sm text-n800 p-3 resize-none" placeholder="自定义提示词..." />
             <div className="flex flex-wrap gap-1">{promptExamples.map((ex, i) => (<button key={i} onClick={() => setCustomPrompt(ex)} className="text-[10px] px-2 py-1 bg-n0 text-n300 rounded border border-n40 hover:bg-primary hover:text-white">{ex}</button>))}</div>
-            <div className="flex items-center gap-2 text-xs text-n700"><span>种子</span><input type="number" value={seed} onChange={e => setSeed(+e.target.value)} className="w-28 bg-n0 border border-n40 rounded px-2 py-1" /><button onClick={() => setSeed(randomSeed())} className="px-2 py-1 rounded border border-n40 hover:text-n800">随机</button></div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-n700">
+              <span className="font-semibold">种子</span>
+              <input type="number" value={seed} onChange={e => setSeed(+e.target.value)} className="w-32 bg-n0 border border-n40 rounded-lg px-2 py-1.5" />
+              <button type="button" onClick={() => setSeed(randomSeed())} className="px-3 py-1.5 rounded-lg border border-n40 hover:bg-n20 hover:text-n800">随机</button>
+              <span className="min-w-52 flex-1 text-[11px] leading-5 text-n100">相同种子配合相同参数，更容易得到构图相近的结果；随机种子用于探索新的构图。</span>
+            </div>
             <GpuNodeSelector onSelectionChange={setGpuSelection} />
           </div>
         </div>
-        <div className="flex justify-end gap-3 pt-4 border-t border-n40">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button
-            onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed, gpu: gpuSelection }); }}
-            disabled={!cur || !gpuSelection?.usable}
-            title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
-            className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >生成新角度</button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">
+          <InlineCreditEstimate
+            featureKey={DESIGN_CREDIT_FEATURES.angleAdjustment}
+            params={creditParams}
+            fallbackCost={DESIGN_CREDIT_DEFAULTS.angleAdjustment}
+          />
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+            <button
+              onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed, gpu: gpuSelection }); }}
+              disabled={!cur || !gpuSelection?.usable}
+              title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+              className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >生成新角度</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1217,23 +1754,42 @@ const ProcessModal: React.FC<{
   const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
   const cur = materials.find(m => m.id === selId) || materials[0];
   const info = workflow === 'upscale_hd' ? { title: '高清放大', desc: 'AI放大到4K' } : { title: '去水印', desc: '智能移除水印' };
+  const creditParams = useMemo(() => designOperationCreditParams('upscale_hd'), []);
   return (
     <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-      <div className="w-full max-w-3xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-n800">{info.title} - {asset.name}</h3><p className="text-xs text-n300 mt-1">{info.desc}</p></div><button onClick={onClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button></div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">{cur ? <img src={secureMediaUrl(cur.url) || ''} className="w-full h-full object-contain" /> : <span className="text-xs text-n100">无</span>}</div>
-          <div><span className="text-[11px] font-bold text-n100 uppercase mb-2 block">选择素材</span><div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto p-2 bg-n0 rounded-lg border border-n40">{materials.map(m => (<button key={m.id} onClick={() => setSelId(m.id)} className={`relative aspect-square rounded-lg overflow-hidden border-2 ${selId === m.id ? 'border-primary ring-2 ring-primary/30' : 'border-transparent hover:border-n40'}`}><img src={secureMediaUrl(m.thumbnail || m.url) || ''} className="w-full h-full object-cover" />{selId === m.id && <div className="absolute inset-0 bg-primary-light flex items-center justify-center"><Check className="w-6 h-6 text-primary" /></div>}</button>))}</div></div>
+          <OperationMaterialPicker materials={materials} selectedId={cur?.id} onSelect={setSelId} />
+          <div className="space-y-4">
+            <div className="rounded-lg border border-n40 bg-n30 p-4">
+              <h4 className="text-xs font-bold text-n700">{info.title}</h4>
+              <p className="mt-2 text-xs leading-5 text-n300">
+                {workflow === 'upscale_hd'
+                  ? '对左侧选中的素材进行高清重建和细节增强，输出结果将作为新的素材版本保存。'
+                  : '对左侧选中的素材执行水印清理，输出结果将作为新的素材版本保存。'}
+              </p>
+            </div>
+            <GpuNodeSelector onSelectionChange={setGpuSelection} />
+          </div>
         </div>
-        <GpuNodeSelector onSelectionChange={setGpuSelection} />
-        <div className="flex justify-end gap-3 pt-4 border-t border-n40">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-          <button
-            onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ materialUrl: cur.url, gpu: gpuSelection }); }}
-            disabled={!cur || !gpuSelection?.usable}
-            title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
-            className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${workflow === 'upscale_hd' ? 'bg-primary hover:bg-primary-hover' : 'bg-primary hover:bg-primary-hover'}`}
-          >开始处理</button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">
+          {workflow === 'upscale_hd' ? (
+            <InlineCreditEstimate
+              featureKey={DESIGN_CREDIT_FEATURES.upscaleHd}
+              params={creditParams}
+              fallbackCost={DESIGN_CREDIT_DEFAULTS.upscaleHd}
+            />
+          ) : <span />}
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
+            <button
+              onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ materialUrl: cur.url, gpu: gpuSelection }); }}
+              disabled={!cur || !gpuSelection?.usable}
+              title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+              className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${workflow === 'upscale_hd' ? 'bg-primary hover:bg-primary-hover' : 'bg-primary hover:bg-primary-hover'}`}
+            >开始处理</button>
+          </div>
         </div>
       </div>
     </div>

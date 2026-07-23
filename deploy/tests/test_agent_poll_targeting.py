@@ -2,7 +2,13 @@ import json
 
 import pytest
 
-from agent_routes import _claim_next_agent_task, _preferred_agent_id_from_task_info
+from agent_routes import (
+    _claim_next_agent_task,
+    _legacy_file_id_from_download_url,
+    _preferred_agent_id_from_task_info,
+    _scope_agent_file_download_urls,
+    _task_references_legacy_file,
+)
 
 
 class _RedisConfig:
@@ -49,6 +55,43 @@ def test_preferred_agent_id_from_task_info_ignores_plain_node_id():
     }
 
     assert _preferred_agent_id_from_task_info(task_info) == ""
+
+
+def test_agent_file_download_urls_are_scoped_to_claimed_task():
+    files = [
+        {
+            "param": "image_path",
+            "filename": "input.png",
+            "url": "https://mecha.one/api/files/file_input123/download",
+        },
+        {
+            "param": "mask",
+            "filename": "mask.png",
+            "url": "https://assets.example.test/mask.png",
+        },
+    ]
+
+    scoped = _scope_agent_file_download_urls("task_1", files)
+
+    assert scoped[0]["url"] == "/api/agent/tasks/task_1/files/file_input123"
+    assert scoped[1]["url"] == "https://assets.example.test/mask.png"
+    assert files[0]["url"] == "https://mecha.one/api/files/file_input123/download"
+
+
+def test_agent_file_scope_only_accepts_task_declared_legacy_files():
+    task_data = {
+        "agent_files": [
+            {
+                "filename": "input.webp",
+                "url": "/api/files/file_allowed/download",
+            }
+        ]
+    }
+
+    assert _legacy_file_id_from_download_url("/api/files/file_allowed/download") == "file_allowed"
+    assert _task_references_legacy_file(task_data, "file_allowed") is True
+    assert _task_references_legacy_file(task_data, "file_other") is False
+    assert _legacy_file_id_from_download_url("https://example.test/file_allowed") == ""
 
 
 @pytest.mark.asyncio

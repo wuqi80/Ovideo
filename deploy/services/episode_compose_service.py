@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -57,6 +58,139 @@ def _audio_urls_from_row(row: Dict[str, Any]) -> List[str]:
         seen.add(url)
         urls.append(url)
     return urls
+
+
+def _ordered_audio_segments_from_row(row: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw = row.get("audio_segments")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            raw = []
+    if not isinstance(raw, list):
+        return []
+
+    segments: List[Dict[str, Any]] = []
+    for index, value in enumerate(raw):
+        if not isinstance(value, dict):
+            continue
+        kind = value.get("kind")
+        if kind not in {"speech", "silence"}:
+            continue
+        try:
+            sequence_index = int(value.get("sequenceIndex", value.get("sequence_index", index)))
+        except (TypeError, ValueError):
+            sequence_index = index
+        try:
+            duration_ms = max(
+                0,
+                int(float(value.get("durationMs", value.get("duration_ms", 0)) or 0)),
+            )
+        except (TypeError, ValueError):
+            duration_ms = 0
+        audio_url = value.get("audioUrl", value.get("audio_url"))
+        segments.append(
+            {
+                "segment_id": str(value.get("segmentId", value.get("segment_id", f"segment-{index + 1}"))),
+                "kind": kind,
+                "sequence_index": sequence_index,
+                "audio_url": str(audio_url) if audio_url else None,
+                "duration_ms": duration_ms,
+            }
+        )
+    return sorted(segments, key=lambda segment: segment["sequence_index"])
+
+
+def _audio_ms_from_segments(segments: List[Dict[str, Any]]) -> int:
+    return sum(max(0, int(segment.get("duration_ms") or 0)) for segment in segments)
+
+
+def _finite_number(value: Any, fallback: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+        return parsed if parsed == parsed else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _global_audio_timeline(
+    row: Dict[str, Any],
+    source_duration_ms: int,
+    episode_duration_ms: int,
+) -> Dict[str, Any]:
+    params = row.get("generation_params") or {}
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except (TypeError, ValueError):
+            params = {}
+    timeline = params.get("timeline") if isinstance(params, dict) else {}
+    if not isinstance(timeline, dict):
+        timeline = {}
+
+    source_duration_ms = max(100, int(source_duration_ms or episode_duration_ms or 100))
+    source_offset_ms = max(
+        0,
+        min(
+            int(_finite_number(timeline.get("sourceOffsetMs", timeline.get("source_offset_ms")))),
+            source_duration_ms - 100,
+        ),
+    )
+    maximum_duration_ms = max(100, source_duration_ms - source_offset_ms)
+    default_duration_ms = min(maximum_duration_ms, max(100, episode_duration_ms))
+    duration_ms = max(
+        100,
+        min(
+            int(_finite_number(
+                timeline.get("durationMs", timeline.get("duration_ms")),
+                default_duration_ms,
+            )),
+            maximum_duration_ms,
+        ),
+    )
+    start_ms = max(
+        0,
+        min(
+            int(_finite_number(timeline.get("startMs", timeline.get("start_ms")))),
+            max(0, episode_duration_ms - duration_ms),
+        ),
+    )
+    is_bgm = row.get("track_type") == "bgm"
+    fade_in_ms = (
+        max(
+            0,
+            min(
+                int(_finite_number(timeline.get("fadeInMs", timeline.get("fade_in_ms")))),
+                duration_ms,
+            ),
+        )
+        if is_bgm
+        else 0
+    )
+    fade_out_ms = (
+        max(
+            0,
+            min(
+                int(_finite_number(timeline.get("fadeOutMs", timeline.get("fade_out_ms")))),
+                duration_ms - fade_in_ms,
+            ),
+        )
+        if is_bgm
+        else 0
+    )
+    default_volume = 0.35 if is_bgm else 1.0
+    volume = max(
+        0.0,
+        min(_finite_number(timeline.get("volume"), default_volume), 2.0),
+    )
+    return {
+        "start_ms": start_ms,
+        "source_offset_ms": source_offset_ms,
+        "duration_ms": duration_ms,
+        "fade_in_ms": fade_in_ms,
+        "fade_out_ms": fade_out_ms,
+        "volume": volume,
+    }
 
 
 async def _run(cmd: List[str]) -> tuple[int, str, str]:
@@ -134,6 +268,113 @@ async def _probe_video_size(path: str) -> Optional[Tuple[int, int]]:
     return None
 
 
+async def _mix_global_audio_tracks(
+    episode_id: str,
+    video_path: str,
+    video_duration: float,
+    tmp: str,
+) -> None:
+    rows = await EpisodeComposeDAO.list_audio_tracks(episode_id)
+    prepared_tracks: List[Dict[str, Any]] = []
+    episode_duration_ms = max(100, int(video_duration * 1000))
+    for row in rows:
+        audio_path = _local(row.get("audio_url"))
+        if not audio_path or not os.path.isfile(audio_path):
+            continue
+        source_duration_ms = int(row.get("duration_ms") or 0)
+        if source_duration_ms <= 0:
+            source_duration_ms = int((await _probe_dur(audio_path)) * 1000)
+        prepared_tracks.append(
+            {
+                **row,
+                "_audio_path": audio_path,
+                "_timeline": _global_audio_timeline(
+                    row,
+                    source_duration_ms,
+                    episode_duration_ms,
+                ),
+            }
+        )
+    if not prepared_tracks:
+        return
+
+    input_args: List[str] = []
+    filters = [
+        "[0:a]aresample=48000,"
+        "aformat=sample_fmts=fltp:sample_rates=48000:"
+        "channel_layouts=stereo[base]"
+    ]
+    mix_labels = ["[base]"]
+    for index, track in enumerate(prepared_tracks, start=1):
+        input_args.extend(["-i", track["_audio_path"]])
+        timeline = track["_timeline"]
+        duration_seconds = timeline["duration_ms"] / 1000.0
+        filter_steps = [
+            f"[{index}:a]atrim=start={timeline['source_offset_ms'] / 1000.0:.3f}:"
+            f"duration={duration_seconds:.3f}",
+            "asetpts=PTS-STARTPTS",
+        ]
+        if timeline["fade_in_ms"] > 0:
+            filter_steps.append(
+                f"afade=t=in:st=0:d={timeline['fade_in_ms'] / 1000.0:.3f}"
+            )
+        if timeline["fade_out_ms"] > 0:
+            filter_steps.append(
+                f"afade=t=out:"
+                f"st={max(0.0, duration_seconds - timeline['fade_out_ms'] / 1000.0):.3f}:"
+                f"d={timeline['fade_out_ms'] / 1000.0:.3f}"
+            )
+        filter_steps.extend(
+            [
+                f"volume={timeline['volume']:.3f}",
+                f"adelay=delays={timeline['start_ms']}:all=1",
+                f"aformat=sample_fmts=fltp:sample_rates=48000:"
+                f"channel_layouts=stereo[global{index}]",
+            ]
+        )
+        filters.append(",".join(filter_steps))
+        mix_labels.append(f"[global{index}]")
+
+    filters.append(
+        f"{''.join(mix_labels)}"
+        f"amix=inputs={len(mix_labels)}:duration=first:dropout_transition=0:"
+        "normalize=0[a]"
+    )
+    mixed_path = os.path.join(tmp, "final_with_global_audio.mp4")
+    rc, _out, err = await _run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            video_path,
+            *input_args,
+            "-filter_complex",
+            ";".join(filters),
+            "-map",
+            "0:v",
+            "-map",
+            "[a]",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-t",
+            f"{video_duration:.3f}",
+            mixed_path,
+        ]
+    )
+    if rc != 0:
+        raise RuntimeError(f"Global audio mix failed: {err[:200]}")
+    os.replace(mixed_path, video_path)
+
+
 def _even(value: int) -> int:
     return max(2, value if value % 2 == 0 else value - 1)
 
@@ -190,7 +431,14 @@ async def _list_shot_takes(episode_id: str) -> List[Dict[str, Any]]:
 
         item_id = row["item_id"]
         if item_id not in shots:
-            audio_urls = _audio_urls_from_row(row)
+            audio_segments = _ordered_audio_segments_from_row(row)
+            ordered_audio_urls = [
+                segment["audio_url"]
+                for segment in audio_segments
+                if segment["kind"] == "speech" and segment.get("audio_url")
+            ]
+            audio_urls = ordered_audio_urls or _audio_urls_from_row(row)
+            audio_ms = _audio_ms_from_segments(audio_segments) or row.get("audio_ms") or 0
             shots[item_id] = {
                 "item_id": item_id,
                 "sort_order": row["sort_order"],
@@ -198,7 +446,9 @@ async def _list_shot_takes(episode_id: str) -> List[Dict[str, Any]]:
                 "dialogue": row.get("dialogue") or "",
                 "audio_url": audio_urls[0] if audio_urls else None,
                 "audio_urls": audio_urls,
-                "audio_ms": row.get("audio_ms") or 0,
+                "audio_segments": audio_segments,
+                "sfx_audio_url": row.get("sfx_audio_url"),
+                "audio_ms": audio_ms,
                 "takes": [],
             }
             order.append(item_id)
@@ -237,6 +487,8 @@ async def _get_shots(episode_id: str, selections: Optional[Dict[str, str]] = Non
                 "video_url": chosen["video_url"],
                 "audio_url": shot.get("audio_url"),
                 "audio_urls": shot.get("audio_urls") or ([shot["audio_url"]] if shot.get("audio_url") else []),
+                "audio_segments": shot.get("audio_segments") or [],
+                "sfx_audio_url": shot.get("sfx_audio_url"),
                 "audio_ms": shot.get("audio_ms") or 0,
             }
         )
@@ -284,22 +536,51 @@ async def _compose(
             idx += 1
             clip_path = os.path.join(tmp, f"clip_{idx:03d}.mp4")
             video_duration = await _probe_dur(video_path)
+            audio_segments = row.get("audio_segments") or []
+            ordered_parts: List[Dict[str, Any]] = []
+            for segment in audio_segments:
+                duration_ms = max(0, int(segment.get("duration_ms") or 0))
+                if segment.get("kind") == "silence":
+                    if duration_ms > 0:
+                        ordered_parts.append({"kind": "silence", "duration_ms": duration_ms})
+                    continue
+                audio_path = _local(segment.get("audio_url"))
+                if audio_path and os.path.isfile(audio_path):
+                    if duration_ms <= 0:
+                        duration_ms = int((await _probe_dur(audio_path)) * 1000)
+                    ordered_parts.append(
+                        {
+                            "kind": "speech",
+                            "path": audio_path,
+                            "duration_ms": duration_ms,
+                        }
+                    )
+                elif duration_ms > 0:
+                    # 已记录时长但音频文件缺失时保留时间位置，避免后续对白提前。
+                    ordered_parts.append({"kind": "silence", "duration_ms": duration_ms})
+
             audio_urls = row.get("audio_urls") or ([row.get("audio_url")] if row.get("audio_url") else [])
             audio_paths: List[str] = []
             seen_audio_paths: set[str] = set()
-            for audio_url in audio_urls:
-                audio_path = _local(audio_url)
-                if not audio_path or not os.path.isfile(audio_path) or audio_path in seen_audio_paths:
-                    continue
-                seen_audio_paths.add(audio_path)
-                audio_paths.append(audio_path)
-            audio_ms = int(row.get("audio_ms") or 0)
+            if not ordered_parts:
+                for audio_url in audio_urls:
+                    audio_path = _local(audio_url)
+                    if not audio_path or not os.path.isfile(audio_path) or audio_path in seen_audio_paths:
+                        continue
+                    seen_audio_paths.add(audio_path)
+                    audio_paths.append(audio_path)
+            audio_ms = sum(int(part.get("duration_ms") or 0) for part in ordered_parts)
+            if not ordered_parts:
+                audio_ms = int(row.get("audio_ms") or 0)
             if audio_paths and audio_ms <= 0:
                 durations = [await _probe_dur(audio_path) for audio_path in audio_paths]
                 audio_ms = int(max(durations or [0.0]) * 1000)
+            sfx_path = _local(row.get("sfx_audio_url")) if ordered_parts else None
+            if sfx_path and not os.path.isfile(sfx_path):
+                sfx_path = None
             video_has_audio = await _probe_has_audio(video_path)
             use_reference_audio = bool(
-                audio_paths
+                (ordered_parts or audio_paths)
                 and audio_ms > 0
                 and (audio_mode == "reference_dubbing" or not video_has_audio)
             )
@@ -325,18 +606,65 @@ async def _compose(
             ]
             if use_reference_audio:
                 target_duration = max(video_duration, audio_ms / 1000.0)
-                audio_inputs: List[str] = []
-                for audio_path in audio_paths:
-                    audio_inputs.extend(["-i", audio_path])
-                if len(audio_paths) == 1:
-                    audio_filter = "[1:a]apad[a]"
+                if ordered_parts:
+                    audio_inputs: List[str] = []
+                    sequence_filters: List[str] = []
+                    sequence_labels: List[str] = []
+                    input_index = 1
+                    for sequence_index, part in enumerate(ordered_parts):
+                        label = f"seq{sequence_index}"
+                        sequence_labels.append(f"[{label}]")
+                        if part["kind"] == "speech":
+                            audio_inputs.extend(["-i", part["path"]])
+                            sequence_filters.append(
+                                f"[{input_index}:a]aresample=48000,"
+                                "aformat=sample_fmts=fltp:sample_rates=48000:"
+                                f"channel_layouts=stereo[{label}]"
+                            )
+                            input_index += 1
+                        else:
+                            duration_seconds = max(0.1, part["duration_ms"] / 1000.0)
+                            sequence_filters.append(
+                                f"anullsrc=r=48000:cl=stereo:d={duration_seconds:.3f}[{label}]"
+                            )
+
+                    if len(sequence_labels) == 1:
+                        sequence_filters.append(f"{sequence_labels[0]}anull[voice]")
+                    else:
+                        sequence_filters.append(
+                            f"{''.join(sequence_labels)}"
+                            f"concat=n={len(sequence_labels)}:v=0:a=1[voice]"
+                        )
+
+                    if sfx_path:
+                        audio_inputs.extend(["-i", sfx_path])
+                        sfx_duration = await _probe_dur(sfx_path)
+                        target_duration = max(target_duration, sfx_duration)
+                        sequence_filters.append(
+                            f"[{input_index}:a]aresample=48000,"
+                            "aformat=sample_fmts=fltp:sample_rates=48000:"
+                            "channel_layouts=stereo[sfx]"
+                        )
+                        sequence_filters.append(
+                            "[voice][sfx]amix=inputs=2:duration=longest:"
+                            "dropout_transition=0,apad[a]"
+                        )
+                    else:
+                        sequence_filters.append("[voice]apad[a]")
+                    audio_filter = ";".join(sequence_filters)
                 else:
-                    padded = "".join(f"[{i}:a]apad[a{i}];" for i in range(1, len(audio_paths) + 1))
-                    mix_inputs = "".join(f"[a{i}]" for i in range(1, len(audio_paths) + 1))
-                    audio_filter = (
-                        f"{padded}{mix_inputs}"
-                        f"amix=inputs={len(audio_paths)}:duration=longest:dropout_transition=0[a]"
-                    )
+                    audio_inputs = []
+                    for audio_path in audio_paths:
+                        audio_inputs.extend(["-i", audio_path])
+                    if len(audio_paths) == 1:
+                        audio_filter = "[1:a]apad[a]"
+                    else:
+                        padded = "".join(f"[{i}:a]apad[a{i}];" for i in range(1, len(audio_paths) + 1))
+                        mix_inputs = "".join(f"[a{i}]" for i in range(1, len(audio_paths) + 1))
+                        audio_filter = (
+                            f"{padded}{mix_inputs}"
+                            f"amix=inputs={len(audio_paths)}:duration=longest:dropout_transition=0[a]"
+                        )
                 cmd = [
                     "ffmpeg",
                     "-nostdin",
@@ -446,6 +774,8 @@ async def _compose(
         if rc != 0:
             raise RuntimeError(f"Final concat failed: {err[:200]}")
 
+        duration = await _probe_dur(out_path)
+        await _mix_global_audio_tracks(episode_id, out_path, duration, tmp)
         duration = await _probe_dur(out_path)
         size = os.path.getsize(out_path)
         file_url = f"/storage/video/{user_id}/{ym}/{out_name}"

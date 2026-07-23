@@ -28,6 +28,7 @@ export {
 } from './episodeDataService';
 export {
     createAudioTrack,
+    updateAudioTrack,
     deleteAudioTrack,
     generateSpeech,
     generateSFX,

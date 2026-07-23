@@ -9,6 +9,7 @@ import {
   minimaxMusic,
   minimaxTTS,
   minimaxVoiceDesign,
+  updateAudioTrack,
 } from '../../services/audioGenerationService';
 
 const mockFetch = vi.fn();
@@ -36,6 +37,19 @@ describe('audio generation service', () => {
     expect(url).toBe('/api/episodes/ep_1/audio-tracks');
     expect(opts.method).toBe('POST');
     expect(JSON.parse(opts.body).track_type).toBe('bgm');
+  });
+
+  it('persists timeline edits through the audio track endpoint', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, track: { id: 't1' } }));
+    await updateAudioTrack('track_1', {
+      generation_params: {
+        timeline: { startMs: 1_000, durationMs: 5_000, fadeInMs: 800 },
+      },
+    });
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/audio-tracks/track_1');
+    expect(opts.method).toBe('PUT');
+    expect(JSON.parse(opts.body).generation_params.timeline.startMs).toBe(1_000);
   });
 
   it('sends speech generation requests with text and persona', async () => {

@@ -73,6 +73,8 @@ export function normalizeStoryboardRecord(record: any): StoryboardItemDB {
     sfxAudioUrl: record.sfx_audio_url ?? record.sfxAudioUrl ?? null,
     audioDurationMs: record.audio_duration_ms ?? record.audioDurationMs ?? null,
     plannedDurationMs: record.planned_duration_ms ?? record.plannedDurationMs ?? null,
+    audioSegments: parseArray(record.audio_segments ?? record.audioSegments),
+    videoScriptBlock: record.video_script_block ?? record.videoScriptBlock ?? '',
   };
 }
 
@@ -89,6 +91,7 @@ export function applyStoryboardRecordPatch(
     bound_assets: patch.bound_assets ?? patch.boundAssets ?? item.boundAssets,
     configured_references:
       patch.configured_references ?? patch.configuredReferences ?? item.configuredReferences,
+    audio_segments: patch.audio_segments ?? patch.audioSegments ?? item.audioSegments,
   });
 }
 
@@ -248,6 +251,11 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     imagePrompt: item.imagePrompt || '',
     videoPrompt: item.videoPrompt || '',
     cameraMovement: item.cameraMovement,
+    plannedDurationMs: item.plannedDurationMs,
+    duration: item.plannedDurationMs && item.plannedDurationMs > 0
+      ? `${item.plannedDurationMs / 1000}秒`
+      : undefined,
+    videoScriptBlock: item.videoScriptBlock || '',
     generatedImage: item.generatedImageUrl || undefined,
     generatedImages,
     selectedImageId: generatedImages.length > 0 ? generatedImages[0].id : undefined,
@@ -306,6 +314,11 @@ export function storyboardItemToDbUpdate(updates: Partial<StoryboardItem>): Reco
   if (updates.configuredReferences !== undefined) {
     result.configured_references = Array.isArray(updates.configuredReferences)
       ? updates.configuredReferences
+      : [];
+  }
+  if ((updates as any).audioSegments !== undefined) {
+    result.audio_segments = Array.isArray((updates as any).audioSegments)
+      ? (updates as any).audioSegments
       : [];
   }
   return result;
@@ -398,18 +411,20 @@ export function assetsToMaterialLibrary(assets: AssetItem[]): Record<string, Arr
       });
     };
 
+    const efImages = (asset.entityFiles || [])
+      .filter(f => isAssetImageFileRole(f.fileRole) && Boolean(f.fileUrl))
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const entityFileUrls = new Set(efImages.map(file => file.fileUrl));
+
     const refs = Array.isArray(asset.referenceImages) ? asset.referenceImages.filter(Boolean) : [];
-    const legacyUrls = [...refs];
+    const legacyUrls = refs.filter(url => !entityFileUrls.has(url));
     if (asset.thumbnailUrl && !legacyUrls.includes(asset.thumbnailUrl)) {
-      legacyUrls.unshift(asset.thumbnailUrl);
+      if (!entityFileUrls.has(asset.thumbnailUrl)) legacyUrls.unshift(asset.thumbnailUrl);
     }
     legacyUrls.forEach((url) => {
       pushMaterial(url, url, 'asset');
     });
 
-    const efImages = (asset.entityFiles || [])
-      .filter(f => isAssetImageFileRole(f.fileRole) && Boolean(f.fileUrl))
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     efImages.forEach((f) => {
       pushMaterial(f.fileUrl, f.fileUrl, `entity_file:${f.fileRole}`, f.fileId);
     });

@@ -53,6 +53,35 @@ export interface StoryboardSegmentLookupEntry {
 }
 
 /**
+ * Removes Markdown decorations commonly found in historical model replies
+ * without changing the underlying script stored in the database.
+ */
+export function cleanStoryboardDisplayLine(line: string): string {
+  let value = String(line || '').trim();
+  if (!value) return '';
+
+  value = value
+    .replace(/^>\s*/, '')
+    .replace(/^#{1,6}\s*/, '')
+    .replace(/^(?:[-+*]\s+|\d+[.)、]\s+)/, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+
+  return value;
+}
+
+export function cleanStoryboardDisplayText(content: string): string {
+  return String(content || '')
+    .split(/\r?\n/)
+    .map(cleanStoryboardDisplayLine)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Uses the immutable conversation reply as the display source while retaining
  * persistence identifiers from the stored storyboard items. Older database
  * rows may only contain a shortened scene/action summary, while `content`
@@ -75,7 +104,7 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
   };
 
   value.split(/\r?\n/).forEach((line) => {
-    const trimmed = line.trim();
+    const trimmed = cleanStoryboardDisplayLine(line);
     const segmentMatch = trimmed.match(/^(?:分段|段落)\s*0*(\d+)\s*$/);
     if (segmentMatch) {
       flush();
@@ -92,7 +121,7 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
       currentLines = [trimmed];
       return;
     }
-    if (currentLines.length > 0) currentLines.push(line);
+    if (currentLines.length > 0) currentLines.push(trimmed);
   });
   flush();
 

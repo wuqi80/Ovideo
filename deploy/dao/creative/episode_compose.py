@@ -18,6 +18,7 @@ class EpisodeComposeDAO:
                    si.scene_heading, si.dialogue,
                    si.mixed_audio_url AS audio_url,
                    si.dialogue_audio_url, si.narration_audio_url, si.sfx_audio_url,
+                   si.audio_segments,
                    COALESCE(si.audio_duration_ms,0) AS audio_ms,
                    vs.segment_id, vs.video_url, vs.created_at,
                    f.thumbnail_url
@@ -29,6 +30,25 @@ class EpisodeComposeDAO:
               ON f.file_url = split_part(vs.video_url, '?', 1)
             WHERE si.episode_id = $1
             ORDER BY si.sort_order, vs.created_at DESC
+            """,
+            episode_id,
+        )
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    async def list_audio_tracks(episode_id: str) -> List[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return []
+        rows = await db.fetch(
+            """
+            SELECT track_id, track_type, name, audio_url, duration_ms,
+                   generation_params
+            FROM audio_tracks
+            WHERE episode_id = $1
+              AND track_type IN ('bgm', 'sfx_global')
+              AND audio_url IS NOT NULL
+            ORDER BY created_at ASC
             """,
             episode_id,
         )

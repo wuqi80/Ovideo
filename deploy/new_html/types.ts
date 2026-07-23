@@ -636,6 +636,8 @@ export interface StoryboardItemDB {
   mixedAudioUrl?: string | null;
   audioDurationMs: number | null;
   plannedDurationMs: number | null;
+  audioSegments?: StoryboardAudioSegment[];
+  videoScriptBlock?: string;
 }
 
 export interface VideoSegment {
@@ -723,14 +725,28 @@ export interface VoiceDesignSetting {
 }
 
 export interface AudioClipInfo {
+  clipId: string;
   itemId: string;
   sortOrder: number;
+  sequenceIndex: number;
   type: 'narration' | 'dialogue';
   text: string;
   characterName: string;
   audioUrl: string | null;
   durationMs: number | null;
   voiceId: string | null;
+}
+
+export interface StoryboardAudioSegment {
+  segmentId: string;
+  kind: 'speech' | 'silence';
+  sequenceIndex: number;
+  speaker?: string;
+  text?: string;
+  label?: string;
+  audioUrl?: string | null;
+  durationMs?: number | null;
+  voiceId?: string | null;
 }
 
 export interface ClipOverride {

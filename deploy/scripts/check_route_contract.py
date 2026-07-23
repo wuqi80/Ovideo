@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 258
-DEFAULT_EXPECTED_OPERATIONS = 315
+DEFAULT_EXPECTED_PATHS = 259
+DEFAULT_EXPECTED_OPERATIONS = 317
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -235,8 +235,13 @@ EXPECTED_ENDPOINTS = {
     ("/api/files/upload", "POST"): ("routers.legacy_files", "upload_file"),
     ("/api/files/{file_id}/download", "GET"): ("routers.legacy_files", "download_file"),
     ("/api/files/{file_id}", "DELETE"): ("routers.legacy_files", "delete_file"),
+    (
+        "/api/agent/tasks/{task_id}/files/{file_id}",
+        "GET",
+    ): ("agent_routes", "agent_download_task_file"),
     ("/api/episodes/{episode_id}/audio-tracks", "GET"): ("routers.audio", "get_audio_tracks"),
     ("/api/episodes/{episode_id}/audio-tracks", "POST"): ("routers.audio", "create_audio_track"),
+    ("/api/audio-tracks/{track_id}", "PUT"): ("routers.audio", "update_audio_track"),
     ("/api/audio-tracks/{track_id}", "DELETE"): ("routers.audio", "delete_audio_track"),
     ("/api/audio/generate-speech", "POST"): ("routers.audio", "gen_speech"),
     ("/api/audio/generate-sfx", "POST"): ("routers.audio", "gen_sfx"),
@@ -3033,8 +3038,8 @@ def check_audio_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 23:
-        fail(f"routers/audio.py should own 23 audio route registrations, found {route_count}")
+    if route_count != 24:
+        fail(f"routers/audio.py should own 24 audio route registrations, found {route_count}")
 
     audio_text = audio_path.read_text(encoding="utf-8")
     audio_generation_service_text = audio_generation_service_path.read_text(encoding="utf-8")

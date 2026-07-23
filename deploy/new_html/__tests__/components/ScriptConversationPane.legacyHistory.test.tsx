@@ -9,17 +9,17 @@ import { AiModel, FileStatus, type ProjectFile, type ScriptConversation, type Sc
 afterEach(cleanup);
 
 describe('ScriptConversationPane legacy history', () => {
-  it('renders the complete immutable legacy reply instead of an empty segmented shell', () => {
+  it('renders the complete immutable legacy reply as formatted segment cards', () => {
     const content = [
-      '镜头1',
-      '时长（秒）：4',
-      '画面描述：小悟站在办公室中央，右手紧握智能跳绳。',
-      '光影色调：明亮自然光。',
+      '### **镜头1**',
+      '- **时长（秒）**：4',
+      '- **画面描述**：小悟站在办公室中央，右手紧握智能跳绳。',
+      '- **光影色调**：明亮自然光。',
       '',
-      '镜头2',
-      '时长（秒）：3',
-      '画面描述：小悟转身看向同事。',
-      '镜头运动：缓慢推进。',
+      '### **镜头2**',
+      '- **时长（秒）**：3',
+      '- **画面描述**：小悟转身看向同事。',
+      '- **镜头运动**：缓慢推进。',
     ].join('\n');
     const version: ScriptStoryboardVersion = {
       id: 'ver_legacy_script_yuan',
@@ -58,7 +58,10 @@ describe('ScriptConversationPane legacy history', () => {
     const body = screen.getByTestId('legacy-storyboard-version-body-ver_legacy_script_yuan');
     expect(body).toHaveTextContent('画面描述：小悟站在办公室中央，右手紧握智能跳绳。');
     expect(body).toHaveTextContent('镜头运动：缓慢推进。');
-    expect(body.textContent).toBe(content);
+    expect(body).toHaveTextContent('分段');
+    expect(body).toHaveTextContent('镜头 01');
+    expect(body).toHaveTextContent('镜头 02');
+    expect(body.textContent).not.toMatch(/###|\*\*/);
   });
 
   it('keeps Yuan-style legacy history visible after collapsing and expanding the reply', () => {

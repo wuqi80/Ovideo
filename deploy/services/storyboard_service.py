@@ -17,6 +17,7 @@ SYNC_UPDATE_FIELDS = (
     ("sfx_audio_url", ("sfx_audio_url", "sfxAudioUrl")),
     ("audio_duration_ms", ("audio_duration_ms", "audioDurationMs")),
     ("planned_duration_ms", ("planned_duration_ms", "plannedDurationMs")),
+    ("audio_segments", ("audio_segments", "audioSegments")),
     ("bound_assets", ("bound_assets", "boundAssets")),
     ("configured_references", ("configured_references", "configuredReferences")),
 )
@@ -120,7 +121,7 @@ def normalize_storyboard_fields(fields: Optional[str]) -> Optional[str]:
 
 
 def _normalize_bound_assets(item: Dict[str, Any]) -> Dict[str, Any]:
-    for field in ("bound_assets", "configured_references"):
+    for field in ("bound_assets", "configured_references", "audio_segments"):
         if isinstance(item.get(field), str):
             try:
                 parsed = json.loads(item[field]) if item[field] else []
@@ -155,7 +156,7 @@ def _json_list_value(value: Any) -> list[Any]:
 
 
 def _comparable_storyboard_value(field: str, value: Any) -> Any:
-    if field in {"bound_assets", "configured_references"}:
+    if field in {"bound_assets", "configured_references", "audio_segments"}:
         return _json_list_value(value)
     if field in AUDIO_URL_FIELDS:
         return value or None
@@ -216,7 +217,7 @@ def _sync_update_fields(item: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, 
         current_cmp = _comparable_storyboard_value(field, current)
         if incoming_cmp == current_cmp:
             continue
-        updates[field] = incoming_cmp if field in {"bound_assets", "configured_references"} or field in AUDIO_URL_FIELDS else incoming
+        updates[field] = incoming_cmp if field in {"bound_assets", "configured_references", "audio_segments"} or field in AUDIO_URL_FIELDS else incoming
         if field in AUDIO_URL_FIELDS:
             audio_changed = True
     if audio_changed:
@@ -261,12 +262,18 @@ def _audio_update_fields_from_sync_item(item: Dict[str, Any]) -> Dict[str, Any]:
     updates: Dict[str, Any] = {}
     audio_changed = False
     for field, keys in SYNC_UPDATE_FIELDS:
-        if field not in AUDIO_URL_FIELDS and field != "audio_duration_ms":
+        if field not in AUDIO_URL_FIELDS and field not in {"audio_duration_ms", "audio_segments"}:
             continue
         present, incoming = _value_for_keys(item, *keys)
         if not present:
             continue
-        updates[field] = (incoming or None) if field in AUDIO_URL_FIELDS else incoming
+        updates[field] = (
+            (incoming or None)
+            if field in AUDIO_URL_FIELDS
+            else _json_list_value(incoming)
+            if field == "audio_segments"
+            else incoming
+        )
         if field in AUDIO_URL_FIELDS:
             audio_changed = True
     if audio_changed:

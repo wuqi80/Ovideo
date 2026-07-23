@@ -124,6 +124,8 @@ class StoryboardDAO:
             "mixed_audio_url",
             "audio_duration_ms",
             "planned_duration_ms",
+            "audio_segments",
+            "video_script_block",
             "status",
         ),
         "video": (
@@ -136,6 +138,7 @@ class StoryboardDAO:
             "generated_image_url",
             "audio_duration_ms",
             "planned_duration_ms",
+            "audio_segments",
             "status",
         ),
         "audio_stage": (
@@ -156,6 +159,7 @@ class StoryboardDAO:
             "mixed_audio_url",
             "audio_duration_ms",
             "planned_duration_ms",
+            "audio_segments",
             "status",
         ),
         "materials": (
@@ -172,6 +176,8 @@ class StoryboardDAO:
             "generated_image_url",
             "bound_assets",
             "configured_references",
+            "planned_duration_ms",
+            "video_script_block",
             "status",
         ),
     }
@@ -643,6 +649,7 @@ class StoryboardDAO:
             'generated_image_url', 'status',
             'dialogue_audio_url', 'narration_audio_url', 'sfx_audio_url',
             'audio_duration_ms', 'planned_duration_ms',
+            'audio_segments',
             'mixed_audio_url', 'mixed_audio_hash',  # Task 2: backend audio mix cache
             # 2026-05-29 三步生成新增字段
             'script_segment_id', 'source_video_shot_no', 'video_script_block',
@@ -657,7 +664,7 @@ class StoryboardDAO:
             'mixed_audio_url',
             'mixed_audio_hash',
         }
-        json_fields = {'bound_assets', 'configured_references'}
+        json_fields = {'bound_assets', 'configured_references', 'audio_segments'}
         sets, vals, idx = [], [], 1
         for key, val in kwargs.items():
             if key in allowed and (val is not None or key in nullable_fields):

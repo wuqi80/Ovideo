@@ -35,6 +35,7 @@ import {
 import { estimateCredits, estimateTextTokens } from '../services/creditService';
 import {
   buildStoryboardSegmentGroups,
+  cleanStoryboardDisplayText,
   mergeStoryboardDisplayItems,
 } from '../utils/storyboardSegments';
 import {
@@ -100,6 +101,10 @@ export const setCollapsedEntry = (
 
 export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion }> = ({ version }) => {
   const content = String(version.content || '').trim();
+  const fallbackContent = useMemo(
+    () => cleanStoryboardDisplayText(content),
+    [content],
+  );
   const displayItems = useMemo(
     () => mergeStoryboardDisplayItems(content, version.storyboardItems || []),
     [content, version.storyboardItems],
@@ -108,20 +113,22 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
     () => buildStoryboardSegmentGroups(displayItems),
     [displayItems],
   );
-  if (version.source === 'legacy') {
+  if (groups.length === 0) {
     return (
       <div
-        className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-n700"
-        data-testid={`legacy-storyboard-version-body-${version.id}`}
+        className="whitespace-pre-wrap break-words text-sm leading-7 text-n700"
+        data-testid={version.source === 'legacy' ? `legacy-storyboard-version-body-${version.id}` : undefined}
       >
-        {content}
+        {fallbackContent}
       </div>
     );
   }
-  if (groups.length === 0) return <>{content}</>;
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      data-testid={version.source === 'legacy' ? `legacy-storyboard-version-body-${version.id}` : undefined}
+    >
       {groups.map(group => (
         <section key={group.key} className="overflow-hidden rounded-md border border-n40 bg-n0">
           <header className="flex items-center gap-2 border-b border-n40 bg-n20 px-3 py-2">
@@ -714,13 +721,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             <LoaderCircle className="h-4 w-4 animate-spin text-primary" /> 正在加载对话
           </div>
         ) : (conversation?.messages || []).length > 0 ? (
-          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 py-4 lg:grid-cols-[124px_minmax(0,1fr)_172px] xl:grid-cols-[140px_minmax(0,1fr)_196px]">
+          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 py-4 lg:grid-cols-[156px_minmax(0,1fr)_172px] xl:grid-cols-[172px_minmax(0,1fr)_196px]">
             <aside className="hidden min-w-0 lg:block" data-testid="conversation-turn-rail">
               <div className="sticky top-4 border-r border-n40 pr-3">
-                <div className="mb-2 flex h-7 items-center gap-1">
-                  <MessageSquare className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-[11px] font-semibold text-n700">对话轮次</span>
-                  <span className="text-[10px] tabular-nums text-n100">{conversationTurns.length}</span>
+                <div className="mb-2 flex h-7 min-w-0 items-center gap-1">
+                  <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 text-primary" />
+                  <span className="flex-shrink-0 whitespace-nowrap text-[11px] font-semibold text-n700">对话轮次</span>
+                  <span className="flex-shrink-0 whitespace-nowrap text-[10px] tabular-nums text-n100">{conversationTurns.length}</span>
                   <span className="flex-1" />
                   <button
                     type="button"

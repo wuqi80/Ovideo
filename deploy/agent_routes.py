@@ -1,10 +1,13 @@
 # agent_routes.py
 import json
 import logging
+import re
 from typing import Optional, List
 from datetime import datetime
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Header, File, UploadFile, Form
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from dao_agent import AgentDAO
@@ -15,6 +18,8 @@ from core.task_types import is_external_api_task
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
+LEGACY_FILE_DOWNLOAD_RE = re.compile(r"^/api/files/([A-Za-z0-9_-]+)/download/?$")
 
 MIME_MAP = {
     ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg",
@@ -173,6 +178,58 @@ def _preferred_agent_id_from_task_info(task_info: dict) -> str:
         if value:
             return str(value).strip()
     return ""
+
+
+def _legacy_file_id_from_download_url(url: str) -> str:
+    """Return a file ID only for the authenticated legacy download route."""
+    path = urlparse(str(url or "").strip()).path
+    match = LEGACY_FILE_DOWNLOAD_RE.fullmatch(path)
+    return match.group(1) if match else ""
+
+
+def _scope_agent_file_download_urls(task_id: str, files: list) -> list:
+    """Route task-owned legacy files through the Agent-authenticated endpoint."""
+    scoped_files = []
+    for raw_file in files or []:
+        file_info = dict(raw_file) if isinstance(raw_file, dict) else {}
+        file_id = _legacy_file_id_from_download_url(file_info.get("url", ""))
+        if file_id:
+            file_info["url"] = f"/api/agent/tasks/{task_id}/files/{file_id}"
+        scoped_files.append(file_info)
+    return scoped_files
+
+
+def _task_references_legacy_file(task_data: dict, file_id: str) -> bool:
+    agent_files = task_data.get("agent_files", []) if isinstance(task_data, dict) else []
+    for file_info in agent_files:
+        if not isinstance(file_info, dict):
+            continue
+        if _legacy_file_id_from_download_url(file_info.get("url", "")) == file_id:
+            return True
+    return False
+
+
+def _decode_task_hash(raw_hash: dict) -> dict:
+    return {
+        (key.decode("utf-8") if isinstance(key, bytes) else key):
+        (value.decode("utf-8") if isinstance(value, bytes) else value)
+        for key, value in (raw_hash or {}).items()
+    }
+
+
+def _task_data_from_rows(task_hash: dict, db_task: Optional[dict]) -> dict:
+    raw_data = task_hash.get("data")
+    if raw_data:
+        try:
+            return json.loads(raw_data) if isinstance(raw_data, str) else dict(raw_data)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {}
+
+    raw_data = dict(db_task or {}).get("task_data") or {}
+    try:
+        return json.loads(raw_data) if isinstance(raw_data, str) else dict(raw_data)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
 
 
 async def _task_info_from_queue_member(redis_client, task_status_prefix: str, raw_member):
@@ -384,6 +441,7 @@ async def agent_poll(authorization: str = Header(...)):
             val = data.get(param_key)
             if val and isinstance(val, str) and (val.startswith("http") or val.startswith("/")):
                 files_to_download.append({"param": param_key, "url": val})
+    files_to_download = _scope_agent_file_download_urls(task_id, files_to_download)
 
     return {
         "task": {
@@ -395,6 +453,65 @@ async def agent_poll(authorization: str = Header(...)):
             "files": files_to_download,
         }
     }
+
+
+@router.get("/tasks/{task_id}/files/{file_id}")
+async def agent_download_task_file(
+    task_id: str,
+    file_id: str,
+    authorization: str = Header(...),
+):
+    """Download one input file that belongs to the task claimed by this Agent."""
+    agent = await _verify_agent_token(authorization)
+    try:
+        from cluster_main import redis_client
+        from cluster_config import RedisConfig
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="Task storage is unavailable") from exc
+
+    raw_hash = (
+        await redis_client.hgetall(f"{RedisConfig.TASK_STATUS_PREFIX}{task_id}")
+        if redis_client
+        else {}
+    )
+    task_hash = _decode_task_hash(raw_hash)
+    db_task = await TaskDAO.get_task(task_id)
+    _assert_agent_completion_scope(
+        agent,
+        str(agent.get("agent_id") or ""),
+        task_id,
+        task_hash,
+        db_task,
+    )
+
+    task_data = _task_data_from_rows(task_hash, db_task)
+    if not _task_references_legacy_file(task_data, file_id):
+        raise HTTPException(status_code=404, detail="Task input file not found")
+
+    user_id = str(task_hash.get("user_id") or dict(db_task or {}).get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=409, detail="Task input owner is unavailable")
+
+    from dao_content import FileDAO
+    from services.legacy_file_service import LegacyFileNotFound, get_legacy_download_info
+
+    try:
+        download = await get_legacy_download_info(
+            file_id=file_id,
+            range_header=None,
+            identity=user_id,
+            deploy_root=Path(__file__).resolve().parent,
+            file_dao=FileDAO,
+            logger=logger,
+        )
+    except LegacyFileNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return FileResponse(
+        path=download.file_path,
+        media_type=download.mime_type,
+        filename=download.filename,
+    )
 
 
 @router.get("/debug-queue")

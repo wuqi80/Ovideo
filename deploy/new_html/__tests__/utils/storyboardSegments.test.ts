@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { StoryboardItem } from '../../types';
 import {
   buildStoryboardSegmentGroups,
+  cleanStoryboardDisplayText,
   estimateDialogueDurationSeconds,
   getStoryboardItemDurationSeconds,
   mergeStoryboardDisplayItems,
@@ -103,6 +104,27 @@ describe('storyboard segment normalization', () => {
     expect(merged[0].originalText).toContain('光影色调：清晨暖光');
     expect(merged[1].originalText).toContain('主角起身走向窗边');
     expect(getStoryboardItemDurationSeconds(merged[1])).toBe(5);
+  });
+
+  it('removes Markdown controls and parses decorated legacy shot headings', () => {
+    const content = [
+      '### **镜头1**',
+      '- **时长（秒）**：4',
+      '- **画面描述**：主角坐在办公室查看电脑。',
+      '',
+      '### **镜头2**',
+      '- **时长（秒）**：5',
+      '- **镜头运动**：缓慢推进',
+    ].join('\n');
+
+    const merged = mergeStoryboardDisplayItems(content, []);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0].originalText).toContain('镜头1');
+    expect(merged[0].originalText).toContain('画面描述：主角坐在办公室查看电脑。');
+    expect(merged[1].originalText).toContain('镜头运动：缓慢推进');
+    expect(merged.map(item => item.originalText).join('\n')).not.toMatch(/###|\*\*/);
+    expect(cleanStoryboardDisplayText(content)).not.toMatch(/###|\*\*/);
   });
 
   it('infers sequential groups close to the 15-second limit for legacy rows', () => {

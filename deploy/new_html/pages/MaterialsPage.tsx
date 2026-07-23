@@ -9,10 +9,8 @@ import {
   dbItemToStoryboardItem,
   normalizeStoryboardRecord,
 } from '../utils/episodeAdapters';
-import {
-  updateAsset as apiUpdateAsset,
-  createAsset as apiCreateAsset,
-} from '../services/assetMutationService';
+import { createAsset as apiCreateAsset } from '../services/assetMutationService';
+import { linkEntityFile } from '../services/entityFileService';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { waitForIdle } from '../utils/idleScheduler';
 import { Image as ImageIcon, Loader } from 'lucide-react';
@@ -238,58 +236,76 @@ export const MaterialsPage: React.FC = () => {
   }, [autoPatchRevision, storyboardItems, assets, updateMaterialsStoryboardItem]);
 
   const handleUpdateLibrary = useCallback(async (newLibrary: MaterialLibrary) => {
-
     for (const [tagName, materials] of Object.entries(newLibrary)) {
-      const assetId = assetNameToId[tagName];
-      if (!assetId) {
-        const newUrls = materials.map(m => m.url).filter(Boolean);
-        if (newUrls.length > 0) {
-          try {
-            const assetType = storyboardItems.some(si => {
-              const converted = dbItemToStoryboardItem(si, assets);
-              return converted.characters.includes(tagName);
-            }) ? 'character' : storyboardItems.some(si => {
-              const converted = dbItemToStoryboardItem(si, assets);
-              return (converted.props || []).includes(tagName);
-            }) ? 'prop' : 'scene';
+      const currentMaterials = materialLibraryFromDb[tagName] || [];
+      const currentFileIds = new Set(currentMaterials.map(material => material.fileId).filter(Boolean));
+      const currentUrls = new Set(currentMaterials.map(material => material.url).filter(Boolean));
+      const additions = materials.filter(material => (
+        (material.fileId && !currentFileIds.has(material.fileId))
+        || (!material.fileId && material.url && !currentUrls.has(material.url))
+      ));
+      if (!additions.length) continue;
 
-            await apiCreateAsset({
-              project_id: projectId,
-              episode_id: episodeId,
-              script_id: selectedScriptId || undefined,
-              asset_type: assetType,
-              name: tagName,
-              reference_images: newUrls,
-            });
-          } catch (e) {
-            console.error('创建素材失败:', e);
-          }
+      let targetAssetId = assetNameToId[tagName];
+      if (!targetAssetId) {
+        const assetType = storyboardItems.some(si => {
+          const converted = dbItemToStoryboardItem(si, assets);
+          return converted.characters.includes(tagName);
+        }) ? 'character' : storyboardItems.some(si => {
+          const converted = dbItemToStoryboardItem(si, assets);
+          return (converted.props || []).includes(tagName);
+        }) ? 'prop' : 'scene';
+
+        try {
+          const created = await apiCreateAsset({
+            project_id: projectId,
+            episode_id: episodeId,
+            script_id: selectedScriptId || undefined,
+            asset_type: assetType,
+            name: tagName,
+          });
+          targetAssetId = created?.asset?.asset_id || created?.asset?.assetId;
+        } catch (e) {
+          console.error('创建素材失败:', e);
+          continue;
         }
-        continue;
       }
 
-      const currentAsset = assets.find(a => a.assetId === assetId);
-      const currentUrls = currentAsset?.referenceImages || [];
-      const newUrls = materials.map(m => m.url).filter(Boolean);
-
-      const urlsChanged =
-        currentUrls.length !== newUrls.length ||
-        currentUrls.some((u, i) => u !== newUrls[i]);
-
-      if (urlsChanged) {
+      if (!targetAssetId) continue;
+      for (const material of additions) {
+        if (!material.fileId) {
+          console.warn('Material image was not persisted because it has no entity file id:', material.url);
+          continue;
+        }
         try {
-          await apiUpdateAsset(assetId, { reference_images: newUrls });
+          await linkEntityFile(material.fileId, 'asset', targetAssetId, 'material_image');
         } catch (e) {
-          console.error('更新素材图片失败:', e);
+          console.error('Failed to link material-stage image:', e);
         }
       }
     }
 
     await forceReloadSlices('assets');
-  }, [assetNameToId, assets, storyboardItems, projectId, episodeId, selectedScriptId, forceReloadSlices]);
+  }, [
+    assetNameToId,
+    assets,
+    storyboardItems,
+    projectId,
+    episodeId,
+    selectedScriptId,
+    forceReloadSlices,
+    materialLibraryFromDb,
+  ]);
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<number>(0);
+
+  const [bindDialog, setBindDialog] = useState<{
+    shotId: string;
+    tagName: string;
+    materialId: string;
+    cascadeTargets: typeof storyboardItems;
+  } | null>(null);
 
   const [unbindDialog, setUnbindDialog] = useState<{
     shotId: string;
@@ -297,60 +313,110 @@ export const MaterialsPage: React.FC = () => {
     cascadeTargets: typeof storyboardItems;
   } | null>(null);
 
+  const buildBoundAssets = useCallback((item: StoryboardItemDB, tagName: string, materialId: string) => {
+    const asset = assets.find(a => a.name === tagName);
+    const prefix = asset?.assetType === 'scene' ? 'scene' : asset?.assetType === 'prop' ? 'prop' : 'char';
+    const tagEntry = `${prefix}:${tagName}`;
+    const currentBound = Array.isArray(item.boundAssets) ? [...item.boundAssets] : [];
+    if (!currentBound.includes(tagEntry)) {
+      currentBound.push(tagEntry);
+    }
+    const rawId = assetNameToId[tagName];
+    const cleaned = currentBound.filter(id =>
+      !id.startsWith(`sel:${tagName}:`) && id !== rawId && id !== `nosel:${tagName}`
+    );
+    cleaned.push(`sel:${tagName}:${materialId}`);
+    return cleaned;
+  }, [assets, assetNameToId]);
+
+  const persistMaterialBinding = useCallback(async (
+    item: StoryboardItemDB,
+    tagName: string,
+    materialId: string,
+  ) => {
+    const cleaned = buildBoundAssets(item, tagName, materialId);
+    await updateMaterialsStoryboardItem(item.itemId, { bound_assets: cleaned, boundAssets: cleaned });
+  }, [buildBoundAssets, updateMaterialsStoryboardItem]);
+
+  const showMaterialToast = useCallback((message: string) => {
+    setToastMsg(message);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToastMsg(null), 3000);
+  }, []);
+
   const handleBindMaterial = useCallback(async (shotId: string, tagName: string, materialId: string) => {
     const currentIndex = storyboardItems.findIndex(si => si.itemId === shotId);
     const item = storyboardItems[currentIndex];
     if (!item || currentIndex < 0) return;
 
-    const asset = assets.find(a => a.name === tagName);
-    const prefix = asset?.assetType === 'scene' ? 'scene' : asset?.assetType === 'prop' ? 'prop' : 'char';
-    const tagEntry = `${prefix}:${tagName}`;
-
-    const buildBoundAssets = (si: typeof item) => {
-      const currentBound = Array.isArray(si.boundAssets) ? [...si.boundAssets] : [];
-      if (!currentBound.includes(tagEntry)) {
-        currentBound.push(tagEntry);
-      }
-      const rawId = assetNameToId[tagName];
-      const cleaned = currentBound.filter(id =>
-        !id.startsWith(`sel:${tagName}:`) && id !== rawId && id !== `nosel:${tagName}`
-      );
-      cleaned.push(`sel:${tagName}:${materialId}`);
-      return cleaned;
-    };
-
-    try {
-      const cleaned = buildBoundAssets(item);
-      await updateMaterialsStoryboardItem(shotId, { bound_assets: cleaned, boundAssets: cleaned });
-    } catch (e) {
-      console.error('绑定素材失败:', e);
-      return;
-    }
-
-    let cascadeCount = 0;
+    const cascadeTargets: typeof storyboardItems = [];
     for (let i = currentIndex + 1; i < storyboardItems.length; i++) {
       const si = storyboardItems[i];
       const bound = Array.isArray(si.boundAssets) ? si.boundAssets : [];
       const hasTag = bound.some((b: string) => b === `char:${tagName}` || b === `scene:${tagName}` || b === `prop:${tagName}`);
       if (!hasTag) continue;
-      const alreadyBound = bound.some((b: string) => b.startsWith(`sel:${tagName}:`));
-      if (alreadyBound) continue;
+      cascadeTargets.push(si);
+    }
 
-      try {
-        const newBound = buildBoundAssets(si);
-        await updateMaterialsStoryboardItem(si.itemId, { bound_assets: newBound, boundAssets: newBound });
-        cascadeCount++;
-      } catch (e) {
-        console.error(`级联绑定镜头${i + 1}失败:`, e);
+    const isAlreadySelected = (target: StoryboardItemDB) =>
+      (Array.isArray(target.boundAssets) ? target.boundAssets : [])
+        .some((entry: string) => entry === `sel:${tagName}:${materialId}`);
+    if (isAlreadySelected(item) && cascadeTargets.every(isAlreadySelected)) {
+      return;
+    }
+
+    if (cascadeTargets.length > 0) {
+      setBindDialog({ shotId, tagName, materialId, cascadeTargets });
+      return;
+    }
+
+    try {
+      await persistMaterialBinding(item, tagName, materialId);
+      showMaterialToast('已锁定当前镜头素材');
+    } catch (e) {
+      console.error('绑定素材失败:', e);
+    }
+  }, [storyboardItems, persistMaterialBinding, showMaterialToast]);
+
+  const handleBindConfirm = useCallback(async () => {
+    if (!bindDialog) return;
+    const { shotId, tagName, materialId, cascadeTargets } = bindDialog;
+    setBindDialog(null);
+
+    const currentItem = storyboardItems.find(si => si.itemId === shotId);
+    if (!currentItem) return;
+
+    let cascadeCount = 0;
+    try {
+      await persistMaterialBinding(currentItem, tagName, materialId);
+      for (const target of cascadeTargets) {
+        try {
+          await persistMaterialBinding(target, tagName, materialId);
+          cascadeCount += 1;
+        } catch (e) {
+          console.error('级联绑定后续镜头失败:', e);
+        }
       }
+      showMaterialToast(`已锁定当前镜头，并同步更新后续 ${cascadeCount} 个同名镜头`);
+    } catch (e) {
+      console.error('绑定素材失败:', e);
     }
+  }, [bindDialog, storyboardItems, persistMaterialBinding, showMaterialToast]);
 
-    if (cascadeCount > 0) {
-      setToastMsg(`已同步绑定到后续 ${cascadeCount} 个镜头`);
-      window.clearTimeout(toastTimer.current);
-      toastTimer.current = window.setTimeout(() => setToastMsg(null), 3000);
+  const handleBindCurrentOnly = useCallback(async () => {
+    if (!bindDialog) return;
+    const { shotId, tagName, materialId } = bindDialog;
+    setBindDialog(null);
+
+    const currentItem = storyboardItems.find(si => si.itemId === shotId);
+    if (!currentItem) return;
+    try {
+      await persistMaterialBinding(currentItem, tagName, materialId);
+      showMaterialToast('已仅更新当前镜头素材');
+    } catch (e) {
+      console.error('绑定素材失败:', e);
     }
-  }, [storyboardItems, assets, assetNameToId, updateMaterialsStoryboardItem]);
+  }, [bindDialog, storyboardItems, persistMaterialBinding, showMaterialToast]);
 
   const handleUnbindMaterial = useCallback(async (shotId: string, tagName: string) => {
     const currentIndex = storyboardItems.findIndex(si => si.itemId === shotId);
@@ -506,6 +572,37 @@ export const MaterialsPage: React.FC = () => {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-success text-white text-sm rounded-lg shadow-bottom">
           {toastMsg}
         </div>
+      )}
+      {bindDialog && (
+        <ConfirmDialog
+          open={!!bindDialog}
+          onConfirm={handleBindConfirm}
+          onCancel={handleBindCurrentOnly}
+          title="同步锁定后续镜头"
+          message={`是否将「${bindDialog.tagName}」的新素材同步锁定到后续同名镜头？`}
+          detail={
+            <div className="space-y-2">
+              <p className="text-xs text-warning font-medium">
+                确认后将覆盖后续 {bindDialog.cascadeTargets.length} 个同名镜头当前绑定的素材
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {bindDialog.cascadeTargets.slice(0, 8).map((si) => (
+                  <span key={si.itemId} className="text-[10px] bg-n30 text-warning px-2 py-0.5 rounded-md">
+                    镜头 {storyboardItems.indexOf(si) + 1}
+                  </span>
+                ))}
+                {bindDialog.cascadeTargets.length > 8 && (
+                  <span className="text-[10px] text-warning">
+                    +{bindDialog.cascadeTargets.length - 8} 个
+                  </span>
+                )}
+              </div>
+            </div>
+          }
+          confirmText="同步后续镜头"
+          cancelText="仅当前镜头"
+          variant="warning"
+        />
       )}
       {unbindDialog && (
         <ConfirmDialog

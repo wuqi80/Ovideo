@@ -98,6 +98,15 @@ def create_audio_router(
         generation_params: Optional[dict] = None
 
 
+    class AudioTrackUpdate(BaseModel):
+        name: Optional[str] = None
+        audio_url: Optional[str] = None
+        duration_ms: Optional[int] = None
+        start_item_id: Optional[str] = None
+        end_item_id: Optional[str] = None
+        generation_params: Optional[dict] = None
+
+
     @router.get("/api/episodes/{episode_id}/audio-tracks")
     async def get_audio_tracks(episode_id: str, user_id: str = Depends(get_current_user)):
         try:
@@ -134,6 +143,26 @@ def create_audio_router(
         )
         if not track:
             raise HTTPException(status_code=500, detail="创建音频轨失败")
+        return {"success": True, "track": dict(track)}
+
+
+    @router.put("/api/audio-tracks/{track_id}")
+    async def update_audio_track(track_id: str, data: AudioTrackUpdate, user_id: str = Depends(get_current_user)):
+        try:
+            await require_audio_track_access(
+                track_id,
+                user_id,
+                "member",
+                audio_track_dao=AudioTrackDAO,
+                episode_dao=EpisodeDAO,
+                project_access_checker=project_access_checker,
+            )
+        except AudioObjectAccessDenied:
+            raise HTTPException(status_code=404, detail="音频轨不存在")
+        updates = data.model_dump(exclude_unset=True)
+        track = await AudioTrackDAO.update(track_id, **updates)
+        if not track:
+            raise HTTPException(status_code=404, detail="音频轨不存在")
         return {"success": True, "track": dict(track)}
 
 
