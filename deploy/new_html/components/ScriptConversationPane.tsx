@@ -98,16 +98,27 @@ export const setCollapsedEntry = (
   return next;
 };
 
-const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion }> = ({ version }) => {
+export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion }> = ({ version }) => {
+  const content = String(version.content || '').trim();
   const displayItems = useMemo(
-    () => mergeStoryboardDisplayItems(version.content, version.storyboardItems || []),
-    [version.content, version.storyboardItems],
+    () => mergeStoryboardDisplayItems(content, version.storyboardItems || []),
+    [content, version.storyboardItems],
   );
   const groups = useMemo(
     () => buildStoryboardSegmentGroups(displayItems),
     [displayItems],
   );
-  if (groups.length === 0) return <>{version.content}</>;
+  if (version.source === 'legacy') {
+    return (
+      <div
+        className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-n700"
+        data-testid={`legacy-storyboard-version-body-${version.id}`}
+      >
+        {content}
+      </div>
+    );
+  }
+  if (groups.length === 0) return <>{content}</>;
 
   return (
     <div className="space-y-4">
