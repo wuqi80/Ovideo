@@ -2134,7 +2134,7 @@ const ApiConfigCard: React.FC<{
                 <div className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${view.dot}`} title={view.text} />
                 <div className="flex-1 min-w-0">
                     <div className="flex flex-col gap-3 min-w-0 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="min-w-0">
+                        <div className="min-w-0 xl:min-w-[18rem] xl:flex-1">
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
                                 <h3 className="text-sm font-semibold text-n800 leading-snug break-words">{cardTitle}</h3>
                                 {isRuntimeActive && (
@@ -2168,7 +2168,7 @@ const ApiConfigCard: React.FC<{
                             </div>
                         </div>
 
-                        <div className="grid w-full grid-cols-2 justify-end gap-2 sm:w-auto sm:grid-cols-[repeat(2,9rem)] 2xl:grid-cols-[repeat(4,9rem)]">
+                        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-[repeat(2,9rem)] xl:flex xl:max-w-[48rem] xl:flex-[0_1_48rem] xl:flex-wrap xl:justify-end">
                             <button
                                 type="button"
                                 onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
