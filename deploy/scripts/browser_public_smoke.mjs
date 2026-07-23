@@ -137,8 +137,7 @@ async function waitForRenderedPage(tab, timeoutMs = 20000) {
       const state = JSON.parse(result.result.value || '{}');
       lastState = state;
       const reachedLogin = /\/login(?:[?#]|$)/.test(state.url || '');
-      const renderedApp = String(state.rootText || '').trim().length > 20;
-      if (state.readyState === 'complete' && (reachedLogin || renderedApp)) {
+      if (state.readyState === 'complete' && reachedLogin) {
         return { ...state, timedOut: false };
       }
     } catch (error) {
