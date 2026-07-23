@@ -58,15 +58,76 @@ export interface StoryboardSegmentLookupEntry {
  * rows may only contain a shortened scene/action summary, while `content`
  * still contains the complete shot fields shown to the user.
  */
+function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
+  const value = String(content || '').trim();
+  if (!value) return [];
+
+  const blocks: Array<{ text: string; segmentNo?: number }> = [];
+  let activeSegmentNo: number | undefined;
+  let currentSegmentNo: number | undefined;
+  let currentLines: string[] = [];
+
+  const flush = () => {
+    const text = currentLines.join('\n').trim();
+    if (text) blocks.push({ text, segmentNo: currentSegmentNo });
+    currentLines = [];
+    currentSegmentNo = undefined;
+  };
+
+  value.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    const segmentMatch = trimmed.match(/^(?:分段|段落)\s*0*(\d+)\s*$/);
+    if (segmentMatch) {
+      flush();
+      activeSegmentNo = Number.parseInt(segmentMatch[1], 10);
+      return;
+    }
+    if (/^---CUT---$/.test(trimmed)) {
+      flush();
+      return;
+    }
+    if (/^镜头\s*\d+\s*$/.test(trimmed)) {
+      flush();
+      currentSegmentNo = activeSegmentNo;
+      currentLines = [trimmed];
+      return;
+    }
+    if (currentLines.length > 0) currentLines.push(line);
+  });
+  flush();
+
+  if (blocks.length === 0) return parseStoryboardScript(value).shots;
+
+  return blocks.map((block, index) => {
+    const parsed = parseStoryboardScript(block.text).shots[0];
+    const shotNumber = block.text.match(/^镜头\s*(\d+)/)?.[1] || String(index + 1);
+    const fallback: StoryboardItem = {
+      id: `storyboard-display-${index + 1}`,
+      originalText: block.text,
+      scriptSegment: block.text,
+      imagePrompt: '',
+      videoPrompt: '',
+      dialogue: '',
+      characters: [],
+      shotNumber: `镜头${shotNumber.padStart(2, '0')}`,
+      sourceVideoShotNo: `镜头${shotNumber.padStart(2, '0')}`,
+    };
+    return {
+      ...(parsed || fallback),
+      originalText: block.text,
+      scriptSegmentId: block.segmentNo
+        ? `storyboard-segment-${block.segmentNo}`
+        : parsed?.scriptSegmentId,
+    };
+  });
+}
+
 export function mergeStoryboardDisplayItems(
   content: string,
   persistedItems: StoryboardItem[] = [],
 ): StoryboardItem[] {
-  const parsedItems = parseStoryboardScript(String(content || '')).shots;
+  const parsedItems = parseStoryboardDisplayItems(content);
   if (parsedItems.length === 0) return persistedItems;
-  if (persistedItems.length > 0 && parsedItems.length !== persistedItems.length) {
-    return persistedItems;
-  }
 
   return parsedItems.map((parsedItem, index) => {
     const persistedItem = persistedItems[index];
@@ -95,7 +156,7 @@ export function getStoryboardItemDurationSeconds(item: StoryboardItem): number {
   const text = [item.originalText, item.videoScriptBlock, item.scriptSegment]
     .filter(Boolean)
     .join('\n');
-  const match = text.match(/(?:时间|时长)\s*[：:]\s*(\d+(?:\.\d+)?)\s*秒?/);
+  const match = text.match(/(?:时间|时长)(?:\s*[（(]秒[)）])?\s*[：:]\s*(\d+(?:\.\d+)?)\s*秒?/);
   const explicit = positiveNumber(match?.[1]);
   if (explicit) return explicit;
 

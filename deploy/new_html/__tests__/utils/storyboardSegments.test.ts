@@ -61,13 +61,48 @@ describe('storyboard segment normalization', () => {
     expect(merged[0].originalText).toContain('道具名称：电脑');
   });
 
-  it('keeps persisted display data when the reply parses to a different shot count', () => {
+  it('keeps the immutable reply authoritative when persisted shot counts differ', () => {
     const persisted = [
       shot('persisted-shot-1', '4秒', 'storyboard-segment-1'),
       shot('persisted-shot-2', '4秒', 'storyboard-segment-1'),
     ];
 
-    expect(mergeStoryboardDisplayItems('镜头01\n时间：4秒', persisted)).toBe(persisted);
+    const merged = mergeStoryboardDisplayItems('镜头01\n时间：4秒\n画面描述：完整历史正文', persisted);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe('persisted-shot-1');
+    expect(merged[0].originalText).toContain('画面描述：完整历史正文');
+  });
+
+  it('splits legacy history without CUT markers and preserves all original fields', () => {
+    const persisted = [
+      shot('persisted-shot-1', '4秒'),
+      shot('persisted-shot-2', '4秒'),
+      shot('duplicate-shot-1', '4秒'),
+      shot('duplicate-shot-2', '4秒'),
+    ];
+    const content = [
+      '镜头1',
+      '时长（秒）：4',
+      '画面描述：主角坐在办公室查看电脑。',
+      '光影色调：清晨暖光。',
+      '镜头运动：固定',
+      '',
+      '镜头2',
+      '时长（秒）：5',
+      '画面描述：主角起身走向窗边。',
+      '光影色调：柔和逆光。',
+      '镜头运动：缓慢推进',
+    ].join('\n');
+
+    const merged = mergeStoryboardDisplayItems(content, persisted);
+
+    expect(merged).toHaveLength(2);
+    expect(merged.map(item => item.id)).toEqual(['persisted-shot-1', 'persisted-shot-2']);
+    expect(merged[0].originalText).toContain('主角坐在办公室查看电脑');
+    expect(merged[0].originalText).toContain('光影色调：清晨暖光');
+    expect(merged[1].originalText).toContain('主角起身走向窗边');
+    expect(getStoryboardItemDurationSeconds(merged[1])).toBe(5);
   });
 
   it('infers sequential groups close to the 15-second limit for legacy rows', () => {
