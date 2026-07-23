@@ -1,4 +1,5 @@
 import type { ScriptSegment, StoryboardItem } from '../types';
+import { parseStoryboardScript } from './storyboardParser';
 
 const TARGET_SEGMENT_DURATION_SECONDS = 15;
 const DEFAULT_SHOT_DURATION_SECONDS = 3;
@@ -49,6 +50,34 @@ export interface StoryboardSegmentLookupEntry {
   localShotLabel: string;
   estimatedDurationSec: number;
   isFirstInSegment: boolean;
+}
+
+/**
+ * Uses the immutable conversation reply as the display source while retaining
+ * persistence identifiers from the stored storyboard items. Older database
+ * rows may only contain a shortened scene/action summary, while `content`
+ * still contains the complete shot fields shown to the user.
+ */
+export function mergeStoryboardDisplayItems(
+  content: string,
+  persistedItems: StoryboardItem[] = [],
+): StoryboardItem[] {
+  const parsedItems = parseStoryboardScript(String(content || '')).shots;
+  if (parsedItems.length === 0) return persistedItems;
+  if (persistedItems.length > 0 && parsedItems.length !== persistedItems.length) {
+    return persistedItems;
+  }
+
+  return parsedItems.map((parsedItem, index) => {
+    const persistedItem = persistedItems[index];
+    if (!persistedItem) return parsedItem;
+    return {
+      ...persistedItem,
+      ...parsedItem,
+      id: persistedItem.id,
+      scriptSegmentId: parsedItem.scriptSegmentId || persistedItem.scriptSegmentId,
+    };
+  });
 }
 
 function positiveNumber(value: unknown): number | null {

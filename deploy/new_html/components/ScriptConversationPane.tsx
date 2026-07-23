@@ -33,7 +33,10 @@ import {
   ScriptStoryboardVersion,
 } from '../types';
 import { estimateCredits, estimateTextTokens } from '../services/creditService';
-import { buildStoryboardSegmentGroups } from '../utils/storyboardSegments';
+import {
+  buildStoryboardSegmentGroups,
+  mergeStoryboardDisplayItems,
+} from '../utils/storyboardSegments';
 import {
   buildShotDurationInstruction,
   DEFAULT_SHOT_DURATION_MODE,
@@ -82,7 +85,14 @@ interface ConversationTurn {
 }
 
 const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion }> = ({ version }) => {
-  const groups = buildStoryboardSegmentGroups(version.storyboardItems || []);
+  const displayItems = useMemo(
+    () => mergeStoryboardDisplayItems(version.content, version.storyboardItems || []),
+    [version.content, version.storyboardItems],
+  );
+  const groups = useMemo(
+    () => buildStoryboardSegmentGroups(displayItems),
+    [displayItems],
+  );
   if (groups.length === 0) return <>{version.content}</>;
 
   return (

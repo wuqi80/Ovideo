@@ -4,6 +4,7 @@ import {
   buildStoryboardSegmentGroups,
   estimateDialogueDurationSeconds,
   getStoryboardItemDurationSeconds,
+  mergeStoryboardDisplayItems,
   normalizeStoryboardItemsForWorkflow,
   serializeStoryboardItemsWithSegments,
 } from '../../utils/storyboardSegments';
@@ -22,6 +23,53 @@ const shot = (id: string, duration: string, scriptSegmentId?: string): Storyboar
 });
 
 describe('storyboard segment normalization', () => {
+  it('restores complete shot fields from version content while keeping persisted ids', () => {
+    const persisted = [
+      {
+        ...shot('persisted-shot-1', '4秒', 'storyboard-segment-1'),
+        originalText: '镜头01\n镜头运动：固定',
+      },
+    ];
+    const content = [
+      '分段01',
+      '镜头01',
+      '时间：4秒',
+      '取景：中景',
+      '摄像机角度：平视',
+      '镜头运动：固定',
+      '机位：办公桌正前方',
+      '站位与构图：主角位于画面中央',
+      '动作与神态：主角专注查看屏幕',
+      '氛围与特效：日光柔和',
+      '人声：无',
+      '音效：键盘声',
+      '转场：硬切',
+      '场景名称：办公室',
+      '人物名称：主角',
+      '道具名称：电脑',
+      '---CUT---',
+    ].join('\n');
+
+    const merged = mergeStoryboardDisplayItems(content, persisted);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe('persisted-shot-1');
+    expect(merged[0].scriptSegmentId).toBe('storyboard-segment-1');
+    expect(merged[0].originalText).toContain('取景：中景');
+    expect(merged[0].originalText).toContain('机位：办公桌正前方');
+    expect(merged[0].originalText).toContain('人物名称：主角');
+    expect(merged[0].originalText).toContain('道具名称：电脑');
+  });
+
+  it('keeps persisted display data when the reply parses to a different shot count', () => {
+    const persisted = [
+      shot('persisted-shot-1', '4秒', 'storyboard-segment-1'),
+      shot('persisted-shot-2', '4秒', 'storyboard-segment-1'),
+    ];
+
+    expect(mergeStoryboardDisplayItems('镜头01\n时间：4秒', persisted)).toBe(persisted);
+  });
+
   it('infers sequential groups close to the 15-second limit for legacy rows', () => {
     const groups = buildStoryboardSegmentGroups([
       shot('a', '6秒'),
