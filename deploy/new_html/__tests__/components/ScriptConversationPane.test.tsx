@@ -110,7 +110,9 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden');
     expect(source).toContain('data-testid="floating-conversation-composer"');
     expect(source).toContain('pointer-events-none absolute inset-x-0 bottom-4');
-    expect(source).toContain('style={{ paddingBottom: composerHeight + 36 }}');
+    expect(source).toContain('data-testid="conversation-composer-spacer"');
+    expect(source).toContain('style={{ height: composerHeight + 36 }}');
+    expect(source).not.toContain('style={{ paddingBottom: composerHeight + 36 }}');
     expect(source).toContain('keepLatestVisibleOnResizeRef');
     expect(source).toContain('scrollNode.scrollHeight - scrollNode.scrollTop - scrollNode.clientHeight < 48');
     expect(source).toContain('useLayoutEffect(() =>');

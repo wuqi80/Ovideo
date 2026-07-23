@@ -653,7 +653,6 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
         ref={scrollRef}
         onScroll={updateScrollControls}
         className="min-h-0 flex-1 overflow-y-auto custom-scrollbar"
-        style={{ paddingBottom: composerHeight + 36 }}
       >
         {!selectedFile ? (
           <div className="flex h-full items-center justify-center text-sm text-n100">请从左侧选择一个剧本任务</div>
@@ -754,6 +753,12 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             </p>
           </div>
         )}
+        <div
+          aria-hidden="true"
+          data-testid="conversation-composer-spacer"
+          className="pointer-events-none w-full flex-shrink-0"
+          style={{ height: composerHeight + 36 }}
+        />
       </div>
 
       {scrollControls.canScrollDown && (
