@@ -37,6 +37,21 @@ def _fake_session(post_response):
     return session
 
 
+@pytest.mark.parametrize(
+    ("emotion", "expected"),
+    [
+        ("excited", "happy"),
+        ("兴奋", "happy"),
+        (" happy ", "happy"),
+        ("neutral", None),
+        ("auto", None),
+        ("legacy-unknown-emotion", None),
+    ],
+)
+def test_map_emotion_for_tts_normalizes_ui_and_legacy_values(emotion, expected):
+    assert minimax_audio._map_emotion_for_tts(emotion) == expected
+
+
 async def test_tts_sync_happy_path_writes_hex_to_audio_dir(tmp_audio_dir):
     # Mock MiniMax /v1/t2a_v2 response: 4 bytes (0x49 0x44 0x33 0x04) = "ID3\x04" mp3-ish header hex
     mock_payload = {
@@ -73,6 +88,28 @@ async def test_tts_sync_happy_path_writes_hex_to_audio_dir(tmp_audio_dir):
     assert post_kwargs["json"]["text"] == "测试文本"
     assert post_kwargs["json"]["model"] == "speech-2.8-hd"
     assert post_kwargs["headers"]["Authorization"] == "Bearer fake"
+
+
+async def test_tts_sync_maps_excited_to_supported_happy(tmp_audio_dir):
+    mock_payload = {
+        "data": {"audio": "49443304", "status": 2},
+        "extra_info": {"audio_length": 1234, "audio_format": "mp3", "audio_size": 4},
+        "trace_id": "trace-emotion-1",
+        "base_resp": {"status_code": 0, "status_msg": "success"},
+    }
+    fake_session_ctx = _fake_session(_fake_aiohttp_response(mock_payload))
+    client = minimax_audio.MinimaxAudioClient(api_key="fake")
+
+    with patch("aiohttp.ClientSession", return_value=fake_session_ctx):
+        await client.tts_sync(
+            text="测试文本",
+            voice_id="presenter_male",
+            model="speech-2.8-hd",
+            emotion="excited",
+        )
+
+    payload = fake_session_ctx.post.call_args.kwargs["json"]
+    assert payload["voice_setting"]["emotion"] == "happy"
 
 
 async def test_tts_sync_raises_when_base_resp_status_nonzero(tmp_audio_dir):

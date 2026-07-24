@@ -25,6 +25,41 @@ AUDIO_UPLOAD_DIR = os.getenv("AUDIO_UPLOAD_DIR", "persistent_storage/audio")
 # MiniMax t2a_async_query_v2 status：文档 enum 为小写，示例偶发 PascalCase
 _TTS_TERMINAL_SUCCESS = frozenset({"success"})
 _TTS_TERMINAL_FAILED = frozenset({"failed", "expired"})
+_TTS_SUPPORTED_EMOTIONS = frozenset(
+    {
+        "happy",
+        "sad",
+        "angry",
+        "fearful",
+        "disgusted",
+        "surprised",
+        "calm",
+        "fluent",
+        "whipser",
+    }
+)
+_TTS_EMOTION_ALIASES = {
+    "excited": "happy",
+    "whisper": "whipser",
+    "兴奋": "happy",
+    "快乐": "happy",
+    "开心": "happy",
+    "高兴": "happy",
+    "悲伤": "sad",
+    "难过": "sad",
+    "愤怒": "angry",
+    "生气": "angry",
+    "恐惧": "fearful",
+    "害怕": "fearful",
+    "厌恶": "disgusted",
+    "惊讶": "surprised",
+    "吃惊": "surprised",
+    "平静": "calm",
+    "冷静": "calm",
+    "流畅": "fluent",
+    "耳语": "whipser",
+    "低语": "whipser",
+}
 
 
 def _is_token_plan_access(api_key: str, access_mode: str = "") -> bool:
@@ -47,10 +82,15 @@ def _generate_voice_id(prefix: str = "clone") -> str:
 
 
 def _map_emotion_for_tts(emotion: Optional[str]) -> Optional[str]:
-    """官方 emotion 无 neutral，用 calm；空/auto/neutral 时不传让模型自动匹配"""
-    if not emotion or emotion in ("neutral", "auto", ""):
+    """Normalize UI and legacy values to MiniMax's supported emotion enum."""
+    normalized = str(emotion or "").strip().lower()
+    if normalized in ("", "neutral", "auto", "中性", "默认"):
         return None
-    return {"neutral": "calm"}.get(emotion, emotion)
+    mapped = _TTS_EMOTION_ALIASES.get(normalized, normalized)
+    if mapped in _TTS_SUPPORTED_EMOTIONS:
+        return mapped
+    logger.warning("Ignoring unsupported MiniMax TTS emotion: %r", emotion)
+    return None
 
 
 def _raise_for_minimax_response(action: str, http_status: int, data: Dict[str, Any]) -> None:

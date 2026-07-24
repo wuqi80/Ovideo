@@ -48,6 +48,7 @@ function buildVoiceDesignPrompt(setting: VoiceDesignSetting): string {
   const emotionMap: Record<string, string> = {
     happy: '高兴活泼', sad: '悲伤低沉', angry: '愤怒有力', fearful: '紧张害怕',
     disgusted: '厌恶冷淡', surprised: '惊讶明亮', neutral: '中性自然',
+    excited: '兴奋有活力',
   };
   const pace = setting.speed > 1.05 ? '语速偏快' : setting.speed < 0.95 ? '语速偏慢' : '语速适中';
   const pitch = setting.pitch > 2 ? '音调偏高' : setting.pitch < -2 ? '音调偏低' : '音调自然';
