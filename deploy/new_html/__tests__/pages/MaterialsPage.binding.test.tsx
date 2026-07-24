@@ -20,6 +20,12 @@ describe('MaterialsPage binding propagation', () => {
     expect(source).toContain('已仅更新当前镜头素材');
   });
 
+  it('disables a binding that already applies to the current and all later matching shots', () => {
+    expect(source).toContain('isMaterialSyncedToCurrentAndFollowing');
+    expect(source).toContain('const isMaterialFullySynced = useCallback');
+    expect(source).toContain('isMaterialFullySynced={isMaterialFullySynced}');
+  });
+
   it('persists material-stage additions without overwriting design reference images', () => {
     expect(source).not.toContain('updateAsset as apiUpdateAsset');
     expect(source).not.toContain('reference_images: newUrls');

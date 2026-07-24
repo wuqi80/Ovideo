@@ -26,9 +26,12 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain('aria-labelledby="material-props-heading"');
   });
 
-  it('keeps one material row scrollbar-free and uses compact image-operation controls', () => {
-    expect(source).toContain("materials.length > 3 ? 'max-h-[104px] overflow-y-auto custom-scrollbar' : 'overflow-hidden'");
-    expect(source).toContain('className={`relative group/item h-20');
+  it('keeps one material row scrollbar-free and fully contains portrait thumbnails', () => {
+    expect(source).toContain("materials.length > 3 ? 'max-h-[128px] overflow-y-auto custom-scrollbar' : 'overflow-hidden'");
+    expect(source).toContain('className={`relative group/item h-24');
+    expect(source).toContain('className="w-full h-full object-contain p-1"');
+    expect(source).toContain("'已同步到当前及后续同名镜头'");
+    expect(source).toContain("isSynced ? 'cursor-not-allowed bg-n30 opacity-60'");
     expect(source).toContain('<span>AI 生图</span>');
     expect(source).toContain('<span>角度</span>');
     expect(source).toContain('<span>高清放大</span>');

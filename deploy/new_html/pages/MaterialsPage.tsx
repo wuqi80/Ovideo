@@ -13,6 +13,10 @@ import { createAsset as apiCreateAsset } from '../services/assetMutationService'
 import { linkEntityFile } from '../services/entityFileService';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { waitForIdle } from '../utils/idleScheduler';
+import {
+  getFollowingMaterialTargets,
+  isMaterialSyncedToCurrentAndFollowing,
+} from '../utils/materialBindingState';
 import { Image as ImageIcon, Loader } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { MaterialLibrary, Material, FileVersion, StoryboardItemDB } from '../types';
@@ -349,19 +353,14 @@ export const MaterialsPage: React.FC = () => {
     const item = storyboardItems[currentIndex];
     if (!item || currentIndex < 0) return;
 
-    const cascadeTargets: typeof storyboardItems = [];
-    for (let i = currentIndex + 1; i < storyboardItems.length; i++) {
-      const si = storyboardItems[i];
-      const bound = Array.isArray(si.boundAssets) ? si.boundAssets : [];
-      const hasTag = bound.some((b: string) => b === `char:${tagName}` || b === `scene:${tagName}` || b === `prop:${tagName}`);
-      if (!hasTag) continue;
-      cascadeTargets.push(si);
-    }
-
-    const isAlreadySelected = (target: StoryboardItemDB) =>
-      (Array.isArray(target.boundAssets) ? target.boundAssets : [])
-        .some((entry: string) => entry === `sel:${tagName}:${materialId}`);
-    if (isAlreadySelected(item) && cascadeTargets.every(isAlreadySelected)) {
+    const cascadeTargets = getFollowingMaterialTargets(storyboardItems, shotId, tagName);
+    if (isMaterialSyncedToCurrentAndFollowing(
+      storyboardItems,
+      assets,
+      shotId,
+      tagName,
+      materialId,
+    )) {
       return;
     }
 
@@ -376,7 +375,19 @@ export const MaterialsPage: React.FC = () => {
     } catch (e) {
       console.error('绑定素材失败:', e);
     }
-  }, [storyboardItems, persistMaterialBinding, showMaterialToast]);
+  }, [storyboardItems, assets, persistMaterialBinding, showMaterialToast]);
+
+  const isMaterialFullySynced = useCallback((
+    shotId: string,
+    tagName: string,
+    materialId: string,
+  ) => isMaterialSyncedToCurrentAndFollowing(
+    storyboardItems,
+    assets,
+    shotId,
+    tagName,
+    materialId,
+  ), [storyboardItems, assets]);
 
   const handleBindConfirm = useCallback(async () => {
     if (!bindDialog) return;
@@ -557,6 +568,7 @@ export const MaterialsPage: React.FC = () => {
         materialLibrary={effectiveLibrary}
         onUpdateLibrary={handleUpdateLibrary}
         onBindMaterial={handleBindMaterial}
+        isMaterialFullySynced={isMaterialFullySynced}
         onUnbindMaterial={handleUnbindMaterial}
         onNextStep={handleNextStep}
         onSaveVersion={noopSaveVersion}

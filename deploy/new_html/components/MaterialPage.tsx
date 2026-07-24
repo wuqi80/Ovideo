@@ -170,6 +170,7 @@ interface MaterialPageProps {
   materialLibrary: MaterialLibrary;
   onUpdateLibrary: (newLibrary: MaterialLibrary) => void | Promise<void>;
   onBindMaterial: (shotId: string, tagName: string, materialId: string) => void;
+  isMaterialFullySynced?: (shotId: string, tagName: string, materialId: string) => boolean;
   onUnbindMaterial: (shotId: string, tagName: string) => void;
   onNextStep: () => void;
   onSaveVersion: (name: string) => void;
@@ -192,6 +193,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   materialLibrary,
   onUpdateLibrary,
   onBindMaterial,
+  isMaterialFullySynced,
   onUnbindMaterial,
   onNextStep,
   onSaveVersion,
@@ -1191,6 +1193,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                        onProcessMaterial={(workflow) => openProcessModal(charName, 'character', workflow as 'upscale_hd' | 'remove_watermark')}
                         onDeleteFromLibrary={(id) => removeMaterialFromLibrary(charName, id)}
                         onBind={(id) => onBindMaterial(selectedShot.id, charName, id)}
+                        isSyncedToFollowing={(id) => (
+                          isMaterialFullySynced?.(selectedShot.id, charName, id) ?? false
+                        )}
                         onUnbind={() => onUnbindMaterial(selectedShot.id, charName)}
                        onViewImage={(url) => setLightboxImage(url)}
                      />
@@ -1224,6 +1229,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                        onProcessMaterial={(workflow) => openProcessModal(selectedShot.scene, 'scene', workflow as 'upscale_hd' | 'remove_watermark')}
                         onDeleteFromLibrary={(id) => removeMaterialFromLibrary(selectedShot.scene, id)}
                         onBind={(id) => onBindMaterial(selectedShot.id, selectedShot.scene, id)}
+                        isSyncedToFollowing={(id) => (
+                          isMaterialFullySynced?.(selectedShot.id, selectedShot.scene, id) ?? false
+                        )}
                         onUnbind={() => onUnbindMaterial(selectedShot.id, selectedShot.scene)}
                        onViewImage={(url) => setLightboxImage(url)}
                      />
@@ -1258,6 +1266,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                           onProcessMaterial={(workflow) => openProcessModal(propName, 'prop', workflow as 'upscale_hd' | 'remove_watermark')}
                           onDeleteFromLibrary={(id) => removeMaterialFromLibrary(propName, id)}
                           onBind={(id) => onBindMaterial(selectedShot.id, propName, id)}
+                          isSyncedToFollowing={(id) => (
+                            isMaterialFullySynced?.(selectedShot.id, propName, id) ?? false
+                          )}
                           onUnbind={() => onUnbindMaterial(selectedShot.id, propName)}
                           onViewImage={(url) => setLightboxImage(url)}
                        />
@@ -1594,9 +1605,10 @@ const MaterialCard: React.FC<{
     onProcessMaterial: (workflow: 'upscale_hd' | 'remove_watermark' | 'three_view') => void;
     onDeleteFromLibrary: (id: string) => void;
     onBind: (id: string) => void;
+    isSyncedToFollowing: (id: string) => boolean;
     onUnbind: () => void;
     onViewImage: (url: string) => void;
-}> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, onUnbind, onViewImage }) => {
+}> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, isSyncedToFollowing, onUnbind, onViewImage }) => {
     
     const boundMaterial = materials.find(m => m.id === selectedMaterialId);
     const hasMaterials = materials.length > 0;
@@ -1620,15 +1632,15 @@ const MaterialCard: React.FC<{
             </div>
             
             {/* Selected Area */}
-            <div className="p-3 border-b border-n40 bg-n20 min-h-[132px] flex gap-3">
-                 <div className="w-24 h-24 flex-shrink-0 bg-n20 rounded-lg overflow-hidden border border-n40 relative flex items-center justify-center group-hover:border-n40 transition-colors">
+            <div className="p-3 border-b border-n40 bg-n20 min-h-[148px] flex gap-3">
+                 <div className="w-24 h-28 flex-shrink-0 bg-n0 rounded-lg overflow-hidden border border-n40 relative flex items-center justify-center group-hover:border-n40 transition-colors">
                      {boundMaterial ? (
                          <>
                             <img 
                                 src={boundMaterial.thumbnail || boundMaterial.url} 
                                 alt="Bound" 
                                 loading="lazy" 
-                                className="w-full h-full object-cover" 
+                                className="w-full h-full object-contain p-1"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-60" />
                             <div className="absolute bottom-2 right-2 bg-success text-white p-1 rounded-full shadow-lg">
@@ -1674,7 +1686,7 @@ const MaterialCard: React.FC<{
             </div>
 
             {/* Library Grid */}
-            <div className={`bg-n20 p-3 ${materials.length > 3 ? 'max-h-[104px] overflow-y-auto custom-scrollbar' : 'overflow-hidden'}`}>
+            <div className={`bg-n20 p-3 ${materials.length > 3 ? 'max-h-[128px] overflow-y-auto custom-scrollbar' : 'overflow-hidden'}`}>
                 {materials.length === 0 ? (
                     <div className="h-20 flex flex-col items-center justify-center text-n100 border-2 border-dashed border-n40 rounded-lg m-1">
                         <AlertCircle className="w-5 h-5 mb-2 opacity-40" />
@@ -1684,18 +1696,40 @@ const MaterialCard: React.FC<{
                     <div className="grid grid-cols-3 gap-2 pb-2">
                         {materials.map(m => {
                             const isCurrent = m.id === selectedMaterialId;
+                            const isSynced = isSyncedToFollowing(m.id);
                             return (
                                 <div 
                                     key={m.id} 
-                                    className={`relative group/item h-20 rounded-lg overflow-hidden border cursor-pointer transition-all ${isCurrent ? 'border-success ring-2 ring-green-500/30' : 'border-n40 hover:border-primary'}`}
-                                    onClick={() => onBind(m.id)}
+                                    role="button"
+                                    tabIndex={isSynced ? -1 : 0}
+                                    aria-disabled={isSynced}
+                                    title={isSynced ? '已同步到当前及后续同名镜头' : '绑定此素材'}
+                                    className={`relative group/item h-24 rounded-lg overflow-hidden border transition-all ${
+                                      isCurrent ? 'border-success ring-2 ring-green-500/30' : 'border-n40 hover:border-primary'
+                                    } ${isSynced ? 'cursor-not-allowed bg-n30 opacity-60' : 'cursor-pointer bg-n0'}`}
+                                    onClick={() => {
+                                      if (!isSynced) onBind(m.id);
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (!isSynced && (event.key === 'Enter' || event.key === ' ')) {
+                                        event.preventDefault();
+                                        onBind(m.id);
+                                      }
+                                    }}
                                 >
                                     <img 
                                         src={m.thumbnail || m.url} 
                                         alt="material" 
                                         loading="lazy" 
-                                        className="w-full h-full object-cover transition-transform group-hover/item:scale-110 duration-500"
+                                        className={`w-full h-full object-contain p-1 transition-transform duration-300 ${
+                                          isSynced ? '' : 'group-hover/item:scale-105'
+                                        }`}
                                     />
+                                    {isSynced && (
+                                      <span className="absolute left-1 bottom-1 text-[8px] bg-n100/85 text-white px-1.5 py-0.5 rounded">
+                                        已同步
+                                      </span>
+                                    )}
                                     
                                     {/* Hover Actions */}
                                     <div className="absolute inset-0 bg-n900/50 opacity-0 group-hover/item:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
