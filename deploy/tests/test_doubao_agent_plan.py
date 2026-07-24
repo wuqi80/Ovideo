@@ -26,6 +26,11 @@ from services.api_provider_registry import (
 from services.api_provider_runtime import resolve_provider
 
 
+def test_doubao_access_modes_use_distinct_seedream_lite_model_names() -> None:
+    assert DOUBAO_IMAGE_AGENT_PLAN_MODEL == "doubao-seedream-5.0-lite"
+    assert DOUBAO_IMAGE_PAYG_MODEL == "doubao-seedream-5-0-lite-260128"
+
+
 def test_doubao_agent_plan_normalizes_endpoint_and_model() -> None:
     endpoint = normalize_doubao_image_endpoint(
         "https://ark.cn-beijing.volces.com/api/plan/"
@@ -80,7 +85,7 @@ def test_doubao_exposes_one_image_operation_binding() -> None:
         {
             "operation": "generate",
             "label": "筑基境界",
-            "model_name": DOUBAO_IMAGE_PAYG_MODEL,
+            "model_name": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
         }
     ]
 

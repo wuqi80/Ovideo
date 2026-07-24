@@ -84,6 +84,29 @@ def test_minimax_audio_explicit_group_id_overrides_runtime_extra(monkeypatch):
     assert client._group_params() == {"GroupId": "explicit-group"}
 
 
+def test_minimax_audio_token_plan_key_omits_legacy_group_id(monkeypatch):
+    config = FakeConfig(api_key="sk-cp-token-plan-key")
+    monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: config)
+
+    client = minimax_audio.MinimaxAudioClient()
+
+    assert client.group_id == "runtime-group"
+    assert client._group_params({"task_id": "task-1"}) == {"task_id": "task-1"}
+
+
+def test_minimax_audio_token_plan_access_mode_omits_group_id(monkeypatch):
+    config = FakeConfig(
+        api_key="runtime-minimax-key",
+        extra={"group_id": "runtime-group", "provider_access_mode": "token_plan"},
+    )
+    monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: config)
+
+    client = minimax_audio.MinimaxAudioClient()
+
+    assert client.provider_access_mode == "token_plan"
+    assert client._group_params() == {}
+
+
 @pytest.mark.asyncio
 async def test_minimax_audio_query_sends_group_id_param(monkeypatch):
     monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: FakeConfig())
@@ -192,7 +215,10 @@ async def test_runtime_loader_projects_minimax_group_id_from_request_template(mo
                 "proxy_mode": "direct",
                 "custom_proxy": "",
                 "model_name": "MiniMax-Hailuo-02",
-                "request_template": {"group_id": "db-group"},
+                "request_template": {
+                    "group_id": "db-group",
+                    "provider_access_mode": "token_plan",
+                },
             }
         ]
 
@@ -210,7 +236,9 @@ async def test_runtime_loader_projects_minimax_group_id_from_request_template(mo
         assert os.environ[env_key] == "db-key"
         assert os.environ[endpoint_env] == "https://minimax-db.example.test/v1"
         assert os.environ["MINIMAX_GROUP_ID"] == "db-group"
+        assert os.environ["MINIMAX_PROVIDER_ACCESS_MODE"] == "token_plan"
         assert config.extra["group_id"] == "db-group"
+        assert config.extra["provider_access_mode"] == "token_plan"
     finally:
         loader._BASE_API_ENV_VALUES.clear()
         loader._BASE_API_ENV_VALUES.update(saved_base)

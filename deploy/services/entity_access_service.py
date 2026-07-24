@@ -112,7 +112,16 @@ async def require_file_access(
     file_dao: Any,
     **scope_dependencies: Any,
 ) -> Dict[str, Any]:
-    row = _row_dict(await file_dao.get_by_id(file_id))
+    # cluster_main still injects the legacy content FileDAO, whose equivalent
+    # lookup is named get_file. Keep the access layer compatible with both DAO
+    # contracts so post-generation selection cannot fail after a file is saved.
+    lookup = getattr(file_dao, "get_by_id", None)
+    if not callable(lookup):
+        lookup = getattr(file_dao, "get_file", None)
+    if not callable(lookup):
+        raise EntityAccessDenied("File not found or access denied")
+
+    row = _row_dict(await lookup(file_id))
     if not row:
         raise EntityAccessDenied("File not found or access denied")
 

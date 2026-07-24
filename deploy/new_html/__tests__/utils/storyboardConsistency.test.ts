@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { MaterialLibrary, StoryboardItem } from '../../types';
 import {
   buildIdentityAnchoredPrompt,
+  detachShotReference,
   resolveConsistencyModel,
+  resolveSelectedShotReferences,
   resolveShotReferencePlan,
   resolveShotReferences,
 } from '../../utils/storyboardConsistency';
@@ -56,6 +58,89 @@ describe('storyboard consistency', () => {
       [{ id: 'manual', url: '/storage/manual.png', type: 'pose', source: 'manual' }],
     );
     expect(refs).toEqual([expect.objectContaining({ id: 'manual', url: '/storage/manual.png' })]);
+  });
+
+  it('preserves an external reference while the active shot receives unrelated updates', () => {
+    const stalePersistedShot = {
+      ...shot,
+      configuredReferences: [
+        { id: 'persisted', url: '/storage/old-reference.png', type: 'pose' as const, source: 'manual' as const },
+      ],
+    };
+    const currentReferences = resolveShotReferences(stalePersistedShot, library, [
+      { id: 'external', url: '/storage/external-upload.png', type: 'pose', source: 'manual' },
+    ]);
+
+    const refs = resolveSelectedShotReferences(
+      stalePersistedShot,
+      library,
+      stalePersistedShot.id,
+      currentReferences,
+    );
+
+    expect(refs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'external', url: '/storage/external-upload.png' }),
+    ]));
+    expect(refs).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'persisted', url: '/storage/old-reference.png' }),
+    ]));
+  });
+
+  it('loads the persisted references only when switching to another shot', () => {
+    const nextShot = {
+      ...shot,
+      id: 'shot_2',
+      configuredReferences: [
+        { id: 'next-manual', url: '/storage/next-shot.png', type: 'pose' as const, source: 'manual' as const },
+      ],
+    };
+
+    const refs = resolveSelectedShotReferences(
+      nextShot,
+      library,
+      shot.id,
+      [{ id: 'previous-manual', url: '/storage/previous-shot.png', type: 'pose', source: 'manual' }],
+    );
+
+    expect(refs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'next-manual', url: '/storage/next-shot.png' }),
+    ]));
+    expect(refs).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'previous-manual', url: '/storage/previous-shot.png' }),
+    ]));
+  });
+
+  it('detaches an automatic reference from the current shot without deleting manual references', () => {
+    const refs = resolveShotReferences(shot, library, [
+      { id: 'manual', url: '/storage/manual.png', type: 'pose', source: 'manual' },
+    ]);
+    const characterReference = refs.find(reference => reference.name === '女1');
+    expect(characterReference).toBeDefined();
+
+    const detached = detachShotReference(shot, refs, characterReference!);
+
+    expect(detached.bindingRemoved).toBe(true);
+    expect(detached.materialSelections).toEqual({ 客厅: 'scene_0' });
+    expect(detached.references).toEqual([
+      expect.objectContaining({ name: '客厅', source: 'material_binding' }),
+      expect.objectContaining({ id: 'manual', source: 'manual' }),
+    ]);
+    expect(resolveShotReferences(
+      { ...shot, materialSelections: detached.materialSelections },
+      library,
+      detached.references,
+    )).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '女1' }),
+    ]));
+  });
+
+  it('removes a manual reference without changing material bindings', () => {
+    const manual = { id: 'manual', url: '/storage/manual.png', type: 'pose' as const, source: 'manual' as const };
+    const detached = detachShotReference(shot, [manual], manual);
+
+    expect(detached.bindingRemoved).toBe(false);
+    expect(detached.materialSelections).toEqual(shot.materialSelections);
+    expect(detached.references).toEqual([]);
   });
 
   it('does not reuse another character material when the saved binding is missing', () => {

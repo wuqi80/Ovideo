@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { SeedanceParams } from '../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
-import { buildCandidates } from '../utils/seedanceCandidateBuilder';
+import { buildCandidates, buildVideoMaterialLibrary } from '../utils/seedanceCandidateBuilder';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { useEntityFilesQuery } from './useEntityFilesQuery';
+import { listMediaItems } from '../services/mediaLibraryService';
 
 export interface UseSeedanceCandidatesProps {
     currentParams: SeedanceParams;
@@ -30,32 +32,36 @@ const EMPTY_FILES: any[] = [];
 export function useSeedanceCandidates(p: UseSeedanceCandidatesProps): UseSeedanceCandidatesResult {
     const ep = useEpisode();
     const ufQuery = useEntityFilesQuery('episode', ep.episodeId || null);
+    const mediaLibraryQuery = useQuery({
+        queryKey: ['video-media-library-candidates', ep.projectId],
+        queryFn: async () => {
+            const pageSize = 200;
+            const items: any[] = [];
+            let offset = 0;
+            let total = 0;
+            do {
+                const response = await listMediaItems({
+                    project_id: ep.projectId || undefined,
+                    include_shared: true,
+                    limit: pageSize,
+                    offset,
+                });
+                const page = response.items || [];
+                items.push(...page);
+                total = response.total || items.length;
+                offset += page.length;
+                if (page.length === 0) break;
+            } while (items.length < total);
+            return items;
+        },
+        enabled: !!ep.projectId,
+        staleTime: 30_000,
+    });
 
     const materialLibrary = useMemo(() => {
-        const toLibItem = (a: any) => {
-            const url = a.thumbnailUrl
-                || a.entityFiles?.find((f: any) => f.fileRole === 'reference_image')?.fileUrl
-                || a.entityFiles?.[0]?.fileUrl
-                || a.referenceImages?.[0]
-                || '';
-            return { id: a.assetId, name: a.name, currentVersion: { url } };
-        };
-        const toAudioLibItem = (t: any) => ({
-            id: t.trackId || t.id || t.audioTrackId,
-            name: t.name || t.title || '音轨',
-            currentVersion: {
-                url: t.audioUrl || t.url || '',
-                durationMs: t.durationMs,
-            },
-        });
         const assets = ep.assets ?? EMPTY_ASSETS;
         const audioTracks = ep.audioTracks ?? EMPTY_AUDIO;
-        return {
-            characters: assets.filter((a: any) => a.assetType === 'character').map(toLibItem),
-            scenes:     assets.filter((a: any) => a.assetType === 'scene').map(toLibItem),
-            props:      assets.filter((a: any) => a.assetType === 'prop').map(toLibItem),
-            audio:      audioTracks.map(toAudioLibItem),
-        };
+        return buildVideoMaterialLibrary(assets, audioTracks);
     }, [ep.assets, ep.audioTracks]);
 
     const historyVideosResolved = useMemo(() => {
@@ -95,11 +101,12 @@ export function useSeedanceCandidates(p: UseSeedanceCandidatesProps): UseSeedanc
             storyboardItems,
             historyVideos: historyVideosResolved,
             userFiles: userFilesAdapted,
+            mediaLibraryItems: mediaLibraryQuery.data ?? EMPTY_FILES,
             characterVoices,
             audioTracks: audioTracksAll,
         }),
-        [p.currentParams, p.currentStoryboardItemId, materialLibrary, storyboardItems, historyVideosResolved, userFilesAdapted, characterVoices, audioTracksAll],
+        [p.currentParams, p.currentStoryboardItemId, materialLibrary, storyboardItems, historyVideosResolved, userFilesAdapted, mediaLibraryQuery.data, characterVoices, audioTracksAll],
     );
 
-    return { candidates, isLoading: !!ufQuery.isLoading };
+    return { candidates, isLoading: !!ufQuery.isLoading || !!mediaLibraryQuery.isLoading };
 }

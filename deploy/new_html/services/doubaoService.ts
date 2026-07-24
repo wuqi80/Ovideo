@@ -9,6 +9,7 @@ export interface GeneratedFileResult {
 
 export interface DoubaoGenerationOptions {
     prompt: string;
+    model?: string;
     referenceMetadata?: GeminiImageReferenceMetadata[];
     references?: string[];
     size?: string;
@@ -35,6 +36,7 @@ export const generateDoubaoImages = async (options: DoubaoGenerationOptions): Pr
         method: 'POST',
         body: JSON.stringify({
             prompt: options.prompt,
+            model: options.model,
             reference_metadata: options.referenceMetadata || [],
             references: options.references || [],
             size: options.size || '2K',

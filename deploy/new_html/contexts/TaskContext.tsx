@@ -102,15 +102,28 @@ export const useTaskManager = (): TaskContextValue => {
   return ctx || STUB_VALUE;
 };
 
+function currentTaskUserScope(): string {
+  try {
+    return localStorage.getItem('username')?.trim() || 'anonymous';
+  } catch {
+    return 'anonymous';
+  }
+}
+
 export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const queryClient = useQueryClient();
-  const [registeredTasks, setRegisteredTasks] = useState<RegisteredTask[]>(() => taskRegistry.list());
+  const taskUserScope = currentTaskUserScope();
+  const [registeredTasks, setRegisteredTasks] = useState<RegisteredTask[]>(() => {
+    taskRegistry.setUserScope(taskUserScope, false);
+    return taskRegistry.list();
+  });
   const [notifications, setNotifications] = useState<TaskNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const startedRef = useRef(false);
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
 
   const refreshNotifications = useCallback(async () => {
+    taskRegistry.setUserScope(taskUserScope, false);
     const [
       { getNotifications },
       { mapNotificationsToTasks },
@@ -125,12 +138,17 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (stats.added > 0 || stats.updated > 0) {
       setRegisteredTasks(taskRegistry.list());
     }
-  }, []);
+  }, [taskUserScope]);
 
   useEffect(() => {
     if (isAdminRoute()) return;
     if (startedRef.current) return;
     startedRef.current = true;
+    taskRegistry.setUserScope(taskUserScope, false);
+    setRegisteredTasks(taskRegistry.list());
+    setNotifications([]);
+    setUnreadCount(0);
+    seenNotificationIdsRef.current.clear();
 
     let disposed = false;
     let stopRuntime: (() => void) | null = null;
@@ -280,7 +298,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubscribeRegistry();
       startedRef.current = false;
     };
-  }, [queryClient]);
+  }, [queryClient, taskUserScope]);
 
   const activeTasks: GlobalTask[] = useMemo(() => {
     return registeredTasks

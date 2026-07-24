@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildStoryboardValidationInstruction,
   buildScriptIterationContext,
   ensureStoryboardCutSeparators,
   normalizeScriptIterationResult,
-  validateStoryboardIterationCount,
 } from '../../utils/scriptIteration';
 import {
   CONTINUE_STORYBOARD_SCRIPT,
@@ -56,34 +54,11 @@ describe('script iteration helpers', () => {
     expect(normalized).toContain('时间：8秒\n---CUT---\n分段02\n镜头02');
   });
 
-  it('allows any positive reduction explicitly requested by the user', () => {
-    expect(validateStoryboardIterationCount(49, 1, '剧本镜头太多，减少几个镜头')).toEqual({ valid: true });
-    expect(validateStoryboardIterationCount(49, 40, '剧本镜头太多，减少几个镜头')).toEqual({ valid: true });
-  });
-
-  it('preserves shot count unless the user explicitly changes it', () => {
-    expect(validateStoryboardIterationCount(12, 11, '让人物语气更自然')).toMatchObject({ valid: false });
-    expect(validateStoryboardIterationCount(12, 12, '让人物语气更自然')).toEqual({ valid: true });
-    expect(validateStoryboardIterationCount(12, 8, '压缩到 8 个镜头')).toEqual({ valid: true });
-  });
-
-  it('inherits the latest reduction request for a referential retry', () => {
-    const instruction = buildStoryboardValidationInstruction(
-      '重新按照要求生成脚本，需要有分段。',
-      [
-        '剧本镜头太多，减少几个镜头。',
-        '重新生成镜头。',
-      ],
-    );
-
-    expect(validateStoryboardIterationCount(49, 45, instruction)).toEqual({ valid: true });
-    expect(buildStoryboardValidationInstruction('调整人物语气', '减少几个镜头')).toBe('调整人物语气');
-  });
-
-  it('uses the latest successful version count on later unrelated turns', () => {
-    expect(validateStoryboardIterationCount(45, 45, '调整人物语气')).toEqual({ valid: true });
-    expect(validateStoryboardIterationCount(45, 44, '调整人物语气')).toMatchObject({ valid: false });
-    expect(validateStoryboardIterationCount(45, 42, '继续按照之前减少镜头的要求生成')).toEqual({ valid: true });
+  it('allows every revision turn to adjust shot count for the current creative request', () => {
+    const text = `${ITERATE_FULL_SCRIPT.system || ''}\n${ITERATE_FULL_SCRIPT.user}`;
+    expect(text).toContain('不得被上一版本的镜头总数限制');
+    expect(text).toContain('允许依据本轮意见自由调整镜头数量');
+    expect(text).not.toContain('镜头总数必须保持不变');
   });
 
   it('requires dialogue-aware timing in initial, continued, and revised storyboards', () => {
@@ -101,5 +76,37 @@ describe('script iteration helpers', () => {
       expect(text).toContain('分段XX');
       expect(text).toContain('15 秒');
     });
+  });
+
+  it('requires one exact shared video prompt for every shot in a segment', () => {
+    [GENERATE_STORYBOARD_SCRIPT, CONTINUE_STORYBOARD_SCRIPT, ITERATE_FULL_SCRIPT].forEach((prompt) => {
+      const text = `${prompt.system || ''}\n${prompt.user}`;
+      expect(text).toContain('视频提示词');
+      expect(text).toContain('【视觉风格】');
+      expect(text).toContain('【正向稳定约束】');
+      expect(text).toContain('同一分段');
+    });
+  });
+
+  it('uses the new three-step storyboard fields instead of obsolete description groups', () => {
+    [GENERATE_STORYBOARD_SCRIPT, CONTINUE_STORYBOARD_SCRIPT].forEach((prompt) => {
+      const text = `${prompt.system || ''}\n${prompt.user}`;
+      expect(text).toContain('剧本拆分');
+      expect(text).toContain('分镜提取');
+      expect(text).toContain('视频脚本');
+      expect(text).toContain('分镜生成提示词');
+      expect(text).toContain('拍摄角度');
+      expect(text).toContain('运镜方式');
+      expect(text).toContain('光影色调');
+      expect(text).toContain('不得输出“站位与构图”');
+      expect(text).not.toContain('站位与构图至少');
+      expect(text).not.toContain('动作与神态至少');
+    });
+  });
+
+  it('keeps the standard sample video prompt range consistent with its one shot', () => {
+    const text = `${GENERATE_STORYBOARD_SCRIPT.system || ''}\n${GENERATE_STORYBOARD_SCRIPT.user}`;
+    expect(text).toContain('视频提示词：镜头01-01');
+    expect(text).not.toContain('视频提示词：镜头01-03');
   });
 });

@@ -15,6 +15,15 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain('{isContextExpanded && (');
   });
 
+  it('repairs stale shot selection and keeps sidebar cards keyboard-selectable', () => {
+    expect(source).toContain('setSelectedShotId(currentId => {');
+    expect(source).toContain('storyboardItems.some(item => item.id === currentId)');
+    expect(source).toContain('return storyboardItems[0]?.id ?? null');
+    expect(source).toContain('data-storyboard-item-id={item.id}');
+    expect(source).toContain('aria-pressed={isSelected}');
+    expect(source).toContain("event.key === 'Enter' || event.key === ' '");
+  });
+
   it('shows up to three cards per row inside every material category on desktop', () => {
     expect(source).toContain('data-testid="material-category-grid"');
     expect(source).toContain('data-testid="material-character-cards"');
@@ -44,6 +53,14 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain("selectedMaterialId === mat.id");
     expect(source).toContain("'border-success ring-2 ring-success/30'");
     expect(source).toContain('className="w-full h-72');
+  });
+
+  it('explains the four generated character views beside the prompt editor', () => {
+    expect(source).toContain('data-testid="character-turnaround-explanation"');
+    expect(source).toContain("config.type === 'character'");
+    expect(source).toContain('三张不同角度的全身图');
+    expect(source).toContain('正面、侧面、背面');
+    expect(source).toContain('一张放大的正面半身图');
   });
 
   it('stores every material-stage image as an independent material_image entity file', () => {

@@ -50,4 +50,73 @@ describe('storyboard dialogue duration', () => {
 
     expect(parsed.completedBlocks.map(block => block.segmentNo)).toEqual([1, 1, 2]);
   });
+
+  it('prioritizes an explicit shared video prompt over the legacy motion fallback', () => {
+    const sharedPrompt = '镜头01-03，【视觉风格】清新动画，【正向稳定约束】角色与场景稳定。';
+    const item = convertToStoryboardItem({
+      shotId: '镜头01',
+      镜头运动: '固定',
+      动作与神态: '主角抬头',
+      视频提示词: sharedPrompt,
+    });
+
+    expect(item.videoPrompt).toBe(sharedPrompt);
+    expect(item.originalText).toContain(`视频提示词：${sharedPrompt}`);
+  });
+
+  it('maps the new three-step prompt fields into the platform storyboard schema', () => {
+    const parsed = parseStreamingBlocks([
+      '分段01',
+      '镜头01',
+      '时长（秒）：4',
+      '景别：中近景',
+      '画面描述：女主角坐在桌前抬头，随后望向窗外。',
+      '分镜生成提示词：中近景，平视，女主角坐在桌前抬头，傍晚暖光。',
+      '拍摄角度：平视',
+      '运镜方式：缓慢推进',
+      '光影色调：傍晚冷暖交织。',
+      '画质：4K，电影质感。',
+      '转场：硬切',
+      '人声：女主角：“我知道了。”',
+      '音效：环境底噪。',
+      '人物名称：女主角',
+      '场景名称：办公室',
+      '道具名称：电脑',
+      '视频提示词：镜头01-02，【视觉风格】电影感动画，【正向稳定约束】角色稳定。',
+      '---CUT---',
+    ].join('\n'));
+    const item = convertToStoryboardItem(parsed.completedBlocks[0]);
+
+    expect(item.duration).toBe('4秒');
+    expect(item.scriptSegment).toBe('女主角坐在桌前抬头，随后望向窗外。');
+    expect(item.imagePrompt).toBe('中近景，平视，女主角坐在桌前抬头，傍晚暖光。');
+    expect(item.videoPrompt).toContain('【视觉风格】电影感动画');
+    expect(item.dialogue).toContain('我知道了');
+    expect(item.originalText).toContain('景别：中近景');
+    expect(item.originalText).toContain('拍摄角度：平视');
+    expect(item.originalText).toContain('运镜方式：缓慢推进');
+    expect(item.shotSize).toBe('中近景');
+    expect(item.cameraAngle).toBe('平视');
+    expect(item.cameraMovement).toBe('中近景，缓慢推进，平视');
+    expect(item.plannedDurationMs).toBe(4000);
+    expect(item.videoScriptBlock).toBe(item.originalText);
+    expect(item.originalText).not.toContain('站位与构图');
+    expect(item.originalText).not.toContain('动作与神态');
+  });
+
+  it('continues to parse persisted legacy fields without emitting an empty shot', () => {
+    const item = convertToStoryboardItem({
+      shotId: '镜头01',
+      取景: '中景',
+      摄像机角度: '平视',
+      镜头运动: '固定',
+      站位与构图: '主角位于画面中央',
+      动作与神态: '主角抬头观察屏幕',
+      氛围与特效: '室内冷色光',
+    });
+
+    expect(item.imagePrompt).toContain('主角位于画面中央');
+    expect(item.videoPrompt).toContain('主角抬头观察屏幕');
+    expect(item.originalText).toContain('站位与构图：主角位于画面中央');
+  });
 });

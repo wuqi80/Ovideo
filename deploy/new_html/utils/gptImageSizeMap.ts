@@ -32,6 +32,30 @@ export type GptImageRatio =
 
 export type GptImageK = '1K' | '2K' | '4K' | 'auto';
 
+export interface SourceImageDimensions {
+  width: number;
+  height: number;
+}
+
+export interface ResolvedGptImageSettings {
+  ratio: Exclude<GptImageRatio, 'auto'>;
+  k: Exclude<GptImageK, 'auto'>;
+  sourceDimensions: SourceImageDimensions | null;
+}
+
+const RATIO_VALUES: Record<Exclude<GptImageRatio, 'auto'>, number> = {
+  '1:1': 1,
+  '4:3': 4 / 3,
+  '3:4': 3 / 4,
+  '16:9': 16 / 9,
+  '9:16': 9 / 16,
+  '3:2': 3 / 2,
+  '2:3': 2 / 3,
+  '21:9': 21 / 9,
+  '5:4': 5 / 4,
+  '4:5': 4 / 5,
+};
+
 /**
  * (ratio, K) → "WxH" 像素映射。
  * "auto" 任一维即返回 "auto"。
@@ -60,8 +84,55 @@ export function recommendGptImageSize(ratio: GptImageRatio, k: GptImageK): strin
   return row[k] ?? 'auto';
 }
 
+/**
+ * 分镜默认使用 16:9 + 1K。只有用户显式选择 auto 时，才按像素面积最大的
+ * 参考图推导最接近的比例和分辨率档位。auto 不会原样交给上游，避免输出漂移。
+ */
+export function resolveGptImageSettings(
+  ratio: GptImageRatio,
+  k: GptImageK,
+  sourceDimensions: SourceImageDimensions[] = [],
+): ResolvedGptImageSettings {
+  const largestSource = sourceDimensions
+    .filter(item => (
+      Number.isFinite(item.width)
+      && Number.isFinite(item.height)
+      && item.width > 0
+      && item.height > 0
+    ))
+    .sort((left, right) => (
+      (right.width * right.height) - (left.width * left.height)
+    ))[0] ?? null;
+
+  const resolvedRatio: Exclude<GptImageRatio, 'auto'> = ratio === 'auto' && largestSource
+    ? (Object.entries(RATIO_VALUES) as [Exclude<GptImageRatio, 'auto'>, number][])
+      .reduce((closest, candidate) => (
+        Math.abs(Math.log((largestSource.width / largestSource.height) / candidate[1]))
+          < Math.abs(Math.log((largestSource.width / largestSource.height) / closest[1]))
+          ? candidate
+          : closest
+      ))[0]
+    : ratio === 'auto' ? '16:9' : ratio;
+  if (k !== 'auto') {
+    return { ratio: resolvedRatio, k, sourceDimensions: largestSource };
+  }
+
+  if (!largestSource) {
+    return { ratio: resolvedRatio, k: '1K', sourceDimensions: null };
+  }
+
+  const sourceMaxEdge = Math.max(largestSource.width, largestSource.height);
+  const inferredK: Exclude<GptImageK, 'auto'> = sourceMaxEdge <= 1920
+    ? '1K'
+    : sourceMaxEdge <= 3072
+      ? '2K'
+      : '4K';
+
+  return { ratio: resolvedRatio, k: inferredK, sourceDimensions: largestSource };
+}
+
 export const GPT_IMAGE_RATIO_OPTIONS: { value: GptImageRatio; label: string }[] = [
-  { value: 'auto',  label: '自动' },
+  { value: 'auto',  label: '自动（按最大参考图和尺寸决定档位）' },
   { value: '1:1',   label: '1:1 方形' },
   { value: '16:9',  label: '16:9 横屏' },
   { value: '9:16',  label: '9:16 竖屏' },
@@ -75,8 +146,8 @@ export const GPT_IMAGE_RATIO_OPTIONS: { value: GptImageRatio; label: string }[] 
 ];
 
 export const GPT_IMAGE_K_OPTIONS: { value: GptImageK; label: string }[] = [
-  { value: 'auto', label: '自动' },
-  { value: '1K',   label: '1K (标准)' },
+  { value: 'auto', label: '自动（按最大参考图和尺寸决定档位）' },
+  { value: '1K',   label: '1K（标准，约 1080p）' },
   { value: '2K',   label: '2K (高清)' },
   { value: '4K',   label: '4K (超清)' },
 ];
@@ -92,19 +163,5 @@ export const GPT_IMAGE_QUALITY_OPTIONS: { value: 'auto' | 'low' | 'medium' | 'hi
  * 化神(Gemini Flash nano2)走 aspectRatio + imageSize="1K"/"2K"/"4K" 字面量路径，
  * 不需要经过 SIZE_TABLE 转换。这里集中导出供 GenerationPage 复用同一份选项数组。
  */
-export const GEMINI_NANO2_RATIO_OPTIONS: { value: string; label: string }[] = [
-  { value: '1:1',  label: '1:1 方形' },
-  { value: '16:9', label: '16:9 横屏' },
-  { value: '9:16', label: '9:16 竖屏' },
-  { value: '4:3',  label: '4:3 横屏' },
-  { value: '3:4',  label: '3:4 竖屏' },
-  { value: '3:2',  label: '3:2 横屏' },
-  { value: '2:3',  label: '2:3 竖屏' },
-  { value: '21:9', label: '21:9 超宽' },
-];
-
-export const GEMINI_NANO2_SIZE_OPTIONS: { value: '1K' | '2K' | '4K'; label: string }[] = [
-  { value: '1K', label: '1K (标准)' },
-  { value: '2K', label: '2K (高清)' },
-  { value: '4K', label: '4K (超清)' },
-];
+export const GEMINI_NANO2_RATIO_OPTIONS = GPT_IMAGE_RATIO_OPTIONS;
+export const GEMINI_NANO2_SIZE_OPTIONS = GPT_IMAGE_K_OPTIONS;

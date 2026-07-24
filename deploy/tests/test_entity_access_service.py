@@ -78,3 +78,29 @@ async def test_unscoped_file_is_available_only_to_owner(monkeypatch):
     assert row["_access_project_id"] == ""
     with pytest.raises(service.EntityAccessDenied):
         await service.require_file_access("file_1", "bob", file_dao=FileDAO)
+
+
+@pytest.mark.asyncio
+async def test_file_access_supports_legacy_get_file_contract(monkeypatch):
+    class LegacyFileDAO:
+        @staticmethod
+        async def get_file(file_id):
+            return {"file_id": file_id, "user_id": "user_1"}
+
+    async def canonical(identity, **_kwargs):
+        return {"alice": "user_1"}.get(identity)
+
+    monkeypatch.setattr(service, "resolve_user_id", canonical)
+    row = await service.require_file_access("file_1", "alice", file_dao=LegacyFileDAO)
+
+    assert row["file_id"] == "file_1"
+    assert row["_access_project_id"] == ""
+
+
+@pytest.mark.asyncio
+async def test_file_access_denies_dao_without_supported_lookup():
+    class InvalidFileDAO:
+        pass
+
+    with pytest.raises(service.EntityAccessDenied):
+        await service.require_file_access("file_1", "alice", file_dao=InvalidFileDAO)

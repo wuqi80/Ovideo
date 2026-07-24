@@ -366,6 +366,18 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   return (
     <div className={`flex flex-col border-t border-n40 bg-n20 ${collapsed ? 'h-10' : 'h-[304px]'}`}>
       <div className="flex shrink-0 items-center gap-3 border-b border-n40 px-4 py-2">
+        {onCollapsedChange && (
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={() => onCollapsedChange(!collapsed)}
+            title={collapsed ? '展开时间轴' : '折叠时间轴'}
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-n40 bg-n0 px-2 text-[10px] font-semibold text-n700 hover:border-primary hover:text-primary"
+          >
+            {collapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {collapsed ? '展开' : '折叠'}
+          </button>
+        )}
         <span className="text-xs font-bold uppercase text-n100">时间轴</span>
         <span className="tabular-nums text-[10px] text-n100">
           总 {(totalMs / 1000).toFixed(1)}s | {Math.round(pixelsPerSecond)}px/s
@@ -375,18 +387,6 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         </span>
         <span className="flex-1" />
         <span className="text-[10px] text-n100">Ctrl+滚轮缩放</span>
-        {onCollapsedChange && (
-          <button
-            type="button"
-            aria-expanded={!collapsed}
-            onClick={() => onCollapsedChange(!collapsed)}
-            title={collapsed ? '展开时间轴' : '折叠时间轴'}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-n40 bg-n0 px-2 text-[10px] font-semibold text-n700 hover:border-primary hover:text-primary"
-          >
-            {collapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            {collapsed ? '展开' : '折叠'}
-          </button>
-        )}
       </div>
 
       {!collapsed && (

@@ -13,7 +13,7 @@ import { updateStoryboardItem } from '../services/episodeDataService';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
 import { fetchEntityFiles } from '../services/entityFileService';
 import { useSelectFileMutation, useDeleteFileMutation } from '../hooks/useFilesMutation';
-import { LayoutGrid, Loader, ChevronDown, ChevronRight, GripHorizontal } from 'lucide-react';
+import { LayoutGrid, Loader, ChevronDown, ChevronUp, GripHorizontal } from 'lucide-react';
 import { TimelineTrack, type TimelineClip } from '../components/TimelineTrack';
 import { MusicModal } from '../components/audio/MusicModal';
 import { SfxModal } from '../components/audio/SfxModal';
@@ -440,8 +440,8 @@ export const StoryboardGenPage: React.FC = () => {
   const [timelinePanel, setTimelinePanel] = usePersistedPageState<{ collapsed: boolean; heightPx: number }>({
     page: 'StoryboardGenPage:timelinePanel',
     episodeId: 'global', // 面板尺寸是全局视觉偏好，不按剧集隔离
-    version: 1,
-    defaultValue: { collapsed: false, heightPx: 260 },
+    version: 2,
+    defaultValue: { collapsed: true, heightPx: 260 },
   });
   const timelineCollapsed = timelinePanel.collapsed;
   const timelineVisibleHeightPx = typeof window === 'undefined'
@@ -569,14 +569,21 @@ export const StoryboardGenPage: React.FC = () => {
               </div>
             </div>
           )}
-          <div
-            className="px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-n20 transition-colors"
-            onClick={() => setTimelineCollapsed(c => !c)}
-          >
-            <h4 className="text-xs font-bold text-n100 uppercase tracking-wider flex items-center gap-2">
-              {timelineCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          <div className="flex items-center gap-3 px-4 py-2">
+            <button
+              type="button"
+              aria-expanded={!timelineCollapsed}
+              onClick={() => setTimelineCollapsed(c => !c)}
+              title={timelineCollapsed ? '展开时间轴' : '折叠时间轴'}
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-n40 bg-n0 px-2 text-[10px] font-semibold text-n700 hover:border-primary hover:text-primary"
+            >
+              {timelineCollapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              {timelineCollapsed ? '展开' : '折叠'}
+            </button>
+            <h4 className="text-xs font-bold text-n100 uppercase tracking-wider">
               图 + 音联合时间轴
             </h4>
+            <span className="flex-1" />
             <span className="text-[10px] text-n100">
               {fmtTimeSimple(timelineTotalMs)} | {Math.min(visibleEntityShotCount, storyboardItems.length)} 个镜头
             </span>

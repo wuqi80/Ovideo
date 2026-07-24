@@ -229,9 +229,9 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                             onClick={() => setPickerOpen(true)}
                             disabled={disabled}
                             className="ml-1 p-1 text-n700 hover:text-n800 bg-n0 hover:bg-n20 rounded inline-flex items-center gap-0.5 text-[10px]"
-                            title="插入素材（媒体库 / 素材库 / 分镜...）"
+                            title="从设计、素材、分镜及通用素材库添加"
                         >
-                            <Plus size={11} /> 插入素材
+                            <Plus size={11} /> 从库里添加
                         </button>
                         <button
                             type="button"
@@ -276,7 +276,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                                 disabled={disabled || uploadBusy || images.length >= 9}
                                 className="px-2 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px]"
                             >
-                                <Upload size={10} className="inline mr-1" />添加
+                                <Upload size={10} className="inline mr-1" />从外部添加
                             </button>
                             <input ref={imgInputRef} type="file" accept="image/*" multiple hidden
                                    onChange={e => onPickImages(e.target.files)} />
@@ -320,7 +320,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                                 disabled={disabled || uploadBusy || videos.length >= 3}
                                 className="px-2 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px]"
                             >
-                                <Upload size={10} className="inline mr-1" />添加
+                                <Upload size={10} className="inline mr-1" />从外部添加
                             </button>
                             <input ref={videoInputRef} type="file" accept="video/*" multiple hidden
                                    onChange={e => onPickVideos(e.target.files)} />
@@ -366,7 +366,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                                     disabled={disabled || uploadBusy || audios.length >= 3}
                                     className="px-1.5 py-0.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-white rounded text-[10px] inline-flex items-center gap-1"
                                 >
-                                    <Upload size={10} />添加
+                                    <Upload size={10} />从外部添加
                                 </button>
                             </div>
                             <input ref={audioInputRef} type="file" accept="audio/*" multiple hidden
@@ -496,7 +496,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                         <div className="flex items-center justify-between px-4 py-3 border-b border-n40">
                             <div>
                                 <div className="text-sm font-semibold text-primary">提示词 · 放大编辑</div>
-                                <div className="text-[10px] text-n100">@ 插入素材 · ✨ AI 改写 · 全面修改提示词</div>
+                                <div className="text-[10px] text-n100">@ 从库里添加 · ✨ AI 改写 · 全面修改提示词</div>
                             </div>
                             <button
                                 type="button"

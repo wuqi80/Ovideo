@@ -18,6 +18,8 @@ export interface CandidateBuildContext {
     storyboardItems: any[];
     historyVideos: any[];
     userFiles: any[];
+    /** Project media-library items, including generated design/material/storyboard resources. */
+    mediaLibraryItems?: any[];
     /** EpisodeContext.characterVoices — 角色配音库（按角色名聚合，sampleAudioUrl 作为预览音）。 */
     characterVoices?: any[];
     /** EpisodeContext.audioTracks — 项目级背景音 / 音效库。 */
@@ -30,6 +32,92 @@ function inferKindFromMime(mime: string | undefined): SeedanceMediaKind | null {
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     return null;
+}
+
+function inferKindFromLibraryItem(item: any): SeedanceMediaKind | null {
+    const explicit = String(item?.item_type || item?.itemType || '').toLowerCase();
+    if (explicit === 'image' || explicit === 'video' || explicit === 'audio') {
+        return explicit;
+    }
+    const mimeKind = inferKindFromMime(item?.mime_type || item?.mimeType || item?.file_type || item?.fileType);
+    if (mimeKind) return mimeKind;
+    const url = String(item?.file_url || item?.fileUrl || '');
+    if (/\.(png|jpe?g|webp|gif|bmp|avif)(?:$|[?#])/i.test(url)) return 'image';
+    if (/\.(mp4|mov|webm|mkv|avi)(?:$|[?#])/i.test(url)) return 'video';
+    if (/\.(mp3|wav|m4a|aac|ogg|flac)(?:$|[?#])/i.test(url)) return 'audio';
+    return null;
+}
+
+function isLikelyImageFile(file: any): boolean {
+    const rawType = String(file?.fileType || file?.file_type || file?.mimeType || file?.mime_type || '').toLowerCase();
+    const role = String(file?.fileRole || file?.file_role || '').toLowerCase();
+    const url = String(file?.fileUrl || file?.file_url || '');
+    if (rawType.startsWith('video') || rawType.startsWith('audio')) return false;
+    return rawType.startsWith('image')
+        || role.includes('image')
+        || /\.(png|jpe?g|webp|gif|bmp|avif)(?:$|[?#])/i.test(url);
+}
+
+export function buildVideoMaterialLibrary(assets: any[] = [], audioTracks: any[] = []) {
+    const grouped: Record<'characters' | 'scenes' | 'props', any[]> = {
+        characters: [],
+        scenes: [],
+        props: [],
+    };
+
+    assets.forEach((asset: any) => {
+        const assetType = asset?.assetType || asset?.asset_type;
+        const group = assetType === 'character'
+            ? 'characters'
+            : assetType === 'scene'
+                ? 'scenes'
+                : assetType === 'prop'
+                    ? 'props'
+                    : null;
+        if (!group) return;
+
+        const sources: Array<{ id: string; url: string; suffix?: string }> = [];
+        const pushSource = (id: string, url: unknown, suffix?: string) => {
+            const normalized = String(url || '').trim();
+            if (!normalized || sources.some(source => source.url === normalized)) return;
+            sources.push({ id, url: normalized, suffix });
+        };
+
+        pushSource('thumbnail', asset.thumbnailUrl || asset.thumbnail_url, '封面');
+        (asset.referenceImages || asset.reference_images || []).forEach((url: string, index: number) => {
+            pushSource(`reference-${index + 1}`, url, `参考图 ${index + 1}`);
+        });
+        (asset.entityFiles || asset.entity_files || []).forEach((file: any, index: number) => {
+            if (!isLikelyImageFile(file)) return;
+            pushSource(
+                String(file.fileId || file.file_id || file.entityFileId || file.entity_file_id || `file-${index + 1}`),
+                file.fileUrl || file.file_url,
+                file.fileRole || file.file_role || `版本 ${index + 1}`,
+            );
+        });
+
+        sources.forEach((source, index) => {
+            grouped[group].push({
+                id: `${asset.assetId || asset.asset_id || asset.id}-${source.id}`,
+                name: index === 0
+                    ? (asset.name || asset.assetId || asset.asset_id)
+                    : `${asset.name || asset.assetId || asset.asset_id} · ${source.suffix || index + 1}`,
+                currentVersion: { url: source.url },
+            });
+        });
+    });
+
+    return {
+        ...grouped,
+        audio: audioTracks.map((track: any) => ({
+            id: track.trackId || track.track_id || track.id || track.audioTrackId,
+            name: track.name || track.title || '音轨',
+            currentVersion: {
+                url: track.audioUrl || track.audio_url || track.url || '',
+                durationMs: track.durationMs || track.duration_ms,
+            },
+        })),
+    };
 }
 
 // 2026-05-20 (Bug 2): EpisodeContext.normalizeStoryboardItem renames every snake_case
@@ -68,7 +156,7 @@ export function buildCandidates(ctx: CandidateBuildContext): SeedanceAssetCandid
         });
     });
 
-    // 2. storyboard_data — text snippets + generated images + prompts (scoped)
+    // 2. storyboard_data — text snippets + the current generated image (scoped)
     const sbItems = (ctx.storyboardItems || []).map(sb).filter(s =>
         ctx.currentStoryboardItemId ? s.itemId === ctx.currentStoryboardItemId : true
     );
@@ -135,6 +223,23 @@ export function buildCandidates(ctx: CandidateBuildContext): SeedanceAssetCandid
             });
         }
     });
+
+    // Other storyboard images remain available as reusable library resources while
+    // their text/audio stays scoped to the current shot.
+    if (ctx.currentStoryboardItemId) {
+        (ctx.storyboardItems || []).map(sb).forEach((s) => {
+            if (!s.generatedImageUrl || s.itemId === ctx.currentStoryboardItemId) return;
+            out.push({
+                id: `sb_library_img_${s.itemId}`,
+                group: 'storyboard_library',
+                kind: 'image',
+                label: `SB-${s.sortOrder} 生成画面`,
+                url: s.generatedImageUrl,
+                thumbnailUrl: s.generatedImageUrl,
+                storyboardItemId: s.itemId,
+            });
+        });
+    }
 
     // 3. assets — materialLibrary characters / scenes / props (kind=image)
     const lib = ctx.materialLibrary || {};
@@ -268,7 +373,26 @@ export function buildCandidates(ctx: CandidateBuildContext): SeedanceAssetCandid
         });
     });
 
-    // 7. ark_asset_id — single placeholder entry; user types asset:// in popover
+    // 7. project media library — generated design/material/storyboard files and uploads
+    (ctx.mediaLibraryItems || []).forEach((item: any) => {
+        const kind = inferKindFromLibraryItem(item);
+        if (!kind) return;
+        const url = item.file_url || item.fileUrl || (kind === 'image' ? item.thumbnail_url || item.thumbnailUrl : '');
+        if (!url) return;
+        out.push({
+            id: `media_library_${item.library_item_id || item.libraryItemId || item.file_id || item.fileId || url}`,
+            group: 'media_library',
+            kind,
+            label: item.title || item.file_name || item.fileName || item.source || '素材库资源',
+            url,
+            thumbnailUrl: kind === 'image' ? (item.thumbnail_url || item.thumbnailUrl || url) : undefined,
+            durationMs: item.duration_seconds != null
+                ? Math.round(Number(item.duration_seconds) * 1000)
+                : item.durationMs,
+        });
+    });
+
+    // 8. ark_asset_id — single placeholder entry; user types asset:// in popover
     out.push({
         id: 'ark_input',
         group: 'ark_asset_id',
@@ -276,5 +400,14 @@ export function buildCandidates(ctx: CandidateBuildContext): SeedanceAssetCandid
         label: '手输 asset://...（远程 ID）',
     });
 
-    return out;
+    const seenMedia = new Set<string>();
+    return out.filter((candidate) => {
+        if (candidate.kind === 'text' || candidate.group === 'ark_asset_id') return true;
+        const mediaUrl = String(candidate.url || candidate.arkAssetId || '').trim();
+        if (!mediaUrl) return true;
+        const key = `${candidate.kind}:${mediaUrl}`;
+        if (seenMedia.has(key)) return false;
+        seenMedia.add(key);
+        return true;
+    });
 }

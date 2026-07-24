@@ -27,6 +27,12 @@ _TTS_TERMINAL_SUCCESS = frozenset({"success"})
 _TTS_TERMINAL_FAILED = frozenset({"failed", "expired"})
 
 
+def _is_token_plan_access(api_key: str, access_mode: str = "") -> bool:
+    """MiniMax Token Plan keys must not be paired with the legacy GroupId."""
+    normalized_mode = re.sub(r"[\s_-]+", "", str(access_mode or "").strip().lower())
+    return str(api_key or "").strip().lower().startswith("sk-cp-") or normalized_mode == "tokenplan"
+
+
 def _normalize_task_status(result: Dict[str, Any]) -> str:
     return str(result.get("status") or "").strip().lower()
 
@@ -75,6 +81,7 @@ class MinimaxAudioClient:
         self._explicit_group_id = group_id
         self.api_key = ""
         self.group_id = ""
+        self.provider_access_mode = ""
         self.base_url = ""
         self.headers: Dict[str, str] = {}
         self._runtime_config = None
@@ -89,6 +96,7 @@ class MinimaxAudioClient:
         self.api_key = self._explicit_api_key or config.api_key or ""
         extra = getattr(config, "extra", {}) or {}
         self.group_id = self._explicit_group_id or extra.get("group_id") or ""
+        self.provider_access_mode = str(extra.get("provider_access_mode") or "")
         self.base_url = config.endpoint.rstrip("/")
         self._aiohttp_proxy = config.aiohttp_proxy()
         self.headers = {
@@ -101,7 +109,7 @@ class MinimaxAudioClient:
 
     def _group_params(self, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         out = dict(params or {})
-        if self.group_id:
+        if self.group_id and not _is_token_plan_access(self.api_key, self.provider_access_mode):
             out.setdefault("GroupId", self.group_id)
         return out
 

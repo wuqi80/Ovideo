@@ -248,6 +248,15 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     setVisibleShotCount(MATERIAL_INITIAL_SHOT_COUNT);
   }, [storyboardIdSignature]);
 
+  useEffect(() => {
+    setSelectedShotId(currentId => {
+      if (currentId && storyboardItems.some(item => item.id === currentId)) {
+        return currentId;
+      }
+      return storyboardItems[0]?.id ?? null;
+    });
+  }, [selectedFile?.id, storyboardIdSignature]);
+
   const startResizing = useCallback(() => {
     setIsResizing(true);
     document.body.style.cursor = 'col-resize';
@@ -907,7 +916,17 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             return (
               <div 
                 key={item.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                data-storyboard-item-id={item.id}
                 onClick={() => setSelectedShotId(item.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setSelectedShotId(item.id);
+                  }
+                }}
                 className={`p-3 rounded-lg cursor-pointer border transition-all relative ${
                   isSelected
                     ? 'bg-primary-light border-primary ring-1 ring-primary/50'
@@ -2514,6 +2533,20 @@ const ThreeViewModal: React.FC<{
                     {/* 右侧：提示词编辑 */}
                     <div className="space-y-4">
                         <label className="text-xs font-bold text-n300 uppercase">生成提示词</label>
+                        {config.type === 'character' && (
+                            <div
+                                data-testid="character-turnaround-explanation"
+                                className="flex gap-3 rounded-md border border-success/30 bg-success-light px-3 py-3"
+                            >
+                                <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-success" />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-n700">人物四视图生成说明</p>
+                                    <p className="mt-1 text-xs leading-5 text-n400">
+                                        会生成三张不同角度的全身图（正面、侧面、背面）和一张放大的正面半身图，四张横向并排，统一使用白底。
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                         <textarea
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}

@@ -4,7 +4,7 @@ import {
   User, Mountain, Sword, Plus, Trash2, Loader, Palette, ArrowRight, Check,
   Upload, ZoomIn, X, Sparkles, Camera, Maximize, Grid3X3,
   Wand2, Scissors, Layers, Square, CheckSquare, RefreshCw,
-  ChevronDown,
+  ChevronDown, GripVertical,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import {
@@ -42,12 +42,21 @@ import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 import { assertEnoughCredits, consumeCredits } from '../services/creditService';
 import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
 import {
+  DESIGN_IMAGE_BATCH_LIMIT,
   DESIGN_IMAGE_MODEL_OPTIONS,
+  canUseDesignImageReferences,
   findDesignImageModel,
+  maxDesignImageOutputCount,
   normalizeDesignImageResolution,
   type DesignImageEngine,
   type DesignImageResolution,
 } from '../utils/designImageModels';
+import {
+  applyDesignAssetOrder,
+  DESIGN_ASSET_ORDER_KEY,
+  moveDesignAsset,
+  reconcileDesignAssetOrder,
+} from '../utils/designAssetOrder';
 import {
   DESIGN_CREDIT_DEFAULTS,
   DESIGN_CREDIT_FEATURES,
@@ -86,7 +95,7 @@ const savedGeminiModel = () => LS.get('design_ai_gemini_model', 'gemini-2.5-flas
 const savedStyle = () => LS.get('design_ai_style', '');
 const savedAspect = () => LS.get('design_ai_aspect_ratio', '1:1');
 const savedResolution = () => LS.get('design_ai_resolution', '1K') as DesignImageResolution;
-const savedRefineModel = () => LS.get('design_ai_refine_model', 'gemini') as AiModel;
+const savedRefineModel = () => LS.get('design_ai_refine_model', AiModel.DeepseekChat) as AiModel;
 
 function savePrefs(p: { engine?: string; geminiModel?: string; style?: string; aspect?: string; resolution?: string; refineModel?: string }) {
   if (p.engine) LS.set('design_ai_engine', p.engine);
@@ -270,6 +279,14 @@ export const DesignPage: React.FC = () => {
   const [syncSubmitting, setSyncSubmitting] = useState(false);
   const [syncCandidates, setSyncCandidates] = useState<SyncExistingAssetCandidate[]>([]);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [assetOrderByType, setAssetOrderByType] = useState<Record<AssetTab, string[]>>({
+    character: [],
+    scene: [],
+    prop: [],
+  });
+  const [draggingAssetId, setDraggingAssetId] = useState<string | null>(null);
+  const [dragOverAssetId, setDragOverAssetId] = useState<string | null>(null);
+  const [savingAssetOrder, setSavingAssetOrder] = useState(false);
 
   const [aiModal, setAiModal] = useState<{ asset: AssetItem } | null>(null);
   const [cameraModal, setCameraModal] = useState<{ asset: AssetItem; materials: ModalMaterial[] } | null>(null);
@@ -281,6 +298,10 @@ export const DesignPage: React.FC = () => {
     [assets, episodeId, selectedScriptId],
   );
   const filtered = useMemo(() => designAssets.filter(a => a.assetType === tab), [designAssets, tab]);
+  const orderedFiltered = useMemo(
+    () => applyDesignAssetOrder(filtered, assetOrderByType[tab]),
+    [assetOrderByType, filtered, tab],
+  );
   const assetHasDesign = (a: AssetItem) => assetHasDesignImages(a);
   const totalDesignedCount = designAssets.filter(assetHasDesign).length;
   const tabDesignedCount = filtered.filter(assetHasDesign).length;
@@ -294,10 +315,64 @@ export const DesignPage: React.FC = () => {
     });
   }, [designAssets]);
 
+  useEffect(() => {
+    setAssetOrderByType(previous => {
+      const nextOrder = reconcileDesignAssetOrder(previous[tab], filtered);
+      if (
+        nextOrder.length === previous[tab].length
+        && nextOrder.every((assetId, index) => assetId === previous[tab][index])
+      ) {
+        return previous;
+      }
+      return { ...previous, [tab]: nextOrder };
+    });
+  }, [filtered, tab]);
+
   const toggleSelect = (id: string) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectAllFiltered = () => setSelectedIds(new Set(filtered.map(a => a.assetId)));
   const selectUndesigned = () => setSelectedIds(new Set(filtered.filter(a => !assetHasDesign(a)).map(a => a.assetId)));
   const isBusy = (id: string) => busyAssetId === id || uploadingId === id || deletingId === id;
+
+  const handleDropAsset = useCallback(async (targetAssetId: string) => {
+    const sourceAssetId = draggingAssetId;
+    setDragOverAssetId(null);
+    setDraggingAssetId(null);
+    if (!sourceAssetId || sourceAssetId === targetAssetId || savingAssetOrder) return;
+
+    const previousOrder = reconcileDesignAssetOrder(assetOrderByType[tab], filtered);
+    const nextOrder = moveDesignAsset(previousOrder, sourceAssetId, targetAssetId);
+    if (nextOrder.every((assetId, index) => assetId === previousOrder[index])) return;
+
+    setAssetOrderByType(previous => ({ ...previous, [tab]: nextOrder }));
+    setSavingAssetOrder(true);
+    try {
+      const assetById = new Map(filtered.map(asset => [asset.assetId, asset]));
+      await Promise.all(nextOrder.map((assetId, index) => {
+        const asset = assetById.get(assetId);
+        if (!asset) return Promise.resolve();
+        return updateAsset(assetId, {
+          style_params: {
+            ...(asset.styleParams || {}),
+            [DESIGN_ASSET_ORDER_KEY]: index,
+          },
+        });
+      }));
+      await forceReloadSlices('assets');
+      crmMessage.success('卡片顺序已保存');
+    } catch (error: any) {
+      setAssetOrderByType(previous => ({ ...previous, [tab]: previousOrder }));
+      crmMessage.error(`保存卡片顺序失败：${error?.message || String(error)}`);
+    } finally {
+      setSavingAssetOrder(false);
+    }
+  }, [
+    assetOrderByType,
+    draggingAssetId,
+    filtered,
+    forceReloadSlices,
+    savingAssetOrder,
+    tab,
+  ]);
 
   const handleSyncExistingDesigns = useCallback(async () => {
     if (!projectId || !episodeId) {
@@ -464,10 +539,11 @@ export const DesignPage: React.FC = () => {
     references: string[]; aspectRatio: string; resolution: '1K' | '2K' | '4K';
     sequential: string; count: number;
   }) => {
+    const generationModel = findDesignImageModel(payload.engine, payload.geminiModel);
     const requestedImageCount = payload.engine === 'doubao' && payload.sequential === 'auto'
       ? Math.max(1, payload.count)
       : 1;
-    const model = payload.engine === 'nanobanana' ? payload.geminiModel : 'doubao-seedream';
+    const model = payload.engine === 'nanobanana' ? payload.geminiModel : generationModel.id;
     const estimateParams = designImageCreditParams({
       imageCount: requestedImageCount,
       model,
@@ -498,7 +574,15 @@ export const DesignPage: React.FC = () => {
           ...entityOpts,
         });
       } else {
-        generated = await generateDoubaoImages({ prompt: payload.prompt, references: payload.references, size: recommendDoubaoImageSize(payload.aspectRatio, payload.resolution), sequential: payload.sequential as any, count: payload.count, ...entityOpts });
+        generated = await generateDoubaoImages({
+          prompt: payload.prompt,
+          model: generationModel.id,
+          references: payload.references,
+          size: recommendDoubaoImageSize(payload.aspectRatio, payload.resolution),
+          sequential: payload.sequential as any,
+          count: payload.count,
+          ...entityOpts,
+        });
       }
       if (generated.length === 0) {
         throw new Error('生成接口未返回有效图片，本次不扣积分');
@@ -648,7 +732,8 @@ export const DesignPage: React.FC = () => {
     refineModel: AiModel;
   }) => {
     const targets = designAssets.filter(a => config.assetIds.includes(a.assetId));
-    const model = config.engine === 'nanobanana' ? config.geminiModel : 'doubao-seedream';
+    const generationModel = findDesignImageModel(config.engine, config.geminiModel);
+    const model = generationModel.id;
     const estimateParams = designImageCreditParams({
       imageCount: targets.length,
       model,
@@ -715,7 +800,13 @@ export const DesignPage: React.FC = () => {
             ...entityOpts,
           });
         } else {
-          generated = await generateDoubaoImages({ prompt, references: [], size: recommendDoubaoImageSize(aspectRatio, config.resolution), ...entityOpts });
+          generated = await generateDoubaoImages({
+            prompt,
+            model: generationModel.id,
+            references: [],
+            size: recommendDoubaoImageSize(aspectRatio, config.resolution),
+            ...entityOpts,
+          });
         }
         if (generated.length === 0) {
           throw new Error('生成接口未返回有效图片，本项不扣积分');
@@ -898,16 +989,57 @@ export const DesignPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((asset) => {
+              {orderedFiltered.map((asset) => {
                 const hasDesign = assetHasDesign(asset);
                 const legacyImgs = getLegacyAssetImageUrls(asset);
                 const busy = isBusy(asset.assetId);
                 const checked = selectedIds.has(asset.assetId);
                 return (
-                  <div key={asset.assetId} className={`bg-n0 rounded-md border transition-all duration-300 shadow-card hover:shadow-atlas ${hasDesign ? 'border-n40' : 'border-warning border-dashed'}`}>
+                  <div
+                    key={asset.assetId}
+                    onDragOver={event => {
+                      if (!draggingAssetId || draggingAssetId === asset.assetId) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                      setDragOverAssetId(asset.assetId);
+                    }}
+                    onDragLeave={event => {
+                      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                        setDragOverAssetId(current => current === asset.assetId ? null : current);
+                      }
+                    }}
+                    onDrop={event => {
+                      event.preventDefault();
+                      void handleDropAsset(asset.assetId);
+                    }}
+                    className={`bg-n0 rounded-md border transition-all duration-300 shadow-card hover:shadow-atlas ${
+                      dragOverAssetId === asset.assetId ? 'border-primary ring-2 ring-primary/20' : hasDesign ? 'border-n40' : 'border-warning border-dashed'
+                    } ${draggingAssetId === asset.assetId ? 'opacity-60' : ''}`}
+                  >
                     <div className="p-4">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            draggable={!savingAssetOrder}
+                            title="拖动调整卡片顺序"
+                            aria-label={`拖动调整 ${asset.name} 的顺序`}
+                            onDragStart={event => {
+                              event.dataTransfer.effectAllowed = 'move';
+                              event.dataTransfer.setData('text/plain', asset.assetId);
+                              setDraggingAssetId(asset.assetId);
+                            }}
+                            onDragEnd={() => {
+                              setDraggingAssetId(null);
+                              setDragOverAssetId(null);
+                            }}
+                            className={`shrink-0 mt-0.5 text-n100 hover:text-primary ${
+                              savingAssetOrder ? 'cursor-wait opacity-40' : 'cursor-grab active:cursor-grabbing'
+                            }`}
+                          >
+                            <GripVertical size={18} />
+                          </span>
                           <button onClick={() => toggleSelect(asset.assetId)} className="shrink-0 mt-0.5">
                             {checked ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-n100" />}
                           </button>
@@ -1156,26 +1288,35 @@ const UnifiedAIModal: React.FC<{
     [engine, geminiModel],
   );
   const maxRefs = generationModel.maxReferences;
-  const generatedImageCount = engine === 'doubao' && sequential === 'auto' ? count : 1;
+  const imageToImageEnabled = canUseDesignImageReferences(
+    generationModel,
+    sequential === 'auto',
+  );
+  const generatedImageCount = imageToImageEnabled ? count : 1;
   const finalAspectRatio = standardTurnaroundAspectRatio(asset.assetType, aspectRatio, standardTurnaround);
   const imageCreditParams = useMemo(() => designImageCreditParams({
     imageCount: generatedImageCount,
-    model: engine === 'nanobanana' ? geminiModel : 'doubao-seedream',
+    model: generationModel.id,
     resolution,
     aspectRatio: finalAspectRatio,
-  }), [engine, finalAspectRatio, geminiModel, generatedImageCount, resolution]);
+  }), [finalAspectRatio, generatedImageCount, generationModel.id, resolution]);
 
   useEffect(() => {
     setResolution(current => normalizeDesignImageResolution(generationModel, current));
     if (!generationModel.supportsImageToImageBatch) {
       setSequential('disabled');
       setCount(1);
+      setSelectedRefs(new Set());
     }
     setSelectedRefs(current => {
       if (current.size <= generationModel.maxReferences) return current;
       return new Set(Array.from(current).slice(0, generationModel.maxReferences));
     });
   }, [generationModel]);
+
+  useEffect(() => {
+    setCount(current => Math.min(current, maxDesignImageOutputCount(selectedRefs.size)));
+  }, [selectedRefs.size]);
 
   const selectGenerationModel = (modelId: string) => {
     const nextModel = DESIGN_IMAGE_MODEL_OPTIONS.find(option => option.id === modelId);
@@ -1204,7 +1345,47 @@ const UnifiedAIModal: React.FC<{
     onClose();
   }, [persistPrompt, prompt, onClose]);
 
-  const toggleRef = (id: string) => setSelectedRefs(prev => { const n = new Set(prev); if (n.has(id)) { n.delete(id); } else { if (n.size >= maxRefs) { crmMessage.error(`最多 ${maxRefs} 张`); return prev; } n.add(id); } return n; });
+  const toggleRef = (id: string) => {
+    if (!imageToImageEnabled) return;
+    setSelectedRefs(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        return next;
+      }
+      if (next.size >= maxRefs) {
+        crmMessage.warning(`参考图最多选择 ${maxRefs} 张`);
+        return prev;
+      }
+      if (next.size + 1 + count > DESIGN_IMAGE_BATCH_LIMIT) {
+        crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
+        return prev;
+      }
+      next.add(id);
+      return next;
+    });
+  };
+
+  const toggleImageToImage = (enabled: boolean) => {
+    if (!generationModel.supportsImageToImageBatch) return;
+    setSequential(enabled ? 'auto' : 'disabled');
+    if (!enabled) {
+      setSelectedRefs(new Set());
+      setCount(1);
+    }
+  };
+
+  const updateGenerationCount = (rawValue: string) => {
+    const requested = Number(rawValue);
+    const nextCount = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1;
+    const allowed = maxDesignImageOutputCount(selectedRefs.size);
+    if (nextCount > allowed) {
+      crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张，当前最多可生成 ${allowed} 张`);
+      setCount(allowed);
+      return;
+    }
+    setCount(nextCount);
+  };
 
   const appendStyle = (styleId: string, suffix: string) => {
     if (activeStyle === styleId) { const prev = STYLE_PRESETS.find(s => s.id === styleId); if (prev) setPrompt(p => p.replace(prev.suffix, '').trim()); setActiveStyle(''); }
@@ -1226,10 +1407,39 @@ const UnifiedAIModal: React.FC<{
     finally { setIsRefining(false); }
   };
 
+  const handleGenerate = () => {
+    if (!prompt.trim()) {
+      crmMessage.error('请输入提示词');
+      return;
+    }
+    if (imageToImageEnabled && selectedRefs.size === 0) {
+      crmMessage.warning('启用图生图后，请至少选择 1 张参考图');
+      return;
+    }
+    if (selectedRefs.size + generatedImageCount > DESIGN_IMAGE_BATCH_LIMIT) {
+      crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
+      return;
+    }
+    persistPrompt(prompt);
+    onSubmit({
+      assetId: asset.assetId,
+      engine,
+      geminiModel,
+      prompt: withStandardTurnaround(prompt, asset.assetType, standardTurnaround),
+      references: imageToImageEnabled
+        ? materials.filter(material => selectedRefs.has(material.id)).map(material => material.url)
+        : [],
+      aspectRatio: finalAspectRatio,
+      resolution,
+      sequential: imageToImageEnabled ? 'auto' : 'disabled',
+      count: imageToImageEnabled ? count : 1,
+    });
+  };
+
   return (
-    <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={handleClose}>
-      <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom relative max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-n900/50 p-3 backdrop-blur-sm sm:p-4" onClick={handleClose}>
+      <div className="relative flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-bottom max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-4">
           <div><h3 className="text-lg font-bold text-n800">AI 生成素材 - {asset.name}</h3><p className="text-xs text-n300 mt-1">基于剧本内容智能生成，支持风格预设和参考图。提示词会自动保存。</p></div>
           <button onClick={handleClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button>
         </div>
@@ -1238,7 +1448,10 @@ const UnifiedAIModal: React.FC<{
           {/* Existing generated images / references */}
           <section>
             <div className="flex items-center justify-between text-[11px] text-n100 mb-2">
-              <span className="font-bold uppercase">生成图 / 参考图 (最多 {maxRefs})</span>
+              <span className="font-bold uppercase">
+                生成图 / 参考图 (最多 {maxRefs})
+                {!imageToImageEnabled && <span className="ml-2 font-normal normal-case text-n100">启用图生图后可选择</span>}
+              </span>
               <span className={selectedRefs.size > 0 ? 'text-success font-semibold' : ''}>{selectedRefs.size}/{maxRefs}</span>
             </div>
             {materials.length === 0 ? (
@@ -1251,9 +1464,16 @@ const UnifiedAIModal: React.FC<{
                     <button
                       key={material.id}
                       type="button"
+                      disabled={!imageToImageEnabled}
                       onClick={() => toggleRef(material.id)}
-                      title={active ? '取消参考图' : '设为参考图'}
-                      className={`relative aspect-square rounded-lg overflow-hidden border transition-colors ${active ? 'border-success ring-2 ring-success/40' : 'border-n40 hover:border-primary'}`}
+                      title={!imageToImageEnabled ? '请先启用图生图' : (active ? '取消参考图' : '设为参考图')}
+                      className={`relative aspect-square rounded-lg overflow-hidden border transition-colors ${
+                        active
+                          ? 'border-success ring-2 ring-success/40'
+                          : imageToImageEnabled
+                            ? 'border-n40 hover:border-primary'
+                            : 'cursor-not-allowed border-n40 opacity-55'
+                      }`}
                     >
                       <img
                         src={secureMediaUrl(material.thumbnail || material.url) || ''}
@@ -1293,8 +1513,8 @@ const UnifiedAIModal: React.FC<{
                     onChange={event => setRefineModel(event.target.value as AiModel)}
                     className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                   >
-                    <option value={AiModel.Gemini}>化神 · Gemini 2.5 Flash</option>
                     <option value={AiModel.DeepseekChat}>金丹 · DeepSeek Chat</option>
+                    <option value={AiModel.Gemini}>化神 · Gemini 2.5 Flash</option>
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
                 </label>
@@ -1311,7 +1531,7 @@ const UnifiedAIModal: React.FC<{
 
           {/* Styles and generation parameters */}
           <section className="border-y border-n40 py-3">
-            <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-3">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
               <div className="min-w-0">
                 <span className="mb-1.5 block text-[11px] font-bold text-n100 uppercase">风格</span>
                 <div className="flex flex-wrap gap-1.5">
@@ -1329,18 +1549,25 @@ const UnifiedAIModal: React.FC<{
               </div>
 
               <div className="flex flex-wrap items-end gap-2 xl:justify-end">
-                <label className="relative min-w-[255px]">
+                <label className="relative min-w-[350px]">
                   <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
-                  <select
-                    value={generationModel.id}
-                    onChange={event => selectGenerationModel(event.target.value)}
-                    className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
-                  >
-                    {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
-                      <option key={option.id} value={option.id}>{option.label} · {option.runtime}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2 bottom-2.5 h-4 w-4 text-n300" />
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap rounded-md border border-n40 bg-n20 px-2 text-[10px] font-medium text-n500">
+                      {generationModel.usageLabel}
+                    </span>
+                    <span className="relative min-w-0 flex-1">
+                      <select
+                        value={generationModel.id}
+                        onChange={event => selectGenerationModel(event.target.value)}
+                        className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                      >
+                        {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
+                          <option key={option.id} value={option.id}>{option.label} · {option.runtime}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
+                    </span>
+                  </div>
                 </label>
 
                 <label className="relative w-[100px]">
@@ -1367,56 +1594,63 @@ const UnifiedAIModal: React.FC<{
                   <ChevronDown className="pointer-events-none absolute right-2 bottom-2.5 h-4 w-4 text-n300" />
                 </label>
 
-                {generationModel.supportsImageToImageBatch && (
-                  <div className="min-w-[235px]">
-                    <span className="mb-1.5 block text-[10px] font-medium text-n300">生成方式</span>
-                    <div className="flex h-9 items-center gap-2">
-                      <label className="inline-flex h-9 items-center gap-2 rounded-md border border-n40 px-3 text-xs text-n700">
-                        <input
-                          type="checkbox"
-                          checked={sequential === 'auto'}
-                          onChange={event => setSequential(event.target.checked ? 'auto' : 'disabled')}
-                          className="accent-primary"
-                        />
-                        图生图
-                      </label>
-                      {sequential === 'auto' && (
-                        <>
-                          <label className="inline-flex items-center gap-1 text-xs text-n700">
-                            <span>张数</span>
-                            <input
-                              type="number"
-                              min={1}
-                              max={15}
-                              value={count}
-                              onChange={event => setCount(Math.min(15, Math.max(1, +event.target.value)))}
-                              className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
-                            />
-                          </label>
-                          <span className="whitespace-nowrap text-[10px] text-n100">参考图+生成≤15</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
-            {supportsStandardTurnaround(asset.assetType) && (
-              <label className="mt-3 inline-flex items-center gap-2 text-xs text-n700">
-                <input
-                  type="checkbox"
-                  checked={standardTurnaround}
-                  onChange={event => setStandardTurnaround(event.target.checked)}
-                  className="accent-primary"
-                />
-                {standardTurnaroundLabel(asset.assetType)}
-              </label>
-            )}
+            <div className="mt-3 grid min-h-[44px] gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+              <div>
+                {supportsStandardTurnaround(asset.assetType) && (
+                  <label className="inline-flex items-center gap-2 text-xs text-n700">
+                    <input
+                      type="checkbox"
+                      checked={standardTurnaround}
+                      onChange={event => setStandardTurnaround(event.target.checked)}
+                      className="accent-primary"
+                    />
+                    {standardTurnaroundLabel(asset.assetType)}
+                  </label>
+                )}
+              </div>
+
+              <div className="flex min-w-[390px] items-center justify-end gap-2">
+                <label className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs ${
+                  generationModel.supportsImageToImageBatch
+                    ? 'border-n40 text-n700'
+                    : 'cursor-not-allowed border-n40 bg-n20 text-n100'
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={imageToImageEnabled}
+                    disabled={!generationModel.supportsImageToImageBatch}
+                    onChange={event => toggleImageToImage(event.target.checked)}
+                    className="accent-primary"
+                  />
+                  图生图
+                </label>
+                <label className={`inline-flex h-9 items-center gap-1 text-xs text-n700 ${
+                  imageToImageEnabled ? '' : 'invisible pointer-events-none'
+                }`}>
+                  <span>生成张数</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={maxDesignImageOutputCount(selectedRefs.size)}
+                    value={count}
+                    onChange={event => updateGenerationCount(event.target.value)}
+                    className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
+                  />
+                </label>
+                <span className="w-[116px] whitespace-nowrap text-[10px] text-n100">
+                  {generationModel.supportsImageToImageBatch
+                    ? '参考图 + 生成图 ≤ 15'
+                    : '当前模型不支持图生图'}
+                </span>
+              </div>
+            </div>
           </section>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-n40 px-6 py-4">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-n40 bg-n0 px-6 py-4">
           <InlineCreditEstimate
             featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
             params={imageCreditParams}
@@ -1424,7 +1658,7 @@ const UnifiedAIModal: React.FC<{
           />
           <div className="flex items-center gap-3">
             <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-            <button onClick={() => { if (!prompt.trim()) { crmMessage.error('请输入提示词'); return; } persistPrompt(prompt); onSubmit({ assetId: asset.assetId, engine, geminiModel, prompt: withStandardTurnaround(prompt, asset.assetType, standardTurnaround), references: materials.filter(m => selectedRefs.has(m.id)).map(m => m.url), aspectRatio: finalAspectRatio, resolution, sequential, count }); }}
+            <button onClick={handleGenerate}
               className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg">开始生成</button>
           </div>
         </div>
@@ -1446,6 +1680,10 @@ const BatchGenerateModal: React.FC<{
   const [resolution, setResolution] = useState(savedResolution());
   const [threeView, setThreeView] = useState(true);
   const [refineModel, setRefineModel] = useState(savedRefineModel());
+  const batchGenerationModel = useMemo(
+    () => findDesignImageModel(engine, geminiModel),
+    [engine, geminiModel],
+  );
 
   const toggle = (id: string) => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const charCount = assets.filter(a => a.assetType === 'character' && checked.has(a.assetId)).length;
@@ -1453,10 +1691,10 @@ const BatchGenerateModal: React.FC<{
   const propCount = assets.filter(a => a.assetType === 'prop' && checked.has(a.assetId)).length;
   const batchCreditParams = useMemo(() => designImageCreditParams({
     imageCount: checked.size,
-    model: engine === 'nanobanana' ? geminiModel : 'doubao-seedream',
+    model: batchGenerationModel.id,
     resolution,
     aspectRatio,
-  }), [aspectRatio, checked.size, engine, geminiModel, resolution]);
+  }), [aspectRatio, batchGenerationModel.id, checked.size, resolution]);
 
   const grouped = useMemo(() => {
     const g: Record<string, AssetItem[]> = { character: [], scene: [], prop: [] };
@@ -1523,7 +1761,7 @@ const BatchGenerateModal: React.FC<{
               <div><span className="text-[11px] text-n100 block mb-1">比例</span><select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
               <div><span className="text-[11px] text-n100 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select></div>
             </div>
-            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value={AiModel.Gemini}>Gemini</option><option value={AiModel.DeepseekChat}>DeepSeek</option></select></div>
+            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value={AiModel.DeepseekChat}>金丹 · DeepSeek Chat</option><option value={AiModel.Gemini}>化神 · Gemini 2.5 Flash</option></select></div>
             <label className="flex items-center gap-2 text-xs text-n700 p-3 bg-n30 rounded-lg border border-n40">
               <input type="checkbox" checked={threeView} onChange={e => setThreeView(e.target.checked)} className="accent-indigo-500" />
               人物/道具默认生成白底四视图

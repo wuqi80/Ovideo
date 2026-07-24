@@ -32,6 +32,12 @@ export interface StoryboardReferencePlan {
   maxReferences: number;
 }
 
+export interface DetachedShotReference {
+  references: GenerationReference[];
+  materialSelections: Record<string, string>;
+  bindingRemoved: boolean;
+}
+
 function normalizedAnchor(raw: unknown): CharacterIdentityAnchor {
   const anchor = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   return {
@@ -144,6 +150,43 @@ export function resolveShotReferences(
   maxReferences = 6,
 ): GenerationReference[] {
   return resolveShotReferencePlan(shot, materialLibrary, existing, maxReferences).references;
+}
+
+export function resolveSelectedShotReferences(
+  shot: StoryboardItem,
+  materialLibrary: MaterialLibrary,
+  activeShotId: string | null,
+  currentReferences: GenerationReference[] = [],
+  maxReferences = 6,
+): GenerationReference[] {
+  const existing = activeShotId === shot.id
+    ? currentReferences
+    : shot.configuredReferences || [];
+  return resolveShotReferences(shot, materialLibrary, existing, maxReferences);
+}
+
+export function detachShotReference(
+  shot: StoryboardItem,
+  references: GenerationReference[],
+  target: GenerationReference,
+): DetachedShotReference {
+  const materialSelections = { ...(shot.materialSelections || {}) };
+  const isAutomaticBinding = AUTO_REFERENCE_SOURCES.has(String(target.source || ''));
+  const bindingRemoved = Boolean(
+    isAutomaticBinding
+    && target.name
+    && Object.prototype.hasOwnProperty.call(materialSelections, target.name),
+  );
+
+  if (bindingRemoved && target.name) {
+    delete materialSelections[target.name];
+  }
+
+  return {
+    references: references.filter(reference => reference.id !== target.id),
+    materialSelections,
+    bindingRemoved,
+  };
 }
 
 function materialMetadata(name: string, materialLibrary: MaterialLibrary, selectedId?: string): Material | undefined {

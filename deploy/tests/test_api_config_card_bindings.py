@@ -159,13 +159,13 @@ def test_gemini_image_legacy_operation_is_recovered_by_model_name():
 
 
 def test_doubao_binding_label_matches_frontend_image_control():
-    from services.api_provider_registry import DOUBAO_IMAGE_PAYG_MODEL, get_provider_model_binding_options
+    from services.api_provider_registry import DOUBAO_IMAGE_DEFAULT_MODEL, get_provider_model_binding_options
 
     assert get_provider_model_binding_options("doubao") == [
         {
             "operation": "generate",
             "label": "筑基境界",
-            "model_name": DOUBAO_IMAGE_PAYG_MODEL,
+            "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
         }
     ]
 

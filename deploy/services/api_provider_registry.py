@@ -33,6 +33,7 @@ PROVIDER_ENV_MAP: Dict[str, str] = {
 PROVIDER_EXTRA_ENV_MAP: Dict[str, Dict[str, str]] = {
     "minimax": {
         "group_id": "MINIMAX_GROUP_ID",
+        "provider_access_mode": "MINIMAX_PROVIDER_ACCESS_MODE",
     },
 }
 
@@ -46,7 +47,16 @@ PROVIDER_EXTRA_FIELD_CATALOG: Dict[str, List[Dict[str, Any]]] = {
             "placeholder": "MiniMax console GroupId",
             "help": "Used by MiniMax TTS, voice design, and voice clone. Hot-reloads into MINIMAX_GROUP_ID.",
             "aliases": ["minimax_group_id"],
-        }
+        },
+        {
+            "field": "provider_access_mode",
+            "label": "MiniMax Access Mode",
+            "target": "request_template",
+            "input_type": "text",
+            "placeholder": "standard / token_plan",
+            "help": "Token Plan keys omit the legacy GroupId query parameter.",
+            "aliases": ["minimax_provider_access_mode"],
+        },
     ],
 }
 
@@ -96,9 +106,10 @@ PROVIDER_KEY_HELP: Dict[str, str] = {
 }
 
 
-DOUBAO_IMAGE_DEFAULT_MODEL = "doubao-seedream-4-0-250828"
-DOUBAO_IMAGE_PAYG_MODEL = "doubao-seedream-5-0-pro-260628"
-DOUBAO_IMAGE_AGENT_PLAN_MODEL = "doubao-seedream-5-0-lite-260128"
+DOUBAO_IMAGE_PAYG_MODEL = "doubao-seedream-5-0-lite-260128"
+DOUBAO_IMAGE_AGENT_PLAN_MODEL = "doubao-seedream-5.0-lite"
+DOUBAO_IMAGE_DEFAULT_MODEL = DOUBAO_IMAGE_AGENT_PLAN_MODEL
+DOUBAO_IMAGE_LEGACY_MODEL = "doubao-seedream-4-0-250828"
 DOUBAO_IMAGE_MODEL_ALIASES: Dict[str, str] = {
     "doubao-seedream-5.0-pro": "doubao-seedream-5-0-pro-260628",
     "doubao-seedream-5-0-pro": "doubao-seedream-5-0-pro-260628",
@@ -111,11 +122,11 @@ DOUBAO_IMAGE_MODEL_ALIASES: Dict[str, str] = {
     "seedream-5.0": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "seedream-5-0": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "seedream-5-0-260128": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
-    "doubao-seedream-4.0": DOUBAO_IMAGE_DEFAULT_MODEL,
-    "doubao-seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
-    "doubao-seedream-4-0-250828": DOUBAO_IMAGE_DEFAULT_MODEL,
-    "seedream-4.0": DOUBAO_IMAGE_DEFAULT_MODEL,
-    "seedream-4-0": DOUBAO_IMAGE_DEFAULT_MODEL,
+    "doubao-seedream-4.0": DOUBAO_IMAGE_LEGACY_MODEL,
+    "doubao-seedream-4-0": DOUBAO_IMAGE_LEGACY_MODEL,
+    "doubao-seedream-4-0-250828": DOUBAO_IMAGE_LEGACY_MODEL,
+    "seedream-4.0": DOUBAO_IMAGE_LEGACY_MODEL,
+    "seedream-4-0": DOUBAO_IMAGE_LEGACY_MODEL,
     "doubao-seedream-5.0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "doubao-seedream-5-0-lite": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
     "doubao-seedream-5-0-lite-260128": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
@@ -130,7 +141,7 @@ DOUBAO_IMAGE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "generate",
         "label": "筑基境界",
-        "model_name": DOUBAO_IMAGE_PAYG_MODEL,
+        "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
     },
 ]
 DOUBAO_IMAGE_ACCESS_MODES: List[Dict[str, Any]] = [

@@ -203,9 +203,6 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   }, [highlightedItemIds]);
 
   const handleCardClick = (e: React.MouseEvent, id: string) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
-
     e.stopPropagation();
     
     const newSet = new Set(highlightedItemIds);

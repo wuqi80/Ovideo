@@ -94,6 +94,12 @@ describe('StoryboardScriptColumn', () => {
     expect(designColumnSource).not.toContain('scale-[1.02]');
   });
 
+  it('selects a design card even when its editable prompt field is clicked', () => {
+    expect(designColumnSource).toContain('onClick={(e) => handleCardClick(e, item.id)}');
+    expect(designColumnSource).not.toContain("target.tagName === 'TEXTAREA'");
+    expect(designColumnSource).not.toContain("target.tagName === 'INPUT'");
+  });
+
   it('shows explicit segment numbers and restarts shot numbering per segment', () => {
     const segmentedFile = {
       ...file,

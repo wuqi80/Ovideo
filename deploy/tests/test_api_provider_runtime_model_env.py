@@ -16,6 +16,7 @@ from services.api_provider_registry import (
     SEEDANCE_DEFAULT_MODEL_MAP,
     DASHSCOPE_DEFAULT_MODEL_MAP,
     DOUBAO_IMAGE_DEFAULT_MODEL,
+    DOUBAO_IMAGE_LEGACY_MODEL,
     MINIMAX_DEFAULT_VIDEO_MODEL,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
@@ -113,7 +114,7 @@ def test_doubao_image_model_alias_helpers_live_in_registry():
     assert normalize_doubao_image_model(None) is None
     assert normalize_doubao_image_model("Doubao-Seedream-5.0-pro") == "doubao-seedream-5-0-pro-260628"
     assert normalize_doubao_image_model("seedream-5-0-pro") == "doubao-seedream-5-0-pro-260628"
-    assert normalize_doubao_image_model("Seedream-4.0") == DOUBAO_IMAGE_DEFAULT_MODEL
+    assert normalize_doubao_image_model("Seedream-4.0") == DOUBAO_IMAGE_LEGACY_MODEL
     assert normalize_doubao_image_model("custom-doubao-endpoint") == "custom-doubao-endpoint"
 
 

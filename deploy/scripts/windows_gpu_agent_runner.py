@@ -301,7 +301,11 @@ def _gpu2_prompt(task: Dict[str, Any], task_type: str) -> str:
     if prompt:
         return prompt
     defaults = {
-        "i2i_fj": "Change the camera angle as requested while preserving the subject identity, clothes, and visual style.",
+        "i2i_fj": (
+            "Change the camera angle as requested while preserving the subject identity, clothes, and visual style. "
+            "Keep the complete visible subject fully inside the frame, including the top of the head and both feet "
+            "for a full-body character. Reframe or zoom out as needed, leave a safe margin, and do not crop body parts."
+        ),
         "i2i_human": "Create a clean multi-angle character reference sheet while preserving identity, clothes, and visual style.",
         "i2i_around": "Create a consistent alternate viewing angle while preserving the scene, subject, and visual style.",
         "remove_watermark": "Remove all visible watermarks and repair the covered area naturally. Preserve all other content.",

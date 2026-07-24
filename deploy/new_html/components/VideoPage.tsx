@@ -240,6 +240,11 @@ function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; tim
 
 const VIDEO_GROUP_PAGE_SIZE = 10;
 const VIDEO_BATCH_WAIT_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const VIDEO_LIBRARY_CANDIDATE_PARAMS: SeedanceParams = {
+    sub_model: 'standard',
+    prompt: '',
+    media_inputs: [],
+};
 
 type VideoBatchWaitResult = 'done' | 'failed' | 'timeout';
 
@@ -258,6 +263,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 状态管理
     const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
     const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
+    const {
+        candidates: videoLibraryCandidates,
+        isLoading: videoLibraryLoading,
+    } = useSeedanceCandidates({ currentParams: VIDEO_LIBRARY_CANDIDATE_PARAMS });
     const [imagePrompts, setImagePrompts] = useState<Record<string, string>>({});
     const [tasksStatus, setTasksStatus] = useState<Record<string, TaskStatus>>({});
     const [taskStartTimes, setTaskStartTimes] = useState<Record<string, number>>({});
@@ -4621,10 +4630,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-semibold text-n700">选择 / 替换图片</h3>
+                            <h3 className="text-sm font-semibold text-n700">从库里添加图片</h3>
                             <div className="flex items-center gap-2">
                                 <label className="px-2 py-1 bg-primary hover:bg-primary-hover text-white text-[11px] rounded cursor-pointer inline-flex items-center gap-1">
-                                    <Upload className="w-3 h-3" /> 上传新图
+                                    <Upload className="w-3 h-3" /> 从外部添加
                                     <input
                                         type="file"
                                         accept="image/*"
@@ -4658,14 +4667,33 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             </div>
                         </div>
                         <p className="text-[11px] text-n100 mb-3">
-                            从已上传的素材中选一张，或点击右上角"上传新图"上传本地文件后立即替换。
+                            可从设计、素材、分镜生成结果及通用素材库中选择，或从外部上传本地图片。
                         </p>
                         {(() => {
-                            const candidates = uploadedImages.filter(img => img.url && !img.isPlaceholder);
+                            const seen = new Set<string>();
+                            const libraryImages = videoLibraryCandidates
+                                .filter(candidate => candidate.kind === 'image' && candidate.url)
+                                .map(candidate => ({
+                                    id: candidate.id,
+                                    url: candidate.url as string,
+                                    filename: candidate.label,
+                                }));
+                            const candidates = [
+                                ...uploadedImages
+                                    .filter(img => img.url && !img.isPlaceholder)
+                                    .map(img => ({ id: img.id, url: img.url, filename: img.filename || img.id })),
+                                ...libraryImages,
+                            ].filter(candidate => {
+                                if (seen.has(candidate.url)) return false;
+                                seen.add(candidate.url);
+                                return true;
+                            });
                             if (candidates.length === 0) {
                                 return (
                                     <div className="text-center text-n100 py-12 text-sm">
-                                        当前会话还没有可选的图片，请点击"上传新图"或从分镜导入。
+                                        {videoLibraryLoading
+                                            ? '正在加载项目素材库...'
+                                            : '项目里还没有可选图片，请从外部添加。'}
                                     </div>
                                 );
                             }

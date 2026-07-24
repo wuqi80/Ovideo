@@ -37,4 +37,31 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain('.filter(f => isDesignAssetImageFileRole(f.fileRole)');
     expect(source).toContain('const materialStageUrls = new Set(');
   });
+
+  it('keeps AI generation actions visible in short desktop viewports', () => {
+    expect(source).toContain('max-h-[calc(100vh-1.5rem)]');
+    expect(source).toContain('sm:max-h-[calc(100vh-2rem)]');
+    expect(source).toContain('flex shrink-0 items-center justify-between px-6 pt-6 pb-4');
+    expect(source).toContain('min-h-0 flex-1 overflow-y-auto px-6 pb-5');
+    expect(source).toContain('flex shrink-0 flex-wrap items-center justify-between');
+  });
+
+  it('keeps image-to-image controls on a stable second row', () => {
+    expect(source).toContain('mt-3 grid min-h-[44px]');
+    expect(source).toContain('invisible pointer-events-none');
+    expect(source).toContain('生成张数');
+    expect(source).toContain('参考图 + 生成图 ≤ 15');
+  });
+
+  it('only enables and submits selected references in image-to-image mode', () => {
+    expect(source).toContain('disabled={!imageToImageEnabled}');
+    expect(source).toContain('if (!imageToImageEnabled) return;');
+    expect(source).toContain('references: imageToImageEnabled');
+    expect(source).toContain("sequential: imageToImageEnabled ? 'auto' : 'disabled'");
+  });
+
+  it('defaults refinement to Jindan and lists it before Huashen', () => {
+    expect(source).toContain("LS.get('design_ai_refine_model', AiModel.DeepseekChat)");
+    expect(source.indexOf('金丹 · DeepSeek Chat')).toBeLessThan(source.indexOf('化神 · Gemini 2.5 Flash'));
+  });
 });

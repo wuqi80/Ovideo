@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
+  ArrowLeftRight,
   ArrowUp,
   Bot,
   Check,
@@ -15,6 +16,7 @@ import {
   History,
   Layers3,
   LoaderCircle,
+  Maximize2,
   MessageSquare,
   PanelRightClose,
   PanelRightOpen,
@@ -185,6 +187,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const [editValue, setEditValue] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isReferenceScriptCollapsed, setIsReferenceScriptCollapsed] = useState(false);
+  const [isReferenceScriptOnLeft, setIsReferenceScriptOnLeft] = useState(true);
+  const [isComposerFullscreen, setIsComposerFullscreen] = useState(false);
   const [composerHeight, setComposerHeight] = useState(132);
   const [isResizingComposer, setIsResizingComposer] = useState(false);
   const [scrollControls, setScrollControls] = useState({ canScrollUp: false, canScrollDown: false });
@@ -445,14 +449,16 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     };
   }, [isResizingComposer]);
 
-  const submit = async () => {
+  const submit = async (): Promise<boolean> => {
     const content = draft.trim();
-    if (!content || isSending || !selectedFile) return;
+    if (!content || isSending || !selectedFile) return false;
     setDraft('');
     try {
       await onSend(content, shotDurationMode);
+      return true;
     } catch {
       setDraft(content);
+      return false;
     }
   };
 
@@ -478,6 +484,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     setEditingVersion(version);
     setEditValue(version.content);
     setIsReferenceScriptCollapsed(false);
+    setIsReferenceScriptOnLeft(true);
   };
 
   const saveEdit = async () => {
@@ -861,6 +868,17 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             >
           <button
             type="button"
+            data-testid="composer-fullscreen-button"
+            onClick={() => setIsComposerFullscreen(true)}
+            disabled={!selectedFile || isSending}
+            title="全屏输入文字剧本或修改要求"
+            aria-label="全屏输入剧本"
+            className="absolute right-12 top-2 z-10 inline-flex h-6 w-8 items-center justify-center rounded text-n100 hover:bg-n20 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Maximize2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             data-testid="composer-resize-handle"
             onPointerDown={event => {
               event.preventDefault();
@@ -888,7 +906,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             disabled={!selectedFile || isSending}
             rows={2}
             placeholder={(conversation?.messages || []).length > 0 ? '继续输入修改意见…' : '输入文字剧本…'}
-            className="min-h-0 flex-1 resize-none bg-transparent px-4 pb-2 pt-4 pr-12 text-sm leading-6 text-n800 outline-none placeholder:text-n100 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-0 flex-1 resize-none bg-transparent px-4 pb-2 pt-4 pr-20 text-sm leading-6 text-n800 outline-none placeholder:text-n100 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <div className="flex min-h-11 items-center gap-2 px-3 py-2">
             <input
@@ -982,6 +1000,99 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
         </div>
       </div>
 
+      {isComposerFullscreen && (
+        <div
+          data-testid="fullscreen-script-composer"
+          className="fixed inset-0 z-[120] flex flex-col bg-n0"
+        >
+          <div className="flex h-14 flex-shrink-0 items-center border-b border-n40 px-5">
+            <div>
+              <h2 className="text-sm font-semibold text-n800">
+                {(conversation?.messages || []).length > 0 ? '全屏输入修改要求' : '全屏输入文字剧本'}
+              </h2>
+              <p className="mt-0.5 text-xs text-n200">内容与底部对话框实时同步，关闭后不会丢失。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsComposerFullscreen(false)}
+              title="退出全屏输入"
+              aria-label="退出全屏输入"
+              className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded hover:bg-n20"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 p-5">
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={event => setDraft(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  void submit().then(sent => {
+                    if (sent) setIsComposerFullscreen(false);
+                  });
+                }
+              }}
+              disabled={!selectedFile || isSending}
+              placeholder={(conversation?.messages || []).length > 0 ? '继续输入修改意见…' : '输入文字剧本…'}
+              className="h-full w-full resize-none rounded-lg border border-n40 bg-n0 p-5 text-sm leading-7 text-n800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+          </div>
+          <div className="flex min-h-16 flex-shrink-0 items-center gap-3 border-t border-n40 px-5 py-3">
+            <button
+              type="button"
+              onClick={() => composerFileInputRef.current?.click()}
+              disabled={!selectedFile || isSending}
+              title="上传文本到输入框"
+              className="inline-flex h-9 items-center gap-2 rounded border border-n40 px-3 text-sm text-n500 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Upload className="h-4 w-4" />
+              上传文本
+            </button>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
+              <Coins className="h-3.5 w-3.5" />
+              预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
+            </span>
+            <label className="relative ml-auto min-w-0">
+              <span className="sr-only">选择剧本模型</span>
+              <select
+                value={aiModel}
+                onChange={event => onChangeModel(event.target.value as AiModel)}
+                disabled={isSending}
+                className="h-9 max-w-[260px] appearance-none rounded border border-n40 bg-n0 pl-3 pr-8 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
+              >
+                {SCRIPT_MODEL_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label} · {option.runtime}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsComposerFullscreen(false)}
+              className="h-9 rounded border border-n40 px-4 text-sm text-n500 hover:bg-n20"
+            >
+              完成输入
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void submit().then(sent => {
+                  if (sent) setIsComposerFullscreen(false);
+                });
+              }}
+              disabled={!selectedFile || !draft.trim() || isSending}
+              className="inline-flex h-9 items-center gap-2 rounded bg-primary px-4 text-sm text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-n100"
+            >
+              {isSending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              发送
+            </button>
+          </div>
+        </div>
+      )}
+
       {editingVersion && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-n900/45 p-3 sm:p-5">
           <div className="flex h-full w-full max-w-[1600px] flex-col rounded-md border border-n40 bg-n0 shadow-bottom">
@@ -999,12 +1110,25 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 {isReferenceScriptCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
                 {isReferenceScriptCollapsed ? '展开文字剧本' : '收起文字剧本'}
               </button>
+              <button
+                type="button"
+                onClick={() => setIsReferenceScriptOnLeft(current => !current)}
+                disabled={isReferenceScriptCollapsed}
+                className="ml-2 inline-flex h-8 items-center gap-1.5 rounded border border-n40 bg-n0 px-3 text-xs text-n700 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="交换文字剧本与分镜脚本的左右位置"
+                title={isReferenceScriptCollapsed ? '请先展开文字剧本对照' : '交换左右位置'}
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                交换左右
+              </button>
               <button type="button" onClick={() => setEditingVersion(null)} className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800" aria-label="关闭">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className={`grid min-h-0 flex-1 overflow-hidden ${isReferenceScriptCollapsed ? 'grid-cols-1 grid-rows-1' : 'grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1'}`}>
-              <section className="flex min-h-0 min-w-0 flex-col bg-n0">
+            <div className={`grid min-h-0 flex-1 gap-px overflow-hidden bg-n40 ${isReferenceScriptCollapsed ? 'grid-cols-1 grid-rows-1' : 'grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1'}`}>
+              <section className={`flex min-h-0 min-w-0 flex-col bg-n0 ${
+                isReferenceScriptCollapsed || !isReferenceScriptOnLeft ? 'order-1' : 'order-2'
+              }`}>
                 <div className="flex h-10 flex-shrink-0 items-center border-b border-n40 px-5 text-xs font-semibold text-n700">
                   分镜脚本（可编辑）
                 </div>
@@ -1016,7 +1140,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 />
               </section>
               {!isReferenceScriptCollapsed && (
-                <aside className="flex min-h-0 min-w-0 flex-col border-t border-n40 bg-n20 lg:border-l lg:border-t-0">
+                <aside className={`flex min-h-0 min-w-0 flex-col bg-n20 ${
+                  isReferenceScriptOnLeft ? 'order-1' : 'order-2'
+                }`}>
                   <div className="flex h-10 flex-shrink-0 items-center justify-between border-b border-n40 px-5">
                     <span className="text-xs font-semibold text-n700">文字剧本（对照）</span>
                     <span className="text-[10px] text-n100">最初输入 · 只读</span>

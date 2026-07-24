@@ -302,6 +302,82 @@ export function buildStoryboardSegmentGroups(
   return groups;
 }
 
+const DEFAULT_SEGMENT_VISUAL_STYLE = '电影感竖屏构图，统一角色、场景、服装与光影风格';
+const DEFAULT_SEGMENT_STABILITY = '角色身份和造型稳定，五官与肢体自然，动作连贯，主体清晰，无字幕、无水印、无Logo';
+
+function extractPromptSection(prompt: string, label: '视觉风格' | '正向稳定约束'): string {
+  const nextLabel = label === '视觉风格' ? '正向稳定约束' : '';
+  const pattern = nextLabel
+    ? new RegExp(`【${label}】([\\s\\S]*?)(?=【${nextLabel}】|$)`)
+    : new RegExp(`【${label}】([\\s\\S]*)$`);
+  return String(prompt || '')
+    .match(pattern)?.[1]
+    ?.replace(/^[，,：:\s]+|[，,。；;\s]+$/g, '')
+    .trim() || '';
+}
+
+function extractVisualStyleFromShot(item: StoryboardItem): string {
+  const text = [item.originalText, item.videoScriptBlock]
+    .filter(Boolean)
+    .join('\n');
+  return text.match(/光影色调\s*[：:]\s*([^\n]+)/)?.[1]?.trim()
+    || text.match(/氛围与特效\s*[：:]\s*([^\n]+)/)?.[1]?.trim()
+    || DEFAULT_SEGMENT_VISUAL_STYLE;
+}
+
+function buildSharedSegmentVideoPrompt(group: StoryboardSegmentGroup): string {
+  const explicit = group.entries
+    .map(entry => String(entry.item.videoPrompt || '').trim())
+    .find(prompt => prompt.includes('【视觉风格】') || prompt.includes('【正向稳定约束】')) || '';
+  const visualStyle = extractPromptSection(explicit, '视觉风格')
+    || extractVisualStyleFromShot(group.entries[0]?.item);
+  const stability = extractPromptSection(explicit, '正向稳定约束')
+    || DEFAULT_SEGMENT_STABILITY;
+  const lastShot = String(Math.max(1, group.entries.length)).padStart(2, '0');
+  return `镜头01-${lastShot}，【视觉风格】${visualStyle}，【正向稳定约束】${stability}。`;
+}
+
+function writeSharedVideoPrompt(originalText: string, prompt: string): string {
+  const value = String(originalText || '').trim();
+  if (!value) return `视频提示词：${prompt}`;
+  if (/^视频提示词\s*[：:]/m.test(value)) {
+    return value.replace(/^视频提示词\s*[：:][^\n]*/m, `视频提示词：${prompt}`);
+  }
+  return `${value}\n视频提示词：${prompt}`;
+}
+
+/**
+ * One segment is rendered as one video from multiple generated stills.
+ * Keep every shot in that segment on the exact same video prompt even when
+ * the model omits the field or returns inconsistent shot-level text.
+ */
+export function synchronizeStoryboardSegmentVideoPrompts(
+  items: StoryboardItem[],
+  scriptSegments: ScriptSegment[] = [],
+): StoryboardItem[] {
+  const normalized = normalizeStoryboardSegmentMetadata(items, scriptSegments);
+  const promptByItemId = new Map<string, string>();
+
+  buildStoryboardSegmentGroups(normalized, scriptSegments).forEach((group) => {
+    const prompt = buildSharedSegmentVideoPrompt(group);
+    group.entries.forEach(entry => promptByItemId.set(entry.item.id, prompt));
+  });
+
+  return normalized.map((item) => {
+    if (item.isPlaceholder) return item;
+    const prompt = promptByItemId.get(item.id);
+    if (!prompt) return item;
+    return {
+      ...item,
+      videoPrompt: prompt,
+      originalText: writeSharedVideoPrompt(
+        item.originalText || item.videoScriptBlock || item.scriptSegment,
+        prompt,
+      ),
+    };
+  });
+}
+
 export function buildStoryboardSegmentLookup(
   items: StoryboardItem[],
   scriptSegments: ScriptSegment[] = [],
@@ -351,7 +427,8 @@ export function serializeStoryboardItemsWithSegments(
   items: StoryboardItem[],
   scriptSegments: ScriptSegment[] = [],
 ): string {
-  return buildStoryboardSegmentGroups(items, scriptSegments)
+  const synchronized = synchronizeStoryboardSegmentVideoPrompts(items, scriptSegments);
+  return buildStoryboardSegmentGroups(synchronized, scriptSegments)
     .flatMap(group => [
       `分段${String(group.segmentNo).padStart(2, '0')}`,
       ...group.entries.flatMap(entry => [

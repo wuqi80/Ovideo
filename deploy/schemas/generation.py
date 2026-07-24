@@ -182,6 +182,8 @@ class ComfyUIWorkflowRequest(BaseModel):
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
     preferred_agent_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的 GPU Agent")
     preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
+    output_width: Optional[int] = Field(None, ge=64, le=8192, description="目标图像宽度")
+    output_height: Optional[int] = Field(None, ge=64, le=8192, description="目标图像高度")
 
 
 class ComfyUIRoutedRequest(BaseModel):

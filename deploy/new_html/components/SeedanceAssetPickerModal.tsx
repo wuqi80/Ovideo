@@ -17,10 +17,12 @@ export interface SeedanceAssetPickerModalProps {
 const GROUP_LABELS: Record<string, string> = {
     current_card: '当前卡',
     storyboard_data: '分镜',
+    storyboard_library: '分镜生成资源',
     assets: '素材库',
     audio: '音频',
     video_segments: '视频片段',
     user_files: '媒体库',
+    media_library: '通用素材库',
     ark_asset_id: '远程 ID',
 };
 
@@ -57,7 +59,7 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
         <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center" onClick={p.onClose}>
             <div className="w-[600px] max-h-[80vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-3 py-2 border-b border-n40">
-                    <div className="text-sm text-n700">插入素材（多选）</div>
+                    <div className="text-sm text-n700">从库里添加（多选）</div>
                     {episodeId && (
                         <div className="ml-auto mr-2 flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n20" title="素材引用范围">
                             <button
@@ -145,7 +147,7 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
                 <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-n40">
                     <button onClick={p.onClose} className="px-3 py-1 text-xs text-n700">取消</button>
                     <button onClick={apply} disabled={selected.size === 0} className="px-3 py-1 text-xs bg-primary hover:bg-primary-hover disabled:opacity-40 rounded text-white">
-                        插入 {selected.size} 项
+                        添加 {selected.size} 项
                     </button>
                 </div>
             </div>

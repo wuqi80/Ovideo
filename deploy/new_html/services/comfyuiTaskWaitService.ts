@@ -228,7 +228,7 @@ export const waitForComfyUITask = async (
                 // 一次状态读取成功就清零瞬时错误计数。
                 consecutiveErrors = 0;
 
-                if (onProgress && status.progress) {
+                if (onProgress && status.progress != null) {
                     onProgress(status.progress);
                 }
                 updateTaskProgress(registryKey, status, hasRegistryMeta);
@@ -294,7 +294,7 @@ export const waitForComfyUITaskAllImages = async (
                 // 一次状态读取成功就清零瞬时错误计数。
                 consecutiveErrors = 0;
 
-                if (onProgress && status.progress) {
+                if (onProgress && status.progress != null) {
                     onProgress(status.progress);
                 }
                 updateTaskProgress(registryKey, status, hasRegistryMeta);

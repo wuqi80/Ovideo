@@ -28,10 +28,12 @@ export interface SeedanceMentionPromptEditorProps {
 const GROUP_LABELS: Record<string, string> = {
     current_card: '当前卡',
     storyboard_data: '分镜',
+    storyboard_library: '分镜生成资源',
     assets: '素材库',
     audio: '音频',
     video_segments: '视频片段',
     user_files: '媒体库',
+    media_library: '通用素材库',
     ark_asset_id: '远程 ID',
 };
 

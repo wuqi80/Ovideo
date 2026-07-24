@@ -100,6 +100,11 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('最初输入 · 只读');
     expect(source).toContain("isReferenceScriptCollapsed ? '展开文字剧本' : '收起文字剧本'");
     expect(source).toContain("isReferenceScriptCollapsed ? 'grid-cols-1 grid-rows-1' : 'grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1'");
+    expect(source).toContain('const [isReferenceScriptOnLeft, setIsReferenceScriptOnLeft] = useState(true)');
+    expect(source).toContain('setIsReferenceScriptOnLeft(true)');
+    expect(source).toContain('aria-label="交换文字剧本与分镜脚本的左右位置"');
+    expect(source).toContain("isReferenceScriptCollapsed || !isReferenceScriptOnLeft ? 'order-1' : 'order-2'");
+    expect(source).toContain("isReferenceScriptOnLeft ? 'order-1' : 'order-2'");
   });
 
   it('moves the composer resize handle to the upper right and follows the latest reply', () => {

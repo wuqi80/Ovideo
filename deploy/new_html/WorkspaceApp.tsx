@@ -18,14 +18,13 @@ import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getS
 import { getAuthToken } from './services/httpClient';
 import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
 import {
-  buildStoryboardValidationInstruction,
   ensureStoryboardCutSeparators,
-  validateStoryboardIterationCount,
 } from './utils/scriptIteration';
 import {
   buildStoryboardSegmentGroups,
   normalizeStoryboardItemsForWorkflow,
   serializeStoryboardItemsWithSegments,
+  synchronizeStoryboardSegmentVideoPrompts,
 } from './utils/storyboardSegments';
 import {
   STORYBOARD_SNAPSHOTS_METADATA_KEY,
@@ -212,7 +211,9 @@ function parseStoryboardVersionContent(content: string): StoryboardItem[] {
     const item = convertToStoryboardItem(block);
     return { ...item, shotNumber: `镜头${String(index + 1).padStart(2, '0')}` };
   });
-  return normalizeStoryboardItemsForWorkflow(items);
+  return synchronizeStoryboardSegmentVideoPrompts(
+    normalizeStoryboardItemsForWorkflow(items),
+  );
 }
 
 function exportStoryboardVersionCsv(file: ProjectFile, version: ScriptStoryboardVersion): void {
@@ -1622,17 +1623,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       if (!rawFinalContent || parsedItems.length === 0) {
         throw new Error('模型返回内容无法识别为分镜脚本，请重新描述要求后再试');
       }
-      if (!isFirstTurn && currentVersion) {
-        const previousCount = normalizeVersionStoryboardItems(currentVersion.storyboardItems).filter(item => !item.isPlaceholder).length;
-        const previousUserInstructions = conversation.messages
-          .filter(message => message.role === 'user')
-          .map(message => message.content);
-        const validationInstruction = buildStoryboardValidationInstruction(content, previousUserInstructions);
-        const validation = validateStoryboardIterationCount(previousCount, parsedItems.length, validationInstruction);
-        if (!validation.valid) {
-          throw new Error(`${validation.message || '模型返回的镜头数量不符合本轮要求'} 本次结果未保存、未扣积分，请重试。`);
-        }
-      }
       const finalContent = serializeStoryboardItemsWithSegments(parsedItems);
       const billingParams = {
         input_tokens: estimateTextTokens(billingInput),
@@ -2731,21 +2721,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                 };
                 // 🔧 Bug 6 修复：续写循环失控会导致 92 个镜头被生成成 450 个（4-5x 重复）。
                 // 三层硬约束（不依赖 AI 自觉判断"已完成"）：
-                // 1) 段内已知镜头数硬上限：当段内有 镜头N 标记时（场景 B/C），用 countShots
-                //    直接知道这段最多应该几个镜头，达到就强制 break，不再调 AI
-                // 2) 续写零产出 break：本轮续写没产出任何新有效镜头 → AI 在重复或没东西可写 → break
-                // 3) MAX 从 8 调到 3：纯叙事文本场景兜底，避免 8 轮 × 10 镜头 = 80 镜头/段的爆炸
-                const expectedShotsInSegment = countShots(segment); // 0 表示叙事文本（无标记）
+                // 1) 续写零产出 break：本轮续写没产出任何新有效镜头 → AI 在重复或没东西可写 → break
+                // 2) MAX 为 3：避免错误的 CONTINUE_FROM 造成无限续写。
+                // 镜头数量由本轮模型结果决定，不再用输入或上一版镜头数截断。
                 const MAX_CONTINUATIONS_PER_SEGMENT = 3;
                 let continuationCount = 0;
                 let nextShotId = detectContinueMarker(fullAccumulatedScript);
                 while (nextShotId && continuationCount < MAX_CONTINUATIONS_PER_SEGMENT) {
-                    // 硬约束 1：段内已知镜头数已被覆盖 → 不再续写（AI 输出的 CONTINUE_FROM 是错觉）
-                    if (expectedShotsInSegment > 0 && parsedItems.length >= expectedShotsInSegment) {
-                        console.log(`✋ 第 ${segmentIndex + 1} 段已生成 ${parsedItems.length} 个镜头（段内标记数 ${expectedShotsInSegment}），跳过续写`);
-                        break;
-                    }
-
                     continuationCount++;
                     console.log(`🔄 第 ${segmentIndex + 1} 段第 ${continuationCount} 次续写：从 ${nextShotId} 开始`);
                     const beforeContinue = parsedItems.length;
@@ -2762,7 +2744,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         break;
                     }
 
-                    // 硬约束 2：本轮续写没产出新镜头 → AI 没东西可写 → 立即停
+                    // 本轮续写没产出新镜头 → AI 没东西可写 → 立即停
                     const newCount = parsedItems.length - beforeContinue;
                     if (newCount === 0) {
                         console.log(`✋ 第 ${segmentIndex + 1} 段第 ${continuationCount} 次续写零产出，停止续写循环`);
@@ -2803,15 +2785,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                 console.log(`✅ 第 ${segmentIndex + 1} 段完成: ${parsedItems.length} 个镜头，累计: ${allParsedItems.length} 个`);
             }
 
-            // 🆕 限制镜头数量
-            // - 输入有 镜头N 标识时（totalShots > 0）：截到 totalShots（输入即真理）
-            // - 叙事文本（totalShots = 0）：按段数兜底，每段最多保留 MAX_CONTINUATIONS_PER_SEGMENT+1
-            //   即首次 10 + 续写 N 段；防止极端情况下还是产出过多重复
-            //   （Bug 6 续写硬约束生效后这里几乎不会触发，仅作最后兜底）
-            if (totalShots > 0 && allParsedItems.length > totalShots) {
-                console.log(`⚠️ 生成了 ${allParsedItems.length} 个镜头，限制为输入的 ${totalShots} 个`);
-                allParsedItems = allParsedItems.slice(0, totalShots);
-            } else if (totalShots === 0) {
+            // 只保留防御无限续写的异常上限，不按输入或上一版镜头数量截断正常结果。
+            if (totalShots === 0) {
                 const narrativeMax = Math.max(50, segments.length * 40);
                 if (allParsedItems.length > narrativeMax) {
                     console.warn(`⚠️ 叙事文本生成了 ${allParsedItems.length} 个镜头，按兜底上限截到 ${narrativeMax} 个`);

@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   recommendGptImageSize,
+  resolveGptImageSettings,
   GPT_IMAGE_RATIO_OPTIONS,
   GPT_IMAGE_K_OPTIONS,
   GPT_IMAGE_QUALITY_OPTIONS,
@@ -67,9 +68,70 @@ describe('recommendGptImageSize', () => {
   });
 });
 
+describe('resolveGptImageSettings', () => {
+  it('没有参考素材时稳定回落到标准 16:9 1K', () => {
+    expect(resolveGptImageSettings('auto', 'auto')).toEqual({
+      ratio: '16:9',
+      k: '1K',
+      sourceDimensions: null,
+    });
+  });
+
+  it('按像素面积最大的参考素材推导比例和分辨率档位', () => {
+    expect(resolveGptImageSettings('auto', 'auto', [
+      { width: 1024, height: 1024 },
+      { width: 1920, height: 1080 },
+      { width: 640, height: 480 },
+    ])).toEqual({
+      ratio: '16:9',
+      k: '1K',
+      sourceDimensions: { width: 1920, height: 1080 },
+    });
+  });
+
+  it('使用最接近最大参考图的受支持比例', () => {
+    expect(resolveGptImageSettings('auto', '1K', [
+      { width: 1200, height: 1600 },
+    ])).toMatchObject({
+      ratio: '3:4',
+      k: '1K',
+    });
+  });
+
+  it('超过 2K 档长边的参考素材使用 4K', () => {
+    expect(resolveGptImageSettings('auto', 'auto', [
+      { width: 3200, height: 1800 },
+    ])).toMatchObject({
+      ratio: '16:9',
+      k: '4K',
+    });
+  });
+
+  it('用户显式选择的比例和档位优先于自动推导', () => {
+    expect(resolveGptImageSettings('9:16', '1K', [
+      { width: 4096, height: 2160 },
+    ])).toMatchObject({
+      ratio: '9:16',
+      k: '1K',
+    });
+  });
+
+  it('忽略无效尺寸', () => {
+    expect(resolveGptImageSettings('auto', 'auto', [
+      { width: 0, height: 1080 },
+      { width: Number.NaN, height: 720 },
+    ])).toEqual({
+      ratio: '16:9',
+      k: '1K',
+      sourceDimensions: null,
+    });
+  });
+});
+
 describe('option arrays', () => {
   it('GPT_IMAGE_RATIO_OPTIONS 第一项是 auto', () => {
     expect(GPT_IMAGE_RATIO_OPTIONS[0].value).toBe('auto');
+    expect(GPT_IMAGE_RATIO_OPTIONS[0].label).toContain('最大参考图');
   });
 
   it('GPT_IMAGE_K_OPTIONS 第一项是 auto', () => {
@@ -80,12 +142,14 @@ describe('option arrays', () => {
     expect(GPT_IMAGE_QUALITY_OPTIONS[0].value).toBe('auto');
   });
 
-  it('化神(Nano2) 选项不含 auto — 化神 API 不接受 auto', () => {
-    expect(GEMINI_NANO2_RATIO_OPTIONS.find(o => o.value === 'auto')).toBeUndefined();
-    expect(GEMINI_NANO2_SIZE_OPTIONS.find(o => o.value === 'auto' as never)).toBeUndefined();
+  it('所有图像模型共用自动选项，但提交前会解析为确定值', () => {
+    expect(GEMINI_NANO2_RATIO_OPTIONS[0]).toEqual(GPT_IMAGE_RATIO_OPTIONS[0]);
+    expect(GEMINI_NANO2_SIZE_OPTIONS[0]).toEqual(GPT_IMAGE_K_OPTIONS[0]);
+    expect(resolveGptImageSettings('auto', 'auto', [{ width: 2048, height: 1152 }]))
+      .toMatchObject({ ratio: '16:9', k: '2K' });
   });
 
-  it('化神尺寸选项严格三档', () => {
-    expect(GEMINI_NANO2_SIZE_OPTIONS.map(o => o.value)).toEqual(['1K', '2K', '4K']);
+  it('共用尺寸选项包含自动与 1K/2K/4K', () => {
+    expect(GEMINI_NANO2_SIZE_OPTIONS.map(o => o.value)).toEqual(['auto', '1K', '2K', '4K']);
   });
 });

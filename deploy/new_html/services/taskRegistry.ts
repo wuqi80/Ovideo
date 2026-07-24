@@ -18,7 +18,8 @@
 
 import type { RegisteredTask, GlobalTaskStatus, SourcePage, TaskKind } from '../types';
 
-const STORAGE_KEY = 'h-my2:task-registry:v1';
+const STORAGE_KEY_PREFIX = 'h-my2:task-registry:v1';
+const ANONYMOUS_USER_SCOPE = 'anonymous';
 // 已完成/失败任务在 sessionStorage 里保留 30 分钟（用于 reload 后能看到刚完成的任务）
 const COMPLETED_RETAIN_MS = 30 * 60 * 1000;
 // 2026-06-14：active（pending/queued/running）任务超过此时长仍未完成，视为僵尸/超时，
@@ -76,6 +77,7 @@ class TaskRegistry {
     /** SSR-safe storage handle（测试时可注入） */
     private storage: Storage | null = null;
     private storageInitialized = false;
+    private userScope = ANONYMOUS_USER_SCOPE;
 
     /**
      * Constructor：默认不接 storage（避免 SSR + jsdom 启动期触发 sessionStorage）；
@@ -91,6 +93,24 @@ class TaskRegistry {
     setStorage(storage: Storage | null): void {
         this.storage = storage;
         this.storageInitialized = true;
+    }
+
+    /**
+     * Browser task state is account-scoped. Without this boundary, switching users
+     * in the same tab can rehydrate the previous user's locally cached tasks.
+     */
+    setUserScope(scope?: string | null, emit = true): void {
+        const nextScope = (scope || '').trim() || ANONYMOUS_USER_SCOPE;
+        if (nextScope === this.userScope) return;
+        this.userScope = nextScope;
+        this.tasks.clear();
+        this.completeCallbacks.clear();
+        this.failCallbacks.clear();
+        if (emit) this.emit({ type: 'rehydrate', tasks: [] });
+    }
+
+    private storageKey(): string {
+        return `${STORAGE_KEY_PREFIX}:${encodeURIComponent(this.userScope)}`;
     }
 
     private resolveStorage(): Storage | null {
@@ -390,7 +410,7 @@ class TaskRegistry {
                 .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
                 .slice(0, MAX_COMPLETED_KEEP);
             const payload = { active, done, savedAt: Date.now() };
-            storage.setItem(STORAGE_KEY, JSON.stringify(payload));
+            storage.setItem(this.storageKey(), JSON.stringify(payload));
         } catch (err) {
             // QuotaExceeded / 其它存储错误：log but don't break runtime
             console.warn('[taskRegistry] persist failed:', err);
@@ -401,7 +421,10 @@ class TaskRegistry {
         const storage = this.resolveStorage();
         if (!storage) return [];
         try {
-            const raw = storage.getItem(STORAGE_KEY);
+            // The legacy unscoped cache has unknown ownership and must never be
+            // shown after an account switch.
+            storage.removeItem(STORAGE_KEY_PREFIX);
+            const raw = storage.getItem(this.storageKey());
             if (!raw) return [];
             const data = JSON.parse(raw) as { active?: RegisteredTask[]; done?: RegisteredTask[] };
             const all = [...(data.active || []), ...(data.done || [])];
@@ -499,7 +522,7 @@ class TaskRegistry {
         this.failCallbacks.clear();
         const storage = this.resolveStorage();
         if (storage) {
-            try { storage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+            try { storage.removeItem(this.storageKey()); } catch { /* ignore */ }
         }
         this.emit({ type: 'rehydrate', tasks: [] });
     }

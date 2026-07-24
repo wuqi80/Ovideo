@@ -58,28 +58,23 @@ export const generateFinalIllustrationResult = async (
     referenceMetadata?: GeminiImageReferenceMetadata[],
 ): Promise<GeneratedFileResult> => {
     return callWithRetry(async () => {
-        try {
-            const results = await generateGeminiImageVariant({
-                prompt: `${prompt}\n\nStyle: High quality Anime/Manga screenshot, detailed background, cinematic lighting.`,
-                references: referenceImages,
-                referenceMetadata,
-                aspectRatio: imageOptions?.aspectRatio ?? '16:9',
-                imageSize: imageOptions?.imageSize ?? '2K',
-                entityType: entityOptions?.entityType,
-                entityId: entityOptions?.entityId,
-                fileRole: entityOptions?.fileRole,
-                projectId: entityOptions?.projectId,
-                episodeId: entityOptions?.episodeId,
-            });
+        const results = await generateGeminiImageVariant({
+            prompt: `${prompt}\n\nStyle: High quality Anime/Manga screenshot, detailed background, cinematic lighting.`,
+            references: referenceImages,
+            referenceMetadata,
+            aspectRatio: imageOptions?.aspectRatio ?? '16:9',
+            imageSize: imageOptions?.imageSize ?? '2K',
+            entityType: entityOptions?.entityType,
+            entityId: entityOptions?.entityId,
+            fileRole: entityOptions?.fileRole,
+            projectId: entityOptions?.projectId,
+            episodeId: entityOptions?.episodeId,
+        });
 
-            if (!results || results.length === 0) {
-                throw new Error("No image generated");
-            }
-
-            return results[0];
-        } catch (error) {
-            console.error("Final Gen Error:", error);
-            throw new Error("Failed to generate final illustration.");
+        if (!results || results.length === 0) {
+            throw new Error("No image generated");
         }
+
+        return results[0];
     });
 };

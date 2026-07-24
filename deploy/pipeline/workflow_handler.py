@@ -150,6 +150,33 @@ class WorkflowHandler:
         image_values = {k: v[:50] if v and len(v) > 50 else v for k, v in params.items() if 'image' in k}
         logger.info(f"✅ 替换占位符完成: prompt={bool(params.get('prompt'))}, seed={params.get('seed')}, images={image_values}")
         return result
+
+    @staticmethod
+    def apply_output_dimensions(
+        workflow: Dict[str, Any],
+        output_width: Optional[int],
+        output_height: Optional[int],
+    ) -> Dict[str, Any]:
+        """Apply an explicit image size to every latent-image source in a workflow."""
+        if output_width is None or output_height is None:
+            return workflow
+
+        width = int(output_width)
+        height = int(output_height)
+        updated = 0
+        for node in workflow.values():
+            if not isinstance(node, dict) or node.get('class_type') != 'EmptyLatentImage':
+                continue
+            inputs = node.setdefault('inputs', {})
+            inputs['width'] = width
+            inputs['height'] = height
+            updated += 1
+
+        if updated:
+            logger.info(f"🖼️ 已设置 {updated} 个潜空间节点输出尺寸: {width}x{height}")
+        else:
+            logger.info(f"ℹ️ 工作流无 EmptyLatentImage 节点，忽略输出尺寸: {width}x{height}")
+        return workflow
     
     @staticmethod
     def generate_seed() -> int:
@@ -363,8 +390,13 @@ class WorkflowHandler:
             params['end_image'] = task_data['uploaded_image_end']
             params['last_frame_image'] = task_data['uploaded_image_end']
         
-        # 替换占位符
-        return self.replace_placeholders(workflow, params)
+        # 替换占位符，并将前端选择的比例/档位落实到 GPU 图像工作流。
+        rendered_workflow = self.replace_placeholders(workflow, params)
+        return self.apply_output_dimensions(
+            rendered_workflow,
+            task_data.get('output_width'),
+            task_data.get('output_height'),
+        )
 
 # 全局实例
 _workflow_handler = None

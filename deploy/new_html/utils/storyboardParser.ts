@@ -14,14 +14,23 @@ import { v4 as uuidv4 } from 'uuid';
 export interface ShotBlockFields {
   shotId: string;       // 镜头01, 镜头02 等
   segmentNo?: number;   // 分段01；段内镜头允许重新从 01 编号
+  '时长（秒）'?: string;
   时长?: string;
   时间?: string;        // 🆕 新字段名
+  景别?: string;
   取景?: string;
+  拍摄角度?: string;
   角度?: string;
   摄像机角度?: string;  // 🆕 新字段名
+  运镜方式?: string;
   运动?: string;
   镜头运动?: string;    // 🆕 新字段名
   机位?: string;
+  画面描述?: string;
+  分镜生成提示词?: string;
+  光影色调?: string;
+  画质?: string;
+  台词?: string;
   站位与构图?: string;
   动作与神态?: string;
   氛围与特效?: string;
@@ -31,6 +40,7 @@ export interface ShotBlockFields {
   场景名称?: string;
   人物名称?: string;
   道具名称?: string;
+  视频提示词?: string;
   视觉化描述?: string;
 }
 
@@ -140,18 +150,22 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
 
   // 已知的字段名列表（支持新旧两种字段名）
   const knownFields = [
-    '时长', '时间',  // 时间/时长
+    '时长（秒）', '时长', '时间',
+    '景别',
     '取景', 
+    '拍摄角度',
     '角度', '摄像机角度',  // 支持新旧格式
+    '运镜方式',
     '运动', '镜头运动',    // 支持新旧格式
-    '机位', 
+    '机位',
+    '画面描述', '分镜生成提示词', '光影色调', '画质', '台词',
     '站位与构图', '动作与神态', '氛围与特效', 
-    '人声', '音效', '转场', '场景名称', '人物名称', '道具名称',
+    '人声', '音效', '转场', '场景名称', '人物名称', '道具名称', '视频提示词',
     '视觉化描述'
   ];
   
   // 🆕 分组标题（不是字段，需要跳过）
-  const groupHeaders = ['镜头描述', '画面描述', '镜头语言'];
+  const groupHeaders = ['镜头描述', '镜头语言'];
 
   for (let line of lines) {
     // 🔧 去除行首空格 + 列表标记（- * • · ◦ → 等），兼容用户/AI 用 markdown 列表语法
@@ -178,7 +192,7 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
     // 🆕 检查是否是分组标题行（如 "镜头描述：" 或 "画面描述："）
     let isGroupHeader = false;
     for (const header of groupHeaders) {
-      if (line.startsWith(header + '：') || line.startsWith(header + ':') || line === header + '：' || line === header + ':') {
+      if (line === header + '：' || line === header + ':') {
         // 保存之前的字段
         if (currentField && currentValue.length > 0) {
           (fields as any)[currentField] = currentValue.join('\n');
@@ -256,10 +270,8 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
 
 /**
  * 将解析的字段转换为 StoryboardItem
- * 🔧 按照新规则生成提示词：
- * - imagePrompt（生图提示词）: 取景 + 角度 + 机位 + 站位与构图 + 氛围与特效
- * - videoPrompt（视频提示词）: 运动 + 动作与神态
- * - dialogue（人物台词）: 人声字段
+ * 新格式按“剧本拆分 → 分镜画面提取 → 视频脚本完善”映射到平台字段。
+ * 旧字段只用于读取历史版本，不再参与新格式输出。
  */
 export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem {
   // 🔧 清理字段值：移除可能残留的分组标题文字
@@ -271,36 +283,67 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
   };
   
   // 🔧 兼容新旧字段名
-  const 角度 = fields.角度 || fields.摄像机角度 || '';
-  const 运动 = fields.运动 || fields.镜头运动 || '';
-  const originalDuration = fields.时长 || fields.时间 || '';
-  const dialogueDurationFloor = estimateDialogueDurationSeconds(fields.人声);
+  const 景别 = fields.景别 || fields.取景 || '';
+  const 角度 = fields.拍摄角度 || fields.角度 || fields.摄像机角度 || '';
+  const 运动 = fields.运镜方式 || fields.运动 || fields.镜头运动 || '';
+  const 对白 = fields.人声 || fields.台词 || '';
+  const rawDuration = fields['时长（秒）'] || fields.时长 || fields.时间 || '';
+  const originalDuration = fields['时长（秒）'] && /^\d+(?:\.\d+)?$/.test(rawDuration.trim())
+    ? `${rawDuration.trim()}秒`
+    : rawDuration;
+  const dialogueDurationFloor = estimateDialogueDurationSeconds(对白);
   const parsedDuration = Number.parseFloat(originalDuration);
   const 时长 = dialogueDurationFloor > 0 && (!Number.isFinite(parsedDuration) || parsedDuration < dialogueDurationFloor)
     ? `${dialogueDurationFloor}秒`
     : originalDuration;
   
-  // 🔧 生图提示词: 取景 + 角度 + 机位 + 站位与构图 + 氛围与特效
-  const imagePromptParts = [
+  const canonicalImagePromptParts = [
+    cleanFieldValue(景别),
+    cleanFieldValue(角度),
+    cleanFieldValue(fields.画面描述),
+    cleanFieldValue(fields.光影色调),
+  ].filter(v => v && v.length > 0);
+  const legacyImagePromptParts = [
     cleanFieldValue(fields.取景),
     cleanFieldValue(角度),
     cleanFieldValue(fields.机位),
     cleanFieldValue(fields.站位与构图),
-    cleanFieldValue(fields.氛围与特效)
+    cleanFieldValue(fields.氛围与特效),
   ].filter(v => v && v.length > 0);
+  const hasCanonicalFields = Boolean(
+    fields.景别
+    || fields.画面描述
+    || fields.分镜生成提示词
+    || fields.拍摄角度
+    || fields.运镜方式
+    || fields.光影色调
+    || fields.画质
+    || fields['时长（秒）']
+    || fields.台词
+  );
   
-  // 🆕 如果主要字段为空，使用视觉化描述作为备用
-  let imagePrompt = imagePromptParts.join('，');
+  let imagePrompt = cleanFieldValue(fields.分镜生成提示词)
+    || (hasCanonicalFields ? canonicalImagePromptParts.join('，') : '')
+    || legacyImagePromptParts.join('，');
   if (!imagePrompt && fields.视觉化描述) {
     imagePrompt = cleanFieldValue(fields.视觉化描述);
   }
 
-  // 🔧 视频提示词: 运动 + 动作与神态
-  const videoPromptParts = [
+  const canonicalVideoPromptParts = [
+    cleanFieldValue(景别),
     cleanFieldValue(运动),
-    cleanFieldValue(fields.动作与神态)
+    cleanFieldValue(角度),
+    cleanFieldValue(fields.画面描述),
+    cleanFieldValue(fields.光影色调),
+    cleanFieldValue(fields.画质),
   ].filter(v => v && v.length > 0);
-  const videoPrompt = videoPromptParts.join('，');
+  const legacyVideoPromptParts = [
+    cleanFieldValue(运动),
+    cleanFieldValue(fields.动作与神态),
+  ].filter(v => v && v.length > 0);
+  const videoPrompt = cleanFieldValue(fields.视频提示词)
+    || (hasCanonicalFields ? canonicalVideoPromptParts.join('，') : '')
+    || legacyVideoPromptParts.join('，');
 
   // 解析人物名称为数组
   const characters = fields.人物名称
@@ -310,8 +353,26 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
     ? fields.道具名称.split(/[,，、]/).map(p => p.trim()).filter(p => p)
     : [];
 
-  // 构建原始文本用于存储和显示
-  const originalTextParts = [
+  const usesCanonicalFormat = hasCanonicalFields;
+  const canonicalOriginalTextParts = [
+    fields.shotId,
+    时长 ? `时间：${时长}` : '',
+    景别 ? `景别：${景别}` : '',
+    fields.画面描述 ? `画面描述：${fields.画面描述}` : '',
+    imagePrompt ? `分镜生成提示词：${imagePrompt}` : '',
+    角度 ? `拍摄角度：${角度}` : '',
+    运动 ? `运镜方式：${运动}` : '',
+    fields.光影色调 ? `光影色调：${fields.光影色调}` : '',
+    fields.画质 ? `画质：${fields.画质}` : '',
+    fields.转场 ? `转场：${fields.转场}` : '',
+    对白 ? `人声：${对白}` : '',
+    fields.音效 ? `音效：${fields.音效}` : '',
+    fields.人物名称 ? `人物名称：${fields.人物名称}` : '',
+    fields.场景名称 ? `场景名称：${fields.场景名称}` : '',
+    fields.道具名称 ? `道具名称：${fields.道具名称}` : '',
+    videoPrompt ? `视频提示词：${videoPrompt}` : '',
+  ].filter(Boolean).join('\n');
+  const legacyOriginalTextParts = [
     fields.shotId,
     时长 ? `时间：${时长}` : '',
     fields.取景 ? `取景：${fields.取景}` : '',
@@ -326,18 +387,25 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
     fields.转场 ? `转场：${fields.转场}` : '',
     fields.场景名称 ? `场景名称：${fields.场景名称}` : '',
     fields.人物名称 ? `人物名称：${fields.人物名称}` : '',
-    fields.道具名称 ? `道具名称：${fields.道具名称}` : ''
+    fields.道具名称 ? `道具名称：${fields.道具名称}` : '',
+    fields.视频提示词 ? `视频提示词：${fields.视频提示词}` : ''
   ].filter(Boolean).join('\n');
+  const originalTextParts = usesCanonicalFormat
+    ? canonicalOriginalTextParts
+    : legacyOriginalTextParts;
 
-  // 生成场景描述 (scriptSegment)
-  const scriptSegmentParts = [
+  const legacyScriptSegmentParts = [
     fields.取景,
     角度,
     fields.站位与构图,
-    fields.动作与神态
+    fields.动作与神态,
   ].filter(Boolean);
-  const scriptSegment = scriptSegmentParts.slice(0, 2).join('，') + '。' + 
-    (scriptSegmentParts.slice(2).join('，') || '');
+  const legacyScriptSegment = legacyScriptSegmentParts.length
+    ? `${legacyScriptSegmentParts.slice(0, 2).join('，')}。${legacyScriptSegmentParts.slice(2).join('，')}`.trim()
+    : '';
+  const scriptSegment = cleanFieldValue(fields.画面描述) || legacyScriptSegment;
+  const parsedDurationSeconds = Number.parseFloat(时长);
+  const cameraMovement = [景别, 运动, 角度].filter(Boolean).join('，');
 
   return {
     id: uuidv4(),
@@ -345,13 +413,20 @@ export function convertToStoryboardItem(fields: ShotBlockFields): StoryboardItem
     scriptSegment: scriptSegment.trim() || fields.shotId,
     imagePrompt,
     videoPrompt,
-    dialogue: fields.人声 || '',  // 🔧 人物台词对应人声字段
+    dialogue: 对白,
     characters,
     scene: fields.场景名称 || '',
     props,
     shotNumber: fields.shotId,
     scriptSegmentId: fields.segmentNo ? `storyboard-segment-${fields.segmentNo}` : undefined,
     sourceVideoShotNo: fields.shotId,
+    videoScriptBlock: originalTextParts,
+    shotSize: 景别,
+    cameraAngle: 角度,
+    cameraMovement,
+    plannedDurationMs: Number.isFinite(parsedDurationSeconds)
+      ? Math.round(parsedDurationSeconds * 1000)
+      : null,
     duration: 时长  // 🔧 兼容 时长/时间 两种字段名
   };
 }

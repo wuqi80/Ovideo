@@ -8,6 +8,7 @@ import {
   mergeStoryboardDisplayItems,
   normalizeStoryboardItemsForWorkflow,
   serializeStoryboardItemsWithSegments,
+  synchronizeStoryboardSegmentVideoPrompts,
 } from '../../utils/storyboardSegments';
 import { convertToStoryboardItem, parseStreamingBlocks } from '../../utils/storyboardParser';
 
@@ -185,6 +186,51 @@ describe('storyboard segment normalization', () => {
     expect(content).toContain('镜头02\n时间：7秒');
     expect(content).toContain('分段02\n镜头01\n时间：6秒');
     expect(content).not.toMatch(/镜头(?:16|17|18)/);
+  });
+
+  it('synchronizes every shot in a segment to one exact video prompt', () => {
+    const items = [
+      {
+        ...shot('a', '6秒', 'segment-a'),
+        videoPrompt: '镜头01-02，【视觉风格】电影感动画，【正向稳定约束】角色稳定。',
+      },
+      {
+        ...shot('b', '7秒', 'segment-a'),
+        videoPrompt: '固定镜头，人物抬头。',
+      },
+      {
+        ...shot('c', '5秒', 'segment-b'),
+        videoPrompt: '镜头01-01，【视觉风格】夜景动画，【正向稳定约束】场景稳定。',
+      },
+    ];
+
+    const synchronized = synchronizeStoryboardSegmentVideoPrompts(items);
+
+    expect(synchronized[0].videoPrompt).toBe(synchronized[1].videoPrompt);
+    expect(synchronized[0].videoPrompt).toBe(
+      '镜头01-02，【视觉风格】电影感动画，【正向稳定约束】角色稳定。',
+    );
+    expect(synchronized[0].originalText).toContain(`视频提示词：${synchronized[0].videoPrompt}`);
+    expect(synchronized[1].originalText).toContain(`视频提示词：${synchronized[1].videoPrompt}`);
+    expect(synchronized[2].videoPrompt).toBe(
+      '镜头01-01，【视觉风格】夜景动画，【正向稳定约束】场景稳定。',
+    );
+  });
+
+  it('uses the new light and color field when constructing a missing shared video prompt', () => {
+    const synchronized = synchronizeStoryboardSegmentVideoPrompts([
+      {
+        ...shot('a', '6秒', 'segment-a'),
+        originalText: '镜头01\n光影色调：傍晚冷暖交织。',
+      },
+      {
+        ...shot('b', '6秒', 'segment-a'),
+        originalText: '镜头02\n光影色调：傍晚冷暖交织。',
+      },
+    ]);
+
+    expect(synchronized[0].videoPrompt).toContain('【视觉风格】傍晚冷暖交织。');
+    expect(synchronized[0].videoPrompt).toBe(synchronized[1].videoPrompt);
   });
 });
 

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildCandidates, type CandidateBuildContext } from '../../utils/seedanceCandidateBuilder';
+import {
+    buildCandidates,
+    buildVideoMaterialLibrary,
+    type CandidateBuildContext,
+} from '../../utils/seedanceCandidateBuilder';
 import { baseParams } from './_fixtures/seedance';   // tiny shared helper, see step 3.13
 
 const emptyCtx = (): CandidateBuildContext => ({
@@ -123,6 +127,24 @@ describe('buildCandidates', () => {
         expect(sb.every((c: any) => c.storyboardItemId === 'item-2')).toBe(true);
         // heading + dialogue + image = 3 entries for item-2
         expect(sb).toHaveLength(3);
+    });
+
+    it('keeps other storyboard generated images available as library resources', () => {
+        const ctx: any = {
+            ...emptyCtx(),
+            currentStoryboardItemId: 'item-2',
+            storyboardItems: [
+                { item_id: 'item-1', sort_order: 1, scene_heading: 'A', generated_image_url: '/a.png' },
+                { item_id: 'item-2', sort_order: 2, scene_heading: 'B', generated_image_url: '/b.png' },
+                { item_id: 'item-3', sort_order: 3, scene_heading: 'C', generated_image_url: '/c.png' },
+            ],
+        };
+        const out = buildCandidates(ctx);
+        const scoped = out.filter(c => c.group === 'storyboard_data');
+        const reusable = out.filter(c => c.group === 'storyboard_library');
+
+        expect(scoped.every(candidate => candidate.storyboardItemId === 'item-2')).toBe(true);
+        expect(reusable.map(candidate => candidate.url)).toEqual(['/a.png', '/c.png']);
     });
 
     it('filters audio candidates by currentStoryboardItemId (no public audio bleed)', () => {
@@ -264,5 +286,84 @@ describe('buildCandidates', () => {
         const audio = out.filter(c => c.group === 'audio');
         // sb1 dialogue + cv1 + t1 = 3
         expect(audio).toHaveLength(3);
+    });
+
+    it('emits project media-library image, video, and audio resources', () => {
+        const ctx: any = {
+            ...emptyCtx(),
+            mediaLibraryItems: [
+                { library_item_id: 'lib-image', item_type: 'image', title: '设计图', file_url: '/library/design.png' },
+                { library_item_id: 'lib-video', item_type: 'video', title: '分镜视频', file_url: '/library/shot.mp4' },
+                {
+                    library_item_id: 'lib-audio',
+                    item_type: 'audio',
+                    title: '配音',
+                    file_url: '/library/voice.mp3',
+                    duration_seconds: 2.5,
+                },
+            ],
+        };
+        const media = buildCandidates(ctx).filter(candidate => candidate.group === 'media_library');
+
+        expect(media.map(candidate => candidate.kind)).toEqual(['image', 'video', 'audio']);
+        expect(media.find(candidate => candidate.kind === 'audio')?.durationMs).toBe(2500);
+    });
+
+    it('deduplicates the same resource URL across current card and libraries', () => {
+        const ctx: any = {
+            ...emptyCtx(),
+            currentParams: {
+                ...baseParams(),
+                media_inputs: [{ kind: 'image', url: '/same.png' }],
+            },
+            mediaLibraryItems: [
+                { library_item_id: 'lib-image', item_type: 'image', file_url: '/same.png' },
+            ],
+        };
+        const matching = buildCandidates(ctx).filter(candidate => candidate.url === '/same.png');
+
+        expect(matching).toHaveLength(1);
+        expect(matching[0].group).toBe('current_card');
+    });
+});
+
+describe('buildVideoMaterialLibrary', () => {
+    it('exposes every generated asset image instead of only the first one', () => {
+        const library = buildVideoMaterialLibrary([
+            {
+                assetId: 'character-1',
+                assetType: 'character',
+                name: '主角',
+                thumbnailUrl: '/thumb.png',
+                referenceImages: ['/ref-1.png', '/ref-2.png', '/thumb.png'],
+                entityFiles: [
+                    { fileId: 'generated-1', fileType: 'image', fileUrl: '/generated.png', fileRole: 'generated_image' },
+                    { fileId: 'video-1', fileType: 'video', fileUrl: '/generated.mp4' },
+                ],
+            },
+        ]);
+
+        expect(library.characters.map((item: any) => item.currentVersion.url)).toEqual([
+            '/thumb.png',
+            '/ref-1.png',
+            '/ref-2.png',
+            '/generated.png',
+        ]);
+        expect(library.scenes).toEqual([]);
+        expect(library.props).toEqual([]);
+    });
+
+    it('supports legacy snake_case asset type fields', () => {
+        const library = buildVideoMaterialLibrary([
+            {
+                asset_id: 'scene-legacy',
+                asset_type: 'scene',
+                name: 'Legacy scene',
+                thumbnail_url: '/legacy-scene.png',
+            },
+        ]);
+
+        expect(library.scenes).toHaveLength(1);
+        expect(library.scenes[0].currentVersion.url).toBe('/legacy-scene.png');
     });
 });

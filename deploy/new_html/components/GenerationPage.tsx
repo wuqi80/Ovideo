@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, ReferenceType, GeneratedImage, FileVersion, StoryboardQualityReview } from '../types';
-import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3, Clapperboard, ShieldCheck, AlertTriangle, LockKeyhole, Library, Search, Check } from 'lucide-react';
+import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3, Clapperboard, ShieldCheck, AlertTriangle, LockKeyhole, LockOpen, Library, Search, Check } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateFinalIllustrationResult } from '../services/geminiImageGenerationService';
 import { generateWithComfyUIWorkflowQueued, generateHumanMultiAngleQueued, generateAroundAngleQueued, adjustImageAngleQueued, generateMattingQueued, generateImageFusionQueued, generatePanorama360Queued, generatePanoramaFusionQueued, generateAutoStoryboardQueued, generateMultiGridStoryboard } from '../services/comfyuiGenerationService';
@@ -15,10 +15,11 @@ import {
   GPT_IMAGE_RATIO_OPTIONS,
   GPT_IMAGE_K_OPTIONS,
   GPT_IMAGE_QUALITY_OPTIONS,
-  GEMINI_NANO2_RATIO_OPTIONS,
-  GEMINI_NANO2_SIZE_OPTIONS,
+  recommendGptImageSize,
+  resolveGptImageSettings,
   type GptImageRatio,
   type GptImageK,
+  type SourceImageDimensions,
 } from '../utils/gptImageSizeMap';
 import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/comfyuiTaskWaitService';
 import type { TaskKind } from '../types';
@@ -37,12 +38,30 @@ import {
 import { reviewStoryboardImage } from '../services/storyboardQualityService';
 import {
   buildIdentityAnchoredPrompt,
+  detachShotReference,
   resolveConsistencyModel,
+  resolveSelectedShotReferences,
   resolveShotReferencePlan,
   resolveShotReferences,
   reviewPassed,
   type StoryboardGenerationModel,
 } from '../utils/storyboardConsistency';
+import {
+  applyStoryboardProviderProgress,
+  buildOtherStoryboardImagePickerItems,
+  createStoryboardGenerationProgress,
+  dedupeGeneratedImages,
+  estimateStoryboardGenerationProgress,
+  formatStoryboardGenerationEta,
+  resolveGenerationAttemptResults,
+  runSingleFlight,
+  type StoryboardGenerationProgressState,
+} from '../utils/storyboardGeneration';
+import {
+  resolveStoryboardImageDrag,
+  serializeStoryboardImageDrag,
+  STORYBOARD_IMAGE_DRAG_MIME,
+} from '../utils/storyboardImageDrag';
 
 const MattingModal = React.lazy(() => import('./MattingModal'));
 const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
@@ -53,6 +72,35 @@ function normalizeImageDownloadUrl(url: string): string {
   if (url.startsWith('blob:') || url.startsWith('data:')) return url;
   const normalized = url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`);
   return secureApiUrl(normalized, { absolute: true });
+}
+
+const imageDimensionRequestCache = new Map<string, Promise<SourceImageDimensions | null>>();
+
+function probeImageDimensions(url: string): Promise<SourceImageDimensions | null> {
+  if (!url || typeof Image === 'undefined') return Promise.resolve(null);
+  const normalizedUrl = normalizeImageDownloadUrl(url);
+  const cached = imageDimensionRequestCache.get(normalizedUrl);
+  if (cached) return cached;
+
+  const request = new Promise<SourceImageDimensions | null>((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      resolve(width > 0 && height > 0 ? { width, height } : null);
+    };
+    image.onerror = () => resolve(null);
+    image.src = normalizedUrl;
+  });
+  imageDimensionRequestCache.set(normalizedUrl, request);
+  return request;
+}
+
+async function loadImageDimensions(urls: string[]): Promise<SourceImageDimensions[]> {
+  const dimensions = await Promise.all(
+    Array.from(new Set(urls.filter(Boolean))).map(probeImageDimensions),
+  );
+  return dimensions.filter((item): item is SourceImageDimensions => item !== null);
 }
 
 async function downloadImageBlob(url: string, apiName = '下载图片'): Promise<Blob> {
@@ -160,6 +208,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   // Configuration State
   const [prompt, setPrompt] = useState<string>('');
   const [references, setReferences] = useState<GenerationReference[]>([]);
+  const referencesRef = useRef<GenerationReference[]>([]);
+  const activeReferenceShotIdRef = useRef<string | null>(null);
   const visibleStoryboardItems = useMemo(
     () => selectedFile?.storyboard?.items.slice(0, visibleShotCount) || [],
     [selectedFile?.storyboard?.items, visibleShotCount],
@@ -199,6 +249,25 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   // 追踪用户是否手动修改了prompt（textarea onBlur 用来决定是否写回 shot.imagePrompt）
   const userEditedPromptRef = useRef<boolean>(false);
+  const generationRequestsRef = useRef<Map<string, Promise<void>>>(new Map());
+  const recoveryStartedRef = useRef(false);
+  const updateCurrentShotReferences = useCallback((
+    nextValue: GenerationReference[] | ((current: GenerationReference[]) => GenerationReference[]),
+    extraUpdates: Partial<StoryboardItem> = {},
+  ) => {
+    const nextReferences = typeof nextValue === 'function'
+      ? nextValue(referencesRef.current)
+      : nextValue;
+    referencesRef.current = nextReferences;
+    setReferences(nextReferences);
+    if (selectedShotId) {
+      onUpdateStoryboardItem(selectedShotId, {
+        ...extraUpdates,
+        configuredReferences: nextReferences,
+      });
+    }
+    return nextReferences;
+  }, [onUpdateStoryboardItem, selectedShotId]);
 
   // 2026-05-24 (Bug 1)：移除 filledShotIdsRef "只填充一次" 的优化。
   // 那个 guard 让 effect 在第二次切回某个 shot 时直接 return，
@@ -217,59 +286,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     setPrompt(shot.imagePrompt || '');
     userEditedPromptRef.current = false;
 
-    // 素材页的绑定是唯一事实来源；自动引用随绑定刷新，手工追加引用继续保留。
-    setReferences(resolveShotReferences(shot, materialLibrary, shot.configuredReferences || []));
+    // 同一镜头的其他字段更新不能覆盖尚在当前页面编辑的外部参考图。
+    // 只有真正切换镜头时，才从该镜头已持久化的 configuredReferences 重新装载。
+    const nextReferences = resolveSelectedShotReferences(
+      shot,
+      materialLibrary,
+      activeReferenceShotIdRef.current,
+      referencesRef.current,
+    );
+    activeReferenceShotIdRef.current = shot.id;
+    referencesRef.current = nextReferences;
+    setReferences(nextReferences);
   }, [selectedShotId, selectedFile?.storyboard?.items, materialLibrary]);
-
-  // 🆕 自动保存参考图片到 storyboard item
-  // 使用 ref 追踪状态，避免循环保存
-  const isInitialLoadRef = useRef<boolean>(true);
-  const pendingSaveRef = useRef<{ shotId: string; refs: GenerationReference[] } | null>(null);
-  const lastSavedRefsRef = useRef<string>(''); // 追踪上次保存的内容，避免重复保存
-  
-  // 🔧 修复：实际执行保存的函数
-  const doSave = useCallback((shotId: string, refs: GenerationReference[]) => {
-    // 生成内容签名，避免重复保存相同内容
-    const signature = JSON.stringify(refs.map(r => r.url).sort());
-    if (signature === lastSavedRefsRef.current) {
-      return; // 内容没变，跳过保存
-    }
-    lastSavedRefsRef.current = signature;
-    console.log('💾 自动保存参考图片到镜头:', shotId, '数量:', refs.length);
-    onUpdateStoryboardItem(shotId, { configuredReferences: refs });
-    pendingSaveRef.current = null;
-  }, [onUpdateStoryboardItem]);
-  
-  useEffect(() => {
-    // 跳过初次加载
-    if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-      return;
-    }
-    
-    // 如果没有选中镜头，不保存
-    if (!selectedShotId) return;
-    
-    // 记录待保存的数据
-    pendingSaveRef.current = { shotId: selectedShotId, refs: [...references] };
-    
-    // 延迟保存，避免频繁更新
-    const timeoutId = setTimeout(() => {
-      if (pendingSaveRef.current) {
-        doSave(pendingSaveRef.current.shotId, pendingSaveRef.current.refs);
-      }
-    }, 1000); // 增加延迟到1秒
-    
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [references, selectedShotId, doSave]);
-  
-  // 切换镜头时重置
-  useEffect(() => {
-    isInitialLoadRef.current = true;
-    lastSavedRefsRef.current = ''; // 重置保存签名
-  }, [selectedShotId]);
 
   // 🆕 自动为已有素材生成缩略图（只在首次加载时执行一次）
   const [thumbnailProcessed, setThumbnailProcessed] = useState<Set<string>>(new Set());
@@ -326,9 +354,103 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   }, [selectedFile?.id, visibleStoryboardItems]); // 只处理当前可见镜头
   
   const [generatingShotIds, setGeneratingShotIds] = useState<Set<string>>(new Set());
-  const [batchProgress, setBatchProgress] = useState<{current: number, total: number} | null>(null);
+  const [generationProgressByShot, setGenerationProgressByShot] = useState<Record<string, StoryboardGenerationProgressState>>({});
+  const [batchProgress, setBatchProgress] = useState<{current: number, total: number, activeShotId?: string} | null>(null);
   const isGenerating = generatingShotIds.size > 0;
   const isCurrentShotGenerating = selectedShotId ? generatingShotIds.has(selectedShotId) : false;
+  const currentGenerationProgress = selectedShotId ? generationProgressByShot[selectedShotId] : undefined;
+
+  const beginShotProgress = useCallback((
+    shotId: string,
+    model: string,
+    startedAt = Date.now(),
+    stage = '准备生成',
+  ) => {
+    setGenerationProgressByShot(prev => ({
+      ...prev,
+      [shotId]: createStoryboardGenerationProgress(model, startedAt, stage),
+    }));
+  }, []);
+
+  const updateShotProgressStage = useCallback((
+    shotId: string,
+    stage: string,
+    percent?: number,
+  ) => {
+    setGenerationProgressByShot(prev => {
+      const current = prev[shotId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [shotId]: {
+          ...current,
+          stage,
+          percent: percent == null ? current.percent : Math.max(current.percent, percent),
+        },
+      };
+    });
+  }, []);
+
+  const updateShotProviderProgress = useCallback((shotId: string, progress: number) => {
+    setGenerationProgressByShot(prev => {
+      const current = prev[shotId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [shotId]: applyStoryboardProviderProgress(current, progress),
+      };
+    });
+  }, []);
+
+  const clearShotProgress = useCallback((shotId: string) => {
+    setGenerationProgressByShot(prev => {
+      if (!prev[shotId]) return prev;
+      const next = { ...prev };
+      delete next[shotId];
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (generatingShotIds.size === 0) return;
+    const timer = window.setInterval(() => {
+      setGenerationProgressByShot(prev => {
+        let changed = false;
+        const next = { ...prev };
+        generatingShotIds.forEach(shotId => {
+          const current = prev[shotId];
+          if (!current) return;
+          const updated = estimateStoryboardGenerationProgress(current);
+          if (updated.percent !== current.percent || updated.etaSeconds !== current.etaSeconds) {
+            next[shotId] = updated;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [generatingShotIds]);
+
+  const batchProgressDisplay = useMemo(() => {
+    if (!batchProgress || batchProgress.total <= 0) return null;
+    const active = batchProgress.activeShotId
+      ? generationProgressByShot[batchProgress.activeShotId]
+      : undefined;
+    const aggregatePercent = Math.min(100, Math.round(
+      ((batchProgress.current + ((active?.percent || 0) / 100)) / batchProgress.total) * 100,
+    ));
+    const remainingQueued = Math.max(
+      0,
+      batchProgress.total - batchProgress.current - (batchProgress.activeShotId ? 1 : 0),
+    );
+    const expectedPerQueuedShot = active?.expectedSeconds || 120;
+    const activeEta = active?.etaSeconds ?? expectedPerQueuedShot;
+    const etaSeconds = activeEta === null
+      ? null
+      : activeEta + (remainingQueued * expectedPerQueuedShot);
+    return { aggregatePercent, etaSeconds, active };
+  }, [batchProgress, generationProgressByShot]);
 
   // Version Control State
   const [showHistory, setShowHistory] = useState(false);
@@ -374,8 +496,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   } | null>(null);
   
   const [showMaterialPicker, setShowMaterialPicker] = useState(false);
-  const [materialPickerFilter, setMaterialPickerFilter] = useState<'shot' | 'character' | 'scene' | 'prop' | 'all'>('shot');
+  const [materialPickerFilter, setMaterialPickerFilter] = useState<'shot' | 'other-shot' | 'character' | 'scene' | 'prop' | 'all'>('shot');
   const [materialPickerSearch, setMaterialPickerSearch] = useState('');
+  const [isLoadingOtherShotImages, setIsLoadingOtherShotImages] = useState(false);
 
   // Generation Model State
   // 2026-05-21：扩 type — 加 qwenN_lora（修历史漏洞，UI 早就在用但 type 没声明）
@@ -397,7 +520,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     page: 'GenerationPage:qualityReviewEnabled', episodeId, version: 1, defaultValue: true,
   });
   const [autoRetryConsistency, setAutoRetryConsistency] = usePersistedPageState<boolean>({
-    page: 'GenerationPage:autoRetryConsistency', episodeId, version: 1, defaultValue: true,
+    page: 'GenerationPage:autoRetryConsistency', episodeId, version: 2, defaultValue: false,
   });
   // ComfyUI 档位固定使用用户选择的 GPU 节点，默认 GPU1。
   const COMFYUI_MODELS = React.useMemo(() => new Set<string>(['qwen', 'qwen_lora', 'qwenN', 'qwenN_lora', 'kontext']), []);
@@ -446,34 +569,19 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     defaultValue: {},
   });
 
-  // 2026-05-21：化神 / 天劫一阶 / 天劫二阶 共享的图像参数（持久化偏好）
-  // 化神(nanobanana / gemini-3.1-flash) → 用 imageRatio + imageGeminiK
-  // 天劫一阶(gpt_image_vip / gpt-image-2-vip) → 用 imageRatio + imageK
-  // 天劫二阶(gpt_image_official / gpt-image-2)  → 用 imageRatio + imageK + imageQuality
-  // 'auto' 含义：天劫系列由上游自选；化神不接受 auto 故 UI 不暴露 auto。
+  // 所有分镜图像模型共享比例 / 分辨率偏好。默认 16:9 + 1K；
+  // 用户主动选择 auto 时，提交前按最大参考图解析为确定值。
   const [imageRatio, setImageRatio] = usePersistedPageState<GptImageRatio>({
     page: 'GenerationPage:imageRatio',
     episodeId,
-    version: 1,
-    defaultValue: 'auto',
+    version: 2,
+    defaultValue: '16:9',
   });
   const [imageK, setImageK] = usePersistedPageState<GptImageK>({
     page: 'GenerationPage:imageK',
     episodeId,
-    version: 1,
-    defaultValue: 'auto',
-  });
-  const [geminiNano2Ratio, setGeminiNano2Ratio] = usePersistedPageState<string>({
-    page: 'GenerationPage:geminiNano2Ratio',
-    episodeId,
-    version: 1,
-    defaultValue: '16:9',
-  });
-  const [geminiNano2Size, setGeminiNano2Size] = usePersistedPageState<'1K' | '2K' | '4K'>({
-    page: 'GenerationPage:geminiNano2Size',
-    episodeId,
-    version: 1,
-    defaultValue: '2K',
+    version: 2,
+    defaultValue: '1K',
   });
   const [imageQuality, setImageQuality] = usePersistedPageState<GptImageQuality>({
     page: 'GenerationPage:imageQuality',
@@ -549,6 +657,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   // 任务恢复：页面加载时检查 localStorage 中未完成的任务，恢复轮询
   useEffect(() => {
+    if (recoveryStartedRef.current) return;
+    recoveryStartedRef.current = true;
     const recoverTasks = async () => {
       const tasks = getRecoverableTasks();
       if (tasks.length === 0) return;
@@ -556,7 +666,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       for (const task of tasks) {
         try {
           setGeneratingShotIds(prev => new Set(prev).add(task.shotId));
-          const urls = await waitForComfyUITaskAllImages(task.taskId);
+          beginShotProgress(task.shotId, task.model, task.startedAt, '正在恢复生成任务');
+          const urls = await waitForComfyUITaskAllImages(
+            task.taskId,
+            progress => updateShotProviderProgress(task.shotId, progress),
+          );
+          updateShotProgressStage(task.shotId, '正在保存生成结果', 97);
           removeRunningTask(task.taskId);
 
           const newImages: GeneratedImage[] = (urls as GeneratedImageResult[])
@@ -583,11 +698,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           removeRunningTask(task.taskId);
         } finally {
           setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(task.shotId); return next; });
+          clearShotProgress(task.shotId);
         }
       }
     };
     recoverTasks();
-  }, []); // only on mount
+  }, [beginShotProgress, clearShotProgress, onUpdateStoryboardItem, updateShotProgressStage, updateShotProviderProgress]);
 
   const renderHistoryPanel = () => (
     <div className="absolute top-[52px] right-0 bottom-0 w-80 bg-n0 border-l border-n40 z-40 flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
@@ -664,6 +780,39 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           ? resolveShotReferencePlan(selectedShot, materialLibrary, references)
           : { references: [], excluded: [], criticalExcluded: [], maxReferences: 6 }
   ), [materialLibrary, references, selectedShot]);
+  const selectedGenerationModel = selectedShot
+      ? (shotModels[selectedShot.id] || globalModel)
+      : globalModel;
+  const [selectedReferenceDimensions, setSelectedReferenceDimensions] = useState<SourceImageDimensions[]>([]);
+  const [isLoadingReferenceDimensions, setIsLoadingReferenceDimensions] = useState(false);
+  useEffect(() => {
+      let active = true;
+      const urls = referencePlan.references.map(reference => reference.url).filter(Boolean);
+      const needsAutomaticResolution = imageRatio === 'auto' || imageK === 'auto';
+      if (!needsAutomaticResolution || urls.length === 0) {
+          setSelectedReferenceDimensions([]);
+          setIsLoadingReferenceDimensions(false);
+          return () => {
+              active = false;
+          };
+      }
+
+      setIsLoadingReferenceDimensions(true);
+      loadImageDimensions(urls)
+          .then(dimensions => {
+              if (active) setSelectedReferenceDimensions(dimensions);
+          })
+          .finally(() => {
+              if (active) setIsLoadingReferenceDimensions(false);
+          });
+      return () => {
+          active = false;
+      };
+  }, [imageK, imageRatio, referencePlan.references]);
+  const selectedImageSettings = useMemo(
+      () => resolveGptImageSettings(imageRatio, imageK, selectedReferenceDimensions),
+      [imageK, imageRatio, selectedReferenceDimensions],
+  );
   const materialPickerItems = useMemo(() => {
       const typeByTag = new Map<string, 'character' | 'scene' | 'prop'>();
       for (const file of files) {
@@ -704,12 +853,26 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       const keyword = materialPickerSearch.trim().toLowerCase();
       return materialPickerItems.filter(item => {
           if (materialPickerFilter === 'shot' && !item.isRelevant) return false;
+          if (materialPickerFilter === 'other-shot') return false;
           if (materialPickerFilter !== 'shot' && materialPickerFilter !== 'all' && item.type !== materialPickerFilter) return false;
           if (!keyword) return true;
           return [item.tagName, item.material.name, item.material.description]
               .some(value => String(value || '').toLowerCase().includes(keyword));
       });
   }, [materialPickerFilter, materialPickerItems, materialPickerSearch]);
+  const otherStoryboardImageItems = useMemo(
+      () => buildOtherStoryboardImagePickerItems(
+          selectedFile?.storyboard?.items || [],
+          selectedShot?.id,
+      ),
+      [selectedFile?.storyboard?.items, selectedShot?.id],
+  );
+  const visibleOtherStoryboardImageItems = useMemo(() => {
+      if (materialPickerFilter !== 'other-shot' && materialPickerFilter !== 'all') return [];
+      const keyword = materialPickerSearch.trim().toLowerCase();
+      if (!keyword) return otherStoryboardImageItems;
+      return otherStoryboardImageItems.filter(item => item.searchText.includes(keyword));
+  }, [materialPickerFilter, materialPickerSearch, otherStoryboardImageItems]);
 
   useEffect(() => {
       if (!selectAllAfterLoad || !selectedFile?.storyboard?.items.length) return;
@@ -775,7 +938,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           ...metadata,
       };
       console.log(`➕ 添加参考图片:`, { type, name, urlLength: url.length });
-      setReferences(prev => {
+      updateCurrentShotReferences(prev => {
           const updated = [...prev, newRef];
           console.log(`📊 当前参考图片总数: ${updated.length}`);
           return updated;
@@ -784,7 +947,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   const handleAutoFill = () => {
       if (!selectedShot) return;
-      setReferences(resolveShotReferences(selectedShot, materialLibrary, references));
+      updateCurrentShotReferences(
+        resolveShotReferences(selectedShot, materialLibrary, referencesRef.current),
+      );
   };
 
   const handleAddProjectMaterial = (item: (typeof materialPickerItems)[number]) => {
@@ -798,6 +963,41 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               description: item.material.description,
           },
       );
+  };
+
+  const handleAddOtherStoryboardImage = (
+      item: (typeof otherStoryboardImageItems)[number],
+  ) => {
+      handleAddReference(
+          item.url,
+          'pose',
+          `${item.shotLabel} · ${item.imageLabel}`,
+          {
+              fileId: item.fileId || undefined,
+              description: `来自其他分镜：${item.shotLabel}`,
+          },
+      );
+  };
+
+  const handleMaterialPickerFilterChange = async (
+      filter: typeof materialPickerFilter,
+  ) => {
+      setMaterialPickerFilter(filter);
+      if (
+          (filter === 'other-shot' || filter === 'all')
+          && hasUnloadedStoryboardItems
+          && onLoadAllStoryboardItems
+          && !isLoadingOtherShotImages
+      ) {
+          setIsLoadingOtherShotImages(true);
+          try {
+              await onLoadAllStoryboardItems();
+          } catch (error) {
+              console.error('加载其他分镜图片失败:', error);
+          } finally {
+              setIsLoadingOtherShotImages(false);
+          }
+      }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: ReferenceType) => {
@@ -834,9 +1034,28 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       });
   };
 
+  const handleRemoveReference = (reference: GenerationReference) => {
+      if (!selectedShot) return;
+
+      const detached = detachShotReference(selectedShot, references, reference);
+      if (
+          detached.bindingRemoved
+          && !window.confirm(`解除当前镜头对「${reference.name || '该素材'}」的绑定并移除参考图？素材库原图和其他镜头不会被删除。`)
+      ) {
+          return;
+      }
+
+      updateCurrentShotReferences(
+        detached.references,
+        detached.bindingRemoved ? { materialSelections: detached.materialSelections } : {},
+      );
+  };
+
   // 🆕 拖拽状态
   const [isDraggingRef, setIsDraggingRef] = useState(false);
   const [isDraggingResult, setIsDraggingResult] = useState(false);
+  const [imageDropTargetShotId, setImageDropTargetShotId] = useState<string | null>(null);
+  const [copyingImageToShotId, setCopyingImageToShotId] = useState<string | null>(null);
 
   // 🆕 处理文件拖拽到参考图区域
   const handleRefDragOver = (e: React.DragEvent) => {
@@ -966,15 +1185,107 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       }
   };
 
+  const handleShotImageDragOver = (e: React.DragEvent, targetShotId: string) => {
+      const dragTypes = Array.from(e.dataTransfer.types);
+      if (
+          !dragTypes.includes(STORYBOARD_IMAGE_DRAG_MIME)
+          && !dragTypes.includes('text/plain')
+      ) {
+          return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+      setImageDropTargetShotId(targetShotId);
+  };
+
+  const handleShotImageDragLeave = (e: React.DragEvent, targetShotId: string) => {
+      const relatedTarget = e.relatedTarget as Node | null;
+      if (relatedTarget && e.currentTarget.contains(relatedTarget)) return;
+      if (imageDropTargetShotId === targetShotId) setImageDropTargetShotId(null);
+  };
+
+  const handleShotImageDrop = async (e: React.DragEvent, targetShot: StoryboardItem) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setImageDropTargetShotId(null);
+
+      const storyboardItems = selectedFile?.storyboard?.items || [];
+      const dragged = resolveStoryboardImageDrag(
+          e.dataTransfer.getData(STORYBOARD_IMAGE_DRAG_MIME),
+          storyboardItems,
+          e.dataTransfer.getData('text/plain'),
+      );
+      if (!dragged || dragged.sourceShotId === targetShot.id || copyingImageToShotId) return;
+
+      setCopyingImageToShotId(targetShot.id);
+      try {
+          const blob = await downloadImageBlob(dragged.image.url, '复制分镜图片');
+          const mimeType = blob.type || 'image/png';
+          const extension = mimeType.split('/')[1]?.split('+')[0] || 'png';
+          const file = new File(
+              [blob],
+              `shot-${targetShot.shotNumber || targetShot.id}-${Date.now()}.${extension}`,
+              { type: mimeType },
+          );
+          const { uploadEntityFile } = await import('../services/entityFileService');
+          const saved = await uploadEntityFile(
+              file,
+              'storyboard_item',
+              targetShot.id,
+              'generated_image',
+              episodeId,
+          );
+          const copiedImage: GeneratedImage = {
+              ...dragged.image,
+              id: saved.fileId || uuidv4(),
+              url: saved.fileUrl,
+              thumbnail: saved.fileUrl,
+              timestamp: Date.now(),
+              fileId: saved.fileId || undefined,
+              isSelected: true,
+          };
+
+          onUpdateStoryboardItem(targetShot.id, (currentItem) => ({
+              generatedImages: dedupeGeneratedImages([
+                  ...(currentItem.generatedImages || []),
+                  copiedImage,
+              ]),
+              selectedImageId: copiedImage.id,
+              generatedImage: copiedImage.url,
+          }));
+          setSelectedShotId(targetShot.id);
+          queryClient.invalidateQueries({
+              queryKey: ['entityFiles', 'storyboard_item', targetShot.id, 'generated_image'],
+          });
+          notifyStoryboardImageChanged(episodeId, targetShot.id);
+          window.dispatchEvent(new CustomEvent('generation-save-trigger'));
+      } catch (error) {
+          console.error('复制分镜图片失败:', error);
+          alert(`复制到目标镜头失败：${(error as Error)?.message || '请稍后重试'}`);
+      } finally {
+          setCopyingImageToShotId(null);
+      }
+  };
+
   // 🆕 生成结果图片开始拖拽
-  const handleResultImageDragStart = (e: React.DragEvent, imageUrl: string) => {
-      e.dataTransfer.setData('text/plain', imageUrl);
+  const handleResultImageDragStart = (
+      e: React.DragEvent,
+      image: GeneratedImage,
+  ) => {
+      if (!selectedShot) return;
+      e.dataTransfer.setData(
+          STORYBOARD_IMAGE_DRAG_MIME,
+          serializeStoryboardImageDrag(selectedShot.id, image),
+      );
+      e.dataTransfer.setData('text/plain', image.url);
       e.dataTransfer.effectAllowed = 'copy';
   };
 
   // --- Generation Logic ---
 
-  const generateForShot = async (
+  const executeGenerationForShot = async (
       shot: StoryboardItem,
       useCurrentState = false,
       model?: GenerationModel,
@@ -1016,6 +1327,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           smartConsistencyRouting,
       );
       const modelToUse = routed.model;
+      beginShotProgress(shot.id, modelToUse);
       if (routed.reason) console.info(`[角色一致性调度] ${routed.reason}`);
       if (COMFYUI_MODELS.has(modelToUse) && boundReferences.length === 0) {
           throw new Error('练气/筑基等本地 GPU 模型需要一张参考图；请添加参考图，或先选择当前分镜已有的生成结果。');
@@ -1051,16 +1363,37 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       });
 
       const runOnce = async (attempt: number, retryFeedback = ''): Promise<GeneratedImage[]> => {
+          updateShotProgressStage(
+              shot.id,
+              attempt > 1 ? '正在按验收结果重新生成' : '正在分析提示词与参考图',
+              attempt > 1 ? 18 : 6,
+          );
           const promptToUse = buildIdentityAnchoredPrompt(shot, basePrompt, materialLibrary, retryFeedback, boundReferences);
+          const sourceDimensions = imageRatio === 'auto' || imageK === 'auto'
+              ? await loadImageDimensions(refImages)
+              : [];
+          const resolvedImageSettings = resolveGptImageSettings(
+              imageRatio,
+              imageK,
+              sourceDimensions,
+          );
+          const [outputWidth, outputHeight] = recommendGptImageSize(
+              resolvedImageSettings.ratio,
+              resolvedImageSettings.k,
+          ).split('x').map(Number);
           let generated: GeneratedImage[] = [];
 
           console.log(`🎨 开始生成 - 模型: ${modelToUse}, 尝试: ${attempt}, 参考图片: ${refImages.length}`);
           if (modelToUse === 'nanobanana') {
+              updateShotProgressStage(shot.id, 'AI 正在生成画面', 10);
               const result = await generateFinalIllustrationResult(
                   promptToUse,
                   refImages,
                   { entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId },
-                  { aspectRatio: geminiNano2Ratio, imageSize: geminiNano2Size },
+                  {
+                      aspectRatio: resolvedImageSettings.ratio,
+                      imageSize: resolvedImageSettings.k,
+                  },
                   boundReferences.map(reference => ({
                       referenceId: reference.id,
                       assetId: reference.assetId,
@@ -1082,6 +1415,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   generationAttempt: attempt,
               }];
           } else if (modelToUse === 'gpt_image_vip' || modelToUse === 'gpt_image_official') {
+              updateShotProgressStage(shot.id, 'AI 正在生成画面', 10);
               const tier = modelToUse === 'gpt_image_vip' ? 'vip' : 'official';
               const response = await generateGptImage({
                   tier,
@@ -1097,8 +1431,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       source: reference.source,
                       isLocked: reference.isLocked,
                   })),
-                  ratio: imageRatio,
-                  k: imageK,
+                  ratio: resolvedImageSettings.ratio,
+                  k: resolvedImageSettings.k,
                   quality: tier === 'official' ? imageQuality : 'auto',
                   entityType: 'storyboard_item',
                   entityId: shot.id,
@@ -1118,6 +1452,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   };
               }).filter(image => image.url);
           } else {
+              updateShotProgressStage(shot.id, '等待 GPU 接收任务', 8);
               let workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN' | 'qwenN_lora';
               if (modelToUse === 'qwen') workflowType = 'qwen';
               else if (modelToUse === 'qwen_lora') workflowType = 'qwen_lora';
@@ -1139,10 +1474,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   taskId => {
                       currentTaskId = taskId;
                       saveRunningTask({ taskId, shotId: shot.id, fileId: selectedFileId || '', model: modelToUse, startedAt: Date.now() });
+                      updateShotProgressStage(shot.id, 'GPU 已接收任务，正在生成', 10);
                   },
                   {
                       entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId,
-                      preferredAgentId, preferredNodeId,
+                      preferredAgentId, preferredNodeId, outputWidth, outputHeight,
                   },
                   buildRegistryMeta(
                       shot,
@@ -1151,6 +1487,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               : workflowType === 'qwenN_lora' ? 'qwen-lora' : 'qwen-image',
                       `画面分镜 ${workflowType}`,
                   ),
+                  progress => updateShotProviderProgress(shot.id, progress),
               );
               if (currentTaskId) removeRunningTask(currentTaskId);
               generated = (resultUrls as GeneratedImageResult[]).filter(result => result.url).map(result => ({
@@ -1165,6 +1502,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           }
 
           if (!generated.length) throw new Error('未获取到生成结果');
+          updateShotProgressStage(
+              shot.id,
+              qualityReviewEnabled ? '正在校验画面质量' : '画面已生成，正在整理结果',
+              90,
+          );
           if (!qualityReviewEnabled) return generated;
 
           return Promise.all(generated.map(async image => {
@@ -1188,7 +1530,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       };
 
       try {
-          const generated = await runOnce(1);
+          let generated = await runOnce(1);
           const shouldRetry = qualityReviewEnabled
               && autoRetryConsistency
               && generated.some(image => image.qualityReview?.status === 'failed')
@@ -1198,28 +1540,48 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   .map(image => image.qualityReview?.retryPrompt || image.qualityReview?.issues.join('；') || '')
                   .filter(Boolean)
                   .join('；');
-              generated.push(...await runOnce(2, retryFeedback));
+              try {
+                  generated = resolveGenerationAttemptResults(
+                      generated,
+                      await runOnce(2, retryFeedback),
+                  );
+              } catch (retryError) {
+                  console.warn(`Quality retry failed for shot ${shot.id}; keeping the initial result.`, retryError);
+              }
           }
 
-          const selected = [...generated].reverse().find(image => reviewPassed(image.qualityReview))
-              || generated[generated.length - 1];
-          onUpdateStoryboardItem(shot.id, currentItem => {
+           const selected = [...generated].reverse().find(image => reviewPassed(image.qualityReview))
+               || generated[generated.length - 1];
+           updateShotProgressStage(shot.id, '正在保存生成结果', 97);
+           onUpdateStoryboardItem(shot.id, currentItem => {
               const existingImages = currentItem.generatedImages || [];
-              const additions = generated.filter(image => !existingImages.some(existing => existing.url === image.url));
+              const mergedImages = dedupeGeneratedImages([...existingImages, ...generated]);
               return {
-                  generatedImages: [...existingImages, ...additions],
+                  generatedImages: mergedImages,
                   selectedImageId: selected.id,
                   generatedImage: selected.url,
               };
           });
           queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', shot.id, 'generated_image'] });
-          notifyStoryboardImageChanged(episodeId, shot.id);
-          window.dispatchEvent(new CustomEvent('generation-save-trigger'));
+           notifyStoryboardImageChanged(episodeId, shot.id);
+           window.dispatchEvent(new CustomEvent('generation-save-trigger'));
+           updateShotProgressStage(shot.id, '生成完成', 100);
       } catch (error) {
           console.error(`Generation failed for shot ${shot.id}`, error);
           throw error;
       }
   };
+
+  const generateForShot = (
+      shot: StoryboardItem,
+      useCurrentState = false,
+      model?: GenerationModel,
+      currentRefs?: GenerationReference[],
+  ): Promise<void> => runSingleFlight(
+      generationRequestsRef.current,
+      shot.id,
+      () => executeGenerationForShot(shot, useCurrentState, model, currentRefs),
+  );
 
   const handleGenerateCurrent = async () => {
       if (!selectedShot) return;
@@ -1232,9 +1594,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       } catch (e: any) {
           // 不再吞错：暴露真实原因（缺 key / 内容审查 / 参考图取不到 等），便于定位。
           alert(`生成失败：${e?.message || e || '请检查网络或图片大小'}`);
-      } finally {
-          setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(shotId); return next; });
-      }
+       } finally {
+           setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(shotId); return next; });
+           clearShotProgress(shotId);
+       }
   };
 
   const handleBatchGenerate = async () => {
@@ -1252,10 +1615,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       const failures: { label: string; message: string }[] = [];
 
       for (let i = 0; i < ids.length; i++) {
-          const id = ids[i];
-          const shot = selectedFile.storyboard?.items.find(item => item.id === id);
-          if (shot) {
-              const shotLabel = String(shot.shotNumber || `#${String(shot.id).slice(0, 6)}`);
+           const id = ids[i];
+           const shot = selectedFile.storyboard?.items.find(item => item.id === id);
+           if (shot) {
+               setBatchProgress({ current: i, total: ids.length, activeShotId: id });
+               const shotLabel = String(shot.shotNumber || `#${String(shot.id).slice(0, 6)}`);
               try {
                   const isCurrent = id === selectedShot.id;
                   const model = shotModels[shot.id] || globalModel;
@@ -1267,10 +1631,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   console.error(`镜头 ${shotLabel} 批量生成失败:`, e);
                   failures.push({ label: shotLabel, message });
               }
-          }
-          setBatchProgress({ current: i + 1, total: ids.length });
-          setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(id); return next; });
-      }
+           }
+           setBatchProgress({ current: i + 1, total: ids.length });
+           setGeneratingShotIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+           clearShotProgress(id);
+       }
 
       setBatchProgress(null);
       if (failures.length === 0) {
@@ -1967,7 +2332,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   // 🆕 图片编辑器回调：保存编辑后的图片（更新底图）
   const handleImageEditorSave = (editedImageUrl: string, referenceId: string) => {
     console.log('💾 保存编辑后的图片:', { referenceId, urlLength: editedImageUrl.length });
-    setReferences(prev => prev.map(ref => 
+    updateCurrentShotReferences(prev => prev.map(ref =>
       ref.id === referenceId ? { ...ref, url: editedImageUrl } : ref
     ));
     setImageEditorData(null);
@@ -1987,7 +2352,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       name: '手绘线稿',
       source: 'manual',
     };
-    setReferences(prev => [...prev, newRef]);
+    updateCurrentShotReferences(prev => [...prev, newRef]);
     // 不关闭编辑器，用户可以继续编辑或选择保存
   };
 
@@ -2152,9 +2517,24 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       </button>
                   )}
                   {batchProgress ? (
-                      <div className="flex items-center gap-2 bg-primary-light px-3 py-1.5 rounded text-xs text-primary border border-primary/20">
-                          <CircleDashed className="w-3.5 h-3.5 animate-spin" />
-                          <span>批量生成中 {batchProgress.current}/{batchProgress.total}</span>
+                      <div className="min-w-56 bg-primary-light px-3 py-1.5 rounded text-xs text-primary border border-primary/20">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                           <CircleDashed className="w-3.5 h-3.5 animate-spin" />
+                           <span>批量生成中 {batchProgress.current}/{batchProgress.total}</span>
+                          </div>
+                          <span className="font-mono font-bold">{batchProgressDisplay?.aggregatePercent || 0}%</span>
+                        </div>
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-primary/15">
+                          <div
+                            className="h-full rounded-full bg-primary transition-[width] duration-500"
+                            style={{ width: `${batchProgressDisplay?.aggregatePercent || 0}%` }}
+                          />
+                        </div>
+                        <div className="mt-1 text-[9px] text-primary/80">
+                          {batchProgressDisplay?.active?.stage || '等待下一个镜头'}
+                          {batchProgressDisplay ? ` · ${formatStoryboardGenerationEta(batchProgressDisplay.etaSeconds)}` : ''}
+                        </div>
                       </div>
                   ) : (
                       <button 
@@ -2224,6 +2604,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                        const hasImage = (item.generatedImages && item.generatedImages.length > 0) || !!item.generatedImage;
                        const isChecked = selectedShotIds.has(item.id);
                        const isShotGenerating = generatingShotIds.has(item.id);
+                       const shotProgress = generationProgressByShot[item.id];
                        
                        // 🔧 使用 thumbnail 而不是 url（url是懒加载的）
                        const selectedImg = item.selectedImageId 
@@ -2239,10 +2620,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                onClick={() => {
                                    setSelectedShotId(item.id);
                                }}
+                               onDragOver={(e) => handleShotImageDragOver(e, item.id)}
+                               onDragLeave={(e) => handleShotImageDragLeave(e, item.id)}
+                               onDrop={(e) => void handleShotImageDrop(e, item)}
                                className={`p-2 rounded-lg cursor-pointer border transition-all flex gap-2 group ${
-                                   isSelected 
-                                   ? 'bg-primary-light border-primary' 
-                                   : 'bg-n0 border-n40 hover:bg-n20'
+                                   imageDropTargetShotId === item.id
+                                   ? 'bg-success/10 border-success ring-2 ring-success/30'
+                                   : isSelected
+                                     ? 'bg-primary-light border-primary'
+                                     : 'bg-n0 border-n40 hover:bg-n20'
                                }`}
                            >
                                <div 
@@ -2267,8 +2653,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                        </div>
                                    )}
                                    {isShotGenerating && (
-                                       <div className="absolute inset-0 bg-n900/50 flex items-center justify-center">
-                                           <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                       <div className="absolute inset-0 bg-n900/60 flex flex-col items-center justify-center text-white">
+                                           <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                           <span className="mt-0.5 text-[8px] font-mono">{shotProgress?.percent || 0}%</span>
+                                       </div>
+                                   )}
+                                   {copyingImageToShotId === item.id && (
+                                       <div className="absolute inset-0 bg-n900/55 flex items-center justify-center text-white">
+                                           <CircleDashed className="w-4 h-4 animate-spin" />
                                        </div>
                                    )}
                                </div>
@@ -2330,10 +2722,33 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                            </button>
                                        )}
                                        </div>
-                                   </div>
-                                   <p className="text-[9px] text-n100 line-clamp-1">{item.scriptSegment}</p>
-                               </div>
-                           </div>
+                                    </div>
+                                    <p className="text-[9px] text-n100 line-clamp-1">{item.scriptSegment}</p>
+                                    {isShotGenerating && (
+                                      <div className="mt-1">
+                                        <div className="flex items-center justify-between gap-1 text-[8px]">
+                                          <span className="truncate text-primary">
+                                            {shotProgress?.stage || '等待批量队列'}
+                                          </span>
+                                          <span className="shrink-0 font-mono text-primary">{shotProgress?.percent || 0}%</span>
+                                        </div>
+                                        <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-primary/15">
+                                          <div
+                                            className="h-full rounded-full bg-primary transition-[width] duration-500"
+                                            style={{ width: `${shotProgress?.percent || 0}%` }}
+                                          />
+                                        </div>
+                                        {shotProgress && (
+                                          <p className="mt-0.5 truncate text-[8px] text-n300">
+                                            {shotProgress.mode === 'live' ? '实时进度' : '预计进度'}
+                                            {' · '}
+                                            {formatStoryboardGenerationEta(shotProgress.etaSeconds)}
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+                                </div>
+                            </div>
                        );
                    })}
                    {/* 分批加载：镜头很多时默认只显示前 N 个，避免卡顿 */}
@@ -2384,7 +2799,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         }`}
                       >
                           <CheckCircle2 className="w-3 h-3" />
-                        {selectedShot?.isConfigConfirmed ? '配置已确认' : '确认配置'}
+                        {selectedShot?.isConfigConfirmed ? '解除配置锁定' : '确认并锁定配置'}
                       </button>
                   </div>
 
@@ -2543,8 +2958,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         {globalModel === 'kontext' && '练气二阶 · 点击分镜列表中的模型标识可单独设置'}
                         {globalModel === 'qwenN' && 'K神境界 · 点击分镜列表中的模型标识可单独设置'}
                         {globalModel === 'qwenN_lora' && '筑基二阶境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'gpt_image_vip' && '天劫一阶 · GPT Image VIP 系列，可调整比例 / 分辨率档位'}
-                        {globalModel === 'gpt_image_official' && '天劫二阶 · GPT Image 官方混合，可调整比例 / 分辨率 / 质量'}
+                        {selectedGenerationModel === 'gpt_image_vip' && '天劫一阶 · GPT Image VIP 系列，可调整比例 / 分辨率档位'}
+                        {selectedGenerationModel === 'gpt_image_official' && '天劫二阶 · GPT Image 官方混合，可调整比例 / 分辨率 / 质量'}
                     </p>
 
                     <div className="mt-3 pt-3 border-t border-n40 grid grid-cols-1 gap-2 text-[10px] text-n300">
@@ -2562,58 +2977,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       </label>
                     </div>
 
-                    {/* 2026-05-21：化神 / 天劫系列 参数面板 — 仅对应模型选中时显示 */}
-                    {globalModel === 'nanobanana' && (
-                      <div className="mt-3 pt-3 border-t border-n40">
+                    <div className="mt-3 pt-3 border-t border-n40">
                         <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
-                          <span className="text-yellow-400">●</span> 化神参数 (Gemini Flash · 1K/2K/4K)
+                          <span className="text-primary">●</span>
+                          当前镜头输出参数
+                          <span className="text-n100 ml-1">· 默认 16:9 / 1K</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[9px] text-n100 block mb-1">画面比例</label>
-                            <select
-                              value={geminiNano2Ratio}
-                              onChange={(e) => setGeminiNano2Ratio(e.target.value)}
-                              disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-yellow-500 focus:outline-none"
-                            >
-                              {GEMINI_NANO2_RATIO_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-n100 block mb-1">分辨率</label>
-                            <select
-                              value={geminiNano2Size}
-                              onChange={(e) => setGeminiNano2Size(e.target.value as '1K' | '2K' | '4K')}
-                              disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-yellow-500 focus:outline-none"
-                            >
-                              {GEMINI_NANO2_SIZE_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {(globalModel === 'gpt_image_vip' || globalModel === 'gpt_image_official') && (
-                      <div className="mt-3 pt-3 border-t border-n40">
-                        <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
-                          <span className={globalModel === 'gpt_image_vip' ? 'text-fuchsia-300' : 'text-rose-300'}>●</span>
-                          {globalModel === 'gpt_image_vip' ? '天劫一阶 (GPT Image 2 VIP)' : '天劫二阶 (GPT Image 2 官方混合)'}
-                          <span className="text-n100 ml-1">· auto = 上游自选</span>
-                        </div>
-                        <div className={`grid ${globalModel === 'gpt_image_official' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                        <div className={`grid ${selectedGenerationModel === 'gpt_image_official' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
                           <div>
                             <label className="text-[9px] text-n100 block mb-1">画面比例</label>
                             <select
                               value={imageRatio}
                               onChange={(e) => setImageRatio(e.target.value as GptImageRatio)}
                               disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-fuchsia-500 focus:outline-none"
+                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none"
                             >
                               {GPT_IMAGE_RATIO_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -2626,14 +3003,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               value={imageK}
                               onChange={(e) => setImageK(e.target.value as GptImageK)}
                               disabled={isGenerating}
-                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-fuchsia-500 focus:outline-none"
+                              className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none"
                             >
                               {GPT_IMAGE_K_OPTIONS.map(o => (
                                 <option key={o.value} value={o.value}>{o.label}</option>
                               ))}
                             </select>
                           </div>
-                          {globalModel === 'gpt_image_official' && (
+                          {selectedGenerationModel === 'gpt_image_official' && (
                             <div>
                               <label className="text-[9px] text-n100 block mb-1">质量</label>
                               <select
@@ -2649,8 +3026,16 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </div>
                           )}
                         </div>
+                        <div className="mt-2 rounded border border-n40 bg-n10 px-2 py-1.5 text-[9px] leading-4 text-n300">
+                          实际输出：{selectedImageSettings.ratio} · {selectedImageSettings.k}
+                          {isLoadingReferenceDimensions
+                            ? ' · 正在读取参考素材尺寸'
+                            : selectedImageSettings.sourceDimensions
+                              ? ` · 最大参考图 ${selectedImageSettings.sourceDimensions.width}×${selectedImageSettings.sourceDimensions.height}`
+                              : ' · 无可用尺寸时使用标准 16:9 / 1K'}
+                          {(imageRatio === 'auto' || imageK === 'auto') && ' · 按最大参考图和尺寸自动决定档位'}
+                        </div>
                       </div>
-                    )}
                   </div>
 
                   {/* Prompt */}
@@ -2746,8 +3131,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                 />
                                   
                                 {/* Action Buttons */}
-                                {!selectedShot?.isConfigConfirmed && !ref.isLocked && (
-                                  <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                                {!selectedShot?.isConfigConfirmed && (
+                                  <div className={`absolute top-0 right-0 z-10 flex gap-1 p-1 transition-opacity ${
+                                    ref.source === 'identity_anchor' || ref.source === 'material_binding'
+                                      ? 'opacity-100'
+                                      : 'opacity-0 group-hover:opacity-100'
+                                  }`}>
+                                    {!ref.isLocked && (
+                                      <>
                                       <button 
                                           onClick={(e) => { e.stopPropagation(); setImageEditorData({ imageUrl: ref.url, referenceId: ref.id }); }}
                                           className="bg-primary hover:bg-primary-hover text-white rounded-full p-0.5"
@@ -2769,12 +3160,18 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       >
                                           <RotateCcw className="w-3 h-3" />
                                       </button>
+                                      </>
+                                    )}
                                         <button 
-                                            onClick={(e) => { e.stopPropagation(); setReferences(prev => prev.filter(r => r.id !== ref.id)); }}
+                                            onClick={(e) => { e.stopPropagation(); handleRemoveReference(ref); }}
                                             className="bg-n900/50 hover:bg-danger text-white rounded-full p-0.5"
-                                          title="移除"
+                                          title={ref.source === 'identity_anchor' || ref.source === 'material_binding'
+                                            ? '解除当前镜头绑定并移除'
+                                            : '从当前镜头移除'}
                                         >
-                                            <X className="w-3 h-3" />
+                                            {ref.source === 'identity_anchor' || ref.source === 'material_binding'
+                                              ? <LockOpen className="w-3 h-3" />
+                                              : <X className="w-3 h-3" />}
                                         </button>
                                     </div>
                                   )}
@@ -2789,7 +3186,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   </div>
                                   <div className="absolute bottom-1 left-1 right-1 pointer-events-none flex justify-between gap-1">
                                     <span className="max-w-full truncate rounded bg-n900/60 px-1.5 py-0.5 text-[9px] text-white">{ref.name || '参考图'}</span>
-                                    {ref.isLocked && <span className="shrink-0 rounded bg-success/90 px-1.5 py-0.5 text-[9px] text-white">素材绑定</span>}
+                                    {(ref.source === 'identity_anchor' || ref.source === 'material_binding') && (
+                                      <span className="shrink-0 rounded bg-success/90 px-1.5 py-0.5 text-[9px] text-white">素材绑定</span>
+                                    )}
                                   </div>
                               </div>
                           ))}
@@ -2923,10 +3322,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                 <div 
                                     key={img.id} 
                                     draggable
-                                    onDragStart={(e) => handleResultImageDragStart(e, img.url)}
+                                    onDragStart={(e) => handleResultImageDragStart(e, img)}
+                                    onDragEnd={() => setImageDropTargetShotId(null)}
                                   className={`relative group bg-n0 border rounded-md overflow-hidden shadow-lg transition-all cursor-grab active:cursor-grabbing ${effectiveSelectedId === img.id ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-n40'}`}
                                     onClick={() => handleSelectResult(img.id)}
-                                    title="拖拽到左侧参考图区域可添加为参考图"
+                                    title="拖到左侧其他镜头可复制为该镜头的候选图；拖到参考图区域可添加为参考图"
                                 >
                                     <div 
                                         className="aspect-video bg-n30 relative cursor-zoom-in group" 
@@ -3061,9 +3461,27 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             ))}
 
                             {isCurrentShotGenerating && (
-                                <div className="aspect-video bg-n0 border-2 border-dashed border-primary/50 rounded-md flex flex-col items-center justify-center animate-pulse">
+                                <div className="aspect-video bg-n0 border-2 border-dashed border-primary/50 rounded-md flex flex-col items-center justify-center px-8">
                                     <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-3"></div>
-                                    <span className="text-primary text-xs">生成中...</span>
+                                    <span className="text-primary text-sm font-bold">
+                                      生成中 {currentGenerationProgress?.percent || 0}%
+                                    </span>
+                                    <span className="mt-1 text-xs text-n300">
+                                      {currentGenerationProgress?.stage || '正在提交生成任务'}
+                                    </span>
+                                    <div className="mt-3 h-1.5 w-full max-w-72 overflow-hidden rounded-full bg-primary/15">
+                                      <div
+                                        className="h-full rounded-full bg-primary transition-[width] duration-500"
+                                        style={{ width: `${currentGenerationProgress?.percent || 0}%` }}
+                                      />
+                                    </div>
+                                    {currentGenerationProgress && (
+                                      <span className="mt-2 text-[10px] text-n300">
+                                        {currentGenerationProgress.mode === 'live' ? '实时进度' : '预计进度'}
+                                        {' · '}
+                                        {formatStoryboardGenerationEta(currentGenerationProgress.etaSeconds)}
+                                      </span>
+                                    )}
                                 </div>
                             )}
 
@@ -3087,7 +3505,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             title={COMFYUI_MODELS.has(globalModel) && references.length === 0 && currentGeneratedImages.length === 0 ? '本地 GPU 模型需要参考图' : ''}
                         >
                             <Sparkles className={`w-4 h-4 ${isCurrentShotGenerating ? 'animate-spin' : ''}`} />
-                            {isCurrentShotGenerating ? '正在生成...' : (currentGeneratedImages.length > 0 ? '重新/追加生成' : '开始生成')}
+                            {isCurrentShotGenerating
+                              ? `正在生成 ${currentGenerationProgress?.percent || 0}%`
+                              : (currentGeneratedImages.length > 0 ? '重新/追加生成' : '开始生成')}
                         </button>
                    </div>
 
@@ -3295,78 +3715,168 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-n40">
                 <div>
                   <h3 className="text-sm font-bold text-n800 flex items-center gap-2"><Library className="w-4 h-4 text-primary" />从项目素材选择</h3>
-                  <p className="mt-1 text-[11px] text-n300">当前镜头绑定素材排在最前并自动参与生成；这里可从完整项目素材中追加参考。</p>
+                  <p className="mt-1 text-[11px] text-n300">当前镜头绑定素材排在最前并自动参与生成；也可追加项目素材或其他分镜图片作为参考。</p>
                 </div>
                 <button onClick={() => setShowMaterialPicker(false)} className="w-8 h-8 inline-flex items-center justify-center text-n300 hover:text-n800" title="关闭">
                   <X className="w-4 h-4" />
                 </button>
               </div>
               <div className="px-5 py-3 border-b border-n40 flex flex-wrap items-center gap-2">
-                {([
-                  ['shot', '本镜头'],
-                  ['character', '人物'],
-                  ['scene', '场景'],
-                  ['prop', '道具'],
-                  ['all', '全部'],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    onClick={() => setMaterialPickerFilter(value)}
-                    className={`h-8 px-3 text-xs border rounded ${materialPickerFilter === value ? 'bg-primary text-white border-primary' : 'bg-n0 text-n700 border-n40 hover:bg-n20'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+                 {([
+                   ['shot', '本镜头'],
+                   ['other-shot', '其他分镜'],
+                   ['character', '人物'],
+                   ['scene', '场景'],
+                   ['prop', '道具'],
+                   ['all', '全部'],
+                 ] as const).map(([value, label]) => (
+                   <button
+                     key={value}
+                     onClick={() => void handleMaterialPickerFilterChange(value)}
+                     className={`h-8 px-3 inline-flex items-center gap-1.5 text-xs border rounded ${materialPickerFilter === value ? 'bg-primary text-white border-primary' : 'bg-n0 text-n700 border-n40 hover:bg-n20'}`}
+                   >
+                     {value === 'other-shot' && <Clapperboard className="w-3.5 h-3.5" />}
+                     {label}
+                     {value === 'other-shot' && otherStoryboardImageItems.length > 0 && (
+                       <span className={`min-w-4 h-4 px-1 inline-flex items-center justify-center rounded text-[9px] ${materialPickerFilter === value ? 'bg-white/20 text-white' : 'bg-n30 text-n500'}`}>
+                         {otherStoryboardImageItems.length}
+                       </span>
+                     )}
+                   </button>
+                 ))}
                 <label className="ml-auto min-w-[220px] h-8 flex items-center gap-2 px-3 border border-n40 rounded bg-n0">
                   <Search className="w-3.5 h-3.5 text-n100" />
                   <input
                     value={materialPickerSearch}
                     onChange={event => setMaterialPickerSearch(event.target.value)}
                     className="min-w-0 flex-1 text-xs text-n700 outline-none bg-transparent"
-                    placeholder="搜索人物、场景或道具"
+                    placeholder="搜索镜头、人物、场景或道具"
                   />
                 </label>
               </div>
               <div className="flex-1 overflow-y-auto p-5">
-                {visibleMaterialPickerItems.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                    {visibleMaterialPickerItems.map(item => {
-                      const alreadyAdded = references.some(reference => reference.url === item.material.url);
-                      const disabled = alreadyAdded || references.length >= 6 || Boolean(selectedShot?.isConfigConfirmed);
-                      return (
-                        <button
-                          key={item.key}
-                          onClick={() => !disabled && handleAddProjectMaterial(item)}
-                          disabled={disabled}
-                          className={`relative overflow-hidden rounded-md border text-left transition-colors ${alreadyAdded ? 'border-success bg-success/5' : 'border-n40 bg-n0 hover:border-primary'} disabled:cursor-not-allowed`}
-                          title={alreadyAdded ? '已在当前参考图中' : `添加 ${item.tagName}`}
-                        >
-                          <div className="aspect-square bg-n30">
-                            <img src={item.material.thumbnail || item.material.url} alt={item.tagName} loading="lazy" className="w-full h-full object-cover" />
-                          </div>
-                          <div className="p-2 min-w-0">
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="truncate text-xs font-semibold text-n700">{item.tagName || item.material.name || '未命名素材'}</span>
-                              {alreadyAdded && <Check className="w-3.5 h-3.5 shrink-0 text-success" />}
-                            </div>
-                            <div className="mt-1 flex items-center gap-1 text-[9px] text-n100">
-                              <span>{item.type === 'character' ? '人物' : item.type === 'scene' ? '场景' : '道具'}</span>
-                              {item.isBound && <span className="rounded bg-primary-light px-1 py-0.5 text-primary">当前绑定</span>}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                {isLoadingOtherShotImages && (materialPickerFilter === 'other-shot' || materialPickerFilter === 'all') ? (
+                  <div className="h-56 flex flex-col items-center justify-center text-n300">
+                    <RefreshCw className="w-6 h-6 mb-3 animate-spin text-primary" />
+                    <span className="text-xs">正在加载全部分镜图片...</span>
                   </div>
                 ) : (
-                  <div className="h-56 flex flex-col items-center justify-center text-n100">
-                    <Library className="w-8 h-8 mb-2 opacity-40" />
-                    <span className="text-xs">当前分类没有可用素材</span>
+                  <div className="space-y-5">
+                    {(materialPickerFilter === 'other-shot' || materialPickerFilter === 'all') && (
+                      <section>
+                        {materialPickerFilter === 'all' && (
+                          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-n700">
+                            <Clapperboard className="w-3.5 h-3.5 text-primary" />
+                            其他分镜图片
+                          </div>
+                        )}
+                        {visibleOtherStoryboardImageItems.length > 0 ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            {visibleOtherStoryboardImageItems.map(item => {
+                              const alreadyAdded = references.some(reference => reference.url === item.url);
+                              const disabled = alreadyAdded || references.length >= 6 || Boolean(selectedShot?.isConfigConfirmed);
+                              return (
+                                <button
+                                  key={item.key}
+                                  onClick={() => !disabled && handleAddOtherStoryboardImage(item)}
+                                  disabled={disabled}
+                                  className={`relative overflow-hidden rounded-md border text-left transition-colors ${alreadyAdded ? 'border-success bg-success/5' : 'border-n40 bg-n0 hover:border-primary'} disabled:cursor-not-allowed`}
+                                  title={alreadyAdded ? '已在当前参考图中' : `添加 ${item.shotLabel} 的${item.imageLabel}`}
+                                >
+                                  <div className="aspect-video bg-n30 flex items-center justify-center">
+                                    <img
+                                      src={item.thumbnail || item.url}
+                                      alt={`${item.shotLabel} ${item.imageLabel}`}
+                                      loading="lazy"
+                                      className="w-full h-full object-contain"
+                                    />
+                                  </div>
+                                  <div className="p-2 min-w-0">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="truncate text-xs font-semibold text-n700">{item.shotLabel}</span>
+                                      {alreadyAdded && <Check className="w-3.5 h-3.5 shrink-0 text-success" />}
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-1 text-[9px] text-n100">
+                                      <span className={`rounded px-1 py-0.5 ${item.isSelected ? 'bg-success/10 text-success' : 'bg-n30 text-n300'}`}>
+                                        {item.imageLabel}
+                                      </span>
+                                      <span>仅作参考</span>
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="h-36 flex flex-col items-center justify-center rounded-md border border-dashed border-n40 text-n100">
+                            <Clapperboard className="w-7 h-7 mb-2 opacity-40" />
+                            <span className="text-xs">其他分镜还没有可用图片</span>
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {materialPickerFilter !== 'other-shot' && (
+                      <section>
+                        {materialPickerFilter === 'all' && (
+                          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-n700">
+                            <Library className="w-3.5 h-3.5 text-primary" />
+                            项目素材
+                          </div>
+                        )}
+                        {visibleMaterialPickerItems.length > 0 ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            {visibleMaterialPickerItems.map(item => {
+                              const alreadyAdded = references.some(reference => reference.url === item.material.url);
+                              const disabled = alreadyAdded || references.length >= 6 || Boolean(selectedShot?.isConfigConfirmed);
+                              return (
+                                <button
+                                  key={item.key}
+                                  onClick={() => !disabled && handleAddProjectMaterial(item)}
+                                  disabled={disabled}
+                                  className={`relative overflow-hidden rounded-md border text-left transition-colors ${alreadyAdded ? 'border-success bg-success/5' : 'border-n40 bg-n0 hover:border-primary'} disabled:cursor-not-allowed`}
+                                  title={alreadyAdded ? '已在当前参考图中' : `添加 ${item.tagName}`}
+                                >
+                                  <div className="aspect-square bg-n30">
+                                    <img src={item.material.thumbnail || item.material.url} alt={item.tagName} loading="lazy" className="w-full h-full object-cover" />
+                                  </div>
+                                  <div className="p-2 min-w-0">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="truncate text-xs font-semibold text-n700">{item.tagName || item.material.name || '未命名素材'}</span>
+                                      {alreadyAdded && <Check className="w-3.5 h-3.5 shrink-0 text-success" />}
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-1 text-[9px] text-n100">
+                                      <span>{item.type === 'character' ? '人物' : item.type === 'scene' ? '场景' : '道具'}</span>
+                                      {item.isBound && <span className="rounded bg-primary-light px-1 py-0.5 text-primary">当前绑定</span>}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="h-36 flex flex-col items-center justify-center rounded-md border border-dashed border-n40 text-n100">
+                            <Library className="w-7 h-7 mb-2 opacity-40" />
+                            <span className="text-xs">当前分类没有可用素材</span>
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {materialPickerFilter === 'all'
+                      && visibleOtherStoryboardImageItems.length === 0
+                      && visibleMaterialPickerItems.length === 0
+                      && (
+                        <div className="h-32 flex flex-col items-center justify-center text-n100">
+                          <Search className="w-7 h-7 mb-2 opacity-40" />
+                          <span className="text-xs">没有匹配的素材或分镜图片</span>
+                        </div>
+                      )}
                   </div>
                 )}
               </div>
               <div className="px-5 py-3 border-t border-n40 flex items-center justify-between text-[11px] text-n300">
-                <span>参考图 {references.length}/6，已绑定素材不可被外部参考替代。</span>
+                <span>参考图 {references.length}/6；其他分镜图片只建立当前镜头引用，不会修改来源镜头。</span>
                 <button onClick={() => setShowMaterialPicker(false)} className="h-8 px-4 rounded bg-primary text-white hover:bg-primary-hover">完成</button>
               </div>
             </div>

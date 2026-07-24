@@ -18,6 +18,8 @@ export type ComfyUIEntityOptions = {
     episodeId?: string;
     preferredAgentId?: string;
     preferredNodeId?: string;
+    outputWidth?: number;
+    outputHeight?: number;
 };
 
 const comfyuiRoutingPayload = (entityOptions?: ComfyUIEntityOptions) => ({
@@ -241,6 +243,8 @@ export const generateWithComfyUIWorkflow = async (
             file_role: entityOptions?.fileRole,
             project_id: entityOptions?.projectId,
             episode_id: entityOptions?.episodeId,
+            output_width: entityOptions?.outputWidth,
+            output_height: entityOptions?.outputHeight,
             ...comfyuiRoutingPayload(entityOptions),
         }, `${workflowType}工作流生成`);
     } catch (error) {
@@ -291,11 +295,12 @@ export const generateWithComfyUIWorkflowQueued = async (
     onTaskId?: (taskId: string) => void,
     entityOptions?: ComfyUIEntityOptions,
     registryMeta?: ComfyUITaskRegistryMeta,
+    onProgress?: (progress: number) => void,
 ): Promise<GeneratedImageResult[]> => {
     return enqueueComfyUITask(async (frontendKey) => {
         const { taskId } = await generateWithComfyUIWorkflow(workflowType, prompt, mainImage, refImages, seed, entityOptions);
         onTaskId?.(taskId);
-        const urls = await waitForComfyUITaskAllImages(taskId, undefined,
+        const urls = await waitForComfyUITaskAllImages(taskId, onProgress,
             registryMeta ? { ...registryMeta, frontendKey } : undefined);
         return urls;
     }, `画面分镜-${workflowType}`, registryMeta ? toQueueMeta(registryMeta) : undefined);

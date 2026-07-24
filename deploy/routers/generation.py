@@ -44,6 +44,15 @@ THREE_VIEW_PROMPT = (
     "and design details. Do not add text, labels, borders, or unrelated objects."
 )
 
+ANGLE_ADJUST_COMPOSITION_GUARD = (
+    "Preserve the complete visible subject, identity, proportions, clothing, colors, and visual style. "
+    "When the reference contains a full-body character, keep the entire character from the top of the "
+    "head through both feet fully inside the frame. For portraits or close-ups, keep the complete head "
+    "and visible silhouette inside the frame. Reframe or zoom out as needed and leave a clear safe margin "
+    "around the subject. Do not crop the head, hair, face, hands, feet, limbs, clothing, or accessories, "
+    "and do not place the subject against the canvas edge."
+)
+
 GPU2_OPERATION_PROMPTS = {
     "matting_subject": (
         "Remove the background completely and keep only the main foreground subject. "
@@ -85,6 +94,12 @@ def merge_gpu2_operation_prompt(operation: str, user_prompt: str = "") -> str:
     base = GPU2_OPERATION_PROMPTS[operation]
     cleaned = str(user_prompt or "").strip()
     return f"{base} Additional direction: {cleaned}" if cleaned else base
+
+
+def merge_angle_adjust_prompt(user_prompt: str = "") -> str:
+    cleaned = str(user_prompt or "").strip()
+    direction = cleaned or "Adjust the camera angle slightly while remaining faithful to the reference."
+    return f"{direction} {ANGLE_ADJUST_COMPOSITION_GUARD}"
 
 
 def qwen_fallback_task_type(image_count: int) -> str:
@@ -211,6 +226,8 @@ def create_generation_router(
             task_data = {
                 "prompt": request.prompt,
                 "seed": request.seed,
+                "output_width": request.output_width,
+                "output_height": request.output_height,
             }
             _attach_entity_fields(task_data, request)
 
@@ -246,7 +263,7 @@ def create_generation_router(
             await _authorize(request, username, [request.image_filename])
             task_data = {
                 "image_path": request.image_filename,
-                "prompt": request.prompt,
+                "prompt": merge_angle_adjust_prompt(request.prompt),
                 "seed": request.seed,
             }
             _attach_entity_fields(task_data, request)

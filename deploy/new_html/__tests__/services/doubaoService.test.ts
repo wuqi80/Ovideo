@@ -25,11 +25,15 @@ describe('generateDoubaoImages', () => {
 
     await generateDoubaoImages({
       prompt: 'turnaround',
+      model: 'doubao-seedream-5-0-lite-260128',
       size: '2048x1152',
     });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/materials/doubao');
-    expect(JSON.parse(init.body).size).toBe('2048x1152');
+    expect(JSON.parse(init.body)).toMatchObject({
+      model: 'doubao-seedream-5-0-lite-260128',
+      size: '2048x1152',
+    });
   });
 });

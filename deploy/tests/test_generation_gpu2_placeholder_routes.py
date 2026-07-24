@@ -5,6 +5,7 @@ import pytest
 from routers.generation import create_generation_router
 from schemas.generation import (
     AutoStoryboardRequest,
+    ComfyUIWorkflowRequest,
     HumanMultiAngleRequest,
     ImageFusionRequest,
     MattingRequest,
@@ -141,3 +142,24 @@ async def test_panorama_and_storyboard_use_agent_resolvable_files_and_safe_geome
     assert storyboard_data["requested_workflow_type"] == "auto_storyboard"
     assert storyboard_data["image_path"] == "scene.png"
     assert (storyboard_data["output_width"], storyboard_data["output_height"]) == (1024, 768)
+
+
+@pytest.mark.asyncio
+async def test_comfyui_workflow_preserves_explicit_storyboard_output_dimensions():
+    router, service = build_router_and_service()
+    request = ComfyUIWorkflowRequest(
+        workflow_type="qwen",
+        prompt="cinematic office scene",
+        image_filenames=["reference.png"],
+        output_width=1344,
+        output_height=768,
+        preferred_agent_id="agent-gpu2",
+    )
+
+    await endpoint_for(router, "/api/generate/comfyui-workflow")(request, username="tester")
+
+    task_type, data, _ = service.calls[0]
+    assert task_type == "qwen_1"
+    assert data["output_width"] == 1344
+    assert data["output_height"] == 768
+    assert data["preferred_agent_id"] == "agent-gpu2"

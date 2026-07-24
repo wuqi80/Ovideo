@@ -21,10 +21,12 @@ export interface SeedanceMentionMeta {
 export type SeedanceCandidateGroup =
     | 'current_card'
     | 'storyboard_data'
+    | 'storyboard_library'
     | 'assets'
     | 'audio'
     | 'video_segments'
     | 'user_files'
+    | 'media_library'
     | 'ark_asset_id';
 
 export interface SeedanceAssetCandidate {
