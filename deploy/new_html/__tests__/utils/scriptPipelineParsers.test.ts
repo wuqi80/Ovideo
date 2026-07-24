@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
     parseScriptSegments,
     parseVideoScriptBlocks,
+    parseVideoScriptGroups,
+    combineVideoScriptOutputs,
     parseStoryboardPromptExtractions,
     stripDialogueMarkers,
 } from '../../utils/scriptPipelineParsers';
@@ -94,6 +96,50 @@ describe('parseVideoScriptBlocks', () => {
     });
 });
 
+describe('parseVideoScriptGroups', () => {
+    const grouped = [
+        '分段01',
+        '镜头1',
+        '时长（秒）：4',
+        '画面描述：角色进入办公室。',
+        '镜头2',
+        '时长（秒）：3',
+        '画面描述：角色坐下。',
+        '【视觉风格】都市写实，柔和日光，电影质感。',
+        '【正向稳定约束】角色形象固定，无字幕、无水印，动作连续自然。',
+        '分段02',
+        '镜头1',
+        '时长（秒）：5',
+        '画面描述：角色开始演讲。',
+        '【视觉风格】冷静商务风格，蓝灰主调。',
+        '【正向稳定约束】人物服装固定，镜头稳定，无跳帧。',
+    ].join('\n');
+
+    it('keeps multiple static shots in one video group', () => {
+        const groups = parseVideoScriptGroups(grouped);
+        expect(groups).toHaveLength(2);
+        expect(groups[0].blocks).toHaveLength(2);
+        expect(groups[1].blocks).toHaveLength(1);
+    });
+
+    it('builds one shared video prompt from the group range and long constraints', () => {
+        const [group] = parseVideoScriptGroups(grouped);
+        expect(group.sharedVideoPrompt).toContain('镜头01-02');
+        expect(group.sharedVideoPrompt).toContain('【视觉风格】都市写实');
+        expect(group.sharedVideoPrompt).toContain('【正向稳定约束】角色形象固定');
+    });
+
+    it('renumbers separately generated outputs before saving a full version', () => {
+        const combined = combineVideoScriptOutputs([
+            '分段01\n镜头1\n时长（秒）：3',
+            '分段01\n镜头1\n时长（秒）：4',
+        ]);
+        expect(combined).toContain('分段01');
+        expect(combined).toContain('分段02');
+        expect(combined.match(/分段01/g)).toHaveLength(1);
+    });
+});
+
 describe('parseStoryboardPromptExtractions', () => {
     const shot = [
         '镜头号：2',
@@ -175,6 +221,22 @@ describe('parseStoryboardPromptExtractions', () => {
         );
         expect(list[0].sceneDescription).toContain('第一行');
         expect(list[0].sceneDescription).toContain('第二行继续');
+    });
+
+    it('derives the image prompt from the final shot fields when the duplicate label is absent', () => {
+        const list = parseStoryboardPromptExtractions([
+            '镜头号：1',
+            '景别：中景',
+            '画面描述：小悟站在办公室窗边，柔和日光照亮侧脸。',
+            '拍摄角度：平视',
+            '运镜方式：固定',
+            '台词：无',
+            '时长：3秒',
+        ].join('\n'));
+        expect(list).toHaveLength(1);
+        expect(list[0].imagePrompt).toContain('中景');
+        expect(list[0].imagePrompt).toContain('平视');
+        expect(list[0].imagePrompt).toContain('柔和日光');
     });
 
     it('returns [] for empty', () => {

@@ -76,6 +76,49 @@ export function isClusterNodeUsable(node: ClusterNodeOption): boolean {
   return node.status === 'online' || node.status === 'busy' || node.status === 'healthy';
 }
 
+function matchesClusterNode(node: ClusterNodeOption, requested: string): boolean {
+  const requestedKey = requested.trim().toLowerCase();
+  return [node.id, node.nodeId, node.agentId, node.name]
+    .filter(Boolean)
+    .some((value) => String(value).trim().toLowerCase() === requestedKey);
+}
+
+function clusterNodeLoad(node: ClusterNodeOption): number {
+  const active = node.tasks ?? (node.status === 'busy' ? 1 : 0);
+  const capacity = Math.max(1, node.maxConcurrent ?? 1);
+  return active / capacity;
+}
+
+function hasClusterNodeCapacity(node: ClusterNodeOption): boolean {
+  if (!isClusterNodeUsable(node)) return false;
+  if (node.maxConcurrent == null || node.tasks == null) return true;
+  return node.tasks < node.maxConcurrent;
+}
+
+/**
+ * Mirrors the original cluster pool semantics: honor an explicit choice while it
+ * is healthy, then prefer GPU1, then use the least-loaded healthy node.
+ */
+export function selectGpuTaskNode(
+  nodes: ClusterNodeOption[],
+  requested?: string,
+): ClusterNodeOption | undefined {
+  const usableNodes = nodes.filter(hasClusterNodeCapacity);
+  if (requested) {
+    const requestedNode = usableNodes.find((node) => matchesClusterNode(node, requested));
+    if (requestedNode) return requestedNode;
+  }
+
+  const gpu1 = usableNodes.find((node) => matchesClusterNode(node, DEFAULT_GPU_NODE_NAME));
+  if (gpu1) return gpu1;
+
+  return [...usableNodes].sort((left, right) => (
+    clusterNodeLoad(left) - clusterNodeLoad(right)
+    || (left.tasks ?? 0) - (right.tasks ?? 0)
+    || left.name.localeCompare(right.name)
+  ))[0];
+}
+
 export function setPreferredGpuNodeId(nodeId: string): void {
   try {
     if (!nodeId) localStorage.removeItem(PREFERRED_GPU_NODE_KEY);
@@ -110,17 +153,17 @@ export async function fetchClusterNodes(): Promise<{ nodes: ClusterNodeOption[];
 export async function resolveGpuTaskRouting(explicitNodeId?: string): Promise<GpuTaskRouting> {
   const result = await fetchClusterNodes();
   const requested = explicitNodeId || getPreferredGpuNodeId();
-  const requestedKey = requested.trim().toLowerCase();
-  const node = result.nodes.find((item) => (
-    [item.id, item.nodeId, item.agentId, item.name]
-      .filter(Boolean)
-      .some((value) => String(value).trim().toLowerCase() === requestedKey)
-  ));
+  const requestedNode = result.nodes.find((item) => matchesClusterNode(item, requested));
+  const node = selectGpuTaskNode(result.nodes, requested);
 
-  if (!node || !isClusterNodeUsable(node)) {
-    const message = `GPU 节点「${requested}」当前不可用，请在节点选择器中切换到在线节点。`;
+  if (!node) {
+    const message = 'GPU 集群当前没有可用节点，请检查节点状态后重试。';
     crmMessage.warning(message);
     throw new Error(message);
+  }
+
+  if (!requestedNode || !hasClusterNodeCapacity(requestedNode)) {
+    crmMessage.info(`GPU 节点「${requested}」当前不可用，任务已自动切换到「${node.name}」。`);
   }
 
   const active = node.tasks ?? (node.status === 'busy' ? 1 : 0);

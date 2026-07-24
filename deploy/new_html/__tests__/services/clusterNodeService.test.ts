@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getPreferredGpuNodeId,
   resolveGpuTaskRouting,
+  selectGpuTaskNode,
   setPreferredGpuNodeId,
 } from '../../services/clusterNodeService';
 
@@ -54,27 +55,63 @@ describe('GPU cluster routing', () => {
     expect(routing.preferredAgentId).toBe('agent_gpu2');
   });
 
-  it('does not silently reroute when the selected node is offline', async () => {
+  it('falls back to GPU1 when the selected node is offline', async () => {
+    setPreferredGpuNodeId('GPU2');
     mockFetch.mockResolvedValueOnce(response({
       success: true,
       nodes: [
-        { id: 'agent_gpu1', agent_id: 'agent_gpu1', name: 'GPU1', status: 'offline' },
-        { id: 'agent_gpu2', agent_id: 'agent_gpu2', name: 'GPU2', status: 'online' },
+        { id: 'agent_gpu1', agent_id: 'agent_gpu1', name: 'GPU1', status: 'online' },
+        { id: 'agent_gpu2', agent_id: 'agent_gpu2', name: 'GPU2', status: 'offline' },
       ],
     }));
 
-    await expect(resolveGpuTaskRouting()).rejects.toThrow('GPU1');
+    const routing = await resolveGpuTaskRouting();
+    expect(routing.preferredAgentId).toBe('agent_gpu1');
   });
 
-  it('does not route to an agent whose ComfyUI instance is unavailable', async () => {
+  it('uses another healthy cluster node when GPU1 and the selected node are unavailable', async () => {
     setPreferredGpuNodeId('GPU2');
     mockFetch.mockResolvedValueOnce(response({
       success: true,
       nodes: [
         { id: 'agent_gpu2', agent_id: 'agent_gpu2', name: 'GPU2', status: 'unavailable' },
+        { id: 'agent_gpu3', agent_id: 'agent_gpu3', name: 'GPU3', status: 'online', tasks: 1, max_concurrent: 2 },
       ],
     }));
 
-    await expect(resolveGpuTaskRouting()).rejects.toThrow('GPU2');
+    const routing = await resolveGpuTaskRouting();
+    expect(routing.preferredAgentId).toBe('agent_gpu3');
+  });
+
+  it('selects the least-loaded healthy node when no preferred node is available', () => {
+    const selected = selectGpuTaskNode([
+      { id: 'gpu3', nodeId: 'gpu3', name: 'GPU3', status: 'online', tasks: 2, maxConcurrent: 2 },
+      { id: 'gpu4', nodeId: 'gpu4', name: 'GPU4', status: 'online', tasks: 1, maxConcurrent: 4 },
+      { id: 'gpu5', nodeId: 'gpu5', name: 'GPU5', status: 'offline', tasks: 0, maxConcurrent: 4 },
+    ], 'missing-node');
+
+    expect(selected?.name).toBe('GPU4');
+  });
+
+  it('skips a preferred node that has reached its concurrency limit', () => {
+    const selected = selectGpuTaskNode([
+      { id: 'gpu2', nodeId: 'gpu2', name: 'GPU2', status: 'online', tasks: 2, maxConcurrent: 2 },
+      { id: 'gpu1', nodeId: 'gpu1', name: 'GPU1', status: 'online', tasks: 0, maxConcurrent: 1 },
+      { id: 'gpu3', nodeId: 'gpu3', name: 'GPU3', status: 'online', tasks: 0, maxConcurrent: 4 },
+    ], 'GPU2');
+
+    expect(selected?.name).toBe('GPU1');
+  });
+
+  it('fails only when the whole cluster has no usable nodes', async () => {
+    mockFetch.mockResolvedValueOnce(response({
+      success: true,
+      nodes: [
+        { id: 'agent_gpu1', agent_id: 'agent_gpu1', name: 'GPU1', status: 'offline' },
+        { id: 'agent_gpu2', agent_id: 'agent_gpu2', name: 'GPU2', status: 'unavailable' },
+      ],
+    }));
+
+    await expect(resolveGpuTaskRouting()).rejects.toThrow('没有可用节点');
   });
 });

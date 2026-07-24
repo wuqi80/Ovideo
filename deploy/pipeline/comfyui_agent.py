@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 import requests
+from datetime import datetime
 from pathlib import Path
 
 logging.basicConfig(
@@ -26,7 +27,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-07-01-agent-control-v3"
+AGENT_VERSION = "2026-07-24-completion-recovery-v1"
 
 
 class ComfyUIAgent:
@@ -37,6 +38,17 @@ class ComfyUIAgent:
         self.agent_id = None
         self.running = True
         self.current_tasks = 0
+        state_root = Path(
+            os.environ.get("MECHA_AGENT_STATE_DIR")
+            or (Path.home() / ".mecha-agent")
+        )
+        self.pending_completion_dir = state_root / "pending-completions"
+        self.pending_completion_dir.mkdir(parents=True, exist_ok=True)
+        self.completion_retry_delays = (0, 5, 15, 30)
+        self.completion_upload_timeout = (
+            30,
+            int(os.environ.get("MECHA_COMPLETION_UPLOAD_TIMEOUT", "600")),
+        )
         signal.signal(signal.SIGTERM, self._shutdown)
         signal.signal(signal.SIGINT, self._shutdown)
 
@@ -340,34 +352,105 @@ class ComfyUIAgent:
         time.sleep(1)
         os.execv(sys.executable, [sys.executable] + sys.argv)
 
-    def complete(self, task_id, status, duration, output_files=None, error="", result_payload=None):
+    def _pending_completion_path(self, task_id):
+        safe_task_id = re.sub(r"[^A-Za-z0-9_.-]", "_", str(task_id))
+        return self.pending_completion_dir / f"{safe_task_id}.json"
+
+    def _save_pending_completion(self, record):
+        path = self._pending_completion_path(record["task_id"])
+        tmp_path = path.with_suffix(".json.tmp")
+        tmp_path.write_text(
+            json.dumps(record, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp_path.replace(path)
+        return path
+
+    def _report_completion_once(self, record):
         files_payload = []
-        for fpath in (output_files or []):
+        for fpath in record.get("output_files") or []:
             if os.path.exists(fpath):
                 files_payload.append(("files", (os.path.basename(fpath), open(fpath, "rb"))))
 
         form_data = {
-            "task_id": task_id,
+            "task_id": record["task_id"],
             "agent_id": self.agent_id,
-            "status": status,
-            "duration": str(round(duration, 2)),
-            "error_message": error,
+            "status": record["status"],
+            "duration": str(round(float(record.get("duration") or 0), 2)),
+            "error_message": record.get("error") or "",
         }
-        if result_payload:
-            form_data["result_json"] = json.dumps(result_payload, ensure_ascii=False)
+        if record.get("result_payload"):
+            form_data["result_json"] = json.dumps(
+                record["result_payload"],
+                ensure_ascii=False,
+            )
         try:
-            requests.post(
+            response = requests.post(
                 f"{self.server_url}/api/agent/complete",
                 data=form_data,
                 files=files_payload if files_payload else None,
                 headers=self._headers(),
-                timeout=120
+                timeout=self.completion_upload_timeout,
             )
-        except Exception as e:
-            logger.error(f"Failed to report completion: {e}")
+            response.raise_for_status()
+            return True
         finally:
             for _, (_, fobj) in files_payload:
                 fobj.close()
+
+    def _report_pending_completion(self, record):
+        task_id = record["task_id"]
+        for attempt, delay in enumerate(self.completion_retry_delays, start=1):
+            if delay:
+                time.sleep(delay)
+            try:
+                if self._report_completion_once(record):
+                    self._pending_completion_path(task_id).unlink(missing_ok=True)
+                    logger.info(
+                        "Reported completion for %s on attempt %s",
+                        task_id,
+                        attempt,
+                    )
+                    return True
+            except Exception as exc:
+                logger.error(
+                    "Failed to report completion for %s (attempt %s/%s): %s",
+                    task_id,
+                    attempt,
+                    len(self.completion_retry_delays),
+                    exc,
+                )
+        return False
+
+    def _flush_pending_completions(self):
+        pending_paths = sorted(self.pending_completion_dir.glob("*.json"))
+        for path in pending_paths:
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.error("Invalid pending completion record %s: %s", path, exc)
+                path.rename(path.with_suffix(".invalid"))
+                continue
+            if not self._report_pending_completion(record):
+                return False
+        return True
+
+    def complete(self, task_id, status, duration, output_files=None, error="", result_payload=None):
+        record = {
+            "task_id": str(task_id),
+            "status": str(status),
+            "duration": float(duration or 0),
+            "output_files": [
+                str(path)
+                for path in (output_files or [])
+                if path and os.path.exists(path)
+            ],
+            "error": str(error or ""),
+            "result_payload": result_payload,
+            "created_at": datetime.now().isoformat(),
+        }
+        self._save_pending_completion(record)
+        return self._report_pending_completion(record)
 
     def _pick_healthy_port(self):
         for p in self.ports:
@@ -509,6 +592,14 @@ class ComfyUIAgent:
                 if now - last_heartbeat >= HEARTBEAT_INTERVAL:
                     self.heartbeat()
                     last_heartbeat = now
+
+                if not self._flush_pending_completions():
+                    logger.warning(
+                        "Pending completion report is still unavailable; "
+                        "new tasks will not be claimed until it is delivered."
+                    )
+                    time.sleep(10)
+                    continue
 
                 task = self.poll()
                 if task:

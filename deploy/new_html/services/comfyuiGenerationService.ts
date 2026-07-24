@@ -42,8 +42,8 @@ const postGenerationTask = async (
     );
     const routedPayload = {
         ...payload,
-        preferred_agent_id: payload.preferred_agent_id || routing.preferredAgentId,
-        preferred_node_id: payload.preferred_node_id || routing.preferredNodeId,
+        preferred_agent_id: routing.preferredAgentId,
+        preferred_node_id: routing.preferredNodeId,
     };
     const data = await apiJson<GenerationTaskResponse>(
         url,
@@ -85,6 +85,8 @@ export const adjustImageAngle = async (
             entity_id: entityOptions?.entityId,
             file_role: entityOptions?.fileRole,
             episode_id: entityOptions?.episodeId,
+            output_width: entityOptions?.outputWidth,
+            output_height: entityOptions?.outputHeight,
             ...comfyuiRoutingPayload(entityOptions),
         }, '角度调整');
     } catch (error) {
@@ -348,7 +350,7 @@ export const adjustImageAngleQueued = async (
     imageDataUrl: string,
     prompt: string,
     seed: number = -1,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string },
+    entityOptions?: ComfyUIEntityOptions,
     registryMeta?: ComfyUITaskRegistryMeta,
 ): Promise<string> => {
     return enqueueComfyUITask(async (frontendKey) => {

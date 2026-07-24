@@ -133,6 +133,15 @@ async def _verify_agent_token(authorization: str = Header(...)) -> dict:
     return agent
 
 
+def _existing_terminal_task_status(task_hash: dict, db_task: dict | None) -> str:
+    status = str(
+        (task_hash or {}).get("status")
+        or (db_task or {}).get("status")
+        or ""
+    ).strip().lower()
+    return status if status in {"completed", "failed", "cancelled", "timeout"} else ""
+
+
 def _assert_agent_completion_scope(
     authenticated_agent: dict,
     submitted_agent_id: str,
@@ -578,6 +587,21 @@ async def agent_complete(
         logger.warning("Failed to retrieve DB task assignment for %s: %s", task_id, e)
 
     _assert_agent_completion_scope(agent, agent_id, task_id, task_hash, db_task)
+
+    existing_status = _existing_terminal_task_status(task_hash, db_task)
+    if existing_status:
+        logger.info(
+            "agent_complete: task=%s already terminal (%s), acknowledging retry",
+            task_id,
+            existing_status,
+        )
+        return {
+            "success": True,
+            "task_id": task_id,
+            "files_saved": 0,
+            "already_terminal": True,
+            "status": existing_status,
+        }
 
     if not user_id and db_task:
         user_id = str(db_task.get("user_id") or "")

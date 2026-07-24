@@ -4,6 +4,7 @@ import pytest
 
 from routers.generation import create_generation_router
 from schemas.generation import (
+    AngleAdjustRequest,
     AutoStoryboardRequest,
     ComfyUIWorkflowRequest,
     HumanMultiAngleRequest,
@@ -47,6 +48,27 @@ def build_router_and_service():
 
 def endpoint_for(router, path):
     return next(route.endpoint for route in router.routes if route.path == path)
+
+
+@pytest.mark.asyncio
+async def test_angle_adjust_preserves_source_aspect_ratio_dimensions_and_gpu_route():
+    router, service = build_router_and_service()
+    request = AngleAdjustRequest(
+        image_filename="storyboard.png",
+        prompt="turn camera left",
+        output_width=1024,
+        output_height=576,
+        preferred_agent_id="agent-gpu3",
+        preferred_node_id="node-gpu3",
+    )
+
+    await endpoint_for(router, "/api/generate/angle-adjust")(request, username="tester")
+
+    task_type, data, _ = service.calls[0]
+    assert task_type == "i2i_fj"
+    assert (data["output_width"], data["output_height"]) == (1024, 576)
+    assert data["preferred_agent_id"] == "agent-gpu3"
+    assert data["preferred_node_id"] == "node-gpu3"
 
 
 @pytest.mark.asyncio

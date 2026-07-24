@@ -32,9 +32,11 @@ import {
   DEFAULT_GPU_NODE_NAME,
   fetchClusterNodes,
   isClusterNodeUsable,
+  resolveGpuTaskRouting,
   setPreferredGpuNodeId,
   type ClusterNodeOption,
 } from '../services/clusterNodeService';
+import { fitAngleOutputDimensions } from '../utils/angleOutputSize';
 import { reviewStoryboardImage } from '../services/storyboardQualityService';
 import {
   buildIdentityAnchoredPrompt,
@@ -1906,12 +1908,24 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         }
         
         const baseImage = await ensureDataUrl(imageUrl);
+        const sourceDimensions = await probeImageDimensions(imageUrl);
+        const outputDimensions = fitAngleOutputDimensions(sourceDimensions);
+        const routing = await resolveGpuTaskRouting(selectedClusterNodeId);
+        const actualNodeId = routing.node?.name || routing.preferredAgentId || routing.preferredNodeId;
+        if (actualNodeId && actualNodeId !== selectedClusterNodeId) {
+          setSelectedClusterNodeId(actualNodeId);
+          setPreferredGpuNodeId(actualNodeId);
+        }
         // 🔧 使用队列执行，确保同时只有一个任务
         const resultUrl = await adjustImageAngleQueued(baseImage, prompt, params.seed, {
           entityType: 'storyboard_item',
           entityId: selectedShot?.id,
           fileRole: 'generated_image',
           episodeId,
+          preferredAgentId: routing.preferredAgentId,
+          preferredNodeId: routing.preferredNodeId,
+          outputWidth: outputDimensions.width,
+          outputHeight: outputDimensions.height,
         }, buildRegistryMeta(selectedShot, 'angle-adjust', '角度调整'));
         
         const newImage: GeneratedImage = {
@@ -2909,7 +2923,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <div className="flex items-start justify-between gap-2">
                                 <span>
                                     {usableClusterNodes.length > 0
-                                        ? <>此档走 <b>ComfyUI GPU 集群</b>。默认 GPU1，可手动切换 GPU2；选择会保留。</>
+                                        ? <>此档走 <b>ComfyUI GPU 集群</b>。默认 GPU1，可手动切换任意在线节点；选择会保留。</>
                                         : <>此档走 <b>ComfyUI GPU 集群</b>。当前未检测到在线节点，请先启动对应 Agent。</>}
                                 </span>
                                 <button
@@ -2946,7 +2960,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </div>
                             <div className="mt-1 text-[9px] text-n300">
                                 当前指定：{selectedClusterNode?.name || selectedClusterNodeId}
-                                {selectedClusterNode && !isClusterNodeUsable(selectedClusterNode) ? '（离线，暂不可提交）' : ''}
+                                {selectedClusterNode && !isClusterNodeUsable(selectedClusterNode) ? '（离线，提交时自动回退）' : ''}
                                 {clusterNodeMessage ? ` · ${clusterNodeMessage}` : ''}
                             </div>
                         </div>
@@ -3635,6 +3649,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                 onClose={() => setCameraModalImage(null)}
                 onSubmit={handleAngleAdjustment}
                 isProcessing={isAngleAdjusting}
+                clusterNodes={clusterNodes}
+                clusterNodesLoading={clusterNodesLoading}
+                selectedClusterNodeId={selectedClusterNodeId}
+                clusterNodeMessage={clusterNodeMessage}
+                onSelectClusterNode={(nodeId) => {
+                    setSelectedClusterNodeId(nodeId);
+                    setPreferredGpuNodeId(nodeId);
+                }}
+                onRefreshClusterNodes={loadClusterNodeOptions}
             />
         )}
 
@@ -3900,9 +3923,26 @@ interface CameraAngleModalProps {
         seed: number;
     }) => void;
     isProcessing: boolean;
+    clusterNodes: ClusterNodeOption[];
+    clusterNodesLoading: boolean;
+    selectedClusterNodeId: string;
+    clusterNodeMessage: string;
+    onSelectClusterNode: (nodeId: string) => void;
+    onRefreshClusterNodes: () => void;
 }
 
-const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, onSubmit, isProcessing }) => {
+const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
+    imageUrl,
+    onClose,
+    onSubmit,
+    isProcessing,
+    clusterNodes,
+    clusterNodesLoading,
+    selectedClusterNodeId,
+    clusterNodeMessage,
+    onSelectClusterNode,
+    onRefreshClusterNodes,
+}) => {
     const [rotate, setRotate] = useState(0);
     const [move, setMove] = useState(0);
     const [vertical, setVertical] = useState(0);
@@ -4067,6 +4107,41 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({ imageUrl, onClose, 
                             >
                                 随机
                             </button>
+                        </div>
+
+                        <div className="rounded-md border border-n40 bg-n20 p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-n700">处理 GPU</span>
+                                <button
+                                    type="button"
+                                    onClick={onRefreshClusterNodes}
+                                    disabled={clusterNodesLoading || isProcessing}
+                                    className="inline-flex items-center gap-1 text-[10px] text-primary disabled:opacity-50"
+                                >
+                                    <RefreshCw className={`h-3 w-3 ${clusterNodesLoading ? 'animate-spin' : ''}`} />
+                                    刷新
+                                </button>
+                            </div>
+                            <select
+                                value={selectedClusterNodeId}
+                                onChange={(event) => onSelectClusterNode(event.target.value)}
+                                disabled={clusterNodesLoading || clusterNodes.length === 0 || isProcessing}
+                                className="h-9 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none focus:border-primary disabled:bg-n20 disabled:text-n100"
+                            >
+                                {clusterNodes.length === 0 && (
+                                    <option value={DEFAULT_GPU_NODE_NAME}>{DEFAULT_GPU_NODE_NAME} · offline</option>
+                                )}
+                                {clusterNodes.map((node) => (
+                                    <option key={node.id} value={node.name} disabled={!isClusterNodeUsable(node)}>
+                                        {node.name} · {node.status}
+                                        {node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="mt-1.5 text-[10px] leading-4 text-n300">
+                                输出保持原图比例。所选节点不可用时优先由 GPU1 接管，再由其他在线低负载节点处理。
+                                {clusterNodeMessage ? ` ${clusterNodeMessage}` : ''}
+                            </p>
                         </div>
                     </div>
                 </div>

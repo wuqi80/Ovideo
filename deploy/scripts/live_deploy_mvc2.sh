@@ -16,6 +16,9 @@ RUN_REMOTE_CONTRACTS="${RUN_REMOTE_CONTRACTS:-1}"
 RUN_REMOTE_SMOKE="${RUN_REMOTE_SMOKE:-1}"
 REQUIRE_REMOTE_SMOKE="${REQUIRE_REMOTE_SMOKE:-1}"
 SMOKE_BASE_URL="${SMOKE_BASE_URL:-https://mecha.one}"
+GPU_AGENT_SOURCE_DIR="pipeline"
+GPU_AGENT_SOURCE_NAME="comfyui_agent.py"
+GPU_AGENT_REMOTE_REL="persistent_storage/tools/$GPU_AGENT_SOURCE_NAME"
 
 if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ ! -d "services" ] || [ ! -d "utils" ] || [ ! -d "new_html" ]; then
   echo "ERROR: run this script from the deploy/ directory"
@@ -172,6 +175,10 @@ for path in "${FILES[@]}"; do
     exit 1
   fi
 done
+if [ ! -f "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME" ]; then
+  echo "ERROR: missing GPU agent source"
+  exit 1
+fi
 
 STAGING_DIR=$(mktemp -d)
 BACKEND_TAR_LOCAL="${STAGING_DIR}.tgz"
@@ -299,6 +306,9 @@ for path in "${FILES[@]}"; do
   mkdir -p "$STAGING_DIR/$(dirname "$path")"
   cp -R "$path" "$STAGING_DIR/$path"
 done
+mkdir -p "$STAGING_DIR/$(dirname "$GPU_AGENT_REMOTE_REL")"
+cp "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME" \
+  "$STAGING_DIR/$GPU_AGENT_REMOTE_REL"
 
 BACKEND_SOURCE_HASH=$(
   find "$STAGING_DIR" -type f -print0 \
@@ -337,6 +347,10 @@ fi
 if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   chown Administrator:Administrator '$REMOTE_DIR'
   chmod 755 '$REMOTE_DIR'
+  mkdir -p '$REMOTE_DIR/persistent_storage/tools'
+  chown Administrator:Administrator \
+    '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py'
+  chmod 644 '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py'
 "; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: application root permissions failed"

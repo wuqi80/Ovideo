@@ -11,7 +11,13 @@ def test_comfyui_requests_preserve_preferred_agent_fields():
         "preferred_node_id": "agent_kunming",
     }
 
-    angle = AngleAdjustRequest(image_filename="input.png", prompt="front view", **common)
+    angle = AngleAdjustRequest(
+        image_filename="input.png",
+        prompt="front view",
+        output_width=1024,
+        output_height=576,
+        **common,
+    )
     matting = MattingRequest(image_filename="input.png", matting_type="subject", **common)
     material = MaterialProcessRequest(
         image_filename="input.png",
@@ -23,3 +29,5 @@ def test_comfyui_requests_preserve_preferred_agent_fields():
         payload = request.model_dump()
         assert payload["preferred_agent_id"] == "agent_kunming"
         assert payload["preferred_node_id"] == "agent_kunming"
+    assert angle.model_dump()["output_width"] == 1024
+    assert angle.model_dump()["output_height"] == 576

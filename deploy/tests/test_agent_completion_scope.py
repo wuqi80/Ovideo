@@ -1,7 +1,10 @@
 import pytest
 from fastapi import HTTPException
 
-from agent_routes import _assert_agent_completion_scope
+from agent_routes import (
+    _assert_agent_completion_scope,
+    _existing_terminal_task_status,
+)
 
 
 def test_agent_completion_scope_accepts_claimed_agent_from_redis():
@@ -48,3 +51,13 @@ def test_agent_completion_scope_rejects_unowned_or_unassigned_tasks(
             db_task,
         )
     assert exc.value.status_code == status_code
+
+
+@pytest.mark.parametrize("status", ["completed", "failed", "cancelled", "timeout"])
+def test_agent_completion_retry_detects_existing_terminal_status(status):
+    assert _existing_terminal_task_status({"status": status}, None) == status
+    assert _existing_terminal_task_status({}, {"status": status}) == status
+
+
+def test_agent_completion_retry_does_not_treat_processing_as_terminal():
+    assert _existing_terminal_task_status({"status": "processing"}, None) == ""

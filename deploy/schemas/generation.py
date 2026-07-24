@@ -200,6 +200,8 @@ class AngleAdjustRequest(ComfyUIRoutedRequest):
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
+    output_width: Optional[int] = Field(None, ge=64, le=8192, description="保持原图比例的目标宽度")
+    output_height: Optional[int] = Field(None, ge=64, le=8192, description="保持原图比例的目标高度")
 
 
 class HumanMultiAngleRequest(ComfyUIRoutedRequest):

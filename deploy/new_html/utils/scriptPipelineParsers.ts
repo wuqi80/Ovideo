@@ -2,7 +2,12 @@
  * 三步生成链路 parser（纯函数，无副作用，可单测）
  * 2026-05-29
  */
-import type { ScriptSegment, VideoScriptBlock, ExtractedStoryboardPrompt } from '../types';
+import type {
+    ScriptSegment,
+    VideoScriptBlock,
+    VideoScriptGroup,
+    ExtractedStoryboardPrompt,
+} from '../types';
 
 let _segCounter = 0;
 function segLocalId(): string {
@@ -100,6 +105,89 @@ export function parseVideoScriptBlocks(text: string): VideoScriptBlock[] {
     }
     flush();
     return blocks;
+}
+
+function extractBracketSection(text: string, label: string): string {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = text.match(new RegExp(
+        `【${escaped}】\\s*([\\s\\S]*?)(?=\\n\\s*【(?:视觉风格|正向稳定约束)】|\\n\\s*分段\\s*\\d+|$)`,
+        'i',
+    ));
+    return (match?.[1] || '').trim();
+}
+
+function shotRange(blocks: VideoScriptBlock[]): string {
+    if (blocks.length === 0) return '镜头01';
+    const numbers = blocks
+        .map(block => Number(block.shotNo.replace(/\D/g, '')))
+        .filter(Number.isFinite);
+    const first = numbers[0] || 1;
+    const last = numbers[numbers.length - 1] || first;
+    const format = (value: number) => String(value).padStart(2, '0');
+    return first === last ? `镜头${format(first)}` : `镜头${format(first)}-${format(last)}`;
+}
+
+/**
+ * Stage 2 文本中的每个分段代表一次视频生成，组内可拆成多个静态画面镜头。
+ * 视觉风格和稳定约束属于整个分段，并会被组合为组内所有最终镜头共享的视频提示词。
+ */
+export function parseVideoScriptGroups(text: string): VideoScriptGroup[] {
+    if (!text || !text.trim()) return [];
+
+    const explicit = /^\s*分段\s*(\d+)\s*[:：]?\s*$/gm;
+    const headers = [...text.matchAll(explicit)];
+    const rawGroups: Array<{ groupNo: number; rawGroup: string }> = [];
+
+    if (headers.length > 0) {
+        headers.forEach((header, index) => {
+            const start = (header.index || 0) + header[0].length;
+            const end = index + 1 < headers.length ? (headers[index + 1].index || text.length) : text.length;
+            rawGroups.push({
+                groupNo: Number(header[1]) || index + 1,
+                rawGroup: text.slice(start, end).trim(),
+            });
+        });
+    } else {
+        rawGroups.push({ groupNo: 1, rawGroup: text.trim() });
+    }
+
+    return rawGroups.flatMap(({ groupNo, rawGroup }) => {
+        const blocks = parseVideoScriptBlocks(rawGroup);
+        if (blocks.length === 0) return [];
+        const visualStyle = extractBracketSection(rawGroup, '视觉风格');
+        const stabilityConstraint = extractBracketSection(rawGroup, '正向稳定约束');
+        const promptParts = [
+            shotRange(blocks),
+            visualStyle ? `【视觉风格】${visualStyle}` : '',
+            stabilityConstraint ? `【正向稳定约束】${stabilityConstraint}` : '',
+        ].filter(Boolean);
+        return [{
+            groupNo,
+            blocks,
+            visualStyle,
+            stabilityConstraint,
+            sharedVideoPrompt: `${promptParts.join('，')}。`,
+            rawGroup,
+        }];
+    });
+}
+
+/** 合并 Stage 2 分段输出，并把分段编号统一整理为连续序号。 */
+export function combineVideoScriptOutputs(outputs: string[]): string {
+    let groupNo = 0;
+    const combined: string[] = [];
+    for (const output of outputs.map(value => value.trim()).filter(Boolean)) {
+        if (/^\s*分段\s*\d+\s*[:：]?\s*$/m.test(output)) {
+            combined.push(output.replace(/^\s*分段\s*\d+\s*[:：]?\s*$/gm, () => {
+                groupNo += 1;
+                return `分段${String(groupNo).padStart(2, '0')}`;
+            }));
+        } else {
+            groupNo += 1;
+            combined.push(`分段${String(groupNo).padStart(2, '0')}\n${output}`);
+        }
+    }
+    return combined.join('\n\n');
 }
 
 /**
@@ -242,9 +330,13 @@ function parseOneStoryboardBlock(text: string): ExtractedStoryboardPrompt {
     result.props = propsRaw.trim() === '无'
         ? []
         : propsRaw.split(/[、，,/／]/).map(p => p.trim()).filter(Boolean);
-    result.imagePrompt = take('imagePrompt');
     result.cameraAngle = take('cameraAngle');
     result.cameraMove = take('cameraMove');
+    result.imagePrompt = take('imagePrompt') || [
+        result.shotSize,
+        result.cameraAngle,
+        result.sceneDescription,
+    ].filter(Boolean).join('，');
     const dialogue = take('dialogue');
     result.dialogue = dialogue.trim() === '无' ? '' : stripDialogueMarkers(dialogue);
     return result;

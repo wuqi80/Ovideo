@@ -127,6 +127,16 @@ export interface VideoScriptBlock {
   rawBlock: string;          // 该镜头完整文本块
 }
 
+/** Stage 2 中可独立生成一条视频的分组，组内可包含多个静态画面镜头 */
+export interface VideoScriptGroup {
+  groupNo: number;
+  blocks: VideoScriptBlock[];
+  visualStyle: string;
+  stabilityConstraint: string;
+  sharedVideoPrompt: string;
+  rawGroup: string;
+}
+
 /** parseStoryboardPromptExtractions 输出元素：Stage 3 单个「镜头号」块的提取结果 */
 export interface ExtractedStoryboardPrompt {
   shotNo: string;            // "镜头1"
@@ -135,7 +145,7 @@ export interface ExtractedStoryboardPrompt {
   characters: string[];      // 人物（按 、，/ 切分；"无" → []）
   scene: string;             // 场景（"无" → ''）
   props: string[];           // 道具（按 、，/ 切分；"无" → []）
-  imagePrompt: string;       // 分镜生成提示词
+  imagePrompt: string;       // 由画面描述、景别和角度组合出的生图提示
   cameraAngle: string;       // 拍摄角度
   cameraMove: string;        // 运镜方式
   dialogue: string;          // 台词（"无" → ''）

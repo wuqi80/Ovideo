@@ -265,6 +265,8 @@ def create_generation_router(
                 "image_path": request.image_filename,
                 "prompt": merge_angle_adjust_prompt(request.prompt),
                 "seed": request.seed,
+                "output_width": request.output_width,
+                "output_height": request.output_height,
             }
             _attach_entity_fields(task_data, request)
             task_id = await task_service_module.get().submit("i2i_fj", task_data, username)

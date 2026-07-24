@@ -183,6 +183,34 @@ export const aiGenerateVideoScriptFromSegment = async (
   );
 };
 
+/** 根据连续意见修改完整的 Stage 2 分组视频脚本 */
+export const aiIterateVideoScript = async (
+  model: AiModel,
+  originalScript: string,
+  currentVideoScript: string,
+  instruction: string,
+  conversationContext: string,
+  onStream?: (chunk: string) => void,
+  taskContext?: TextTaskContext,
+): Promise<string> => {
+  return await callAI(
+    model,
+    PROMPTS.ITERATE_VIDEO_SCRIPT,
+    {
+      originalScript,
+      currentVideoScript,
+      instruction,
+      conversationContext,
+    },
+    onStream,
+    {
+      operation: 'script_rewrite',
+      displayName: '剧本修改',
+      ...taskContext,
+    },
+  );
+};
+
 /**
  * Stage 3：从单个视频镜头块提取分镜提示词。
  * 单次只喂一个视频镜头，但 AI 可把它拆成多个「镜头号」块（更细的分镜）→ 返回数组。
