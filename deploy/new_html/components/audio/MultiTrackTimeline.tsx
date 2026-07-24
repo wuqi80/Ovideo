@@ -6,6 +6,8 @@ import React, {
   useState,
 } from 'react';
 import {
+  ChevronDown,
+  ChevronUp,
   GripVertical,
   Music,
   Plus,
@@ -26,6 +28,8 @@ import {
   type AudioTrackTimelineEdit,
 } from '../../utils/audioTrackTimeline';
 import { updateAudioTrack } from '../../services/audioGenerationService';
+import { dbItemToStoryboardItem } from '../../utils/episodeAdapters';
+import { buildStoryboardSegmentGroups } from '../../utils/storyboardSegments';
 
 export interface TimelineSegment {
   itemId: string;
@@ -48,6 +52,8 @@ export interface MultiTrackTimelineProps {
   projectId?: string;
   script: any;
   reload: () => Promise<void>;
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 type PointerEditMode = 'move' | 'trim-start' | 'trim-end';
@@ -67,6 +73,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   projectId,
   script,
   reload,
+  collapsed = false,
+  onCollapsedChange,
 }) => {
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [showSfxModal, setShowSfxModal] = useState(false);
@@ -85,8 +93,27 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     [storyboardItems],
   );
 
+  const segmentDisplayByItemId = useMemo(() => {
+    const displayByItemId = new Map<string, {
+      segmentLabel: string;
+      localShotLabel: string;
+    }>();
+    buildStoryboardSegmentGroups(
+      sortedItems.map(item => dbItemToStoryboardItem(item)),
+    ).forEach(group => {
+      group.entries.forEach(entry => {
+        displayByItemId.set(entry.item.id, {
+          segmentLabel: group.segmentLabel,
+          localShotLabel: entry.localShotLabel,
+        });
+      });
+    });
+    return displayByItemId;
+  }, [sortedItems]);
+
   const segments: TimelineSegment[] = useMemo(() => (
     sortedItems.map(item => {
+      const segmentDisplay = segmentDisplayByItemId.get(item.itemId);
       const itemClips = clips
         .filter(clip => clip.itemId === item.itemId)
         .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
@@ -112,11 +139,11 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         hasAudio,
         clip,
         label: itemClips.length > 0
-          ? `${speakers.join(' / ')} · ${itemClips.length} 段配音`
-          : `#${item.sortOrder}`,
+          ? `${segmentDisplay?.segmentLabel || '未分段'} · ${segmentDisplay?.localShotLabel || `镜头 ${item.sortOrder}`} · ${speakers.join(' / ')} · ${itemClips.length} 段配音`
+          : `${segmentDisplay?.segmentLabel || '未分段'} · ${segmentDisplay?.localShotLabel || `镜头 ${item.sortOrder}`}`,
       };
     })
-  ), [sortedItems, clips, localAudio, clipKeyFn]);
+  ), [sortedItems, segmentDisplayByItemId, clips, localAudio, clipKeyFn]);
 
   const totalMs = Math.max(
     100,
@@ -337,7 +364,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   }
 
   return (
-    <div className="flex h-[304px] flex-col border-t border-n40 bg-n20">
+    <div className={`flex flex-col border-t border-n40 bg-n20 ${collapsed ? 'h-10' : 'h-[304px]'}`}>
       <div className="flex shrink-0 items-center gap-3 border-b border-n40 px-4 py-2">
         <span className="text-xs font-bold uppercase text-n100">时间轴</span>
         <span className="tabular-nums text-[10px] text-n100">
@@ -348,13 +375,27 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         </span>
         <span className="flex-1" />
         <span className="text-[10px] text-n100">Ctrl+滚轮缩放</span>
+        {onCollapsedChange && (
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={() => onCollapsedChange(!collapsed)}
+            title={collapsed ? '展开时间轴' : '折叠时间轴'}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-n40 bg-n0 px-2 text-[10px] font-semibold text-n700 hover:border-primary hover:text-primary"
+          >
+            {collapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {collapsed ? '展开' : '折叠'}
+          </button>
+        )}
       </div>
 
-      {selectedTrack && selectedEdit && (
-        <div className="flex shrink-0 items-center gap-3 overflow-x-auto border-b border-n40 bg-n0 px-4 py-2">
-          <Scissors size={13} className="text-primary" />
-          <strong className="max-w-40 truncate text-[11px] text-n700">{selectedTrack.name}</strong>
-          <audio controls src={selectedTrack.audioUrl || ''} className="h-7 w-44" />
+      {!collapsed && (
+        <>
+          {selectedTrack && selectedEdit && (
+            <div className="flex shrink-0 items-center gap-3 overflow-x-auto border-b border-n40 bg-n0 px-4 py-2">
+              <Scissors size={13} className="text-primary" />
+              <strong className="max-w-40 truncate text-[11px] text-n700">{selectedTrack.name}</strong>
+              <audio controls src={selectedTrack.audioUrl || ''} className="h-7 w-44" />
           {[
             ['位置', 'startMs'],
             ['素材起点', 'sourceOffsetMs'],
@@ -439,11 +480,11 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               )}
             />
           </label>
-        </div>
-      )}
+            </div>
+          )}
 
-      <div className="flex-1 overflow-auto" onWheel={handleWheel}>
-        <div style={{ minWidth: `${trackWidth + 192}px` }}>
+          <div className="flex-1 overflow-auto" onWheel={handleWheel}>
+            <div style={{ minWidth: `${trackWidth + 192}px` }}>
           <div className="flex h-7 items-center border-b border-n40">
             {renderTrackLabel('镜头')}
             <div className="flex h-full" style={{ width: `${trackWidth}px` }}>
@@ -454,8 +495,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   style={{ width: msToWidth(segment.durationMs) }}
                   className="flex items-center justify-center border-r border-n40 text-[10px] text-n100 transition-colors hover:bg-n30"
                   onClick={() => onClickItem(segment.itemId)}
+                  title={segment.label}
                 >
-                  #{segment.sortOrder}
+                  {segment.label.match(/分段\s*(\d+).*镜头\s*(\d+)/)?.slice(1).join('-')
+                    || `#${segment.sortOrder}`}
                 </button>
               ))}
             </div>
@@ -540,33 +583,35 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               {sfxTracks.map(track => renderEditableTrack(track, 'bg-primary/20 text-primary'))}
             </div>
           </div>
-        </div>
-      </div>
+            </div>
+          </div>
 
-      {showMusicModal && (
-        <MusicModal
-          episodeId={episodeId}
-          projectId={projectId}
-          script={script}
-          onClose={() => setShowMusicModal(false)}
-          onCreated={async () => {
-            await reload();
-            setShowMusicModal(false);
-          }}
-        />
-      )}
+          {showMusicModal && (
+            <MusicModal
+              episodeId={episodeId}
+              projectId={projectId}
+              script={script}
+              onClose={() => setShowMusicModal(false)}
+              onCreated={async () => {
+                await reload();
+                setShowMusicModal(false);
+              }}
+            />
+          )}
 
-      {showSfxModal && (
-        <SfxModal
-          episodeId={episodeId}
-          projectId={projectId}
-          script={script}
-          onClose={() => setShowSfxModal(false)}
-          onCreated={async () => {
-            await reload();
-            setShowSfxModal(false);
-          }}
-        />
+          {showSfxModal && (
+            <SfxModal
+              episodeId={episodeId}
+              projectId={projectId}
+              script={script}
+              onClose={() => setShowSfxModal(false)}
+              onCreated={async () => {
+                await reload();
+                setShowSfxModal(false);
+              }}
+            />
+          )}
+        </>
       )}
     </div>
   );

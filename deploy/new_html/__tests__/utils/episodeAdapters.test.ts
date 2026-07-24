@@ -21,6 +21,25 @@ describe('EpisodeContext adapter wiring', () => {
   });
 });
 
+describe('storyboard segment metadata adapters', () => {
+  it('preserves backend segment identifiers for downstream workflow pages', () => {
+    const record = normalizeStoryboardRecord({
+      item_id: 'shot_2',
+      episode_id: 'episode_1',
+      sort_order: 2,
+      script_segment_id: 'segment_2',
+      source_video_shot_no: '镜头01',
+    });
+
+    expect(record.scriptSegmentId).toBe('segment_2');
+    expect(record.sourceVideoShotNo).toBe('镜头01');
+    expect(dbItemToStoryboardItem(record)).toEqual(expect.objectContaining({
+      scriptSegmentId: 'segment_2',
+      sourceVideoShotNo: '镜头01',
+    }));
+  });
+});
+
 describe('assetsToMaterialLibrary', () => {
   it('includes generated material_image files alongside reference images', () => {
     const library = assetsToMaterialLibrary([

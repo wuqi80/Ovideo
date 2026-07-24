@@ -78,4 +78,61 @@ describe('MultiTrackTimeline editor', () => {
     });
     expect(reload).toHaveBeenCalled();
   });
+
+  it('keeps the timeline collapsed until the user expands it', () => {
+    const onCollapsedChange = vi.fn();
+    const { rerender } = render(
+      <MultiTrackTimeline
+        storyboardItems={[{
+          itemId: 'shot_1',
+          sortOrder: 1,
+          plannedDurationMs: 4_000,
+          scriptSegmentId: 'segment_1',
+        } as any]}
+        clips={[]}
+        localAudio={{}}
+        audioTracks={[]}
+        clipKeyFn={clip => clip.clipId}
+        onClickItem={vi.fn()}
+        episodeId="ep_1"
+        projectId="project_1"
+        script=""
+        reload={vi.fn().mockResolvedValue(undefined)}
+        collapsed
+        onCollapsedChange={onCollapsedChange}
+      />,
+    );
+
+    expect(screen.queryByText('镜头')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('展开时间轴'));
+    expect(onCollapsedChange).toHaveBeenCalledWith(false);
+
+    rerender(
+      <MultiTrackTimeline
+        storyboardItems={[{
+          itemId: 'shot_1',
+          sortOrder: 1,
+          plannedDurationMs: 4_000,
+          scriptSegmentId: 'segment_1',
+        } as any]}
+        clips={[]}
+        localAudio={{}}
+        audioTracks={[]}
+        clipKeyFn={clip => clip.clipId}
+        onClickItem={vi.fn()}
+        episodeId="ep_1"
+        projectId="project_1"
+        script=""
+        reload={vi.fn().mockResolvedValue(undefined)}
+        collapsed={false}
+        onCollapsedChange={onCollapsedChange}
+      />,
+    );
+
+    expect(screen.getByText('镜头')).toBeInTheDocument();
+    expect(
+      screen.getAllByTitle('分段 01 · 镜头 01')
+        .find(element => element.textContent === '01-01'),
+    ).toBeTruthy();
+  });
 });

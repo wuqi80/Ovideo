@@ -14,6 +14,8 @@ import {
   resolveBoundCharacterVoice,
   resolveEffectiveSpeaker,
 } from '../../utils/audioVoiceBinding';
+import { dbItemToStoryboardItem } from '../../utils/episodeAdapters';
+import { buildStoryboardSegmentGroups } from '../../utils/storyboardSegments';
 
 const DUBBING_INITIAL_ITEM_COUNT = 20;
 const DUBBING_ITEM_PAGE_SIZE = 20;
@@ -76,6 +78,30 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
     () => [...storyboardItems].sort((a, b) => a.sortOrder - b.sortOrder),
     [storyboardItems],
   );
+
+  const segmentDisplayByItemId = useMemo(() => {
+    const displayByItemId = new Map<string, {
+      segmentLabel: string;
+      localShotLabel: string;
+      shotCount: number;
+      estimatedDurationSec: number;
+      isFirstInSegment: boolean;
+    }>();
+    buildStoryboardSegmentGroups(
+      sortedItems.map(item => dbItemToStoryboardItem(item)),
+    ).forEach(group => {
+      group.entries.forEach((entry, entryIndex) => {
+        displayByItemId.set(entry.item.id, {
+          segmentLabel: group.segmentLabel,
+          localShotLabel: entry.localShotLabel,
+          shotCount: group.entries.length,
+          estimatedDurationSec: group.estimatedDurationSec,
+          isFirstInSegment: entryIndex === 0,
+        });
+      });
+    });
+    return displayByItemId;
+  }, [sortedItems]);
 
   const itemIdSignature = useMemo(
     () => sortedItems.map(item => item.itemId).join('|'),
@@ -163,6 +189,7 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
         </div>
       ) : (
         visibleStoryboardItems.map(item => {
+          const segmentDisplay = segmentDisplayByItemId.get(item.itemId);
           const itemClips = [...(clipsByItem.get(item.itemId) || [])]
             .sort((a, b) => a.sequenceIndex - b.sequenceIndex);
           const hasDialogue = itemClips.length > 0;
@@ -188,35 +215,46 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
               voiceId: clip.voiceId,
             }));
           return (
-            <div
-              key={item.itemId}
-              ref={el => { if (el) itemRefs.current.set(item.itemId, el); }}
-              className="bg-n0 rounded-md border border-n40 p-4 shadow-card"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-bold text-primary bg-primary-light px-2 py-0.5 rounded">
-                  #{item.sortOrder}
-                </span>
-                {plannedDurationMs > 0 && (
+            <React.Fragment key={item.itemId}>
+              {segmentDisplay?.isFirstInSegment && (
+                <div className="flex items-center gap-2 pt-1 text-xs">
+                  <span className="rounded-md bg-warning/15 px-2.5 py-1 font-bold text-warning">
+                    {segmentDisplay.segmentLabel}
+                  </span>
+                  <span className="text-n100">
+                    {segmentDisplay.shotCount} 个镜头 · 约 {Math.round(segmentDisplay.estimatedDurationSec)} 秒
+                  </span>
+                  <span className="h-px flex-1 bg-n40" />
+                </div>
+              )}
+              <div
+                ref={el => { if (el) itemRefs.current.set(item.itemId, el); }}
+                className="bg-n0 rounded-md border border-n40 p-4 shadow-card"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-primary bg-primary-light px-2 py-0.5 rounded">
+                    {segmentDisplay?.localShotLabel || `镜头 ${String(item.sortOrder).padStart(2, '0')}`}
+                  </span>
+                  {plannedDurationMs > 0 && (
+                    <span className="text-[10px] text-n100">
+                      设计时长 {(plannedDurationMs / 1000).toFixed(1)}s
+                    </span>
+                  )}
+                  <span className="text-[10px] text-primary font-semibold">
+                    镜头总时长 {(shotDurationMs / 1000).toFixed(1)}s
+                  </span>
                   <span className="text-[10px] text-n100">
-                    设计时长 {(plannedDurationMs / 1000).toFixed(1)}s
+                    {itemClips.length} 段配音
                   </span>
-                )}
-                <span className="text-[10px] text-primary font-semibold">
-                  镜头总时长 {(shotDurationMs / 1000).toFixed(1)}s
-                </span>
-                <span className="text-[10px] text-n100">
-                  {itemClips.length} 段配音
-                </span>
-                {!hasDialogue && (
-                  <span className="text-[10px] text-n100 italic ml-auto">
-                    无台词 — 按设计时长占位
-                  </span>
-                )}
-              </div>
-              {timelineSegments.length > 0 ? (
-                <div className="space-y-2">
-                  {timelineSegments.map((segment, segmentIndex) => {
+                  {!hasDialogue && (
+                    <span className="text-[10px] text-n100 italic ml-auto">
+                      无台词 — 按设计时长占位
+                    </span>
+                  )}
+                </div>
+                {timelineSegments.length > 0 ? (
+                  <div className="space-y-2">
+                    {timelineSegments.map((segment, segmentIndex) => {
                     const canMoveUp = segmentIndex > 0;
                     const canMoveDown = segmentIndex < timelineSegments.length - 1;
                     const moveControls = (
@@ -330,35 +368,36 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
                         </button>
                       </div>
                     );
-                  })}
+                    })}
+                  </div>
+                ) : (
+                  <div className="px-3 py-4 text-center rounded border border-dashed border-n40">
+                    <p className="text-xs text-n100">该镜头暂时没有配音片段</p>
+                    <p className="text-[10px] text-n100 mt-1">
+                      设计时长 {(plannedDurationMs / 1000).toFixed(1)}s
+                    </p>
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-n40">
+                  <button
+                    type="button"
+                    onClick={() => onAddSpeech?.(item.itemId)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-n40 bg-n0 hover:border-primary hover:text-primary text-xs"
+                  >
+                    <Plus size={12} />
+                    添加配音
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAddSilence?.(item.itemId)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-n40 bg-n0 hover:border-primary hover:text-primary text-xs"
+                  >
+                    <Timer size={12} />
+                    添加无声动作
+                  </button>
                 </div>
-              ) : (
-                <div className="px-3 py-4 text-center rounded border border-dashed border-n40">
-                  <p className="text-xs text-n100">该镜头暂时没有配音片段</p>
-                  <p className="text-[10px] text-n100 mt-1">
-                    设计时长 {(plannedDurationMs / 1000).toFixed(1)}s
-                  </p>
-                </div>
-              )}
-              <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-n40">
-                <button
-                  type="button"
-                  onClick={() => onAddSpeech?.(item.itemId)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-n40 bg-n0 hover:border-primary hover:text-primary text-xs"
-                >
-                  <Plus size={12} />
-                  添加配音
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onAddSilence?.(item.itemId)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-n40 bg-n0 hover:border-primary hover:text-primary text-xs"
-                >
-                  <Timer size={12} />
-                  添加无声动作
-                </button>
               </div>
-            </div>
+            </React.Fragment>
           );
         })
       )}

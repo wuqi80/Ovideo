@@ -620,6 +620,8 @@ export interface StoryboardItemDB {
   itemId: string;
   episodeId: string;
   sortOrder: number;
+  scriptSegmentId?: string;
+  sourceVideoShotNo?: string;
   sceneHeading: string;
   actionText: string;
   dialogue: string;

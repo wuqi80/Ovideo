@@ -56,6 +56,8 @@ export function normalizeStoryboardRecord(record: any): StoryboardItemDB {
     sortOrder: typeof (record.sort_order ?? record.sortOrder) === 'number'
       ? (record.sort_order ?? record.sortOrder)
       : 0,
+    scriptSegmentId: record.script_segment_id ?? record.scriptSegmentId ?? undefined,
+    sourceVideoShotNo: record.source_video_shot_no ?? record.sourceVideoShotNo ?? undefined,
     sceneHeading: record.scene_heading ?? record.sceneHeading ?? '',
     actionText: record.action_text ?? record.actionText ?? '',
     dialogue: record.dialogue ?? '',
@@ -251,6 +253,8 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     imagePrompt: item.imagePrompt || '',
     videoPrompt: item.videoPrompt || '',
     cameraMovement: item.cameraMovement,
+    scriptSegmentId: item.scriptSegmentId,
+    sourceVideoShotNo: item.sourceVideoShotNo,
     plannedDurationMs: item.plannedDurationMs,
     duration: item.plannedDurationMs && item.plannedDurationMs > 0
       ? `${item.plannedDurationMs / 1000}秒`

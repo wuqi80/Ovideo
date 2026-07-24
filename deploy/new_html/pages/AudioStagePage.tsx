@@ -87,6 +87,7 @@ export const AudioStagePage: React.FC = () => {
   const [storyboardLoading, setStoryboardLoading] = useState(false);
   const [storyboardError, setStoryboardError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [timelineCollapsed, setTimelineCollapsed] = useState(true);
   const storyboardItemsRef = useRef<StoryboardItemDB[]>([]);
 
   const reloadAudioTracks = useCallback(async () => {
@@ -96,6 +97,10 @@ export const AudioStagePage: React.FC = () => {
   useEffect(() => {
     storyboardItemsRef.current = storyboardItems;
   }, [storyboardItems]);
+
+  useEffect(() => {
+    setTimelineCollapsed(true);
+  }, [episodeId]);
 
   // 「同步到分镜」只原地更新发生变化的配音字段；找不到对应分镜时才新增。
   // 保留原 item_id，避免误伤已经生成的画面、视频段和未改动配音。
@@ -730,6 +735,8 @@ export const AudioStagePage: React.FC = () => {
         projectId={projectId}
         script={script}
         reload={reloadAudioTracks}
+        collapsed={timelineCollapsed}
+        onCollapsedChange={setTimelineCollapsed}
       />
     </div>
   );
