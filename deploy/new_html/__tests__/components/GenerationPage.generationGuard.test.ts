@@ -89,3 +89,21 @@ describe('GenerationPage external reference persistence', () => {
     expect(storyboardPageSource).toContain('storyboardItemToDbUpdate(resolvedUpdates)');
   });
 });
+
+describe('GenerationPage reference actions', () => {
+  it('keeps lock toggling separate from reference deletion', () => {
+    expect(source).toContain('handleSetReferenceLocked(ref, !ref.isLocked)');
+    expect(source).toContain('handleDeleteReference(ref)');
+    expect(source).toContain('解除锁定（保留参考图片）');
+    expect(source).toContain('从当前镜头删除参考图片');
+  });
+
+  it('copies cross-shot images into submitted references instead of generated results', () => {
+    expect(source).toContain("'reference_image',");
+    expect(source).toContain(
+      'configuredReferences: [...currentReferences, copiedReference].slice(0, 6)',
+    );
+    expect(source).toContain('从其他镜头的画面分镜结果拖入');
+    expect(source).toContain('实际提交参考图片');
+  });
+});

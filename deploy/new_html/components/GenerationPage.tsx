@@ -46,6 +46,7 @@ import {
   resolveShotReferencePlan,
   resolveShotReferences,
   reviewPassed,
+  setShotReferenceLock,
   type StoryboardGenerationModel,
 } from '../utils/storyboardConsistency';
 import {
@@ -1036,13 +1037,28 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       });
   };
 
-  const handleRemoveReference = (reference: GenerationReference) => {
+  const handleSetReferenceLocked = (
+      reference: GenerationReference,
+      isLocked: boolean,
+  ) => {
       if (!selectedShot) return;
 
-      const detached = detachShotReference(selectedShot, references, reference);
+      updateCurrentShotReferences(current => (
+          setShotReferenceLock(current, reference, isLocked)
+      ));
+  };
+
+  const handleDeleteReference = (reference: GenerationReference) => {
+      if (!selectedShot) return;
+
+      const detached = detachShotReference(
+          selectedShot,
+          referencesRef.current,
+          reference,
+      );
       if (
           detached.bindingRemoved
-          && !window.confirm(`解除当前镜头对「${reference.name || '该素材'}」的绑定并移除参考图？素材库原图和其他镜头不会被删除。`)
+          && !window.confirm(`删除当前镜头的「${reference.name || '该素材'}」参考图并解除素材绑定？素材库原图和其他镜头不会被删除。`)
       ) {
           return;
       }
@@ -1220,10 +1236,28 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           e.dataTransfer.getData('text/plain'),
       );
       if (!dragged || dragged.sourceShotId === targetShot.id || copyingImageToShotId) return;
+      if (targetShot.isConfigConfirmed) {
+          alert('目标镜头的参考图片已锁定，请先解锁后再拖入。');
+          return;
+      }
+
+      const targetReferences = resolveShotReferences(
+          targetShot,
+          materialLibrary,
+          targetShot.configuredReferences || [],
+      );
+      if (targetReferences.some(reference => reference.url === dragged.image.url)) {
+          setSelectedShotId(targetShot.id);
+          return;
+      }
+      if (targetReferences.length >= 6) {
+          alert('目标镜头最多只能提交 6 张参考图片，请先删除不需要的参考图。');
+          return;
+      }
 
       setCopyingImageToShotId(targetShot.id);
       try {
-          const blob = await downloadImageBlob(dragged.image.url, '复制分镜图片');
+          const blob = await downloadImageBlob(dragged.image.url, '复制分镜参考图片');
           const mimeType = blob.type || 'image/png';
           const extension = mimeType.split('/')[1]?.split('+')[0] || 'png';
           const file = new File(
@@ -1236,36 +1270,42 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               file,
               'storyboard_item',
               targetShot.id,
-              'generated_image',
+              'reference_image',
               episodeId,
           );
-          const copiedImage: GeneratedImage = {
-              ...dragged.image,
+          const sourceShot = storyboardItems.find(item => item.id === dragged.sourceShotId);
+          const copiedReference: GenerationReference = {
               id: saved.fileId || uuidv4(),
               url: saved.fileUrl,
-              thumbnail: saved.fileUrl,
-              timestamp: Date.now(),
+              type: 'pose',
+              name: `来自镜头 ${sourceShot?.shotNumber || dragged.sourceShotId}`,
               fileId: saved.fileId || undefined,
-              isSelected: true,
+              description: '从其他镜头的画面分镜结果拖入',
+              source: 'manual',
+              isLocked: false,
           };
 
-          onUpdateStoryboardItem(targetShot.id, (currentItem) => ({
-              generatedImages: dedupeGeneratedImages([
-                  ...(currentItem.generatedImages || []),
-                  copiedImage,
-              ]),
-              selectedImageId: copiedImage.id,
-              generatedImage: copiedImage.url,
-          }));
+          onUpdateStoryboardItem(targetShot.id, (currentItem) => {
+              const currentReferences = resolveShotReferences(
+                  currentItem,
+                  materialLibrary,
+                  currentItem.configuredReferences || [],
+              );
+              if (currentReferences.some(reference => reference.url === copiedReference.url)) {
+                  return {};
+              }
+              return {
+                  configuredReferences: [...currentReferences, copiedReference].slice(0, 6),
+              };
+          });
           setSelectedShotId(targetShot.id);
           queryClient.invalidateQueries({
-              queryKey: ['entityFiles', 'storyboard_item', targetShot.id, 'generated_image'],
+              queryKey: ['entityFiles', 'storyboard_item', targetShot.id, 'reference_image'],
           });
-          notifyStoryboardImageChanged(episodeId, targetShot.id);
           window.dispatchEvent(new CustomEvent('generation-save-trigger'));
       } catch (error) {
-          console.error('复制分镜图片失败:', error);
-          alert(`复制到目标镜头失败：${(error as Error)?.message || '请稍后重试'}`);
+          console.error('复制分镜参考图片失败:', error);
+          alert(`复制到目标镜头参考图片失败：${(error as Error)?.message || '请稍后重试'}`);
       } finally {
           setCopyingImageToShotId(null);
       }
@@ -3146,11 +3186,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   
                                 {/* Action Buttons */}
                                 {!selectedShot?.isConfigConfirmed && (
-                                  <div className={`absolute top-0 right-0 z-10 flex gap-1 p-1 transition-opacity ${
-                                    ref.source === 'identity_anchor' || ref.source === 'material_binding'
-                                      ? 'opacity-100'
-                                      : 'opacity-0 group-hover:opacity-100'
-                                  }`}>
+                                  <div className="absolute top-0 right-0 z-10 flex gap-1 p-1 opacity-100">
                                     {!ref.isLocked && (
                                       <>
                                       <button 
@@ -3176,16 +3212,29 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       </button>
                                       </>
                                     )}
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); handleRemoveReference(ref); }}
-                                            className="bg-n900/50 hover:bg-danger text-white rounded-full p-0.5"
-                                          title={ref.source === 'identity_anchor' || ref.source === 'material_binding'
-                                            ? '解除当前镜头绑定并移除'
-                                            : '从当前镜头移除'}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSetReferenceLocked(ref, !ref.isLocked);
+                                            }}
+                                            className="bg-n900/50 hover:bg-primary text-white rounded-full p-0.5"
+                                            title={ref.isLocked ? '解除锁定（保留参考图片）' : '锁定参考图片'}
                                         >
-                                            {ref.source === 'identity_anchor' || ref.source === 'material_binding'
+                                            {ref.isLocked
                                               ? <LockOpen className="w-3 h-3" />
-                                              : <X className="w-3 h-3" />}
+                                              : <LockKeyhole className="w-3 h-3" />}
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteReference(ref);
+                                            }}
+                                            className="bg-n900/50 hover:bg-danger text-white rounded-full p-0.5"
+                                            title={ref.source === 'identity_anchor' || ref.source === 'material_binding'
+                                              ? '删除参考图片并解除当前镜头素材绑定'
+                                              : '从当前镜头删除参考图片'}
+                                        >
+                                            <Trash2 className="w-3 h-3" />
                                         </button>
                                     </div>
                                   )}
@@ -3340,7 +3389,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                     onDragEnd={() => setImageDropTargetShotId(null)}
                                   className={`relative group bg-n0 border rounded-md overflow-hidden shadow-lg transition-all cursor-grab active:cursor-grabbing ${effectiveSelectedId === img.id ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-n40'}`}
                                     onClick={() => handleSelectResult(img.id)}
-                                    title="拖到左侧其他镜头可复制为该镜头的候选图；拖到参考图区域可添加为参考图"
+                                    title="拖到左侧其他镜头可复制为该镜头的实际提交参考图片；拖到参考图区可添加为当前镜头参考图"
                                 >
                                     <div 
                                         className="aspect-video bg-n30 relative cursor-zoom-in group" 

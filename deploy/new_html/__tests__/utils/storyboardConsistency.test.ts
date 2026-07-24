@@ -9,6 +9,7 @@ import {
   resolveSelectedShotReferences,
   resolveShotReferencePlan,
   resolveShotReferences,
+  setShotReferenceLock,
 } from '../../utils/storyboardConsistency';
 
 const library: MaterialLibrary = {
@@ -192,6 +193,45 @@ describe('storyboard consistency', () => {
     )).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ name: '女1' }),
     ]));
+  });
+
+  it('unlocks an automatic reference without removing its image or material binding', () => {
+    const refs = resolveShotReferences(shot, library);
+    const characterReference = refs.find(reference => reference.name === '女1');
+    expect(characterReference).toBeDefined();
+
+    const unlocked = setShotReferenceLock(refs, characterReference!, false);
+    const resolved = resolveShotReferences(
+      { ...shot, configuredReferences: unlocked },
+      library,
+      unlocked,
+    );
+
+    expect(resolved).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        url: '/storage/char/bound.png',
+        source: 'identity_anchor',
+        isLocked: false,
+      }),
+    ]));
+    expect(shot.materialSelections).toEqual({ 女1: 'char_1', 客厅: 'scene_0' });
+  });
+
+  it('can lock an imported manual reference without changing its membership', () => {
+    const manual = {
+      id: 'manual',
+      url: '/storage/manual.png',
+      type: 'pose' as const,
+      source: 'manual' as const,
+    };
+
+    expect(setShotReferenceLock([manual], manual, true)).toEqual([
+      expect.objectContaining({
+        id: 'manual',
+        url: '/storage/manual.png',
+        isLocked: true,
+      }),
+    ]);
   });
 
   it('removes a manual reference without changing material bindings', () => {

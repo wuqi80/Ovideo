@@ -39,6 +39,18 @@ export interface DetachedShotReference {
   bindingRemoved: boolean;
 }
 
+export function setShotReferenceLock(
+  references: GenerationReference[],
+  target: GenerationReference,
+  isLocked: boolean,
+): GenerationReference[] {
+  return references.map(reference => (
+    reference.id === target.id
+      ? { ...reference, isLocked }
+      : reference
+  ));
+}
+
 function normalizedAnchor(raw: unknown): CharacterIdentityAnchor {
   const anchor = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   return {
@@ -84,7 +96,16 @@ export function resolveShotReferencePlan(
   const automatic: GenerationReference[] = [];
   const add = (reference?: GenerationReference) => {
     if (!reference || automatic.some(item => item.url === reference.url)) return;
-    automatic.push(reference);
+    const persisted = existing.find(item => (
+      item.url === reference.url
+      && item.source === reference.source
+      && typeof item.isLocked === 'boolean'
+    ));
+    automatic.push(
+      persisted
+        ? { ...reference, isLocked: persisted.isLocked }
+        : reference,
+    );
   };
 
   for (const character of shot.characters || []) {
