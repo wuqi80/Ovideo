@@ -8,6 +8,7 @@ from services.api_config_health_service import _real_generation_request
 from services.api_provider_registry import (
     DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT,
     DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+    DOUBAO_IMAGE_DEFAULT_MODEL,
     DOUBAO_IMAGE_PAYG_MODEL,
     DOUBAO_IMAGE_STANDARD_ENDPOINT,
     SEEDANCE_AGENT_PLAN_ENDPOINT,
@@ -29,6 +30,7 @@ from services.api_provider_runtime import resolve_provider
 def test_doubao_access_modes_use_distinct_seedream_lite_model_names() -> None:
     assert DOUBAO_IMAGE_AGENT_PLAN_MODEL == "doubao-seedream-5.0-lite"
     assert DOUBAO_IMAGE_PAYG_MODEL == "doubao-seedream-5-0-lite-260128"
+    assert DOUBAO_IMAGE_DEFAULT_MODEL == DOUBAO_IMAGE_PAYG_MODEL
 
 
 def test_doubao_agent_plan_normalizes_endpoint_and_model() -> None:
@@ -85,7 +87,7 @@ def test_doubao_exposes_one_image_operation_binding() -> None:
         {
             "operation": "generate",
             "label": "筑基境界",
-            "model_name": DOUBAO_IMAGE_AGENT_PLAN_MODEL,
+            "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
         }
     ]
 
@@ -120,6 +122,18 @@ def test_doubao_runtime_uses_agent_plan_model(monkeypatch) -> None:
 
     assert config.endpoint == DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
     assert config.model_name == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+
+
+def test_doubao_default_runtime_keeps_payg_endpoint_and_model(monkeypatch) -> None:
+    env_key = get_provider_env_key("doubao")
+    assert env_key
+    monkeypatch.delenv(get_endpoint_env_key(env_key), raising=False)
+    monkeypatch.delenv(get_model_env_key(env_key), raising=False)
+
+    config = resolve_provider("doubao", DOUBAO_IMAGE_DEFAULT_MODEL)
+
+    assert config.endpoint == DOUBAO_IMAGE_STANDARD_ENDPOINT
+    assert config.model_name == DOUBAO_IMAGE_PAYG_MODEL
 
 
 def test_doubao_image_size_normalizes_frontend_k_values() -> None:
