@@ -667,13 +667,13 @@ class StoryboardDAO:
         json_fields = {'bound_assets', 'configured_references', 'audio_segments'}
         sets, vals, idx = [], [], 1
         for key, val in kwargs.items():
-            if key in allowed and (val is not None or key in nullable_fields):
-                sets.append(f"{key} = ${idx}")
-                vals.append(val)
-                idx += 1
-            elif key in json_fields and val is not None:
+            if key in json_fields and val is not None:
                 sets.append(f"{key} = ${idx}::jsonb")
                 vals.append(json.dumps(val, ensure_ascii=False))
+                idx += 1
+            elif key in allowed and (val is not None or key in nullable_fields):
+                sets.append(f"{key} = ${idx}")
+                vals.append(val)
                 idx += 1
         if not sets:
             return await StoryboardDAO.get_by_id(item_id)

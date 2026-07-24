@@ -2,6 +2,8 @@
 """
 分镜 DAO 测试
 """
+import json
+
 import pytest
 
 
@@ -35,6 +37,46 @@ async def test_update_audio_duration_writes_back(test_db):
         created["item_id"], audio_duration_ms=3200
     )
     assert updated["audio_duration_ms"] == 3200
+
+
+async def test_update_serializes_audio_segments_as_jsonb(monkeypatch):
+    from dao.creative import storyboard as storyboard_module
+
+    class FakeDB:
+        query = None
+        values = None
+
+        async def fetchrow(self, query, *values):
+            self.query = query
+            self.values = values
+            return {"item_id": "sb_audio"}
+
+    fake_db = FakeDB()
+    monkeypatch.setattr(storyboard_module, "get_db_manager", lambda: fake_db)
+    segments = [
+        {
+            "segmentId": "sb_audio:speech:1",
+            "type": "speech",
+            "durationMs": 1800,
+            "audioUrl": "/audio/line-1.wav",
+        },
+        {
+            "segmentId": "sb_audio:silence:2",
+            "type": "silence",
+            "durationMs": 700,
+        },
+    ]
+
+    await storyboard_module.StoryboardDAO.update(
+        "sb_audio",
+        audio_segments=segments,
+        planned_duration_ms=2500,
+    )
+
+    assert "audio_segments = $1::jsonb" in fake_db.query
+    assert "planned_duration_ms = $2" in fake_db.query
+    assert json.loads(fake_db.values[0]) == segments
+    assert fake_db.values[1:] == (2500, "sb_audio")
 
 
 async def test_reorder_items(test_db):

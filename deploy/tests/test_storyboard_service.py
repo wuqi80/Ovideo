@@ -497,6 +497,50 @@ async def test_sync_storyboard_items_updates_configured_references():
     }]
 
 
+async def test_sync_storyboard_items_updates_ordered_audio_segments():
+    FakeStoryboardDAO.episode_rows = [
+        {
+            "item_id": "sb_1",
+            "episode_id": "ep_1",
+            "script_id": "script_1",
+            "sort_order": 0,
+            "audio_segments": "[]",
+            "planned_duration_ms": 3000,
+        }
+    ]
+    segments = [
+        {
+            "segmentId": "sb_1:speech:1",
+            "type": "speech",
+            "durationMs": 1800,
+            "audioUrl": "/audio/line-1.wav",
+        },
+        {
+            "segmentId": "sb_1:silence:2",
+            "type": "silence",
+            "durationMs": 1200,
+        },
+    ]
+
+    result = await storyboard_service.sync_storyboard_items(
+        "ep_1",
+        items=[{
+            "itemId": "sb_1",
+            "sortOrder": 0,
+            "audioSegments": segments,
+            "plannedDurationMs": 3000,
+        }],
+        script_id="script_1",
+        storyboard_dao=FakeStoryboardDAO,
+    )
+
+    assert result["updated"] == 1
+    assert FakeStoryboardDAO.updates == [{
+        "item_id": "sb_1",
+        "audio_segments": segments,
+    }]
+
+
 async def test_sync_storyboard_items_creates_missing_rows_and_applies_audio_fields():
     FakeStoryboardDAO.episode_rows = []
 
