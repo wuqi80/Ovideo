@@ -27,7 +27,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-07-24-completion-recovery-v1"
+AGENT_VERSION = "2026-07-24-agent-control-completion-recovery-v1"
 
 
 class ComfyUIAgent:
