@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MaterialLibrary, StoryboardItem } from '../../types';
 import {
+  applyConfiguredReferenceDrafts,
   buildIdentityAnchoredPrompt,
   detachShotReference,
   resolveConsistencyModel,
@@ -108,6 +109,65 @@ describe('storyboard consistency', () => {
     expect(refs).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'previous-manual', url: '/storage/previous-shot.png' }),
     ]));
+  });
+
+  it('keeps per-shot reference drafts when the user switches shots before the server refreshes', () => {
+    const file = {
+      id: 'file_1',
+      name: 'test',
+      originalContent: '',
+      scriptContent: '',
+      storyboard: {
+        items: [
+          { ...shot, id: 'shot_1', configuredReferences: [] },
+          { ...shot, id: 'shot_2', configuredReferences: [] },
+        ],
+      },
+      extractedCharacters: [],
+      extractedScenes: [],
+      status: 'completed',
+      lastUpdated: 1,
+      versions: [],
+    } as any;
+
+    const updated = applyConfiguredReferenceDrafts(file, {
+      shot_1: [{
+        id: 'external',
+        url: '/storage/external-upload.png',
+        type: 'pose',
+        source: 'manual',
+      }],
+    });
+
+    expect(updated.storyboard?.items[0].configuredReferences).toEqual([
+      expect.objectContaining({ id: 'external', url: '/storage/external-upload.png' }),
+    ]);
+    expect(updated.storyboard?.items[1].configuredReferences).toEqual([]);
+  });
+
+  it('keeps an explicit empty reference draft instead of restoring stale server references', () => {
+    const file = {
+      id: 'file_1',
+      name: 'test',
+      originalContent: '',
+      scriptContent: '',
+      storyboard: {
+        items: [{
+          ...shot,
+          configuredReferences: [
+            { id: 'stale', url: '/storage/stale.png', type: 'pose', source: 'manual' },
+          ],
+        }],
+      },
+      extractedCharacters: [],
+      extractedScenes: [],
+      status: 'completed',
+      lastUpdated: 1,
+      versions: [],
+    } as any;
+
+    const updated = applyConfiguredReferenceDrafts(file, { shot_1: [] });
+    expect(updated.storyboard?.items[0].configuredReferences).toEqual([]);
   });
 
   it('detaches an automatic reference from the current shot without deleting manual references', () => {

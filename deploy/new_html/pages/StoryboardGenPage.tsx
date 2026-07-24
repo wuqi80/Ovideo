@@ -22,6 +22,7 @@ import type { StoryboardItem, FileVersion, GeneratedImage, MaterialLibrary, Audi
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { runWhenIdle } from '../utils/idleScheduler';
 import { getImageThumbnailUrl } from '../services/imageLoaderService';
+import { applyConfiguredReferenceDrafts } from '../utils/storyboardConsistency';
 
 const STORYBOARD_INITIAL_SHOT_COUNT = 10;
 const GenerationPage = React.lazy(() => import('../components/GenerationPage').then(m => ({ default: m.GenerationPage })));
@@ -108,9 +109,22 @@ export const StoryboardGenPage: React.FC = () => {
     [storyboardItems, visibleEntityShotCount],
   );
 
-  const pseudoFile = useMemo(
+  const [configuredReferenceDrafts, setConfiguredReferenceDrafts] = useState<
+    Record<string, NonNullable<StoryboardItem['configuredReferences']>>
+  >({});
+
+  useEffect(() => {
+    setConfiguredReferenceDrafts({});
+  }, [episodeId, selectedScriptId]);
+
+  const serverPseudoFile = useMemo(
     () => scriptToProjectFile(script, visibleStoryboardItems, assets, episodeId),
     [script, visibleStoryboardItems, assets, episodeId]
+  );
+
+  const pseudoFile = useMemo(
+    () => applyConfiguredReferenceDrafts(serverPseudoFile, configuredReferenceDrafts),
+    [configuredReferenceDrafts, serverPseudoFile],
   );
 
   const materialLibrary = useMemo(
@@ -174,6 +188,14 @@ export const StoryboardGenPage: React.FC = () => {
         });
       }
 
+      if (resolvedUpdates.configuredReferences !== undefined) {
+        const nextReferences = [...(resolvedUpdates.configuredReferences || [])];
+        setConfiguredReferenceDrafts(previous => ({
+          ...previous,
+          [shotId]: nextReferences,
+        }));
+      }
+
       // 2. 选中图片 → 更新DB
       const dbUpdates = storyboardItemToDbUpdate(resolvedUpdates);
 
@@ -224,6 +246,9 @@ export const StoryboardGenPage: React.FC = () => {
       if (Object.keys(dbUpdates).length > 0) {
         updateStoryboardItem(shotId, dbUpdates).catch(err => {
           console.error('更新分镜失败:', err);
+          if (resolvedUpdates.configuredReferences !== undefined) {
+            crmMessage.error('参考图保存失败，已保留在当前页面，请重试');
+          }
         });
       }
     },

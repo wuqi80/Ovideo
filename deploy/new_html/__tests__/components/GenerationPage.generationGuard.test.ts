@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(__dirname, '../../components/GenerationPage.tsx'), 'utf-8');
+const storyboardPageSource = readFileSync(resolve(__dirname, '../../pages/StoryboardGenPage.tsx'), 'utf-8');
 
 describe('GenerationPage duplicate generation guards', () => {
   it('does not automatically submit a second generation request by default', () => {
@@ -79,5 +80,12 @@ describe('GenerationPage external reference persistence', () => {
     expect(source).toContain('referencesRef.current = nextReferences');
     expect(source).toContain('configuredReferences: nextReferences');
     expect(source).not.toContain('pendingSaveRef.current');
+  });
+
+  it('keeps reference edits in the routed page snapshot while the server save is pending', () => {
+    expect(storyboardPageSource).toContain('configuredReferenceDrafts');
+    expect(storyboardPageSource).toContain('applyConfiguredReferenceDrafts(');
+    expect(storyboardPageSource).toContain('[shotId]: nextReferences');
+    expect(storyboardPageSource).toContain('storyboardItemToDbUpdate(resolvedUpdates)');
   });
 });

@@ -3,6 +3,7 @@ import type {
   GenerationReference,
   Material,
   MaterialLibrary,
+  ProjectFile,
   StoryboardItem,
   StoryboardQualityReview,
 } from '../types';
@@ -163,6 +164,32 @@ export function resolveSelectedShotReferences(
     ? currentReferences
     : shot.configuredReferences || [];
   return resolveShotReferences(shot, materialLibrary, existing, maxReferences);
+}
+
+export function applyConfiguredReferenceDrafts(
+  file: ProjectFile,
+  drafts: Record<string, GenerationReference[]>,
+): ProjectFile {
+  if (!file.storyboard || Object.keys(drafts).length === 0) return file;
+
+  let changed = false;
+  const items = file.storyboard.items.map(item => {
+    if (!Object.prototype.hasOwnProperty.call(drafts, item.id)) return item;
+    changed = true;
+    return {
+      ...item,
+      configuredReferences: [...(drafts[item.id] || [])],
+    };
+  });
+
+  if (!changed) return file;
+  return {
+    ...file,
+    storyboard: {
+      ...file.storyboard,
+      items,
+    },
+  };
 }
 
 export function detachShotReference(
