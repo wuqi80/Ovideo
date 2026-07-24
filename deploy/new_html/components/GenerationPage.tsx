@@ -2585,7 +2585,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             style={{ width: `${batchProgressDisplay?.aggregatePercent || 0}%` }}
                           />
                         </div>
-                        <div className="mt-1 text-[9px] text-primary/80">
+                        <div className="mt-1 whitespace-nowrap text-[9px] text-primary/80">
                           {batchProgressDisplay?.active?.stage || '等待下一个镜头'}
                           {batchProgressDisplay ? ` · ${formatStoryboardGenerationEta(batchProgressDisplay.etaSeconds)}` : ''}
                         </div>
@@ -2793,7 +2793,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                           />
                                         </div>
                                         {shotProgress && (
-                                          <p className="mt-0.5 truncate text-[8px] text-n300">
+                                          <p className="mt-0.5 whitespace-nowrap text-[8px] text-n300">
                                             {shotProgress.mode === 'live' ? '实时进度' : '预计进度'}
                                             {' · '}
                                             {formatStoryboardGenerationEta(shotProgress.etaSeconds)}
@@ -3542,7 +3542,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       />
                                     </div>
                                     {currentGenerationProgress && (
-                                      <span className="mt-2 text-[10px] text-n300">
+                                      <span className="mt-2 whitespace-nowrap text-[10px] text-n300">
                                         {currentGenerationProgress.mode === 'live' ? '实时进度' : '预计进度'}
                                         {' · '}
                                         {formatStoryboardGenerationEta(currentGenerationProgress.etaSeconds)}

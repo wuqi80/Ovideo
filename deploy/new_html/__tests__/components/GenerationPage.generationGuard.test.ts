@@ -61,6 +61,12 @@ describe('GenerationPage progress feedback', () => {
     expect(source).toContain('currentGenerationProgress?.percent');
     expect(source).toContain('batchProgressDisplay?.aggregatePercent');
   });
+
+  it('keeps estimated progress and remaining time on one line', () => {
+    expect(source).toContain('mt-1 whitespace-nowrap text-[9px] text-primary/80');
+    expect(source).toContain('mt-0.5 whitespace-nowrap text-[8px] text-n300');
+    expect(source).toContain('mt-2 whitespace-nowrap text-[10px] text-n300');
+  });
 });
 
 describe('GenerationPage other storyboard references', () => {
