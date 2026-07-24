@@ -3186,26 +3186,29 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   
                                 {/* Action Buttons */}
                                 {!selectedShot?.isConfigConfirmed && (
-                                  <div className="absolute top-0 right-0 z-10 flex gap-1 p-1 opacity-100">
+                                  <div
+                                    className="absolute right-1 top-1 z-10 grid grid-cols-2 gap-1 opacity-100"
+                                    data-testid="reference-image-actions"
+                                  >
                                     {!ref.isLocked && (
                                       <>
                                       <button 
                                           onClick={(e) => { e.stopPropagation(); setImageEditorData({ imageUrl: ref.url, referenceId: ref.id }); }}
-                                          className="bg-primary hover:bg-primary-hover text-white rounded-full p-0.5"
+                                          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white hover:bg-primary-hover"
                                           title="编辑图片"
                                       >
                                           <Pencil className="w-3 h-3" />
                                       </button>
                                       <button 
                                           onClick={(e) => { e.stopPropagation(); setCameraModalImage(ref.url); }}
-                                          className="bg-primary hover:bg-primary-hover text-white rounded-full p-0.5"
+                                          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white hover:bg-primary-hover"
                                           title="角度调整"
                                       >
                                           <Camera className="w-3 h-3" />
                                       </button>
                                       <button 
                                           onClick={(e) => { e.stopPropagation(); setAroundAngleModalImage(ref.url); }}
-                                          className="bg-cyan-500/80 hover:bg-cyan-600 text-white rounded-full p-0.5"
+                                          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-cyan-500/80 text-white hover:bg-cyan-600"
                                           title="全景角度生成"
                                       >
                                           <RotateCcw className="w-3 h-3" />
@@ -3217,7 +3220,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                 e.stopPropagation();
                                                 handleSetReferenceLocked(ref, !ref.isLocked);
                                             }}
-                                            className="bg-n900/50 hover:bg-primary text-white rounded-full p-0.5"
+                                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-n900/50 text-white hover:bg-primary"
                                             title={ref.isLocked ? '解除锁定（保留参考图片）' : '锁定参考图片'}
                                         >
                                             {ref.isLocked
@@ -3229,7 +3232,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                 e.stopPropagation();
                                                 handleDeleteReference(ref);
                                             }}
-                                            className="bg-n900/50 hover:bg-danger text-white rounded-full p-0.5"
+                                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-n900/50 text-white hover:bg-danger"
                                             title={ref.source === 'identity_anchor' || ref.source === 'material_binding'
                                               ? '删除参考图片并解除当前镜头素材绑定'
                                               : '从当前镜头删除参考图片'}

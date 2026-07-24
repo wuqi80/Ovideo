@@ -98,6 +98,12 @@ describe('GenerationPage reference actions', () => {
     expect(source).toContain('从当前镜头删除参考图片');
   });
 
+  it('keeps all reference image actions visible inside narrow cards', () => {
+    expect(source).toContain('data-testid="reference-image-actions"');
+    expect(source).toContain('grid grid-cols-2 gap-1');
+    expect(source).toContain('inline-flex h-5 w-5 items-center justify-center');
+  });
+
   it('copies cross-shot images into submitted references instead of generated results', () => {
     expect(source).toContain("'reference_image',");
     expect(source).toContain(
