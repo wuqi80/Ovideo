@@ -95,6 +95,19 @@ describe('Webflow design-system contract', () => {
     expect(html).not.toContain('style="background-color:');
   });
 
+  it('keeps the standalone unauthenticated login page on the same Webflow system', () => {
+    const login = readProjectFile('../login.html');
+
+    expect(login).toContain('--primary: #146EF5');
+    expect(login).toContain('--n800: #080808');
+    expect(login).toContain('--n40: #D8D8D8');
+    expect(login).toContain('"WF Visual Sans Variable"');
+    expect(login).toContain('var(--shadow-cascade)');
+    expect(login).toContain('transform: translateX(6px)');
+    expect(login).toContain('@media (max-width: 479px)');
+    expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D/i);
+  });
+
   it('does not reintroduce dark neutral utilities into product source', () => {
     const sourceRoots = [
       'admin',

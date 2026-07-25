@@ -8,20 +8,31 @@
     <style>
         :root {
             --n0: #FFFFFF;
-            --n20: #F4F5F7;
-            --n30: #EBECF0;
-            --n40: #DFE1E6;
-            --n100: #7A869A;
-            --n200: #6B778C;
-            --n300: #5E6C84;
-            --n700: #253858;
-            --n800: #172B4D;
-            --primary: #0052CC;
-            --primary-hover: #0065FF;
-            --primary-active: #0747A6;
-            --primary-light: #DEEBFF;
-            --danger: #FF5630;
-            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+            --n10: #FCFCFC;
+            --n20: #F7F7F7;
+            --n30: #EEEEEE;
+            --n40: #D8D8D8;
+            --n100: #ABABAB;
+            --n200: #777777;
+            --n300: #5A5A5A;
+            --n700: #222222;
+            --n800: #080808;
+            --primary: #146EF5;
+            --primary-hover: #0055D4;
+            --primary-active: #006ACC;
+            --primary-light: #EAF2FF;
+            --purple: #7A3DFF;
+            --pink: #ED52CB;
+            --green: #00D722;
+            --danger: #EE1D36;
+            --border-hover: #898989;
+            --shadow-cascade:
+                rgba(0, 0, 0, 0) 0 84px 24px,
+                rgba(0, 0, 0, 0.01) 0 54px 22px,
+                rgba(0, 0, 0, 0.04) 0 30px 18px,
+                rgba(0, 0, 0, 0.08) 0 13px 13px,
+                rgba(0, 0, 0, 0.09) 0 3px 7px;
+            --font-sans: "WF Visual Sans Variable", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
         }
 
         * { box-sizing: border-box; }
@@ -32,7 +43,7 @@
             min-height: 100%;
             overflow-x: hidden;
             font-family: var(--font-sans);
-            background: var(--n20);
+            background: var(--n0);
             color: var(--n800);
             -webkit-font-smoothing: antialiased;
         }
@@ -56,7 +67,10 @@
             flex-direction: column;
             justify-content: space-between;
             padding: 48px;
-            background: linear-gradient(135deg, #0052CC 0%, #0A5AD6 56%, #0747A6 100%);
+            background:
+                radial-gradient(circle at 78% 18%, rgba(122, 61, 255, 0.72), transparent 30%),
+                radial-gradient(circle at 18% 88%, rgba(237, 82, 203, 0.32), transparent 34%),
+                linear-gradient(145deg, #146EF5 0%, #0055D4 52%, #080808 100%);
             color: white;
             overflow: hidden;
         }
@@ -66,9 +80,9 @@
             position: absolute;
             inset: 0;
             background:
-                linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
-            background-size: 36px 36px;
+                linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 40px 40px;
             mask-image: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent 88%);
             pointer-events: none;
         }
@@ -91,19 +105,20 @@
         .logo {
             width: 40px;
             height: 40px;
-            border-radius: 9px;
+            border-radius: 4px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
             font-size: 22px;
-            background: rgba(255,255,255,0.92);
+            background: var(--n0);
             color: var(--primary);
         }
 
         .mobile-brand .logo {
             width: 36px;
             height: 36px;
+            border-radius: 4px;
             background: var(--primary);
             color: white;
             font-size: 20px;
@@ -112,7 +127,8 @@
         .brand-name {
             font-size: 20px;
             line-height: 1;
-            font-weight: 700;
+            font-weight: 600;
+            letter-spacing: -0.2px;
         }
 
         .brand-content {
@@ -122,8 +138,9 @@
         .brand-content h1 {
             margin: 0 0 12px;
             font-size: clamp(30px, 3.2vw, 42px);
-            line-height: 1.2;
-            font-weight: 700;
+            line-height: 1.08;
+            font-weight: 600;
+            letter-spacing: -0.4px;
         }
 
         .brand-content p {
@@ -142,11 +159,12 @@
             width: 36px;
             height: 36px;
             flex: 0 0 auto;
-            border-radius: 7px;
+            border: 1px solid rgba(255,255,255,0.22);
+            border-radius: 4px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: rgba(255,255,255,0.16);
+            background: rgba(255,255,255,0.12);
         }
 
         .feature-title {
@@ -175,7 +193,7 @@
 
         .login-card {
             width: 100%;
-            max-width: 360px;
+            max-width: 400px;
         }
 
         .mobile-brand {
@@ -186,16 +204,18 @@
 
         h2 {
             margin: 0 0 4px;
-            font-size: 24px;
+            font-size: 32px;
             line-height: 1.3;
-            font-weight: 650;
+            font-weight: 600;
+            letter-spacing: -0.32px;
             color: var(--n800);
         }
 
         .subtitle {
             margin: 0 0 32px;
             color: var(--n300);
-            font-size: 14px;
+            font-size: 16px;
+            line-height: 1.6;
         }
 
         form {
@@ -210,13 +230,13 @@
         .input-group input[type="text"],
         .input-group input[type="password"] {
             width: 100%;
-            height: 44px;
+            height: 48px;
             border: 1px solid var(--n40);
-            border-radius: 6px;
+            border-radius: 4px;
             background: var(--n0);
             color: var(--n800);
             font: inherit;
-            font-size: 14px;
+            font-size: 16px;
             outline: none;
             padding: 10px 12px 8px;
             transition: border-color 150ms ease, box-shadow 150ms ease;
@@ -224,17 +244,17 @@
 
         .input-group input:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(0,82,204,0.16);
+            box-shadow: 0 0 0 3px rgba(20,110,245,0.16);
         }
 
         .input-group label {
             position: absolute;
             left: 10px;
-            top: 12px;
+            top: 15px;
             padding: 0 4px;
             background: var(--n0);
             color: var(--n200);
-            font-size: 14px;
+            font-size: 15px;
             line-height: 1;
             pointer-events: none;
             transition: transform 150ms ease, color 150ms ease;
@@ -264,7 +284,7 @@
 
         .remember:hover,
         .link:hover {
-            color: var(--n700);
+            color: var(--primary);
         }
 
         .remember input {
@@ -279,9 +299,9 @@
 
         .login-button {
             width: 100%;
-            height: 42px;
+            height: 48px;
             border: 0;
-            border-radius: 6px;
+            border-radius: 4px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -289,19 +309,20 @@
             background: var(--primary);
             color: white;
             font: inherit;
-            font-size: 14px;
-            font-weight: 600;
+            font-size: 16px;
+            font-weight: 500;
             cursor: pointer;
-            box-shadow: 0 1px 2px rgba(9,30,66,0.16);
-            transition: background-color 150ms ease, transform 150ms ease;
+            box-shadow: var(--shadow-cascade);
+            transition: background-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
         }
 
         .login-button:hover {
             background: var(--primary-hover);
+            transform: translateX(6px);
         }
 
         .login-button:active {
-            transform: scale(0.99);
+            transform: translateX(6px) scale(0.99);
             background: var(--primary-active);
         }
 
@@ -345,7 +366,7 @@
             display: none;
         }
 
-        @media (max-width: 860px) {
+        @media (max-width: 992px) {
             .brand-panel {
                 display: none;
             }
@@ -356,6 +377,40 @@
 
             .login-panel {
                 min-height: 100vh;
+            }
+        }
+
+        @media (max-width: 479px) {
+            .login-panel {
+                align-items: flex-start;
+                padding: 72px 20px 32px;
+            }
+
+            .mobile-brand {
+                justify-content: flex-start;
+                margin-bottom: 48px;
+            }
+
+            h2 {
+                font-size: 28px;
+            }
+
+            form {
+                gap: 20px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+
+            .login-button:hover,
+            .login-button:active {
+                transform: none;
             }
         }
     </style>
