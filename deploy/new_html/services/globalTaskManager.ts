@@ -14,7 +14,7 @@ function normalizeProgress(value: unknown): number | undefined {
     return Math.min(1, Math.max(0, normalized));
 }
 
-export type TaskEventType = 'tasks_updated' | 'notification' | 'progress';
+export type TaskEventType = 'tasks_updated' | 'tasks_terminal' | 'notification' | 'progress';
 export type TaskEventCallback = (
     type: TaskEventType,
     data: {
@@ -38,7 +38,9 @@ export class GlobalTaskManager {
     private pollingTimer: ReturnType<typeof setInterval> | null = null;
     private lastPollTime = 0;
     private activeTasks: GlobalTask[] = [];
-    private pollIntervalMs = 5000;
+    private pollingIntervalMs: number | null = null;
+    private readonly fallbackPollIntervalMs = 5000;
+    private readonly reconciliationPollIntervalMs = 15000;
     private eventSource: EventSource | null = null;
     private sseReconnectTimer: ReturnType<typeof setTimeout> | null = null;
     private sseConnected = false;
@@ -69,8 +71,9 @@ export class GlobalTaskManager {
             this.eventSource.onopen = () => {
                 console.log('[TaskManager] SSE 已连接');
                 this.sseConnected = true;
-                this.stopPolling();
-                this.poll();
+                // SSE 可能在页面切换、代理重连或浏览器休眠期间漏掉一次终态。
+                // 保留低频 HTTP 对账，避免服务端已 completed、前端仍永久 running。
+                this.startPolling(this.reconciliationPollIntervalMs);
             };
 
             this.eventSource.onmessage = (event) => {
@@ -141,10 +144,16 @@ export class GlobalTaskManager {
     }
 
     private startPollingFallback() {
-        if (this.pollingTimer) return;
-        this.poll();
-        this.pollingTimer = setInterval(() => this.poll(), this.pollIntervalMs);
+        this.startPolling(this.fallbackPollIntervalMs);
         console.log('[TaskManager] 轮询已启动');
+    }
+
+    private startPolling(intervalMs: number) {
+        if (this.pollingTimer && this.pollingIntervalMs === intervalMs) return;
+        this.stopPolling();
+        void this.poll();
+        this.pollingIntervalMs = intervalMs;
+        this.pollingTimer = setInterval(() => void this.poll(), intervalMs);
     }
 
     private stopPolling() {
@@ -152,12 +161,15 @@ export class GlobalTaskManager {
             clearInterval(this.pollingTimer);
             this.pollingTimer = null;
         }
+        this.pollingIntervalMs = null;
     }
 
     private async poll() {
         const pollStartedAt = Date.now();
         const isBaselinePoll = !this.notificationBaselineReady;
-        const since = this.lastPollTime || pollStartedAt;
+        // 首轮拉取最近终态用于修复 sessionStorage 中的幽灵 running，但不弹历史通知。
+        // 后续保留 60 秒重叠窗口，抵消浏览器/服务器时钟偏差；notification id 会负责去重。
+        const since = this.lastPollTime ? Math.max(0, this.lastPollTime - 60_000) : undefined;
 
         try {
             const [activeRes, notifRes] = await Promise.all([
@@ -181,6 +193,23 @@ export class GlobalTaskManager {
             }
 
             if (notifRes?.success && Array.isArray(notifRes.notifications)) {
+                const terminalTasks = notifRes.notifications.map((n: any) => ({
+                    id: n.task_id,
+                    category: n.category || n.task_type,
+                    status: n.status === 'completed' ? 'completed' : 'failed',
+                    displayName: n.display_name || n.task_type,
+                    projectId: n.project_id || '',
+                    sourcePage: n.source_page || 'editor',
+                    sourceItemId: n.source_item_id || n.entity_id,
+                    createdAt: new Date(n.created_at).getTime(),
+                    completedAt: new Date(n.completed_at).getTime(),
+                    error: n.error_message || undefined,
+                })).filter((task: GlobalTask) => Boolean(task.id));
+                if (terminalTasks.length > 0) {
+                    // 终态同步只负责收口本地状态，不等同于用户可见通知。
+                    // suppress_notification 的内部修复任务也可以静默退出 running。
+                    this.emit('tasks_terminal', { tasks: terminalTasks });
+                }
                 this.notificationBaselineReady = true;
                 this.lastPollTime = pollStartedAt;
             }

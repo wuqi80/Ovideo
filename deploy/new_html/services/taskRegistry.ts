@@ -468,8 +468,9 @@ class TaskRegistry {
     /**
      * 2026-05-20 (M5)：把后端 dao_notification 表里的历史 task 合并进内存。
      *
-     * 合并规则（重要：不破坏正在跑的运行时状态）：
-     *   - 内存里已有此 taskId 且为活跃态 (pending/queued/running) → 跳过（SSE/轮询数据更新鲜）
+     * 合并规则（服务端终态优先，运行态不倒退）：
+     *   - 内存里已有此 taskId 且双方均为活跃态 → 跳过（SSE/轮询数据更新鲜）
+     *   - 内存仍为活跃态、服务端已是终态 → 以服务端终态收口，修复漏掉 SSE 后的幽灵任务
      *   - 内存里没有 → 直接 set（首次加载就能看到刷新前完成的任务）
      *   - 内存里有但已是终态 → 用后端数据补 createdAt/completedAt（不会改 status）
      *
@@ -488,9 +489,29 @@ class TaskRegistry {
             if (!existing) {
                 this.tasks.set(incoming.taskId, incoming);
                 added++;
-            } else if (isActive(existing.status)) {
-                // 内存里在跑，后端不可能更新 → 直接跳过
+            } else if (isActive(existing.status) && isActive(incoming.status)) {
+                // 双方都在运行时保留内存实时状态，避免旧轮询覆盖进度。
                 skipped++;
+            } else if (isActive(existing.status)) {
+                // 服务端完成/失败状态是权威终态。旧逻辑在这里跳过 incoming，
+                // 导致正文已生成且数据库已 completed，铃铛仍永久显示 running。
+                this.update(incoming.taskId, {
+                    ...existing,
+                    ...incoming,
+                    createdAt: existing.createdAt || incoming.createdAt,
+                    startedAt: existing.startedAt || incoming.startedAt,
+                    targetProjectId: incoming.targetProjectId || existing.targetProjectId,
+                    targetItemId: incoming.targetItemId || existing.targetItemId,
+                    targetEntityType: incoming.targetEntityType || existing.targetEntityType,
+                    targetEntityId: incoming.targetEntityId || existing.targetEntityId,
+                    episodeId: incoming.episodeId || existing.episodeId,
+                    fileRole: incoming.fileRole || existing.fileRole,
+                    metadata: {
+                        ...(existing.metadata || {}),
+                        ...(incoming.metadata || {}),
+                    },
+                });
+                updated++;
             } else {
                 // 内存终态 + 后端终态：用后端时间戳补全（不改 status）
                 this.tasks.set(incoming.taskId, {

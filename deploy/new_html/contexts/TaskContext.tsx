@@ -224,6 +224,20 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        if (type === 'tasks_terminal' && data.tasks) {
+          for (const t of data.tasks) {
+            const existing = taskRegistry.get(t.id);
+            if (!existing) continue;
+            if (t.status === 'completed') {
+              taskRegistry.complete(t.id);
+            } else if (t.status === 'failed') {
+              taskRegistry.fail(t.id, t.error || `${t.displayName || '任务'}执行失败`);
+            } else if (t.status === 'cancelled') {
+              taskRegistry.cancel(t.id);
+            }
+          }
+        }
+
         if (type === 'progress' && data.taskId) {
           const raw = (data.raw || {}) as Record<string, unknown>;
           const metadata: Record<string, unknown> = {};

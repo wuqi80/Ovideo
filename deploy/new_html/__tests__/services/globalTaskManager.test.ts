@@ -46,8 +46,9 @@ describe('GlobalTaskManager notification polling', () => {
 
     await (manager as any).poll();
 
-    expect(mockGetTaskNotifications).toHaveBeenCalledWith(expect.any(Number));
+    expect(mockGetTaskNotifications).toHaveBeenCalledWith(undefined);
     expect(events).not.toContain('notification');
+    expect(events).toContain('tasks_terminal');
   });
 
   it('emits only new notification ids after the baseline poll', async () => {
@@ -103,5 +104,46 @@ describe('GlobalTaskManager notification polling', () => {
 
     expect(snapshots[0][0].progress).toBe(0.42);
     expect(snapshots[0][1].progress).toBeUndefined();
+  });
+
+  it('reconciles terminal task state without creating a visible notification while SSE is connected', async () => {
+    mockGetTaskNotifications
+      .mockResolvedValueOnce({ success: true, notifications: [] })
+      .mockResolvedValueOnce({
+        success: true,
+        notifications: [terminalTask('deepseek_text_1', 'completed')],
+      });
+
+    const manager = new GlobalTaskManager();
+    const events: Array<{ type: string; taskStatus?: string }> = [];
+    manager.addEventListener((type, data) => {
+      events.push({ type, taskStatus: data.tasks?.[0]?.status });
+    });
+
+    await (manager as any).poll();
+    (manager as any).sseConnected = true;
+    await (manager as any).poll();
+
+    expect(events).toContainEqual({ type: 'tasks_terminal', taskStatus: 'completed' });
+    expect(events.filter(event => event.type === 'notification')).toEqual([]);
+  });
+
+  it('keeps low-frequency reconciliation polling while SSE is connected', async () => {
+    vi.useFakeTimers();
+    mockGetTaskNotifications.mockResolvedValue({ success: true, notifications: [] });
+    const manager = new GlobalTaskManager();
+    (manager as any).sseConnected = true;
+
+    try {
+      (manager as any).startPolling(15_000);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockGetActiveTasks).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(mockGetActiveTasks).toHaveBeenCalledTimes(2);
+    } finally {
+      manager.stop();
+      vi.useRealTimers();
+    }
   });
 });

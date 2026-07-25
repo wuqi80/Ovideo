@@ -68,4 +68,43 @@ describe('TaskRegistry user scope', () => {
     expect(registry.rehydrate()).toEqual([]);
     expect(storage.getItem('h-my2:task-registry:v1')).toBeNull();
   });
+
+  it('lets an authoritative server terminal state close a locally running task', () => {
+    const registry = new TaskRegistry(new MemoryStorage());
+    registry.setUserScope('yuan');
+    registry.register({
+      taskId: 'deepseek_text_1',
+      kind: 'script-segment',
+      title: '剧本修改',
+      targetPage: 'script',
+      initialStatus: 'running',
+      targetProjectId: 'project_1',
+    });
+    let completedCallbacks = 0;
+    registry.onComplete('deepseek_text_1', () => {
+      completedCallbacks += 1;
+    });
+
+    const stats = registry.mergeFromServer([{
+      taskId: 'deepseek_text_1',
+      notificationId: 'notification_1',
+      kind: 'script-segment',
+      title: '剧本修改',
+      status: 'completed',
+      progress: 1,
+      createdAt: Date.now() - 40_000,
+      startedAt: Date.now() - 39_000,
+      completedAt: Date.now(),
+      targetPage: 'script',
+    }]);
+
+    expect(stats).toEqual({ added: 0, skipped: 0, updated: 1 });
+    expect(registry.get('deepseek_text_1')).toMatchObject({
+      status: 'completed',
+      progress: 1,
+      notificationId: 'notification_1',
+      targetProjectId: 'project_1',
+    });
+    expect(completedCallbacks).toBe(1);
+  });
 });

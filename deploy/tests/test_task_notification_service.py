@@ -200,6 +200,42 @@ async def test_get_active_tasks_enriches_context_from_task_data():
     assert task["category"] == "image"
 
 
+async def test_get_active_tasks_hides_internal_notification_suppressed_text_tasks():
+    class ActiveTaskDAO(FakeTaskDAO):
+        @classmethod
+        async def get_active_tasks_for_user(cls, user_id: str, limit: int):
+            return [
+                {
+                    "task_id": "deepseek_internal_1",
+                    "user_id": user_id,
+                    "status": "processing",
+                    "task_type": "deepseek_text",
+                    "task_data": {
+                        "display_name": "镜头设计局部修复",
+                        "source_page": "script",
+                        "suppress_notification": True,
+                    },
+                },
+                {
+                    "task_id": "deepseek_visible_1",
+                    "user_id": user_id,
+                    "status": "processing",
+                    "task_type": "deepseek_text",
+                    "task_data": {
+                        "display_name": "剧本修改",
+                        "source_page": "script",
+                    },
+                },
+            ]
+
+    result = await task_notification_service.get_active_tasks(
+        user_id="user_1",
+        task_dao=ActiveTaskDAO,
+    )
+
+    assert [task["task_id"] for task in result["tasks"]] == ["deepseek_visible_1"]
+
+
 async def test_get_task_files_rejects_missing_or_foreign_task():
     result = await task_notification_service.get_task_files(
         task_id="task_1",
@@ -232,7 +268,7 @@ async def test_get_task_notifications_normalizes_task_data_and_since_ms():
         task_dao=FakeTaskDAO,
     )
 
-    assert FakeTaskDAO.terminal_args["limit"] == 20
+    assert FakeTaskDAO.terminal_args["limit"] == 50
     assert isinstance(FakeTaskDAO.terminal_args["since_dt"], datetime)
     assert FakeTaskDAO.terminal_args["since_dt"].tzinfo is None
     assert result["notifications"][0]["entity_type"] == "shot"

@@ -34,6 +34,10 @@ def _normalize_task_data(value: Any) -> dict:
     return {}
 
 
+def _is_notification_suppressed_task(row: Dict[str, Any]) -> bool:
+    return _normalize_task_data(row.get("task_data")).get("suppress_notification") is True
+
+
 def _enrich_task_row_from_data(row: Dict[str, Any], *, include_empty_entity: bool = False) -> Dict[str, Any]:
     task_data = _normalize_task_data(row.pop("task_data", None) or {})
     context_keys = (
@@ -197,7 +201,11 @@ async def get_active_tasks(
     task_queue: Any = None,
 ) -> Dict[str, Any]:
     tasks = await task_dao.get_active_tasks_for_user(user_id, limit=50)
-    active_rows = [_enrich_task_row_from_data(row) for row in _rows_to_dicts(tasks)]
+    active_rows = [
+        _enrich_task_row_from_data(row)
+        for row in _rows_to_dicts(tasks)
+        if not _is_notification_suppressed_task(row)
+    ]
     active_tasks = await _reconcile_active_tasks_with_queue(
         active_rows,
         task_queue=task_queue,
@@ -213,7 +221,9 @@ async def get_task_notifications(
     task_dao: Any,
 ) -> Dict[str, Any]:
     since_dt = _since_ms_to_naive_utc(since)
-    tasks = await task_dao.get_terminal_tasks_for_notifications(user_id, since_dt, limit=20)
+    # 文本/镜头批处理可能在一个轮询周期内完成数十个子任务。
+    # 50 条仍是有界查询，同时足够让前端可靠收口之前登记的 running 状态。
+    tasks = await task_dao.get_terminal_tasks_for_notifications(user_id, since_dt, limit=50)
 
     notifications = []
     for task in tasks:

@@ -1072,25 +1072,47 @@ def check_task_notification_toast_dedupe_contract(root: Path) -> int:
     """Task notifications use a deduped unread badge without delayed popups."""
     manager_text = (root / "new_html" / "services" / "globalTaskManager.ts").read_text(encoding="utf-8")
     context_text = (root / "new_html" / "contexts" / "TaskContext.tsx").read_text(encoding="utf-8")
+    registry_text = (root / "new_html" / "services" / "taskRegistry.ts").read_text(encoding="utf-8")
+    task_service_text = (root / "services" / "task_notification_service.py").read_text(encoding="utf-8")
     test_text = (root / "new_html" / "__tests__" / "services" / "globalTaskManager.test.ts").read_text(encoding="utf-8")
+    registry_test_text = (
+        root / "new_html" / "__tests__" / "services" / "taskRegistry.userScope.test.ts"
+    ).read_text(encoding="utf-8")
+    task_service_test_text = (root / "tests" / "test_task_notification_service.py").read_text(encoding="utf-8")
     indicator_test_text = (
         root / "new_html" / "__tests__" / "components" / "TaskNotificationIndicator.test.ts"
     ).read_text(encoding="utf-8")
 
     required_snippets = {
         "notificationBaselineReady": "global task manager tracks notification baseline",
-        "const since = this.lastPollTime || pollStartedAt": "initial poll uses a timestamp baseline, not undefined",
+        "const since = this.lastPollTime ? Math.max(0, this.lastPollTime - 60_000) : undefined": "initial poll recovers recent terminal state with a clock-skew overlap",
+        "tasks_terminal": "terminal task state is reconciled independently from visible notifications",
+        "this.startPolling(this.reconciliationPollIntervalMs)": "SSE mode keeps low-frequency state reconciliation",
         "!isBaselinePoll": "baseline poll does not emit toast notifications",
         "rememberNotificationId": "transport-level task notification id dedupe",
         "seenNotificationIdsRef": "TaskContext unread count dedupes notification events",
+        "isActive(existing.status) && isActive(incoming.status)": "server terminal state may close a locally active task",
+        "_is_notification_suppressed_task": "internal repair tasks stay out of the active notification panel",
         "does not toast historical failures": "unit test covers historical failure burst",
         "emits only new notification ids": "unit test covers duplicate terminal task suppression",
+        "reconciles terminal task state without creating a visible notification": "unit test covers silent terminal reconciliation",
+        "lets an authoritative server terminal state close a locally running task": "unit test covers persisted ghost task repair",
+        "test_get_active_tasks_hides_internal_notification_suppressed_text_tasks": "backend test covers internal task filtering",
         "does not mount delayed in-app or browser notification popups": "unit test blocks delayed popup regressions",
         "shows the unread notification count beside the bell": "unit test covers the unread badge",
         "not.toContain('GlobalToast')": "application must not remount the legacy in-app toast",
         "not.toContain('Notification.requestPermission')": "application must not request browser notifications",
     }
-    sources = "\n".join([manager_text, context_text, test_text, indicator_test_text])
+    sources = "\n".join([
+        manager_text,
+        context_text,
+        registry_text,
+        task_service_text,
+        test_text,
+        registry_test_text,
+        task_service_test_text,
+        indicator_test_text,
+    ])
     missing = [
         f"{label}: missing {snippet}"
         for snippet, label in required_snippets.items()
