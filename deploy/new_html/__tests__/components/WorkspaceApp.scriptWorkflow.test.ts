@@ -45,4 +45,20 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('collectConversationStoryboardSnapshots(conversation)');
     expect(source).toContain('handleConversationGenerateDesign(version, { autoSnapshot: false })');
   });
+
+  it('offers persistent writing and four-column quick modes on the unified generation pipeline', () => {
+    expect(source).toContain("readScriptWorkspaceMode(localStorage, scriptWorkspaceUsername)");
+    expect(source).toContain("writeScriptWorkspaceMode(localStorage, scriptWorkspaceUsername, mode)");
+    expect(source).toContain("scriptWorkspaceMode === 'writing'");
+    expect(source).toContain('data-testid="quick-script-workspace"');
+    expect(source).toContain('<QuickScriptSourceColumn');
+    expect(source).toContain('<QuickScriptVersionColumn');
+    expect(source).toContain('onSend={handleConversationSend}');
+    expect(source).toContain('onEditVersion={handleConversationEditVersion}');
+    expect(source).toContain('handleConversationGenerateDesign(version, { openDrawer: false })');
+    expect(source).toContain("snapshot.scriptVersionId === selectedConversationVersion.id");
+    expect(source).toContain('selectedFile={quickStoryboardFile}');
+    expect(source).not.toContain('onSend={handleRewrite}');
+    expect(source).not.toContain('onSend={handleIterateScript}');
+  });
 });

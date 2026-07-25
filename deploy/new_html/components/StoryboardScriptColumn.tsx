@@ -12,6 +12,7 @@ interface StoryboardScriptColumnProps {
   selectedFile: ProjectFile | undefined;
   highlightedItemIds: Set<string>;
   onSelectItemIds: (selectedIds: Set<string>) => void;
+  showHeader?: boolean;
 }
 
 const getScriptBlock = (item: StoryboardItem): string => (
@@ -28,6 +29,7 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
   selectedFile,
   highlightedItemIds,
   onSelectItemIds,
+  showHeader = true,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -66,21 +68,25 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
       data-testid="storyboard-script-column"
       aria-label="当前镜头设计对应的分镜脚本"
     >
-      <header className="flex h-[52px] flex-shrink-0 items-center justify-between border-b border-n40 bg-n0 px-4">
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-n700">
-          <FileText className="h-4 w-4 text-primary" />
-          分镜脚本
-        </h2>
-        <span className="text-xs text-n100">当前镜头设计对应版本</span>
-      </header>
+      {showHeader && (
+        <>
+          <header className="flex h-[52px] flex-shrink-0 items-center justify-between border-b border-n40 bg-n0 px-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-n700">
+              <FileText className="h-4 w-4 text-primary" />
+              分镜脚本
+            </h2>
+            <span className="text-xs text-n100">当前镜头设计对应版本</span>
+          </header>
 
-      <div className="flex h-[52px] flex-shrink-0 items-center border-b border-n40 bg-n0 px-3">
-        <div className="flex w-full items-center gap-2 rounded border border-primary bg-primary-light px-3 py-2 text-xs text-primary">
-          <Film className="h-4 w-4" />
-          <span>共 {segmentGroups.length} 个分段 · {items.length} 个镜头</span>
-          <span className="ml-auto text-[10px] text-n300">点击段落联动右侧镜头</span>
-        </div>
-      </div>
+          <div className="flex h-[52px] flex-shrink-0 items-center border-b border-n40 bg-n0 px-3">
+            <div className="flex w-full items-center gap-2 rounded border border-primary bg-primary-light px-3 py-2 text-xs text-primary">
+              <Film className="h-4 w-4" />
+              <span>共 {segmentGroups.length} 个分段 · {items.length} 个镜头</span>
+              <span className="ml-auto text-[10px] text-n300">点击段落联动右侧镜头</span>
+            </div>
+          </div>
+        </>
+      )}
 
       <div
         ref={scrollContainerRef}
@@ -101,11 +107,6 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
                 </span>
               </header>
               <div className="space-y-3 p-3">
-                <SegmentPromptCards
-                  segmentNo={group.segmentNo}
-                  visualStyle={promptSections.visualStyle}
-                  stabilityConstraint={promptSections.stabilityConstraint}
-                />
                 {group.entries.map(entry => {
                   const { item } = entry;
                   const isHighlighted = highlightedItemIds.has(item.id);
@@ -136,6 +137,11 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
                     </button>
                   );
                 })}
+                <SegmentPromptCards
+                  segmentNo={group.segmentNo}
+                  visualStyle={promptSections.visualStyle}
+                  stabilityConstraint={promptSections.stabilityConstraint}
+                />
               </div>
             </section>
           );

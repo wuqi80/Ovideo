@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { v4 as uuidv4 } from 'uuid';
-import { ShieldCheck } from 'lucide-react';
+import { FileText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { SkeletonScreen } from './components/SkeletonScreen';
@@ -46,6 +46,12 @@ import {
   getVersionStoryboardSnapshots,
   mergeStoryboardSnapshots,
 } from './utils/storyboardSnapshots';
+import {
+  readScriptWorkspaceMode,
+  writeScriptWorkspaceMode,
+  type ScriptWorkspaceMode,
+} from './utils/scriptWorkspaceMode';
+import { ScriptWorkspaceModeSwitch } from './components/ScriptWorkspaceModeSwitch';
 
 const loadAiModelService = () => import('./services/aiModelService');
 const loadScriptThreeStageService = () => import('./services/scriptThreeStageService');
@@ -71,6 +77,8 @@ type HistoryUpdateOptions = {
 
 const FileColumn = React.lazy(() => import('./components/FileColumn').then(m => ({ default: m.FileColumn })));
 const ScriptConversationPane = React.lazy(() => import('./components/ScriptConversationPane').then(m => ({ default: m.ScriptConversationPane })));
+const QuickScriptSourceColumn = React.lazy(() => import('./components/QuickScriptSourceColumn').then(m => ({ default: m.QuickScriptSourceColumn })));
+const QuickScriptVersionColumn = React.lazy(() => import('./components/QuickScriptVersionColumn').then(m => ({ default: m.QuickScriptVersionColumn })));
 const VideoReversePage = React.lazy(() => import('./pages/VideoReversePage').then(m => ({ default: m.VideoReversePage })));
 const StoryboardScriptColumn = React.lazy(() => import('./components/StoryboardScriptColumn').then(m => ({ default: m.StoryboardScriptColumn })));
 const StoryboardColumn = React.lazy(() => import('./components/StoryboardColumn').then(m => ({ default: m.StoryboardColumn })));
@@ -323,6 +331,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   onAfterExport,
 }) => {
   const scriptModelOptions = useScriptModelOptions();
+  const scriptWorkspaceUsername = localStorage.getItem('username');
+  const [scriptWorkspaceMode, setScriptWorkspaceMode] = useState<ScriptWorkspaceMode>(
+    () => readScriptWorkspaceMode(localStorage, scriptWorkspaceUsername),
+  );
 
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [storyboardTotalsByFileId, setStoryboardTotalsByFileId] = useState<Record<string, number>>({});
@@ -469,6 +481,12 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
 
+  const handleScriptWorkspaceModeChange = useCallback((mode: ScriptWorkspaceMode) => {
+    writeScriptWorkspaceMode(localStorage, scriptWorkspaceUsername, mode);
+    setScriptWorkspaceMode(mode);
+    if (mode === 'quick') setStoryboardDrawerOpen(false);
+  }, [scriptWorkspaceUsername]);
+
   const selectedFile = files.find(f => f.id === selectedFileId);
   const selectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined;
   const selectedConversationVersion = selectedConversation?.versions.find(
@@ -482,6 +500,29 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     || selectedFile?.storyboard?.items
     || []
   ).filter(item => !item.isPlaceholder).length;
+  const selectedVersionStoryboardSnapshots = selectedConversationVersion
+    ? mergeStoryboardSnapshots(
+        getVersionStoryboardSnapshots(selectedConversationVersion),
+        (selectedFile?.versions || []).filter(snapshot => (
+          snapshot.scriptVersionId === selectedConversationVersion.id
+        )),
+      )
+    : [];
+  const latestSelectedVersionStoryboard = selectedVersionStoryboardSnapshots[
+    selectedVersionStoryboardSnapshots.length - 1
+  ];
+  const quickStoryboardFile = selectedFile
+    ? {
+        ...selectedFile,
+        // A newly generated script version must not display another version's design cards.
+        // Legacy records predate version-owned snapshots, so retain their persisted storyboard.
+        storyboard: selectedConversationVersion?.source === 'legacy'
+          ? selectedFile.storyboard
+          : selectedConversationVersion
+            ? latestSelectedVersionStoryboard?.data.storyboard || null
+            : selectedFile.storyboard,
+      }
+    : undefined;
 
   useEffect(() => {
     if (!selectedFileId || selectedFileId.startsWith('local_')) return;
@@ -1864,7 +1905,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
   const handleConversationGenerateDesign = useCallback(async (
     version: ScriptStoryboardVersion,
-    options: { autoSnapshot?: boolean } = {},
+    options: { autoSnapshot?: boolean; openDrawer?: boolean } = {},
   ) => {
     const fileId = selectedFileId;
     if (!fileId) return;
@@ -1907,7 +1948,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             ...prev,
             [fileId]: { ...prev[fileId], currentVersionId: selectedVersion.id },
           }) : prev);
-          setStoryboardDrawerOpen(true);
+          if (options.openDrawer !== false) setStoryboardDrawerOpen(true);
         });
         await updateEpisodeScriptById(propEpisodeId, fileId, { adapted_script: selectedVersion.content });
         return;
@@ -1977,7 +2018,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         }) : prev);
         setHighlightedScriptSegments(new Set());
         setHighlightedStoryboardItemIds(new Set());
-        setStoryboardDrawerOpen(true);
+        if (options.openDrawer !== false) setStoryboardDrawerOpen(true);
       });
 
       await persistStoryboardSnapshot(fileId, {
@@ -3768,6 +3809,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           {/* Editor - 懒挂载 + display 切换，永不卸载 */}
           {mountedViews.has(AppView.Editor) && (
             <div style={{ display: currentView === AppView.Editor ? 'contents' : 'none' }}>
+              {scriptWorkspaceMode === 'writing' ? (
+                <>
                 <div className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
                     <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
                     <FileColumn 
@@ -3818,6 +3861,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                           selectedStoryboardItemCount,
                           selectedFileId ? (storyboardTotalsByFileId[selectedFileId] ?? 0) : 0,
                         )}
+                        workspaceMode={scriptWorkspaceMode}
+                        onWorkspaceModeChange={handleScriptWorkspaceModeChange}
                     />
                     </React.Suspense>
 
@@ -3890,6 +3935,166 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       </div>
                     )}
                 </div>
+                </>
+              ) : (
+                <div
+                  className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-n0"
+                  data-testid="quick-script-workspace"
+                >
+                  <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
+                    <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
+                    <div className="truncate text-sm font-semibold text-n800">
+                      {selectedFile?.name || '请选择剧本任务'}
+                    </div>
+                    <ScriptWorkspaceModeSwitch
+                      mode={scriptWorkspaceMode}
+                      onChange={handleScriptWorkspaceModeChange}
+                    />
+                    <span className="ml-auto text-[10px] text-n200">
+                      四列使用同一生成、版本、积分与镜头数据
+                    </span>
+                  </header>
+
+                  <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+                    <div className="flex h-full min-w-[1180px] overflow-hidden">
+                      <div
+                        style={{ width: `${colWidths[0]}%` }}
+                        className="relative h-full flex-shrink-0 overflow-hidden"
+                      >
+                        <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
+                          <FileColumn
+                            files={files}
+                            selectedFileId={selectedFileId}
+                            activeFileId={activeScriptId || null}
+                            checkedFileIds={checkedFileIds}
+                            onFileSelect={handleFileSelect}
+                            onActivateFile={activateWorkflowScript}
+                            onFileCheck={handleFileCheck}
+                            onCheckAll={handleCheckAll}
+                            onFileUpload={handleFileUpload}
+                            onCreateBlankFile={handleCreateBlankFile}
+                            onRenameFile={handleRenameFile}
+                            onDeleteFile={handleDeleteFile}
+                            onDownloadFile={handleDownloadFile}
+                            onMoveFile={handleMoveFile}
+                            onSaveVersion={handleSaveVersion}
+                            onRestoreVersion={handleRestoreVersion}
+                            isExpanded={false}
+                            onToggleExpand={() => {}}
+                            onReorderFiles={handleReorderFiles}
+                            onExportProject={handleExportProject}
+                          />
+                        </React.Suspense>
+                      </div>
+
+                      {isFullView && (
+                        <div
+                          onMouseDown={() => startResizing(0)}
+                          className="z-20 w-1 flex-shrink-0 cursor-col-resize bg-n40 transition-colors hover:bg-primary"
+                        />
+                      )}
+
+                      <div
+                        style={{ width: `${colWidths[1]}%` }}
+                        className="relative h-full flex-shrink-0 overflow-hidden"
+                      >
+                        <React.Suspense fallback={<LegacyColumnFallback label="source-script" />}>
+                          <QuickScriptSourceColumn
+                            selectedFile={selectedFile}
+                            currentVersionNo={selectedConversationVersion?.versionNo}
+                            aiModel={aiModel}
+                            modelOptions={scriptModelOptions}
+                            isLoading={conversationLoadingId === selectedFileId}
+                            isSending={conversationSendingId === selectedFileId}
+                            error={conversationError}
+                            onDismissError={() => setConversationError(null)}
+                            onChangeModel={setAiModel}
+                            onUpdateSource={handleUpdateContent}
+                            onSend={handleConversationSend}
+                          />
+                        </React.Suspense>
+                      </div>
+
+                      {isFullView && (
+                        <div
+                          onMouseDown={() => startResizing(1)}
+                          className="z-20 w-1 flex-shrink-0 cursor-col-resize bg-n40 transition-colors hover:bg-primary"
+                        />
+                      )}
+
+                      <div
+                        style={{ width: `${colWidths[2]}%` }}
+                        className="relative h-full flex-shrink-0 overflow-hidden"
+                      >
+                        <React.Suspense fallback={<LegacyColumnFallback label="video-script" />}>
+                          <QuickScriptVersionColumn
+                            selectedFile={selectedFile}
+                            version={selectedConversationVersion}
+                            isSending={conversationSendingId === selectedFileId}
+                            error={conversationError}
+                            highlightedItemIds={highlightedStoryboardItemIds}
+                            onDismissError={() => setConversationError(null)}
+                            onSelectItemIds={handleStoryboardSelectionChange}
+                            onEditVersion={handleConversationEditVersion}
+                            onGenerateDesign={(version) => handleConversationGenerateDesign(version, { openDrawer: false })}
+                            onExportVersion={handleConversationExportVersion}
+                          />
+                        </React.Suspense>
+                      </div>
+
+                      {isFullView && (
+                        <div
+                          onMouseDown={() => startResizing(2)}
+                          className="z-20 w-1 flex-shrink-0 cursor-col-resize bg-n40 transition-colors hover:bg-primary"
+                        />
+                      )}
+
+                      <div
+                        style={{ width: `${colWidths[3]}%` }}
+                        className="relative h-full flex-shrink-0 overflow-hidden"
+                      >
+                        <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
+                          <StoryboardColumn
+                            selectedFile={quickStoryboardFile}
+                            onGenerateStoryboard={handleGenerateStoryboard}
+                            isProcessing={isProcessing}
+                            generationProgress={shotGenerationProgress}
+                            processingType={processingType}
+                            aiModel={aiModel}
+                            isExpanded={false}
+                            onToggleExpand={() => {}}
+                            onHighlightScript={handleStoryboardSelectionChange}
+                            highlightedItemIds={highlightedStoryboardItemIds}
+                            onLockItem={handleLockItem}
+                            onDeleteItem={handleDeleteStoryboardItem}
+                            onRegenerateItem={handleRegenerateItem}
+                            onUpdateItem={handleUpdateStoryboardItem}
+                            onInsertShot={handleInsertShot}
+                            onInsertShotWithAI={handleInsertShotWithAI}
+                            onExport={handleExportStoryboards}
+                            isExporting={isExporting}
+                            isWorkflowScript={selectedFileId === activeScriptId}
+                            onUndo={handleUndo}
+                            onRedo={handleRedo}
+                            canUndo={canUndo}
+                            canRedo={canRedo}
+                            onSaveVersion={(name) => selectedFileId && handleSaveVersion(selectedFileId, name)}
+                            onRestoreStoryboard={(version) => selectedFileId && handleRestoreStoryboard(selectedFileId, version)}
+                            onDeleteVersion={(versionId) => selectedFileId && handleDeleteVersion(selectedFileId, versionId)}
+                            scriptVersions={selectedConversation?.versions || []}
+                            currentScriptVersionId={selectedConversation?.currentVersionId}
+                            generationCreditCost={Number(selectedConversationVersion?.metadata?.storyboardDesignCreditCost || 0)}
+                            onRestoreScriptVersion={(version) => handleConversationGenerateDesign(
+                              version,
+                              { autoSnapshot: false, openDrawer: false },
+                            )}
+                          />
+                        </React.Suspense>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

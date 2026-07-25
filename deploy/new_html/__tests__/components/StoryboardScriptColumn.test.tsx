@@ -107,6 +107,11 @@ describe('StoryboardScriptColumn', () => {
     expect(screen.getByTestId('segment-1-stability-constraint-card')).toHaveTextContent(STABILITY_CONSTRAINT_REFERENCE);
     expect(screen.getByRole('button', { name: /镜头1-1/ })).not.toHaveTextContent('视频提示词');
     expect(screen.getByRole('button', { name: /镜头1-1/ })).not.toHaveTextContent('正向稳定约束');
+    expect(
+      screen.getByRole('button', { name: /镜头1-2/ }).compareDocumentPosition(
+        screen.getByTestId('segment-1-visual-style-card'),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('keeps linked scrolling inside each independent column', () => {

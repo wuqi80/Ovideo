@@ -47,6 +47,8 @@ import {
   DEFAULT_SCRIPT_MODEL_OPTIONS,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
+import type { ScriptWorkspaceMode } from '../utils/scriptWorkspaceMode';
+import { ScriptWorkspaceModeSwitch } from './ScriptWorkspaceModeSwitch';
 
 export const SCRIPT_MODEL_OPTIONS = DEFAULT_SCRIPT_MODEL_OPTIONS;
 
@@ -68,6 +70,8 @@ interface ScriptConversationPaneProps {
   onOpenStoryboard: () => void;
   onOpenVideoReverse?: () => void;
   storyboardItemCount: number;
+  workspaceMode?: ScriptWorkspaceMode;
+  onWorkspaceModeChange?: (mode: ScriptWorkspaceMode) => void;
 }
 
 const formatTime = (value: number) => new Date(value).toLocaleString('zh-CN', {
@@ -188,6 +192,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   onOpenStoryboard,
   onOpenVideoReverse,
   storyboardItemCount,
+  workspaceMode,
+  onWorkspaceModeChange,
 }) => {
   const [draft, setDraft] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -702,6 +708,12 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
         <FileText className="h-4 w-4 text-primary" />
         <div className="truncate text-sm font-semibold text-n800">{selectedFile?.name || '请选择剧本任务'}</div>
+        {workspaceMode && onWorkspaceModeChange && (
+          <ScriptWorkspaceModeSwitch
+            mode={workspaceMode}
+            onChange={onWorkspaceModeChange}
+          />
+        )}
         {isLoading && conversation && (
           <span className="ml-auto inline-flex flex-shrink-0 items-center gap-1 text-[10px] text-n300" title="正在后台同步最新对话">
             <LoaderCircle className="h-3 w-3 animate-spin text-primary" /> 后台同步
