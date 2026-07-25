@@ -23,6 +23,7 @@ from services.api_provider_registry import (
     get_provider_api_path,
     get_provider_default_endpoint,
     is_google_generative_language_endpoint,
+    normalize_deepseek_model_name,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
     normalize_provider,
@@ -554,11 +555,16 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
 
     if normalized in TEXT_GENERATION_TEST_PROVIDERS:
         url = _join_api_url(endpoint, get_provider_api_path(normalized, "chat_completions"))
-        resolved_model = model or (
+        requested_model = model or (
             "deepseek-reasoner" if normalized == "deepseek" else "gemini-2.5-flash"
         )
-        max_tokens = 64 if resolved_model == "deepseek-reasoner" else 32
-        return url, {
+        resolved_model = (
+            normalize_deepseek_model_name(requested_model)
+            if normalized == "deepseek"
+            else requested_model
+        )
+        max_tokens = 64 if resolved_model == "deepseek-v4-pro" else 32
+        payload = {
             "model": resolved_model,
             "messages": [{"role": "user", "content": "Please reply with the word OK only."}],
             "temperature": 0,
@@ -566,7 +572,12 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             # Reasoning models can spend the first tokens on reasoning_content
             # before producing their final content field.
             "max_tokens": max_tokens,
-        }, "text"
+        }
+        if normalized == "deepseek":
+            payload["thinking"] = {
+                "type": "enabled" if resolved_model == "deepseek-v4-pro" else "disabled"
+            }
+        return url, payload, "text"
 
     if normalized == "gemini-image":
         model = model or "gemini-2.5-flash-image"

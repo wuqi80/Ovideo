@@ -39,6 +39,7 @@ def build_deepseek_payload(
     response_format: str = "text",
     temperature: float = 0.2,
     stream: bool = False,
+    thinking_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "model": model,
@@ -51,6 +52,8 @@ def build_deepseek_payload(
     }
     if response_format == "json":
         payload["response_format"] = {"type": "json_object"}
+    if thinking_type:
+        payload["thinking"] = {"type": thinking_type}
     return payload
 
 
@@ -70,6 +73,15 @@ def _deepseek_chat_url(model: Optional[str]) -> tuple[str, Dict[str, Any], str]:
     }, resolved_model
 
 
+def _deepseek_thinking_type(model: Optional[str]) -> Optional[str]:
+    operation = str(model or "deepseek-reasoner").strip().lower()
+    if operation == "deepseek-chat":
+        return "disabled"
+    if operation == "deepseek-reasoner":
+        return "enabled"
+    return None
+
+
 def generate_deepseek_text(
     *,
     prompt: str,
@@ -78,7 +90,10 @@ def generate_deepseek_text(
     model: Optional[str] = None,
 ) -> str:
     config = _resolve_deepseek_config(model)
-    extra_payload: Dict[str, Any] = {"stream": False}
+    extra_payload: Dict[str, Any] = {
+        "stream": False,
+        "thinking": {"type": _deepseek_thinking_type(model) or "enabled"},
+    }
     if response_format == "json":
         extra_payload["response_format"] = {"type": "json_object"}
 
@@ -127,6 +142,7 @@ def stream_deepseek_chat(
             response_format=response_format,
             temperature=temperature,
             stream=True,
+            thinking_type=_deepseek_thinking_type(model) or "enabled",
         )
     except AIProxyError as e:
         if on_error:

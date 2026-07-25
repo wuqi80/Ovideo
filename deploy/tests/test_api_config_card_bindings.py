@@ -13,12 +13,12 @@ def test_deepseek_binding_options_match_frontend_model_choices():
         {
             "operation": "deepseek-reasoner",
             "label": "DeepSeek Reasoner",
-            "model_name": "deepseek-reasoner",
+            "model_name": "deepseek-v4-pro",
         },
         {
             "operation": "deepseek-chat",
             "label": "DeepSeek Chat",
-            "model_name": "deepseek-chat",
+            "model_name": "deepseek-v4-flash",
         },
     ]
 
@@ -38,9 +38,59 @@ def test_deepseek_legacy_reasoner_card_is_completed_with_chat_binding():
     )
 
     assert [(item["operation"], item["model_name"]) for item in bindings] == [
-        ("deepseek-reasoner", "deepseek-reasoner"),
-        ("deepseek-chat", "deepseek-chat"),
+        ("deepseek-reasoner", "deepseek-v4-pro"),
+        ("deepseek-chat", "deepseek-v4-flash"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_one_enabled_deepseek_card_projects_all_bound_models(monkeypatch):
+    from services import api_config_runtime_loader as loader
+
+    for env_key in (
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_MODEL_REASONER",
+        "DEEPSEEK_MODEL_CHAT",
+    ):
+        monkeypatch.delenv(env_key, raising=False)
+        monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
+
+    row = {
+        "config_id": "deepseek-card",
+        "name": "DeepSeek API",
+        "provider": "deepseek",
+        "endpoint": "https://api.deepseek.com",
+        "api_key_encrypted": "enc:key-1",
+        "model_name": "deepseek-reasoner",
+        "model_bindings": [
+            {
+                "operation": "deepseek-reasoner",
+                "label": "DeepSeek Reasoner",
+                "model_name": "deepseek-reasoner",
+            },
+            {
+                "operation": "deepseek-chat",
+                "label": "DeepSeek Chat",
+                "model_name": "deepseek-chat",
+            },
+        ],
+        "proxy_mode": "direct",
+        "enabled": True,
+    }
+
+    monkeypatch.setattr(loader.ApiConfigDAO, "list_enabled", AsyncMock(return_value=[row]))
+    monkeypatch.setattr(
+        loader.ApiConfigDAO,
+        "decrypt_key",
+        staticmethod(lambda value: value.split(":", 1)[1]),
+    )
+
+    result = await loader.load_api_configs_to_env()
+
+    assert result["success"] is True
+    assert loader.os.environ["DEEPSEEK_API_KEY"] == "key-1"
+    assert loader.os.environ["DEEPSEEK_MODEL_REASONER"] == "deepseek-v4-pro"
+    assert loader.os.environ["DEEPSEEK_MODEL_CHAT"] == "deepseek-v4-flash"
 
 
 def test_seedance_binding_options_are_explicit():

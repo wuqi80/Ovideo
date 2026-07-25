@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from services.api_provider_registry import (
     DASHSCOPE_DEFAULT_MODEL_MAP,
+    DEEPSEEK_DEFAULT_MODEL_MAP,
     PROVIDER_CATALOG,
     SEEDANCE_DEFAULT_MODEL_MAP,
     build_provider_operation_url_templates,
@@ -21,6 +22,7 @@ from services.api_provider_registry import (
     get_api_model_preset,
     get_api_model_presets,
     get_custom_proxy_env_key,
+    get_deepseek_operation_model_env_key,
     get_dashscope_sub_model_env_key,
     get_endpoint_env_key,
     get_model_env_key,
@@ -33,6 +35,7 @@ from services.api_provider_registry import (
     normalize_doubao_image_model,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
+    normalize_deepseek_model_name,
     normalize_dashscope_sub_model,
     normalize_model_bindings,
     normalize_seedance_sub_model,
@@ -460,6 +463,22 @@ def resolve_dashscope_default_model_name(model_name: str) -> str:
     return model_name
 
 
+def resolve_deepseek_model_name(model_name: Optional[str], runtime_model_name: Optional[str] = None) -> tuple[str, Optional[str]]:
+    """Resolve stable front-end operations through their configured provider model."""
+    requested = str(model_name or "").strip()
+    operation = requested.lower()
+    if operation in DEEPSEEK_DEFAULT_MODEL_MAP:
+        operation_env = get_deepseek_operation_model_env_key(operation)
+        configured = (os.getenv(operation_env) or "").strip()
+        return (
+            normalize_deepseek_model_name(configured or DEEPSEEK_DEFAULT_MODEL_MAP[operation]),
+            operation_env if configured else None,
+        )
+
+    selected = requested or str(runtime_model_name or "").strip()
+    return normalize_deepseek_model_name(selected), None
+
+
 def resolve_provider(provider: str, model_name: Optional[str] = None) -> ResolvedProviderConfig:
     provider_id = normalize_provider(provider)
     preset = get_api_model_preset(provider_id, model_name) or {}
@@ -513,7 +532,17 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     )
     runtime_model_name, model_env = _first_env(model_envs)
     resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
-    if provider_id == "doubao":
+    deepseek_operation_request = False
+    if provider_id == "deepseek":
+        requested_operation = str(model_name or "").strip().lower()
+        deepseek_operation_request = requested_operation in DEEPSEEK_DEFAULT_MODEL_MAP
+        resolved_model_name, operation_model_env = resolve_deepseek_model_name(
+            model_name,
+            runtime_model_name or preset.get("model_name"),
+        )
+        if operation_model_env:
+            model_env = operation_model_env
+    elif provider_id == "doubao":
         resolved_model_name = normalize_doubao_image_model_for_endpoint(
             normalize_doubao_image_model(resolved_model_name),
             endpoint,
@@ -522,6 +551,12 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
         resolved_model_name = normalize_seedance_model_for_endpoint(
             resolved_model_name,
             endpoint,
+        )
+    if deepseek_operation_request:
+        resolved_model_source = model_env or "preset"
+    else:
+        resolved_model_source = (
+            "request" if model_name else (model_env or ("preset" if resolved_model_name else "missing"))
         )
 
     extra: Dict[str, str] = {}
@@ -551,7 +586,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
             "endpoint": endpoint_env or ("preset" if endpoint else "missing"),
             "proxy_mode": proxy_mode_env or "preset",
             "custom_proxy": custom_proxy_env or "",
-            "model": "request" if model_name else (model_env or ("preset" if resolved_model_name else "missing")),
+            "model": resolved_model_source,
             "extra": extra_sources,
         },
     )

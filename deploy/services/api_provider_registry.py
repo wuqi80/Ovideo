@@ -281,16 +281,26 @@ DASHSCOPE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "happyhorse": "DASHSCOPE_MODEL_HAPPYHORSE",
 }
 
+DEEPSEEK_DEFAULT_MODEL_MAP: Dict[str, str] = {
+    "deepseek-reasoner": "deepseek-v4-pro",
+    "deepseek-chat": "deepseek-v4-flash",
+}
+
+DEEPSEEK_OPERATION_MODEL_ENV_MAP: Dict[str, str] = {
+    "deepseek-reasoner": "DEEPSEEK_MODEL_REASONER",
+    "deepseek-chat": "DEEPSEEK_MODEL_CHAT",
+}
+
 DEEPSEEK_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "deepseek-reasoner",
         "label": "DeepSeek Reasoner",
-        "model_name": "deepseek-reasoner",
+        "model_name": DEEPSEEK_DEFAULT_MODEL_MAP["deepseek-reasoner"],
     },
     {
         "operation": "deepseek-chat",
         "label": "DeepSeek Chat",
-        "model_name": "deepseek-chat",
+        "model_name": DEEPSEEK_DEFAULT_MODEL_MAP["deepseek-chat"],
     },
 ]
 
@@ -366,6 +376,18 @@ def normalize_seedance_sub_model(sub_model: Optional[str]) -> str:
 
 def get_seedance_sub_model_env_key(sub_model: Optional[str]) -> str:
     return SEEDANCE_SUB_MODEL_ENV_MAP[normalize_seedance_sub_model(sub_model)]
+
+
+def normalize_deepseek_model_name(model_name: Optional[str]) -> str:
+    value = str(model_name or "").strip()
+    return DEEPSEEK_DEFAULT_MODEL_MAP.get(value.lower(), value)
+
+
+def get_deepseek_operation_model_env_key(operation: Optional[str]) -> str:
+    normalized = str(operation or "").strip().lower()
+    if normalized not in DEEPSEEK_OPERATION_MODEL_ENV_MAP:
+        raise ValueError(f"Unsupported DeepSeek operation: {operation}")
+    return DEEPSEEK_OPERATION_MODEL_ENV_MAP[normalized]
 
 
 def is_seedance_fast_model(model_name: Optional[str]) -> bool:
@@ -598,7 +620,7 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "fallback": [
             {
                 "provider": "deepseek",
-                "model_name": "deepseek-reasoner",
+                "model_name": DEEPSEEK_DEFAULT_MODEL_MAP["deepseek-reasoner"],
                 "when": ["missing_key", "health_error"],
             }
         ],
@@ -783,12 +805,14 @@ API_MODEL_PRESETS: List[dict] = [
     {
         "name": "DeepSeek Reasoner",
         "provider": "deepseek",
-        "model_name": "deepseek-reasoner",
+        "operation": "deepseek-reasoner",
+        "model_name": DEEPSEEK_DEFAULT_MODEL_MAP["deepseek-reasoner"],
     },
     {
         "name": "DeepSeek Chat",
         "provider": "deepseek",
-        "model_name": "deepseek-chat",
+        "operation": "deepseek-chat",
+        "model_name": DEEPSEEK_DEFAULT_MODEL_MAP["deepseek-chat"],
     },
     {
         "name": "化神1阶（快速）",
@@ -1216,6 +1240,8 @@ def normalize_model_bindings(
         model_name = str(item.get("model_name") or "").strip()
         if not model_name:
             continue
+        if provider_id == "deepseek":
+            model_name = normalize_deepseek_model_name(model_name)
         operation = str(item.get("operation") or "").strip().lower()
         inferred_operation = infer_model_binding_operation(provider, model_name)
         if provider_id == "doubao":
@@ -1236,6 +1262,8 @@ def normalize_model_bindings(
         }
 
     fallback_model = str(legacy_model_name or "").strip()
+    if provider_id == "deepseek":
+        fallback_model = normalize_deepseek_model_name(fallback_model)
     if not normalized and fallback_model:
         operation = infer_model_binding_operation(provider, fallback_model)
         normalized[operation] = {

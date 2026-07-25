@@ -48,9 +48,25 @@ def test_deepseek_reasoner_generation_test_allows_reasoning_budget() -> None:
     )
 
     assert url == "https://api.deepseek.com/chat/completions"
-    assert body["model"] == "deepseek-reasoner"
+    assert body["model"] == "deepseek-v4-pro"
+    assert body["thinking"] == {"type": "enabled"}
     assert body["max_tokens"] == 64
     assert body["stream"] is False
+    assert output_type == "text"
+
+
+def test_deepseek_chat_generation_test_migrates_legacy_model_alias() -> None:
+    _, body, output_type = _real_generation_request(
+        "deepseek",
+        {
+            "endpoint": "https://api.deepseek.com",
+            "model_name": "deepseek-chat",
+        },
+    )
+
+    assert body["model"] == "deepseek-v4-flash"
+    assert body["thinking"] == {"type": "disabled"}
+    assert body["max_tokens"] == 32
     assert output_type == "text"
 
 

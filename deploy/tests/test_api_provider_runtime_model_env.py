@@ -20,6 +20,7 @@ from services.api_provider_registry import (
     MINIMAX_DEFAULT_VIDEO_MODEL,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
+    get_deepseek_operation_model_env_key,
     get_endpoint_env_key,
     get_dashscope_sub_model_env_key,
     get_model_env_key,
@@ -143,21 +144,28 @@ def test_explicit_model_overrides_runtime_model_env(monkeypatch):
     assert config.source["model"] == "request"
 
 
-def test_deepseek_frontend_models_resolve_to_their_exact_runtime_model(monkeypatch):
+def test_deepseek_frontend_operations_resolve_to_bound_v4_models(monkeypatch):
     env_key = get_provider_env_key("deepseek")
     assert env_key
     model_env = get_model_env_key(env_key)
+    reasoner_env = get_deepseek_operation_model_env_key("deepseek-reasoner")
+    chat_env = get_deepseek_operation_model_env_key("deepseek-chat")
 
     monkeypatch.setenv(env_key, "shared-deepseek-key")
     monkeypatch.setenv(model_env, "deepseek-reasoner")
+    monkeypatch.setenv(reasoner_env, "deepseek-v4-pro")
+    monkeypatch.setenv(chat_env, "deepseek-v4-flash")
 
     reasoner = resolve_provider("deepseek", "deepseek-reasoner")
     chat = resolve_provider("deepseek", "deepseek-chat")
 
     assert reasoner.api_key == chat.api_key == "shared-deepseek-key"
-    assert reasoner.model_name == "deepseek-reasoner"
-    assert chat.model_name == "deepseek-chat"
-    assert reasoner.source["model"] == chat.source["model"] == "request"
+    assert reasoner.model_name == "deepseek-v4-pro"
+    assert chat.model_name == "deepseek-v4-flash"
+    assert reasoner.model_env == reasoner_env
+    assert chat.model_env == chat_env
+    assert reasoner.source["model"] == reasoner_env
+    assert chat.source["model"] == chat_env
 
 
 class _ImageResponse:
@@ -1221,7 +1229,8 @@ def test_deepseek_generate_text_explicit_model_overrides_runtime_model(monkeypat
 
     assert result == "deepseek ok"
     assert calls[0]["url"] == "https://deepseek-runtime.example.test/v1/chat/completions"
-    assert calls[0]["json"]["model"] == "deepseek-chat"
+    assert calls[0]["json"]["model"] == "deepseek-v4-flash"
+    assert calls[0]["json"]["thinking"] == {"type": "disabled"}
     assert calls[0]["json"]["response_format"] == {"type": "json_object"}
 
 

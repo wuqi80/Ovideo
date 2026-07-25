@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from dao.admin.api_config import ApiConfigDAO
 from services.api_provider_registry import (
     DASHSCOPE_SUB_MODEL_ENV_MAP,
+    DEEPSEEK_OPERATION_MODEL_ENV_MAP,
     GEMINI_TTS_DEFAULT_MODEL,
     PROVIDER_EXTRA_ENV_MAP,
     PROVIDER_ENV_MAP,
@@ -25,6 +26,7 @@ from services.api_provider_registry import (
     dashscope_sub_model_for_model,
     get_api_model_preset,
     get_custom_proxy_env_key,
+    get_deepseek_operation_model_env_key,
     get_dashscope_sub_model_env_key,
     get_endpoint_env_key,
     get_gpt_image_tiers,
@@ -72,7 +74,11 @@ GEMINI_TTS_LEGACY_ENDPOINTS = {
 SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL
 VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL
 def managed_api_env_keys() -> set[str]:
-    keys: set[str] = set(SEEDANCE_SUB_MODEL_ENV_MAP.values()) | set(DASHSCOPE_SUB_MODEL_ENV_MAP.values())
+    keys: set[str] = (
+        set(SEEDANCE_SUB_MODEL_ENV_MAP.values())
+        | set(DASHSCOPE_SUB_MODEL_ENV_MAP.values())
+        | set(DEEPSEEK_OPERATION_MODEL_ENV_MAP.values())
+    )
     for field_map in PROVIDER_EXTRA_ENV_MAP.values():
         keys.update(field_map.values())
     for env_key in PROVIDER_ENV_MAP.values():
@@ -249,6 +255,8 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                 if provider_id == "seedance" and operation in SEEDANCE_SUB_MODEL_ENV_MAP:
                     sub_model = operation
                     new_env[get_seedance_sub_model_env_key(sub_model)] = bound_model
+                if provider_id == "deepseek" and operation in DEEPSEEK_OPERATION_MODEL_ENV_MAP:
+                    new_env[get_deepseek_operation_model_env_key(operation)] = bound_model
                 if provider.strip().lower() == "dashscope":
                     model_name = bound_model
                     dashscope_sub_model = dashscope_sub_model_for_model(model_name)

@@ -3409,7 +3409,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "api_provider_runtime.py",
-            '"model": "request" if model_name else',
+            "resolved_model_name, operation_model_env = resolve_deepseek_model_name(",
+        ),
+        (
+            root / "services" / "api_config_runtime_loader.py",
+            "get_deepseek_operation_model_env_key(operation)",
         ),
         (
             root / "services" / "api_provider_runtime.py",
