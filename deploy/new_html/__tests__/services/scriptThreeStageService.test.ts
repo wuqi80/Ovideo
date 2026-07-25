@@ -5,6 +5,7 @@ const aiMocks = vi.hoisted(() => ({
   aiSplitScriptIntoSegments: vi.fn(),
   aiReplanInvalidScriptSegments: vi.fn(),
   aiGenerateVideoScriptFromSegment: vi.fn(),
+  aiGenerateVideoScriptFromSegments: vi.fn(),
   aiIterateVideoScript: vi.fn(),
   aiReplanInvalidVideoScript: vi.fn(),
   aiExtractStoryboardPromptFromVideoShot: vi.fn(),
@@ -82,14 +83,16 @@ describe('three-stage video script contract', () => {
       { id: 's2', order: 1, sourceText: '第二段', estimatedDurationSec: 10, status: 'done' },
       { id: 's3', order: 2, sourceText: '第三段', estimatedDurationSec: 14, status: 'done' },
     ]);
-    aiMocks.aiGenerateVideoScriptFromSegment.mockImplementation(async (_model, segment) => [
-      '分段1',
-      '镜头1',
-      `时长（秒）：${segment.estimatedDurationSec}`,
-      `画面描述：${segment.sourceText}`,
-      '【视觉风格】都市写实。',
-      '【正向稳定约束】人物与场景稳定。',
-    ].join('\n'));
+    aiMocks.aiGenerateVideoScriptFromSegments.mockImplementation(async (_model, segments) => (
+      segments.map((segment, index) => [
+        `分段${index + 1}`,
+        `镜头${index + 1}-1`,
+        `时长（秒）：${segment.estimatedDurationSec}`,
+        `画面描述：${segment.sourceText}`,
+        `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+        `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+      ].join('\n')).join('\n\n')
+    ));
 
     const progress: string[] = [];
     const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '第一段第二段第三段', {
@@ -99,7 +102,17 @@ describe('three-stage video script contract', () => {
     });
 
     expect(aiMocks.aiSplitScriptIntoSegments).toHaveBeenCalledTimes(1);
-    expect(aiMocks.aiGenerateVideoScriptFromSegment).toHaveBeenCalledTimes(3);
+    expect(aiMocks.aiGenerateVideoScriptFromSegments).toHaveBeenCalledTimes(1);
+    expect(aiMocks.aiGenerateVideoScriptFromSegments).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      expect.arrayContaining([
+        expect.objectContaining({ sourceText: '第一段' }),
+        expect.objectContaining({ sourceText: '第二段' }),
+        expect.objectContaining({ sourceText: '第三段' }),
+      ]),
+      undefined,
+    );
+    expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
     expect(result.content).toContain('分段1\n镜头1-1');
     expect(result.content).toContain('分段2\n镜头2-1');
     expect(result.content).toContain('分段3\n镜头3-1');
@@ -111,18 +124,77 @@ describe('three-stage video script contract', () => {
     });
   });
 
-  it('silently replans invalid stage-one duration and coverage output', async () => {
+  it('keeps valid groups and repairs only the invalid group once', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 's1', order: 0, sourceText: '第一段', estimatedDurationSec: 15, status: 'done' },
+      { id: 's2', order: 1, sourceText: '第二段', estimatedDurationSec: 10, status: 'done' },
+      { id: 's3', order: 2, sourceText: '第三段', estimatedDurationSec: 14, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegments.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：第一段合格内容保持不变。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+      '',
+      '分段2',
+      '镜头2-1',
+      '时长（秒）：6',
+      '画面描述：第二段待修内容前半。',
+      '镜头2-2',
+      '时长（秒）：5',
+      '画面描述：第二段待修内容后半。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+      '',
+      '分段3',
+      '镜头3-1',
+      '时长（秒）：14',
+      '画面描述：第三段合格内容保持不变。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+    aiMocks.aiReplanInvalidVideoScript.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：10',
+      '画面描述：第二段局部修复完成。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+
+    const result = await generateEpisodeVideoScript(
+      AiModel.DeepseekChat,
+      '第一段第二段第三段',
+    );
+
+    expect(aiMocks.aiGenerateVideoScriptFromSegments).toHaveBeenCalledTimes(1);
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledTimes(1);
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      '第二段',
+      expect.stringContaining('第二段待修内容'),
+      '当前分段镜头累计11秒，应与第一步规划的10秒一致',
+      expect.stringContaining('只重新规划当前这一个原文分段'),
+      expect.any(String),
+      expect.any(String),
+      undefined,
+    );
+    expect(result.content).toContain('第一段合格内容保持不变');
+    expect(result.content).toContain('第二段局部修复完成');
+    expect(result.content).toContain('第三段合格内容保持不变');
+    expect(result.content).not.toContain('第二段待修内容');
+  });
+
+  it('silently replans invalid stage-one duration and coverage output once', async () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
       { id: 'bad', order: 0, sourceText: '遗漏原文', estimatedDurationSec: 17, status: 'done' },
     ]);
-    aiMocks.aiReplanInvalidScriptSegments
-      .mockResolvedValueOnce([
-        { id: 'still-bad', order: 0, sourceText: '遗漏原文', estimatedDurationSec: 15, status: 'done' },
-      ])
-      .mockResolvedValueOnce([
-        { id: 'fixed', order: 0, sourceText: '完整原文', estimatedDurationSec: 15, status: 'done' },
-      ]);
-    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
+    aiMocks.aiReplanInvalidScriptSegments.mockResolvedValue([
+      { id: 'fixed', order: 0, sourceText: '完整原文', estimatedDurationSec: 15, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegments.mockResolvedValue([
       '分段1',
       '镜头1-1',
       '时长（秒）：15',
@@ -133,22 +205,14 @@ describe('three-stage video script contract', () => {
 
     const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '完整原文');
 
-    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenNthCalledWith(
-      1,
+    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenCalledWith(
       AiModel.DeepseekChat,
       '完整原文',
       expect.stringContaining('遗漏原文'),
       expect.stringContaining('4-15秒'),
       undefined,
     );
-    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenNthCalledWith(
-      2,
-      AiModel.DeepseekChat,
-      '完整原文',
-      expect.stringContaining('遗漏原文'),
-      expect.stringContaining('未100%覆盖原文'),
-      undefined,
-    );
+    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenCalledTimes(1);
     expect(result.segments[0].sourceText).toBe('完整原文');
     expect(result.content).toContain('时长（秒）：15');
   });
@@ -163,15 +227,15 @@ describe('three-stage video script contract', () => {
 
     await expect(generateEpisodeVideoScript(AiModel.DeepseekChat, '完整原文'))
       .rejects.toThrow('剧本拆分未完成，系统已自动重新规划，请稍后再试');
-    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenCalledTimes(2);
-    expect(aiMocks.aiGenerateVideoScriptFromSegment).not.toHaveBeenCalled();
+    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenCalledTimes(1);
+    expect(aiMocks.aiGenerateVideoScriptFromSegments).not.toHaveBeenCalled();
   });
 
   it('silently replans an over-limit first-generation segment before publishing progress', async () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
       { id: 's1', order: 0, sourceText: '单段原文', estimatedDurationSec: 15, status: 'done' },
     ]);
-    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
+    aiMocks.aiGenerateVideoScriptFromSegments.mockResolvedValue([
       '分段1',
       '镜头1-1',
       '时长（秒）：8',
@@ -222,7 +286,7 @@ describe('three-stage video script contract', () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
       { id: 's1', order: 0, sourceText: '单段原文', estimatedDurationSec: 15, status: 'done' },
     ]);
-    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
+    aiMocks.aiGenerateVideoScriptFromSegments.mockResolvedValue([
       '分段1',
       '镜头1-1',
       '时长（秒）：13',
@@ -321,7 +385,7 @@ describe('three-stage video script contract', () => {
       '',
       { onStream },
     )).rejects.toThrow('视频脚本生成未完成，系统已自动重新规划，请稍后再试');
-    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledTimes(2);
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledTimes(1);
     expect(onStream).not.toHaveBeenCalled();
   });
 
@@ -421,6 +485,6 @@ describe('three-stage video script contract', () => {
       '【视觉风格】都市写实。',
       '【正向稳定约束】人物与场景稳定。',
     ].join('\n'))).rejects.toThrow('镜头设计生成未完成，系统已自动重新提取，请稍后再试');
-    expect(aiMocks.aiReplanInvalidStoryboardExtraction).toHaveBeenCalledTimes(2);
+    expect(aiMocks.aiReplanInvalidStoryboardExtraction).toHaveBeenCalledTimes(1);
   });
 });

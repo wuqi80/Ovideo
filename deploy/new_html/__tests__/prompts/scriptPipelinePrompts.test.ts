@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT,
   GENERATE_VIDEO_SCRIPT_FROM_SEGMENT,
+  GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS,
   ITERATE_VIDEO_SCRIPT,
   REPLAN_INVALID_SCRIPT_SEGMENTS,
   REPLAN_INVALID_STORYBOARD_EXTRACTION,
@@ -37,6 +38,13 @@ describe('latest three-step script prompts', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('不足时继续增加约束细节');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(VISUAL_STYLE_REFERENCE);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(STABILITY_CONSTRAINT_REFERENCE);
+  });
+
+  it('generates all stage-one segments in one stage-two request', () => {
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('{segmentsText}');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('输入有多少个分段，输出必须有且仅有多少个分段');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('镜头累计时长必须与该输入分段标注的时长完全一致');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('发现局部不合格时只修正该段');
   });
 
   it('merges revisions with both stage-one and full stage-two constraints', () => {

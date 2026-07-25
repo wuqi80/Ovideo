@@ -223,6 +223,30 @@ export const aiGenerateVideoScriptFromSegment = async (
   );
 };
 
+/** Stage 2：一次把第一步的全部分段转换为完整视频脚本。 */
+export const aiGenerateVideoScriptFromSegments = async (
+  model: AiModel,
+  segments: ScriptSegment[],
+  taskContext?: TextTaskContext,
+): Promise<string> => {
+  const segmentsText = segments.map((segment, index) => [
+    `分段${index + 1}`,
+    segment.sourceText,
+    segment.estimatedDurationSec === null ? '时长：缺失' : `时长：${segment.estimatedDurationSec}秒`,
+  ].join('\n')).join('\n---\n');
+  return await callAI(
+    model,
+    PROMPTS.GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS,
+    { segmentsText },
+    undefined,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '剧本转视频脚本',
+      ...taskContext,
+    },
+  );
+};
+
 /** 根据连续意见修改完整的 Stage 2 分组视频脚本 */
 export const aiIterateVideoScript = async (
   model: AiModel,

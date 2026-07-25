@@ -21,9 +21,10 @@ import {
 import type { TextTaskContext } from './textTaskContext';
 
 const loadAiModelService = () => import('./aiModelService');
-const MAX_SPLIT_REPLAN_ATTEMPTS = 2;
-const MAX_VIDEO_SCRIPT_REPLAN_ATTEMPTS = 2;
-const MAX_STORYBOARD_EXTRACTION_REPLAN_ATTEMPTS = 2;
+const MAX_SPLIT_REPLAN_ATTEMPTS = 1;
+const MAX_VIDEO_SCRIPT_REPLAN_ATTEMPTS = 1;
+const MAX_STORYBOARD_EXTRACTION_REPLAN_ATTEMPTS = 1;
+const VIDEO_SCRIPT_REPAIR_CONCURRENCY = 3;
 const SAFE_SPLIT_REPLAN_FAILURE_MESSAGE = '剧本拆分未完成，系统已自动重新规划，请稍后再试';
 const SAFE_REPLAN_FAILURE_MESSAGE = '视频脚本生成未完成，系统已自动重新规划，请稍后再试';
 const SAFE_EXTRACTION_REPLAN_FAILURE_MESSAGE = '镜头设计生成未完成，系统已自动重新提取，请稍后再试';
@@ -64,6 +65,27 @@ class SplitScriptValidationError extends Error {
   }
 }
 
+async function runWithConcurrencyInOrder<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        results[index] = await worker(items[index], index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 function failVideoScriptValidation(message: string): never {
   throw new VideoScriptValidationError(message);
 }
@@ -81,6 +103,14 @@ function serializeSplitSegments(segments: ScriptSegment[]): string {
 
 function normalizeCoverageText(value: string): string {
   return String(value || '').replace(/\s/g, '');
+}
+
+function serializeStageOneSegments(segments: ScriptSegment[]): string {
+  return segments.map((segment, index) => [
+    `分段${index + 1}`,
+    segment.sourceText,
+    segment.estimatedDurationSec === null ? '时长：缺失' : `时长：${segment.estimatedDurationSec}秒`,
+  ].join('\n')).join('\n---\n');
 }
 
 function assertValidSplitSegments(segments: ScriptSegment[], originalContent: string): void {
@@ -157,6 +187,31 @@ export function assertValidVideoScript(
   }
 }
 
+function assertVideoScriptMatchesStageOneSegments(
+  content: string,
+  segments: ScriptSegment[],
+): void {
+  const groups = parseVideoScriptGroups(content);
+  if (groups.length !== segments.length) {
+    failVideoScriptValidation(
+      `第二步生成了${groups.length}个分段，应与第一步的${segments.length}个分段一一对应`,
+    );
+  }
+  groups.forEach((group, index) => {
+    const plannedDuration = segments[index].estimatedDurationSec;
+    if (plannedDuration === null) return;
+    const totalDuration = group.blocks.reduce(
+      (total, block) => total + Number(block.durationSec || 0),
+      0,
+    );
+    if (totalDuration !== plannedDuration) {
+      failVideoScriptValidation(
+        `分段${index + 1}镜头累计${totalDuration}秒，应与第一步规划的${plannedDuration}秒一致`,
+      );
+    }
+  });
+}
+
 async function validateOrReplanVideoScript(
   model: AiModel,
   initialDraft: string,
@@ -227,20 +282,19 @@ async function splitWithValidation(
   throw new Error(SAFE_SPLIT_REPLAN_FAILURE_MESSAGE);
 }
 
-async function generateSegmentVideoScript(
+async function validateOrRepairGeneratedSegment(
   model: AiModel,
   segment: ScriptSegment,
+  initialDraft: string,
   taskContext?: TextTaskContext,
 ): Promise<string> {
-  const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
-  const raw = await aiGenerateVideoScriptFromSegment(model, segment, undefined, taskContext);
-  return await validateOrReplanVideoScript(model, raw, {
+  return await validateOrReplanVideoScript(model, initialDraft, {
     originalScript: segment.sourceText,
     instruction: '保持本段原文剧情不变，重新规划镜头与时长',
     conversationContext: '这是首次生成中的单个原文分段',
     scopeRequirements: [
       '只重新规划当前这一个原文分段，不扩写为额外剧情分段。',
-      `镜头累计时长以第一步估算的${segment.estimatedDurationSec ?? 15}秒为目标，且绝对不得超过15秒。`,
+      `镜头累计时长必须精确等于第一步规划的${segment.estimatedDurationSec ?? 15}秒，不是尽量接近，且绝对不得超过15秒。`,
       '不单独要求这一段满足全剧14-15秒占比或全剧平均时长指标。',
     ].join('\n'),
     enforceDurationDensity: false,
@@ -285,24 +339,65 @@ export async function generateEpisodeVideoScript(
 
   const outputs: string[] = [];
   const orderedSegments = [...segments].sort((a, b) => a.order - b.order);
-  for (let index = 0; index < orderedSegments.length; index += 1) {
-    const segment = orderedSegments[index];
-    inputTexts.push(segment.sourceText);
-    const output = await generateSegmentVideoScript(model, segment, options.taskContext);
-    outputs.push(output);
-    outputTexts.push(output);
-    const partialContent = combineVideoScriptOutputs(outputs);
-    options.onProgress?.({
-      stage: 'videoScript',
-      completed: index + 1,
-      total: orderedSegments.length,
-      content: partialContent,
+  inputTexts.push(...orderedSegments.map(segment => segment.sourceText));
+
+  const { aiGenerateVideoScriptFromSegments } = await loadAiModelService();
+  const initialVideoScript = await aiGenerateVideoScriptFromSegments(
+    model,
+    orderedSegments,
+    options.taskContext,
+  );
+  let normalizedVideoScript = ensureVideoScriptPromptLengths(
+    combineVideoScriptOutputs([initialVideoScript]),
+  );
+  if (parseVideoScriptGroups(normalizedVideoScript).length !== orderedSegments.length) {
+    normalizedVideoScript = await validateOrReplanVideoScript(model, normalizedVideoScript, {
+      originalScript: serializeStageOneSegments(orderedSegments),
+      instruction: '保持第一步全部原文分段及其顺序不变，重新输出一一对应的完整视频脚本',
+      conversationContext: '这是首次生成的完整第二步结果',
+      scopeRequirements: [
+        `必须输出且仅输出${orderedSegments.length}个分段，与第一步输入一一对应。`,
+        '不得合并、拆开、遗漏或调换第一步分段。',
+        '每个分段的镜头累计时长必须与第一步标注时长完全一致。',
+      ].join('\n'),
+      enforceDurationDensity: true,
+      validateContent: content => assertVideoScriptMatchesStageOneSegments(content, orderedSegments),
+      taskContext: options.taskContext,
     });
   }
+
+  const generatedGroups = parseVideoScriptGroups(normalizedVideoScript);
+  let completed = 0;
+  const repairedOutputs = await runWithConcurrencyInOrder(
+    orderedSegments,
+    VIDEO_SCRIPT_REPAIR_CONCURRENCY,
+    async (segment, index) => {
+      const group = generatedGroups[index];
+      const standaloneDraft = group
+        ? combineVideoScriptOutputs([group.rawGroup])
+        : '';
+      const output = await validateOrRepairGeneratedSegment(
+        model,
+        segment,
+        standaloneDraft,
+        options.taskContext,
+      );
+      completed += 1;
+      options.onProgress?.({
+        stage: 'videoScript',
+        completed,
+        total: orderedSegments.length,
+      });
+      return output;
+    },
+  );
+  outputs.push(...repairedOutputs);
+  outputTexts.push(...repairedOutputs);
 
   const content = combineVideoScriptOutputs(outputs);
   try {
     assertValidVideoScript(content);
+    assertVideoScriptMatchesStageOneSegments(content, orderedSegments);
   } catch (error) {
     if (error instanceof VideoScriptValidationError) {
       throw new Error(SAFE_REPLAN_FAILURE_MESSAGE);
@@ -310,6 +405,12 @@ export async function generateEpisodeVideoScript(
     throw error;
   }
   const groups = parseVideoScriptGroups(content);
+  options.onProgress?.({
+    stage: 'videoScript',
+    completed: orderedSegments.length,
+    total: orderedSegments.length,
+    content,
+  });
   const completedSegments = orderedSegments.map((segment, index) => ({
     ...segment,
     videoScript: outputs[index] || '',
