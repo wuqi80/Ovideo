@@ -237,6 +237,30 @@ export const SPLIT_SCRIPT_INTO_SEGMENTS: PromptTemplate = {
 {originalContent}`,
 };
 
+/** Stage 1 内部质检失败后的静默重新拆分。 */
+export const REPLAN_INVALID_SCRIPT_SEGMENTS: PromptTemplate = {
+  system: `你是剧本拆分结果的内部质量修复工具。
+上一版拆分没有通过系统硬性校验，你必须从原文重新拆分，只输出最终合格结果。
+不得输出质检反馈、修复过程、解释、评论或Markdown代码块。`,
+  user: `【原始剧本】
+{originalContent}
+
+【系统内部质检反馈】
+{validationError}
+
+【未通过质检的拆分草稿】
+{invalidSegments}
+
+请从原始剧本重新拆分，并同时满足：
+1. 每段必须100%原文摘抄，所有段落拼接后与原文一致，无遗漏、无重复、无改写。
+2. 每段时长必须为4-15秒的正整数。
+3. 在保证情绪闭环的前提下合并相邻短段，14-15秒段落占30%以上，所有段落平均时长不低于10秒。
+4. 场景切换、情绪180度反转、高冲击独立时刻不得强行合并。
+5. 每段末尾单独输出“时长：N秒”，段落之间只用单独一行“---”分隔。
+
+输出前自行计算并检查全部指标；仍不合格时继续调整。只输出最终拆分结果。`,
+};
+
 /** Stage 2：把单个原文分段转成竖屏视频镜头脚本 */
 export const GENERATE_VIDEO_SCRIPT_FROM_SEGMENT: PromptTemplate = {
   system: `你是竖屏AI仿真人短剧的视频脚本导演。严禁篡改、增删原文核心剧情、人物设定、旁白、人物对话。`,
@@ -440,6 +464,42 @@ ${ITERATION_STAGE2_RULES}
 4. 允许按本轮意见调整镜头数量，但不得降低第一步时长密度与第二步稳定性要求。`,
 };
 
+/** Stage 2 内部质检失败后的静默重规划；只向用户返回最终合格稿。 */
+export const REPLAN_INVALID_VIDEO_SCRIPT: PromptTemplate = {
+  system: `你是竖屏AI短剧视频脚本的内部质量修复导演。
+上一版脚本没有通过系统硬性校验，你必须根据质检反馈重新规划，而不是解释、辩解或只修改错误提示文字。
+只输出重新规划后的完整分组视频脚本，不得输出质检过程、修改说明、Markdown代码块或任何面向用户的错误信息。`,
+  user: `【原始剧本或当前原文分段】
+{originalScript}
+
+【需要持续满足的用户意见】
+{instruction}
+
+【此前对话约束】
+{conversationContext}
+
+【系统内部质检反馈】
+{validationError}
+
+【未通过质检的脚本草稿】
+{invalidVideoScript}
+
+【本次重规划范围】
+{scopeRequirements}
+
+【第二步完整提示词】
+${ITERATION_STAGE2_RULES}
+
+必须从剧情、分段和镜头层级重新规划，并满足：
+1. 每个分段所有镜头累计时长不得超过15秒，每组镜头数不得超过5个，所有镜头时长必须为正整数。
+2. 如果某段超时，优先重新分配镜头时长、合并重复画面或精简动作节奏；全剧重规划时可按情绪闭环调整相邻分段，但不得遗漏、重复或篡改原剧情。
+3. 分段号必须从1连续递增，镜头号必须为“镜头{分段号}-{段内镜头号}”且连续不重复。
+4. 每个分段必须独立输出【视觉风格】和【正向稳定约束】，禁止使用“同上”，完整度分别约${MIN_VISUAL_STYLE_CHARACTERS}字和约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字。
+5. 输出前自行重新计算每个分段累计时长；任何一段超过15秒都必须继续调整，直到全部合格。
+
+只输出最终完整脚本，不要暴露内部质检反馈。`,
+};
+
 /** Stage 3：把单个视频镜头块拆成最终静态画面镜头 */
 export const EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT: PromptTemplate = {
   system: `你是分镜信息提取工具。把给定的文字分镜脚本拆解、整理、提取关键信息。严禁篡改、增删原文核心剧情、人物设定、旁白、人物对话。`,
@@ -534,4 +594,31 @@ export const EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT: PromptTemplate = {
 
 原文如下，请按要求输出:
 {videoShotBlock}`,
+};
+
+/** Stage 3 内部质检失败后的静默重新提取。 */
+export const REPLAN_INVALID_STORYBOARD_EXTRACTION: PromptTemplate = {
+  system: `你是分镜设计提取结果的内部质量修复工具。
+上一版提取没有通过系统校验，请重新阅读原视频镜头脚本并完整提取。
+只输出最终镜头设计，不得输出质检反馈、修复说明、解释或Markdown代码块。`,
+  user: `【原视频镜头脚本】
+{videoShotBlock}
+
+【本次标准镜头号】
+{canonicalShotNo}
+
+【系统内部质检反馈】
+{validationError}
+
+【未通过质检的提取草稿】
+{invalidExtraction}
+
+重新提取时必须：
+1. 至少输出一个镜头设计；镜头号从{canonicalShotNo}所属分段开始连续排列。
+2. 每个镜头必须完整包含：镜头号、景别、画面描述、分镜生成提示词、拍摄角度、运镜方式、台词、时长、人物、场景、道具。
+3. 画面描述不得为空；分镜生成提示词不得为空，并包含景别、角度、主体、动作、环境和光影。
+4. 严禁篡改、遗漏或新增原脚本核心剧情、人物设定、旁白和人物对话。
+5. 无人物、场景、道具或台词时明确写“无”，不要省略字段。
+
+输出前逐个镜头自检；仍有缺失时继续补全。只输出最终镜头设计。`,
 };

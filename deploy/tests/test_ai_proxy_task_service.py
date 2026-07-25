@@ -196,6 +196,53 @@ async def test_complete_text_task_writes_notification_and_publishes_event():
 
 
 @pytest.mark.asyncio
+async def test_internal_text_repair_keeps_task_audit_without_user_notification():
+    completed = await complete_ai_proxy_text_task(
+        task_id="deepseek_text_internal",
+        text_content="repaired answer",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        user_id="wuqi80",
+        task_type="deepseek_text",
+        task_context={
+            "operation": "script_rewrite",
+            "display_name": "视频脚本自动重规划",
+            "source_page": "script",
+            "suppress_notification": True,
+        },
+        redis_client=_Redis,
+        notification_dao=_NotificationDAO,
+    )
+
+    assert completed is True
+    assert _TaskDAO.updated[-1]["status"] == "completed"
+    assert _Redis.published == []
+    assert _NotificationDAO.created == []
+
+    failed = await fail_ai_proxy_task(
+        task_id="deepseek_text_internal_failed",
+        error_message="internal repair failed",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        user_id="wuqi80",
+        task_type="deepseek_text",
+        task_context={
+            "operation": "script_rewrite",
+            "display_name": "视频脚本自动重规划",
+            "source_page": "script",
+            "suppress_notification": True,
+        },
+        redis_client=_Redis,
+        notification_dao=_NotificationDAO,
+    )
+
+    assert failed is True
+    assert _TaskDAO.updated[-1]["status"] == "failed"
+    assert _Redis.published == []
+    assert _NotificationDAO.created == []
+
+
+@pytest.mark.asyncio
 async def test_create_completed_gemini_text_task_creates_and_completes():
     task_id = await create_completed_gemini_text_task(
         user_id="yuan",

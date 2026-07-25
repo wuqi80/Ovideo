@@ -76,7 +76,7 @@ def create_ai_proxy_router(
         "prompt_rewrite": "提示词改写",
     }
 
-    def _text_task_context(request, *, provider: str) -> dict[str, str]:
+    def _text_task_context(request, *, provider: str) -> dict[str, Any]:
         operation = (getattr(request, "operation", None) or "").strip()
         requested_name = (getattr(request, "display_name", None) or "").strip()
         fallback_name = "DeepSeek 文本生成" if provider == "deepseek" else "Gemini 文本生成"
@@ -89,8 +89,14 @@ def create_ai_proxy_router(
             "source_item_id": getattr(request, "source_item_id", None),
             "entity_type": getattr(request, "entity_type", None),
             "entity_id": getattr(request, "entity_id", None),
+            "suppress_notification": bool(getattr(request, "suppress_notification", False)),
         }
-        return {key: value for key, value in values.items() if isinstance(value, str) and value.strip()}
+        return {
+            key: value
+            for key, value in values.items()
+            if (isinstance(value, str) and value.strip())
+            or (key == "suppress_notification" and value is True)
+        }
 
     def _current_redis_client():
         try:

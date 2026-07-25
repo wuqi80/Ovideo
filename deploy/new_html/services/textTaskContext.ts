@@ -7,12 +7,13 @@ export interface TextTaskContext {
   sourceItemId?: string;
   entityType?: string;
   entityId?: string;
+  suppressNotification?: boolean;
 }
 
-export function toTextTaskPayload(context?: TextTaskContext): Record<string, string> {
+export function toTextTaskPayload(context?: TextTaskContext): Record<string, string | boolean> {
   if (!context) return {};
 
-  const fields: Array<[string, string | undefined]> = [
+  const fields: Array<[string, string | boolean | undefined]> = [
     ['operation', context.operation],
     ['display_name', context.displayName],
     ['project_id', context.projectId],
@@ -21,9 +22,13 @@ export function toTextTaskPayload(context?: TextTaskContext): Record<string, str
     ['source_item_id', context.sourceItemId],
     ['entity_type', context.entityType],
     ['entity_id', context.entityId],
+    ['suppress_notification', context.suppressNotification],
   ];
 
   return Object.fromEntries(
-    fields.filter(([, value]) => typeof value === 'string' && value.trim().length > 0),
-  ) as Record<string, string>;
+    fields.filter(([, value]) => (
+      (typeof value === 'string' && value.trim().length > 0)
+      || value === true
+    )),
+  ) as Record<string, string | boolean>;
 }

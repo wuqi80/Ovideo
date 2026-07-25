@@ -3,6 +3,9 @@ import {
   EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT,
   GENERATE_VIDEO_SCRIPT_FROM_SEGMENT,
   ITERATE_VIDEO_SCRIPT,
+  REPLAN_INVALID_SCRIPT_SEGMENTS,
+  REPLAN_INVALID_STORYBOARD_EXTRACTION,
+  REPLAN_INVALID_VIDEO_SCRIPT,
   SPLIT_SCRIPT_INTO_SEGMENTS,
 } from '../../prompts/scriptPipelinePrompts';
 import {
@@ -44,6 +47,23 @@ describe('latest three-step script prompts', () => {
       `分别以约${MIN_VISUAL_STYLE_CHARACTERS}字、约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准`,
     );
     expect(ITERATE_VIDEO_SCRIPT.user).toContain('不足时继续增加细节');
+  });
+
+  it('keeps validation failures internal while replanning the whole draft', () => {
+    expect(REPLAN_INVALID_VIDEO_SCRIPT.system).toContain('不得输出质检过程');
+    expect(REPLAN_INVALID_VIDEO_SCRIPT.user).toContain('{validationError}');
+    expect(REPLAN_INVALID_VIDEO_SCRIPT.user).toContain('{invalidVideoScript}');
+    expect(REPLAN_INVALID_VIDEO_SCRIPT.user).toContain('累计时长不得超过15秒');
+    expect(REPLAN_INVALID_VIDEO_SCRIPT.user).toContain('只输出最终完整脚本');
+  });
+
+  it('keeps repairable stage-one and stage-three errors inside their quality loops', () => {
+    expect(REPLAN_INVALID_SCRIPT_SEGMENTS.system).toContain('不得输出质检反馈');
+    expect(REPLAN_INVALID_SCRIPT_SEGMENTS.user).toContain('所有段落拼接后与原文一致');
+    expect(REPLAN_INVALID_SCRIPT_SEGMENTS.user).toContain('{validationError}');
+    expect(REPLAN_INVALID_STORYBOARD_EXTRACTION.system).toContain('只输出最终镜头设计');
+    expect(REPLAN_INVALID_STORYBOARD_EXTRACTION.user).toContain('分镜生成提示词不得为空');
+    expect(REPLAN_INVALID_STORYBOARD_EXTRACTION.user).toContain('{invalidExtraction}');
   });
 
   it('restores the latest stage-three image prompt field', () => {

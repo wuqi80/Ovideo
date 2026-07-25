@@ -175,6 +175,29 @@ export const aiSplitScriptIntoSegments = async (
   return parseScriptSegments(raw);
 };
 
+/** Stage 1 拆分未通过硬性校验时，根据内部反馈静默重新拆分。 */
+export const aiReplanInvalidScriptSegments = async (
+  model: AiModel,
+  originalContent: string,
+  invalidSegments: string,
+  validationError: string,
+  taskContext?: TextTaskContext,
+): Promise<ScriptSegment[]> => {
+  const raw = await callAI(
+    model,
+    PROMPTS.REPLAN_INVALID_SCRIPT_SEGMENTS,
+    { originalContent, invalidSegments, validationError },
+    undefined,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '剧本拆分自动重规划',
+      ...taskContext,
+      suppressNotification: true,
+    },
+  );
+  return parseScriptSegments(raw);
+};
+
 /** Stage 2：把单个分段转成视频镜头脚本（返回原始文本，由调用方追加 + parseVideoScriptBlocks） */
 export const aiGenerateVideoScriptFromSegment = async (
   model: AiModel,
@@ -185,7 +208,12 @@ export const aiGenerateVideoScriptFromSegment = async (
   return await callAI(
     model,
     PROMPTS.GENERATE_VIDEO_SCRIPT_FROM_SEGMENT,
-    { segmentText: segment.sourceText },
+    {
+      segmentText: [
+        segment.sourceText,
+        segment.estimatedDurationSec === null ? '' : `时长：${segment.estimatedDurationSec}秒`,
+      ].filter(Boolean).join('\n'),
+    },
     onStream,
     {
       operation: 'storyboard_script_generate',
@@ -223,6 +251,38 @@ export const aiIterateVideoScript = async (
   );
 };
 
+/** Stage 2 结果未通过硬性校验时，根据内部反馈静默重规划。 */
+export const aiReplanInvalidVideoScript = async (
+  model: AiModel,
+  originalScript: string,
+  invalidVideoScript: string,
+  validationError: string,
+  scopeRequirements: string,
+  instruction: string,
+  conversationContext: string,
+  taskContext?: TextTaskContext,
+): Promise<string> => {
+  return await callAI(
+    model,
+    PROMPTS.REPLAN_INVALID_VIDEO_SCRIPT,
+    {
+      originalScript,
+      invalidVideoScript,
+      validationError,
+      scopeRequirements,
+      instruction: instruction || '保持原始剧情和当前脚本要求不变',
+      conversationContext: conversationContext || '无',
+    },
+    undefined,
+    {
+      operation: 'script_rewrite',
+      displayName: '视频脚本自动重规划',
+      ...taskContext,
+      suppressNotification: true,
+    },
+  );
+};
+
 /**
  * Stage 3：从单个视频镜头块提取分镜提示词。
  * 单次只喂一个视频镜头，但 AI 可把它拆成多个「镜头号」块（更细的分镜）→ 返回数组。
@@ -242,6 +302,35 @@ export const aiExtractStoryboardPromptFromVideoShot = async (
       operation: 'storyboard_script_generate',
       displayName: '镜头设计生成',
       ...taskContext,
+    },
+  );
+  return parseStoryboardPromptExtractions(raw);
+};
+
+/** Stage 3 提取结果缺字段或为空时，根据内部反馈静默重新提取。 */
+export const aiReplanInvalidStoryboardExtraction = async (
+  model: AiModel,
+  videoShotBlock: string,
+  canonicalShotNo: string,
+  invalidExtraction: string,
+  validationError: string,
+  taskContext?: TextTaskContext,
+): Promise<ExtractedStoryboardPrompt[]> => {
+  const raw = await callAI(
+    model,
+    PROMPTS.REPLAN_INVALID_STORYBOARD_EXTRACTION,
+    {
+      videoShotBlock,
+      canonicalShotNo,
+      invalidExtraction,
+      validationError,
+    },
+    undefined,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '镜头设计自动重新提取',
+      ...taskContext,
+      suppressNotification: true,
     },
   );
   return parseStoryboardPromptExtractions(raw);
@@ -383,4 +472,3 @@ export const aiGenerateStoryboardScriptBySegments = async (
   
   return results;
 };
-

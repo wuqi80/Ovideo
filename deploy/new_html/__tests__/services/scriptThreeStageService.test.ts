@@ -3,9 +3,12 @@ import { AiModel } from '../../types';
 
 const aiMocks = vi.hoisted(() => ({
   aiSplitScriptIntoSegments: vi.fn(),
+  aiReplanInvalidScriptSegments: vi.fn(),
   aiGenerateVideoScriptFromSegment: vi.fn(),
   aiIterateVideoScript: vi.fn(),
+  aiReplanInvalidVideoScript: vi.fn(),
   aiExtractStoryboardPromptFromVideoShot: vi.fn(),
+  aiReplanInvalidStoryboardExtraction: vi.fn(),
 }));
 
 vi.mock('../../services/aiModelService', () => aiMocks);
@@ -89,7 +92,7 @@ describe('three-stage video script contract', () => {
     ].join('\n'));
 
     const progress: string[] = [];
-    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '原始剧本', {
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '第一段第二段第三段', {
       onProgress: event => {
         if (event.content) progress.push(event.content);
       },
@@ -106,6 +109,149 @@ describe('three-stage video script contract', () => {
       expect(countPromptCharacters(group.stabilityConstraint))
         .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);
     });
+  });
+
+  it('silently replans invalid stage-one duration and coverage output', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 'bad', order: 0, sourceText: '遗漏原文', estimatedDurationSec: 17, status: 'done' },
+    ]);
+    aiMocks.aiReplanInvalidScriptSegments
+      .mockResolvedValueOnce([
+        { id: 'still-bad', order: 0, sourceText: '遗漏原文', estimatedDurationSec: 15, status: 'done' },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'fixed', order: 0, sourceText: '完整原文', estimatedDurationSec: 15, status: 'done' },
+      ]);
+    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：完整原文。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '完整原文');
+
+    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenNthCalledWith(
+      1,
+      AiModel.DeepseekChat,
+      '完整原文',
+      expect.stringContaining('遗漏原文'),
+      expect.stringContaining('4-15秒'),
+      undefined,
+    );
+    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenNthCalledWith(
+      2,
+      AiModel.DeepseekChat,
+      '完整原文',
+      expect.stringContaining('遗漏原文'),
+      expect.stringContaining('未100%覆盖原文'),
+      undefined,
+    );
+    expect(result.segments[0].sourceText).toBe('完整原文');
+    expect(result.content).toContain('时长（秒）：15');
+  });
+
+  it('hides stage-one contract details if automatic splitting repair is exhausted', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 'bad', order: 0, sourceText: '完整原文', estimatedDurationSec: 17, status: 'done' },
+    ]);
+    aiMocks.aiReplanInvalidScriptSegments.mockResolvedValue([
+      { id: 'still-bad', order: 0, sourceText: '完整原文', estimatedDurationSec: 17, status: 'done' },
+    ]);
+
+    await expect(generateEpisodeVideoScript(AiModel.DeepseekChat, '完整原文'))
+      .rejects.toThrow('剧本拆分未完成，系统已自动重新规划，请稍后再试');
+    expect(aiMocks.aiReplanInvalidScriptSegments).toHaveBeenCalledTimes(2);
+    expect(aiMocks.aiGenerateVideoScriptFromSegment).not.toHaveBeenCalled();
+  });
+
+  it('silently replans an over-limit first-generation segment before publishing progress', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 's1', order: 0, sourceText: '单段原文', estimatedDurationSec: 15, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：8',
+      '画面描述：超限草稿前半段。',
+      '镜头1-2',
+      '时长（秒）：9',
+      '画面描述：超限草稿后半段。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+    aiMocks.aiReplanInvalidVideoScript.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：8',
+      '画面描述：合格稿前半段。',
+      '镜头1-2',
+      '时长（秒）：7',
+      '画面描述：合格稿后半段。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+    const progress: string[] = [];
+
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '单段原文', {
+      onProgress: event => {
+        if (event.content) progress.push(event.content);
+      },
+    });
+
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledTimes(1);
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      '单段原文',
+      expect.stringContaining('超限草稿'),
+      '分段1累计17秒，超过15秒上限',
+      expect.stringContaining('绝对不得超过15秒'),
+      expect.any(String),
+      expect.any(String),
+      undefined,
+    );
+    expect(result.content).toContain('合格稿');
+    expect(result.content).not.toContain('超限草稿');
+    expect(progress.join('\n')).not.toContain('超限草稿');
+    expect(() => assertValidVideoScript(result.content)).not.toThrow();
+  });
+
+  it('replans a segment whose stage-two duration drifts from the stage-one plan', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 's1', order: 0, sourceText: '单段原文', estimatedDurationSec: 15, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：13',
+      '画面描述：时长偏离草稿。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+    aiMocks.aiReplanInvalidVideoScript.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：时长对齐合格稿。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '单段原文');
+
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      '单段原文',
+      expect.stringContaining('时长偏离草稿'),
+      '当前分段镜头累计13秒，应与第一步规划的15秒一致',
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      undefined,
+    );
+    expect(result.content).toContain('时长对齐合格稿');
   });
 
   it('silently completes short prompts in a revised version before returning it', async () => {
@@ -131,6 +277,52 @@ describe('three-stage video script contract', () => {
     expect(countPromptCharacters(group.stabilityConstraint))
       .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);
     expect(result.outputTexts).toEqual([result.content]);
+  });
+
+  it('buffers an invalid revision and only streams the replanned valid result', async () => {
+    aiMocks.aiIterateVideoScript.mockResolvedValue(
+      validGroup
+        .replace('时长（秒）：7', '时长（秒）：9')
+        .replace('主角停在办公桌前', '客户不可见的超限草稿'),
+    );
+    aiMocks.aiReplanInvalidVideoScript.mockResolvedValue(
+      validGroup.replace('主角停在办公桌前', '重新规划后的合格稿'),
+    );
+    const onStream = vi.fn();
+
+    const result = await iterateEpisodeVideoScript(
+      AiModel.DeepseekChat,
+      '原始剧本',
+      validGroup,
+      '让冲突更强',
+      '此前意见',
+      { onStream },
+    );
+
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledTimes(1);
+    expect(onStream).toHaveBeenCalledTimes(1);
+    expect(onStream).toHaveBeenCalledWith(result.content);
+    expect(onStream).not.toHaveBeenCalledWith(expect.stringContaining('客户不可见的超限草稿'));
+    expect(result.content).toContain('重新规划后的合格稿');
+    expect(result.outputTexts).toEqual([result.content]);
+  });
+
+  it('hides internal validation details if automatic replanning is exhausted', async () => {
+    const invalidDraft = validGroup.replace('时长（秒）：7', '时长（秒）：9');
+    aiMocks.aiIterateVideoScript.mockResolvedValue(invalidDraft);
+    aiMocks.aiReplanInvalidVideoScript.mockResolvedValue(invalidDraft);
+    const onStream = vi.fn();
+
+    await expect(iterateEpisodeVideoScript(
+      AiModel.DeepseekChat,
+      '原始剧本',
+      validGroup,
+      '让冲突更强',
+      '',
+      { onStream },
+    )).rejects.toThrow('视频脚本生成未完成，系统已自动重新规划，请稍后再试');
+    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledTimes(2);
+    expect(onStream).not.toHaveBeenCalled();
   });
 
   it('runs stage three for a selected version and builds fresh hierarchical cards', async () => {
@@ -166,5 +358,69 @@ describe('three-stage video script contract', () => {
     expect(result.items).toHaveLength(1);
     expect(result.items[0].shotNumber).toBe('镜头1-1');
     expect(result.items[0].imagePrompt).toContain('主角推门');
+  });
+
+  it('silently re-extracts incomplete stage-three output before creating cards', async () => {
+    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([{
+      shotNo: '镜头1-1',
+      shotSize: '近景',
+      sceneDescription: '不完整草稿。',
+      characters: ['主角'],
+      scene: '办公室',
+      props: [],
+      imagePrompt: '',
+      cameraAngle: '平视',
+      cameraMove: '固定',
+      dialogue: '',
+      durationSec: 15,
+    }]);
+    aiMocks.aiReplanInvalidStoryboardExtraction.mockResolvedValue([{
+      shotNo: '镜头1-1',
+      shotSize: '近景',
+      sceneDescription: '重新提取后的完整画面。',
+      characters: ['主角'],
+      scene: '办公室',
+      props: ['门'],
+      imagePrompt: '近景，平视，主角推门进入办公室，日光稳定。',
+      cameraAngle: '平视',
+      cameraMove: '固定',
+      dialogue: '',
+      durationSec: 15,
+    }]);
+
+    const result = await generateStoryboardDesignForVersion(AiModel.DeepseekChat, [
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：主角推门进入办公室。',
+      '【视觉风格】都市写实。',
+      '【正向稳定约束】人物与场景稳定。',
+    ].join('\n'));
+
+    expect(aiMocks.aiReplanInvalidStoryboardExtraction).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      expect.stringContaining('主角推门进入办公室'),
+      '镜头1-1',
+      expect.stringContaining('不完整草稿'),
+      '镜头1-1缺少画面描述或分镜生成提示词',
+      undefined,
+    );
+    expect(result.items[0].imagePrompt).toContain('主角推门');
+    expect(result.outputTexts.join('\n')).not.toContain('不完整草稿');
+  });
+
+  it('hides stage-three extraction details if automatic repair is exhausted', async () => {
+    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([]);
+    aiMocks.aiReplanInvalidStoryboardExtraction.mockResolvedValue([]);
+
+    await expect(generateStoryboardDesignForVersion(AiModel.DeepseekChat, [
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：主角推门进入办公室。',
+      '【视觉风格】都市写实。',
+      '【正向稳定约束】人物与场景稳定。',
+    ].join('\n'))).rejects.toThrow('镜头设计生成未完成，系统已自动重新提取，请稍后再试');
+    expect(aiMocks.aiReplanInvalidStoryboardExtraction).toHaveBeenCalledTimes(2);
   });
 });

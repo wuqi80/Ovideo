@@ -60,6 +60,7 @@ class DeepseekChatRequest(BaseModel):
     source_item_id: Optional[str] = None
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
+    suppress_notification: bool = Field(False, description="内部重试时保留任务审计但不发送用户通知")
 
 
 class ImageReferenceMetadata(BaseModel):
@@ -101,6 +102,7 @@ class GeminiTextRequest(BaseModel):
     source_item_id: Optional[str] = None
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
+    suppress_notification: bool = Field(False, description="内部重试时保留任务审计但不发送用户通知")
 
 
 class GeminiImageReferenceMetadata(BaseModel):

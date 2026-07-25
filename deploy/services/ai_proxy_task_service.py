@@ -17,6 +17,7 @@ _TEXT_CONTEXT_KEYS = (
     "source_item_id",
     "entity_type",
     "entity_id",
+    "suppress_notification",
 )
 
 
@@ -40,12 +41,15 @@ async def _default_notification_dao() -> Any:
     return NotificationDAO
 
 
-def _normalize_text_context(task_context: Optional[Dict[str, Any]]) -> Dict[str, str]:
+def _normalize_text_context(task_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not isinstance(task_context, dict):
         return {}
-    normalized: Dict[str, str] = {}
+    normalized: Dict[str, Any] = {}
     for key in _TEXT_CONTEXT_KEYS:
         value = task_context.get(key)
+        if key == "suppress_notification" and isinstance(value, bool):
+            normalized[key] = value
+            continue
         if isinstance(value, str) and value.strip():
             normalized[key] = value.strip()[:200]
     return normalized
@@ -69,6 +73,8 @@ async def _emit_text_task_terminal(
         return
 
     context = _normalize_text_context(task_context)
+    if context.get("suppress_notification") is True:
+        return
     display_name = context.get("display_name") or (
         "DeepSeek 文本生成" if task_type.startswith("deepseek") else "Gemini 文本生成"
     )
