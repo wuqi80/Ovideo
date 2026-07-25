@@ -55,6 +55,7 @@ GENERATION_SENSITIVE_PROVIDERS = {
     "gemini-tts",
     "gemini-text",
     "gemini-image",
+    "minimax",
     "sora2",
     "veo",
     "laozhang-gpt-image",
@@ -552,31 +553,43 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
     model_name = str(row.get("model_name") or "").strip()
     preset = get_api_model_preset(normalized, model_name) or {}
     model = model_name or str(preset.get("model_name") or "").strip()
+    category = str(row.get("_test_category") or row.get("category") or "").strip().lower()
 
-    if normalized in TEXT_GENERATION_TEST_PROVIDERS:
+    if normalized in TEXT_GENERATION_TEST_PROVIDERS or (
+        normalized == "minimax" and category == "text"
+    ):
         url = _join_api_url(endpoint, get_provider_api_path(normalized, "chat_completions"))
         requested_model = model or (
-            "deepseek-reasoner" if normalized == "deepseek" else "gemini-2.5-flash"
+            "deepseek-reasoner"
+            if normalized == "deepseek"
+            else "MiniMax-M3"
+            if normalized == "minimax"
+            else "gemini-2.5-flash"
         )
         resolved_model = (
             normalize_deepseek_model_name(requested_model)
             if normalized == "deepseek"
             else requested_model
         )
-        max_tokens = 64 if resolved_model == "deepseek-v4-pro" else 32
         payload = {
             "model": resolved_model,
             "messages": [{"role": "user", "content": "Please reply with the word OK only."}],
             "temperature": 0,
             "stream": False,
-            # Reasoning models can spend the first tokens on reasoning_content
-            # before producing their final content field.
-            "max_tokens": max_tokens,
         }
         if normalized == "deepseek":
+            # Reasoning models can spend the first tokens on reasoning_content
+            # before producing their final content field.
+            payload["max_tokens"] = 64 if resolved_model == "deepseek-v4-pro" else 32
             payload["thinking"] = {
                 "type": "enabled" if resolved_model == "deepseek-v4-pro" else "disabled"
             }
+        elif normalized == "minimax":
+            payload["max_completion_tokens"] = 32
+            payload["thinking"] = {"type": "disabled"}
+            payload["reasoning_split"] = True
+        else:
+            payload["max_tokens"] = 32
         return url, payload, "text"
 
     if normalized == "gemini-image":
@@ -609,7 +622,6 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         }, "audio"
 
     if normalized == "minimax":
-        category = str(row.get("_test_category") or row.get("category") or "").strip().lower()
         if category == "video":
             raise ProviderHealthNotFound(REAL_GENERATION_UNSUPPORTED_ERROR)
         if category != "audio":

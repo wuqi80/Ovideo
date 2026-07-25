@@ -63,6 +63,22 @@ class DeepseekChatRequest(BaseModel):
     suppress_notification: bool = Field(False, description="内部重试时保留任务审计但不发送用户通知")
 
 
+class MinimaxChatRequest(BaseModel):
+    prompt: str = Field(..., description="要发送给 MiniMax M3 的提示词")
+    response_format: str = Field("text", pattern="^(text|json)$")
+    temperature: float = Field(0.2, ge=0, le=1)
+    model: Optional[str] = Field(None, description="MiniMax text operation; omitted uses MiniMax M3")
+    operation: Optional[str] = Field(None, description="业务操作标识，用于通知展示")
+    display_name: Optional[str] = Field(None, description="用户可读的任务名称")
+    project_id: Optional[str] = None
+    episode_id: Optional[str] = None
+    source_page: Optional[str] = None
+    source_item_id: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    suppress_notification: bool = Field(False, description="内部重试时保留任务审计但不发送用户通知")
+
+
 class ImageReferenceMetadata(BaseModel):
     referenceId: Optional[str] = None
     assetId: Optional[str] = None

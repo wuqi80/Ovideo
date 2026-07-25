@@ -4,6 +4,7 @@ from schemas.auth import LoginRequest
 from schemas.generation import (
     GenerateRequest,
     DeepseekChatRequest,
+    MinimaxChatRequest,
     DoubaoImageRequest,
     GeminiTextRequest,
     GeminiImageRequest,
@@ -30,6 +31,7 @@ __all__ = [
     "LoginRequest",
     "GenerateRequest",
     "DeepseekChatRequest",
+    "MinimaxChatRequest",
     "DoubaoImageRequest",
     "GeminiTextRequest",
     "GeminiImageRequest",

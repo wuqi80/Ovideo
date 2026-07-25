@@ -832,7 +832,7 @@ app.include_router(
         get_redis_client=lambda: redis_client,
     )
 )
-logger.info("✅ AI Proxy API 路由已注册 (/api/deepseek, /api/gemini, /api/gpt-image, /api/materials/doubao)")
+logger.info("✅ AI Proxy API 路由已注册 (/api/deepseek, /api/minimax, /api/gemini, /api/gpt-image, /api/materials/doubao)")
 
 app.include_router(
     create_video_router(

@@ -86,6 +86,7 @@ IMAGE_LOG_TYPE_MATCHES = (
 TEXT_LOG_TYPE_MATCHES = (
     "deepseek_text",
     "gemini_text",
+    "minimax_text",
 )
 
 MODEL_NAME_BY_TASK_TYPE = {
@@ -130,6 +131,7 @@ MODEL_NAME_BY_TASK_TYPE = {
     "doubao_image": "doubao-image",
     "deepseek_text": "deepseek-r1",
     "gemini_text": "gemini-2.5-flash-text",
+    "minimax_text": "MiniMax-M3",
     "i2i_fj": "comfyui-i2i",
     "video_crop": "video-crop",
     "video_magnify": "video-magnify",

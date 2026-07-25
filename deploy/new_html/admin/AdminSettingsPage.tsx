@@ -970,7 +970,7 @@ function mergeMissingKnownModelBindings(
 }
 
 function providerRequiresCompleteModelBindings(provider: string): boolean {
-    return ['deepseek', 'gemini-image'].includes(normalizeProvider(provider));
+    return ['deepseek', 'gemini-image', 'minimax'].includes(normalizeProvider(provider));
 }
 
 function defaultModelBindings(meta?: ProviderMeta): ApiModelBinding[] {

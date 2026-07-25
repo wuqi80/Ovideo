@@ -16,6 +16,7 @@ from services.api_provider_registry import (
     DASHSCOPE_SUB_MODEL_ENV_MAP,
     DEEPSEEK_OPERATION_MODEL_ENV_MAP,
     GEMINI_TTS_DEFAULT_MODEL,
+    MINIMAX_OPERATION_MODEL_ENV_MAP,
     PROVIDER_EXTRA_ENV_MAP,
     PROVIDER_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
@@ -31,6 +32,7 @@ from services.api_provider_registry import (
     get_endpoint_env_key,
     get_gpt_image_tiers,
     get_model_env_key,
+    get_minimax_operation_model_env_key,
     get_provider_default_endpoint,
     get_provider_extra_env_keys,
     get_provider_env_key,
@@ -78,6 +80,7 @@ def managed_api_env_keys() -> set[str]:
         set(SEEDANCE_SUB_MODEL_ENV_MAP.values())
         | set(DASHSCOPE_SUB_MODEL_ENV_MAP.values())
         | set(DEEPSEEK_OPERATION_MODEL_ENV_MAP.values())
+        | set(MINIMAX_OPERATION_MODEL_ENV_MAP.values())
     )
     for field_map in PROVIDER_EXTRA_ENV_MAP.values():
         keys.update(field_map.values())
@@ -257,6 +260,8 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                     new_env[get_seedance_sub_model_env_key(sub_model)] = bound_model
                 if provider_id == "deepseek" and operation in DEEPSEEK_OPERATION_MODEL_ENV_MAP:
                     new_env[get_deepseek_operation_model_env_key(operation)] = bound_model
+                if provider_id == "minimax" and operation in MINIMAX_OPERATION_MODEL_ENV_MAP:
+                    new_env[get_minimax_operation_model_env_key(operation)] = bound_model
                 if provider.strip().lower() == "dashscope":
                     model_name = bound_model
                     dashscope_sub_model = dashscope_sub_model_for_model(model_name)

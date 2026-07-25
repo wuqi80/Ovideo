@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from services.api_provider_registry import (
     DASHSCOPE_DEFAULT_MODEL_MAP,
     DEEPSEEK_DEFAULT_MODEL_MAP,
+    MINIMAX_M3_MODEL,
+    MINIMAX_OPERATION_MODEL_ENV_MAP,
     PROVIDER_CATALOG,
     SEEDANCE_DEFAULT_MODEL_MAP,
     build_provider_operation_url_templates,
@@ -26,6 +28,7 @@ from services.api_provider_registry import (
     get_dashscope_sub_model_env_key,
     get_endpoint_env_key,
     get_model_env_key,
+    get_minimax_operation_model_env_key,
     get_provider_api_path,
     get_provider_extra_env_keys,
     get_provider_env_key,
@@ -479,6 +482,18 @@ def resolve_deepseek_model_name(model_name: Optional[str], runtime_model_name: O
     return normalize_deepseek_model_name(selected), None
 
 
+def resolve_minimax_model_name(model_name: Optional[str], runtime_model_name: Optional[str] = None) -> tuple[str, Optional[str]]:
+    """Resolve the stable MiniMax text operation without disturbing video/audio defaults."""
+    requested = str(model_name or "").strip()
+    operation = requested.lower()
+    if operation in MINIMAX_OPERATION_MODEL_ENV_MAP:
+        operation_env = get_minimax_operation_model_env_key(operation)
+        configured = (os.getenv(operation_env) or "").strip()
+        return configured or MINIMAX_M3_MODEL, operation_env if configured else None
+
+    return requested or str(runtime_model_name or "").strip(), None
+
+
 def resolve_provider(provider: str, model_name: Optional[str] = None) -> ResolvedProviderConfig:
     provider_id = normalize_provider(provider)
     preset = get_api_model_preset(provider_id, model_name) or {}
@@ -533,6 +548,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     runtime_model_name, model_env = _first_env(model_envs)
     resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
     deepseek_operation_request = False
+    minimax_operation_request = False
     if provider_id == "deepseek":
         requested_operation = str(model_name or "").strip().lower()
         deepseek_operation_request = requested_operation in DEEPSEEK_DEFAULT_MODEL_MAP
@@ -541,6 +557,15 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
             runtime_model_name or preset.get("model_name"),
         )
         if operation_model_env:
+            model_env = operation_model_env
+    elif provider_id == "minimax":
+        requested_operation = str(model_name or "").strip().lower()
+        minimax_operation_request = requested_operation in MINIMAX_OPERATION_MODEL_ENV_MAP
+        resolved_model_name, operation_model_env = resolve_minimax_model_name(
+            model_name,
+            runtime_model_name or preset.get("model_name"),
+        )
+        if minimax_operation_request:
             model_env = operation_model_env
     elif provider_id == "doubao":
         resolved_model_name = normalize_doubao_image_model_for_endpoint(
@@ -552,7 +577,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
             resolved_model_name,
             endpoint,
         )
-    if deepseek_operation_request:
+    if deepseek_operation_request or minimax_operation_request:
         resolved_model_source = model_env or "preset"
     else:
         resolved_model_source = (

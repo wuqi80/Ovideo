@@ -211,6 +211,7 @@ export enum AppView {
 }
 
 export enum AiModel {
+  MinimaxM3 = 'minimax-m3',
   Gemini = 'gemini',
   Deepseek = 'deepseek',
   DeepseekChat = 'deepseek-chat'

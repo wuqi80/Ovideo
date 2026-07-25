@@ -41,9 +41,9 @@ const ENDPOINT_CREDENTIAL_SOURCES: EndpointCredentialSource[] = [
   },
   {
     domains: ['minimaxi.com'],
-    console_url: 'https://platform.minimaxi.com/',
-    docs_url: 'https://platform.minimaxi.com/document/',
-    key_help: '请使用 MiniMax 国内站创建的 API Key；国内 Key 仅用于 api.minimaxi.com。',
+    console_url: 'https://platform.minimaxi.com/console/personal-info',
+    docs_url: 'https://platform.minimaxi.com/docs/api-reference/text-openai-api',
+    key_help: '请使用 MiniMax 国内站创建的按量或 Token Plan API Key；Token Plan Key 选择 token_plan 模式。',
   },
   {
     domains: ['minimax.io'],

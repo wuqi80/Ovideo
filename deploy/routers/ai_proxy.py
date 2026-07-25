@@ -19,6 +19,7 @@ from schemas.generation import (
     GeminiImageRequest,
     GeminiTextRequest,
     GptImageRequest,
+    MinimaxChatRequest,
 )
 from services.ai_proxy_deepseek_service import (
     ensure_deepseek_configured,
@@ -36,6 +37,10 @@ from services.ai_proxy_gemini_text_service import (
 from services.ai_proxy_gpt_image_service import (
     generate_gpt_images as proxy_generate_gpt_images,
 )
+from services.ai_proxy_minimax_text_service import (
+    ensure_minimax_configured,
+    stream_minimax_chat,
+)
 from services.ai_proxy_types import AIProxyError
 from services.ai_proxy_image_persistence_service import persist_generated_ai_images
 from services.ai_proxy_task_service import (
@@ -44,6 +49,7 @@ from services.ai_proxy_task_service import (
     create_completed_image_task,
     create_deepseek_text_task,
     create_gemini_text_task,
+    create_minimax_text_task,
     fail_ai_proxy_task,
     start_ai_proxy_task,
 )
@@ -80,7 +86,11 @@ def create_ai_proxy_router(
     def _text_task_context(request, *, provider: str) -> dict[str, Any]:
         operation = (getattr(request, "operation", None) or "").strip()
         requested_name = (getattr(request, "display_name", None) or "").strip()
-        fallback_name = "DeepSeek 文本生成" if provider == "deepseek" else "Gemini 文本生成"
+        fallback_name = {
+            "deepseek": "DeepSeek 文本生成",
+            "minimax": "MiniMax M3 文本生成",
+            "gemini": "Gemini 文本生成",
+        }.get(provider, "AI 文本生成")
         values = {
             "operation": operation,
             "display_name": requested_name[:80] or text_operation_names.get(operation, fallback_name),
@@ -134,7 +144,7 @@ def create_ai_proxy_router(
             except Exception as e:
                 logger.error("⚠️ 提交保存任务到主事件循环失败: %s", e, exc_info=True)
         else:
-            logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过 DeepSeek 文本结果持久化")
+            logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过文本结果持久化")
 
     def _schedule_text_task_failure(
         task_id: Optional[str],
@@ -162,9 +172,9 @@ def create_ai_proxy_router(
                     loop,
                 )
             except Exception as e:
-                logger.error("⚠️ 提交 DeepSeek 失败状态到主事件循环失败: %s", e, exc_info=True)
+                logger.error("⚠️ 提交文本失败状态到主事件循环失败: %s", e, exc_info=True)
         else:
-            logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过 DeepSeek 失败状态持久化")
+            logger.warning("⚠️ MAIN_EVENT_LOOP 不可用，跳过文本失败状态持久化")
 
     def _image_task_data(request, *, provider: str, model: Optional[str] = None, **extra):
         reference_metadata = [
@@ -252,6 +262,59 @@ def create_ai_proxy_router(
             raise
         except Exception as e:
             logger.error("AI服务请求失败: %s", e)
+            raise HTTPException(status_code=500, detail="AI服务请求失败，请稍后重试")
+
+    @router.post("/api/minimax/chat")
+    async def minimax_chat(request: MinimaxChatRequest, username: str = Depends(require_auth_dependency)):
+        """MiniMax M3 流式聊天接口。"""
+        try:
+            ensure_minimax_configured(request.model)
+        except AIProxyError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+        try:
+            task_context = _text_task_context(request, provider="minimax")
+            task_id = await create_minimax_text_task(
+                user_id=username,
+                prompt=request.prompt,
+                response_format=request.response_format,
+                temperature=request.temperature,
+                model=request.model,
+                logger=logger,
+                task_context=task_context,
+            )
+            return StreamingResponse(
+                stream_minimax_chat(
+                    prompt=request.prompt,
+                    response_format=request.response_format,
+                    temperature=request.temperature,
+                    model=request.model,
+                    on_complete=lambda text: _schedule_text_result_save(
+                        task_id,
+                        text,
+                        user_id=username,
+                        task_type="minimax_text",
+                        task_context=task_context,
+                    ),
+                    on_error=lambda error: _schedule_text_task_failure(
+                        task_id,
+                        error,
+                        user_id=username,
+                        task_type="minimax_text",
+                        task_context=task_context,
+                    ),
+                ),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("MiniMax AI 服务请求失败: %s", exc)
             raise HTTPException(status_code=500, detail="AI服务请求失败，请稍后重试")
 
     @router.post("/api/gemini/text")

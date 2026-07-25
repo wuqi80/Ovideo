@@ -18,12 +18,14 @@ from services.api_provider_registry import (
     DOUBAO_IMAGE_DEFAULT_MODEL,
     DOUBAO_IMAGE_LEGACY_MODEL,
     MINIMAX_DEFAULT_VIDEO_MODEL,
+    MINIMAX_M3_MODEL,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
     get_deepseek_operation_model_env_key,
     get_endpoint_env_key,
     get_dashscope_sub_model_env_key,
     get_model_env_key,
+    get_minimax_operation_model_env_key,
     get_provider_env_key,
     get_seedance_sub_model_env_key,
     dashscope_vidu_reference_sub_model,
@@ -166,6 +168,29 @@ def test_deepseek_frontend_operations_resolve_to_bound_v4_models(monkeypatch):
     assert chat.model_env == chat_env
     assert reasoner.source["model"] == reasoner_env
     assert chat.source["model"] == chat_env
+
+
+def test_minimax_text_operation_resolves_m3_without_using_video_primary(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    model_env = get_model_env_key(env_key)
+    m3_env = get_minimax_operation_model_env_key("minimax-m3")
+
+    monkeypatch.setenv(env_key, "shared-minimax-plan-key")
+    monkeypatch.setenv(model_env, MINIMAX_DEFAULT_VIDEO_MODEL)
+    monkeypatch.setenv(m3_env, "MiniMax-M3-plan")
+
+    text = resolve_provider("minimax", "minimax-m3")
+    video = resolve_provider("minimax", MINIMAX_DEFAULT_VIDEO_MODEL)
+
+    assert text.api_key == video.api_key == "shared-minimax-plan-key"
+    assert text.model_name == "MiniMax-M3-plan"
+    assert text.model_env == m3_env
+    assert text.source["model"] == m3_env
+    assert video.model_name == MINIMAX_DEFAULT_VIDEO_MODEL
+
+    monkeypatch.delenv(m3_env)
+    assert resolve_provider("minimax", "minimax-m3").model_name == MINIMAX_M3_MODEL
 
 
 class _ImageResponse:
@@ -1283,6 +1308,45 @@ def test_deepseek_stream_reports_empty_result_as_failure(monkeypatch):
 
     assert events[-1] == "data: [DONE]\n\n"
     assert failures == ["DeepSeek 返回空内容"]
+    assert response.closed is True
+
+
+def test_minimax_m3_stream_uses_token_plan_compatible_runtime_request(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    m3_env = get_minimax_operation_model_env_key("minimax-m3")
+    calls = []
+    completed = []
+    response = _DeepseekStreamResponse()
+
+    monkeypatch.setenv(env_key, "test-minimax-plan-key")
+    monkeypatch.setenv(endpoint_env, "https://api.minimaxi.com/v1")
+    monkeypatch.setenv(m3_env, "MiniMax-M3")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return response
+
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
+
+    events = list(
+        ai_proxy_service.stream_minimax_chat(
+            prompt="hello",
+            model="minimax-m3",
+            on_complete=completed.append,
+        )
+    )
+
+    assert calls[0]["url"] == "https://api.minimaxi.com/v1/chat/completions"
+    assert calls[0]["headers"]["Authorization"] == "Bearer test-minimax-plan-key"
+    assert calls[0]["json"]["model"] == "MiniMax-M3"
+    assert calls[0]["json"]["thinking"] == {"type": "adaptive"}
+    assert calls[0]["json"]["reasoning_split"] is True
+    assert calls[0]["json"]["stream"] is True
+    assert any('"content": "stream ok"' in event for event in events)
+    assert events[-1] == "data: [DONE]\n\n"
+    assert completed == ["stream ok"]
     assert response.closed is True
 
 

@@ -26,6 +26,15 @@ interface TextModelCatalogResponse {
 
 export const DEFAULT_SCRIPT_MODEL_OPTIONS: readonly ScriptModelOption[] = [
   {
+    value: AiModel.MinimaxM3,
+    label: '练气',
+    operation: 'minimax-m3',
+    requestedProvider: 'minimax',
+    provider: 'minimax',
+    runtime: 'MiniMax-M3',
+    failoverActive: false,
+  },
+  {
     value: AiModel.Gemini,
     label: '化神',
     operation: 'gemini-text',
@@ -55,7 +64,8 @@ export const DEFAULT_SCRIPT_MODEL_OPTIONS: readonly ScriptModelOption[] = [
 ];
 
 const isAiModel = (value: string): value is AiModel => (
-  value === AiModel.Gemini
+  value === AiModel.MinimaxM3
+  || value === AiModel.Gemini
   || value === AiModel.Deepseek
   || value === AiModel.DeepseekChat
 );
@@ -101,7 +111,8 @@ export function getScriptModelOption(
 ): ScriptModelOption {
   return options.find(option => option.value === model)
     || DEFAULT_SCRIPT_MODEL_OPTIONS.find(option => option.value === model)
-    || DEFAULT_SCRIPT_MODEL_OPTIONS[2];
+    || DEFAULT_SCRIPT_MODEL_OPTIONS.find(option => option.value === AiModel.DeepseekChat)
+    || DEFAULT_SCRIPT_MODEL_OPTIONS[0];
 }
 
 export function resolveScriptAiModel(
@@ -118,6 +129,7 @@ export function resolveScriptAiModel(
   ));
   if (exact) return exact.value;
 
+  if (normalized.includes('minimax') && normalized.includes('m3')) return AiModel.MinimaxM3;
   if (normalized.includes('gemini')) return AiModel.Gemini;
   if (normalized.includes('reasoner') || normalized.includes('v4-pro')) return AiModel.Deepseek;
   if (normalized.includes('deepseek')) return AiModel.DeepseekChat;
@@ -125,5 +137,6 @@ export function resolveScriptAiModel(
 }
 
 export function formatScriptModelDisplay(option: ScriptModelOption): string {
+  if (option.value === AiModel.MinimaxM3) return `${option.label}·Minimax M3`;
   return `${option.label} · ${option.runtime}`;
 }

@@ -8,6 +8,7 @@
 import { AiModel } from '../types';
 import { callGeminiProxyWithRetry } from './geminiProxyService';
 import { callDeepseekWithRetry, callDeepseekChatWithRetry } from './deepseekService';
+import { callMinimaxM3WithRetry } from './minimaxTextService';
 import { PromptTemplate, fillPrompt } from '../prompts';
 import type { TextTaskContext } from './textTaskContext';
 
@@ -32,7 +33,9 @@ export async function callAI(
   const systemPrompt = promptTemplate.system;
 
   // 根据模型选择对应的服务
-  if (model === AiModel.Deepseek) {
+  if (model === AiModel.MinimaxM3) {
+    return await callMinimaxM3WithRetry(userPrompt, systemPrompt, onStream, taskContext);
+  } else if (model === AiModel.Deepseek) {
     return await callDeepseekWithRetry(userPrompt, systemPrompt, onStream, 'deepseek-reasoner', taskContext);
   } else if (model === AiModel.DeepseekChat) {
     return await callDeepseekChatWithRetry(userPrompt, systemPrompt, onStream, taskContext);

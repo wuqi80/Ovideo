@@ -8,6 +8,7 @@ from services.ai_proxy_task_service import (
     create_completed_gemini_text_task,
     create_completed_image_task,
     create_deepseek_text_task,
+    create_minimax_text_task,
     fail_ai_proxy_task,
     start_ai_proxy_task,
 )
@@ -142,6 +143,38 @@ async def test_create_deepseek_text_task_persists_business_context():
     }
     task_data = _TaskDAO.created[0]["task_data"]
     assert {key: task_data[key] for key in expected_context} == expected_context
+
+
+@pytest.mark.asyncio
+async def test_minimax_text_task_uses_own_type_and_user_scoped_notification():
+    task_id = await create_minimax_text_task(
+        user_id="yuan",
+        prompt="prompt",
+        response_format="text",
+        temperature=0.2,
+        model=None,
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        timestamp_ms_provider=lambda: 125,
+    )
+
+    assert task_id == "minimax_text_125"
+    assert _TaskDAO.created[0]["task_type"] == "minimax_text"
+    assert _TaskDAO.created[0]["task_data"]["model"] == "minimax-m3"
+
+    await complete_ai_proxy_text_task(
+        task_id=task_id,
+        text_content="answer",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        user_id="yuan",
+        task_type="minimax_text",
+        redis_client=_Redis,
+        notification_dao=_NotificationDAO,
+    )
+
+    assert _Redis.published[0][0] == "task_complete:yuan"
+    assert _NotificationDAO.created[0]["title"] == "MiniMax M3 文本生成 已完成"
 
 
 @pytest.mark.asyncio

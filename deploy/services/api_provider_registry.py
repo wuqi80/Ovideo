@@ -78,8 +78,8 @@ VENDOR_CREDENTIAL_LINKS: Dict[str, Dict[str, str]] = {
         "console_url": "https://bailian.console.aliyun.com/",
     },
     "minimax": {
-        "docs_url": "https://platform.minimax.io/docs/guides/quickstart-preparation",
-        "console_url": "https://platform.minimax.io/",
+        "docs_url": "https://platform.minimaxi.com/docs/api-reference/text-openai-api",
+        "console_url": "https://platform.minimaxi.com/console/personal-info",
     },
     "laozhang": {
         "docs_url": "https://docs.laozhang.ai/en/getting-started",
@@ -98,7 +98,11 @@ PROVIDER_KEY_HELP: Dict[str, str] = {
         "Seedance channel, and paste it as SEEDANCE_API_KEY; ARK_API_KEY remains a fallback."
     ),
     "dashscope": "Create an Alibaba Cloud Model Studio / DashScope API key and paste it as DASHSCOPE_API_KEY.",
-    "minimax": "Create a MiniMax API key and paste it as MINIMAX_API_KEY. Group ID is configured separately when needed.",
+    "minimax": (
+        "Create a MiniMax pay-as-you-go or Token Plan API key and paste it as "
+        "MINIMAX_API_KEY. Select token_plan for a Token Plan key; Group ID is "
+        "configured separately only when needed."
+    ),
     "sora2": "Create a LaoZhang API token and paste it as SORA2_API_KEY.",
     "veo": "Create a LaoZhang API token and paste it as VEO_API_KEY; SORA2_API_KEY remains a fallback.",
     "laozhang-gpt-image": "Create a LaoZhang API token and paste it as GPT_IMAGE_API_KEY.",
@@ -208,6 +212,11 @@ MINIMAX_FAST_VIDEO_MODEL = "MiniMax-Hailuo-2.3-Fast"
 MINIMAX_LEGACY_VIDEO_MODELS = frozenset({"MiniMax-Hailuo-02"})
 MINIMAX_TTS_HD_MODEL = "speech-2.8-hd"
 MINIMAX_TTS_TURBO_MODEL = "speech-2.8-turbo"
+MINIMAX_M3_OPERATION = "minimax-m3"
+MINIMAX_M3_MODEL = "MiniMax-M3"
+MINIMAX_OPERATION_MODEL_ENV_MAP: Dict[str, str] = {
+    MINIMAX_M3_OPERATION: "MINIMAX_MODEL_M3",
+}
 MINIMAX_DOMESTIC_ENDPOINT = "https://api.minimaxi.com/v1"
 MINIMAX_INTERNATIONAL_ENDPOINT = "https://api.minimax.io/v1"
 MINIMAX_ACCESS_MODES: List[Dict[str, Any]] = [
@@ -215,9 +224,9 @@ MINIMAX_ACCESS_MODES: List[Dict[str, Any]] = [
         "mode": "domestic",
         "label": "国内站",
         "endpoint": MINIMAX_DOMESTIC_ENDPOINT,
-        "console_url": "https://platform.minimaxi.com/",
-        "docs_url": "https://platform.minimaxi.com/document/",
-        "description": "使用 MiniMax 国内站创建的 API Key。",
+        "console_url": "https://platform.minimaxi.com/console/personal-info",
+        "docs_url": "https://platform.minimaxi.com/docs/api-reference/text-openai-api",
+        "description": "使用 MiniMax 国内站创建的按量或 Token Plan API Key。",
     },
     {
         "mode": "international",
@@ -364,6 +373,11 @@ MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
         "label": "语音生成 (Speech 2.8 Turbo)",
         "model_name": MINIMAX_TTS_TURBO_MODEL,
     },
+    {
+        "operation": MINIMAX_M3_OPERATION,
+        "label": "练气 (MiniMax M3 文本)",
+        "model_name": MINIMAX_M3_MODEL,
+    },
 ]
 
 
@@ -388,6 +402,13 @@ def get_deepseek_operation_model_env_key(operation: Optional[str]) -> str:
     if normalized not in DEEPSEEK_OPERATION_MODEL_ENV_MAP:
         raise ValueError(f"Unsupported DeepSeek operation: {operation}")
     return DEEPSEEK_OPERATION_MODEL_ENV_MAP[normalized]
+
+
+def get_minimax_operation_model_env_key(operation: Optional[str]) -> str:
+    normalized = str(operation or "").strip().lower()
+    if normalized not in MINIMAX_OPERATION_MODEL_ENV_MAP:
+        raise ValueError(f"Unsupported MiniMax operation: {operation}")
+    return MINIMAX_OPERATION_MODEL_ENV_MAP[normalized]
 
 
 def is_seedance_fast_model(model_name: Optional[str]) -> bool:
@@ -661,8 +682,8 @@ PROVIDER_CATALOG: Dict[str, dict] = {
     "minimax": {
         "label": "MiniMax / Hailuo",
         "vendor": "minimax",
-        "capabilities": ["video", "audio"],
-        "notes": "Video generation plus TTS, voice design, and voice clone.",
+        "capabilities": ["video", "audio", "text"],
+        "notes": "MiniMax M3 text generation plus video, TTS, voice design, and voice clone.",
         "access_modes": MINIMAX_ACCESS_MODES,
     },
     "sora2": {
@@ -757,6 +778,7 @@ PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
         "task": "{task_id}",
     },
     "minimax": {
+        "chat_completions": "chat/completions",
         "video_generation": "video_generation",
         "query_video_generation": "query/video_generation",
         "files_retrieve": "files/retrieve",
@@ -867,6 +889,14 @@ API_MODEL_PRESETS: List[dict] = [
         "operation": "speech-turbo",
         "operation_label": "语音生成 (Speech 2.8 Turbo)",
         "category": "audio",
+    },
+    {
+        "name": "MiniMax M3",
+        "provider": "minimax",
+        "model_name": MINIMAX_M3_MODEL,
+        "operation": MINIMAX_M3_OPERATION,
+        "operation_label": "练气 (MiniMax M3 文本)",
+        "category": "text",
     },
     {
         "name": "Sora2",
@@ -1271,7 +1301,7 @@ def normalize_model_bindings(
             "label": option_labels.get(operation) or operation,
             "model_name": fallback_model,
         }
-    if provider_id in {"gemini-image", "deepseek"} and normalized:
+    if provider_id in {"gemini-image", "deepseek", "minimax"} and normalized:
         for option in get_provider_model_binding_options(provider_id):
             operation = option["operation"]
             if operation not in normalized:

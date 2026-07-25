@@ -467,7 +467,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   // Layout State
   const [colWidths, setColWidths] = useState<number[]>([15, 25, 30, 30]); // 文件列表10%, 文字脚本20%, 分镜脚本30%, 镜头设计40%
   const [visibleColumns, setVisibleColumns] = useState<boolean[]>([true, true, true, true]);  // ✅ 强制所有列始终显示
-  const [aiModel, setAiModel] = useState<AiModel>(AiModel.DeepseekChat);  // 🔧 默认改为DK金丹
+  const [aiModel, setAiModel] = useState<AiModel>(AiModel.MinimaxM3);
   const [scriptConversations, setScriptConversations] = useState<Record<string, ScriptConversation>>({});
   const [conversationLoadingId, setConversationLoadingId] = useState<string | null>(null);
   const [conversationSendingId, setConversationSendingId] = useState<string | null>(null);
@@ -585,15 +585,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
   useEffect(() => {
     const selectionKey = `${selectedFileId || ''}:${selectedConversation?.defaultModel || ''}`;
-    if (!selectedConversation?.defaultModel || appliedConversationModelRef.current === selectionKey) return;
-    const matchingModel = resolveScriptAiModel(
-      selectedConversation.defaultModel,
-      scriptModelOptions,
-    );
-    if (matchingModel) {
-      appliedConversationModelRef.current = selectionKey;
-      setAiModel(matchingModel);
-    }
+    if (!selectedFileId || appliedConversationModelRef.current === selectionKey) return;
+    const matchingModel = selectedConversation?.defaultModel
+      ? resolveScriptAiModel(selectedConversation.defaultModel, scriptModelOptions)
+      : AiModel.MinimaxM3;
+    if (!matchingModel) return;
+    appliedConversationModelRef.current = selectionKey;
+    setAiModel(matchingModel);
   }, [scriptModelOptions, selectedConversation?.defaultModel, selectedFileId]);
   
   // 保存定时器引用

@@ -8,7 +8,7 @@ from services.api_provider_runtime import resolve_provider
 
 
 async def build_text_model_catalog() -> List[Dict[str, Any]]:
-    """Describe the effective models used by the three stable frontend choices.
+    """Describe the effective models used by the stable frontend choices.
 
     Frontend values and DeepSeek operation identifiers are deliberately stable.
     Only provider/model display metadata follows the effective runtime config.
@@ -16,8 +16,18 @@ async def build_text_model_catalog() -> List[Dict[str, Any]]:
     gemini_config, gemini_failover = await resolve_ai_proxy_provider("gemini-text")
     reasoner_config = resolve_provider("deepseek", "deepseek-reasoner")
     chat_config = resolve_provider("deepseek", "deepseek-chat")
+    minimax_config = resolve_provider("minimax", "minimax-m3")
 
     return [
+        {
+            "value": "minimax-m3",
+            "label": "练气",
+            "operation": "minimax-m3",
+            "requested_provider": "minimax",
+            "provider": minimax_config.provider,
+            "runtime_model_name": minimax_config.model_name or "MiniMax-M3",
+            "failover_active": False,
+        },
         {
             "value": "gemini",
             "label": "化神",

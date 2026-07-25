@@ -10,6 +10,7 @@ import { apiJson } from '../../services/httpClient';
 import {
   DEFAULT_SCRIPT_MODEL_OPTIONS,
   fetchScriptModelOptions,
+  formatScriptModelDisplay,
   getScriptModelOption,
   normalizeScriptModelOptions,
   resolveScriptAiModel,
@@ -24,6 +25,15 @@ describe('scriptModelCatalogService', () => {
     vi.mocked(apiJson).mockResolvedValue({
       success: true,
       models: [
+        {
+          value: 'minimax-m3',
+          label: '练气',
+          operation: 'minimax-m3',
+          requested_provider: 'minimax',
+          provider: 'minimax',
+          runtime_model_name: 'MiniMax-M3',
+          failover_active: false,
+        },
         {
           value: 'deepseek-chat',
           label: '金丹',
@@ -57,6 +67,7 @@ describe('scriptModelCatalogService', () => {
     const options = await fetchScriptModelOptions();
 
     expect(options.map(option => option.value)).toEqual([
+      AiModel.MinimaxM3,
       AiModel.Gemini,
       AiModel.Deepseek,
       AiModel.DeepseekChat,
@@ -74,6 +85,13 @@ describe('scriptModelCatalogService', () => {
       runtime: 'deepseek-v4-pro-fallback',
       failoverActive: true,
     });
+    expect(getScriptModelOption(AiModel.MinimaxM3, options)).toMatchObject({
+      operation: 'minimax-m3',
+      runtime: 'MiniMax-M3',
+    });
+    expect(formatScriptModelDisplay(getScriptModelOption(AiModel.MinimaxM3, options)))
+      .toBe('练气·Minimax M3');
+    expect(resolveScriptAiModel('MiniMax-M3', options)).toBe(AiModel.MinimaxM3);
     expect(resolveScriptAiModel('deepseek-v4-pro-admin', options)).toBe(AiModel.Deepseek);
     expect(resolveScriptAiModel('deepseek-v4-flash-admin', options)).toBe(AiModel.DeepseekChat);
   });
@@ -87,10 +105,13 @@ describe('scriptModelCatalogService', () => {
     expect(getScriptModelOption(AiModel.DeepseekChat, options).runtime).toBe('custom-chat');
     expect(getScriptModelOption(AiModel.Deepseek, options).runtime).toBe('deepseek-v4-pro');
     expect(getScriptModelOption(AiModel.Gemini, options).runtime).toBe('gemini-2.5-flash');
-    expect(DEFAULT_SCRIPT_MODEL_OPTIONS).toHaveLength(3);
+    expect(getScriptModelOption(AiModel.MinimaxM3, options).runtime).toBe('MiniMax-M3');
+    expect(DEFAULT_SCRIPT_MODEL_OPTIONS).toHaveLength(4);
   });
 
   it('restores legacy aliases and new V4 runtime names to the correct selector', () => {
+    expect(resolveScriptAiModel('minimax-m3')).toBe(AiModel.MinimaxM3);
+    expect(resolveScriptAiModel('MiniMax-M3')).toBe(AiModel.MinimaxM3);
     expect(resolveScriptAiModel('deepseek-reasoner')).toBe(AiModel.Deepseek);
     expect(resolveScriptAiModel('deepseek-v4-pro')).toBe(AiModel.Deepseek);
     expect(resolveScriptAiModel('deepseek-chat')).toBe(AiModel.DeepseekChat);

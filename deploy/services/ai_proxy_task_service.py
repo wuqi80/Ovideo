@@ -75,8 +75,15 @@ async def _emit_text_task_terminal(
     context = _normalize_text_context(task_context)
     if context.get("suppress_notification") is True:
         return
-    display_name = context.get("display_name") or (
-        "DeepSeek 文本生成" if task_type.startswith("deepseek") else "Gemini 文本生成"
+    provider_display_names = {
+        "deepseek": "DeepSeek 文本生成",
+        "minimax": "MiniMax M3 文本生成",
+        "gemini": "Gemini 文本生成",
+    }
+    task_provider = task_type.split("_", 1)[0]
+    display_name = context.get("display_name") or provider_display_names.get(
+        task_provider,
+        "AI 文本生成",
     )
     project_id = context.get("project_id", "")
     source_page = context.get("source_page", "global")
@@ -328,6 +335,36 @@ async def create_deepseek_text_task(
         task_id_prefix="deepseek_text",
         user_id=user_id,
         task_type="deepseek_text",
+        task_data=task_data,
+        logger=logger,
+        task_dao=task_dao,
+        timestamp_ms_provider=timestamp_ms_provider,
+    )
+
+
+async def create_minimax_text_task(
+    *,
+    user_id: str,
+    prompt: str,
+    response_format: Optional[str],
+    temperature: float,
+    logger: Any,
+    model: Optional[str] = None,
+    task_dao: Optional[Any] = None,
+    timestamp_ms_provider: TimestampMsProvider = _default_timestamp_ms,
+    task_context: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    task_data = {
+        "prompt": prompt[:500],
+        "response_format": response_format,
+        "temperature": temperature,
+        "model": model or "minimax-m3",
+    }
+    task_data.update(_normalize_text_context(task_context))
+    return await start_ai_proxy_task(
+        task_id_prefix="minimax_text",
+        user_id=user_id,
+        task_type="minimax_text",
         task_data=task_data,
         logger=logger,
         task_dao=task_dao,

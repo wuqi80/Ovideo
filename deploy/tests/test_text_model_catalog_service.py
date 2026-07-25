@@ -16,6 +16,9 @@ async def test_catalog_keeps_stable_operations_and_reports_effective_runtime_mod
         )
 
     def fake_resolve_provider(provider, operation):
+        if provider == "minimax":
+            assert operation == "minimax-m3"
+            return SimpleNamespace(provider="minimax", model_name="MiniMax-M3-plan")
         assert provider == "deepseek"
         return SimpleNamespace(
             provider="deepseek",
@@ -38,17 +41,25 @@ async def test_catalog_keeps_stable_operations_and_reports_effective_runtime_mod
 
     models = await text_model_catalog_service.build_text_model_catalog()
 
-    assert [item["value"] for item in models] == ["gemini", "deepseek", "deepseek-chat"]
+    assert [item["value"] for item in models] == [
+        "minimax-m3",
+        "gemini",
+        "deepseek",
+        "deepseek-chat",
+    ]
     assert [item["operation"] for item in models] == [
+        "minimax-m3",
         "gemini-text",
         "deepseek-reasoner",
         "deepseek-chat",
     ]
     assert [item["runtime_model_name"] for item in models] == [
+        "MiniMax-M3-plan",
         "fallback-v4",
         "deepseek-v4-pro-custom",
         "deepseek-v4-flash-custom",
     ]
-    assert models[0]["provider"] == "deepseek"
-    assert models[0]["failover_active"] is True
+    assert models[0]["provider"] == "minimax"
+    assert models[1]["provider"] == "deepseek"
+    assert models[1]["failover_active"] is True
     assert all("api_key" not in item and "endpoint" not in item for item in models)

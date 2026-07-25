@@ -143,7 +143,11 @@ def test_seedance_provider_catalog_exposes_both_billing_channels():
 
 
 def test_minimax_provider_catalog_exposes_domestic_and_international_channels():
-    from services.api_provider_registry import get_api_provider_catalog
+    from services.api_provider_registry import (
+        get_api_provider_catalog,
+        get_provider_model_binding_options,
+        normalize_model_bindings,
+    )
 
     minimax = next(item for item in get_api_provider_catalog() if item["provider"] == "minimax")
 
@@ -152,6 +156,70 @@ def test_minimax_provider_catalog_exposes_domestic_and_international_channels():
         "https://api.minimaxi.com/v1",
         "https://api.minimax.io/v1",
     ]
+    assert "text" in minimax["capabilities"]
+    assert get_provider_model_binding_options("minimax")[-1] == {
+        "operation": "minimax-m3",
+        "label": "练气 (MiniMax M3 文本)",
+        "model_name": "MiniMax-M3",
+    }
+
+    legacy_bindings = normalize_model_bindings(
+        "minimax",
+        [{"operation": "video-standard", "model_name": "MiniMax-Hailuo-2.3"}],
+    )
+    assert ("minimax-m3", "MiniMax-M3") in {
+        (item["operation"], item["model_name"])
+        for item in legacy_bindings
+    }
+
+
+@pytest.mark.asyncio
+async def test_one_enabled_minimax_card_projects_m3_without_changing_video_primary(monkeypatch):
+    from services import api_config_runtime_loader as loader
+
+    for env_key in (
+        "MINIMAX_API_KEY",
+        "MINIMAX_MODEL",
+        "MINIMAX_MODEL_M3",
+    ):
+        monkeypatch.delenv(env_key, raising=False)
+        monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
+
+    row = {
+        "config_id": "minimax-card",
+        "name": "MiniMax API",
+        "provider": "minimax",
+        "endpoint": "https://api.minimaxi.com/v1",
+        "api_key_encrypted": "enc:key-plan",
+        "model_name": "MiniMax-Hailuo-2.3",
+        "model_bindings": [
+            {
+                "operation": "video-standard",
+                "label": "金丹 (Hailuo 2.3)",
+                "model_name": "MiniMax-Hailuo-2.3",
+            },
+            {
+                "operation": "minimax-m3",
+                "label": "练气 (MiniMax M3 文本)",
+                "model_name": "MiniMax-M3",
+            },
+        ],
+        "proxy_mode": "direct",
+        "enabled": True,
+    }
+    monkeypatch.setattr(loader.ApiConfigDAO, "list_enabled", AsyncMock(return_value=[row]))
+    monkeypatch.setattr(
+        loader.ApiConfigDAO,
+        "decrypt_key",
+        staticmethod(lambda value: value.split(":", 1)[1]),
+    )
+
+    result = await loader.load_api_configs_to_env()
+
+    assert result["success"] is True
+    assert loader.os.environ["MINIMAX_API_KEY"] == "key-plan"
+    assert loader.os.environ["MINIMAX_MODEL"] == "MiniMax-Hailuo-2.3"
+    assert loader.os.environ["MINIMAX_MODEL_M3"] == "MiniMax-M3"
 
 
 def test_legacy_default_binding_is_recovered_to_known_model_operation():
