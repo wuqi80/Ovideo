@@ -34,11 +34,6 @@ import {
   getVersionStoryboardSnapshots,
   mergeStoryboardSnapshots,
 } from './utils/storyboardSnapshots';
-import {
-  buildShotDurationInstruction,
-  DEFAULT_SHOT_DURATION_MODE,
-  type ShotDurationMode,
-} from './utils/shotDurationMode';
 
 const loadAiModelService = () => import('./services/aiModelService');
 
@@ -1472,10 +1467,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     );
   }, [aiModel, propEpisodeId, selectedFileId, urlProjectId]);
 
-  const handleConversationSend = useCallback(async (
-    content: string,
-    shotDurationMode: ShotDurationMode = DEFAULT_SHOT_DURATION_MODE,
-  ) => {
+  const handleConversationSend = useCallback(async (content: string) => {
     const fileId = selectedFileId;
     const file = filesRef.current.find(item => item.id === fileId);
     if (!fileId || !file) throw new Error('请先选择剧本任务');
@@ -1494,10 +1486,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const conversationContext = conversation.messages.slice(-10)
       .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
-    const durationInstruction = buildShotDurationInstruction(shotDurationMode);
     const billingInput = isFirstTurn
-      ? [content, durationInstruction].join('\n')
-      : [currentVersion?.content || file.scriptContent || file.originalContent, content, durationInstruction, conversationContext].join('\n');
+      ? content
+      : [currentVersion?.content || file.scriptContent || file.originalContent, content, conversationContext].join('\n');
     const forecastOutputTokens = Math.max(
       1000,
       estimateTextTokens(currentVersion?.content || file.scriptContent || content) * (isFirstTurn ? 2 : 1),
@@ -1551,7 +1542,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           requestId,
           estimatedCreditCost,
           creditCharged: false,
-          shotDurationMode,
         },
       });
       assistantMessageId = assistantMessage.id;
@@ -1585,7 +1575,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         result = await aiService.aiGenerateStoryboardScript(
           aiModel,
           content,
-          durationInstruction,
+          '',
           appendStreamChunk,
           {
             operation: 'storyboard_script_generate',
@@ -1602,7 +1592,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         result = await aiService.aiIterateFullScript(
           aiModel,
           currentVersion?.content || file.scriptContent || file.originalContent,
-          `${content}\n\n${durationInstruction}`,
+          content,
           conversationContext || '（首次修改，无历史意见）',
           appendStreamChunk,
           {
@@ -1645,7 +1635,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         creditTransactionId: credit.transaction_id,
         creditFeatureKey: credit.feature_key,
         creditUsage: billingParams,
-        shotDurationMode,
       };
       const completedMessage = await updateScriptMessage(
         propEpisodeId,

@@ -40,12 +40,6 @@ import {
   cleanStoryboardDisplayText,
   mergeStoryboardDisplayItems,
 } from '../utils/storyboardSegments';
-import {
-  buildShotDurationInstruction,
-  DEFAULT_SHOT_DURATION_MODE,
-  SHOT_DURATION_MODE_STORAGE_KEY,
-  type ShotDurationMode,
-} from '../utils/shotDurationMode';
 
 export const SCRIPT_MODEL_OPTIONS = [
   { value: AiModel.Gemini, label: '化神', runtime: 'Gemini 2.5 Flash', provider: 'google' },
@@ -63,7 +57,7 @@ interface ScriptConversationPaneProps {
   error?: string | null;
   onDismissError?: () => void;
   onChangeModel: (model: AiModel) => void;
-  onSend: (content: string, shotDurationMode: ShotDurationMode) => Promise<void>;
+  onSend: (content: string) => Promise<void>;
   onGenerateDesign: (version: ScriptStoryboardVersion) => Promise<void> | void;
   onEditVersion: (version: ScriptStoryboardVersion, content: string) => Promise<void>;
   onExportVersion: (version: ScriptStoryboardVersion) => void;
@@ -173,15 +167,6 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   storyboardItemCount,
 }) => {
   const [draft, setDraft] = useState('');
-  const [shotDurationMode, setShotDurationMode] = useState<ShotDurationMode>(() => {
-    try {
-      return window.localStorage.getItem(SHOT_DURATION_MODE_STORAGE_KEY) === 'fragmented'
-        ? 'fragmented'
-        : DEFAULT_SHOT_DURATION_MODE;
-    } catch {
-      return DEFAULT_SHOT_DURATION_MODE;
-    }
-  });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingVersion, setEditingVersion] = useState<ScriptStoryboardVersion | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -262,10 +247,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     const conversationContext = (conversation?.messages || []).slice(-10)
       .map(message => `${message.role}:${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
-    const durationInstruction = buildShotDurationInstruction(shotDurationMode);
     const billingInput = isFirstTurn
-      ? [draft, durationInstruction].join('\n')
-      : [currentVersion?.content || selectedFile.scriptContent || selectedFile.originalContent, draft, durationInstruction, conversationContext].join('\n');
+      ? draft
+      : [currentVersion?.content || selectedFile.scriptContent || selectedFile.originalContent, draft, conversationContext].join('\n');
     const forecastOutputTokens = Math.max(
       1000,
       estimateTextTokens(currentVersion?.content || selectedFile.scriptContent || draft) * (isFirstTurn ? 2 : 1),
@@ -276,15 +260,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       output_tokens: forecastOutputTokens,
       model,
     };
-  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, selectedFile, shotDurationMode]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SHOT_DURATION_MODE_STORAGE_KEY, shotDurationMode);
-    } catch {
-      // Storage can be unavailable in private browsing; the in-memory selection still works.
-    }
-  }, [shotDurationMode]);
+  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, selectedFile]);
 
   useEffect(() => {
     setCollapsed(new Set());
@@ -454,7 +430,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     if (!content || isSending || !selectedFile) return false;
     setDraft('');
     try {
-      await onSend(content, shotDurationMode);
+      await onSend(content);
       return true;
     } catch {
       setDraft(content);
@@ -939,30 +915,6 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 视频反推
               </button>
             )}
-            <div
-              className="inline-flex h-8 flex-shrink-0 overflow-hidden rounded border border-n40 bg-n10"
-              role="group"
-              aria-label="选择镜头时长模式"
-            >
-              <button
-                type="button"
-                onClick={() => setShotDurationMode('complete')}
-                disabled={isSending}
-                title="直接完善：优先生成 10-15 秒的完整镜头"
-                className={`px-2 text-xs transition-colors ${shotDurationMode === 'complete' ? 'bg-primary text-white' : 'text-n400 hover:bg-n20 hover:text-primary'}`}
-              >
-                直接完善
-              </button>
-              <button
-                type="button"
-                onClick={() => setShotDurationMode('fragmented')}
-                disabled={isSending}
-                title="细碎 + 合并：先生成 3-5 秒基础镜头，再按不超过 15 秒组织分段"
-                className={`border-l border-n40 px-2 text-xs transition-colors ${shotDurationMode === 'fragmented' ? 'bg-primary text-white' : 'text-n400 hover:bg-n20 hover:text-primary'}`}
-              >
-                细碎 + 合并
-              </button>
-            </div>
             <span
               className="inline-flex flex-shrink-0 items-center gap-1 text-xs font-medium text-warning"
               title="根据当前输入、历史上下文、预计输出和所选模型动态计算"

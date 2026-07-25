@@ -24,6 +24,17 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('aria-label="发送"');
   });
 
+  it('uses the master generation mode without the shot-duration selector', () => {
+    expect(source).not.toContain('选择镜头时长模式');
+    expect(source).not.toContain('直接完善');
+    expect(source).not.toContain('细碎 + 合并');
+    expect(source).not.toContain('shotDurationMode');
+    expect(source).toContain('await onSend(content)');
+    expect(workspace).toContain("aiModel,\n          content,\n          '',");
+    expect(workspace).not.toContain('buildShotDurationInstruction');
+    expect(workspace).not.toContain('shotDurationMode');
+  });
+
   it('shows a dynamic credit estimate before each script generation', () => {
     expect(source).toContain("estimateCredits('script_model_call', creditEstimateParams)");
     expect(source).toContain('input_tokens: estimateTextTokens(billingInput)');
