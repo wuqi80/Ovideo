@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { FileText, Film } from 'lucide-react';
 import type { ProjectFile, StoryboardItem } from '../types';
-import { buildStoryboardSegmentGroups } from '../utils/storyboardSegments';
+import {
+  buildStoryboardSegmentGroups,
+  cleanStoryboardShotCardText,
+  getStoryboardSegmentPromptSections,
+} from '../utils/storyboardSegments';
+import { SegmentPromptCards } from './SegmentPromptCards';
 
 interface StoryboardScriptColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -10,9 +15,12 @@ interface StoryboardScriptColumnProps {
 }
 
 const getScriptBlock = (item: StoryboardItem): string => (
-  item.originalText?.trim()
-  || item.videoScriptBlock?.trim()
-  || item.scriptSegment?.trim()
+  cleanStoryboardShotCardText(
+    item.originalText?.trim()
+    || item.videoScriptBlock?.trim()
+    || item.scriptSegment?.trim()
+    || '',
+  )
   || '暂无对应分镜脚本内容'
 );
 
@@ -79,51 +87,59 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
         className="custom-scrollbar relative min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
         data-testid="storyboard-script-scroll-container"
       >
-        {items.length > 0 ? segmentGroups.map(group => (
-          <section key={group.key} className="overflow-hidden rounded-md border border-n40 bg-n0 shadow-card">
-            <header className="flex items-center gap-2 border-b border-n40 bg-n20 px-4 py-2.5">
-              <span className="text-xs font-semibold text-n500">分段</span>
-              <span className="font-mono text-sm font-bold text-warning">
-                {String(group.segmentNo).padStart(2, '0')}
-              </span>
-              <span className="text-[10px] text-n100">
-                {group.entries.length} 个镜头 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒
-              </span>
-            </header>
-            <div className="divide-y divide-n40">
-              {group.entries.map(entry => {
-                const { item } = entry;
-                const isHighlighted = highlightedItemIds.has(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    ref={(element) => {
-                      if (element) itemRefs.current.set(item.id, element);
-                      else itemRefs.current.delete(item.id);
-                    }}
-                    type="button"
-                    data-storyboard-item-id={item.id}
-                    aria-label={`${group.segmentLabel} ${entry.localShotLabel}`}
-                    aria-pressed={isHighlighted}
-                    onClick={() => onSelectItemIds(new Set([item.id]))}
-                    className={`block w-full border-l-2 p-4 text-left transition-colors ${
-                      isHighlighted
-                        ? 'border-l-primary bg-primary-light/30 ring-1 ring-inset ring-primary/20'
-                        : 'border-l-transparent bg-n0 hover:bg-n20'
-                    }`}
-                  >
-                    <span className={`mb-3 block text-xs font-semibold ${isHighlighted ? 'text-primary' : 'text-n700'}`}>
-                      {entry.localShotLabel}
-                    </span>
-                    <span className="block whitespace-pre-wrap font-mono text-sm leading-7 text-n700">
-                      {getScriptBlock(item)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )) : (
+        {items.length > 0 ? segmentGroups.map(group => {
+          const promptSections = getStoryboardSegmentPromptSections(group);
+          return (
+            <section key={group.key} className="overflow-hidden rounded-md border border-n40 bg-n0 shadow-card">
+              <header className="flex items-center gap-2 border-b border-n40 bg-n20 px-4 py-2.5">
+                <span className="text-xs font-semibold text-n500">分段</span>
+                <span className="font-mono text-sm font-bold text-warning">
+                  {String(group.segmentNo).padStart(2, '0')}
+                </span>
+                <span className="text-[10px] text-n100">
+                  {group.entries.length} 个镜头 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒
+                </span>
+              </header>
+              <div className="space-y-3 p-3">
+                <SegmentPromptCards
+                  segmentNo={group.segmentNo}
+                  visualStyle={promptSections.visualStyle}
+                  stabilityConstraint={promptSections.stabilityConstraint}
+                />
+                {group.entries.map(entry => {
+                  const { item } = entry;
+                  const isHighlighted = highlightedItemIds.has(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      ref={(element) => {
+                        if (element) itemRefs.current.set(item.id, element);
+                        else itemRefs.current.delete(item.id);
+                      }}
+                      type="button"
+                      data-storyboard-item-id={item.id}
+                      aria-label={`${group.segmentLabel} ${entry.localShotLabel}`}
+                      aria-pressed={isHighlighted}
+                      onClick={() => onSelectItemIds(new Set([item.id]))}
+                      className={`block w-full rounded-md border border-n40 border-l-2 p-4 text-left transition-colors ${
+                        isHighlighted
+                          ? 'border-l-primary bg-primary-light/30 ring-1 ring-inset ring-primary/20'
+                          : 'border-l-transparent bg-n20/50 hover:bg-n20'
+                      }`}
+                    >
+                      <span className={`mb-3 block text-xs font-semibold ${isHighlighted ? 'text-primary' : 'text-n700'}`}>
+                        {entry.localShotLabel}
+                      </span>
+                      <span className="block whitespace-pre-wrap font-mono text-sm leading-7 text-n700">
+                        {getScriptBlock(item)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        }) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-n100">
             <FileText className="h-8 w-8 opacity-30" />
             <p className="text-xs">当前镜头设计没有对应的分镜脚本</p>

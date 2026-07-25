@@ -5,8 +5,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { StoryboardScriptColumn } from '../../components/StoryboardScriptColumn';
 import type { ProjectFile } from '../../types';
+import {
+  STABILITY_CONSTRAINT_REFERENCE,
+  VISUAL_STYLE_REFERENCE,
+} from '../../utils/scriptPromptStandards';
 
 const designColumnSource = readFileSync(resolve(__dirname, '../../components/StoryboardColumn.tsx'), 'utf-8');
+const sharedVideoPrompt =
+  `镜头1-1至镜头1-2，【视觉风格】${VISUAL_STYLE_REFERENCE}，【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}。`;
 
 const file = {
   id: 'script-1',
@@ -16,8 +22,9 @@ const file = {
       {
         id: 'shot-1',
         shotNumber: '镜头01',
-        originalText: '镜头01\n主角推门进入办公室。',
+        originalText: `镜头01\n主角推门进入办公室。\n视频提示词：${sharedVideoPrompt}`,
         scriptSegment: '主角进入办公室',
+        videoPrompt: sharedVideoPrompt,
       },
       {
         id: 'shot-2',
@@ -26,6 +33,7 @@ const file = {
         shotNumber: 1,
         originalText: '镜头02\n主角走向桌边。',
         scriptSegment: '主角走向桌边',
+        videoPrompt: sharedVideoPrompt,
       },
     ],
   },
@@ -84,6 +92,21 @@ describe('StoryboardScriptColumn', () => {
 
     expect(screen.getByRole('button', { name: /镜头1-1/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /镜头1-2/ })).toBeInTheDocument();
+  });
+
+  it('renders segment prompts and every shot as separate cards', () => {
+    render(
+      <StoryboardScriptColumn
+        selectedFile={file}
+        highlightedItemIds={new Set()}
+        onSelectItemIds={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('segment-1-visual-style-card')).toHaveTextContent(VISUAL_STYLE_REFERENCE);
+    expect(screen.getByTestId('segment-1-stability-constraint-card')).toHaveTextContent(STABILITY_CONSTRAINT_REFERENCE);
+    expect(screen.getByRole('button', { name: /镜头1-1/ })).not.toHaveTextContent('视频提示词');
+    expect(screen.getByRole('button', { name: /镜头1-1/ })).not.toHaveTextContent('正向稳定约束');
   });
 
   it('keeps linked scrolling inside each independent column', () => {

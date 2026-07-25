@@ -10,6 +10,7 @@ import { SkeletonScreen } from './components/SkeletonScreen';
 import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock, ScriptConversation, ScriptStoryboardVersion } from './types';
 import {
   combineVideoScriptOutputs,
+  ensureVideoScriptPromptLengths,
   formatHierarchicalShotNumber,
   parseHierarchicalShotNumber,
   parseVideoScriptBlocks,
@@ -1790,7 +1791,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   ) => {
     const fileId = selectedFileId;
     if (!fileId) return;
-    const normalizedContent = combineVideoScriptOutputs([content]);
+    const normalizedContent = ensureVideoScriptPromptLengths(combineVideoScriptOutputs([content]));
     const { assertValidVideoScript } = await loadScriptThreeStageService();
     assertValidVideoScript(normalizedContent);
     const parsedItems = parseStoryboardVersionContent(normalizedContent);

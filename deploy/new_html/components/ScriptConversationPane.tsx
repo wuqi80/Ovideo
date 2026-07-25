@@ -37,9 +37,12 @@ import {
 import { estimateCredits, estimateTextTokens } from '../services/creditService';
 import {
   buildStoryboardSegmentGroups,
+  cleanStoryboardShotCardText,
   cleanStoryboardDisplayText,
   mergeStoryboardDisplayItems,
 } from '../utils/storyboardSegments';
+import { parseVideoScriptGroups } from '../utils/scriptPipelineParsers';
+import { SegmentPromptCards } from './SegmentPromptCards';
 
 export const SCRIPT_MODEL_OPTIONS = [
   { value: AiModel.Gemini, label: '化神', runtime: 'Gemini 2.5 Flash', provider: 'google' },
@@ -109,6 +112,10 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
     () => buildStoryboardSegmentGroups(displayItems),
     [displayItems],
   );
+  const promptGroupsByNo = useMemo(
+    () => new Map(parseVideoScriptGroups(fallbackContent).map(group => [group.groupNo, group])),
+    [fallbackContent],
+  );
   if (groups.length === 0) {
     return (
       <div
@@ -125,25 +132,39 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
       className="space-y-4"
       data-testid={version.source === 'legacy' ? `legacy-storyboard-version-body-${version.id}` : undefined}
     >
-      {groups.map(group => (
-        <section key={group.key} className="overflow-hidden rounded-md border border-n40 bg-n0">
-          <header className="flex items-center gap-2 border-b border-n40 bg-n20 px-3 py-2">
-            <span className="text-xs font-semibold text-n500">分段</span>
-            <span className="font-mono text-sm font-bold text-warning">{String(group.segmentNo).padStart(2, '0')}</span>
-            <span className="text-[10px] text-n100">{group.entries.length} 个镜头 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒</span>
-          </header>
-          <div className="divide-y divide-n40">
-            {group.entries.map(entry => (
-              <div key={entry.item.id} className="px-3 py-3">
-                <div className="mb-1 text-xs font-semibold text-primary">{entry.localShotLabel}</div>
-                <div className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-n700">
-                  {entry.item.originalText || entry.item.videoScriptBlock || entry.item.scriptSegment}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+      {groups.map(group => {
+        const promptGroup = promptGroupsByNo.get(group.segmentNo);
+        return (
+          <section key={group.key} className="overflow-hidden rounded-md border border-n40 bg-n0">
+            <header className="flex items-center gap-2 border-b border-n40 bg-n20 px-3 py-2">
+              <span className="text-xs font-semibold text-n500">分段</span>
+              <span className="font-mono text-sm font-bold text-warning">{String(group.segmentNo).padStart(2, '0')}</span>
+              <span className="text-[10px] text-n100">{group.entries.length} 个镜头 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒</span>
+            </header>
+            <div className="space-y-3 p-3">
+              <SegmentPromptCards
+                segmentNo={group.segmentNo}
+                visualStyle={promptGroup?.visualStyle}
+                stabilityConstraint={promptGroup?.stabilityConstraint}
+              />
+              {group.entries.map(entry => (
+                <article
+                  key={entry.item.id}
+                  className="rounded-md border border-n40 bg-n20/60 px-3 py-3"
+                  data-testid={`segment-${group.segmentNo}-shot-${entry.localShotNo}-card`}
+                >
+                  <div className="mb-1 text-xs font-semibold text-primary">{entry.localShotLabel}</div>
+                  <div className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-n700">
+                    {cleanStoryboardShotCardText(
+                      entry.item.originalText || entry.item.videoScriptBlock || entry.item.scriptSegment,
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 };

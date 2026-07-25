@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { StoryboardItem } from '../../types';
 import {
   buildStoryboardSegmentGroups,
+  cleanStoryboardShotCardText,
   cleanStoryboardDisplayText,
   estimateDialogueDurationSeconds,
   getStoryboardItemDurationSeconds,
+  getStoryboardSegmentPromptSections,
   mergeStoryboardDisplayItems,
   normalizeStoryboardItemsForWorkflow,
   serializeStoryboardItemsWithSegments,
@@ -105,6 +107,33 @@ describe('storyboard segment normalization', () => {
     expect(merged[0].originalText).toContain('光影色调：清晨暖光');
     expect(merged[1].originalText).toContain('主角起身走向窗边');
     expect(getStoryboardItemDurationSeconds(merged[1])).toBe(5);
+  });
+
+  it('keeps segment prompts out of the final shot body and exposes explicit prompt sections', () => {
+    const content = [
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：主角推门。',
+      '【视觉风格】古风写实，暖黄暗调，室内光影层次丰富，略带神秘氛围。',
+      '【正向稳定约束】角色、场景、机位和光影全部保持稳定。',
+    ].join('\n');
+    const merged = mergeStoryboardDisplayItems(content, []);
+
+    expect(merged[0].originalText).not.toContain('【视觉风格】');
+    expect(merged[0].originalText).not.toContain('【正向稳定约束】');
+
+    const group = buildStoryboardSegmentGroups([{
+      ...merged[0],
+      videoPrompt: '镜头1-1，【视觉风格】古风写实，暖黄暗调。【正向稳定约束】角色、场景、机位和光影全部保持稳定。',
+    }])[0];
+    expect(getStoryboardSegmentPromptSections(group)).toEqual({
+      visualStyle: '古风写实，暖黄暗调。',
+      stabilityConstraint: '角色、场景、机位和光影全部保持稳定。',
+    });
+    expect(cleanStoryboardShotCardText(
+      `${merged[0].originalText}\n视频提示词：${group.entries[0].item.videoPrompt}`,
+    )).toBe(merged[0].originalText);
   });
 
   it('removes Markdown controls and parses decorated legacy shot headings', () => {

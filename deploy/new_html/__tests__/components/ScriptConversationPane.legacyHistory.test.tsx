@@ -5,6 +5,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ScriptConversationPane, StoryboardVersionBody } from '../../components/ScriptConversationPane';
 import { AiModel, FileStatus, type ProjectFile, type ScriptConversation, type ScriptStoryboardVersion } from '../../types';
+import {
+  STABILITY_CONSTRAINT_REFERENCE,
+  VISUAL_STYLE_REFERENCE,
+} from '../../utils/scriptPromptStandards';
 
 afterEach(cleanup);
 
@@ -20,6 +24,8 @@ describe('ScriptConversationPane legacy history', () => {
       '- **时长（秒）**：3',
       '- **画面描述**：小悟转身看向同事。',
       '- **镜头运动**：缓慢推进。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
     ].join('\n');
     const version: ScriptStoryboardVersion = {
       id: 'ver_legacy_script_yuan',
@@ -64,6 +70,10 @@ describe('ScriptConversationPane legacy history', () => {
     expect(body).toHaveTextContent('镜头1-1');
     expect(body).toHaveTextContent('镜头1-2');
     expect(body.textContent).not.toMatch(/###|\*\*/);
+    expect(screen.getByTestId('segment-1-visual-style-card')).toHaveTextContent(VISUAL_STYLE_REFERENCE);
+    expect(screen.getByTestId('segment-1-stability-constraint-card')).toHaveTextContent(STABILITY_CONSTRAINT_REFERENCE);
+    expect(screen.getByTestId('segment-1-shot-2-card')).not.toHaveTextContent('【视觉风格】');
+    expect(screen.getByTestId('segment-1-shot-2-card')).not.toHaveTextContent('【正向稳定约束】');
   });
 
   it('keeps Yuan-style legacy history visible after collapsing and expanding the reply', () => {

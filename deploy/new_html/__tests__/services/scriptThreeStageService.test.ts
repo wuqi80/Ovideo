@@ -14,7 +14,16 @@ import {
   assertValidVideoScript,
   generateEpisodeVideoScript,
   generateStoryboardDesignForVersion,
+  iterateEpisodeVideoScript,
 } from '../../services/scriptThreeStageService';
+import {
+  countPromptCharacters,
+  MIN_STABILITY_CONSTRAINT_CHARACTERS,
+  MIN_VISUAL_STYLE_CHARACTERS,
+  STABILITY_CONSTRAINT_REFERENCE,
+  VISUAL_STYLE_REFERENCE,
+} from '../../utils/scriptPromptStandards';
+import { parseVideoScriptGroups } from '../../utils/scriptPipelineParsers';
 
 const validGroup = [
   '分段1',
@@ -24,8 +33,8 @@ const validGroup = [
   '镜头1-2',
   '时长（秒）：7',
   '画面描述：主角停在办公桌前。',
-  '【视觉风格】现代都市写实，日光统一。',
-  '【正向稳定约束】角色和场景固定，无字幕、无水印。',
+  `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+  `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
 ].join('\n');
 
 describe('three-stage video script contract', () => {
@@ -45,6 +54,18 @@ describe('three-stage video script contract', () => {
   it('rejects missing stability requirements', () => {
     expect(() => assertValidVideoScript(validGroup.replace(/【正向稳定约束】.*$/, '')))
       .toThrow('缺少独立的视觉风格或正向稳定约束');
+  });
+
+  it('rejects short or inherited segment-level prompts', () => {
+    expect(() => assertValidVideoScript(
+      validGroup.replace(`【视觉风格】${VISUAL_STYLE_REFERENCE}`, '【视觉风格】古风写实'),
+    )).toThrow('视觉风格仅');
+    expect(() => assertValidVideoScript(
+      validGroup.replace(`【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`, '【正向稳定约束】同上'),
+    )).toThrow('必须独立完整');
+    expect(() => assertValidVideoScript(
+      validGroup.replace(`【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`, '【正向稳定约束】角色稳定，无字幕。'),
+    )).toThrow('正向稳定约束仅');
   });
 
   it('rejects duplicate or discontinuous hierarchical numbers', () => {
@@ -80,6 +101,36 @@ describe('three-stage video script contract', () => {
     expect(result.content).toContain('分段2\n镜头2-1');
     expect(result.content).toContain('分段3\n镜头3-1');
     expect(progress.at(-1)).toBe(result.content);
+    parseVideoScriptGroups(result.content).forEach((group) => {
+      expect(countPromptCharacters(group.visualStyle)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
+      expect(countPromptCharacters(group.stabilityConstraint))
+        .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);
+    });
+  });
+
+  it('silently completes short prompts in a revised version before returning it', async () => {
+    aiMocks.aiIterateVideoScript.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：主角推门进入办公室。',
+      '【视觉风格】都市写实。',
+      '【正向稳定约束】人物与场景稳定。',
+    ].join('\n'));
+
+    const result = await iterateEpisodeVideoScript(
+      AiModel.DeepseekChat,
+      '原始剧本',
+      validGroup,
+      '让冲突更强',
+      '',
+    );
+    const [group] = parseVideoScriptGroups(result.content);
+
+    expect(countPromptCharacters(group.visualStyle)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
+    expect(countPromptCharacters(group.stabilityConstraint))
+      .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);
+    expect(result.outputTexts).toEqual([result.content]);
   });
 
   it('runs stage three for a selected version and builds fresh hierarchical cards', async () => {

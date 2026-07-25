@@ -5,6 +5,12 @@
  * 约定：占位符 {originalContent} / {segmentText} / {videoShotBlock} 会被 fillPrompt 替换。
  */
 import type { PromptTemplate } from './scriptPrompts';
+import {
+  MIN_STABILITY_CONSTRAINT_CHARACTERS,
+  MIN_VISUAL_STYLE_CHARACTERS,
+  STABILITY_CONSTRAINT_REFERENCE,
+  VISUAL_STYLE_REFERENCE,
+} from '../utils/scriptPromptStandards';
 
 /** Stage 1：把剧本按情绪单元拆成 4-15 秒原文段落 */
 export const SPLIT_SCRIPT_INTO_SEGMENTS: PromptTemplate = {
@@ -287,6 +293,12 @@ export const GENERATE_VIDEO_SCRIPT_FROM_SEGMENT: PromptTemplate = {
 19. 严禁同场景镜头的人物核心设定、场景参数、光影参数出现表述差异，杜绝模型生成变脸/换装/场景跳变。
 优化补充权限边界·仅可在以下范围内调整：1. 原文单句描述无法用1个镜头完整呈现时，可拆分为2-3个连续镜头；2. 原文剧情出现节奏拖沓、情绪断层、叙事逻辑不顺畅时，可补充不超过2个过渡镜头，补充内容必须服务于原文核心剧情；3. 原文镜头表达无法凸显冲突、放大情绪时，可调整景别、运镜、构图方式，强化剧情张力；4. 所有优化调整必须以还原原文核心为前提，严禁偏离原文剧情。
 20. 必须按故事情节分段。镜头号统一使用“镜头{分段号}-{段内镜头号}”，例如镜头1-1、镜头1-2、镜头2-1；禁止使用会跨段重复的平面镜头号。
+21. 每个分段的【视觉风格】必须针对当前剧情独立编写，以约${MIN_VISUAL_STYLE_CHARACTERS}字为完整度基准；不足时继续补充当前分段的画面质感、色调、光影和氛围细节，禁止写“同上”“沿用上组”或照抄不符合当前题材的示例内容。
+22. 每个分段的【正向稳定约束】必须针对当前分段独立完整输出，以约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准；不足时继续增加约束细节，并覆盖无字幕/水印/Logo、角色与肢体稳定、画面流畅、竖屏构图、机位与空间关系、光影和道具连续性。
+
+字数与细节密度基准（只参考完整度，视觉风格内容必须随当前剧本变化）：
+【视觉风格】${VISUAL_STYLE_REFERENCE}
+【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}
 
 输入示例：
 1-2 日 内 浅浅家
@@ -326,8 +338,8 @@ export const GENERATE_VIDEO_SCRIPT_FROM_SEGMENT: PromptTemplate = {
 画质：（示例：4K，高清，细节丰富，电影质感）
 音效：
 
-【视觉风格】（此组画面的视觉风格）
-【正向稳定约束】（此组画面的正向稳定约束）
+【视觉风格】（此组画面的视觉风格，约${MIN_VISUAL_STYLE_CHARACTERS}字，不足时继续补充细节）
+【正向稳定约束】（此组画面的正向稳定约束，约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字，不足时继续增加约束）
 输出示例：
 分段1
 镜头1-1
@@ -363,7 +375,7 @@ export const GENERATE_VIDEO_SCRIPT_FROM_SEGMENT: PromptTemplate = {
 音效：赵峰逐渐加重的鼻息声，低沉心跳“咚、咚”两声。
 
 【视觉风格】现代都市写实，午后温暖柔光与突转冷峻的视觉张力，胶片感影调。
-【正向稳定约束】无背景音乐，保持无字幕、不要生成Logo、不要生成水印，全程画面流畅丝滑，无跳帧、无抖动、无突兀切换；角色五官、妆容、发型、服饰全程100%固定不变；人物肢体自然正常，无多手指、无肢体扭曲、无穿模；画面焦点始终锁定核心主体；竖屏主体居中，纵向空间充分利用
+【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}
 
 分段2
 镜头2-1
@@ -383,7 +395,7 @@ export const GENERATE_VIDEO_SCRIPT_FROM_SEGMENT: PromptTemplate = {
 音效：急促脚步声，赵峰怒吼声在室内回荡。
 
 【视觉风格】现代都市写实，冲突爆发的冷峻张力，硬光强化愤怒情绪，胶片感影调。
-【正向稳定约束】无背景音乐，保持无字幕、不要生成Logo、不要生成水印，全程画面流畅丝滑，无跳帧、无抖动、无突兀切换；角色五官、妆容、发型、服饰全程100%固定不变；人物肢体自然正常，无多手指、无肢体扭曲、无穿模；画面焦点始终锁定核心主体；竖屏主体居中，纵向空间充分利用。
+【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}
 
 剧本如下，请按要求输入：
 {segmentText}`,
@@ -424,7 +436,7 @@ ${ITERATION_STAGE2_RULES}
 输出前再次检查：
 1. 分段号从1连续递增；镜头号必须统一为镜头1-1、镜头1-2、镜头2-1这种“分段号-段内镜头号”格式，禁止重复。
 2. 每组累计时长不超过15秒且镜头数不超过5个。
-3. 每组都完整包含独立的【视觉风格】和【正向稳定约束】。
+3. 每组都完整包含独立的【视觉风格】和【正向稳定约束】，并分别以约${MIN_VISUAL_STYLE_CHARACTERS}字、约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准；不足时继续增加细节。
 4. 允许按本轮意见调整镜头数量，但不得降低第一步时长密度与第二步稳定性要求。`,
 };
 

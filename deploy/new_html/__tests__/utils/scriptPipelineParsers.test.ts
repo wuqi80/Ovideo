@@ -4,10 +4,16 @@ import {
     parseVideoScriptBlocks,
     parseVideoScriptGroups,
     combineVideoScriptOutputs,
+    ensureVideoScriptPromptLengths,
     findVideoScriptShotBlock,
     parseStoryboardPromptExtractions,
     stripDialogueMarkers,
 } from '../../utils/scriptPipelineParsers';
+import {
+    countPromptCharacters,
+    MIN_STABILITY_CONSTRAINT_CHARACTERS,
+    MIN_VISUAL_STYLE_CHARACTERS,
+} from '../../utils/scriptPromptStandards';
 
 describe('findVideoScriptShotBlock', () => {
     it('matches the full hierarchical number instead of the first segment digit', () => {
@@ -110,6 +116,8 @@ describe('parseVideoScriptBlocks', () => {
         const blocks = parseVideoScriptBlocks(sample);
         expect(blocks[0].rawBlock).toContain('画面描述：三架战机编队');
         expect(blocks[0].rawBlock).toContain('镜头运动：远景');
+        expect(blocks[2].rawBlock).not.toContain('【视觉风格】');
+        expect(blocks[2].rawBlock).not.toContain('【正向稳定约束】');
     });
 
     it('parses 时长（秒）：N', () => {
@@ -169,6 +177,23 @@ describe('parseVideoScriptGroups', () => {
     it('parses hierarchical shot numbers without collapsing the separator', () => {
         const blocks = parseVideoScriptBlocks('分段12\n镜头12-3\n时长（秒）：5');
         expect(blocks[0].shotNo).toBe('镜头12-3');
+    });
+
+    it('silently pads short segment prompts while preserving shot content', () => {
+        const normalized = ensureVideoScriptPromptLengths([
+            '分段1',
+            '镜头1-1',
+            '时长（秒）：15',
+            '画面描述：主角推门进入办公室。',
+            '【视觉风格】都市写实。',
+            '【正向稳定约束】人物与场景稳定。',
+        ].join('\n'));
+        const [group] = parseVideoScriptGroups(normalized);
+
+        expect(group.blocks[0].rawBlock).toContain('主角推门进入办公室');
+        expect(countPromptCharacters(group.visualStyle)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
+        expect(countPromptCharacters(group.stabilityConstraint))
+            .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);
     });
 });
 

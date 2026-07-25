@@ -8,9 +8,16 @@ import type {
 } from '../types';
 import {
   combineVideoScriptOutputs,
+  ensureVideoScriptPromptLengths,
   formatHierarchicalShotNumber,
   parseVideoScriptGroups,
 } from '../utils/scriptPipelineParsers';
+import {
+  countPromptCharacters,
+  isIndependentSegmentPrompt,
+  MIN_STABILITY_CONSTRAINT_CHARACTERS,
+  MIN_VISUAL_STYLE_CHARACTERS,
+} from '../utils/scriptPromptStandards';
 import type { TextTaskContext } from './textTaskContext';
 
 const loadAiModelService = () => import('./aiModelService');
@@ -51,7 +58,11 @@ function assertValidSplitSegments(segments: ScriptSegment[]): void {
   }
 }
 
-export function assertValidVideoScript(content: string, enforceDurationDensity = true): void {
+export function assertValidVideoScript(
+  content: string,
+  enforceDurationDensity = true,
+  enforcePromptLength = true,
+): void {
   const groups = parseVideoScriptGroups(content);
   if (groups.length === 0) throw new Error('第二步未解析出有效分段和镜头');
   const groupDurations: number[] = [];
@@ -70,6 +81,24 @@ export function assertValidVideoScript(content: string, enforceDurationDensity =
     groupDurations.push(totalDuration);
     if (!group.visualStyle || !group.stabilityConstraint) {
       throw new Error(`分段${group.groupNo}缺少独立的视觉风格或正向稳定约束`);
+    }
+    if (!isIndependentSegmentPrompt(group.visualStyle)
+      || !isIndependentSegmentPrompt(group.stabilityConstraint)) {
+      throw new Error(`分段${group.groupNo}的视觉风格和正向稳定约束必须独立完整，禁止使用“同上”`);
+    }
+    if (enforcePromptLength) {
+      const visualStyleLength = countPromptCharacters(group.visualStyle);
+      const stabilityConstraintLength = countPromptCharacters(group.stabilityConstraint);
+      if (visualStyleLength < MIN_VISUAL_STYLE_CHARACTERS) {
+        throw new Error(
+          `分段${group.groupNo}视觉风格仅${visualStyleLength}字，至少需要${MIN_VISUAL_STYLE_CHARACTERS}字`,
+        );
+      }
+      if (stabilityConstraintLength < MIN_STABILITY_CONSTRAINT_CHARACTERS) {
+        throw new Error(
+          `分段${group.groupNo}正向稳定约束仅${stabilityConstraintLength}字，至少需要${MIN_STABILITY_CONSTRAINT_CHARACTERS}字`,
+        );
+      }
     }
     group.blocks.forEach((block, index) => {
       const expected = formatHierarchicalShotNumber(group.groupNo, index + 1);
@@ -103,9 +132,9 @@ async function generateSegmentVideoScript(
 ): Promise<string> {
   const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
   const raw = await aiGenerateVideoScriptFromSegment(model, segment, undefined, taskContext);
-  const content = combineVideoScriptOutputs([raw]);
+  const content = ensureVideoScriptPromptLengths(combineVideoScriptOutputs([raw]));
   assertValidVideoScript(content, false);
-  return raw;
+  return content;
 }
 
 export async function generateEpisodeVideoScript(
@@ -177,13 +206,13 @@ export async function iterateEpisodeVideoScript(
     options.onStream,
     options.taskContext,
   );
-  const content = combineVideoScriptOutputs([raw]);
+  const content = ensureVideoScriptPromptLengths(combineVideoScriptOutputs([raw]));
   assertValidVideoScript(content);
   return {
     segments: [],
     content,
     inputTexts: [originalScript, currentVideoScript, instruction, conversationContext],
-    outputTexts: [raw],
+    outputTexts: [content],
   };
 }
 
@@ -246,7 +275,8 @@ export async function generateStoryboardDesignForVersion(
   } = {},
 ): Promise<StoryboardDesignResult> {
   const groups = parseVideoScriptGroups(videoScript);
-  assertValidVideoScript(videoScript);
+  // 历史版本正文保持不可变；新生成/新编辑版本已在写入前执行完整字数校验。
+  assertValidVideoScript(videoScript, true, false);
   const sourceShotCount = groups.reduce((total, group) => total + group.blocks.length, 0);
   const inputTexts: string[] = [];
   const outputTexts: string[] = [];

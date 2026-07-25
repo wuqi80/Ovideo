@@ -8,6 +8,7 @@ import type {
     VideoScriptGroup,
     ExtractedStoryboardPrompt,
 } from '../types';
+import { ensureSegmentPromptLengths } from './scriptPromptStandards';
 
 let _segCounter = 0;
 function segLocalId(): string {
@@ -88,6 +89,13 @@ export function formatHierarchicalShotNumber(segmentNo: number, localShotNo: num
     return `镜头${segmentNo}-${localShotNo}`;
 }
 
+/** 从单个镜头正文中移除分段级提示词，分段提示词由独立卡片展示和持久化。 */
+export function stripVideoScriptGroupPromptSections(value: string): string {
+    const text = String(value || '');
+    const promptStart = text.search(/^[ \t]*【(?:视觉风格|正向稳定约束)】/m);
+    return (promptStart >= 0 ? text.slice(0, promptStart) : text).trim();
+}
+
 /** 精确提取指定镜头文本块，避免把镜头2-2误识别为镜头2-1。 */
 export function findVideoScriptShotBlock(content: string, shotNumber: string): string | null {
     const parsed = parseHierarchicalShotNumber(shotNumber);
@@ -103,7 +111,7 @@ export function findVideoScriptShotBlock(content: string, shotNumber: string): s
     const remaining = content.slice(bodyStart);
     const nextHeader = /^[ \t]*镜头\s*\d+(?:\s*[-－—]\s*\d+)?/m.exec(remaining);
     const end = nextHeader ? bodyStart + nextHeader.index : content.length;
-    return content.slice(match.index, end).trimEnd();
+    return stripVideoScriptGroupPromptSections(content.slice(match.index, end));
 }
 
 /** 把镜头标题规范化；非镜头标题返回 null。 */
@@ -127,9 +135,9 @@ export function parseVideoScriptBlocks(text: string): VideoScriptBlock[] {
 
     const flush = () => {
         if (!current) return;
-        const rawBlock = current.lines.join('\n').trim();
+        const rawBlock = stripVideoScriptGroupPromptSections(current.lines.join('\n'));
         let durationSec: number | null = null;
-        for (const l of current.lines) {
+        for (const l of rawBlock.split('\n')) {
             const d = parseDurationSec(l);
             if (d !== null && /时长/.test(l)) { durationSec = d; break; }
         }
@@ -248,6 +256,26 @@ export function combineVideoScriptOutputs(outputs: string[]): string {
         }
     }
     return combined.join('\n\n');
+}
+
+/**
+ * 补足新生成/新编辑脚本的分段级提示词长度，并保持镜头正文与分段编号不变。
+ * 缺失字段不会在这里伪造，交由后续校验明确拒绝。
+ */
+export function ensureVideoScriptPromptLengths(content: string): string {
+    const groups = parseVideoScriptGroups(content);
+    if (groups.length === 0) return content.trim();
+
+    return groups.map((group) => {
+        const shotBody = stripVideoScriptGroupPromptSections(group.rawGroup);
+        const prompts = ensureSegmentPromptLengths(group.visualStyle, group.stabilityConstraint);
+        return [
+            `分段${group.groupNo}`,
+            shotBody,
+            prompts.visualStyle ? `【视觉风格】${prompts.visualStyle}` : '',
+            prompts.stabilityConstraint ? `【正向稳定约束】${prompts.stabilityConstraint}` : '',
+        ].filter(Boolean).join('\n\n');
+    }).join('\n\n');
 }
 
 /**

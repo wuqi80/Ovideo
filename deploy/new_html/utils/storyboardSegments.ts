@@ -3,6 +3,7 @@ import { parseStoryboardScript } from './storyboardParser';
 import {
   formatHierarchicalShotNumber,
   parseHierarchicalShotNumber,
+  stripVideoScriptGroupPromptSections,
 } from './scriptPipelineParsers';
 
 const TARGET_SEGMENT_DURATION_SECONDS = 15;
@@ -101,7 +102,7 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
   let currentLines: string[] = [];
 
   const flush = () => {
-    const text = currentLines.join('\n').trim();
+    const text = stripVideoScriptGroupPromptSections(currentLines.join('\n'));
     if (text) blocks.push({ text, segmentNo: currentSegmentNo });
     currentLines = [];
     currentSegmentNo = undefined;
@@ -322,8 +323,34 @@ function extractPromptSection(prompt: string, label: '视觉风格' | '正向稳
     : new RegExp(`【${label}】([\\s\\S]*)$`);
   return String(prompt || '')
     .match(pattern)?.[1]
-    ?.replace(/^[，,：:\s]+|[，,。；;\s]+$/g, '')
+    ?.replace(/^[，,：:\s]+|[，,\s]+$/g, '')
+    .replace(/。{2,}$/g, '。')
     .trim() || '';
+}
+
+export interface StoryboardSegmentPromptSections {
+  visualStyle: string;
+  stabilityConstraint: string;
+}
+
+export function getStoryboardSegmentPromptSections(
+  group: StoryboardSegmentGroup,
+): StoryboardSegmentPromptSections {
+  const explicit = group.entries
+    .map(entry => String(entry.item.videoPrompt || '').trim())
+    .find(prompt => prompt.includes('【视觉风格】') || prompt.includes('【正向稳定约束】')) || '';
+  return {
+    visualStyle: extractPromptSection(explicit, '视觉风格'),
+    stabilityConstraint: extractPromptSection(explicit, '正向稳定约束'),
+  };
+}
+
+export function cleanStoryboardShotCardText(value: string): string {
+  return stripVideoScriptGroupPromptSections(value)
+    .split(/\r?\n/)
+    .filter(line => !/^\s*视频提示词\s*[：:]/.test(line))
+    .join('\n')
+    .trim();
 }
 
 function extractVisualStyleFromShot(item: StoryboardItem): string {
@@ -336,17 +363,18 @@ function extractVisualStyleFromShot(item: StoryboardItem): string {
 }
 
 function buildSharedSegmentVideoPrompt(group: StoryboardSegmentGroup): string {
-  const explicit = group.entries
-    .map(entry => String(entry.item.videoPrompt || '').trim())
-    .find(prompt => prompt.includes('【视觉风格】') || prompt.includes('【正向稳定约束】')) || '';
-  const visualStyle = extractPromptSection(explicit, '视觉风格')
+  const promptSections = getStoryboardSegmentPromptSections(group);
+  const visualStyle = promptSections.visualStyle
     || extractVisualStyleFromShot(group.entries[0]?.item);
-  const stability = extractPromptSection(explicit, '正向稳定约束')
+  const stability = promptSections.stabilityConstraint
     || DEFAULT_SEGMENT_STABILITY;
   const firstShot = formatHierarchicalShotNumber(group.segmentNo, 1);
   const lastShot = formatHierarchicalShotNumber(group.segmentNo, Math.max(1, group.entries.length));
   const shotRange = firstShot === lastShot ? firstShot : `${firstShot}至${lastShot}`;
-  return `${shotRange}，【视觉风格】${visualStyle}，【正向稳定约束】${stability}。`;
+  const normalizedVisualStyle = visualStyle.replace(/[，,；;\s]+$/g, '');
+  const normalizedStability = stability.replace(/[，,。；;！？\s]+$/g, '');
+  const promptSeparator = /[。！？]$/.test(normalizedVisualStyle) ? '' : '，';
+  return `${shotRange}，【视觉风格】${normalizedVisualStyle}${promptSeparator}【正向稳定约束】${normalizedStability}。`;
 }
 
 function writeSharedVideoPrompt(originalText: string, prompt: string): string {
