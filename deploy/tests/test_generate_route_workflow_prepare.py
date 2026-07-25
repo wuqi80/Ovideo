@@ -114,9 +114,9 @@ async def test_generate_route_rejects_invalid_minimax_options_before_enqueue():
     ("generate_request", "expected_workflow", "expected_node_type"),
     [
         (
-            GenerateRequest(task_type="upscale", video_filename="/storage/clip.mp4"),
-            "viedo_upscaler",
-            "SeedVR2",
+                GenerateRequest(task_type="upscale", video_filename="/storage/clip.mp4"),
+                "viedo_upscaler",
+                "SeedVR2VideoUpscaler",
         ),
         (
             GenerateRequest(

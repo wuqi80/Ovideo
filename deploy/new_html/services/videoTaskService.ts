@@ -26,6 +26,30 @@ export interface VideoGenerationOptions {
     minimax_prompt_optimizer?: boolean;
 }
 
+export function buildComfyUIVideoTaskPayload(
+    taskType: 'i2v' | 'morph',
+    imageFilename: string,
+    imageFilenameEnd: string | null,
+    prompt: string,
+    model: VideoModel,
+    generationOptions?: VideoGenerationOptions,
+): Record<string, any> {
+    const payload: Record<string, any> = {
+        task_type: taskType,
+        image_path: imageFilename,
+        prompt,
+        negative_prompt: 'nsfw, bad quality, worst quality',
+        model,
+        duration: generationOptions?.duration ?? 5,
+        seed: -1,
+        priority: 2,
+    };
+    if (imageFilenameEnd) {
+        payload.image_path_end = imageFilenameEnd;
+    }
+    return payload;
+}
+
 function hasAuthHeader(): boolean {
     const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
     return Object.keys(headers).some(key => key.toLowerCase() === 'authorization');
@@ -217,18 +241,14 @@ export async function submitTask(
         };
     } else {
         // ComfyUI工作流（Wan2, 一阶~七阶）
-        requestData = {
-            task_type: taskType,
-            image_path: imageFilename,
-            prompt: prompt,
-            negative_prompt: 'nsfw, bad quality, worst quality',
-            model: model,
-            seed: -1,
-            priority: 2
-        };
-        if (imageFilenameEnd) {
-            requestData.image_path_end = imageFilenameEnd;
-        }
+        requestData = buildComfyUIVideoTaskPayload(
+            taskType,
+            imageFilename,
+            imageFilenameEnd,
+            prompt,
+            model,
+            generationOptions,
+        );
     }
 
     if (entityOptions) {

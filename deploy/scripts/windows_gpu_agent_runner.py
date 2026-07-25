@@ -21,6 +21,8 @@ GPU2_QWEN_MODEL_FILES = {
     "lora": "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
 }
 GPU2_BACKGROUND_REMOVAL_MODEL = "birefnet.safetensors"
+GPU2_IMAGE_UPSCALE_TARGET = 4096
+GPU2_IMAGE_UPSCALE_MAX_RESOLUTION = 4096
 
 GPU2_WAN_MODEL_FILES = {
     "diffusion": r"wan2.1\Wan2_1-I2V-14B-480p_fp8_e4m3fn_scaled_KJ.safetensors",
@@ -37,6 +39,7 @@ GPU2_WAN_FRAMES = 33
 GPU2_WAN_FPS = 16
 GPU2_WAN_BLOCKS_TO_SWAP = 36
 GPU2_WAN_MAX_DURATION_SECONDS = 30.0
+GPU2_WAN_MAX_GENERATION_SECONDS = 15.0
 
 GPU2_QWEN_COMPAT_PREFIXES = (
     "qwen_",
@@ -66,7 +69,7 @@ sys.path.insert(0, str(AGENT_DIR))
 
 
 def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a low-VRAM SeedVR2 image workflow for the 12 GB GPU2 node."""
+    """Build a low-VRAM SeedVR2 image workflow that still satisfies the 4K UI contract."""
     params = task.get("params") or {}
     files = task.get("files") or []
     image_name = str(params.get("image_path") or params.get("uploaded_image") or "").strip()
@@ -84,10 +87,10 @@ def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
             "inputs": {
                 "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
                 "device": "cuda:0",
-                "blocks_to_swap": 0,
+                "blocks_to_swap": 36,
                 "swap_io_components": False,
                 "offload_device": "cpu",
-                "cache_model": True,
+                "cache_model": False,
                 "attention_mode": "sdpa",
             },
         },
@@ -104,7 +107,7 @@ def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "decode_tile_overlap": 64,
                 "tile_debug": "false",
                 "offload_device": "cpu",
-                "cache_model": True,
+                "cache_model": False,
             },
         },
         "4": {
@@ -114,8 +117,8 @@ def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "dit": ["2", 0],
                 "vae": ["3", 0],
                 "seed": seed,
-                "resolution": 1080,
-                "max_resolution": 1920,
+                "resolution": GPU2_IMAGE_UPSCALE_TARGET,
+                "max_resolution": GPU2_IMAGE_UPSCALE_MAX_RESOLUTION,
                 "batch_size": 1,
                 "uniform_batch_size": False,
                 "color_correction": "lab",
@@ -324,7 +327,7 @@ def _gpu2_prompt(task: Dict[str, Any], task_type: str) -> str:
 
 
 def normalize_gpu2_image_dimensions(width: Any, height: Any) -> tuple[int, int]:
-    """Clamp requested image geometry to a low-VRAM, Qwen-compatible range."""
+    """Fit requested geometry into the low-VRAM range without changing its aspect ratio."""
     try:
         normalized_width = int(float(width or 768))
     except (TypeError, ValueError):
@@ -333,12 +336,32 @@ def normalize_gpu2_image_dimensions(width: Any, height: Any) -> tuple[int, int]:
         normalized_height = int(float(height or 768))
     except (TypeError, ValueError):
         normalized_height = 768
-    normalized_width = max(256, min(1024, normalized_width))
-    normalized_height = max(256, min(1024, normalized_height))
+    normalized_width = max(1, normalized_width)
+    normalized_height = max(1, normalized_height)
+    scale = min(1.0, 1024 / max(normalized_width, normalized_height))
+    normalized_width = max(256, int(normalized_width * scale))
+    normalized_height = max(256, int(normalized_height * scale))
     return (
         max(256, (normalized_width // 8) * 8),
         max(256, (normalized_height // 8) * 8),
     )
+
+GPU2_HUMAN_ANGLE_PROMPTS = (
+    "Move the camera forward while preserving the same character and scene.",
+    "Move the camera backward while preserving the same character and scene.",
+    "Move the camera to the left while preserving the same character and scene.",
+    "Move the camera to the right while preserving the same character and scene.",
+    "Move the camera upward while preserving the same character and scene.",
+    "Move the camera downward while preserving the same character and scene.",
+    "Rotate the camera 45 degrees to the left around the same character.",
+    "Rotate the camera 45 degrees to the right around the same character.",
+    "Rotate the camera 90 degrees to the left around the same character.",
+    "Rotate the camera 90 degrees to the right around the same character.",
+    "Change the camera to a top-down view of the same character and scene.",
+    "Change the camera to a low-angle view of the same character and scene.",
+    "Change the camera to a wide-angle view while preserving the same character.",
+    "Change the camera to a close-up view while preserving the same character.",
+)
 
 
 def build_gpu2_matting_workflow(task: Dict[str, Any], *, split: bool) -> Dict[str, Any]:
@@ -395,7 +418,7 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
     those frontend modes so every selectable local image action can complete.
     """
     task_type = str(task.get("task_type") or "qwen_1").strip().lower()
-    image_names = _gpu2_input_image_names(task)[:3]
+    image_names = _gpu2_input_image_names(task)[:6]
     if not image_names:
         raise RuntimeError(f"GPU2 {task_type} task is missing an input image filename")
 
@@ -460,11 +483,40 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         },
     }
 
-    image_links: Dict[str, list[Any]] = {}
+    load_links: list[list[Any]] = []
     for index, image_name in enumerate(image_names, 1):
-        load_id = str(77 + index)
-        scale_id = str(125 + index)
+        load_id = str(200 + index)
         workflow[load_id] = {"class_type": "LoadImage", "inputs": {"image": image_name}}
+        load_links.append([load_id, 0])
+
+    if len(load_links) <= 3:
+        reference_groups = [[link] for link in load_links]
+    elif len(load_links) == 4:
+        reference_groups = [[load_links[0]], [load_links[1]], load_links[2:4]]
+    elif len(load_links) == 5:
+        reference_groups = [[load_links[0]], load_links[1:3], load_links[3:5]]
+    else:
+        reference_groups = [load_links[0:2], load_links[2:4], load_links[4:6]]
+
+    image_links: Dict[str, list[Any]] = {}
+    for index, group in enumerate(reference_groups, 1):
+        source_link = group[0]
+        if len(group) == 2:
+            stitch_id = str(300 + index)
+            workflow[stitch_id] = {
+                "class_type": "ImageStitch",
+                "inputs": {
+                    "image1": group[0],
+                    "image2": group[1],
+                    "direction": "down",
+                    "spacing_color": "white",
+                    "spacing_width": 0,
+                    "match_image_size": True,
+                },
+            }
+            source_link = [stitch_id, 0]
+
+        scale_id = str(400 + index)
         workflow[scale_id] = {
             "class_type": "LayerUtility: ImageScaleByAspectRatio V2",
             "inputs": {
@@ -477,7 +529,7 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "scale_to_side": "longest",
                 "scale_to_length": max(output_width, output_height),
                 "background_color": "#000000",
-                "image": [load_id, 0],
+                "image": source_link,
             },
         }
         image_links[f"image{index}"] = [scale_id, 0]
@@ -496,6 +548,34 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         "class_type": "TextEncodeQwenImageEditPlus",
         "inputs": {"prompt": prompt, **encoder_base},
     }
+    if task_type == "i2i_human":
+        base_seed = _gpu2_seed(task)
+        for index, angle_prompt in enumerate(GPU2_HUMAN_ANGLE_PROMPTS):
+            if index == 0:
+                prompt_id = "111"
+                sampler_id = "3"
+                decode_id = "8"
+                save_id = "60"
+            else:
+                branch_base = 500 + index * 4
+                prompt_id = str(branch_base)
+                sampler_id = str(branch_base + 1)
+                decode_id = str(branch_base + 2)
+                save_id = str(branch_base + 3)
+                workflow[prompt_id] = deepcopy(workflow["111"])
+                workflow[sampler_id] = deepcopy(workflow["3"])
+                workflow[decode_id] = deepcopy(workflow["8"])
+                workflow[save_id] = deepcopy(workflow["60"])
+                workflow[sampler_id]["inputs"]["positive"] = [prompt_id, 0]
+                workflow[decode_id]["inputs"]["samples"] = [sampler_id, 0]
+                workflow[save_id]["inputs"]["images"] = [decode_id, 0]
+
+            workflow[prompt_id]["inputs"]["prompt"] = angle_prompt
+            workflow[sampler_id]["inputs"]["seed"] = base_seed + index
+            workflow[save_id]["inputs"]["filename_prefix"] = (
+                f"MECHA_GPU2_i2i_human_{index + 1:02d}"
+            )
+
     return workflow
 
 
@@ -600,6 +680,33 @@ def is_gpu2_infinitetalk_task(task: Dict[str, Any]) -> bool:
     return task_type in {"voice", "infinitetalk"} or "infinitetalk" in workflow_name
 
 
+def gpu2_wan_duration_seconds(task: Dict[str, Any]) -> float:
+    """Preserve the requested clip duration while bounding pathological requests."""
+    params = _gpu2_task_params(task)
+    try:
+        duration = float(params.get("duration") or 5.0)
+    except (TypeError, ValueError):
+        duration = 5.0
+    return max(1.0, min(GPU2_WAN_MAX_GENERATION_SECONDS, duration))
+
+
+def gpu2_wan_total_frames(task: Dict[str, Any]) -> int:
+    """Wan frame counts must follow 4n+1 while covering the requested duration."""
+    requested = max(1, int(math.ceil(gpu2_wan_duration_seconds(task) * GPU2_WAN_FPS)))
+    return int(math.ceil(max(0, requested - 1) / 4) * 4 + 1)
+
+
+def gpu2_wan_chunk_frame_counts(task: Dict[str, Any]) -> list[int]:
+    """Split long clips into overlapping 33-frame windows for the 12 GB node."""
+    remaining_new_frames = gpu2_wan_total_frames(task) - 1
+    chunks: list[int] = []
+    while remaining_new_frames > 0:
+        new_frames = min(GPU2_WAN_FRAMES - 1, remaining_new_frames)
+        chunks.append(new_frames + 1)
+        remaining_new_frames -= new_frames
+    return chunks or [1]
+
+
 def _gpu2_wan_common_nodes(task: Dict[str, Any]) -> Dict[str, Any]:
     params = _gpu2_task_params(task)
     prompt = str(
@@ -677,7 +784,7 @@ def _gpu2_wan_common_nodes(task: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Build a single-model Wan 2.1 graph that can spill into 128 GB RAM."""
+    """Build a duration-aware Wan 2.1 graph split into low-VRAM frame windows."""
     workflow_name = _gpu2_workflow_name(task)
     task_type = str(task.get("task_type") or "").strip().lower()
     morph = task_type == "morph" or "morph" in workflow_name
@@ -686,6 +793,7 @@ def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError("GPU2 Wan task is missing a start image filename")
     if morph and len(image_names) < 2:
         raise RuntimeError("GPU2 Wan morph task is missing an end image filename")
+    chunk_frames = gpu2_wan_chunk_frame_counts(task)
 
     workflow = _gpu2_wan_common_nodes(task)
     workflow.update(
@@ -706,7 +814,7 @@ def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "inputs": {
                     "width": GPU2_WAN_WIDTH,
                     "height": GPU2_WAN_HEIGHT,
-                    "num_frames": GPU2_WAN_FRAMES,
+                    "num_frames": chunk_frames[0],
                     "noise_aug_strength": 0.0,
                     "start_latent_strength": 1.0,
                     "end_latent_strength": 1.0,
@@ -781,8 +889,56 @@ def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "crop": "center",
             },
         }
-        workflow["22"]["inputs"]["end_image"] = ["27", 0]
         workflow["25"]["inputs"]["filename_prefix"] = "MECHA_GPU2_wan_morph"
+
+    combined_images: list[Any] = ["24", 0]
+    combined_frame_count = chunk_frames[0]
+    final_encode_node = "22"
+    for chunk_index, frame_count in enumerate(chunk_frames[1:], 1):
+        base_id = 30 + (chunk_index - 1) * 10
+        last_frame_id = str(base_id)
+        encode_id = str(base_id + 1)
+        sample_id = str(base_id + 2)
+        decode_id = str(base_id + 3)
+        trim_id = str(base_id + 4)
+        combine_id = str(base_id + 5)
+
+        workflow[last_frame_id] = {
+            "class_type": "ImageFromBatch",
+            "inputs": {
+                "image": combined_images,
+                "batch_index": combined_frame_count - 1,
+                "length": 1,
+            },
+        }
+        workflow[encode_id] = deepcopy(workflow["22"])
+        workflow[encode_id]["inputs"]["num_frames"] = frame_count
+        workflow[encode_id]["inputs"]["start_image"] = [last_frame_id, 0]
+        workflow[encode_id]["inputs"].pop("end_image", None)
+        workflow[sample_id] = deepcopy(workflow["23"])
+        workflow[sample_id]["inputs"]["seed"] = _gpu2_seed(task) + chunk_index
+        workflow[sample_id]["inputs"]["image_embeds"] = [encode_id, 0]
+        workflow[decode_id] = deepcopy(workflow["24"])
+        workflow[decode_id]["inputs"]["samples"] = [sample_id, 0]
+        workflow[trim_id] = {
+            "class_type": "ImageFromBatch",
+            "inputs": {
+                "image": [decode_id, 0],
+                "batch_index": 1,
+                "length": frame_count - 1,
+            },
+        }
+        workflow[combine_id] = {
+            "class_type": "ImageBatch",
+            "inputs": {"image1": combined_images, "image2": [trim_id, 0]},
+        }
+        combined_images = [combine_id, 0]
+        combined_frame_count += frame_count - 1
+        final_encode_node = encode_id
+
+    if morph:
+        workflow[final_encode_node]["inputs"]["end_image"] = ["27", 0]
+    workflow["25"]["inputs"]["images"] = combined_images
     return workflow
 
 

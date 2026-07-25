@@ -429,7 +429,7 @@
   },
   "99": {
     "inputs": {
-      "Value": 5
+      "Value": "{duration}"
     },
     "class_type": "DF_Integer",
     "_meta": {

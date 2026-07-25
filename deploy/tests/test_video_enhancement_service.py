@@ -23,10 +23,14 @@ def test_upscale_workflow_uses_seedvr2_and_preserves_audio():
     workflow = build_video_upscale_workflow("clip.mp4", "1080p", 42)
 
     assert workflow["1"]["inputs"]["video"] == "clip.mp4"
-    assert workflow["2"]["class_type"] == "SeedVR2"
-    assert workflow["2"]["inputs"]["new_resolution"] == 1080
-    assert workflow["2"]["inputs"]["batch_size"] == 1
-    assert workflow["4"]["inputs"]["audio"] == ["1", 2]
+    assert workflow["2"]["class_type"] == "SeedVR2LoadDiTModel"
+    assert workflow["2"]["inputs"]["model"] == "seedvr2_ema_3b_fp8_e4m3fn.safetensors"
+    assert workflow["2"]["inputs"]["blocks_to_swap"] == 0
+    assert workflow["3"]["class_type"] == "SeedVR2LoadVAEModel"
+    assert workflow["4"]["class_type"] == "SeedVR2VideoUpscaler"
+    assert workflow["4"]["inputs"]["resolution"] == 1080
+    assert workflow["4"]["inputs"]["batch_size"] == 1
+    assert workflow["5"]["inputs"]["audio"] == ["1", 2]
 
 
 def test_voice_workflow_replaces_all_runtime_placeholders():
@@ -55,7 +59,8 @@ async def test_prepare_upscale_bypasses_ambiguous_db_workflow_template():
     await prepare_video_upscale_task(data, "Yuan", FakeTaskService())
 
     assert data["workflow_name"] == "viedo_upscaler"
-    assert data["workflow_json"]["2"]["class_type"] == "SeedVR2"
+    assert data["workflow_json"]["2"]["class_type"] == "SeedVR2LoadDiTModel"
+    assert data["workflow_json"]["4"]["inputs"]["resolution"] == 2160
     assert data["agent_files"][0]["param"] == "video_filename"
 
 

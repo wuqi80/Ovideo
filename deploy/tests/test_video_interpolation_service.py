@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from services.video_interpolation_service import (
-    INTERPOLATION_MODEL,
     build_video_interpolation_workflow,
     normalize_target_fps,
     prepare_video_interpolation_task,
@@ -14,12 +13,15 @@ def test_build_video_interpolation_workflow_preserves_audio_and_target_fps():
     workflow = build_video_interpolation_workflow("input.mp4", 60)
 
     assert workflow["1"]["inputs"]["video"] == "input.mp4"
-    assert workflow["1"]["inputs"]["force_rate"] == 30
-    assert workflow["2"]["inputs"]["model_name"] == INTERPOLATION_MODEL
-    assert workflow["3"]["inputs"]["multiplier"] == 2
-    assert workflow["4"]["inputs"]["images"] == ["3", 0]
-    assert workflow["4"]["inputs"]["audio"] == ["1", 2]
-    assert workflow["4"]["inputs"]["frame_rate"] == 60
+    assert workflow["1"]["inputs"]["force_rate"] == 60
+    assert workflow["2"]["class_type"] == "VHS_VideoCombine"
+    assert workflow["2"]["inputs"]["images"] == ["1", 0]
+    assert workflow["2"]["inputs"]["audio"] == ["1", 2]
+    assert workflow["2"]["inputs"]["frame_rate"] == 60
+    assert all(
+        node["class_type"] not in {"FrameInterpolationModelLoader", "FrameInterpolate"}
+        for node in workflow.values()
+    )
 
 
 @pytest.mark.parametrize(
@@ -46,9 +48,9 @@ async def test_prepare_video_interpolation_task_attaches_file_and_workflow():
 
     assert task_data["video_filename"] == "input.mp4"
     assert task_data["target_fps"] == 120
-    assert task_data["workflow_name"] == "video_interpolation_rife_lite"
+    assert task_data["workflow_name"] == "video_interpolation_vhs_portable"
     assert task_data["agent_files"][0]["filename"] == "input.mp4"
-    assert task_data["workflow_json"]["4"]["inputs"]["frame_rate"] == 120
+    assert task_data["workflow_json"]["2"]["inputs"]["frame_rate"] == 120
 
 
 @pytest.mark.asyncio

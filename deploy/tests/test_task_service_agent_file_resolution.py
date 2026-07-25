@@ -28,6 +28,12 @@ class _FileDAO:
             return cls.record
         return None
 
+    @classmethod
+    async def get_file_by_url(cls, file_url):
+        if cls.record and cls.record.get("file_url") == file_url:
+            return cls.record
+        return None
+
 
 class _WorkflowHandler:
     calls = []
@@ -96,6 +102,30 @@ async def test_prepare_resolves_plain_file_id_to_download_url_and_extension(fake
 
 
 @pytest.mark.asyncio
+async def test_prepare_resolves_server_filename_to_authenticated_download_route(fake_dependencies):
+    file_id = "file_9cf3de8c6079"
+    _FileDAO.record = {
+        "file_id": file_id,
+        "file_path": f"persistent_storage/videos/admin/202607/{file_id}.mp4",
+        "file_url": f"/api/files/{file_id}/download",
+        "file_name": "uploaded-video.mp4",
+        "mime_type": "video/mp4",
+    }
+    task_data = {"video_filename": f"{file_id}.mp4"}
+
+    await TaskService(_Redis())._prepare_for_agent("interpolate", task_data, "admin")
+
+    assert task_data["video_filename"] == f"{file_id}.mp4"
+    assert task_data["agent_files"] == [
+        {
+            "param": "video_filename",
+            "filename": f"{file_id}.mp4",
+            "url": f"/api/files/{file_id}/download",
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_prepare_fallback_adds_extension_to_storage_url(fake_dependencies):
     task_data = {"image_path": "legacy_upload", "prompt": "x"}
 
@@ -117,6 +147,29 @@ async def test_prepare_adds_extension_to_extensionless_storage_url(fake_dependen
     assert agent_file["filename"] == "file_d0b2371a362b.png"
     assert agent_file["url"] == "/storage/image/admin/202607/file_d0b2371a362b.png"
     assert task_data["uploaded_image"] == "file_d0b2371a362b.png"
+
+
+@pytest.mark.asyncio
+async def test_prepare_resolves_storage_url_to_authenticated_download_route(fake_dependencies):
+    file_id = "file_video123456"
+    storage_url = "/storage/video/admin/202607/generated.mp4"
+    _FileDAO.record = {
+        "file_id": file_id,
+        "file_path": "persistent_storage/video/admin/202607/generated.mp4",
+        "file_url": storage_url,
+        "file_name": "generated.mp4",
+        "mime_type": "video/mp4",
+    }
+    task_data = {"video_filename": storage_url}
+
+    await TaskService(_Redis())._prepare_for_agent("interpolate", task_data, "admin")
+
+    assert task_data["video_filename"] == "generated.mp4"
+    assert task_data["agent_files"][0] == {
+        "param": "video_filename",
+        "filename": "generated.mp4",
+        "url": f"/api/files/{file_id}/download",
+    }
 
 
 @pytest.mark.asyncio

@@ -41,6 +41,7 @@ def build_video_upscale_workflow(
         normalized_seed = -1
     if normalized_seed < 0:
         normalized_seed = random.randint(100000, 999999)
+    target_resolution = normalize_video_resolution(resolution)
 
     return {
         "1": {
@@ -57,31 +58,57 @@ def build_video_upscale_workflow(
             },
         },
         "2": {
-            "class_type": "SeedVR2",
+            "class_type": "SeedVR2LoadDiTModel",
             "inputs": {
-                "model": "seedvr2_ema_7b_sharp_fp16.safetensors",
-                "seed": normalized_seed,
-                "new_resolution": normalize_video_resolution(resolution),
-                "batch_size": 1,
-                "preserve_vram": True,
-                "images": ["1", 0],
-                "block_swap_config": ["3", 0],
+                "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+                "device": "cuda:0",
+                "blocks_to_swap": 0,
+                "swap_io_components": False,
+                "offload_device": "cpu",
+                "cache_model": True,
+                "attention_mode": "sdpa",
             },
         },
         "3": {
-            "class_type": "SeedVR2BlockSwap",
+            "class_type": "SeedVR2LoadVAEModel",
             "inputs": {
-                "blocks_to_swap": 0,
-                "use_non_blocking": True,
-                "offload_io_components": True,
-                "cache_model": False,
-                "enable_debug": False,
+                "model": "ema_vae_fp16.safetensors",
+                "device": "cuda:0",
+                "encode_tiled": True,
+                "encode_tile_size": 1024,
+                "encode_tile_overlap": 128,
+                "decode_tiled": True,
+                "decode_tile_size": 1024,
+                "decode_tile_overlap": 128,
+                "tile_debug": "false",
+                "offload_device": "cpu",
+                "cache_model": True,
             },
         },
         "4": {
+            "class_type": "SeedVR2VideoUpscaler",
+            "inputs": {
+                "image": ["1", 0],
+                "dit": ["2", 0],
+                "vae": ["3", 0],
+                "seed": normalized_seed,
+                "resolution": target_resolution,
+                "max_resolution": max(1920, target_resolution),
+                "batch_size": 1,
+                "uniform_batch_size": False,
+                "color_correction": "lab",
+                "temporal_overlap": 0,
+                "prepend_frames": 0,
+                "input_noise_scale": 0.0,
+                "latent_noise_scale": 0.0,
+                "offload_device": "cpu",
+                "enable_debug": False,
+            },
+        },
+        "5": {
             "class_type": "VHS_VideoCombine",
             "inputs": {
-                "images": ["2", 0],
+                "images": ["4", 0],
                 "audio": ["1", 2],
                 "frame_rate": 25,
                 "loop_count": 0,

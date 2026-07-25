@@ -87,6 +87,11 @@ GPU2_OPERATION_PROMPTS = {
         "Use six distinct cinematic shots in a 3 by 2 grid with consistent characters and scene design. "
         "Do not add captions, labels, or borders."
     ),
+    "i2i_around": (
+        "Generate a coherent orbiting-camera view of the same subject and scene. "
+        "Preserve identity, clothing, geometry, lighting, and background layout while applying the "
+        "requested camera direction. Do not merely copy the input image."
+    ),
 }
 
 
@@ -318,11 +323,14 @@ def create_generation_router(
             await _authorize(request, username, [request.image_filename])
             task_data = {
                 "image_path": request.image_filename,
-                "prompt": request.prompt,
+                "prompt": merge_gpu2_operation_prompt("i2i_around", request.prompt),
                 "seed": request.seed,
+                "gpu2_operation": "i2i_around",
+                "requested_workflow_type": "i2i_around",
             }
             _attach_entity_fields(task_data, request)
-            task_id = await task_service_module.get().submit("i2i_around", task_data, username)
+            effective_task_type = qwen_fallback_task_type(1)
+            task_id = await task_service_module.get().submit(effective_task_type, task_data, username)
             logger.info(
                 "✅ 创建全景角度生成任务: %s (图片: %s, 提示词: %s...)",
                 task_id,
@@ -333,6 +341,9 @@ def create_generation_router(
             return {
                 "success": True,
                 "task_id": task_id,
+                "workflow_type": effective_task_type,
+                "requested_workflow_type": "i2i_around",
+                "fallback_applied": True,
                 "message": "全景角度生成任务已提交",
             }
 

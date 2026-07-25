@@ -162,8 +162,8 @@
         0
       ],
       "video_latent": [
-        "190",
-        0
+        "232",
+        2
       ]
     },
     "class_type": "LTXVConcatAVLatent"
@@ -292,8 +292,8 @@
         1
       ],
       "video_latent": [
-        "192",
-        0
+        "233",
+        2
       ]
     },
     "class_type": "LTXVConcatAVLatent"
@@ -331,11 +331,11 @@
         0
       ],
       "negative": [
-        "204",
+        "232",
         1
       ],
       "positive": [
-        "204",
+        "232",
         0
       ]
     },
@@ -586,7 +586,7 @@
         0
       ],
       "format": "auto",
-      "filename_prefix": "MECHA_ltx_i2v"
+      "filename_prefix": "MECHA_ltx_morph"
     },
     "class_type": "SaveVideo"
   },
@@ -604,11 +604,11 @@
       "steps": 4,
       "denoise": 0.35,
       "negative": [
-        "172",
+        "233",
         1
       ],
       "positive": [
-        "172",
+        "233",
         0
       ],
       "scheduler": "simple",
@@ -681,5 +681,91 @@
       "offload_model": true
     },
     "class_type": "VRAMCleanup"
+  },
+  "229": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{image_end}"
+    },
+    "_meta": {
+      "title": "Load end frame"
+    }
+  },
+  "230": {
+    "class_type": "ResizeImageMaskNode",
+    "inputs": {
+      "input": [
+        "229",
+        0
+      ],
+      "resize_type": "scale dimensions",
+      "scale_method": "lanczos",
+      "resize_type.crop": "center",
+      "resize_type.width": 1280,
+      "resize_type.height": 720
+    },
+    "_meta": {
+      "title": "Resize end frame"
+    }
+  },
+  "232": {
+    "class_type": "LTXVAddGuide",
+    "inputs": {
+      "positive": [
+        "204",
+        0
+      ],
+      "negative": [
+        "204",
+        1
+      ],
+      "vae": [
+        "199",
+        2
+      ],
+      "latent": [
+        "190",
+        0
+      ],
+      "image": [
+        "230",
+        0
+      ],
+      "frame_idx": -1,
+      "strength": 1.0
+    },
+    "_meta": {
+      "title": "Add low-resolution end-frame guide"
+    }
+  },
+  "233": {
+    "class_type": "LTXVAddGuide",
+    "inputs": {
+      "positive": [
+        "172",
+        0
+      ],
+      "negative": [
+        "172",
+        1
+      ],
+      "vae": [
+        "199",
+        2
+      ],
+      "latent": [
+        "192",
+        0
+      ],
+      "image": [
+        "230",
+        0
+      ],
+      "frame_idx": -1,
+      "strength": 1.0
+    },
+    "_meta": {
+      "title": "Add high-resolution end-frame guide"
+    }
   }
 }

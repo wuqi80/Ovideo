@@ -18,6 +18,7 @@ import time
 import requests
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +28,9 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-07-24-agent-control-completion-recovery-v1"
+AGENT_VERSION = "2026-07-25-agent-control-completion-recovery-tls-v2"
+PLATFORM_DOWNLOAD_RETRIES = 3
+PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 
 
 class ComfyUIAgent:
@@ -58,6 +61,57 @@ class ComfyUIAgent:
 
     def _headers(self):
         return {"Authorization": f"Bearer {self.token}"}
+
+    def _is_platform_download_url(self, url):
+        """Only permit a TLS fallback for authenticated files on this backend."""
+        target = urlsplit(str(url or ""))
+        server = urlsplit(self.server_url)
+        target_port = target.port or (443 if target.scheme == "https" else 80)
+        server_port = server.port or (443 if server.scheme == "https" else 80)
+        return (
+            target.scheme == "https"
+            and target.hostname == server.hostname
+            and target_port == server_port
+            and any(target.path.startswith(prefix) for prefix in PLATFORM_DOWNLOAD_PATH_PREFIXES)
+        )
+
+    def _get_platform_download(self, url, *, headers, timeout, stream=False):
+        """Retry transient downloads; narrowly recover a broken same-origin certificate."""
+        last_error = None
+        for attempt in range(1, PLATFORM_DOWNLOAD_RETRIES + 1):
+            try:
+                return requests.get(
+                    url,
+                    headers=headers,
+                    timeout=timeout,
+                    stream=stream,
+                )
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as exc:
+                last_error = exc
+                logger.warning(
+                    "Platform download attempt %s/%s failed for %s: %s",
+                    attempt,
+                    PLATFORM_DOWNLOAD_RETRIES,
+                    urlsplit(url).path,
+                    exc,
+                )
+
+        if isinstance(last_error, requests.exceptions.SSLError) and self._is_platform_download_url(url):
+            logger.error(
+                "Platform TLS verification failed repeatedly for %s; "
+                "retrying this same-origin file once without certificate verification",
+                urlsplit(url).path,
+            )
+            return requests.get(
+                url,
+                headers=headers,
+                timeout=timeout,
+                stream=stream,
+                verify=False,
+            )
+        if last_error:
+            raise last_error
+        raise RuntimeError(f"Platform download failed without an error: {url}")
 
     def _get_system_info(self):
         info = {
@@ -323,7 +377,11 @@ class ComfyUIAgent:
             f"{current_path.name}.bak.{time.strftime('%Y%m%d%H%M%S')}"
         )
 
-        resp = requests.get(script_url, headers=self._headers(), timeout=60)
+        resp = self._get_platform_download(
+            script_url,
+            headers=self._headers(),
+            timeout=60,
+        )
         resp.raise_for_status()
         content = resp.text
         if "class ComfyUIAgent" not in content or "AGENT_VERSION" not in content:
@@ -468,7 +526,12 @@ class ComfyUIAgent:
         local_path = local_dir / filename
         headers = self._headers() if self.server_url and not url.startswith("http://127.0.0.1") else {}
         full_url = url if url.startswith("http") else f"{self.server_url}{url}"
-        resp = requests.get(full_url, headers=headers, timeout=120, stream=True)
+        resp = self._get_platform_download(
+            full_url,
+            headers=headers,
+            timeout=120,
+            stream=True,
+        )
         resp.raise_for_status()
         local_path.write_bytes(resp.content)
         logger.info(f"Downloaded {full_url} -> {local_path} ({len(resp.content)} bytes)")

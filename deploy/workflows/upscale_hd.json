@@ -1,58 +1,260 @@
 {
-  "1": {
-    "inputs": {
-      "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
-      "seed": "{seed_0}",
-      "new_resolution": 1088,
-      "batch_size": 125,
-      "preserve_vram": 1,
-      "images": [
-        "10",
-        0
-      ],
-      "block_swap_config": [
-        "9",
-        0
-      ]
-    },
-    "class_type": "SeedVR2",
+  "15": {
     "_meta": {
-      "title": "SeedVR2 Video Upscaler"
-    }
-  },
-  "9": {
-    "inputs": {
-      "blocks_to_swap": 20,
-      "use_non_blocking": true,
-      "offload_io_components": false,
-      "cache_model": false,
-      "enable_debug": false
+      "title": "加载图像"
     },
-    "class_type": "SeedVR2BlockSwap",
-    "_meta": {
-      "title": "SeedVR2 BlockSwap Config"
-    }
-  },
-  "10": {
     "inputs": {
       "image": "{image}"
     },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "加载图像"
-    }
+    "class_type": "LoadImage"
   },
-  "11": {
+  "100": {
+    "_meta": {
+      "title": "保存图像"
+    },
     "inputs": {
-      "filename_prefix": "ComfyUI",
       "images": [
-        "1",
+        "122",
+        0
+      ],
+      "filename_prefix": "MECHA_upscale_hd"
+    },
+    "class_type": "SaveImage"
+  },
+  "103": {
+    "_meta": {
+      "title": "4K target multiplier"
+    },
+    "inputs": {
+      "value": 4
+    },
+    "class_type": "INTConstant"
+  },
+  "108": {
+    "_meta": {
+      "title": "SeedVR2 Video Upscaler (v2.5.24)"
+    },
+    "inputs": {
+      "dit": [
+        "109",
+        0
+      ],
+      "vae": [
+        "110",
+        0
+      ],
+      "seed": "{seed_0}",
+      "image": [
+        "118",
+        0
+      ],
+      "batch_size": 1,
+      "resolution": [
+        "119",
+        0
+      ],
+      "enable_debug": false,
+      "max_resolution": [
+        "112",
+        0
+      ],
+      "offload_device": "cpu",
+      "prepend_frames": 0,
+      "color_correction": "lab",
+      "temporal_overlap": 0,
+      "input_noise_scale": 0,
+      "latent_noise_scale": 0,
+      "uniform_batch_size": false
+    },
+    "class_type": "SeedVR2VideoUpscaler"
+  },
+  "109": {
+    "_meta": {
+      "title": "SeedVR2 (Down)Load DiT Model"
+    },
+    "inputs": {
+      "model": "seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+      "device": "cuda:0",
+      "cache_model": false,
+      "attention_mode": "sdpa",
+      "blocks_to_swap": 36,
+      "offload_device": "cpu",
+      "swap_io_components": false
+    },
+    "class_type": "SeedVR2LoadDiTModel"
+  },
+  "110": {
+    "_meta": {
+      "title": "SeedVR2 (Down)Load VAE Model"
+    },
+    "inputs": {
+      "model": "ema_vae_fp16.safetensors",
+      "device": "cuda:0",
+      "tile_debug": "false",
+      "cache_model": false,
+      "decode_tiled": true,
+      "encode_tiled": true,
+      "offload_device": "cpu",
+      "decode_tile_size": 1024,
+      "encode_tile_size": 1024,
+      "decode_tile_overlap": 128,
+      "encode_tile_overlap": 128
+    },
+    "class_type": "SeedVR2LoadVAEModel"
+  },
+  "112": {
+    "_meta": {
+      "title": "Math Expression"
+    },
+    "inputs": {
+      "a": [
+        "103",
+        0
+      ],
+      "expression": "a*1024"
+    },
+    "class_type": "MathExpression|pysssss"
+  },
+  "114": {
+    "_meta": {
+      "title": "按宽高比缩放 V2"
+    },
+    "inputs": {
+      "fit": "fill",
+      "image": [
+        "15",
+        0
+      ],
+      "method": "lanczos",
+      "aspect_ratio": "original",
+      "scale_to_side": "longest",
+      "scale_to_length": [
+        "112",
+        0
+      ],
+      "background_color": "#000000",
+      "round_to_multiple": "None",
+      "proportional_width": 1,
+      "proportional_height": 1
+    },
+    "class_type": "LayerUtility: ImageScaleByAspectRatio V2"
+  },
+  "115": {
+    "_meta": {
+      "title": "TTP_Tile_image_size"
+    },
+    "inputs": {
+      "image": [
+        "114",
+        0
+      ],
+      "overlap_rate": 0.1,
+      "width_factor": 2,
+      "height_factor": 2
+    },
+    "class_type": "TTP_Tile_image_size"
+  },
+  "116": {
+    "_meta": {
+      "title": "TTP_Image_Tile_Batch"
+    },
+    "inputs": {
+      "image": [
+        "114",
+        0
+      ],
+      "tile_width": [
+        "115",
+        0
+      ],
+      "tile_height": [
+        "115",
+        1
+      ]
+    },
+    "class_type": "TTP_Image_Tile_Batch"
+  },
+  "117": {
+    "_meta": {
+      "title": "按宽高比缩放 V2"
+    },
+    "inputs": {
+      "fit": "fill",
+      "image": [
+        "116",
+        0
+      ],
+      "method": "lanczos",
+      "aspect_ratio": "original",
+      "scale_to_side": "None",
+      "scale_to_length": 1024,
+      "background_color": "#000000",
+      "round_to_multiple": "16",
+      "proportional_width": 1,
+      "proportional_height": 1
+    },
+    "class_type": "LayerUtility: ImageScaleByAspectRatio V2"
+  },
+  "118": {
+    "_meta": {
+      "title": "Image Batch to Image List"
+    },
+    "inputs": {
+      "image": [
+        "117",
         0
       ]
     },
-    "class_type": "SaveImage",
+    "class_type": "ImpactImageBatchToImageList"
+  },
+  "119": {
     "_meta": {
-      "title": "保存图像"
-    }
+      "title": "图像尺寸（边）"
+    },
+    "inputs": {
+      "side": "Shortest",
+      "image": [
+        "117",
+        0
+      ]
+    },
+    "class_type": "easy imageSizeBySide"
+  },
+  "120": {
+    "_meta": {
+      "title": "Image List to Image Batch"
+    },
+    "inputs": {
+      "images": [
+        "108",
+        0
+      ]
+    },
+    "class_type": "ImageListToImageBatch"
+  },
+  "122": {
+    "_meta": {
+      "title": "TTP_Image_Assy"
+    },
+    "inputs": {
+      "tiles": [
+        "120",
+        0
+      ],
+      "padding": 128,
+      "grid_size": [
+        "116",
+        3
+      ],
+      "positions": [
+        "116",
+        1
+      ],
+      "original_size": [
+        "116",
+        2
+      ]
+    },
+    "class_type": "TTP_Image_Assy"
   }
 }

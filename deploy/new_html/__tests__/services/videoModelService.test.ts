@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getModelDisplayName,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
   normalizeMiniMaxVideoParams,
 } from '../../services/videoModelService';
+
+describe('GPU runtime model label', () => {
+  it('shows the actual node-specific engines behind the stable Wan2 operation ID', () => {
+    expect(getModelDisplayName('Wan2')).toBe('GPU视频（GPU1·LTX / GPU2·Wan）');
+  });
+});
 
 describe('inferSeedanceTaskType', () => {
   it('treats a single first frame as image-to-video', () => {

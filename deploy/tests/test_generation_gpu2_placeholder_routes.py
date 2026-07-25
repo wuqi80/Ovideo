@@ -5,6 +5,7 @@ import pytest
 from routers.generation import create_generation_router
 from schemas.generation import (
     AngleAdjustRequest,
+    AroundAngleRequest,
     AutoStoryboardRequest,
     ComfyUIWorkflowRequest,
     HumanMultiAngleRequest,
@@ -86,6 +87,31 @@ async def test_human_multi_angle_uses_defined_identity_preserving_prompt():
     assert data["image_path"] == "character.png"
     assert "Preserve identity" in data["prompt"]
     assert data["preferred_node_id"] == "gpu-node-2"
+
+
+@pytest.mark.asyncio
+async def test_around_angle_uses_executable_single_image_qwen_workflow():
+    router, service = build_router_and_service()
+    request = AroundAngleRequest(
+        image_filename="character.png",
+        prompt="rotate to the rear-right quarter view",
+        preferred_agent_id="agent-gpu1",
+    )
+
+    response = await endpoint_for(router, "/api/generate/around-angle")(
+        request,
+        username="tester",
+    )
+
+    task_type, data, _ = service.calls[0]
+    assert task_type == "qwen_1"
+    assert data["image_path"] == "character.png"
+    assert data["gpu2_operation"] == "i2i_around"
+    assert data["requested_workflow_type"] == "i2i_around"
+    assert "rear-right quarter view" in data["prompt"]
+    assert "Do not merely copy" in data["prompt"]
+    assert data["preferred_agent_id"] == "agent-gpu1"
+    assert response["fallback_applied"] is True
 
 
 @pytest.mark.asyncio

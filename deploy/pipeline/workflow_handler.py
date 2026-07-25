@@ -7,6 +7,7 @@ import json
 import random
 import logging
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -39,6 +40,15 @@ class WorkflowHandler:
     def get_workflow(self, name: str) -> Optional[Dict]:
         """获取工作流 — 优先从磁盘读取最新版本，内存缓存作 fallback"""
         file_path = self.workflow_dir / f"{name}.json"
+        if not file_path.is_file():
+            file_path = next(
+                (
+                    candidate
+                    for candidate in self.workflow_dir.glob("*.json")
+                    if candidate.stem.lower() == str(name or "").lower()
+                ),
+                file_path,
+            )
         if file_path.is_file():
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -52,7 +62,7 @@ class WorkflowHandler:
     def extract_executable_nodes(self, workflow: Dict, workflow_name: str) -> Dict:
         """Return a ComfyUI prompt graph without template metadata entries."""
         cleaned = {
-            str(node_id): node
+            str(node_id): deepcopy(node)
             for node_id, node in workflow.items()
             if isinstance(node, dict)
             and node.get('class_type')
@@ -113,6 +123,7 @@ class WorkflowHandler:
             '"{prompt}"': json.dumps(params.get('prompt', '')),  # 保持字符串格式
             '"{negative_prompt}"': json.dumps(params.get('negative_prompt', '')),
             '"{prompt_AU}"': json.dumps(params.get('prompt_AU', '')),  # 配音提示词
+            '"{duration}"': str(params.get('duration', 5)),
             '"{seed}"': str(params.get('seed')),  # 替换为数字（移除引号）
             '"{seed_0}"': str(params.get('seed_0', params.get('seed', 123456))),  # seed_0
             '"{seed_1}"': str(params.get('seed_1')),  # 替换为数字（移除引号）
@@ -150,6 +161,96 @@ class WorkflowHandler:
         image_values = {k: v[:50] if v and len(v) > 50 else v for k, v in params.items() if 'image' in k}
         logger.info(f"✅ 替换占位符完成: prompt={bool(params.get('prompt'))}, seed={params.get('seed')}, images={image_values}")
         return result
+
+    @staticmethod
+    def normalize_video_duration(value: Any) -> float | int:
+        """Return a Wan-compatible duration without emitting invalid JSON."""
+        try:
+            duration = float(value)
+        except (TypeError, ValueError):
+            duration = 5.0
+        duration = max(1.0, min(15.0, duration))
+        return int(duration) if duration.is_integer() else duration
+
+    @staticmethod
+    def apply_gpu1_qwen_model_paths(
+        workflow: Dict[str, Any],
+        workflow_name: str,
+    ) -> Dict[str, Any]:
+        """Normalize legacy Qwen paths to the model inventory verified on GPU1."""
+        normalized_name = str(workflow_name or '').lower()
+        if not (
+            normalized_name.startswith('qwen_')
+            or normalized_name.startswith('qwen_lora_')
+        ):
+            return workflow
+
+        replacements = {
+            'Qwen_Image_Edit_2509_bf16.safetensors':
+                'qwen/qwen_image_edit_2509_bf16.safetensors',
+            'Qwen-Image-Lightning-4steps-V2.0.safetensors':
+                'Qwen/Qwen-Image-Lightning-4steps-V2.0.safetensors',
+        }
+        for node in workflow.values():
+            if not isinstance(node, dict):
+                continue
+            inputs = node.get('inputs')
+            if not isinstance(inputs, dict):
+                continue
+            for key in ('unet_name', 'lora_name'):
+                current = inputs.get(key)
+                if current in replacements:
+                    inputs[key] = replacements[current]
+        return workflow
+
+    @staticmethod
+    def apply_gpu1_upscale_contract(
+        workflow: Dict[str, Any],
+        workflow_name: str,
+    ) -> Dict[str, Any]:
+        """Keep the verified tiled GPU1 graph while enforcing the UI's 4K target."""
+        if str(workflow_name or '').lower() != 'upscale_hd':
+            return workflow
+        for node in workflow.values():
+            if not isinstance(node, dict) or node.get('class_type') != 'MathExpression|pysssss':
+                continue
+            inputs = node.get('inputs') or {}
+            if str(inputs.get('expression') or '').replace(' ', '') != 'a*1024':
+                continue
+            constant_link = inputs.get('a')
+            if not isinstance(constant_link, list) or not constant_link:
+                continue
+            constant = workflow.get(str(constant_link[0]))
+            if isinstance(constant, dict) and constant.get('class_type') == 'INTConstant':
+                constant.setdefault('inputs', {})['value'] = 4
+        return workflow
+
+    @staticmethod
+    def apply_ltx_duration_contract(
+        workflow: Dict[str, Any],
+        workflow_name: str,
+        duration: Any,
+    ) -> Dict[str, Any]:
+        """Project the requested seconds into the verified LTX frame-count graph."""
+        if str(workflow_name or '').lower() not in {'ltx_i2v', 'ltx_morph'}:
+            return workflow
+        normalized_duration = max(
+            1,
+            int(round(float(WorkflowHandler.normalize_video_duration(duration)))),
+        )
+        for node in workflow.values():
+            if not isinstance(node, dict) or node.get('class_type') != 'MathExpression|pysssss':
+                continue
+            inputs = node.get('inputs') or {}
+            if str(inputs.get('expression') or '').replace(' ', '') != 'a*b+1':
+                continue
+            duration_link = inputs.get('a')
+            if not isinstance(duration_link, list) or not duration_link:
+                continue
+            duration_node = workflow.get(str(duration_link[0]))
+            if isinstance(duration_node, dict) and duration_node.get('class_type') == 'PrimitiveInt':
+                duration_node.setdefault('inputs', {})['value'] = normalized_duration
+        return workflow
 
     @staticmethod
     def apply_output_dimensions(
@@ -198,7 +299,10 @@ class WorkflowHandler:
 
         # 🆕 模型到工作流前缀的映射
         model_workflow_prefix = {
-            'Wan2': 'wan2',
+            # Wan2 remains the stable frontend operation ID. GPU1 executes the
+            # verified LTX graph; GPU2 replaces it with its isolated low-VRAM
+            # Wan graph inside windows_gpu_agent_runner.py.
+            'Wan2': 'ltx',
             '一阶': 'smooth',
             '二阶': 'dawasi',
             '三阶': 'hunyuan',
@@ -319,6 +423,7 @@ class WorkflowHandler:
             'prompt': task_data.get('prompt', ''),
             'negative_prompt': task_data.get('negative_prompt', ''),
             'prompt_AU': task_data.get('prompt_AU', ''),
+            'duration': self.normalize_video_duration(task_data.get('duration')),
             'seed': task_data.get('seed', -1),
             'seed_0': task_data.get('seed_0', task_data.get('seed', random.randint(100000, 999999))),  # 6位随机数
             'seed_1': task_data.get('seed', -1),  # 默认使用相同seed
@@ -348,6 +453,9 @@ class WorkflowHandler:
         if not params.get('image') and params.get('image_1'):
             params['image'] = params['image_1']
             logger.info(f"🔧 单图兜底: image = image_1 = {params['image_1']}")
+        if params.get('image') and not params.get('image_1'):
+            params['image_1'] = params['image']
+            logger.info(f"🔧 单图 Qwen 兜底: image_1 = image = {params['image']}")
         
         # 🆕 处理融合工作流的图片参数 (image_BK, image_HU, image_MB)
         if 'uploaded_image_BK' in task_data:
@@ -391,6 +499,13 @@ class WorkflowHandler:
             params['last_frame_image'] = task_data['uploaded_image_end']
         
         # 替换占位符，并将前端选择的比例/档位落实到 GPU 图像工作流。
+        workflow = self.apply_gpu1_qwen_model_paths(workflow, workflow_name)
+        workflow = self.apply_gpu1_upscale_contract(workflow, workflow_name)
+        workflow = self.apply_ltx_duration_contract(
+            workflow,
+            workflow_name,
+            params['duration'],
+        )
         rendered_workflow = self.replace_placeholders(workflow, params)
         return self.apply_output_dimensions(
             rendered_workflow,
@@ -414,4 +529,3 @@ def get_workflow_handler() -> WorkflowHandler:
         _workflow_handler = WorkflowHandler(str(workflow_dir))
         logger.info(f"📂 工作流目录（绝对路径）: {workflow_dir}")
     return _workflow_handler
-

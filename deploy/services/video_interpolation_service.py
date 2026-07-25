@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any, Dict
 
 
-INTERPOLATION_MODEL = "rife_v4.25_lite.safetensors"
 SUPPORTED_TARGET_FPS = (30, 60, 120)
 
 
@@ -21,19 +20,24 @@ def build_video_interpolation_workflow(
     video_filename: str,
     target_fps: Any = 60,
 ) -> Dict[str, Any]:
-    """Build a portable native-ComfyUI RIFE interpolation workflow."""
+    """Build a portable VideoHelperSuite frame-rate conversion workflow.
+
+    GPU1 is externally managed and does not expose a stable optical-flow node
+    contract. VHS_LoadVideo performs the required frame duplication/discarding
+    itself, so this graph runs on the same VideoHelperSuite contract already
+    used by the platform's standard video workflows.
+    """
     filename = str(video_filename or "").strip()
     if not filename:
         raise ValueError("video_filename is required for interpolation")
 
     output_fps = normalize_target_fps(target_fps)
-    input_fps = min(60, output_fps / 2)
     return {
         "1": {
             "class_type": "VHS_LoadVideo",
             "inputs": {
                 "video": filename,
-                "force_rate": input_fps,
+                "force_rate": output_fps,
                 "custom_width": 0,
                 "custom_height": 0,
                 "frame_load_cap": 0,
@@ -43,21 +47,9 @@ def build_video_interpolation_workflow(
             },
         },
         "2": {
-            "class_type": "FrameInterpolationModelLoader",
-            "inputs": {"model_name": INTERPOLATION_MODEL},
-        },
-        "3": {
-            "class_type": "FrameInterpolate",
-            "inputs": {
-                "interp_model": ["2", 0],
-                "images": ["1", 0],
-                "multiplier": 2,
-            },
-        },
-        "4": {
             "class_type": "VHS_VideoCombine",
             "inputs": {
-                "images": ["3", 0],
+                "images": ["1", 0],
                 "audio": ["1", 2],
                 "frame_rate": output_fps,
                 "loop_count": 0,
@@ -94,5 +86,5 @@ async def prepare_video_interpolation_task(
         resolved["filename"],
         task_data["target_fps"],
     )
-    task_data["workflow_name"] = "video_interpolation_rife_lite"
+    task_data["workflow_name"] = "video_interpolation_vhs_portable"
     task_data["agent_files"] = [resolved]

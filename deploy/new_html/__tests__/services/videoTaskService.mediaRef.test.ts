@@ -1,4 +1,8 @@
-import { normalizeVideoMediaRef, submitTask } from '../../services/videoTaskService';
+import {
+    buildComfyUIVideoTaskPayload,
+    normalizeVideoMediaRef,
+    submitTask,
+} from '../../services/videoTaskService';
 
 describe('normalizeVideoMediaRef', () => {
     it('preserves persistent application URLs for MiniMax frames', () => {
@@ -41,5 +45,35 @@ describe('MiniMax submission validation', () => {
 
         expect(fetchSpy).not.toHaveBeenCalled();
         fetchSpy.mockRestore();
+    });
+});
+
+describe('ComfyUI video duration contract', () => {
+    it('preserves the storyboard segment duration for GPU i2v and morph tasks', () => {
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            'Wan2',
+            { duration: 14 },
+        )).toMatchObject({
+            task_type: 'i2v',
+            image_path: 'first.png',
+            duration: 14,
+        });
+
+        expect(buildComfyUIVideoTaskPayload(
+            'morph',
+            'first.png',
+            'last.png',
+            'continuous transition',
+            'Wan2',
+        )).toMatchObject({
+            task_type: 'morph',
+            image_path: 'first.png',
+            image_path_end: 'last.png',
+            duration: 5,
+        });
     });
 });

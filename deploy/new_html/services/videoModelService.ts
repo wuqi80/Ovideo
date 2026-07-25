@@ -284,7 +284,7 @@ export function inferDashScopeTaskType(
 
 export function getModelDisplayName(model: VideoModel): string {
   const modelNameMap: Record<VideoModel, string> = {
-    Wan2: '练气',
+    Wan2: 'GPU视频（GPU1·LTX / GPU2·Wan）',
     '一阶': '一阶',
     '二阶': '二阶',
     '三阶': '三阶',

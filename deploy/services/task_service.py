@@ -57,8 +57,9 @@ def _extract_file_id(ref: str) -> Optional[str]:
     if len(parts) >= 3 and parts[0] == "api" and parts[1] == "files":
         return parts[2]
     basename = Path(path).name
-    if basename.startswith("file_") and not Path(basename).suffix:
-        return basename
+    file_id = Path(basename).stem if Path(basename).suffix else basename
+    if file_id.startswith("file_"):
+        return file_id
     return None
 
 
@@ -295,6 +296,22 @@ class TaskService:
             resolved_file_id = file_record.get("file_id") or file_id
             filename = _filename_from_file_record(file_record, original_ref, file_type)
             return {"param": param, "filename": filename, "url": f"/api/files/{resolved_file_id}/download"}
+
+        if original_ref.startswith("http") or original_ref.startswith("/"):
+            try:
+                from dao_content import FileDAO
+
+                get_file_by_url = getattr(FileDAO, "get_file_by_url", None)
+                if get_file_by_url:
+                    file_record = await get_file_by_url(original_ref)
+            except Exception as exc:
+                logger.warning("Failed to resolve file URL %s for agent transfer: %s", original_ref, exc)
+
+        if file_record:
+            resolved_file_id = file_record.get("file_id")
+            filename = _filename_from_file_record(file_record, original_ref, file_type)
+            if resolved_file_id:
+                return {"param": param, "filename": filename, "url": f"/api/files/{resolved_file_id}/download"}
 
         if "/" not in original_ref and "\\" not in original_ref:
             try:

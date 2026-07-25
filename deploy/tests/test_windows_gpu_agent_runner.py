@@ -1,5 +1,8 @@
 from scripts.windows_gpu_agent_runner import (
     GPU2_BACKGROUND_REMOVAL_MODEL,
+    GPU2_IMAGE_UPSCALE_MAX_RESOLUTION,
+    GPU2_IMAGE_UPSCALE_TARGET,
+    GPU2_HUMAN_ANGLE_PROMPTS,
     GPU2_QWEN_MODEL_FILES,
     GPU2_WAN_BLOCKS_TO_SWAP,
     GPU2_WAN_FRAMES,
@@ -14,6 +17,9 @@ from scripts.windows_gpu_agent_runner import (
     build_gpu2_wan_i2v_workflow,
     gpu2_infinitetalk_duration_seconds,
     gpu2_infinitetalk_total_frames,
+    gpu2_wan_chunk_frame_counts,
+    gpu2_wan_duration_seconds,
+    gpu2_wan_total_frames,
     is_gpu2_infinitetalk_task,
     is_gpu2_qwen_compatible_task,
     is_gpu2_wan_i2v_task,
@@ -51,11 +57,32 @@ def test_gpu2_wan_i2v_uses_one_scaled_fp8_model_and_aggressive_ram_offload():
     assert prepared["workflow_name"] == "gpu2_wan21_i2v_low_vram"
 
 
+def test_gpu2_replaces_gpu1_ltx_baseline_when_stable_wan_operation_is_selected():
+    task = {
+        "task_type": "i2v",
+        "workflow_name": "ltx_i2v",
+        "params": {
+            "model": "Wan2",
+            "image_path": "start.png",
+            "duration": 2,
+        },
+        "files": [{"param": "image_path", "filename": "start.png"}],
+    }
+
+    prepared = prepare_gpu2_task(task)
+
+    assert is_gpu2_wan_i2v_task(task)
+    assert prepared["workflow_name"] == "gpu2_wan21_i2v_low_vram"
+    assert prepared["workflow_json"]["14"]["inputs"]["model"] == (
+        GPU2_WAN_MODEL_FILES["diffusion"]
+    )
+
+
 def test_gpu2_wan_morph_preserves_start_and_end_images():
     task = {
         "task_type": "morph",
         "workflow_name": "wan2_morph",
-        "params": {"start_image": "first.png", "end_image": "last.png"},
+        "params": {"start_image": "first.png", "end_image": "last.png", "duration": 2},
         "files": [
             {"param": "start_image", "filename": "first.png"},
             {"param": "end_image", "filename": "last.png"},
@@ -69,6 +96,32 @@ def test_gpu2_wan_morph_preserves_start_and_end_images():
     assert workflow["26"]["inputs"]["image"] == "last.png"
     assert workflow["22"]["inputs"]["end_image"] == ["27", 0]
     assert prepared["workflow_name"] == "gpu2_wan21_morph_low_vram"
+
+
+def test_gpu2_wan_long_clip_is_split_and_reassembled_without_losing_duration():
+    task = {
+        "task_type": "i2v",
+        "workflow_name": "wan2_i2v",
+        "params": {
+            "image": "start.png",
+            "prompt": "slow camera push",
+            "seed": 77,
+            "duration": 5,
+        },
+    }
+
+    workflow = build_gpu2_wan_i2v_workflow(task)
+
+    assert gpu2_wan_duration_seconds(task) == 5
+    assert gpu2_wan_total_frames(task) == 81
+    assert gpu2_wan_chunk_frame_counts(task) == [33, 33, 17]
+    assert workflow["22"]["inputs"]["num_frames"] == 33
+    assert workflow["31"]["inputs"]["num_frames"] == 33
+    assert workflow["41"]["inputs"]["num_frames"] == 17
+    assert workflow["30"]["class_type"] == "ImageFromBatch"
+    assert workflow["35"]["class_type"] == "ImageBatch"
+    assert workflow["45"]["class_type"] == "ImageBatch"
+    assert workflow["25"]["inputs"]["images"] == ["45", 0]
 
 
 def test_gpu2_infinitetalk_uses_short_window_and_direct_audio_without_separation():
@@ -150,10 +203,15 @@ def test_gpu2_upscale_workflow_uses_low_vram_seedvr2_nodes():
     )
 
     assert workflow["1"]["inputs"]["image"] == "input.webp"
-    assert workflow["2"]["inputs"]["blocks_to_swap"] == 0
+    assert workflow["2"]["inputs"]["blocks_to_swap"] == 36
+    assert workflow["2"]["inputs"]["cache_model"] is False
     assert workflow["3"]["inputs"]["decode_tiled"] is True
+    assert workflow["3"]["inputs"]["cache_model"] is False
     assert workflow["4"]["inputs"]["batch_size"] == 1
     assert workflow["4"]["inputs"]["seed"] == 123
+    assert workflow["4"]["inputs"]["resolution"] == GPU2_IMAGE_UPSCALE_TARGET
+    assert workflow["4"]["inputs"]["max_resolution"] == GPU2_IMAGE_UPSCALE_MAX_RESOLUTION
+    assert GPU2_IMAGE_UPSCALE_TARGET >= 3840
     assert workflow["5"]["class_type"] == "SaveImage"
 
 
@@ -244,9 +302,15 @@ def test_gpu2_builds_executable_qwen_fallback_for_placeholder_workflow():
     assert workflow["38"]["inputs"]["clip_name"] == GPU2_QWEN_MODEL_FILES["text_encoder"]
     assert workflow["121"]["inputs"] == {"width": 768, "height": 768, "batch_size": 1}
     assert workflow["111"]["inputs"]["prompt"] == "keep the same subject"
-    assert workflow["111"]["inputs"]["image1"] == ["126", 0]
-    assert workflow["111"]["inputs"]["image3"] == ["128", 0]
+    assert workflow["111"]["inputs"]["image1"] == ["401", 0]
+    assert workflow["111"]["inputs"]["image3"] == ["403", 0]
     assert "image4" not in workflow["111"]["inputs"]
+    assert {
+        node["inputs"]["image"]
+        for node in workflow.values()
+        if node.get("class_type") == "LoadImage"
+    } == {"first.png", "second.png", "third.png", "fourth.png"}
+    assert workflow["303"]["class_type"] == "ImageStitch"
     assert prepared["workflow_name"] == "gpu2_qwenn_lora_6_qwen_fp8"
     assert prepared["workflow_json"]["60"]["class_type"] == "SaveImage"
 
@@ -266,9 +330,78 @@ def test_gpu2_qwen_fallback_uses_requested_safe_geometry_and_legacy_image_names(
 
     assert normalize_gpu2_image_dimensions(1025, 509) == (1024, 504)
     assert workflow["121"]["inputs"] == {"width": 1024, "height": 504, "batch_size": 1}
-    assert workflow["111"]["inputs"]["image1"] == ["126", 0]
-    assert workflow["111"]["inputs"]["image2"] == ["127", 0]
-    assert workflow["126"]["inputs"]["scale_to_length"] == 1024
+    assert workflow["111"]["inputs"]["image1"] == ["401", 0]
+    assert workflow["111"]["inputs"]["image2"] == ["402", 0]
+    assert workflow["401"]["inputs"]["scale_to_length"] == 1024
+    assert normalize_gpu2_image_dimensions(1928, 1080) == (1024, 568)
+
+
+def test_gpu2_qwen_six_reference_workflow_keeps_every_input_via_three_stitches():
+    workflow = build_gpu2_qwen_workflow(
+        {
+            "task_type": "qwen_6",
+            "params": {
+                **{f"image_path_{index}": f"reference-{index}.png" for index in range(1, 7)},
+                "prompt": "preserve every reference",
+                "output_width": 1024,
+                "output_height": 768,
+            },
+        }
+    )
+
+    loaded = [
+        node["inputs"]["image"]
+        for node in workflow.values()
+        if node.get("class_type") == "LoadImage"
+    ]
+    stitched = [
+        node
+        for node in workflow.values()
+        if node.get("class_type") == "ImageStitch"
+    ]
+
+    assert loaded == [f"reference-{index}.png" for index in range(1, 7)]
+    assert len(stitched) == 3
+    assert workflow["111"]["inputs"]["image1"] == ["401", 0]
+    assert workflow["111"]["inputs"]["image2"] == ["402", 0]
+    assert workflow["111"]["inputs"]["image3"] == ["403", 0]
+
+
+def test_gpu2_human_multi_angle_splits_fourteen_views_without_growing_batch_vram():
+    workflow = build_gpu2_qwen_workflow(
+        {
+            "task_type": "i2i_human",
+            "params": {
+                "image_path": "character.png",
+                "seed": 700,
+            },
+        }
+    )
+
+    save_nodes = [
+        node
+        for node in workflow.values()
+        if node.get("class_type") == "SaveImage"
+    ]
+    sampler_nodes = [
+        node
+        for node in workflow.values()
+        if node.get("class_type") == "KSampler"
+    ]
+    positive_prompt_ids = {
+        node["inputs"]["positive"][0]
+        for node in sampler_nodes
+    }
+    prompts = {
+        workflow[node_id]["inputs"]["prompt"]
+        for node_id in positive_prompt_ids
+    }
+
+    assert len(save_nodes) == len(GPU2_HUMAN_ANGLE_PROMPTS) == 14
+    assert len(sampler_nodes) == 14
+    assert workflow["121"]["inputs"]["batch_size"] == 1
+    assert prompts == set(GPU2_HUMAN_ANGLE_PROMPTS)
+    assert {node["inputs"]["seed"] for node in sampler_nodes} == set(range(700, 714))
 
 
 def test_gpu2_matting_uses_native_birefnet_and_split_has_two_outputs():
