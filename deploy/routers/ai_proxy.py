@@ -54,6 +54,7 @@ from services.ai_proxy_reference_service import (
     prepare_gemini_image_parts,
     prepare_gpt_image_reference_inputs,
 )
+from services.text_model_catalog_service import build_text_model_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,14 @@ def create_ai_proxy_router(
         }
         task_data.update(extra)
         return task_data
+
+    @router.get("/api/ai/text-models")
+    async def get_text_models(_username: str = Depends(require_auth_dependency)):
+        """Return the effective text models without exposing runtime secrets."""
+        return {
+            "success": True,
+            "models": await build_text_model_catalog(),
+        }
 
     @router.post("/api/deepseek/chat")
     async def deepseek_chat(request: DeepseekChatRequest, username: str = Depends(require_auth_dependency)):

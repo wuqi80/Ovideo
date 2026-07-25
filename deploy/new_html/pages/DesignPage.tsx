@@ -25,7 +25,13 @@ import { AiModel } from '../types';
 import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
 import type { AssetItem } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
+import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
+import {
+  formatScriptModelDisplay,
+  getScriptModelOption,
+  type ScriptModelOption,
+} from '../services/scriptModelCatalogService';
 import {
   isDesignAssetImageFileRole,
   isMaterialStageAssetImageFileRole,
@@ -252,6 +258,7 @@ const AssetImageRow: React.FC<{
 /* ======================== Main Component ======================== */
 export const DesignPage: React.FC = () => {
   const navigate = useNavigate();
+  const scriptModelOptions = useScriptModelOptions();
   const { episodeId, projectId, selectedScriptId, assets, script, isLoading, error, forceReloadSlices } = useEpisode();
   useEffect(() => {
     // 2026-06-14：强制刷新资产，保证别处新生成的资产图在设计页可见。
@@ -1105,10 +1112,10 @@ export const DesignPage: React.FC = () => {
         </div>
       )}
 
-      {aiModal && <UnifiedAIModal asset={aiModal.asset} scriptText={scriptText} onClose={() => setAiModal(null)} onSubmit={handleAIGeneration} />}
+      {aiModal && <UnifiedAIModal asset={aiModal.asset} scriptText={scriptText} modelOptions={scriptModelOptions} onClose={() => setAiModal(null)} onSubmit={handleAIGeneration} />}
       {cameraModal && <CameraModal asset={cameraModal.asset} materials={cameraModal.materials} onClose={() => setCameraModal(null)} onSubmit={(p) => handleCameraGenerate({ ...p, assetId: cameraModal.asset.assetId })} />}
       {processModal && <ProcessModal asset={processModal.asset} materials={processModal.materials} workflow={processModal.workflow} onClose={() => setProcessModal(null)} onSubmit={handleProcessSubmit} />}
-      {batchModal && <BatchGenerateModal assets={designAssets} selectedIds={selectedIds} scriptText={scriptText} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
+      {batchModal && <BatchGenerateModal assets={designAssets} selectedIds={selectedIds} scriptText={scriptText} modelOptions={scriptModelOptions} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
       {syncModalOpen && (
         <SyncExistingDesignModal
           candidates={syncCandidates}
@@ -1254,9 +1261,9 @@ const SyncExistingDesignModal: React.FC<{
 
 /* ======================== Unified AI Modal ======================== */
 const UnifiedAIModal: React.FC<{
-  asset: AssetItem; scriptText: string; onClose: () => void;
+  asset: AssetItem; scriptText: string; modelOptions: readonly ScriptModelOption[]; onClose: () => void;
   onSubmit: (p: { assetId: string; engine: MaterialAIEngine; geminiModel: string; prompt: string; references: string[]; aspectRatio: string; resolution: '1K' | '2K' | '4K'; sequential: string; count: number }) => void;
-}> = ({ asset, scriptText, onClose, onSubmit }) => {
+}> = ({ asset, scriptText, modelOptions, onClose, onSubmit }) => {
   const { forceReloadSlices } = useEpisode();
   const initialPrompt = useMemo(
     () => (asset.styleParams?.ai_prompt as string) || asset.description || asset.name,
@@ -1286,6 +1293,10 @@ const UnifiedAIModal: React.FC<{
   const generationModel = useMemo(
     () => findDesignImageModel(engine, geminiModel),
     [engine, geminiModel],
+  );
+  const refineModelOptions = useMemo(
+    () => [AiModel.DeepseekChat, AiModel.Gemini].map(model => getScriptModelOption(model, modelOptions)),
+    [modelOptions],
   );
   const maxRefs = generationModel.maxReferences;
   const imageToImageEnabled = canUseDesignImageReferences(
@@ -1513,8 +1524,9 @@ const UnifiedAIModal: React.FC<{
                     onChange={event => setRefineModel(event.target.value as AiModel)}
                     className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                   >
-                    <option value={AiModel.DeepseekChat}>金丹 · DeepSeek Chat</option>
-                    <option value={AiModel.Gemini}>化神 · Gemini 2.5 Flash</option>
+                    {refineModelOptions.map(option => (
+                      <option key={option.value} value={option.value}>{formatScriptModelDisplay(option)}</option>
+                    ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
                 </label>
@@ -1669,9 +1681,9 @@ const UnifiedAIModal: React.FC<{
 
 /* ======================== BatchGenerateModal ======================== */
 const BatchGenerateModal: React.FC<{
-  assets: AssetItem[]; selectedIds: Set<string>; scriptText: string;
+  assets: AssetItem[]; selectedIds: Set<string>; scriptText: string; modelOptions: readonly ScriptModelOption[];
   onClose: () => void; onSubmit: (config: { assetIds: string[]; engine: MaterialAIEngine; geminiModel: string; style: string; aspectRatio: string; resolution: '1K' | '2K' | '4K'; threeView: boolean; refineModel: AiModel }) => void;
-}> = ({ assets, selectedIds, scriptText, onClose, onSubmit }) => {
+}> = ({ assets, selectedIds, scriptText, modelOptions, onClose, onSubmit }) => {
   const [checked, setChecked] = useState<Set<string>>(() => selectedIds.size > 0 ? new Set(selectedIds) : new Set(assets.filter(a => !a.thumbnailUrl && !(a.referenceImages?.length > 0)).map(a => a.assetId)));
   const [engine, setEngine] = useState<MaterialAIEngine>(savedEngine());
   const [geminiModel, setGeminiModel] = useState(savedGeminiModel());
@@ -1683,6 +1695,10 @@ const BatchGenerateModal: React.FC<{
   const batchGenerationModel = useMemo(
     () => findDesignImageModel(engine, geminiModel),
     [engine, geminiModel],
+  );
+  const refineModelOptions = useMemo(
+    () => [AiModel.DeepseekChat, AiModel.Gemini].map(model => getScriptModelOption(model, modelOptions)),
+    [modelOptions],
   );
 
   const toggle = (id: string) => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -1761,7 +1777,7 @@ const BatchGenerateModal: React.FC<{
               <div><span className="text-[11px] text-n100 block mb-1">比例</span><select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
               <div><span className="text-[11px] text-n100 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select></div>
             </div>
-            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value={AiModel.DeepseekChat}>金丹 · DeepSeek Chat</option><option value={AiModel.Gemini}>化神 · Gemini 2.5 Flash</option></select></div>
+            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{refineModelOptions.map(option => <option key={option.value} value={option.value}>{formatScriptModelDisplay(option)}</option>)}</select></div>
             <label className="flex items-center gap-2 text-xs text-n700 p-3 bg-n30 rounded-lg border border-n40">
               <input type="checkbox" checked={threeView} onChange={e => setThreeView(e.target.checked)} className="accent-indigo-500" />
               人物/道具默认生成白底四视图

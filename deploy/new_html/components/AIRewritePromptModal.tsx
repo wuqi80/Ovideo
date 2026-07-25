@@ -10,14 +10,19 @@
 //   5. [接受] 把结果回写到原 textarea / [重新生成] / [取消]
 //
 // 不依赖外部 modal 库，复用 Tailwind + lucide-react 图标。
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, Sparkles, Loader2, RotateCcw, Check } from 'lucide-react';
 import {
     rewritePrompt,
     REWRITE_PRESETS,
-    REWRITE_BACKEND_LABELS,
     type RewriteBackend,
 } from '../services/promptRewriter';
+import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
+import {
+    formatScriptModelDisplay,
+    getScriptModelOption,
+} from '../services/scriptModelCatalogService';
+import { AiModel } from '../types';
 
 export interface AIRewritePromptModalProps {
     open: boolean;
@@ -32,12 +37,26 @@ export interface AIRewritePromptModalProps {
 const PRESET_CUSTOM = '__custom__';
 
 export const AIRewritePromptModal: React.FC<AIRewritePromptModalProps> = (p) => {
+    const scriptModelOptions = useScriptModelOptions();
     const [presetId, setPresetId] = useState<string>(REWRITE_PRESETS[0]?.id ?? PRESET_CUSTOM);
     const [customInstr, setCustomInstr] = useState('');
     const [backend, setBackend] = useState<RewriteBackend>(p.defaultBackend ?? 'geminiProxy');
     const [result, setResult] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const rewriteBackendLabels = useMemo<Record<RewriteBackend, string>>(() => {
+        const gemini = formatScriptModelDisplay(
+            getScriptModelOption(AiModel.Gemini, scriptModelOptions),
+        );
+        const deepseek = formatScriptModelDisplay(
+            getScriptModelOption(AiModel.DeepseekChat, scriptModelOptions),
+        );
+        return {
+            geminiProxy: `${gemini}（默认）`,
+            geminiSDK: `${gemini}（兼容旧选项）`,
+            deepseek: `${deepseek}（中文优化）`,
+        };
+    }, [scriptModelOptions]);
 
     // 打开时重置
     useEffect(() => {
@@ -155,8 +174,8 @@ export const AIRewritePromptModal: React.FC<AIRewritePromptModalProps> = (p) => 
                                 disabled={loading}
                                 className="w-full px-2 py-1 bg-n0 border border-n40 rounded text-n700 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
                             >
-                                {(Object.keys(REWRITE_BACKEND_LABELS) as RewriteBackend[]).map(k => (
-                                    <option key={k} value={k}>{REWRITE_BACKEND_LABELS[k]}</option>
+                                {(Object.keys(rewriteBackendLabels) as RewriteBackend[]).map(k => (
+                                    <option key={k} value={k}>{rewriteBackendLabels[k]}</option>
                                 ))}
                             </select>
                         </div>

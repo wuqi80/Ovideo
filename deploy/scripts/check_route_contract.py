@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 259
-DEFAULT_EXPECTED_OPERATIONS = 317
+DEFAULT_EXPECTED_PATHS = 260
+DEFAULT_EXPECTED_OPERATIONS = 318
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -42,6 +42,7 @@ EXPECTED_ENDPOINTS = {
     ("/api/admin/users/create", "POST"): ("routers.admin_compat", "create_user"),
     ("/api/admin/users/{user_id}", "DELETE"): ("routers.admin_compat", "delete_user"),
     ("/api/video/crop", "POST"): ("routers.video", "crop_video"),
+    ("/api/ai/text-models", "GET"): ("routers.ai_proxy", "get_text_models"),
     ("/api/thumbnail", "GET"): ("routers.files", "get_thumbnail"),
     ("/api/upload", "POST"): ("routers.files", "upload_file"),
     ("/api/comfyui/upload", "POST"): ("routers.comfyui_files", "comfyui_upload_proxy"),

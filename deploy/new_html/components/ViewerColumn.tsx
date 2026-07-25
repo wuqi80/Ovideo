@@ -81,7 +81,7 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
                   className={`px-2 py-1 text-[10px] font-semibold transition-all border-l border-n40 ${
                       aiModel === AiModel.Deepseek ? 'bg-primary text-white' : 'text-n300 hover:text-n800'
                   }`}
-                  title="DK筑基 (DeepSeek Reasoner)"
+                  title="DK筑基 (deepseek-v4-pro)"
                 >
                   DK筑基
                 </button>
@@ -90,7 +90,7 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
                   className={`px-2 py-1 text-[10px] font-semibold rounded-r transition-all border-l border-n40 ${
                       aiModel === AiModel.DeepseekChat ? 'bg-yellow-600 text-white' : 'text-n300 hover:text-n800'
                   }`}
-                  title="DK金丹 (DeepSeek Chat)"
+                  title="DK金丹 (deepseek-v4-flash)"
                 >
                   DK金丹
                 </button>

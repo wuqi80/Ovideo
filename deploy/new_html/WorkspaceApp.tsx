@@ -22,6 +22,12 @@ import { assertEnoughCredits, consumeCredits, estimateTextTokens } from './servi
 import { exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
 import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
+import { useScriptModelOptions } from './hooks/useScriptModelOptions';
+import {
+  getScriptModelOption,
+  resolveScriptAiModel,
+  type ScriptModelOption,
+} from './services/scriptModelCatalogService';
 import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
 import {
   ensureStoryboardCutSeparators,
@@ -276,19 +282,13 @@ function exportStoryboardVersionCsv(file: ProjectFile, version: ScriptStoryboard
   URL.revokeObjectURL(url);
 }
 
-function getScriptModelInfo(model: AiModel) {
-  if (model === AiModel.Gemini) return { alias: '化神', provider: 'google', runtime: 'gemini-2.5-flash' };
-  if (model === AiModel.Deepseek) return { alias: '筑基', provider: 'deepseek', runtime: 'deepseek-reasoner' };
-  return { alias: '金丹', provider: 'deepseek', runtime: 'deepseek-chat' };
-}
-
-function resolveScriptAiModel(modelName?: string): AiModel | null {
-  const normalized = String(modelName || '').trim().toLowerCase();
-  if (!normalized) return null;
-  if (normalized.includes('gemini')) return AiModel.Gemini;
-  if (normalized.includes('reasoner')) return AiModel.Deepseek;
-  if (normalized.includes('deepseek')) return AiModel.DeepseekChat;
-  return null;
+function getScriptModelInfo(model: AiModel, options: readonly ScriptModelOption[]) {
+  const option = getScriptModelOption(model, options);
+  return {
+    alias: option.label,
+    provider: option.provider,
+    runtime: option.runtime,
+  };
 }
 
 /**
@@ -322,6 +322,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   onActivateScript,
   onAfterExport,
 }) => {
+  const scriptModelOptions = useScriptModelOptions();
 
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [storyboardTotalsByFileId, setStoryboardTotalsByFileId] = useState<Record<string, number>>({});
@@ -463,6 +464,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const [videoReverseOpen, setVideoReverseOpen] = useState(false);
   const loadedConversationKeysRef = useRef<Set<string>>(new Set());
   const conversationRequestsRef = useRef<Map<string, Promise<ScriptConversation>>>(new Map());
+  const appliedConversationModelRef = useRef<string>('');
   
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
@@ -518,8 +520,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           filesRef.current = next;
           return next;
         });
-        const matchingModel = resolveScriptAiModel(conversation.defaultModel);
-        if (matchingModel) setAiModel(matchingModel);
       })
       .catch(error => {
         if (cancelled) return;
@@ -541,6 +541,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       });
     return () => { cancelled = true; };
   }, [propEpisodeId, selectedFileId]);
+
+  useEffect(() => {
+    const selectionKey = `${selectedFileId || ''}:${selectedConversation?.defaultModel || ''}`;
+    if (!selectedConversation?.defaultModel || appliedConversationModelRef.current === selectionKey) return;
+    const matchingModel = resolveScriptAiModel(
+      selectedConversation.defaultModel,
+      scriptModelOptions,
+    );
+    if (matchingModel) {
+      appliedConversationModelRef.current = selectionKey;
+      setAiModel(matchingModel);
+    }
+  }, [scriptModelOptions, selectedConversation?.defaultModel, selectedFileId]);
   
   // 保存定时器引用
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1510,7 +1523,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       messages: [],
       versions: [],
     };
-    const modelInfo = getScriptModelInfo(aiModel);
+    const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
     const requestId = `script_turn_${uuidv4()}`;
     const isFirstTurn = conversation.versions.length === 0;
     const currentVersion = conversation.versions.find(version => version.id === conversation.currentVersionId)
@@ -1783,7 +1796,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     } finally {
       setConversationSendingId(null);
     }
-  }, [aiModel, propEpisodeId, scriptConversations, selectedFileId, updateFileWithHistory, urlProjectId]);
+  }, [aiModel, propEpisodeId, scriptConversations, scriptModelOptions, selectedFileId, updateFileWithHistory, urlProjectId]);
 
   const handleConversationEditVersion = useCallback(async (
     sourceVersion: ScriptStoryboardVersion,
@@ -1900,7 +1913,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         return;
       }
 
-      const modelInfo = getScriptModelInfo(aiModel);
+      const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
       const sourceItems = parseStoryboardVersionContent(selectedVersion.content);
       if (sourceItems.length === 0) {
         throw new Error('当前分镜脚本版本没有可生成的镜头内容');
@@ -2031,6 +2044,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     aiModel,
     persistStoryboardSnapshot,
     propEpisodeId,
+    scriptModelOptions,
     selectedFileId,
     updateFileWithHistory,
     urlProjectId,
@@ -3340,7 +3354,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       (total, item) => total + estimateTextTokens(`${item.originalText || ''}\n${item.scriptSegment || ''}`),
       0,
     );
-    const modelInfo = getScriptModelInfo(aiModel);
+    const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
     try {
       await assertEnoughCredits('storyboard_design_generation', {
         shot_count: file.storyboard.items.length,
@@ -3473,7 +3487,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setProcessingType(null); // 🆕 清空处理类型
       setShotGenerationProgress(null);
     }
-  }, [aiModel, files, persistStoryboardSnapshot, propEpisodeId, scriptConversations, updateFileWithHistory, urlProjectId]);
+  }, [aiModel, files, persistStoryboardSnapshot, propEpisodeId, scriptConversations, scriptModelOptions, updateFileWithHistory, urlProjectId]);
 
   const handleExtractMetadata = useCallback(async (targetFileId?: string) => {
     setIsProcessing(true);
@@ -3787,6 +3801,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         selectedFile={selectedFile}
                         conversation={selectedConversation}
                         aiModel={aiModel}
+                        modelOptions={scriptModelOptions}
                         onChangeModel={setAiModel}
                         isWorkflowScript={selectedFileId === activeScriptId}
                         isLoading={conversationLoadingId === selectedFileId}
@@ -3991,6 +4006,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           currentView={currentView}
           onChangeView={handleViewSwitch}
           aiModel={aiModel}
+          modelOptions={scriptModelOptions}
           onChangeModel={setAiModel}
           notifications={taskNotifications}
           onDismissNotification={dismissTaskNotification}

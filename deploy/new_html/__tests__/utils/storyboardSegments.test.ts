@@ -133,7 +133,18 @@ describe('storyboard segment normalization', () => {
     });
     expect(cleanStoryboardShotCardText(
       `${merged[0].originalText}\n视频提示词：${group.entries[0].item.videoPrompt}`,
-    )).toBe(merged[0].originalText);
+    )).not.toMatch(/^镜头1-1/m);
+  });
+
+  it('removes the shot heading already rendered by the shot card', () => {
+    expect(cleanStoryboardShotCardText([
+      '镜头2-1',
+      '时长（秒）：8',
+      '画面描述：角色推门进入。',
+    ].join('\n'))).toBe([
+      '时长（秒）：8',
+      '画面描述：角色推门进入。',
+    ].join('\n'));
   });
 
   it('removes Markdown controls and parses decorated legacy shot headings', () => {

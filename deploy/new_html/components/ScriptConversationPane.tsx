@@ -43,17 +43,18 @@ import {
 } from '../utils/storyboardSegments';
 import { parseVideoScriptGroups } from '../utils/scriptPipelineParsers';
 import { SegmentPromptCards } from './SegmentPromptCards';
+import {
+  DEFAULT_SCRIPT_MODEL_OPTIONS,
+  type ScriptModelOption,
+} from '../services/scriptModelCatalogService';
 
-export const SCRIPT_MODEL_OPTIONS = [
-  { value: AiModel.Gemini, label: '化神', runtime: 'Gemini 2.5 Flash', provider: 'google' },
-  { value: AiModel.Deepseek, label: '筑基', runtime: 'DeepSeek Reasoner', provider: 'deepseek' },
-  { value: AiModel.DeepseekChat, label: '金丹', runtime: 'DeepSeek Chat', provider: 'deepseek' },
-] as const;
+export const SCRIPT_MODEL_OPTIONS = DEFAULT_SCRIPT_MODEL_OPTIONS;
 
 interface ScriptConversationPaneProps {
   selectedFile?: ProjectFile;
   conversation?: ScriptConversation;
   aiModel: AiModel;
+  modelOptions?: readonly ScriptModelOption[];
   isWorkflowScript: boolean;
   isLoading: boolean;
   isSending: boolean;
@@ -142,11 +143,6 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
               <span className="text-[10px] text-n100">{group.entries.length} 个镜头 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒</span>
             </header>
             <div className="space-y-3 p-3">
-              <SegmentPromptCards
-                segmentNo={group.segmentNo}
-                visualStyle={promptGroup?.visualStyle}
-                stabilityConstraint={promptGroup?.stabilityConstraint}
-              />
               {group.entries.map(entry => (
                 <article
                   key={entry.item.id}
@@ -161,6 +157,11 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
                   </div>
                 </article>
               ))}
+              <SegmentPromptCards
+                segmentNo={group.segmentNo}
+                visualStyle={promptGroup?.visualStyle}
+                stabilityConstraint={promptGroup?.stabilityConstraint}
+              />
             </div>
           </section>
         );
@@ -173,6 +174,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   selectedFile,
   conversation,
   aiModel,
+  modelOptions = SCRIPT_MODEL_OPTIONS,
   isWorkflowScript,
   isLoading,
   isSending,
@@ -275,13 +277,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       1000,
       estimateTextTokens(currentVersion?.content || selectedFile.scriptContent || draft) * (isFirstTurn ? 3 : 1),
     );
-    const model = SCRIPT_MODEL_OPTIONS.find(option => option.value === aiModel)?.runtime || String(aiModel);
+    const model = modelOptions.find(option => option.value === aiModel)?.runtime || String(aiModel);
     return {
       input_tokens: estimateTextTokens(billingInput),
       output_tokens: forecastOutputTokens,
       model,
     };
-  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, selectedFile]);
+  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, modelOptions, selectedFile]);
 
   useEffect(() => {
     setCollapsed(new Set());
@@ -954,7 +956,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 disabled={isSending}
                 className="h-8 max-w-[230px] appearance-none border-0 bg-transparent pl-2 pr-7 text-xs text-n700 outline-none hover:text-primary focus:text-primary disabled:opacity-50"
               >
-                {SCRIPT_MODEL_OPTIONS.map(option => (
+                {modelOptions.map(option => (
                   <option key={option.value} value={option.value}>{option.label} · {option.runtime}</option>
                 ))}
               </select>
@@ -1039,7 +1041,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 disabled={isSending}
                 className="h-9 max-w-[260px] appearance-none rounded border border-n40 bg-n0 pl-3 pr-8 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
               >
-                {SCRIPT_MODEL_OPTIONS.map(option => (
+                {modelOptions.map(option => (
                   <option key={option.value} value={option.value}>{option.label} · {option.runtime}</option>
                 ))}
               </select>

@@ -39,13 +39,32 @@ describe('Header model display and credit balance', () => {
 
   it('shows business name with the actual runtime model name', () => {
     render(<Header {...baseProps} aiModel={AiModel.Gemini} />);
-    expect(screen.getByText('化神 · Gemini 2.5 Flash')).toBeTruthy();
+    expect(screen.getByText('化神 · gemini-2.5-flash')).toBeTruthy();
 
     render(<Header {...baseProps} aiModel={AiModel.DeepseekChat} />);
-    expect(screen.getByText('金丹 · DeepSeek Chat')).toBeTruthy();
+    expect(screen.getByText('金丹 · deepseek-v4-flash')).toBeTruthy();
 
     render(<Header {...baseProps} aiModel={AiModel.Deepseek} />);
-    expect(screen.getByText('筑基 · DeepSeek Reasoner')).toBeTruthy();
+    expect(screen.getByText('筑基 · deepseek-v4-pro')).toBeTruthy();
+  });
+
+  it('uses backend-resolved model metadata when supplied', () => {
+    render(
+      <Header
+        {...baseProps}
+        aiModel={AiModel.DeepseekChat}
+        modelOptions={[{
+          value: AiModel.DeepseekChat,
+          label: '金丹',
+          operation: 'deepseek-chat',
+          requestedProvider: 'deepseek',
+          provider: 'deepseek',
+          runtime: 'deepseek-v4-flash-admin',
+          failoverActive: false,
+        }]}
+      />,
+    );
+    expect(screen.getByText('金丹 · deepseek-v4-flash-admin')).toBeTruthy();
   });
 
   it('loads and renders the available credit balance', async () => {

@@ -6,13 +6,12 @@ import { NotificationPanel } from './NotificationPanel';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 import { apiFetch } from '../services/httpClient';
 import { getCreditBalance } from '../services/creditService';
-
-// 与 ScriptConversationPane 的 SCRIPT_MODEL_OPTIONS 保持一致：业务名 · 实际模型名。
-const AI_MODEL_DISPLAY: Record<AiModel, string> = {
-  [AiModel.Gemini]: '化神 · Gemini 2.5 Flash',
-  [AiModel.Deepseek]: '筑基 · DeepSeek Reasoner',
-  [AiModel.DeepseekChat]: '金丹 · DeepSeek Chat',
-};
+import {
+  DEFAULT_SCRIPT_MODEL_OPTIONS,
+  formatScriptModelDisplay,
+  getScriptModelOption,
+  type ScriptModelOption,
+} from '../services/scriptModelCatalogService';
 
 interface HeaderProps {
   visibleColumns: boolean[];
@@ -24,6 +23,7 @@ interface HeaderProps {
   currentView: AppView;
   onChangeView: (view: AppView) => void;
   aiModel: AiModel;
+  modelOptions?: readonly ScriptModelOption[];
   onChangeModel: (model: AiModel) => void;
   // 🆕 任务通知（2026-05-20 起改由 TaskContext 提供，props 仅作向后兼容）
   notifications?: TaskNotification[];
@@ -40,10 +40,12 @@ export const Header: React.FC<HeaderProps> = ({
   currentView,
   onChangeView,
   aiModel,
+  modelOptions = DEFAULT_SCRIPT_MODEL_OPTIONS,
   onChangeModel,
   notifications = [],
   onDismissNotification
 }) => {
+  const aiModelDisplay = formatScriptModelDisplay(getScriptModelOption(aiModel, modelOptions));
   // 🔐 检查是否为管理员（包括超级管理员）
   const username = localStorage.getItem('username') || 'User';
   const isAdmin = username === 'admin' || username === 'lllsdhr';
@@ -280,10 +282,10 @@ export const Header: React.FC<HeaderProps> = ({
               旧的 props.notifications / props.onDismissNotification 仍向后兼容，但不再用于渲染。 */}
           <NotificationPanel />
           
-          <span className="flex items-center gap-1" title={`当前剧本模型：${AI_MODEL_DISPLAY[aiModel] || aiModel}`}>
+          <span className="flex items-center gap-1" title={`当前剧本模型：${aiModelDisplay}`}>
             <Sparkles className="w-3.5 h-3.5 text-warning" />
             <span className="hidden sm:inline text-xs font-medium">
-              {AI_MODEL_DISPLAY[aiModel] || aiModel}
+              {aiModelDisplay}
             </span>
           </span>
 

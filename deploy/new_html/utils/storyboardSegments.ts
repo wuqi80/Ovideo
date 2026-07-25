@@ -346,11 +346,18 @@ export function getStoryboardSegmentPromptSections(
 }
 
 export function cleanStoryboardShotCardText(value: string): string {
-  return stripVideoScriptGroupPromptSections(value)
+  const lines = stripVideoScriptGroupPromptSections(value)
     .split(/\r?\n/)
     .filter(line => !/^\s*视频提示词\s*[：:]/.test(line))
-    .join('\n')
-    .trim();
+    .map(line => line.trimEnd());
+  const firstContentLine = lines.findIndex(line => line.trim());
+  if (
+    firstContentLine >= 0
+    && /^镜头\s*\d+(?:\s*[-－—–]\s*\d+)?\s*$/.test(cleanStoryboardDisplayLine(lines[firstContentLine]))
+  ) {
+    lines.splice(firstContentLine, 1);
+  }
+  return lines.join('\n').trim();
 }
 
 function extractVisualStyleFromShot(item: StoryboardItem): string {

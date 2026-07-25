@@ -62,6 +62,7 @@ describe('DesignPage image operation modals', () => {
 
   it('defaults refinement to Jindan and lists it before Huashen', () => {
     expect(source).toContain("LS.get('design_ai_refine_model', AiModel.DeepseekChat)");
-    expect(source.indexOf('金丹 · DeepSeek Chat')).toBeLessThan(source.indexOf('化神 · Gemini 2.5 Flash'));
+    expect(source).toContain('[AiModel.DeepseekChat, AiModel.Gemini].map');
+    expect(source).toContain('formatScriptModelDisplay(option)');
   });
 });

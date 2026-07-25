@@ -11,9 +11,10 @@ const app = readFileSync(resolve(__dirname, '../../App.tsx'), 'utf-8');
 
 describe('ScriptConversationPane workflow', () => {
   it('uses a persistent conversation composer with runtime model labels', () => {
-    expect(source).toContain("label: '化神', runtime: 'Gemini 2.5 Flash'");
-    expect(source).toContain("label: '筑基', runtime: 'DeepSeek Reasoner'");
-    expect(source).toContain("label: '金丹', runtime: 'DeepSeek Chat'");
+    expect(source).toContain('modelOptions = SCRIPT_MODEL_OPTIONS');
+    expect(source).toContain('{modelOptions.map(option => (');
+    expect(workspace).toContain('const scriptModelOptions = useScriptModelOptions()');
+    expect(workspace).toContain('modelOptions={scriptModelOptions}');
     expect(source).toContain('继续输入修改意见');
   });
 

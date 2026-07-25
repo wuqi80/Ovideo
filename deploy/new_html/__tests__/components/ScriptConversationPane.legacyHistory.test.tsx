@@ -74,6 +74,14 @@ describe('ScriptConversationPane legacy history', () => {
     expect(screen.getByTestId('segment-1-stability-constraint-card')).toHaveTextContent(STABILITY_CONSTRAINT_REFERENCE);
     expect(screen.getByTestId('segment-1-shot-2-card')).not.toHaveTextContent('【视觉风格】');
     expect(screen.getByTestId('segment-1-shot-2-card')).not.toHaveTextContent('【正向稳定约束】');
+    const segment = screen.getByTestId('segment-1-shot-1-card').parentElement!;
+    expect(
+      Array.from(segment.children).indexOf(screen.getByTestId('segment-1-prompt-cards')),
+    ).toBeGreaterThan(
+      Array.from(segment.children).indexOf(screen.getByTestId('segment-1-shot-2-card')),
+    );
+    expect(screen.getByTestId('segment-1-shot-1-card').textContent?.match(/镜头1-1/g)).toHaveLength(1);
+    expect(screen.getByTestId('segment-1-shot-2-card').textContent?.match(/镜头1-2/g)).toHaveLength(1);
   });
 
   it('keeps Yuan-style legacy history visible after collapsing and expanding the reply', () => {
