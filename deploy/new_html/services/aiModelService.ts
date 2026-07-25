@@ -307,10 +307,35 @@ export const aiReplanInvalidVideoScript = async (
   );
 };
 
-/**
- * Stage 3：从单个视频镜头块提取分镜提示词。
- * 单次只喂一个视频镜头，但 AI 可把它拆成多个「镜头号」块（更细的分镜）→ 返回数组。
- */
+/** Stage 3：按固定镜头号顺序批量提取同一分段的镜头设计。 */
+export const aiExtractStoryboardPromptsFromVideoShots = async (
+  model: AiModel,
+  videoShotBlocks: string,
+  expectedShotNumbers: string[],
+  taskContext?: TextTaskContext,
+): Promise<ExtractedStoryboardPrompt[]> => {
+  const orderedShotNumbers = expectedShotNumbers.map(value => value.trim()).filter(Boolean);
+  if (orderedShotNumbers.length === 0) return [];
+  const raw = await callAI(
+    model,
+    PROMPTS.EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT,
+    {
+      videoShotBlock: videoShotBlocks,
+      canonicalShotNo: orderedShotNumbers[0],
+      expectedShotNumbers: orderedShotNumbers.join('、'),
+    },
+    undefined,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '镜头设计批量生成',
+      ...taskContext,
+      suppressNotification: true,
+    },
+  );
+  return parseStoryboardPromptExtractions(raw);
+};
+
+/** Stage 3 局部兜底：只重新提取一个缺失或不合格的镜头。 */
 export const aiExtractStoryboardPromptFromVideoShot = async (
   model: AiModel,
   videoShotBlock: string,
@@ -320,7 +345,11 @@ export const aiExtractStoryboardPromptFromVideoShot = async (
   const raw = await callAI(
     model,
     PROMPTS.EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT,
-    { videoShotBlock, canonicalShotNo },
+    {
+      videoShotBlock,
+      canonicalShotNo,
+      expectedShotNumbers: canonicalShotNo,
+    },
     undefined,
     {
       operation: 'storyboard_script_generate',

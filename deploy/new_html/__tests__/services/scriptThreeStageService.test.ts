@@ -8,6 +8,7 @@ const aiMocks = vi.hoisted(() => ({
   aiGenerateVideoScriptFromSegments: vi.fn(),
   aiIterateVideoScript: vi.fn(),
   aiReplanInvalidVideoScript: vi.fn(),
+  aiExtractStoryboardPromptsFromVideoShots: vi.fn(),
   aiExtractStoryboardPromptFromVideoShot: vi.fn(),
   aiReplanInvalidStoryboardExtraction: vi.fn(),
 }));
@@ -390,7 +391,7 @@ describe('three-stage video script contract', () => {
   });
 
   it('runs stage three for a selected version and builds fresh hierarchical cards', async () => {
-    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([{
+    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([{
       shotNo: '镜头1-1',
       shotSize: '近景',
       sceneDescription: '主角推门进入办公室。',
@@ -413,18 +414,178 @@ describe('three-stage video script contract', () => {
       '【正向稳定约束】人物与场景稳定。',
     ].join('\n'));
 
-    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledWith(
+    expect(aiMocks.aiExtractStoryboardPromptsFromVideoShots).toHaveBeenCalledWith(
       AiModel.DeepseekChat,
       expect.stringContaining('镜头1-1'),
-      '镜头1-1',
+      ['镜头1-1'],
       undefined,
     );
+    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).not.toHaveBeenCalled();
     expect(result.items).toHaveLength(1);
     expect(result.items[0].shotNumber).toBe('镜头1-1');
     expect(result.items[0].imagePrompt).toContain('主角推门');
   });
 
+  it('generates independent segment groups concurrently but renders cards in source order', async () => {
+    let active = 0;
+    let maxActive = 0;
+    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockImplementation(async (
+      _model: AiModel,
+      _videoShotBlocks: string,
+      expectedShotNumbers: string[],
+    ) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise(resolve => setTimeout(
+        resolve,
+        expectedShotNumbers[0] === '镜头1-1' ? 20 : 1,
+      ));
+      active -= 1;
+      return expectedShotNumbers.map((shotNo, index) => ({
+        shotNo,
+        shotSize: '近景',
+        sceneDescription: `${shotNo}的画面`,
+        characters: [],
+        scene: '',
+        props: [],
+        imagePrompt: `${shotNo}，近景，平视，人物动作，室内环境，稳定光影。`,
+        cameraAngle: '平视',
+        cameraMove: '固定',
+        dialogue: '',
+        durationSec: index === 0 ? 8 : 7,
+      }));
+    });
+    const secondGroup = validGroup
+      .replace('分段1', '分段2')
+      .replaceAll('镜头1-', '镜头2-')
+      .replaceAll('主角', '配角')
+      .replaceAll('办公室', '走廊');
+
+    const result = await generateStoryboardDesignForVersion(
+      AiModel.DeepseekChat,
+      `${validGroup}\n\n${secondGroup}`,
+    );
+
+    expect(maxActive).toBe(2);
+    expect(aiMocks.aiExtractStoryboardPromptsFromVideoShots).toHaveBeenCalledTimes(2);
+    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).not.toHaveBeenCalled();
+    expect(result.items.map(item => item.shotNumber)).toEqual([
+      '镜头1-1',
+      '镜头1-2',
+      '镜头2-1',
+      '镜头2-2',
+    ]);
+  });
+
+  it('repairs only missing batch entries and restores them to the fixed source position', async () => {
+    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([{
+      shotNo: '镜头1-1',
+      shotSize: '近景',
+      sceneDescription: '主角推门进入办公室。',
+      characters: ['主角'],
+      scene: '办公室',
+      props: ['门'],
+      imagePrompt: '近景，平视，主角推门，办公室日光。',
+      cameraAngle: '平视',
+      cameraMove: '固定',
+      dialogue: '',
+      durationSec: 8,
+    }]);
+    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([{
+      shotNo: '镜头1-2',
+      shotSize: '中景',
+      sceneDescription: '主角停在办公桌前。',
+      characters: ['主角'],
+      scene: '办公室',
+      props: ['办公桌'],
+      imagePrompt: '中景，平视，主角停步，办公室柔和日光。',
+      cameraAngle: '平视',
+      cameraMove: '固定',
+      dialogue: '',
+      durationSec: 7,
+    }]);
+
+    const result = await generateStoryboardDesignForVersion(
+      AiModel.DeepseekChat,
+      validGroup,
+    );
+
+    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledTimes(1);
+    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      expect.stringContaining('主角停在办公桌前'),
+      '镜头1-2',
+      expect.objectContaining({ suppressNotification: true }),
+    );
+    expect(result.items.map(item => item.shotNumber)).toEqual(['镜头1-1', '镜头1-2']);
+    expect(result.items[1].imagePrompt).toContain('主角停步');
+  });
+
+  it('repairs multiple missing entries concurrently without changing display order', async () => {
+    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([]);
+    let active = 0;
+    let maxActive = 0;
+    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockImplementation(async (
+      _model: AiModel,
+      _videoShotBlock: string,
+      canonicalShotNo: string,
+    ) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise(resolve => setTimeout(
+        resolve,
+        canonicalShotNo === '镜头1-1' ? 20 : 1,
+      ));
+      active -= 1;
+      return [{
+        shotNo: canonicalShotNo,
+        shotSize: '近景',
+        sceneDescription: `${canonicalShotNo}修复后的画面`,
+        characters: [],
+        scene: '',
+        props: [],
+        imagePrompt: `${canonicalShotNo}，近景，平视，人物动作，环境与光影稳定。`,
+        cameraAngle: '平视',
+        cameraMove: '固定',
+        dialogue: '',
+        durationSec: canonicalShotNo.endsWith('-1') ? 8 : 7,
+      }];
+    });
+    const secondGroup = validGroup
+      .replace('分段1', '分段2')
+      .replaceAll('镜头1-', '镜头2-')
+      .replaceAll('主角', '配角')
+      .replaceAll('办公室', '走廊');
+
+    const result = await generateStoryboardDesignForVersion(
+      AiModel.DeepseekChat,
+      `${validGroup}\n\n${secondGroup}`,
+    );
+
+    expect(maxActive).toBe(4);
+    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledTimes(4);
+    expect(result.items.map(item => item.shotNumber)).toEqual([
+      '镜头1-1',
+      '镜头1-2',
+      '镜头2-1',
+      '镜头2-2',
+    ]);
+  });
+
   it('silently re-extracts incomplete stage-three output before creating cards', async () => {
+    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([{
+      shotNo: '镜头1-1',
+      shotSize: '近景',
+      sceneDescription: '不完整批量草稿。',
+      characters: ['主角'],
+      scene: '办公室',
+      props: [],
+      imagePrompt: '',
+      cameraAngle: '平视',
+      cameraMove: '固定',
+      dialogue: '',
+      durationSec: 15,
+    }]);
     aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([{
       shotNo: '镜头1-1',
       shotSize: '近景',
@@ -467,13 +628,14 @@ describe('three-stage video script contract', () => {
       '镜头1-1',
       expect.stringContaining('不完整草稿'),
       '镜头1-1缺少画面描述或分镜生成提示词',
-      undefined,
+      expect.objectContaining({ suppressNotification: true }),
     );
     expect(result.items[0].imagePrompt).toContain('主角推门');
-    expect(result.outputTexts.join('\n')).not.toContain('不完整草稿');
+    expect(result.outputTexts.join('\n')).toContain('重新提取后的完整画面');
   });
 
   it('hides stage-three extraction details if automatic repair is exhausted', async () => {
+    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([]);
     aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([]);
     aiMocks.aiReplanInvalidStoryboardExtraction.mockResolvedValue([]);
 

@@ -25,6 +25,8 @@ const MAX_SPLIT_REPLAN_ATTEMPTS = 1;
 const MAX_VIDEO_SCRIPT_REPLAN_ATTEMPTS = 1;
 const MAX_STORYBOARD_EXTRACTION_REPLAN_ATTEMPTS = 1;
 const VIDEO_SCRIPT_REPAIR_CONCURRENCY = 3;
+const STORYBOARD_GROUP_GENERATION_CONCURRENCY = 4;
+const STORYBOARD_LOCAL_REPAIR_CONCURRENCY = 4;
 const SAFE_SPLIT_REPLAN_FAILURE_MESSAGE = '剧本拆分未完成，系统已自动重新规划，请稍后再试';
 const SAFE_REPLAN_FAILURE_MESSAGE = '视频脚本生成未完成，系统已自动重新规划，请稍后再试';
 const SAFE_EXTRACTION_REPLAN_FAILURE_MESSAGE = '镜头设计生成未完成，系统已自动重新提取，请稍后再试';
@@ -520,10 +522,34 @@ function getStoryboardExtractionValidationError(
   if (extractions.length === 0) {
     return `${canonicalShotNo}未提取出有效镜头设计`;
   }
-  if (extractions.some(extraction => !extraction.sceneDescription || !extraction.imagePrompt)) {
+  if (extractions.length !== 1) {
+    return `${canonicalShotNo}应一一对应1个镜头设计，实际提取出${extractions.length}个`;
+  }
+  if (extractions[0].shotNo !== canonicalShotNo) {
+    return `${canonicalShotNo}镜头号不匹配`;
+  }
+  if (!extractions[0].sceneDescription || !extractions[0].imagePrompt) {
     return `${canonicalShotNo}缺少画面描述或分镜生成提示词`;
   }
   return null;
+}
+
+function alignStoryboardExtractions(
+  expectedShotNumbers: string[],
+  extractions: ExtractedStoryboardPrompt[],
+): Array<ExtractedStoryboardPrompt | undefined> {
+  const candidates = new Map<string, ExtractedStoryboardPrompt[]>();
+  extractions.forEach((extraction) => {
+    if (!expectedShotNumbers.includes(extraction.shotNo)) return;
+    candidates.set(extraction.shotNo, [
+      ...(candidates.get(extraction.shotNo) || []),
+      extraction,
+    ]);
+  });
+  return expectedShotNumbers.map((shotNo) => {
+    const matches = candidates.get(shotNo) || [];
+    return getStoryboardExtractionValidationError(matches, shotNo) ? undefined : matches[0];
+  });
 }
 
 async function validateOrReplanStoryboardExtractions(
@@ -567,66 +593,144 @@ export async function generateStoryboardDesignForVersion(
   const sourceShotCount = groups.reduce((total, group) => total + group.blocks.length, 0);
   const inputTexts: string[] = [];
   const outputTexts: string[] = [];
-  const items: StoryboardItem[] = [];
   let completed = 0;
-  const { aiExtractStoryboardPromptFromVideoShot } = await loadAiModelService();
+  let sourceIndex = 0;
+  const groupJobs = groups.map((group) => ({
+    group,
+    shots: group.blocks.map((block, localIndex) => ({
+      block,
+      group,
+      localShotNo: localIndex + 1,
+      canonicalShotNo: formatHierarchicalShotNumber(group.groupNo, localIndex + 1),
+      sourceIndex: sourceIndex++,
+    })),
+  }));
+  const sourceShots = groupJobs.flatMap(job => job.shots);
+  const extractionBySourceIndex = new Map<number, ExtractedStoryboardPrompt>();
+  const {
+    aiExtractStoryboardPromptsFromVideoShots,
+    aiExtractStoryboardPromptFromVideoShot,
+  } = await loadAiModelService();
 
-  for (const group of groups) {
-    const groupItemStart = items.length;
-    let nextLocalShotNo = 1;
-    for (const block of group.blocks) {
-      const canonicalShotNo = formatHierarchicalShotNumber(group.groupNo, nextLocalShotNo);
-      inputTexts.push(block.rawBlock);
+  // 同一分段按固定镜头号一次生成；不同分段有限并发。结果数组始终按输入组顺序返回。
+  const groupResults = await runWithConcurrencyInOrder(
+    groupJobs,
+    STORYBOARD_GROUP_GENERATION_CONCURRENCY,
+    async (job) => {
+      const expectedShotNumbers = job.shots.map(shot => shot.canonicalShotNo);
+      let extractions: ExtractedStoryboardPrompt[] = [];
+      try {
+        extractions = await aiExtractStoryboardPromptsFromVideoShots(
+          model,
+          job.group.rawGroup,
+          expectedShotNumbers,
+          options.taskContext,
+        );
+      } catch {
+        // 批量请求失败时只将本组标记为待修复，后续按镜头有限并发，不暴露中间错误。
+      }
+      const aligned = alignStoryboardExtractions(expectedShotNumbers, extractions);
+      const validCount = aligned.filter(Boolean).length;
+      completed += validCount;
+      if (validCount > 0) {
+        options.onProgress?.({
+          stage: 'storyboardDesign',
+          completed,
+          total: sourceShotCount,
+        });
+      }
+      return {
+        inputText: job.group.rawGroup,
+        outputText: JSON.stringify(extractions),
+        aligned,
+      };
+    },
+  );
+
+  groupResults.forEach((result, groupIndex) => {
+    inputTexts.push(result.inputText);
+    if (result.outputText !== '[]') outputTexts.push(result.outputText);
+    result.aligned.forEach((extraction, localIndex) => {
+      if (extraction) {
+        extractionBySourceIndex.set(
+          groupJobs[groupIndex].shots[localIndex].sourceIndex,
+          extraction,
+        );
+      }
+    });
+  });
+
+  const repairShots = sourceShots.filter(
+    shot => !extractionBySourceIndex.has(shot.sourceIndex),
+  );
+  const repairResults = await runWithConcurrencyInOrder(
+    repairShots,
+    STORYBOARD_LOCAL_REPAIR_CONCURRENCY,
+    async (shot) => {
+      const repairTaskContext = {
+        ...options.taskContext,
+        suppressNotification: true,
+      };
       const initialExtractions = await aiExtractStoryboardPromptFromVideoShot(
         model,
-        block.rawBlock,
-        canonicalShotNo,
-        options.taskContext,
+        shot.block.rawBlock,
+        shot.canonicalShotNo,
+        repairTaskContext,
       );
       const extractions = await validateOrReplanStoryboardExtractions(
         model,
-        block.rawBlock,
-        canonicalShotNo,
+        shot.block.rawBlock,
+        shot.canonicalShotNo,
         initialExtractions,
-        options.taskContext,
+        repairTaskContext,
       );
-      outputTexts.push(JSON.stringify(extractions));
-      extractions.forEach((extraction) => {
-        items.push(buildStoryboardItem(
-          extraction,
-          block,
-          group.groupNo,
-          nextLocalShotNo,
-          group.sharedVideoPrompt,
-        ));
-        nextLocalShotNo += 1;
-      });
       completed += 1;
       options.onProgress?.({
         stage: 'storyboardDesign',
         completed,
         total: sourceShotCount,
       });
-    }
-    const firstShot = formatHierarchicalShotNumber(group.groupNo, 1);
-    const lastShot = formatHierarchicalShotNumber(group.groupNo, Math.max(1, nextLocalShotNo - 1));
+      return {
+        shot,
+        extraction: extractions[0],
+        inputTexts: extractions === initialExtractions
+          ? [shot.block.rawBlock]
+          : [shot.block.rawBlock, shot.block.rawBlock],
+        outputTexts: extractions === initialExtractions
+          ? [JSON.stringify(initialExtractions)]
+          : [JSON.stringify(initialExtractions), JSON.stringify(extractions)],
+      };
+    },
+  );
+  repairResults.forEach((result) => {
+    extractionBySourceIndex.set(result.shot.sourceIndex, result.extraction);
+    inputTexts.push(...result.inputTexts);
+    outputTexts.push(...result.outputTexts);
+  });
+
+  // 最终卡片只按源镜头序号组装，与并发请求完成顺序无关。
+  const items = sourceShots.map((shot) => {
+    const extraction = extractionBySourceIndex.get(shot.sourceIndex);
+    if (!extraction) throw new Error(SAFE_EXTRACTION_REPLAN_FAILURE_MESSAGE);
+    const firstShot = formatHierarchicalShotNumber(shot.group.groupNo, 1);
+    const lastShot = formatHierarchicalShotNumber(
+      shot.group.groupNo,
+      Math.max(1, shot.group.blocks.length),
+    );
     const range = firstShot === lastShot ? firstShot : `${firstShot}至${lastShot}`;
     const finalSharedVideoPrompt = [
       range,
-      group.visualStyle ? `【视觉风格】${group.visualStyle}` : '',
-      group.stabilityConstraint ? `【正向稳定约束】${group.stabilityConstraint}` : '',
+      shot.group.visualStyle ? `【视觉风格】${shot.group.visualStyle}` : '',
+      shot.group.stabilityConstraint ? `【正向稳定约束】${shot.group.stabilityConstraint}` : '',
     ].filter(Boolean).join('，') + '。';
-    for (let index = groupItemStart; index < items.length; index += 1) {
-      items[index] = {
-        ...items[index],
-        videoPrompt: finalSharedVideoPrompt,
-        originalText: items[index].originalText.replace(
-          /^视频提示词：.*$/m,
-          `视频提示词：${finalSharedVideoPrompt}`,
-        ),
-      };
-    }
-  }
+    return buildStoryboardItem(
+      extraction,
+      shot.block,
+      shot.group.groupNo,
+      shot.localShotNo,
+      finalSharedVideoPrompt,
+    );
+  });
 
   if (items.length === 0) throw new Error(SAFE_EXTRACTION_REPLAN_FAILURE_MESSAGE);
   return { items, sourceShotCount, inputTexts, outputTexts };

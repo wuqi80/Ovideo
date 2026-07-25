@@ -78,5 +78,8 @@ describe('latest three-step script prompts', () => {
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('分镜生成提示词：用于AI生成分镜图片的提示词');
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('景别（只需要景别不要运镜）、角度、主体、动作、环境、光影');
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('{canonicalShotNo}');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('{expectedShotNumbers}');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('逐个一一对应');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('不得合并、拆分、遗漏、重复或调换顺序');
   });
 });
