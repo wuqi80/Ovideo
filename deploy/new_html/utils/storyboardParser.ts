@@ -6,13 +6,17 @@
 
 import { StoryboardItem } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  formatHierarchicalShotNumber,
+  parseHierarchicalShotNumber,
+} from './scriptPipelineParsers';
 
 /**
  * 镜头块原始字段
  * 🔧 根据 GENERATE_STORYBOARD_SCRIPT 提示词输出格式（支持新旧字段名）
  */
 export interface ShotBlockFields {
-  shotId: string;       // 镜头01, 镜头02 等
+  shotId: string;       // 新数据为镜头1-1，历史数据兼容镜头01
   segmentNo?: number;   // 分段01；段内镜头允许重新从 01 编号
   '时长（秒）'?: string;
   时长?: string;
@@ -83,11 +87,11 @@ export function parseStreamingBlocks(buffer: string): {
   let continueFrom: string | undefined;
 
   // 检查 CONTINUE_FROM 标记
-  const continueMatch = buffer.match(/<<<CONTINUE_FROM\s+(镜头\d+)>>>/);
+  const continueMatch = buffer.match(/<<<CONTINUE_FROM\s+(镜头\d+(?:-\d+)?)>>>/);
   if (continueMatch) {
     continueFrom = continueMatch[1];
     // 从显示文本中移除
-    remainingBuffer = buffer.replace(/<<<CONTINUE_FROM\s+镜头\d+>>>\s*/, '');
+    remainingBuffer = buffer.replace(/<<<CONTINUE_FROM\s+镜头\d+(?:-\d+)?>>>\s*/, '');
   }
 
   // 按 ---CUT--- 分割
@@ -175,15 +179,19 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
     // 分段标题由 parseStreamingBlocks 维护，不属于镜头字段。
     if (/^(?:分段|段落)\s*0*\d+\s*$/.test(line)) continue;
 
-    // 检查是否是镜头ID行 (如 "镜头01" 或 "镜头 01")
-    const shotIdMatch = line.match(/^镜头\s*(\d+)/);
+    // 检查是否是镜头ID行（新格式“镜头1-1”，兼容历史“镜头01”）。
+    const shotIdMatch = line.match(/^镜头\s*(\d+)(?:\s*[-－—]\s*(\d+))?/);
     if (shotIdMatch) {
       // 保存之前的字段
       if (currentField && currentValue.length > 0) {
         (fields as any)[currentField] = currentValue.join('\n');
       }
 
-      fields.shotId = `镜头${shotIdMatch[1].padStart(2, '0')}`;
+      fields.shotId = shotIdMatch[2]
+        ? formatHierarchicalShotNumber(Number(shotIdMatch[1]), Number(shotIdMatch[2]))
+        : `镜头${shotIdMatch[1].padStart(2, '0')}`;
+      const parsedShotNo = parseHierarchicalShotNumber(fields.shotId);
+      if (!fields.segmentNo && parsedShotNo?.segmentNo) fields.segmentNo = parsedShotNo.segmentNo;
       currentField = null;
       currentValue = [];
       continue;
@@ -482,7 +490,7 @@ export function updateShotsFromStream(
 export function removeControlCharacters(text: string): string {
   return text
     .replace(/---CUT---/g, '')
-    .replace(/<<<CONTINUE_FROM\s+镜头\d+>>>/g, '')
+    .replace(/<<<CONTINUE_FROM\s+镜头\d+(?:-\d+)?>>>/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -504,7 +512,7 @@ export function segmentInputContent(
   if (!content.trim()) return [];
 
   // 识别镜头标识的正则：匹配 "镜头1"、"镜头 1"、"镜头01" 等格式
-  const shotPattern = /镜头\s*(\d+)/g;
+  const shotPattern = /镜头\s*(\d+(?:\s*[-－—]\s*\d+)?)/g;
   const matches = [...content.matchAll(shotPattern)];
   
   // 如果没有找到镜头标识，按空行分段
@@ -580,8 +588,7 @@ function segmentByParagraphs(content: string, itemsPerSegment: number): string[]
  * 🆕 获取镜头数量
  */
 export function countShots(content: string): number {
-  const shotPattern = /镜头\s*\d+/g;
+  const shotPattern = /镜头\s*\d+(?:\s*[-－—]\s*\d+)?/g;
   const matches = content.match(shotPattern);
   return matches ? matches.length : 0;
 }
-

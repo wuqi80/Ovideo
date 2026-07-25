@@ -248,11 +248,11 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       .map(message => `${message.role}:${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
     const billingInput = isFirstTurn
-      ? draft
+      ? `${draft}\n${draft}`
       : [currentVersion?.content || selectedFile.scriptContent || selectedFile.originalContent, draft, conversationContext].join('\n');
     const forecastOutputTokens = Math.max(
       1000,
-      estimateTextTokens(currentVersion?.content || selectedFile.scriptContent || draft) * (isFirstTurn ? 2 : 1),
+      estimateTextTokens(currentVersion?.content || selectedFile.scriptContent || draft) * (isFirstTurn ? 3 : 1),
     );
     const model = SCRIPT_MODEL_OPTIONS.find(option => option.value === aiModel)?.runtime || String(aiModel);
     return {
@@ -594,10 +594,13 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 <button
                   type="button"
                   onClick={() => onGenerateDesign(version)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover"
+                  disabled={isSending}
+                  className="inline-flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <PanelRightOpen className="h-3.5 w-3.5" />
-                  生成镜头设计
+                  {isSending
+                    ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                    : <PanelRightOpen className="h-3.5 w-3.5" />}
+                  {isSending ? '处理中…' : '生成镜头设计'}
                 </button>
                 <button
                   type="button"

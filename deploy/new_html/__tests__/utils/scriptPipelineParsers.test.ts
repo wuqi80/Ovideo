@@ -4,9 +4,36 @@ import {
     parseVideoScriptBlocks,
     parseVideoScriptGroups,
     combineVideoScriptOutputs,
+    findVideoScriptShotBlock,
     parseStoryboardPromptExtractions,
     stripDialogueMarkers,
 } from '../../utils/scriptPipelineParsers';
+
+describe('findVideoScriptShotBlock', () => {
+    it('matches the full hierarchical number instead of the first segment digit', () => {
+        const content = [
+            '分段2',
+            '镜头2-1',
+            '画面描述：第一个镜头。',
+            '镜头2-2',
+            '画面描述：第二个镜头。',
+            '镜头3-1',
+            '画面描述：下一分段。',
+        ].join('\n');
+
+        expect(findVideoScriptShotBlock(content, '镜头2-2')).toBe([
+            '镜头2-2',
+            '画面描述：第二个镜头。',
+        ].join('\n'));
+        expect(findVideoScriptShotBlock(content, '镜头2-1')).not.toContain('第二个镜头');
+    });
+
+    it('keeps legacy flat shot numbers from matching hierarchical headers', () => {
+        const content = '镜头1-1\n画面描述：新格式。\n镜头1\n画面描述：旧格式。';
+        expect(findVideoScriptShotBlock(content, '镜头1')).toContain('旧格式');
+        expect(findVideoScriptShotBlock(content, '镜头1')).not.toContain('新格式');
+    });
+});
 
 describe('parseScriptSegments', () => {
     it('splits on --- and reads 时长：N秒', () => {
@@ -124,7 +151,7 @@ describe('parseVideoScriptGroups', () => {
 
     it('builds one shared video prompt from the group range and long constraints', () => {
         const [group] = parseVideoScriptGroups(grouped);
-        expect(group.sharedVideoPrompt).toContain('镜头01-02');
+        expect(group.sharedVideoPrompt).toContain('镜头1-1至镜头1-2');
         expect(group.sharedVideoPrompt).toContain('【视觉风格】都市写实');
         expect(group.sharedVideoPrompt).toContain('【正向稳定约束】角色形象固定');
     });
@@ -134,9 +161,14 @@ describe('parseVideoScriptGroups', () => {
             '分段01\n镜头1\n时长（秒）：3',
             '分段01\n镜头1\n时长（秒）：4',
         ]);
-        expect(combined).toContain('分段01');
-        expect(combined).toContain('分段02');
-        expect(combined.match(/分段01/g)).toHaveLength(1);
+        expect(combined).toContain('分段1\n镜头1-1');
+        expect(combined).toContain('分段2\n镜头2-1');
+        expect(combined.match(/分段1/g)).toHaveLength(1);
+    });
+
+    it('parses hierarchical shot numbers without collapsing the separator', () => {
+        const blocks = parseVideoScriptBlocks('分段12\n镜头12-3\n时长（秒）：5');
+        expect(blocks[0].shotNo).toBe('镜头12-3');
     });
 });
 
@@ -176,6 +208,11 @@ describe('parseStoryboardPromptExtractions', () => {
         );
         expect(list[0].characters).toEqual(['陆一航', '浅浅', '赵峰']);
         expect(list[0].scene).toBe('浅浅家');
+    });
+
+    it('preserves a hierarchical shot number returned by stage 3', () => {
+        const [result] = parseStoryboardPromptExtractions(shot.replace('镜头号：2', '镜头号：镜头2-3'));
+        expect(result.shotNo).toBe('镜头2-3');
     });
 
     it('splits 道具 by 、，/ into an array', () => {

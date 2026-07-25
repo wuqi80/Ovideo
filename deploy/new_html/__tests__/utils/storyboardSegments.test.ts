@@ -148,9 +148,9 @@ describe('storyboard segment normalization', () => {
       shot('c', '4秒', 'segment-b'),
     ]);
 
-    expect(normalized.map(item => item.shotNumber)).toEqual(['镜头01', '镜头02', '镜头03']);
-    expect(normalized.map(item => item.sourceVideoShotNo)).toEqual(['镜头01', '镜头02', '镜头01']);
-    expect(normalized[2].originalText.startsWith('镜头01')).toBe(true);
+    expect(normalized.map(item => item.shotNumber)).toEqual(['镜头1-1', '镜头1-2', '镜头2-1']);
+    expect(normalized.map(item => item.sourceVideoShotNo)).toEqual(['镜头1-1', '镜头1-2', '镜头2-1']);
+    expect(normalized[2].originalText.startsWith('镜头2-1')).toBe(true);
   });
 
   it('serializes visible segment headings and restarts shot numbers per segment', () => {
@@ -160,9 +160,9 @@ describe('storyboard segment normalization', () => {
       shot('c', '6秒', 'segment-b'),
     ]);
 
-    expect(content).toContain('分段01\n镜头01');
-    expect(content).toContain('镜头02\nb\n时间：7秒');
-    expect(content).toContain('分段02\n镜头01\nc\n时间：6秒');
+    expect(content).toContain('分段1\n镜头1-1');
+    expect(content).toContain('镜头1-2\nb\n时间：7秒');
+    expect(content).toContain('分段2\n镜头2-1\nc\n时间：6秒');
   });
 
   it('renumbers globally numbered model output inside every explicit segment', () => {
@@ -182,9 +182,9 @@ describe('storyboard segment normalization', () => {
     const parsed = parseStreamingBlocks(modelOutput).completedBlocks.map(convertToStoryboardItem);
     const content = serializeStoryboardItemsWithSegments(parsed);
 
-    expect(content).toContain('分段01\n镜头01\n时间：8秒');
-    expect(content).toContain('镜头02\n时间：7秒');
-    expect(content).toContain('分段02\n镜头01\n时间：6秒');
+    expect(content).toContain('分段1\n镜头1-1\n时间：8秒');
+    expect(content).toContain('镜头1-2\n时间：7秒');
+    expect(content).toContain('分段2\n镜头2-1\n时间：6秒');
     expect(content).not.toMatch(/镜头(?:16|17|18)/);
   });
 
@@ -208,12 +208,12 @@ describe('storyboard segment normalization', () => {
 
     expect(synchronized[0].videoPrompt).toBe(synchronized[1].videoPrompt);
     expect(synchronized[0].videoPrompt).toBe(
-      '镜头01-02，【视觉风格】电影感动画，【正向稳定约束】角色稳定。',
+      '镜头1-1至镜头1-2，【视觉风格】电影感动画，【正向稳定约束】角色稳定。',
     );
     expect(synchronized[0].originalText).toContain(`视频提示词：${synchronized[0].videoPrompt}`);
     expect(synchronized[1].originalText).toContain(`视频提示词：${synchronized[1].videoPrompt}`);
     expect(synchronized[2].videoPrompt).toBe(
-      '镜头01-01，【视觉风格】夜景动画，【正向稳定约束】场景稳定。',
+      '镜头2-1，【视觉风格】夜景动画，【正向稳定约束】场景稳定。',
     );
   });
 

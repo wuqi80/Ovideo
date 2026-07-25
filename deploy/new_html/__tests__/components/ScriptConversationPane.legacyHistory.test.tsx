@@ -31,6 +31,7 @@ describe('ScriptConversationPane legacy history', () => {
         {
           id: 'shot-1',
           shotNumber: '镜头01',
+          originalText: '镜头01',
           scriptSegment: '旧版摘要一',
           imagePrompt: '',
           videoPrompt: '',
@@ -40,6 +41,7 @@ describe('ScriptConversationPane legacy history', () => {
         {
           id: 'shot-2',
           shotNumber: '镜头02',
+          originalText: '镜头02',
           scriptSegment: '旧版摘要二',
           imagePrompt: '',
           videoPrompt: '',
@@ -59,8 +61,8 @@ describe('ScriptConversationPane legacy history', () => {
     expect(body).toHaveTextContent('画面描述：小悟站在办公室中央，右手紧握智能跳绳。');
     expect(body).toHaveTextContent('镜头运动：缓慢推进。');
     expect(body).toHaveTextContent('分段');
-    expect(body).toHaveTextContent('镜头 01');
-    expect(body).toHaveTextContent('镜头 02');
+    expect(body).toHaveTextContent('镜头1-1');
+    expect(body).toHaveTextContent('镜头1-2');
     expect(body.textContent).not.toMatch(/###|\*\*/);
   });
 

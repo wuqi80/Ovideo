@@ -62,6 +62,16 @@ function seconds(ms: number): string {
   return (ms / 1000).toFixed(1);
 }
 
+function formatTimelineShotLabel(label: string, sortOrder: number): string {
+  const hierarchical = label.match(/分段\s*(\d+).*镜头\s*\d+\s*[-－—]\s*(\d+)/);
+  if (hierarchical) {
+    return `${hierarchical[1]}-${hierarchical[2]}`;
+  }
+
+  const legacy = label.match(/分段\s*(\d+).*镜头\s*(\d+)/);
+  return legacy ? legacy.slice(1).join('-') : `#${sortOrder}`;
+}
+
 export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   storyboardItems,
   clips,
@@ -497,8 +507,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   onClick={() => onClickItem(segment.itemId)}
                   title={segment.label}
                 >
-                  {segment.label.match(/分段\s*(\d+).*镜头\s*(\d+)/)?.slice(1).join('-')
-                    || `#${segment.sortOrder}`}
+                  {formatTimelineShotLabel(segment.label, segment.sortOrder)}
                 </button>
               ))}
             </div>

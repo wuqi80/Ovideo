@@ -131,8 +131,8 @@ describe('MultiTrackTimeline editor', () => {
 
     expect(screen.getByText('镜头')).toBeInTheDocument();
     expect(
-      screen.getAllByTitle('分段 01 · 镜头 01')
-        .find(element => element.textContent === '01-01'),
+      screen.getAllByTitle('分段1 · 镜头1-1')
+        .find(element => element.textContent === '1-1'),
     ).toBeTruthy();
   });
 });

@@ -42,7 +42,7 @@ describe('StoryboardScriptColumn', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /镜头 01/ }));
+    fireEvent.click(screen.getByRole('button', { name: /镜头1-1/ }));
     expect(onSelectItemIds).toHaveBeenCalledTimes(1);
     expect(Array.from(onSelectItemIds.mock.calls[0][0])).toEqual(['shot-1']);
   });
@@ -70,7 +70,7 @@ describe('StoryboardScriptColumn', () => {
     );
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
-    expect(screen.getByRole('button', { name: /镜头 02/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /镜头1-2/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('uses visible item order when legacy shot numbers are duplicated', () => {
@@ -82,8 +82,8 @@ describe('StoryboardScriptColumn', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: /镜头 01/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /镜头 02/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /镜头1-1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /镜头1-2/ })).toBeInTheDocument();
   });
 
   it('keeps linked scrolling inside each independent column', () => {
@@ -121,8 +121,8 @@ describe('StoryboardScriptColumn', () => {
     );
 
     expect(screen.getByText('共 2 个分段 · 3 个镜头')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '分段 01 镜头 02' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '分段 02 镜头 01' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分段1 镜头1-2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分段2 镜头2-1' })).toBeInTheDocument();
     expect(screen.getAllByText('01', { selector: '.text-warning' })).toHaveLength(1);
     expect(screen.getAllByText('02', { selector: '.text-warning' })).toHaveLength(1);
   });

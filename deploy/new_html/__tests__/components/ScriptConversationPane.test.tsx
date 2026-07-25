@@ -30,9 +30,21 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).not.toContain('细碎 + 合并');
     expect(source).not.toContain('shotDurationMode');
     expect(source).toContain('await onSend(content)');
-    expect(workspace).toContain("aiModel,\n          content,\n          '',");
+    expect(workspace).toContain('pipelineService.generateEpisodeVideoScript(');
+    expect(workspace).toContain('pipelineService.iterateEpisodeVideoScript(');
+    expect(workspace).toContain('pipelineService.generateStoryboardDesignForVersion(');
     expect(workspace).not.toContain('buildShotDurationInstruction');
     expect(workspace).not.toContain('shotDurationMode');
+  });
+
+  it('generates version-specific design cards with history and post-success billing', () => {
+    expect(workspace).toContain("if (options.autoSnapshot === false)");
+    expect(workspace).toContain('getVersionStoryboardSnapshots(selectedVersion)');
+    expect(workspace).toContain('buildStoryboardDbPayload(normalizedItems)');
+    expect(workspace).toContain('await persistStoryboardSnapshot(fileId, {');
+    expect(workspace).toContain("featureKey: 'storyboard_design_generation'");
+    expect(workspace.indexOf('await persistStoryboardSnapshot(fileId, {', workspace.indexOf('const handleConversationGenerateDesign')))
+      .toBeLessThan(workspace.indexOf('const credit = await consumeCredits({', workspace.indexOf('const handleConversationGenerateDesign')));
   });
 
   it('shows a dynamic credit estimate before each script generation', () => {

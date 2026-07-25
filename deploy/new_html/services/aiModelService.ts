@@ -159,12 +159,18 @@ export const aiSplitScriptIntoSegments = async (
   model: AiModel,
   originalContent: string,
   onStream?: (chunk: string) => void,
+  taskContext?: TextTaskContext,
 ): Promise<ScriptSegment[]> => {
   const raw = await callAI(
     model,
     PROMPTS.SPLIT_SCRIPT_INTO_SEGMENTS,
     { originalContent },
     onStream,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '剧本拆分',
+      ...taskContext,
+    },
   );
   return parseScriptSegments(raw);
 };
@@ -174,12 +180,18 @@ export const aiGenerateVideoScriptFromSegment = async (
   model: AiModel,
   segment: ScriptSegment,
   onStream?: (chunk: string) => void,
+  taskContext?: TextTaskContext,
 ): Promise<string> => {
   return await callAI(
     model,
     PROMPTS.GENERATE_VIDEO_SCRIPT_FROM_SEGMENT,
     { segmentText: segment.sourceText },
     onStream,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '视频脚本生成',
+      ...taskContext,
+    },
   );
 };
 
@@ -218,11 +230,19 @@ export const aiIterateVideoScript = async (
 export const aiExtractStoryboardPromptFromVideoShot = async (
   model: AiModel,
   videoShotBlock: string,
+  canonicalShotNo: string = '镜头1-1',
+  taskContext?: TextTaskContext,
 ): Promise<ExtractedStoryboardPrompt[]> => {
   const raw = await callAI(
     model,
     PROMPTS.EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT,
-    { videoShotBlock },
+    { videoShotBlock, canonicalShotNo },
+    undefined,
+    {
+      operation: 'storyboard_script_generate',
+      displayName: '镜头设计生成',
+      ...taskContext,
+    },
   );
   return parseStoryboardPromptExtractions(raw);
 };

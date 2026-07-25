@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ProjectFile, StoryboardItem, FileVersion, ScriptStoryboardVersion } from '../types';
 import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box, Coins } from 'lucide-react';
 import { buildStoryboardSegmentGroups, buildStoryboardSegmentLookup } from '../utils/storyboardSegments';
+import { getVersionStoryboardSnapshots } from '../utils/storyboardSnapshots';
 
 interface StoryboardColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -501,6 +502,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                        <div className="px-1 pt-1 text-[10px] font-semibold text-n300">分镜脚本版本</div>
                        {[...scriptVersions].reverse().map(version => {
                          const isCurrent = version.id === currentScriptVersionId;
+                         const designHistoryCount = getVersionStoryboardSnapshots(version).length;
                          return (
                            <div key={version.id} className={`rounded-lg border p-3 transition-colors ${isCurrent ? 'border-success/40 bg-success-light' : 'border-n40 bg-n30 hover:bg-n20'}`}>
                              <div className="mb-2 flex items-start justify-between gap-2">
@@ -514,7 +516,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                    )}
                                  </div>
                                  <div className="mt-1 text-[10px] text-n100">
-                                   {version.storyboardItems.length} 个镜头
+                                   {version.storyboardItems.length} 个脚本镜头 · {designHistoryCount} 个镜头设计版本
                                    {version.modelAlias ? ` · ${version.modelAlias}` : ''}
                                    {version.modelName ? ` · ${version.modelName}` : ''}
                                  </div>
@@ -531,11 +533,11 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                    setShowHistory(false);
                                  }
                                }}
-                               disabled={isCurrent || !onRestoreScriptVersion || version.storyboardItems.length === 0}
+                               disabled={isCurrent || !onRestoreScriptVersion || designHistoryCount === 0}
                                className="flex w-full items-center justify-center gap-1 rounded border border-primary bg-primary-light py-1.5 text-[10px] text-primary transition-colors hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:border-n40 disabled:bg-n20 disabled:text-n100"
                              >
                                <RefreshCw className="h-3 w-3" />
-                               {isCurrent ? '当前版本' : version.storyboardItems.length > 0 ? '恢复此版本' : '无镜头数据'}
+                               {isCurrent ? '当前版本' : designHistoryCount > 0 ? '恢复最近镜头设计' : '无镜头设计历史'}
                              </button>
                            </div>
                          );

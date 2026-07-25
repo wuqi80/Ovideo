@@ -43,7 +43,7 @@ export interface StoryboardQualityReview {
 
 export interface StoryboardItem {
   id: string;
-  shotNumber?: string | number; // 镜头编号（如 "镜头01" 或 1）
+  shotNumber?: string | number; // 镜头编号（新数据为 "镜头1-1"，历史数据兼容 "镜头01" 或 1）
   duration?: string; // 🆕 时长（如 "4秒"）
   
   // 🔧 第一阶段：提取分镜（必需）
@@ -122,7 +122,7 @@ export interface ScriptSegment {
 
 /** parseVideoScriptBlocks 输出：Stage 2 视频脚本里的单个镜头块 */
 export interface VideoScriptBlock {
-  shotNo: string;            // 规范化为 "镜头1"
+  shotNo: string;            // 新数据规范化为 "镜头1-1"，历史数据兼容 "镜头1"
   durationSec: number | null;
   rawBlock: string;          // 该镜头完整文本块
 }
@@ -139,7 +139,7 @@ export interface VideoScriptGroup {
 
 /** parseStoryboardPromptExtractions 输出元素：Stage 3 单个「镜头号」块的提取结果 */
 export interface ExtractedStoryboardPrompt {
-  shotNo: string;            // "镜头1"
+  shotNo: string;            // "镜头1-1" 或兼容旧输出 "镜头1"
   shotSize: string;          // 景别
   sceneDescription: string;  // 画面描述
   characters: string[];      // 人物（按 、，/ 切分；"无" → []）

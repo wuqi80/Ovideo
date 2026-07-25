@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ProjectFile } from '../types';
 import { ScrollText, FileSignature, LayoutDashboard, Users, MapPin, Tags, ListPlus, Sparkles, Wand2, Split, Merge, Edit, Save, X, Undo2, Redo2, FileText, CheckCircle, Clock, AlertOctagon, Download, FileSpreadsheet } from 'lucide-react';
+import {
+  findVideoScriptShotBlock,
+  parseHierarchicalShotNumber,
+} from '../utils/scriptPipelineParsers';
 
 interface ScriptColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -216,12 +220,14 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
     }
 
     // 🔧 策略1：从选中文本中提取镜头号
-    const shotMatch = selectedText.match(/镜头\s*(\d+)/);
+    const shotMatch = selectedText.match(/镜头\s*\d+(?:\s*[-－—]\s*\d+)?/);
     if (shotMatch) {
-      const shotNum = parseInt(shotMatch[1]);
+      const shotNo = parseHierarchicalShotNumber(shotMatch[0]);
       const item = selectedFile.storyboard.items.find(i => {
-        const itemNum = getShotNumberStr(i.shotNumber).match(/\d+/)?.[0];
-        return itemNum && parseInt(itemNum) === shotNum;
+        const itemShotNo = parseHierarchicalShotNumber(getShotNumberStr(i.shotNumber));
+        return shotNo && itemShotNo
+          && shotNo.localShotNo === itemShotNo.localShotNo
+          && (shotNo.segmentNo === null || itemShotNo.segmentNo === null || shotNo.segmentNo === itemShotNo.segmentNo);
       });
       if (item) {
         matched.push(getShotNumberStr(item.shotNumber) || item.originalText || item.scriptSegment);
@@ -235,13 +241,15 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
     if (selectionIndex !== -1) {
       // 往前查找最近的镜头标识
       const beforeText = content.substring(0, selectionIndex);
-      const shotMatches = [...beforeText.matchAll(/镜头\s*(\d+)/g)];
+      const shotMatches = [...beforeText.matchAll(/镜头\s*\d+(?:\s*[-－—]\s*\d+)?/g)];
       if (shotMatches.length > 0) {
         const lastMatch = shotMatches[shotMatches.length - 1];
-        const shotNum = parseInt(lastMatch[1]);
+        const shotNo = parseHierarchicalShotNumber(lastMatch[0]);
         const item = selectedFile.storyboard.items.find(i => {
-          const itemNum = getShotNumberStr(i.shotNumber).match(/\d+/)?.[0];
-          return itemNum && parseInt(itemNum) === shotNum;
+          const itemShotNo = parseHierarchicalShotNumber(getShotNumberStr(i.shotNumber));
+          return shotNo && itemShotNo
+            && shotNo.localShotNo === itemShotNo.localShotNo
+            && (shotNo.segmentNo === null || itemShotNo.segmentNo === null || shotNo.segmentNo === itemShotNo.segmentNo);
         });
         if (item) {
           matched.push(getShotNumberStr(item.shotNumber) || item.originalText || item.scriptSegment);
@@ -503,49 +511,11 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
       return renderMarkdown(content);
     }
 
-    // 🔧 基于镜头号找到对应的文本块并高亮
-    // 策略：找到 "镜头XX" 开始到下一个 "镜头YY" 或文档末尾的区域
+    // 基于完整层级镜头号找到对应文本块，直到下一个镜头或文档末尾。
     highlightShotNumbers.forEach(shotNumber => {
-      // 匹配 shotNumber（如 "镜头01" 或 "镜头1"）
-      const shotNum = shotNumber.match(/\d+/)?.[0];
-      if (!shotNum) return;
-      
-      // 构造正则：匹配 "镜头01" 或 "镜头 01" 或 "镜头1" 等格式
-      const shotPattern = new RegExp(`(镜头\\s*0?${parseInt(shotNum)}(?![\\d]))`, 'g');
-      
-      // 找到这个镜头在内容中的位置
-      const match = markedContent.match(shotPattern);
-      if (match) {
-        // 找到镜头开始位置
-        const startIndex = markedContent.search(shotPattern);
-        if (startIndex === -1) return;
-        
-        // 找到下一个镜头的位置（作为结束位置）
-        const nextShotNum = parseInt(shotNum) + 1;
-        const nextShotPattern = new RegExp(`镜头\\s*0?${nextShotNum}(?![\\d])`);
-        const afterStart = markedContent.substring(startIndex + match[0].length);
-        const nextMatch = afterStart.match(nextShotPattern);
-        
-        let endIndex: number;
-        if (nextMatch && nextMatch.index !== undefined) {
-          endIndex = startIndex + match[0].length + nextMatch.index;
-        } else {
-          // 如果没有下一个镜头，查找下一个任意镜头标识
-          const anyNextShot = afterStart.match(/镜头\s*\d+/);
-          if (anyNextShot && anyNextShot.index !== undefined) {
-            endIndex = startIndex + match[0].length + anyNextShot.index;
-          } else {
-            endIndex = markedContent.length;
-          }
-        }
-        
-        // 提取这个镜头的完整文本块
-        const shotBlock = markedContent.substring(startIndex, endIndex).trimEnd();
-        
-        // 标记这个区块
-        if (shotBlock && !shotBlock.includes(MARK_START)) {
-          markedContent = markedContent.replace(shotBlock, `${MARK_START}${shotBlock}${MARK_END}`);
-        }
+      const shotBlock = findVideoScriptShotBlock(markedContent, shotNumber);
+      if (shotBlock && !shotBlock.includes(MARK_START)) {
+        markedContent = markedContent.replace(shotBlock, `${MARK_START}${shotBlock}${MARK_END}`);
       }
     });
 

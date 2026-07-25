@@ -8,7 +8,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { SkeletonScreen } from './components/SkeletonScreen';
 import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock, ScriptConversation, ScriptStoryboardVersion } from './types';
-import { parseVideoScriptBlocks } from './utils/scriptPipelineParsers';
+import {
+  combineVideoScriptOutputs,
+  formatHierarchicalShotNumber,
+  parseHierarchicalShotNumber,
+  parseVideoScriptBlocks,
+} from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
 import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments, getScriptConversation, createScriptMessage, updateScriptMessage, createScriptVersion, selectScriptVersion, updateScriptVersionMetadata } from './services/scriptTimelineService';
@@ -36,6 +41,7 @@ import {
 } from './utils/storyboardSnapshots';
 
 const loadAiModelService = () => import('./services/aiModelService');
+const loadScriptThreeStageService = () => import('./services/scriptThreeStageService');
 
 const WORKSPACE_INITIAL_STORYBOARD_COUNT = 10;
 const BACKUP_STORYBOARD_PAGE_SIZE = 200;
@@ -94,6 +100,34 @@ function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
   ];
 }
 
+function buildStoryboardDbPayload(items: StoryboardItem[]): any[] {
+  return items
+    .filter(item => !item.isPlaceholder)
+    .map((item, index) => {
+      const rawImage = ((item as any).generatedImage || (item as any).generated_image_url || '').toString();
+      const cleanImage = rawImage.split('?')[0];
+      const persistedImage = cleanImage.startsWith('http') || cleanImage.startsWith('/') ? cleanImage : '';
+      return {
+        sort_order: index,
+        scene_heading: item.originalText || item.scene || '',
+        action_text: item.scriptSegment || '',
+        dialogue: item.dialogue || '',
+        camera_movement: item.cameraMovement || '',
+        image_prompt: item.imagePrompt || '',
+        video_prompt: item.videoPrompt || '',
+        generated_image_url: persistedImage,
+        planned_duration_ms: item.plannedDurationMs || null,
+        bound_assets: buildBoundAssetTags(item),
+        configured_references: item.configuredReferences || [],
+        script_segment_id: item.scriptSegmentId || null,
+        source_video_shot_no: item.sourceVideoShotNo || '',
+        video_script_block: item.videoScriptBlock || '',
+        shot_size: item.shotSize || '',
+        camera_angle: item.cameraAngle || '',
+      };
+    });
+}
+
 const LegacyViewFallback: React.FC<{ label: string }> = ({ label }) => (
   <div className="h-full w-full flex items-center justify-center text-sm text-n300">
     Loading {label}...
@@ -115,7 +149,7 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
     const imageId = `img_${r.item_id ?? r.itemId ?? idx}`;
     return {
       id: r.item_id ?? r.itemId ?? uuidv4(),
-      shotNumber: idx + 1,
+      shotNumber: r.source_video_shot_no ?? r.sourceVideoShotNo ?? idx + 1,
       originalText: r.scene_heading ?? r.sceneHeading ?? '',
       scriptSegment: r.action_text ?? r.actionText ?? '',
       dialogue: r.dialogue ?? '',
@@ -202,10 +236,7 @@ function parseStoryboardVersionContent(content: string): StoryboardItem[] {
   const separated = ensureStoryboardCutSeparators(content);
   const normalized = separated.endsWith('---CUT---') ? separated : `${separated}\n---CUT---`;
   const parsed = parseStreamingBlocks(normalized);
-  const items = parsed.completedBlocks.map((block, index) => {
-    const item = convertToStoryboardItem(block);
-    return { ...item, shotNumber: `镜头${String(index + 1).padStart(2, '0')}` };
-  });
+  const items = parsed.completedBlocks.map(convertToStoryboardItem);
   return synchronizeStoryboardSegmentVideoPrompts(
     normalizeStoryboardItemsForWorkflow(items),
   );
@@ -805,10 +836,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         const currentItems = (file.storyboard?.items || []).filter(item => !item.isPlaceholder);
         const currentItemsById = new Map(currentItems.map(item => [item.id, item]));
         const persistedIds = new Set(persistedItems.map(item => item.id));
-        const mergedItems = [
+        const mergedItems = normalizeStoryboardItemsForWorkflow([
           ...persistedItems.map(item => currentItemsById.get(item.id) || item),
           ...currentItems.filter(item => !persistedIds.has(item.id)),
-        ].map((item, index) => ({ ...item, shotNumber: index + 1 }));
+        ], file.scriptSegments || []);
         return {
           ...file,
           storyboard: mergedItems.length > 0
@@ -1487,11 +1518,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
     const billingInput = isFirstTurn
-      ? content
+      ? `${content}\n${content}`
       : [currentVersion?.content || file.scriptContent || file.originalContent, content, conversationContext].join('\n');
     const forecastOutputTokens = Math.max(
       1000,
-      estimateTextTokens(currentVersion?.content || file.scriptContent || content) * (isFirstTurn ? 2 : 1),
+      estimateTextTokens(currentVersion?.content || file.scriptContent || content) * (isFirstTurn ? 3 : 1),
     );
     setConversationSendingId(fileId);
     setConversationError(null);
@@ -1500,6 +1531,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     let streamedContent = '';
     let estimatedCreditCost = 0;
     let chargedCreditCost = 0;
+    let pipelineInputTexts: string[] = [];
+    let pipelineOutputTexts: string[] = [];
+    let generatedSegments: ScriptSegment[] = [];
     try {
       const creditQuote = await assertEnoughCredits('script_model_call', {
         input_tokens: estimateTextTokens(billingInput),
@@ -1553,10 +1587,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         },
       }));
 
-      const aiService = await loadAiModelService();
+      const pipelineService = await loadScriptThreeStageService();
       let result = '';
-      const appendStreamChunk = (chunk: string) => {
-        streamedContent += chunk;
+      const replaceStreamContent = (nextContent: string) => {
+        streamedContent = nextContent;
         setScriptConversations(prev => {
           const current = prev[fileId];
           if (!current) return prev;
@@ -1571,52 +1605,56 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           };
         });
       };
+      const appendStreamChunk = (chunk: string) => replaceStreamContent(`${streamedContent}${chunk}`);
+      const taskContext = {
+        projectId: urlProjectId,
+        episodeId: propEpisodeId,
+        sourcePage: 'script',
+        sourceItemId: fileId,
+        entityType: 'episode_script',
+        entityId: fileId,
+      };
       if (isFirstTurn) {
-        result = await aiService.aiGenerateStoryboardScript(
+        const pipelineResult = await pipelineService.generateEpisodeVideoScript(
           aiModel,
           content,
-          '',
-          appendStreamChunk,
           {
-            operation: 'storyboard_script_generate',
-            displayName: '分镜脚本生成',
-            projectId: urlProjectId,
-            episodeId: propEpisodeId,
-            sourcePage: 'script',
-            sourceItemId: fileId,
-            entityType: 'episode_script',
-            entityId: fileId,
+            taskContext,
+            onProgress: progress => {
+              if (progress.content) replaceStreamContent(progress.content);
+            },
           },
         );
+        result = pipelineResult.content;
+        generatedSegments = pipelineResult.segments;
+        pipelineInputTexts = pipelineResult.inputTexts;
+        pipelineOutputTexts = pipelineResult.outputTexts;
       } else {
-        result = await aiService.aiIterateFullScript(
+        const pipelineResult = await pipelineService.iterateEpisodeVideoScript(
           aiModel,
+          file.originalContent,
           currentVersion?.content || file.scriptContent || file.originalContent,
           content,
           conversationContext || '（首次修改，无历史意见）',
-          appendStreamChunk,
           {
-            operation: 'script_rewrite',
-            displayName: '剧本修改',
-            projectId: urlProjectId,
-            episodeId: propEpisodeId,
-            sourcePage: 'script',
-            sourceItemId: fileId,
-            entityType: 'episode_script',
-            entityId: fileId,
+            taskContext,
+            onStream: appendStreamChunk,
           },
         );
+        result = pipelineResult.content;
+        pipelineInputTexts = pipelineResult.inputTexts;
+        pipelineOutputTexts = pipelineResult.outputTexts;
       }
 
-      const rawFinalContent = ensureStoryboardCutSeparators(result || streamedContent);
+      const rawFinalContent = (result || streamedContent).trim();
       const parsedItems = parseStoryboardVersionContent(rawFinalContent);
       if (!rawFinalContent || parsedItems.length === 0) {
         throw new Error('模型返回内容无法识别为分镜脚本，请重新描述要求后再试');
       }
-      const finalContent = serializeStoryboardItemsWithSegments(parsedItems);
+      const finalContent = rawFinalContent;
       const billingParams = {
-        input_tokens: estimateTextTokens(billingInput),
-        output_tokens: estimateTextTokens(finalContent),
+        input_tokens: estimateTextTokens(pipelineInputTexts.join('\n')),
+        output_tokens: estimateTextTokens(pipelineOutputTexts.join('\n') || finalContent),
         model: modelInfo.runtime,
       };
       const credit = await consumeCredits({
@@ -1636,6 +1674,31 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         creditFeatureKey: credit.feature_key,
         creditUsage: billingParams,
       };
+      const step1Segments = isFirstTurn
+        ? generatedSegments.map(segment => ({
+            id: segment.id,
+            order: segment.order,
+            sourceText: segment.sourceText,
+            estimatedDurationSec: segment.estimatedDurationSec,
+          }))
+        : currentVersion?.metadata?.scriptPipeline?.step1Segments
+          || file.scriptSegments?.map(segment => ({
+            id: segment.id,
+            order: segment.order,
+            sourceText: segment.sourceText,
+            estimatedDurationSec: segment.estimatedDurationSec,
+          }))
+          || [];
+      const versionMetadata = {
+        ...billingMetadata,
+        scriptPipeline: {
+          version: 3,
+          stage: 'videoScript',
+          shotNumberFormat: 'segment-local',
+          step1Segments,
+          sourceVersionId: isFirstTurn ? undefined : currentVersion?.id,
+        },
+      };
       const completedMessage = await updateScriptMessage(
         propEpisodeId,
         fileId,
@@ -1651,9 +1714,27 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
         modelName: modelInfo.runtime,
-        metadata: billingMetadata,
+        metadata: versionMetadata,
         setCurrent: true,
       });
+      await updateEpisodeScriptById(propEpisodeId, fileId, {
+        adapted_script: finalContent,
+      });
+      if (isFirstTurn) {
+        await batchSaveScriptSegments(
+          propEpisodeId,
+          fileId,
+          buildScriptSegmentPayload(generatedSegments),
+        );
+      }
+      updateFileWithHistory(fileId, current => ({
+        ...current,
+        originalContent: isFirstTurn ? content : current.originalContent,
+        scriptContent: finalContent,
+        scriptSegments: isFirstTurn ? generatedSegments : current.scriptSegments,
+        status: FileStatus.Completed,
+        lastUpdated: Date.now(),
+      }), { recordHistory: false });
       setScriptConversations(prev => {
         const current = prev[fileId] || conversation;
         return {
@@ -1709,30 +1790,50 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   ) => {
     const fileId = selectedFileId;
     if (!fileId) return;
-    const parsedItems = parseStoryboardVersionContent(content);
+    const normalizedContent = combineVideoScriptOutputs([content]);
+    const { assertValidVideoScript } = await loadScriptThreeStageService();
+    assertValidVideoScript(normalizedContent);
+    const parsedItems = parseStoryboardVersionContent(normalizedContent);
     const storyboardItems = parsedItems.length > 0 ? parsedItems : normalizeVersionStoryboardItems(sourceVersion.storyboardItems);
+    const metadata = {
+      sourceVersionId: sourceVersion.id,
+      scriptPipeline: {
+        ...(sourceVersion.metadata?.scriptPipeline || {}),
+        version: 3,
+        stage: 'videoScript',
+        shotNumberFormat: 'segment-local',
+        sourceVersionId: sourceVersion.id,
+      },
+    };
     const message = await createScriptMessage(propEpisodeId, fileId, {
       role: 'assistant',
-      content,
+      content: normalizedContent,
       status: 'completed',
       modelAlias: '手动编辑',
       provider: 'manual',
       modelName: 'manual',
       requestId: `manual_${uuidv4()}`,
-      metadata: { sourceVersionId: sourceVersion.id },
+      metadata,
     });
     const version = await createScriptVersion(propEpisodeId, fileId, {
       messageId: message.id,
-      content,
+      content: normalizedContent,
       storyboardItems,
       source: 'manual',
       status: 'ready',
       modelAlias: '手动编辑',
       provider: 'manual',
       modelName: 'manual',
-      metadata: { sourceVersionId: sourceVersion.id },
+      metadata,
       setCurrent: true,
     });
+    await updateEpisodeScriptById(propEpisodeId, fileId, { adapted_script: normalizedContent });
+    updateFileWithHistory(fileId, current => ({
+      ...current,
+      scriptContent: normalizedContent,
+      status: FileStatus.Completed,
+      lastUpdated: Date.now(),
+    }), { recordHistory: false });
     setScriptConversations(prev => {
       const current = prev[fileId] || { scriptId: fileId, messages: [], versions: [] };
       return {
@@ -1745,7 +1846,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         },
       };
     });
-  }, [propEpisodeId, selectedFileId]);
+  }, [propEpisodeId, selectedFileId, updateFileWithHistory]);
 
   const handleConversationGenerateDesign = useCallback(async (
     version: ScriptStoryboardVersion,
@@ -1754,47 +1855,185 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const fileId = selectedFileId;
     if (!fileId) return;
     setConversationError(null);
-    const selectedVersion = version.source === 'legacy' && version.id.startsWith('legacy_')
-      ? version
-      : await selectScriptVersion(propEpisodeId, fileId, version.id);
-    const items = normalizeVersionStoryboardItems(selectedVersion.storyboardItems);
-    if (items.length === 0) {
-      setConversationError('当前分镜版本没有可展示的镜头内容，请先生成分镜脚本。');
-      return;
-    }
-    flushSync(() => {
-      updateFileWithHistory(fileId, current => ({
-        ...current,
-        scriptContent: selectedVersion.content,
-        storyboard: { items },
-        status: FileStatus.Completed,
-        lastUpdated: Date.now(),
-      }), {
-        recordHistory: false,
-        resetHistory: true,
-        versionId: selectedVersion.id,
-      });
-      setScriptConversations(prev => prev[fileId] ? ({
-        ...prev,
-        [fileId]: { ...prev[fileId], currentVersionId: selectedVersion.id },
-      }) : prev);
-      setHighlightedScriptSegments(new Set());
-      setHighlightedStoryboardItemIds(new Set());
-      setStoryboardDrawerOpen(true);
-    });
-    if (options.autoSnapshot !== false) {
-      try {
-        await persistStoryboardSnapshot(fileId, {
-          source: 'auto',
-          version: selectedVersion,
-          name: `自动存档 · 分镜脚本 V${selectedVersion.versionNo} · ${new Date().toLocaleString('zh-CN')}`,
+    setConversationSendingId(fileId);
+    try {
+      const selectedVersion = version.source === 'legacy' && version.id.startsWith('legacy_')
+        ? version
+        : await selectScriptVersion(propEpisodeId, fileId, version.id);
+
+      // 历史区的“恢复此版本”只恢复该脚本版本最近一次镜头设计，不再次调用 AI、扣积分或生成新卡。
+      if (options.autoSnapshot === false) {
+        const localSnapshots = filesRef.current
+          .find(item => item.id === fileId)
+          ?.versions.filter(snapshot => snapshot.scriptVersionId === selectedVersion.id) || [];
+        const snapshots = mergeStoryboardSnapshots(
+          getVersionStoryboardSnapshots(selectedVersion),
+          localSnapshots,
+        );
+        const latestSnapshot = snapshots[snapshots.length - 1];
+        const items = latestSnapshot?.data.storyboard?.items
+          ? normalizeVersionStoryboardItems(latestSnapshot.data.storyboard.items)
+          : [];
+        if (items.length === 0) {
+          throw new Error(`分镜脚本 V${selectedVersion.versionNo} 尚无镜头设计历史，请在对话中点击“生成镜头设计”`);
+        }
+        flushSync(() => {
+          updateFileWithHistory(fileId, current => ({
+            ...current,
+            scriptContent: selectedVersion.content,
+            storyboard: { items },
+            status: FileStatus.Completed,
+            lastUpdated: Date.now(),
+          }), {
+            recordHistory: false,
+            resetHistory: true,
+            versionId: selectedVersion.id,
+          });
+          setScriptConversations(prev => prev[fileId] ? ({
+            ...prev,
+            [fileId]: { ...prev[fileId], currentVersionId: selectedVersion.id },
+          }) : prev);
+          setStoryboardDrawerOpen(true);
         });
-      } catch (error) {
-        console.error('自动保存镜头设计失败:', error);
-        setConversationError(`镜头设计已生成，但自动存档失败：${summarizePipelineError(error)}`);
+        await updateEpisodeScriptById(propEpisodeId, fileId, { adapted_script: selectedVersion.content });
+        return;
       }
+
+      const modelInfo = getScriptModelInfo(aiModel);
+      const sourceItems = parseStoryboardVersionContent(selectedVersion.content);
+      if (sourceItems.length === 0) {
+        throw new Error('当前分镜脚本版本没有可生成的镜头内容');
+      }
+      const billingTaskId = `storyboard_design_${uuidv4()}`;
+      await assertEnoughCredits('storyboard_design_generation', {
+        shot_count: sourceItems.length,
+        input_tokens: estimateTextTokens(selectedVersion.content),
+        output_tokens: Math.max(500, sourceItems.length * 500),
+        model: modelInfo.runtime,
+      });
+
+      const pipelineService = await loadScriptThreeStageService();
+      const designResult = await pipelineService.generateStoryboardDesignForVersion(
+        aiModel,
+        selectedVersion.content,
+        {
+          taskContext: {
+            projectId: urlProjectId,
+            episodeId: propEpisodeId,
+            sourcePage: 'script',
+            sourceItemId: fileId,
+            entityType: 'episode_script_version',
+            entityId: selectedVersion.id,
+          },
+          onProgress: progress => {
+            setShotGenerationProgress({ current: progress.completed, total: progress.total });
+          },
+        },
+      );
+      const normalizedItems = normalizeStoryboardItemsForWorkflow(designResult.items);
+      const persisted = await batchCreateStoryboardItems(
+        propEpisodeId,
+        buildStoryboardDbPayload(normalizedItems),
+        fileId,
+      );
+      if (!persisted?.success || !Array.isArray(persisted.items) || persisted.items.length === 0) {
+        throw new Error('镜头设计生成成功，但正式镜头链路保存失败');
+      }
+      const persistedItems = normalizeStoryboardItemsForWorkflow(
+        mapWorkspaceStoryboardRowsToItems(persisted.items),
+      );
+      await updateEpisodeScriptById(propEpisodeId, fileId, { adapted_script: selectedVersion.content });
+
+      flushSync(() => {
+        updateFileWithHistory(fileId, current => ({
+          ...current,
+          scriptContent: selectedVersion.content,
+          storyboard: { items: persistedItems },
+          status: FileStatus.Completed,
+          lastUpdated: Date.now(),
+        }), {
+          recordHistory: false,
+          resetHistory: true,
+          versionId: selectedVersion.id,
+        });
+        setStoryboardTotalsByFileId(prev => ({ ...prev, [fileId]: persistedItems.length }));
+        setScriptConversations(prev => prev[fileId] ? ({
+          ...prev,
+          [fileId]: { ...prev[fileId], currentVersionId: selectedVersion.id },
+        }) : prev);
+        setHighlightedScriptSegments(new Set());
+        setHighlightedStoryboardItemIds(new Set());
+        setStoryboardDrawerOpen(true);
+      });
+
+      await persistStoryboardSnapshot(fileId, {
+        source: 'auto',
+        version: selectedVersion,
+        name: `自动存档 · 分镜脚本 V${selectedVersion.versionNo} · ${new Date().toLocaleString('zh-CN')}`,
+      });
+
+      const billingParams = {
+        shot_count: persistedItems.length,
+        input_tokens: estimateTextTokens(designResult.inputTexts.join('\n')),
+        output_tokens: estimateTextTokens(designResult.outputTexts.join('\n')),
+        model: modelInfo.runtime,
+      };
+      const credit = await consumeCredits({
+        featureKey: 'storyboard_design_generation',
+        taskId: billingTaskId,
+        params: billingParams,
+        projectId: urlProjectId,
+        metadata: {
+          episode_id: propEpisodeId,
+          script_id: fileId,
+          script_version_id: selectedVersion.id,
+          operation: 'extract_storyboard_design',
+        },
+      });
+      if (!selectedVersion.id.startsWith('legacy_')) {
+        const previousBillings = Array.isArray(selectedVersion.metadata?.storyboardDesignBillings)
+          ? selectedVersion.metadata.storyboardDesignBillings
+          : [];
+        const updatedVersion = await updateScriptVersionMetadata(propEpisodeId, fileId, selectedVersion.id, {
+          storyboardDesignCreditCost: credit.charged_credits,
+          storyboardDesignCreditTransactionId: credit.transaction_id,
+          storyboardDesignCreditTaskId: billingTaskId,
+          storyboardDesignUsage: billingParams,
+          storyboardDesignGeneratedAt: Date.now(),
+          storyboardDesignBillings: [
+            ...previousBillings,
+            {
+              taskId: billingTaskId,
+              cost: credit.charged_credits,
+              usage: billingParams,
+              createdAt: Date.now(),
+            },
+          ].slice(-20),
+        });
+        setScriptConversations(prev => prev[fileId] ? ({
+          ...prev,
+          [fileId]: {
+            ...prev[fileId],
+            versions: prev[fileId].versions.map(item => item.id === updatedVersion.id ? updatedVersion : item),
+          },
+        }) : prev);
+      }
+    } catch (error) {
+      const message = summarizePipelineError(error);
+      console.error('生成镜头设计失败:', error);
+      setConversationError(`生成镜头设计失败：${message}`);
+    } finally {
+      setConversationSendingId(null);
+      setShotGenerationProgress(null);
     }
-  }, [persistStoryboardSnapshot, propEpisodeId, selectedFileId, updateFileWithHistory]);
+  }, [
+    aiModel,
+    persistStoryboardSnapshot,
+    propEpisodeId,
+    selectedFileId,
+    updateFileWithHistory,
+    urlProjectId,
+  ]);
 
   const handleOpenStoryboardDrawer = useCallback(() => {
     if (!selectedFileId) return;
@@ -1809,7 +2048,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const version = conversation?.versions.find(item => item.id === conversation.currentVersionId)
       || conversation?.versions[conversation.versions.length - 1];
     if (version) {
-      void handleConversationGenerateDesign(version);
+      void handleConversationGenerateDesign(version, { autoSnapshot: false });
       return;
     }
     setConversationError('当前还没有可展示的镜头设计。');
@@ -1964,9 +2203,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         return typeof sn === 'string' ? sn : String(sn);
     };
 
-    // 🔧 策略0（三阶段精确匹配）：按 videoScriptBlock 子串定位所属镜头。
-    // 三阶段里 scriptContent = 各段视频脚本拼接，镜头号全局重复（每段都从镜头1重排），
-    // 仅靠镜头号会永远命中第一个。videoScriptBlock 是段内唯一的原文块，能精确锁定。
+    // 策略0（三阶段精确匹配）：按 videoScriptBlock 子串定位所属镜头。
     const seln = selection.trim();
     if (seln.length >= 3) {
         selectedFile.storyboard.items.forEach(item => {
@@ -1979,12 +2216,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     }
 
     // 🔧 策略1：如果 selection 包含镜头号（如 "镜头01"），直接匹配（仅在策略0未命中时）
-    const shotMatch = selection.match(/镜头\s*(\d+)/);
+    const shotMatch = selection.match(/镜头\s*\d+(?:\s*[-－—]\s*\d+)?/);
     if (matchedIds.size === 0 && shotMatch) {
-        const shotNum = parseInt(shotMatch[1]);
+        const selectedShotNo = parseHierarchicalShotNumber(shotMatch[0]);
         selectedFile.storyboard.items.forEach(item => {
-            const itemNum = safeShotNumStr(item.shotNumber).match(/\d+/)?.[0];
-            if (itemNum && parseInt(itemNum) === shotNum) {
+            const itemShotNo = parseHierarchicalShotNumber(safeShotNumStr(item.shotNumber));
+            const matches = selectedShotNo && itemShotNo
+              && selectedShotNo.localShotNo === itemShotNo.localShotNo
+              && (
+                selectedShotNo.segmentNo === null
+                || itemShotNo.segmentNo === null
+                || selectedShotNo.segmentNo === itemShotNo.segmentNo
+              );
+            if (matches) {
                 matchedIds.add(item.id);
                 matchedSegments.add(safeShotNumStr(item.shotNumber) || item.scriptSegment);
             }
@@ -1998,13 +2242,20 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         if (selectionIndex !== -1) {
             // 往前查找最近的镜头标识
             const beforeText = content.substring(0, selectionIndex);
-            const shotMatches = [...beforeText.matchAll(/镜头\s*(\d+)/g)];
+            const shotMatches = [...beforeText.matchAll(/镜头\s*\d+(?:\s*[-－—]\s*\d+)?/g)];
             if (shotMatches.length > 0) {
                 const lastMatch = shotMatches[shotMatches.length - 1];
-                const shotNum = parseInt(lastMatch[1]);
+                const selectedShotNo = parseHierarchicalShotNumber(lastMatch[0]);
                 selectedFile.storyboard.items.forEach(item => {
-                    const itemNum = safeShotNumStr(item.shotNumber).match(/\d+/)?.[0];
-                    if (itemNum && parseInt(itemNum) === shotNum) {
+                    const itemShotNo = parseHierarchicalShotNumber(safeShotNumStr(item.shotNumber));
+                    const matches = selectedShotNo && itemShotNo
+                      && selectedShotNo.localShotNo === itemShotNo.localShotNo
+                      && (
+                        selectedShotNo.segmentNo === null
+                        || itemShotNo.segmentNo === null
+                        || selectedShotNo.segmentNo === itemShotNo.segmentNo
+                      );
+                    if (matches) {
                         matchedIds.add(item.id);
                         matchedSegments.add(safeShotNumStr(item.shotNumber) || item.scriptSegment);
                     }
@@ -2577,10 +2828,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     setProcessingType('rewrite'); // 标记为AI改写
     const idsToProcess = getTargetIds(targetFileId);
 
-    // 🆕 helper: 按全局位置重新编号镜头（shotNumber + originalText 首行）
-    const renumberItem = (item: StoryboardItem, seqNum: number): StoryboardItem => {
-        const newShotId = `镜头${String(seqNum).padStart(2, '0')}`;
-        const rewrittenOriginal = (item.originalText || '').replace(/^镜头\s*\d+/, newShotId);
+    // 兼容入口也统一使用“分段号-段内镜头号”。
+    const renumberItem = (item: StoryboardItem, segmentNo: number, localShotNo: number): StoryboardItem => {
+        const newShotId = formatHierarchicalShotNumber(segmentNo, localShotNo);
+        const rewrittenOriginal = (item.originalText || '').replace(/^镜头\s*\d+(?:\s*[-－—]\s*\d+)?/, newShotId);
         return {
             ...item,
             shotNumber: newShotId,
@@ -2645,9 +2896,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
                     // 将完成的块转换为 StoryboardItem，并按全局位置重新编号
                     if (completedBlocks.length > 0) {
-                        const baseIdx = allParsedItems.length + parsedItems.length;
+                        const baseIdx = parsedItems.length;
                         const newItems = completedBlocks.map((block, idx) =>
-                            renumberItem(convertToStoryboardItem(block), baseIdx + idx + 1)
+                            renumberItem(convertToStoryboardItem(block), segmentIndex + 1, baseIdx + idx + 1)
                         );
                         parsedItems = [...parsedItems, ...newItems];
                         streamBuffer = remainingBuffer;
@@ -2675,9 +2926,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                             parseStreamingBlocks(streamBuffer + '---CUT---');
 
                         if (completedBlocks.length > 0) {
-                            const baseIdx = allParsedItems.length + parsedItems.length;
+                            const baseIdx = parsedItems.length;
                             const finalItems = completedBlocks.map((block, idx) =>
-                                renumberItem(convertToStoryboardItem(block), baseIdx + idx + 1)
+                                renumberItem(convertToStoryboardItem(block), segmentIndex + 1, baseIdx + idx + 1)
                             );
                             parsedItems = [...parsedItems, ...finalItems];
                             displayText += finalDisplayText;
@@ -2705,7 +2956,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                 // 不做续写时第二半内容会被永久丢失。全局重编号已保证不会因为续写产生
                 // shotNumber 冲突，最坏情况是 AI 偶尔重复，被空过滤+全局重编号兜住。
                 const detectContinueMarker = (text: string): string | null => {
-                    const m = text.match(/<<<CONTINUE_FROM\s+(镜头\d+)>>>/);
+                    const m = text.match(/<<<CONTINUE_FROM\s+(镜头\d+(?:-\d+)?)>>>/);
                     return m ? m[1] : null;
                 };
                 // 🔧 Bug 6 修复：续写循环失控会导致 92 个镜头被生成成 450 个（4-5x 重复）。
@@ -2757,10 +3008,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     return hasContent;
                 });
 
-                // 🔧 过滤后可能有编号空洞，重新连续编号（基于全局位置）
-                const segmentBaseIdx = allParsedItems.length;
+                // 过滤后可能有编号空洞，按当前分段重新连续编号。
                 parsedItems = parsedItems.map((item, idx) =>
-                    renumberItem(item, segmentBaseIdx + idx + 1)
+                    renumberItem(item, segmentIndex + 1, idx + 1)
                 );
 
                 // 🚫 不再做基于 shotNumber 的跨段去重 ——
@@ -2878,7 +3128,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     setStage(file.id, 'split', { status: 'running', errorMessage: '' });
     try {
       const { aiSplitScriptIntoSegments } = await loadAiModelService();
-      const segments = await aiSplitScriptIntoSegments(aiModel, file.originalContent);
+      const segments = await aiSplitScriptIntoSegments(aiModel, file.originalContent, undefined, {
+        projectId: urlProjectId,
+        episodeId: propEpisodeId,
+        sourcePage: 'script',
+        sourceItemId: file.id,
+        entityType: 'episode_script',
+        entityId: file.id,
+      });
       const applySegs = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, scriptSegments: segments } : f);
       setFiles(applySegs);
       filesRef.current = applySegs(filesRef.current); // 同步镜像，供下一阶段立即读取
@@ -2891,7 +3148,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setStage(file.id, 'split', { status: 'error', errorMessage: (e as Error).message });
       alert(`拆分剧本失败: ${(e as Error).message}`);
     }
-  }, [selectedFileId, aiModel, propEpisodeId, setStage]);
+  }, [selectedFileId, aiModel, propEpisodeId, setStage, urlProjectId]);
 
   /** Stage 2：逐段生成视频脚本，按 order 追加到 scriptContent */
   const handleGenerateVideoScript = useCallback(async (targetFileId?: string) => {
@@ -2910,14 +3167,21 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         if (seg.status === 'done' && seg.videoScript) { completed++; continue; } // 跳过已完成（失败恢复）
         try {
           const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
-          const text = await aiGenerateVideoScriptFromSegment(aiModel, seg);
+          const text = await aiGenerateVideoScriptFromSegment(aiModel, seg, undefined, {
+            projectId: urlProjectId,
+            episodeId: propEpisodeId,
+            sourcePage: 'script',
+            sourceItemId: file.id,
+            entityType: 'episode_script',
+            entityId: file.id,
+          });
           updated[i] = { ...seg, videoScript: text, status: 'done', errorMessage: '' };
           completed++;
           setStage(file.id, 'videoScript', { status: 'running', completed });
         } catch (segErr) {
           const errorSummary = summarizePipelineError(segErr);
           updated[i] = { ...seg, status: 'error', errorMessage: errorSummary };
-          const partialScript = updated.map(s => s.videoScript || '').filter(Boolean).join('\n\n');
+          const partialScript = combineVideoScriptOutputs(updated.map(s => s.videoScript || ''));
           const applyErr = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
             ? { ...f, scriptSegments: updated, scriptContent: partialScript }
             : f);
@@ -2929,7 +3193,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           return false; // 保留已完成，下次从失败段继续
         }
       }
-      const fullScript = updated.map(s => s.videoScript || '').filter(Boolean).join('\n\n');
+      const fullScript = combineVideoScriptOutputs(updated.map(s => s.videoScript || ''));
       const applyDone = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
         ? { ...f, scriptSegments: updated, scriptContent: fullScript }
         : f);
@@ -2943,7 +3207,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setStage(file.id, 'videoScript', { status: 'error', errorMessage: summarizePipelineError(e) });
       return false;
     }
-  }, [selectedFileId, aiModel, propEpisodeId, setStage]);
+  }, [selectedFileId, aiModel, propEpisodeId, setStage, urlProjectId]);
 
   /** Stage 3：对每个视频镜头块提取分镜提示词 → StoryboardItem[] */
   const handleExtractStoryboardPrompts = useCallback(async (targetFileId?: string) => {
@@ -2953,33 +3217,50 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     if (segs.length === 0) { alert('请先生成视频脚本'); return false; }
 
     // 收集所有镜头块（带 segmentId 关联）
-    const shots: Array<{ segmentId: string; block: VideoScriptBlock }> = [];
-    for (const seg of segs) {
+    const shots: Array<{ segmentId: string; segmentNo: number; block: VideoScriptBlock }> = [];
+    for (const [segmentIndex, seg] of segs.entries()) {
       for (const block of parseVideoScriptBlocks(seg.videoScript!)) {
-        shots.push({ segmentId: seg.id, block });
+        shots.push({ segmentId: seg.id, segmentNo: segmentIndex + 1, block });
       }
     }
     if (shots.length === 0) { alert('未能从视频脚本解析出镜头'); return false; }
 
     // total = 视频镜头数（AI 调用次数）；一个视频镜头可拆成多个分镜 item
     setStage(file.id, 'storyboardPrompt', { status: 'running', total: shots.length, completed: 0, errorMessage: '' });
-    // 重跑只追加新的镜头设计；已生成镜头及其下游素材由用户自行删除。
-    const items: StoryboardItem[] = (file.storyboard?.items || []).filter(item => !item.isPlaceholder);
+    // 重跑生成一套新的当前镜头设计；旧设计由版本快照保留，不混入本次正式链路。
+    const items: StoryboardItem[] = [];
+    const localShotCountBySegment = new Map<number, number>();
     // 把当前 items 写入 React state + filesRef（同步），供 Stage3 末尾的 saveEpisodeToBackend 立即看到
     const applyItems = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, storyboard: { items } } : f);
     for (let i = 0; i < shots.length; i++) {
-      const { segmentId, block } = shots[i];
+      const { segmentId, segmentNo, block } = shots[i];
       try {
         // 单个视频镜头 → 一个或多个更细的分镜
         const { aiExtractStoryboardPromptFromVideoShot } = await loadAiModelService();
-        const exList = await aiExtractStoryboardPromptFromVideoShot(aiModel, block.rawBlock);
+        const nextLocalShotNo = (localShotCountBySegment.get(segmentNo) || 0) + 1;
+        const exList = await aiExtractStoryboardPromptFromVideoShot(
+          aiModel,
+          block.rawBlock,
+          formatHierarchicalShotNumber(segmentNo, nextLocalShotNo),
+          {
+            projectId: urlProjectId,
+            episodeId: propEpisodeId,
+            sourcePage: 'script',
+            sourceItemId: file.id,
+            entityType: 'episode_script',
+            entityId: file.id,
+          },
+        );
         if (exList.length === 0) {
           throw new Error('AI 返回内容未解析出分镜提示词');
         }
         for (const ex of exList) {
+          const localShotNo = (localShotCountBySegment.get(segmentNo) || 0) + 1;
+          const shotNumber = formatHierarchicalShotNumber(segmentNo, localShotNo);
+          localShotCountBySegment.set(segmentNo, localShotNo);
           items.push({
             id: uuidv4(),
-            shotNumber: items.length + 1,
+            shotNumber,
             originalText: ex.sceneDescription || block.rawBlock.slice(0, 80),
             scriptSegment: ex.sceneDescription || '',
             characters: ex.characters || [],           // 人物 → bound_assets char:
@@ -2993,7 +3274,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             plannedDurationMs: (ex.durationSec ?? block.durationSec) != null
               ? (ex.durationSec ?? block.durationSec)! * 1000 : null,
             scriptSegmentId: segmentId,
-            sourceVideoShotNo: ex.shotNo || block.shotNo,
+            sourceVideoShotNo: shotNumber,
             videoScriptBlock: block.rawBlock,
             shotSize: ex.shotSize || '',
             cameraAngle: ex.cameraAngle || '',
@@ -3012,12 +3293,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         return false; // 保留已提取
       }
     }
-    setFiles(applyItems);
-    filesRef.current = applyItems(filesRef.current); // 关键：保证下面的 save 读到刚生成的 items
+    const normalizedItems = normalizeStoryboardItemsForWorkflow(items, segs);
+    const applyNormalizedItems = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
+      ? { ...f, storyboard: { items: normalizedItems } }
+      : f);
+    setFiles(applyNormalizedItems);
+    filesRef.current = applyNormalizedItems(filesRef.current); // 关键：保证下面的 save 读到刚生成的 items
     setStage(file.id, 'storyboardPrompt', { status: 'done', completed: shots.length });
     await saveEpisodeToBackend();
     return true;
-  }, [selectedFileId, aiModel, propEpisodeId, setStage, saveEpisodeToBackend]);
+  }, [selectedFileId, aiModel, propEpisodeId, setStage, saveEpisodeToBackend, urlProjectId]);
 
   /** 主按钮：按三步顺序执行，从未完成的阶段开始 */
   const handleRunThreeStagePipeline = useCallback(async (targetFileId?: string) => {

@@ -64,10 +64,11 @@ describe('DubbingPanel storyboard segmentation', () => {
       />,
     );
 
-    expect(screen.getByText('分段 01')).toBeInTheDocument();
-    expect(screen.getByText('分段 02')).toBeInTheDocument();
-    expect(screen.getAllByText('镜头 01')).toHaveLength(2);
-    expect(screen.getByText('镜头 02')).toBeInTheDocument();
+    expect(screen.getByText('分段1')).toBeInTheDocument();
+    expect(screen.getByText('分段2')).toBeInTheDocument();
+    expect(screen.getByText('镜头1-1')).toBeInTheDocument();
+    expect(screen.getByText('镜头1-2')).toBeInTheDocument();
+    expect(screen.getByText('镜头2-1')).toBeInTheDocument();
     expect(screen.queryByText('#3')).not.toBeInTheDocument();
   });
 });

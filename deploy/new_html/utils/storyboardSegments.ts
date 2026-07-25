@@ -1,5 +1,9 @@
 import type { ScriptSegment, StoryboardItem } from '../types';
 import { parseStoryboardScript } from './storyboardParser';
+import {
+  formatHierarchicalShotNumber,
+  parseHierarchicalShotNumber,
+} from './scriptPipelineParsers';
 
 const TARGET_SEGMENT_DURATION_SECONDS = 15;
 const DEFAULT_SHOT_DURATION_SECONDS = 3;
@@ -115,9 +119,10 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
       flush();
       return;
     }
-    if (/^镜头\s*\d+\s*$/.test(trimmed)) {
+    if (/^镜头\s*\d+(?:\s*[-－—]\s*\d+)?\s*$/.test(trimmed)) {
       flush();
-      currentSegmentNo = activeSegmentNo;
+      const parsedShotNo = parseHierarchicalShotNumber(trimmed);
+      currentSegmentNo = activeSegmentNo || parsedShotNo?.segmentNo || undefined;
       currentLines = [trimmed];
       return;
     }
@@ -129,7 +134,10 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
 
   return blocks.map((block, index) => {
     const parsed = parseStoryboardScript(block.text).shots[0];
-    const shotNumber = block.text.match(/^镜头\s*(\d+)/)?.[1] || String(index + 1);
+    const parsedShotNo = parseHierarchicalShotNumber(block.text);
+    const segmentNo = block.segmentNo || parsedShotNo?.segmentNo || 1;
+    const localShotNo = parsedShotNo?.localShotNo || index + 1;
+    const shotNumber = formatHierarchicalShotNumber(segmentNo, localShotNo);
     const fallback: StoryboardItem = {
       id: `storyboard-display-${index + 1}`,
       originalText: block.text,
@@ -138,14 +146,16 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
       videoPrompt: '',
       dialogue: '',
       characters: [],
-      shotNumber: `镜头${shotNumber.padStart(2, '0')}`,
-      sourceVideoShotNo: `镜头${shotNumber.padStart(2, '0')}`,
+      shotNumber,
+      sourceVideoShotNo: shotNumber,
     };
     return {
       ...(parsed || fallback),
       originalText: block.text,
-      scriptSegmentId: block.segmentNo
-        ? `storyboard-segment-${block.segmentNo}`
+      shotNumber,
+      sourceVideoShotNo: shotNumber,
+      scriptSegmentId: segmentNo
+        ? `storyboard-segment-${segmentNo}`
         : parsed?.scriptSegmentId,
     };
   });
@@ -198,12 +208,12 @@ function makeSyntheticSegmentId(segmentNo: number): string {
   return `storyboard-segment-${segmentNo}`;
 }
 
-function replaceShotHeader(value: string, localShotNo: number): string {
-  const label = `镜头${String(localShotNo).padStart(2, '0')}`;
+function replaceShotHeader(value: string, segmentNo: number, localShotNo: number): string {
+  const label = formatHierarchicalShotNumber(segmentNo, localShotNo);
   const text = String(value || '').trim();
   if (!text) return label;
-  return /^\s*镜头\s*\d+/m.test(text)
-    ? text.replace(/^\s*镜头\s*\d+/m, label)
+  return /^\s*镜头\s*\d+(?:\s*[-－—]\s*\d+)?/m.test(text)
+    ? text.replace(/^\s*镜头\s*\d+(?:\s*[-－—]\s*\d+)?/m, label)
     : `${label}\n${text}`;
 }
 
@@ -280,7 +290,7 @@ export function buildStoryboardSegmentGroups(
       group = {
         key,
         segmentNo: groups.length + 1,
-        segmentLabel: `分段 ${String(groups.length + 1).padStart(2, '0')}`,
+        segmentLabel: `分段${groups.length + 1}`,
         estimatedDurationSec: 0,
         sourceText: source?.sourceText,
         inferred: !source && !items.some(row => row.scriptSegmentId === key),
@@ -294,7 +304,7 @@ export function buildStoryboardSegmentGroups(
       item,
       globalIndex,
       localShotNo,
-      localShotLabel: `镜头 ${String(localShotNo).padStart(2, '0')}`,
+      localShotLabel: formatHierarchicalShotNumber(group.segmentNo, localShotNo),
     });
     group.estimatedDurationSec += getStoryboardItemDurationSeconds(item);
   });
@@ -333,8 +343,10 @@ function buildSharedSegmentVideoPrompt(group: StoryboardSegmentGroup): string {
     || extractVisualStyleFromShot(group.entries[0]?.item);
   const stability = extractPromptSection(explicit, '正向稳定约束')
     || DEFAULT_SEGMENT_STABILITY;
-  const lastShot = String(Math.max(1, group.entries.length)).padStart(2, '0');
-  return `镜头01-${lastShot}，【视觉风格】${visualStyle}，【正向稳定约束】${stability}。`;
+  const firstShot = formatHierarchicalShotNumber(group.segmentNo, 1);
+  const lastShot = formatHierarchicalShotNumber(group.segmentNo, Math.max(1, group.entries.length));
+  const shotRange = firstShot === lastShot ? firstShot : `${firstShot}至${lastShot}`;
+  return `${shotRange}，【视觉风格】${visualStyle}，【正向稳定约束】${stability}。`;
 }
 
 function writeSharedVideoPrompt(originalText: string, prompt: string): string {
@@ -399,25 +411,30 @@ export function buildStoryboardSegmentLookup(
   return lookup;
 }
 
-/** Keeps persistence ids globally unique while storing the user-facing shot no per segment. */
+/** Keeps persistence ids globally unique while using one canonical hierarchical shot label everywhere. */
 export function normalizeStoryboardItemsForWorkflow(
   items: StoryboardItem[],
   scriptSegments: ScriptSegment[] = [],
 ): StoryboardItem[] {
   const normalized = normalizeStoryboardSegmentMetadata(items, scriptSegments);
   const lookup = buildStoryboardSegmentLookup(normalized, scriptSegments);
-  return normalized.map((item, index) => {
+  return normalized.map((item) => {
     if (item.isPlaceholder) return item;
     const segment = lookup.get(item.id);
+    const shotNumber = segment
+      ? formatHierarchicalShotNumber(segment.segmentNo, segment.localShotNo)
+      : String(item.shotNumber || item.sourceVideoShotNo || '');
     return {
       ...item,
-      shotNumber: `镜头${String(index + 1).padStart(2, '0')}`,
+      shotNumber,
       originalText: segment
-        ? replaceShotHeader(item.originalText || item.videoScriptBlock || item.scriptSegment, segment.localShotNo)
+        ? replaceShotHeader(
+            item.originalText || item.videoScriptBlock || item.scriptSegment,
+            segment.segmentNo,
+            segment.localShotNo,
+          )
         : item.originalText,
-      sourceVideoShotNo: segment
-        ? `镜头${String(segment.localShotNo).padStart(2, '0')}`
-        : item.sourceVideoShotNo,
+      sourceVideoShotNo: shotNumber || item.sourceVideoShotNo || '',
     };
   });
 }
@@ -430,10 +447,11 @@ export function serializeStoryboardItemsWithSegments(
   const synchronized = synchronizeStoryboardSegmentVideoPrompts(items, scriptSegments);
   return buildStoryboardSegmentGroups(synchronized, scriptSegments)
     .flatMap(group => [
-      `分段${String(group.segmentNo).padStart(2, '0')}`,
+      `分段${group.segmentNo}`,
       ...group.entries.flatMap(entry => [
         replaceShotHeader(
           entry.item.originalText || entry.item.videoScriptBlock || entry.item.scriptSegment,
+          group.segmentNo,
           entry.localShotNo,
         ),
         '---CUT---',

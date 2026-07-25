@@ -398,8 +398,7 @@ function splitScriptByShots(scriptText: string): Array<{shotNumber: string; orig
     // 🔧 支持多种镜头编号格式的正则
     const shotPatterns = [
         /^(\d{3})\s*[\t\【\(（]/,           // 001 【... 或 001（...
-        /^镜头\s*(\d+)\s*[\(（\【\|｜]/,    // 镜头28 ( 或 镜头28（ 或 镜头28 |
-        /^镜头(\d+)\s*[\(（\【\|｜]/,       // 镜头28( 无空格
+        /^镜头\s*(\d+(?:-\d+)?)\s*(?:[\(（\【\|｜:]|$)/, // 镜头1-2 / 镜头28（
         /^[Ss]hot\s*(\d+)\s*[\(\[]/i,        // Shot 28 ( 英文格式
     ];
     
