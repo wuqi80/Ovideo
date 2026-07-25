@@ -447,10 +447,10 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
     html = html.replace(/\*([^*]+?)\*/g, '<em class="italic text-emerald-300">$1</em>');
     
     // 3. 【标记】加颜色（紫色/靛蓝色）- 使用普通span，不加额外样式
-    html = html.replace(/【([^】]+)】/g, '<span class="text-indigo-400 font-bold">【$1】</span>');
+    html = html.replace(/【([^】]+)】/g, '<span class="text-primary font-semibold">【$1】</span>');
     
     // 4. （说明）加颜色 - 使用普通span，不加额外样式
-    html = html.replace(/（([^）]+)）/g, '<span class="text-gray-400">（$1）</span>');
+    html = html.replace(/（([^）]+)）/g, '<span class="text-n200">（$1）</span>');
     
     return html;
   };
@@ -619,7 +619,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
           {/* 🆕 已提取分镜提示 + 导出按钮 */}
           {selectedFile?.storyboard && (
             <div className="w-full flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 px-3 py-2 bg-green-900/20 border border-green-500/30 rounded-lg text-xs text-success">
+              <div className="flex items-center gap-2 px-3 py-2 bg-g50 border border-g75 rounded-lg text-xs text-success">
                 <LayoutDashboard className="w-4 h-4" />
                 <span>已提取 {selectedFile.storyboard.items.length} 个分镜</span>
               </div>
@@ -753,7 +753,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                                     <span className="text-[10px] text-orange-400 font-bold mb-2 block">场景 (Scenes)</span>
                                     <div className="flex flex-wrap gap-2">
                                         {selectedFile.extractedScenes.map((scene, i) => (
-                                            <span key={i} className="px-2 py-1 bg-orange-900/30 border border-orange-500/20 rounded text-[10px] text-orange-200">
+                                            <span key={i} className="px-2 py-1 bg-orange-50 border border-orange-200 rounded text-[10px] text-orange-600">
                                                 {scene}
                                             </span>
                                         ))}
@@ -766,7 +766,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                                     <span className="text-[10px] text-yellow-600 font-bold mb-2 block">道具 (Props)</span>
                                     <div className="flex flex-wrap gap-2">
                                         {(selectedFile.extractedProps || []).map((prop, i) => (
-                                            <span key={i} className="px-2 py-1 bg-yellow-900/20 border border-yellow-500/20 rounded text-[10px] text-yellow-600">
+                                            <span key={i} className="px-2 py-1 bg-y50 border border-y75 rounded text-[10px] text-warning">
                                                 {prop}
                                             </span>
                                         ))}
@@ -999,7 +999,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                         <span className="text-n800 text-lg">#{shot.shotNumber || selectedFile.storyboard.items.indexOf(shot) + 1}</span>
                       </div>
                       {hasDetails ? (
-                        <span className="px-2 py-1 bg-green-900/30 text-success rounded text-xs flex items-center gap-1">
+                        <span className="px-2 py-1 bg-g50 text-success rounded text-xs flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
                           已生成详情
                         </span>
@@ -1145,7 +1145,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                               <label className="text-xs font-bold text-n300 block mb-2">道具</label>
                               <div className="flex flex-wrap gap-1.5">
                                 {shot.props.map(prop => (
-                                  <span key={prop} className="px-2 py-1 bg-yellow-900/20 text-yellow-700 rounded text-xs border border-yellow-500/20">
+                                  <span key={prop} className="px-2 py-1 bg-y50 text-warning rounded text-xs border border-y75">
                                     {prop}
                                   </span>
                                 ))}
@@ -1234,7 +1234,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                               }
                             }
                           }}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-green-900/30 hover:bg-green-800/50 border border-green-500/30 text-success hover:text-white rounded transition-all"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-g50 hover:bg-g75 border border-g75 text-success rounded transition-all"
                         >
                           <Sparkles className="w-4 h-4" />
                           <span className="text-sm">扩写</span>
@@ -1287,7 +1287,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                               }
                             }
                           }}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-900/30 hover:bg-orange-800/50 border border-orange-500/30 text-orange-300 hover:text-white rounded transition-all"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-50 hover:bg-orange-200 border border-orange-200 text-orange-600 rounded transition-all"
                         >
                           <Split className="w-4 h-4" />
                           <span className="text-sm">拆分</span>
@@ -1297,7 +1297,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                             // 合并功能需要选中多个分镜，在工具条中提供
                             alert('请在分镜脚本中框选多个镜头的文字，然后点击工具条的"合并"按钮');
                           }}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-b50 hover:bg-blue-800/50 border border-b75 text-b400 hover:text-white rounded transition-all"
+                          className="flex items-center justify-center gap-2 px-4 py-2 bg-b50 hover:bg-b75 border border-b75 text-primary rounded transition-all"
                         >
                           <Merge className="w-4 h-4" />
                           <span className="text-sm">合并</span>

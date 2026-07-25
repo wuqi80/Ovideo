@@ -127,8 +127,8 @@ export const ShareResourceDialog: React.FC<ShareResourceDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
-      <div className="bg-n0 border border-n40 rounded-lg w-[480px] max-h-[80vh] flex flex-col overflow-hidden shadow-bottom">
+    <div className="app-modal-backdrop fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
+      <div role="dialog" aria-modal="true" aria-label="共享资源" className="app-modal-surface bg-n0 border border-n40 rounded-lg w-[480px] max-h-[80vh] flex flex-col overflow-hidden shadow-bottom">
         <div className="px-4 py-3 border-b border-n40 flex items-center gap-2">
           <Share2 size={14} className="text-primary" />
           <span className="text-sm font-medium text-n700">共享资源</span>

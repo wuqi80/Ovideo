@@ -6,7 +6,7 @@
  *  - 一级分组：可折叠，带图标 + 右侧箭头
  *  - 二级项：缩进；若含三级则可二次展开，否则直接跳转
  *  - 三级项：圆点前缀的末级链接
- * 视觉用 Atlassian 浅色（n* 中性 + primary 主色），与主站一致。
+ * 视觉使用 Webflow 浅色令牌（n* 中性 + primary 主色），与主站一致。
  */
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';

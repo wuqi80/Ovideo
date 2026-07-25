@@ -146,7 +146,7 @@ export const EpisodeHubPage: React.FC = () => {
     : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
 
   return (
-    <div className="min-h-screen bg-n20 p-6 md:p-10">
+    <div className="min-h-screen bg-n0 p-6 md:p-10">
       <div className={`w-full ${shellWidthClass} mx-auto`}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8 animate-slideDown">

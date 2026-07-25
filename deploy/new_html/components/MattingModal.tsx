@@ -28,8 +28,8 @@ export const MattingModal: React.FC<MattingModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm">
-            <div className="bg-n0 rounded-2xl border border-n40 shadow-bottom w-[500px] max-h-[90vh] overflow-hidden">
+        <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm">
+            <div role="dialog" aria-modal="true" aria-label="抠图" className="app-modal-surface bg-n0 rounded-2xl border border-n40 shadow-bottom w-[500px] max-h-[90vh] overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-n40">
                     <div className="flex items-center gap-3">

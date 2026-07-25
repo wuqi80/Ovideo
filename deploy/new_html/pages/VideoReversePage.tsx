@@ -235,7 +235,7 @@ export const VideoReversePage: React.FC<VideoReversePageProps> = ({
   };
 
   return (
-    <div className={`layout-safe flex flex-col bg-n20 text-n800 ${embedded ? 'h-full' : 'h-screen'}`}>
+    <div className={`layout-safe flex flex-col bg-n0 text-n800 ${embedded ? 'h-full' : 'h-screen'}`}>
       <div className="responsive-toolbar flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
         {!embedded && (
           <button onClick={() => navigate(`/projects/${projectId}/episodes`)} className="text-sm text-n300 hover:text-n800">

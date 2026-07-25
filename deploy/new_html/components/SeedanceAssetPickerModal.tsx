@@ -56,8 +56,8 @@ export const SeedanceAssetPickerModal: React.FC<SeedanceAssetPickerModalProps> =
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center" onClick={p.onClose}>
-            <div className="w-[600px] max-h-[80vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="app-modal-backdrop fixed inset-0 z-50 bg-n900/50 flex items-center justify-center" onClick={p.onClose}>
+            <div role="dialog" aria-modal="true" aria-label="从素材库添加" className="app-modal-surface w-[600px] max-h-[80vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-3 py-2 border-b border-n40">
                     <div className="text-sm text-n700">从库里添加（多选）</div>
                     {episodeId && (

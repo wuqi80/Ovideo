@@ -6210,8 +6210,16 @@ def check_frontend_dependency_contract(root: Path) -> int:
         (tailwind_config_path.read_text(encoding="utf-8") if tailwind_config_path.exists() else "", "'ui-monospace'", tailwind_config_path),
         (postcss_config_path.read_text(encoding="utf-8") if postcss_config_path.exists() else "", "tailwindcss: {}", postcss_config_path),
         (postcss_config_path.read_text(encoding="utf-8") if postcss_config_path.exists() else "", "autoprefixer: {}", postcss_config_path),
-        (design_tokens_css, "--font-sans: -apple-system", new_html / "styles" / "design-tokens.css"),
-        (design_tokens_css, "--font-mono: ui-monospace", new_html / "styles" / "design-tokens.css"),
+        (
+            design_tokens_css,
+            '--font-sans: "WF Visual Sans Variable", Arial',
+            new_html / "styles" / "design-tokens.css",
+        ),
+        (
+            design_tokens_css,
+            "--font-mono: Inconsolata, ui-monospace",
+            new_html / "styles" / "design-tokens.css",
+        ),
         (login_html, "fetch('/api/login'", root / "login.html"),
         (login_html, "localStorage.setItem(TOKEN_KEY", root / "login.html"),
     ]

@@ -17,8 +17,8 @@ export const SkeletonScreen: React.FC<SkeletonScreenProps> = ({
     <div className="w-full h-full flex flex-col items-center justify-center bg-n20/50 backdrop-blur-sm">
       {/* 简洁的加载动画 */}
       <div className="relative mb-6">
-        <div className="absolute inset-0 bg-indigo-500/20 blur-xl animate-pulse rounded-full"></div>
-        <div className="relative bg-n0/80 border border-indigo-500/30 p-4 rounded-md shadow-lg flex items-center justify-center">
+        <div className="absolute inset-0 bg-primary/20 blur-xl animate-pulse rounded-full"></div>
+        <div className="relative bg-n0/80 border border-b75 p-4 rounded-md shadow-card flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
         <div className="absolute -top-1 -right-1">
@@ -33,7 +33,7 @@ export const SkeletonScreen: React.FC<SkeletonScreenProps> = ({
 
       {/* 进度条 */}
       <div className="w-48 h-0.5 bg-n30 rounded-full mt-4 overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500 w-1/3 animate-loading-shimmer rounded-full"></div>
+        <div className="h-full bg-gradient-to-r from-primary to-b200 w-1/3 animate-loading-shimmer rounded-full"></div>
       </div>
 
       <style>{`

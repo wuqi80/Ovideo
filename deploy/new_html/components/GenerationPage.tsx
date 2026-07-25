@@ -2639,7 +2639,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
                     <button
                         onClick={handleExport}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold shadow-lg shadow-emerald-900/30 ml-2"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-semibold shadow-card ml-2"
                     >
                         一键导出选定
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -2848,7 +2848,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         onClick={handleConfirmConfig}
                         className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${
                           selectedShot?.isConfigConfirmed 
-                            ? 'bg-green-900/30 text-success border-green-500/30'
+                            ? 'bg-g50 text-success border-g75'
                             : 'bg-n0 text-n300 border-n40 hover:text-n800'
                         }`}
                       >

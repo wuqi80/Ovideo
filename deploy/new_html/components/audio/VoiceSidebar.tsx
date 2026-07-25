@@ -597,9 +597,9 @@ export const VoiceDrawer: React.FC<VoiceDrawerProps> = ({
   }, [onSaved, onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div className="app-drawer-backdrop fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
-      <div className="relative ml-auto w-96 bg-n0 border-l border-n40 h-full overflow-auto p-6 shadow-bottom">
+      <div role="dialog" aria-modal="true" aria-label={`${roleName}声音配置`} className="app-drawer-surface relative ml-auto w-96 bg-n0 border-l border-n40 h-full overflow-auto p-6 shadow-bottom">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold flex items-center gap-2">
             <Settings size={16} className="text-primary" />

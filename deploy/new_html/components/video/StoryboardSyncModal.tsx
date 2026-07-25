@@ -53,11 +53,14 @@ export const StoryboardSyncModal: React.FC<StoryboardSyncModalProps> = (p) => {
 
     return (
         <div
-            className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center"
+            className="app-modal-backdrop fixed inset-0 z-50 bg-n900/50 flex items-center justify-center"
             onClick={p.onClose}
         >
             <div
-                className="w-[480px] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden"
+                role="dialog"
+                aria-modal="true"
+                aria-label="同步分镜"
+                className="app-modal-surface w-[480px] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between px-3 py-2 border-b border-n40">

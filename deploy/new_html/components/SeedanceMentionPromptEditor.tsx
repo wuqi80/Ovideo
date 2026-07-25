@@ -264,8 +264,8 @@ export const SeedanceMentionPromptEditor: React.FC<SeedanceMentionPromptEditorPr
             {/* mask overlay（高亮层）：z-0、pointer-events:none，渲染同 prompt 字符的高亮版本 */}
             {/* 2026-05-21 修复：overlay 的 text-color 必须跟 textarea 互斥
                 （任意时刻只有一层显字），否则要么文字消失要么双层叠出重影。
-                - 非 composing：textarea text-transparent → overlay text-slate-100（用户看到的字其实是 overlay 渲染的，token 段被 TOKEN_KIND_CLASS 自带的颜色覆盖）
-                - composing 中（中文输入候选）：textarea 切 text-slate-100 → overlay 切 text-transparent，避免双字 */}
+                - 非 composing：textarea text-transparent → overlay text-n800（用户看到的字其实是 overlay 渲染的，token 段被 TOKEN_KIND_CLASS 自带的颜色覆盖）
+                - composing 中（中文输入候选）：textarea 切 text-n800 → overlay 切 text-transparent，避免双字 */}
             <div
                 ref={overlayRef}
                 aria-hidden="true"

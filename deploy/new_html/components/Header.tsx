@@ -113,10 +113,10 @@ export const Header: React.FC<HeaderProps> = ({
           <a href="/projects" className="flex items-center gap-1.5 text-n300 hover:text-primary transition-colors" title="返回项目列表">
             <FolderOpen className="w-4 h-4" />
           </a>
-          <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-label="MECHA"><rect width="28" height="28" rx="6" fill="#0052CC"/><text x="14" y="20" fontFamily="system-ui,sans-serif" fontWeight="800" fontSize="16" fill="white" textAnchor="middle">M</text></svg>
+          <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-label="MECHA"><rect width="28" height="28" rx="4" fill="#146EF5"/><text x="14" y="20" fontFamily="Arial,sans-serif" fontWeight="600" fontSize="16" fill="white" textAnchor="middle">M</text></svg>
           <div className="flex flex-col leading-tight">
             <span className="font-bold text-lg tracking-tight text-n800">MECHA</span>
-            <span className="text-[10px] text-slate-400 uppercase">Storyboard AI</span>
+            <span className="ui-eyebrow text-[10px] text-n100 uppercase">Storyboard AI</span>
           </div>
         </div>
         
@@ -175,7 +175,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => onChangeView(AppView.Admin)}
             className={`ml-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 border
                ${currentView === AppView.Admin
-                 ? 'bg-red-900/30 text-danger border-red-500/30'
+                 ? 'bg-r50 text-danger border-r75'
                  : 'text-n100 hover:text-danger border-n40 hover:border-red-500/30'}
             `}
             title="管理员控制台"

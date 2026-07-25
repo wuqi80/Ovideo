@@ -91,15 +91,16 @@ export const AIRewritePromptModal: React.FC<AIRewritePromptModalProps> = (p) => 
 
     return (
         <div
-            role="dialog"
-            aria-label="AI 改写视频提示词"
-            className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4"
+            className="app-modal-backdrop fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4"
             onClick={() => { if (!loading) p.onClose(); }}
         >
             <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="AI 改写视频提示词"
                 /* 2026-06-05：弹窗整体放大约 3 倍（640px → min(96vw,1400px)）。
                    2026-06-05(2)：高度再放大 2 倍——文本框行数翻倍（原文/自定义/结果 8/4/16 → 16/8/32），max-h 96vh。 */
-                className="w-[min(96vw,1400px)] max-w-full max-h-[96vh] bg-n0 border border-primary rounded-md shadow-bottom overflow-hidden flex flex-col"
+                className="app-modal-surface w-[min(96vw,1400px)] max-w-full max-h-[96vh] bg-n0 border border-primary rounded-md shadow-bottom overflow-hidden flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-n40 bg-primary-light">

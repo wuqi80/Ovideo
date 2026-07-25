@@ -336,8 +336,8 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
     const canSubmit = selectedBk && selectedHu && (fusionType !== 'transfer' || maskDataUrl);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm">
-            <div className="bg-n0 rounded-2xl border border-n40 shadow-bottom w-[1000px] max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm">
+            <div role="dialog" aria-modal="true" aria-label="图像融合" className="app-modal-surface bg-n0 rounded-2xl border border-n40 shadow-bottom w-[1000px] max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-n40 flex-shrink-0">
                     <div className="flex items-center gap-3">
@@ -650,7 +650,7 @@ export const ImageFusionModal: React.FC<ImageFusionModalProps> = ({
                     <button
                         onClick={handleSubmit}
                         disabled={isProcessing || !canSubmit}
-                        className="px-6 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                        className="px-6 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                     >
                         {isProcessing ? (
                             <>

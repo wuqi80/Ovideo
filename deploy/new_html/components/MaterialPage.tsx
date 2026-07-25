@@ -876,11 +876,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             });
             if (appendedSources.size > 0) {
               return (
-                <div className="mb-2 p-2 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+                <div className="mb-2 p-2 bg-y50 border border-y75 rounded-lg">
                   <div className="text-[10px] text-warning font-bold mb-1.5">📎 已追加的文件镜头：</div>
                   <div className="flex flex-wrap gap-1">
                     {Array.from(appendedSources.entries()).map(([fileId, fileName]) => (
-                      <div key={fileId} className="flex items-center gap-1 px-2 py-0.5 bg-amber-900/30 border border-amber-500/20 rounded text-[9px] text-warning">
+                      <div key={fileId} className="flex items-center gap-1 px-2 py-0.5 bg-y50 border border-y75 rounded text-[9px] text-warning">
                         <span>{fileName}</span>
                         {onRemoveAppendedStoryboard && (
                           <button
@@ -931,7 +931,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                   isSelected
                     ? 'bg-primary-light border-primary ring-1 ring-primary/50'
                     : isAppended
-                      ? 'bg-amber-900/20 border-amber-500/30 hover:border-amber-500/50 hover:bg-amber-900/30'  // 🆕 追加镜头的颜色
+                      ? 'bg-y50 border-y75 hover:border-warning hover:bg-y75'  // 追加镜头
                       : 'bg-n0 border-n40 hover:border-n40 hover:bg-n20'
                 }`}
               >
@@ -949,12 +949,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                   </div>
                   {hasTags && (
                     isBound ? (
-                        <div className="flex items-center gap-1 text-[9px] text-success bg-green-950/30 px-1.5 py-0.5 rounded-full border border-green-500/20">
+                        <div className="flex items-center gap-1 text-[9px] text-success bg-g50 px-1.5 py-0.5 rounded-full border border-g75">
                             <Check className="w-2.5 h-2.5" />
                             已完成
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1 text-[9px] text-warning bg-yellow-950/30 px-1.5 py-0.5 rounded-full border border-yellow-500/20">
+                        <div className="flex items-center gap-1 text-[9px] text-warning bg-y50 px-1.5 py-0.5 rounded-full border border-y75">
                             <AlertCircle className="w-2.5 h-2.5" />
                             待绑定
                         </div>
@@ -969,12 +969,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                      </span>
                    ))}
                    {item.scene && (
-                     <span className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[item.scene] ? 'bg-orange-900/40 border-orange-500/30 text-orange-300' : 'bg-n30 border-n40 text-n100'}`}>
+                     <span className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[item.scene] ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-n30 border-n40 text-n100'}`}>
                          {item.scene}
                      </span>
                    )}
                    {(item.props || []).map(p => (
-                     <span key={`p-${p}`} className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[p] ? 'bg-yellow-900/30 border-yellow-500/30 text-yellow-500' : 'bg-n30 border-n40 text-n100'}`}>
+                     <span key={`p-${p}`} className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[p] ? 'bg-y50 border-y75 text-warning' : 'bg-n30 border-n40 text-n100'}`}>
                          {p}
                      </span>
                    ))}
@@ -1057,7 +1057,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                      </button>
                    </div>
                  )}
-                 <div className="flex items-center gap-2 text-[10px] text-success bg-green-950/20 px-2 py-1 rounded border border-green-500/20">
+                 <div className="flex items-center gap-2 text-[10px] text-success bg-g50 px-2 py-1 rounded border border-g75">
                      <Database className="w-3 h-3" />
                      <span>素材绑定数据已自动保存</span>
                  </div>
@@ -1454,8 +1454,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                         </div>
                         <span className={`text-[10px] px-2 py-1 rounded ${
                           appendToFront
-                            ? 'text-success bg-green-900/30'
-                            : 'text-orange-400 bg-orange-900/30'
+                            ? 'text-success bg-g50'
+                            : 'text-orange-600 bg-orange-50'
                         }`}>
                           {appendToFront ? '← 前置' : '追加 →'}
                         </span>
@@ -1569,7 +1569,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
           <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[150]" onClick={() => setLightboxImage(null)}>
             <button 
               onClick={() => setLightboxImage(null)} 
-              className="absolute top-6 right-6 text-white hover:text-gray-300 bg-black/50 rounded-full p-2 z-10"
+              className="absolute top-6 right-6 text-white hover:text-n50 bg-black/50 rounded-full p-2 z-10"
             >
               <X className="w-6 h-6" />
             </button>
@@ -1577,7 +1577,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             {hasPrev && (
               <button
                 onClick={(e) => { e.stopPropagation(); showPrev(); }}
-                className="absolute left-6 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 bg-black/50 rounded-full p-3 z-10"
+                className="absolute left-6 top-1/2 -translate-y-1/2 text-white hover:text-n50 bg-black/50 rounded-full p-3 z-10"
               >
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1588,7 +1588,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             {hasNext && (
               <button
                 onClick={(e) => { e.stopPropagation(); showNext(); }}
-                className="absolute right-6 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 bg-black/50 rounded-full p-3 z-10"
+                className="absolute right-6 top-1/2 -translate-y-1/2 text-white hover:text-n50 bg-black/50 rounded-full p-3 z-10"
               >
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1633,8 +1633,8 @@ const MaterialCard: React.FC<{
     const hasMaterials = materials.length > 0;
     const typeStyles: Record<BindingAssetType, { header: string; badge: string; label: string }> = {
         character: { header: 'bg-primary-light', badge: 'text-primary border-primary/20 bg-primary-light', label: 'Character' },
-        scene: { header: 'bg-orange-950/20', badge: 'text-orange-300 border-orange-500/20 bg-orange-500/10', label: 'Scene' },
-        prop: { header: 'bg-yellow-950/20', badge: 'text-yellow-600 border-yellow-500/20 bg-yellow-500/10', label: 'Prop' },
+        scene: { header: 'bg-orange-50', badge: 'text-orange-600 border-orange-200 bg-orange-50', label: 'Scene' },
+        prop: { header: 'bg-y50', badge: 'text-warning border-y75 bg-y50', label: 'Prop' },
     };
     const style = typeStyles[type];
 

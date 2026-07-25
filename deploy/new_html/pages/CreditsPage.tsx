@@ -60,7 +60,7 @@ export const CreditsPage: React.FC = () => {
   useEffect(() => { reload(); }, [reload]);
 
   return (
-    <div className="min-h-screen bg-n20 text-n800">
+    <div className="min-h-screen bg-n0 text-n800">
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-sm text-n300 hover:text-n800">← 返回</button>
@@ -103,12 +103,12 @@ export const CreditsPage: React.FC = () => {
 
         {/* 筛选 + 流水 */}
         <section className="rounded-md border border-n40 bg-n0 shadow-card">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-n40 text-sm">
-            <span className="font-medium">积分流水</span>
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-n40 text-sm">
+            <span className="font-medium whitespace-nowrap">积分流水</span>
             <select
               value={filterChangeType}
               onChange={e => setFilterChangeType(e.target.value)}
-              className="ml-3 text-xs bg-n0 border border-n40 rounded px-2 py-1"
+              className="sm:ml-3 text-xs bg-n0 border border-n40 rounded px-2 py-1"
             >
               <option value="">全部类型</option>
               {Object.keys(CHANGE_TYPE_LABEL).map(k => (
@@ -119,13 +119,13 @@ export const CreditsPage: React.FC = () => {
               value={filterFeature}
               onChange={e => setFilterFeature(e.target.value)}
               placeholder="按功能筛选 (feature_key)"
-              className="text-xs bg-n0 border border-n40 rounded px-2 py-1 w-56"
+              className="order-last w-full text-xs bg-n0 border border-n40 rounded px-2 py-1 sm:order-none sm:w-56"
             />
             <span className="ml-auto text-xs text-n100">共 {transactions.length} 条</span>
           </div>
 
           <div className="overflow-auto">
-            <table className="w-full text-xs">
+            <table className="w-full min-w-[720px] text-xs">
               <thead className="text-n100 bg-n20">
                 <tr>
                   <th className="text-left py-2 px-3">时间</th>

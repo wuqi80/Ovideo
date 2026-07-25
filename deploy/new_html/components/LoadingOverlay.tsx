@@ -36,8 +36,8 @@ export const LoadingOverlay: React.FC = () => {
       <div className="relative z-10 flex flex-col items-center">
         {/* Central Logo/Spinner */}
         <div className="relative mb-8">
-            <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20 animate-pulse rounded-full"></div>
-            <div className="relative bg-n0 border border-indigo-500/30 p-6 rounded-2xl shadow-2xl flex items-center justify-center">
+            <div className="absolute inset-0 bg-primary blur-xl opacity-20 animate-pulse rounded-full"></div>
+            <div className="relative bg-n0 border border-b75 p-6 rounded-2xl shadow-bottom flex items-center justify-center">
                 <Loader2 className="w-12 h-12 text-primary animate-spin" />
                 <div className="absolute -top-2 -right-2">
                     <Sparkles className="w-6 h-6 text-cyan-400 animate-bounce" />
@@ -62,7 +62,7 @@ export const LoadingOverlay: React.FC = () => {
         </div>
 
         {/* Text */}
-        <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-wider mb-2">
+        <h2 className="text-xl font-semibold text-n800 tracking-tight mb-2">
             AnimeScript Studio
         </h2>
         

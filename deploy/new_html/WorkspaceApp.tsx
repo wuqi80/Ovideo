@@ -3704,7 +3704,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }
 
   return (
-    <div className={`layout-safe flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} bg-n20 text-n800 font-sans`}>
+    <div className={`layout-safe flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} bg-n0 text-n800 font-sans`}>
       {!hideHeader && (
         <Header 
           visibleColumns={visibleColumns} 

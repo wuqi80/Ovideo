@@ -522,7 +522,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
 
             {/* 2026-05-24 Task 3：多镜头编辑区（intelligence/customize） */}
             {currentMode === 'multi' && (
-                <div className="flex flex-col gap-1.5 border border-sky-700/40 rounded p-2 bg-sky-950/20">
+                <div className="flex flex-col gap-1.5 border border-b75 rounded p-2 bg-b50">
                     {/* shot_type 切换 */}
                     <div className="flex items-center gap-1.5 text-[10px]">
                         <span className="text-n300">分镜模式：</span>
@@ -593,7 +593,7 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                                         arr.push({ index: arr.length + 1, prompt: '', duration: 5 });
                                         onChange({ ...params, kling_multi_prompt: arr });
                                     }}
-                                    className="text-[10px] text-sky-300 hover:text-sky-200 border border-dashed border-sky-700/50 rounded py-1 hover:bg-sky-950/30"
+                                    className="text-[10px] text-primary hover:text-b400 border border-dashed border-b75 rounded py-1 hover:bg-b75"
                                 >+ 添加分镜 ({(params.kling_multi_prompt?.length || 0)}/6)</button>
                             )}
                         </div>

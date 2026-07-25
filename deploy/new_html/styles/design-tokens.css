@@ -1,7 +1,8 @@
 /**
- * Drama 设计令牌（design tokens）—— refactor/v2
- * 移植自参考仓 wk_crm-java-ai/frontend/src/styles/var.scss 的 Atlassian Design System。
- * 企业级浅色主题。所有组件应优先使用这些 CSS 变量 / 对应的 Tailwind 命名色（见 index.html）。
+ * Drama 设计令牌（design tokens）—— Webflow visual system
+ *
+ * DESIGN.md 是本文件的视觉契约。创作端、管理端和所有浮层都通过这里
+ * 共享颜色、字体、圆角、阴影、交互和响应式行为，业务组件不再各自定义主题。
  */
 
 @tailwind base;
@@ -9,87 +10,99 @@
 @tailwind utilities;
 
 :root {
-  /* ---------- 中性色阶 n0~n900 ---------- */
-  --n0:   #FFFFFF;
-  --n10:  #FAFBFC;
-  --n20:  #F4F5F7;
-  --n30:  #EBECF0;
-  --n40:  #DFE1E6;
-  --n50:  #C1C7D0;
-  --n60:  #B3BAC5;
-  --n70:  #A5ADBA;
-  --n80:  #97A0AF;
-  --n90:  #8993A4;
-  --n100: #7A869A;
-  --n200: #6B778C;
-  --n300: #5E6C84;
-  --n400: #505F79;
-  --n500: #42526E;
-  --n600: #344563;
-  --n700: #253858;
-  --n800: #172B4D;
-  --n900: #091E42;
+  color-scheme: light;
 
-  /* ---------- 功能色（红/黄/绿/蓝/紫/青 各 50~500） ---------- */
-  --r50: #FFEBE6; --r75: #FFBDAD; --r100: #FF8F73; --r200: #FF7452; --r300: #FF5630; --r400: #DE350B; --r500: #BF2600;
-  --y50: #FFFAE6; --y75: #FFF0B3; --y100: #FFE380; --y200: #FFC400; --y300: #FFAB00; --y400: #FF991F; --y500: #FF8B00;
-  --g50: #E3FCEF; --g75: #ABF5D1; --g100: #79F2C0; --g200: #57D9A3; --g300: #36B37E; --g400: #00875A; --g500: #006644;
-  --b50: #DEEBFF; --b75: #B3D4FF; --b100: #4C9AFF; --b200: #2684FF; --b300: #0065FF; --b400: #0052CC; --b500: #0747A6;
-  --p50: #EAE6FF; --p75: #C0B6F2; --p100: #998DD9; --p200: #8777D9; --p300: #6554C0; --p400: #5243AA; --p500: #403294;
-  --t50: #E6FCFF; --t75: #B3F5FF; --t100: #79E2F2; --t200: #00C7E6; --t300: #00B8D9; --t400: #00A3BF; --t500: #008DA6;
+  /* ---------- Webflow 中性色阶 n0~n900 ---------- */
+  --n0:   #FFFFFF;
+  --n10:  #FCFCFC;
+  --n20:  #F7F7F7;
+  --n30:  #EEEEEE;
+  --n40:  #D8D8D8;
+  --n50:  #C8C8C8;
+  --n60:  #B8B8B8;
+  --n70:  #ABABAB;
+  --n80:  #9A9A9A;
+  --n90:  #898989;
+  --n100: #ABABAB;
+  --n200: #777777;
+  --n300: #5A5A5A;
+  --n400: #484848;
+  --n500: #363636;
+  --n600: #2B2B2B;
+  --n700: #222222;
+  --n800: #080808;
+  --n900: #000000;
+
+  /* ---------- Webflow 功能色与次级强调色 ---------- */
+  --r50: #FFF1F3; --r75: #FFD4DA; --r100: #FFA3AF; --r200: #FF7384; --r300: #EE1D36; --r400: #C9152B; --r500: #9D1021;
+  --y50: #FFF8E8; --y75: #FFEBC0; --y100: #FFDB82; --y200: #FFC84A; --y300: #FFAE13; --y400: #DB8D00; --y500: #A96D00;
+  --g50: #ECFFF0; --g75: #C7FFD2; --g100: #86F99C; --g200: #3BE65D; --g300: #00D722; --g400: #00A91B; --g500: #007E14;
+  --b50: #EAF2FF; --b75: #CFE0FF; --b100: #8EB7FF; --b200: #3B89FF; --b300: #146EF5; --b400: #006ACC; --b500: #0055D4;
+  --p50: #F2EBFF; --p75: #DECFFF; --p100: #B996FF; --p200: #9566FF; --p300: #7A3DFF; --p400: #6428DC; --p500: #4B19B3;
+  --t50: #E9FBFF; --t75: #C7F4FF; --t100: #83E8FA; --t200: #35D4EB; --t300: #00B7D3; --t400: #008EA6; --t500: #006B7D;
+  --pink: #ED52CB;
+  --orange: #FF6B00;
 
   /* ---------- 语义色 ---------- */
-  --color-primary:        var(--b400);   /* #0052CC 主品牌色 */
-  --color-primary-hover:  var(--b300);
-  --color-primary-active: var(--b500);
+  --color-primary:        #146EF5;
+  --color-primary-hover:  #0055D4;
+  --color-primary-active: #006ACC;
   --color-primary-light:  var(--b50);
   --color-success: var(--g300);
   --color-warning: var(--y300);
   --color-danger:  var(--r300);
-  --color-info:    var(--n800);
+  --color-info:    var(--b300);
   --color-purple:  var(--p300);
   --color-teal:    var(--t300);
 
   /* ---------- 文字 ---------- */
   --text-primary:     var(--n800);
-  --text-regular:     var(--n500);
-  --text-secondary:   var(--n200);
+  --text-regular:     var(--n700);
+  --text-secondary:   var(--n300);
   --text-placeholder: var(--n100);
   --text-inverse:     var(--n0);
 
   /* ---------- 边框 / 背景 ---------- */
   --border-base:  var(--n40);
+  --border-hover: var(--n90);
   --border-light: var(--n30);
-  --bg-body:      var(--n20);   /* 页面底色 */
-  --bg-surface:   var(--n0);    /* 卡片/面板 */
-  --bg-sunken:    var(--n30);   /* 凹陷区/表头 */
+  --bg-body:      var(--n0);
+  --bg-surface:   var(--n0);
+  --bg-sunken:    var(--n20);
   --bg-hover:     var(--n20);
 
   /* ---------- 字体 ---------- */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --font-sans: "WF Visual Sans Variable", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: Inconsolata, ui-monospace, "SFMono-Regular", Consolas, monospace;
 
-  /* 字号（11~29px，base 14） */
-  --fs-xxxl: 29px; --fs-xxl: 24px; --fs-xl: 20px; --fs-lg: 16px;
-  --fs-base: 14px; --fs-md: 14px; --fs-sm: 12px; --fs-xs: 11px;
+  /* 字号：工具型界面采用 DESIGN.md 的正文/标题比例 */
+  --fs-display: 80px; --fs-section: 56px; --fs-xxxl: 32px; --fs-xxl: 24px;
+  --fs-xl: 20px; --fs-lg: 16px; --fs-base: 16px; --fs-md: 14px; --fs-sm: 12.8px; --fs-xs: 10px;
   /* 字重 */
-  --fw-light: 300; --fw-normal: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+  --fw-light: 300; --fw-normal: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 600;
   /* 行高 */
-  --lh-base: 24px; --lh-sm: 16px;
+  --lh-base: 1.6; --lh-sm: 1.4;
 
-  /* ---------- 间距（8px 基准） ---------- */
-  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px;
+  /* ---------- DESIGN.md 分数间距 ---------- */
+  --space-px: 1px; --space-0-5: 2.4px; --space-1: 4px; --space-1-5: 5.6px;
+  --space-2: 8px; --space-2-5: 9.6px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px;
   --interval-base: 8px;
-  --main-padding: 16px;
+  --main-padding: 24px;
 
   /* ---------- 圆角 ---------- */
-  --radius-sm: 2px; --radius-base: 4px; --radius-chart: 10px; --radius-circle: 100%;
+  --radius-sm: 2px; --radius-base: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-circle: 50%;
 
-  /* ---------- 阴影（3 档） ---------- */
-  --shadow-base:   0px 2px 8px 0px rgba(23, 43, 77, 0.10);
-  --shadow-dark:   0 2px 4px rgba(0, 0, 0, .12), 0 0 6px rgba(0, 0, 0, .12);
-  --shadow-card:   0 1px 2px rgba(9, 30, 66, 0.08), 0 0 1px rgba(9, 30, 66, 0.31);
-  --shadow-bottom: rgba(9, 30, 66, 0.25) 0px 4px 8px -2px, rgba(9, 30, 66, 0.31) 0px 0px 1px;
+  /* ---------- Webflow 5 层级联阴影 ---------- */
+  --shadow-cascade: rgba(0, 0, 0, 0) 0 84px 24px,
+                    rgba(0, 0, 0, 0.01) 0 54px 22px,
+                    rgba(0, 0, 0, 0.04) 0 30px 18px,
+                    rgba(0, 0, 0, 0.08) 0 13px 13px,
+                    rgba(0, 0, 0, 0.09) 0 3px 7px;
+  --shadow-base: var(--shadow-cascade);
+  --shadow-dark: var(--shadow-cascade);
+  --shadow-card: 0 1px 0 rgba(8, 8, 8, 0.04), 0 4px 12px rgba(8, 8, 8, 0.06);
+  --shadow-bottom: var(--shadow-cascade);
 
   /* ---------- 布局尺寸 ---------- */
   --topbar-height: 56px;
@@ -115,8 +128,18 @@ body,
 body {
   margin: 0;
   font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  color: var(--text-primary);
+  background: var(--bg-body);
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
   overflow-y: auto;
+}
+
+::selection {
+  color: var(--n800);
+  background: var(--b75);
 }
 
 img,
@@ -137,6 +160,21 @@ button {
 
 table {
   max-width: 100%;
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 pre,
@@ -202,6 +240,10 @@ code,
 .modal-surface {
   max-width: calc(100vw - 32px);
   max-height: calc(100dvh - 32px);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-cascade);
 }
 
 .media-detail-pane {
@@ -328,18 +370,27 @@ code,
 }
 
 /* 浅色主题基线 */
-body.theme-light {
+body.theme-webflow {
   background-color: var(--bg-body);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--fs-base);
 }
 
-/* Atlassian 风格细滚动条（浅色） */
+/* Webflow 风格细滚动条 */
+.scrollbar-webflow::-webkit-scrollbar,
 .scrollbar-atlas::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-webflow::-webkit-scrollbar-track,
 .scrollbar-atlas::-webkit-scrollbar-track { background: transparent; }
-.scrollbar-atlas::-webkit-scrollbar-thumb { background: var(--n50); border-radius: 4px; }
-.scrollbar-atlas::-webkit-scrollbar-thumb:hover { background: var(--n70); }
+.scrollbar-webflow::-webkit-scrollbar-thumb,
+.scrollbar-atlas::-webkit-scrollbar-thumb { background: var(--n50); border: 2px solid transparent; border-radius: 8px; background-clip: content-box; }
+.scrollbar-webflow::-webkit-scrollbar-thumb:hover,
+.scrollbar-atlas::-webkit-scrollbar-thumb:hover { background-color: var(--n90); }
+
+* {
+  scrollbar-color: var(--n50) transparent;
+  scrollbar-width: thin;
+}
 
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -347,7 +398,7 @@ body.theme-light {
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.9); opacity: 0; }
+  from { transform: translateY(12px) scale(0.985); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
 
@@ -361,12 +412,17 @@ body.theme-light {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes drawerIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 .animate-fadeIn {
   animation: fadeIn 0.2s ease-out;
 }
 
 .animate-scaleIn {
-  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: scaleIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .animate-slideUp {
@@ -392,14 +448,281 @@ body.theme-light {
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 3px;
+  background: var(--n50);
+  border-radius: 4px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+  background: var(--n90);
+}
+
+/* --------------------------------------------------------------------------
+ * 全站组件契约
+ * -------------------------------------------------------------------------- */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-top: 0;
+  color: var(--text-primary);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+
+h1,
+h2 {
+  letter-spacing: -0.02em;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+/* 功能元素圆角不超过 8px；头像、状态点等仍可使用 rounded-full。 */
+.rounded { border-radius: var(--radius-base); }
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg,
+.rounded-xl,
+.rounded-2xl,
+.rounded-3xl { border-radius: var(--radius-lg); }
+
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-atlas,
+.shadow-bottom { box-shadow: var(--shadow-cascade); }
+
+/* 页面、卡片和工具栏共享相同的白色表面与灰色边界。 */
+.ui-surface,
+.ui-card {
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.ui-card {
+  box-shadow: var(--shadow-card);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.ui-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-cascade);
+}
+
+.ui-eyebrow {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1.3;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* 输入、下拉和文本域使用同一尺寸、边界与焦点态。 */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),
+textarea,
+select {
+  border-color: var(--border-base);
+  border-radius: var(--radius-base);
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-placeholder);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]):hover,
+textarea:hover,
+select:hover {
+  border-color: var(--n90);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]):focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(20, 110, 245, 0.14);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-primary);
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  color: var(--text-placeholder);
+  background-color: var(--n20);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+button {
+  border-radius: var(--radius-base);
+  font-weight: var(--fw-medium);
+  letter-spacing: -0.01em;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease,
+              box-shadow 150ms ease, opacity 150ms ease, transform 150ms ease;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+button[class~="bg-primary"],
+button[class~="bg-b300"],
+button[class~="bg-b400"] {
+  color: var(--n0);
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+button[class~="bg-primary"]:not(:disabled):hover,
+button[class~="bg-b300"]:not(:disabled):hover,
+button[class~="bg-b400"]:not(:disabled):hover {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  box-shadow: 0 8px 20px rgba(20, 110, 245, 0.18);
+}
+
+.button-shift:not(:disabled):hover {
+  transform: translateX(6px);
+}
+
+/* 所有现存 Tailwind 浮层统一为同一遮罩、动效和内容表面。 */
+.app-modal-backdrop,
+.fixed.inset-0[role="dialog"],
+.fixed.inset-0[class*="bg-n900/"],
+.fixed.inset-0[class*="bg-black/"] {
+  background-color: rgba(8, 8, 8, 0.52);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 160ms ease-out both;
+}
+
+.app-modal-surface,
+.fixed.inset-0[role="dialog"] > .bg-n0,
+.fixed.inset-0[class*="bg-n900/"] > .bg-n0,
+.fixed.inset-0[class*="bg-black/"] > .bg-n0 {
+  max-height: calc(100dvh - 32px);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  background-color: var(--bg-surface);
+  box-shadow: var(--shadow-cascade);
+  animation: scaleIn 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.app-modal-header {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-base);
+}
+
+.app-modal-body {
+  min-height: 0;
+  padding: 20px;
+  overflow: auto;
+}
+
+.app-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 64px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-base);
+  background: var(--n10);
+}
+
+.app-drawer-backdrop {
+  background-color: rgba(8, 8, 8, 0.52);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 160ms ease-out both;
+}
+
+.app-drawer-surface {
+  max-width: min(100vw, 440px);
+  border-left: 1px solid var(--border-base);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-cascade);
+  animation: drawerIn 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 992px) {
+  :root {
+    --main-padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-modal-surface,
+  .fixed.inset-0[role="dialog"] > .bg-n0,
+  .fixed.inset-0[class*="bg-n900/"] > .bg-n0,
+  .fixed.inset-0[class*="bg-black/"] > .bg-n0 {
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+@media (max-width: 479px) {
+  :root {
+    --main-padding: 12px;
+  }
+
+  .app-modal-backdrop,
+  .fixed.inset-0[class*="bg-n900/"],
+  .fixed.inset-0[class*="bg-black/"] {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .app-modal-surface,
+  .fixed.inset-0[role="dialog"] > .bg-n0,
+  .fixed.inset-0[class*="bg-n900/"] > .bg-n0,
+  .fixed.inset-0[class*="bg-black/"] > .bg-n0 {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .app-drawer-surface {
+    width: 100%;
+    max-width: 100%;
+    border-left: 0;
+  }
 }

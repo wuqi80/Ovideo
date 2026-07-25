@@ -203,7 +203,7 @@ const ProjectHub: React.FC = () => {
         return d.toLocaleDateString('zh-CN');
     };
 
-    // refactor/v2 (P1 旗舰)：项目中心整体换肤为 Atlassian 企业级浅色。
+    // Webflow 视觉系统：项目中心与创作工作台共享白色画布、锐利边界和主色。
     // 逻辑/状态/handler 全部不变，仅替换样式（暗 gray/purple → 浅 n色阶/primary）。
     const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-6xl';
     const projectGridClass = isWideLayout
@@ -212,10 +212,10 @@ const ProjectHub: React.FC = () => {
     const currentUsername = localStorage.getItem('username') || '未登录';
 
     return (
-        <div className="layout-safe min-h-screen bg-n20 p-6 md:p-10 text-n800" onClick={() => setContextMenu(null)}>
+        <div className="layout-safe min-h-screen bg-n0 p-4 sm:p-6 md:p-10 text-n800" onClick={() => setContextMenu(null)}>
             <div className={`w-full ${shellWidthClass} mx-auto`}>
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6 animate-slideDown">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 animate-slideDown">
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-n0 border border-n40 text-primary">
                             <FolderOpen size={18} />
@@ -225,11 +225,11 @@ const ProjectHub: React.FC = () => {
                             <p className="text-sm text-n100 mt-0.5">{filteredProjects.length} 个项目 · {currentUsername}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto sm:gap-3">
                         <button
                             type="button"
                             onClick={toggleLayoutWidth}
-                            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-n300 hover:text-n800 hover:bg-n0 border border-n40 hover:border-primary transition-all duration-200"
+                            className="flex items-center gap-2 whitespace-nowrap px-3 py-2.5 rounded-lg text-sm text-n300 hover:text-n800 hover:bg-n0 border border-n40 hover:border-primary transition-all duration-200"
                             title={isWideLayout ? '切回窄屏' : '切到宽屏'}
                         >
                             {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -237,11 +237,11 @@ const ProjectHub: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setShowCreateModal(true)}
-                            className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-card hover:shadow-atlas"
+                            className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-card hover:shadow-atlas"
                         >
                             <Plus size={18} /> 新建项目
                         </button>
-                        <span className="max-w-[160px] truncate text-sm font-medium text-n300" title={currentUsername}>
+                        <span className="hidden lg:block max-w-[160px] truncate text-sm font-medium text-n300" title={currentUsername}>
                             {currentUsername}
                         </span>
                         <button
@@ -250,7 +250,7 @@ const ProjectHub: React.FC = () => {
                                 localStorage.removeItem('username');
                                 window.location.href = '/login';
                             }}
-                            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-n100 hover:text-danger hover:bg-r50 border border-n40 hover:border-n40 transition-all duration-200"
+                            className="button-shift flex items-center gap-2 whitespace-nowrap px-3 py-2.5 rounded-lg text-sm text-n100 hover:text-danger hover:bg-r50 border border-n40 hover:border-n40 transition-all duration-200"
                             title="退出登录"
                         >
                             退出
@@ -259,8 +259,8 @@ const ProjectHub: React.FC = () => {
                 </div>
 
                 {/* 工具栏 */}
-                <div className="flex flex-wrap items-center gap-4 mb-6">
-                    <div className="flex-1 relative max-w-md min-w-[220px]">
+                <div className="grid grid-cols-2 items-center gap-3 sm:flex sm:flex-wrap sm:gap-4 mb-6">
+                    <div className="col-span-2 w-full sm:flex-1 relative sm:max-w-md min-w-0 sm:min-w-[220px]">
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-n100" />
                     <input
                         type="text"
@@ -451,10 +451,18 @@ const ProjectHub: React.FC = () => {
 
             {/* 新建项目弹窗 */}
             {showCreateModal && (
-                <div className="fixed inset-0 bg-n900/50 flex items-center justify-center z-50 animate-fadeIn" onClick={() => setShowCreateModal(false)}>
-                    <div className="bg-n0 rounded-md p-6 w-full max-w-md border border-n40 shadow-bottom animate-scaleIn" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-lg font-semibold mb-4 text-n800">新建项目</h2>
-                        <div className="space-y-4">
+                <div
+                    className="app-modal-backdrop fixed inset-0 flex items-center justify-center z-50 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="create-project-title"
+                    onClick={() => setShowCreateModal(false)}
+                >
+                    <div className="app-modal-surface w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="app-modal-header">
+                            <h2 id="create-project-title" className="text-lg font-semibold text-n800">新建项目</h2>
+                        </div>
+                        <div className="app-modal-body space-y-4">
                             <div>
                                 <label className="block text-sm text-n300 mb-1">项目名称</label>
                                 <input
@@ -518,7 +526,7 @@ const ProjectHub: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                        <div className="flex justify-end gap-3 mt-6">
+                        <div className="app-modal-footer">
                             <button
                                 onClick={() => setShowCreateModal(false)}
                                 className="px-4 py-2 text-sm text-n300 hover:text-n800 hover:bg-n20 rounded transition-colors"

@@ -22,8 +22,8 @@ const NAV_ITEMS: { path: string; label: string; icon: any; sourcePage: SourcePag
   { path: 'history',        label: '历史',     icon: Clock,      sourcePage: 'history' },
 ];
 
-// refactor/v2 (P1 shell)：顶栏从暗色(gray-950/indigo) 换成 Atlassian 企业级浅色
-// （56px 白色顶栏 + n40 细边 + 主色 #0052CC 活跃态）。导航项/逻辑/功能完全不变。
+// Webflow shell：56px 白色顶栏 + #d8d8d8 细边 + #146ef5 活跃态。
+// 导航项、路由和业务逻辑保持不变。
 export const WorkflowLayout: React.FC = () => {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
   const navigate = useNavigate();
@@ -59,7 +59,7 @@ export const WorkflowLayout: React.FC = () => {
 
   return (
     <EpisodeProvider>
-      <div className="layout-safe flex flex-col h-screen min-w-0 overflow-hidden bg-n20 text-n800">
+      <div className="layout-safe flex flex-col h-screen min-w-0 overflow-hidden bg-n0 text-n800">
         <nav className="responsive-toolbar flex items-center gap-1 px-4 border-b border-n40 bg-n0 shadow-card shrink-0 min-w-0 overflow-hidden">
           <button
             onClick={() => navigate(`/projects/${projectId}/episodes`)}
@@ -127,7 +127,7 @@ export const WorkflowLayout: React.FC = () => {
               localStorage.removeItem('username');
               window.location.href = '/login';
             }}
-            className="flex items-center gap-1.5 px-2.5 py-2 ml-1 rounded text-sm text-n300 hover:text-danger hover:bg-r50 transition-colors"
+            className="button-shift flex items-center gap-1.5 px-2.5 py-2 ml-1 rounded text-sm text-n300 hover:text-danger hover:bg-r50 transition-colors"
             title="退出登录"
           >
             <LogOut size={15} />

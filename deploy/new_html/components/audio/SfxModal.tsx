@@ -108,9 +108,9 @@ export const SfxModal: React.FC<SfxModalProps> = ({
   }, [description, episodeId, onCreated, script]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
-      <div className="relative max-h-[84vh] w-[560px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl">
+      <div role="dialog" aria-modal="true" aria-label="添加音效" className="app-modal-surface relative max-h-[84vh] w-[560px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-base font-bold text-n800">
             <Sparkles size={16} className="text-primary" /> 添加音效

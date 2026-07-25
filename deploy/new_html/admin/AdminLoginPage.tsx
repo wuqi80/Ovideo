@@ -100,8 +100,7 @@ export const AdminLoginPage: React.FC = () => {
 
     return (
         <div
-            className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden bg-n20 text-n700"
-            style={{ fontFamily: '"PingFang SC", "Source Han Sans CN", "Microsoft YaHei", sans-serif' }}
+            className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden bg-n0 text-n700 font-sans"
         >
             {/* 背景：径向辉光 + 等距网格 + 微粒噪点 */}
             <div className="absolute inset-0 pointer-events-none">

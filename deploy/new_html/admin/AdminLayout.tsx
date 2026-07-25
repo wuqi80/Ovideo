@@ -52,8 +52,7 @@ export const AdminLayout: React.FC = () => {
     };
 
     return (
-        <div className="layout-safe h-screen w-full min-w-0 bg-n20 text-n700 flex overflow-hidden"
-             style={{ fontFamily: '"PingFang SC", "Source Han Sans CN", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif' }}>
+        <div className="layout-safe h-screen w-full min-w-0 bg-n0 text-n700 font-sans flex overflow-hidden">
             {/* ============ 统一层级菜单 ============ */}
             <AdminSidebar />
 
@@ -100,7 +99,7 @@ export const AdminLayout: React.FC = () => {
                             </div>
                             <button
                                 onClick={handleLogout}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-n300 hover:text-danger hover:bg-r50 border border-n40 hover:border-danger/30 transition-all"
+                                className="button-shift flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-n300 hover:text-danger hover:bg-r50 border border-n40 hover:border-danger/30 transition-all"
                                 title="退出管理后台"
                             >
                                 <LogOut className="w-3.5 h-3.5" /> 退出
@@ -110,7 +109,7 @@ export const AdminLayout: React.FC = () => {
                 </header>
 
                 {/* 内容区 */}
-                <main className="layout-safe flex-1 min-h-0 min-w-0 overflow-auto bg-n20">
+                <main className="layout-safe flex-1 min-h-0 min-w-0 overflow-auto bg-n0">
                     <Outlet />
                 </main>
             </div>

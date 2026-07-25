@@ -790,7 +790,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
         //   旧实现 min-h-screen 让容器最少 100vh 但允许撑大；内部 flex-1 子在 "无明确高度的父容器"下
         //   不会形成滚动区域（overflow-y-auto 失效）→ "生成统计分析" / "新功能管理" 等长内容看不全也滚不动。
         //   h-screen 固定为精确 100vh，配合 overflow-hidden + flex-1 + overflow-y-auto 三件套才正确触发滚动。
-        <div className={`flex ${embedded ? 'h-full w-full' : 'h-screen w-screen'} bg-n20 text-n800 overflow-hidden font-sans relative`}>
+        <div className={`flex ${embedded ? 'h-full w-full' : 'h-screen w-screen'} bg-n0 text-n800 overflow-hidden font-sans relative`}>
             {/* 🆕 创建用户Loading遮罩 */}
             {isCreatingUser && (
                 <div className="fixed inset-0 z-[100] bg-n900/50 backdrop-blur-sm flex items-center justify-center">

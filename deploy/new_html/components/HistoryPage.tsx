@@ -312,7 +312,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
           </div>
         )}
         {loadError && (
-          <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+          <div className="mb-4 p-3 bg-r50 border border-r75 rounded-lg">
             <div className="flex items-center gap-2 text-danger text-xs font-bold mb-1">
               <AlertTriangle className="w-3.5 h-3.5" />
               加载出错

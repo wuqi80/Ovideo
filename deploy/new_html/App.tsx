@@ -66,7 +66,7 @@ const AdminSettingsPage = React.lazy(() => import('./admin/AdminSettingsPage'));
 const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));
 
 const RouteFallback: React.FC = () => (
-    <div className="h-screen w-full bg-n20 flex items-center justify-center text-sm text-n300">
+    <div className="h-screen w-full bg-n0 flex items-center justify-center text-sm text-n300">
         加载中...
     </div>
 );

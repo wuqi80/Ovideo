@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './styles/design-tokens.css';  // refactor/v2：设计令牌（CSS 变量 + 浅色滚动条），打包进构建
+import './styles/design-tokens.css';  // Webflow 视觉令牌与全站组件契约
 import App from './App';
 
 const rootElement = document.getElementById('root');

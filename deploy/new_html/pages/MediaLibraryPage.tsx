@@ -322,7 +322,7 @@ export const MediaLibraryPage: React.FC = () => {
   };
 
   return (
-    <div className="layout-safe flex flex-col h-screen bg-n20 text-n800">
+    <div className="layout-safe flex flex-col h-screen bg-n0 text-n800">
       {/* 顶部工具栏 */}
       <div className="responsive-toolbar flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
         <button

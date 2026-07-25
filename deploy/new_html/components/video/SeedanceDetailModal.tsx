@@ -38,13 +38,14 @@ export const SeedanceDetailModal: React.FC<SeedanceDetailModalProps> = (p) => {
     if (!p.open) return null;
     return (
         <div
-            role="dialog"
-            aria-label="Seedance 详情"
-            className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4"
+            className="app-modal-backdrop fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4"
             onClick={p.onClose}
         >
             <div
-                className="w-[520px] max-w-full max-h-[85vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Seedance 详情"
+                className="app-modal-surface w-[520px] max-w-full max-h-[85vh] bg-n0 border border-n40 rounded-md shadow-bottom overflow-hidden flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-n40">

@@ -12,7 +12,7 @@ const WorkspaceContent: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="h-screen bg-n20 flex items-center justify-center">
+            <div className="h-screen bg-n0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3 text-n300">
                     <Loader2 className="w-8 h-8 animate-spin text-primary" />
                     <span className="text-sm">加载项目中...</span>
@@ -23,7 +23,7 @@ const WorkspaceContent: React.FC = () => {
 
     if (error) {
         return (
-            <div className="h-screen bg-n20 flex items-center justify-center">
+            <div className="h-screen bg-n0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3 text-danger">
                     <AlertCircle className="w-10 h-10" />
                     <span className="text-sm">{error}</span>

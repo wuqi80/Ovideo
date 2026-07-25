@@ -43,11 +43,11 @@ export const CARD_BODY_SCROLL_CLASS = 'flex-1 min-h-0 overflow-y-auto mt-2 pr-0.
 
 /** 普通 I2V textarea：填满 body 区域，长文内部滚 */
 export const SIMPLE_PROMPT_TEXTAREA_CLASS =
-    'w-full h-full min-h-[72px] overflow-y-auto bg-black/30 border border-slate-700 rounded px-3 py-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none';
+    'w-full h-full min-h-[72px] overflow-y-auto bg-n0 border border-n40 rounded px-3 py-2 text-xs text-n700 focus:border-primary focus:outline-none resize-none';
 
 /** 空镜 textarea 容器内样式 */
 export const PLACEHOLDER_PROMPT_TEXTAREA_CLASS =
-    'w-full h-full min-h-[56px] overflow-y-auto bg-black/30 border border-slate-700 rounded px-3 py-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none resize-none';
+    'w-full h-full min-h-[56px] overflow-y-auto bg-n0 border border-n40 rounded px-3 py-2 text-xs text-n700 focus:border-primary focus:outline-none resize-none';
 
 /** 右侧只读 prompt 展示 */
 export const RESULT_PROMPT_READONLY_CLASS =

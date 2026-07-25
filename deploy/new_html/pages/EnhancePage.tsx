@@ -959,7 +959,7 @@ export const EnhancePage: React.FC = () => {
                 <span className="text-[10px] text-danger" title={compose.error || ''}>合成失败，点「合成成品」重试</span>
               )}
               <button
-                className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white text-xs rounded-lg transition-colors"
                 title="导出时间线配置"
                 onClick={() => {
                   const data = JSON.stringify({ clips, scale, totalDuration }, null, 2);

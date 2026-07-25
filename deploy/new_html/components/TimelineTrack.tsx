@@ -304,7 +304,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                     {trackClips.map(clip => {
                       const leftPct = (clip.startMs / effectiveTotal) * 100;
                       const widthPct = (clip.durationMs / effectiveTotal) * 100;
-                      const colorClass = clip.color || TRACK_COLORS[clip.track] || 'bg-gray-600';
+                      const colorClass = clip.color || TRACK_COLORS[clip.track] || 'bg-n300';
                       const canDelete = Boolean(onDeleteClip && (clip.track === 'bgm' || clip.track === 'sfx'));
 
                       return (

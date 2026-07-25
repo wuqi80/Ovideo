@@ -54,8 +54,8 @@ export const CreditEstimateModal: React.FC<CreditEstimateModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50">
-      <div className="w-full max-w-md mx-4 bg-n0 border border-n40 rounded-lg shadow-bottom">
+    <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-n900/50">
+      <div role="dialog" aria-modal="true" aria-label={title} className="app-modal-surface w-full max-w-md mx-4 bg-n0 border border-n40 rounded-lg shadow-bottom">
         <div className="px-5 py-3 border-b border-n40 flex items-center gap-2">
           <Coins size={18} className="text-warning" />
           <h3 className="text-sm font-medium text-n800">{title}</h3>

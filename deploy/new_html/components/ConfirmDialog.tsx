@@ -41,12 +41,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     danger: {
       icon: 'text-danger',
       confirmBtn: 'bg-danger hover:bg-red-500 text-white',
-      detailBg: 'bg-red-950/30 border-red-500/20',
+      detailBg: 'bg-r50 border-r75',
     },
     warning: {
       icon: 'text-warning',
       confirmBtn: 'bg-amber-600 hover:bg-amber-500 text-white',
-      detailBg: 'bg-amber-950/30 border-amber-500/20',
+      detailBg: 'bg-y50 border-y75',
     },
   };
 
@@ -54,18 +54,21 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-n900/50 backdrop-blur-sm"
+      className="app-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center bg-n900/50 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div
         ref={dialogRef}
-        className="bg-n0 rounded-2xl border border-n40 shadow-bottom w-full max-w-md mx-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        className="app-modal-surface bg-n0 rounded-2xl border border-n40 shadow-bottom w-full max-w-md mx-4"
       >
-        <div className="flex items-center gap-3 px-6 pt-6 pb-2">
+        <div className="app-modal-header flex items-center gap-3 px-6 pt-6 pb-2">
           <div className={`p-2 rounded-md bg-n0 ${styles.icon}`}>
             <AlertTriangle className="w-5 h-5" />
           </div>
-          <h3 className="text-lg font-semibold text-n800 flex-1">{title}</h3>
+          <h3 id="confirm-dialog-title" className="text-lg font-semibold text-n800 flex-1">{title}</h3>
           <button
             onClick={onCancel}
             className="p-1 rounded-lg hover:bg-n20 text-n100 hover:text-n700 transition-colors"
@@ -74,7 +77,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           </button>
         </div>
 
-        <div className="px-6 py-4">
+        <div className="app-modal-body px-6 py-4">
           <p className="text-sm text-n700 leading-relaxed">{message}</p>
           {detail && (
             <div className={`mt-3 p-3 rounded-md border ${styles.detailBg}`}>
@@ -83,7 +86,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 pb-6">
+        <div className="app-modal-footer flex items-center justify-end gap-3 px-6 pb-6">
           <button
             onClick={onCancel}
             className="px-4 py-2 rounded-md text-sm font-medium text-n700 bg-n0 hover:bg-n20 border border-n40 transition-colors"

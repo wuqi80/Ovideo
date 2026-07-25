@@ -126,9 +126,9 @@ export const MusicModal: React.FC<MusicModalProps> = ({
   }, [musicLyrics, episodeId, onCreated]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
-      <div className="relative max-h-[84vh] w-[640px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl">
+      <div role="dialog" aria-modal="true" aria-label="添加背景音乐" className="app-modal-surface relative max-h-[84vh] w-[640px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-base font-bold text-n800">
             <Music size={16} className="text-success" /> 添加背景音乐

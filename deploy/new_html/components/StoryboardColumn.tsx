@@ -417,7 +417,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                         onClick={onExport}
                         disabled={isExporting || !isWorkflowScript}
                         title={isWorkflowScript ? '将本集采用剧本导出到后续流程' : '请先在文件列表中将当前剧本设为后续采用'}
-                        className={`flex items-center gap-1 text-[10px] text-white px-3 py-1.5 rounded shadow-sm transition-colors font-bold ${isExporting || !isWorkflowScript ? 'bg-n100 cursor-not-allowed' : 'bg-success hover:bg-emerald-500'}`}
+                        className={`flex items-center gap-1 text-[10px] text-white px-3 py-1.5 rounded shadow-sm transition-colors font-semibold ${isExporting || !isWorkflowScript ? 'bg-n100 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover'}`}
                     >
                         {isExporting ? '导出中...' : isWorkflowScript ? '全部导出' : '设为采用后导出'}
                         {!isExporting && isWorkflowScript && <ArrowRight className="w-3 h-3" />}
@@ -776,7 +776,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                           ))}
                           {item.scene && (
                               <div 
-                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-950 border border-orange-500/20 text-[9px] text-orange-300 cursor-pointer hover:bg-orange-900/50"
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-[9px] text-orange-600 cursor-pointer hover:bg-orange-200"
                                 onClick={(e) => { e.stopPropagation(); setAddingTagToItem(item.id); setTagInputType('scene'); setTagInputValue(item.scene); }}
                                 title="点击修改场景"
                               >
@@ -787,7 +787,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                           {(item.props || []).map((prop, i) => (
                               <div
                                 key={`p-${i}`}
-                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-950/30 border border-yellow-500/20 text-[9px] text-yellow-600 hover:bg-r50 hover:border-r75 hover:text-danger cursor-pointer transition-colors group/tag"
+                                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-y50 border border-y75 text-[9px] text-warning hover:bg-r50 hover:border-r75 hover:text-danger cursor-pointer transition-colors group/tag"
                                 onClick={(e) => handleRemoveProp(e, item, prop)}
                                 title="点击删除道具"
                               >

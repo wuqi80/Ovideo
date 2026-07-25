@@ -13,7 +13,7 @@ const PostProcessPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'upscale' | 'voice'>('upscale');
 
     return (
-        <div className="h-screen bg-n20 text-n800 flex flex-col">
+        <div className="h-screen bg-n0 text-n800 flex flex-col">
             {/* 页面头部 */}
             <div className="h-12 bg-n0 border-b border-n40 flex items-center px-4 gap-4 flex-shrink-0">
                 <button
