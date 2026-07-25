@@ -831,17 +831,26 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       </div>
 
       {scrollControls.canScrollDown && (
-        <button
-          type="button"
-          data-testid="conversation-jump-to-latest"
-          onClick={() => scrollConversationTo('bottom')}
-          title="前往最新对话"
-          aria-label="前往最新对话"
-          className="absolute left-1/2 z-40 inline-flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-n40 bg-n0 text-n500 shadow-bottom hover:border-primary hover:text-primary"
+        <div
+          data-testid="conversation-jump-to-latest-anchor"
+          className="pointer-events-none absolute inset-x-0 z-40"
           style={{ bottom: composerHeight + 28 }}
         >
-          <ArrowDown className="h-4 w-4" />
-        </button>
+          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[124px_minmax(0,1fr)_172px] xl:grid-cols-[140px_minmax(0,1fr)_196px]">
+            <div className="flex min-w-0 justify-center lg:col-start-2">
+              <button
+                type="button"
+                data-testid="conversation-jump-to-latest"
+                onClick={() => scrollConversationTo('bottom')}
+                title="前往最新对话"
+                aria-label="前往最新对话"
+                className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full border border-n40 bg-n0 text-n500 shadow-bottom hover:border-primary hover:text-primary"
+              >
+                <ArrowDown className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30" data-testid="floating-conversation-composer">

@@ -164,7 +164,10 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('data-testid="conversation-turn-rail"');
     expect(source).toContain('aria-label="对话轮次快速导航"');
     expect(source).toContain('onClick={() => scrollToTurn(turn)}');
+    expect(source).toContain('data-testid="conversation-jump-to-latest-anchor"');
     expect(source).toContain('data-testid="conversation-jump-to-latest"');
+    expect(source).toContain('className="flex min-w-0 justify-center lg:col-start-2"');
+    expect(source).not.toContain('className="absolute left-1/2 z-40 inline-flex h-9 w-9 -translate-x-1/2');
     expect(source).toContain('scrollControls.canScrollDown');
     expect(source).toContain('style={{ bottom: composerHeight + 28 }}');
     expect(source).toContain('aria-label="回到对话顶部"');
