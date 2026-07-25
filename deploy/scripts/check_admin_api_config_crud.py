@@ -218,7 +218,7 @@ async def main() -> int:
             fail(f"create_api_config should reload once, got {reload_calls}")
         if invalidations[-1] != ("deepseek",):
             fail(f"create_api_config should invalidate created provider health cache: {invalidations}")
-        if ("deepseek", "deepseek-chat") not in target_invalidations[-1]:
+        if ("deepseek", "deepseek-v4-flash") not in target_invalidations[-1]:
             fail(f"create_api_config should invalidate created model health cache: {target_invalidations}")
         if ("deepseek", "deepseek-reasoner") not in target_invalidations[-1]:
             fail(f"create_api_config should invalidate disabled conflicting model health cache: {target_invalidations}")
@@ -255,7 +255,7 @@ async def main() -> int:
             fail(f"update_api_config should invalidate updated provider health cache: {invalidations}")
         if ("deepseek", "deepseek-reasoner") not in target_invalidations[-1]:
             fail(f"update_api_config should invalidate updated model health cache: {target_invalidations}")
-        if ("deepseek", "deepseek-chat") not in target_invalidations[-1]:
+        if ("deepseek", "deepseek-v4-flash") not in target_invalidations[-1]:
             fail(f"update_api_config should invalidate disabled conflicting model health cache: {target_invalidations}")
 
         previous_gpt_image_key = os.environ.pop("GPT_IMAGE_API_KEY", None)

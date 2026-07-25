@@ -283,8 +283,8 @@ async def main() -> int:
             model_name="deepseek-chat",
             session_factory=runtime_model_factory,
         )
-        if runtime_model_ok.get("model_name") != "deepseek-chat":
-            fail(f"Provider runtime health did not preserve model_name override: {runtime_model_ok}")
+        if runtime_model_ok.get("model_name") != "deepseek-v4-flash":
+            fail(f"Provider runtime health did not normalize legacy model_name override: {runtime_model_ok}")
 
         os.environ["ARK_API_KEY"] = "runtime-doubao-secret"
         os.environ["ARK_ENDPOINT"] = "https://runtime.doubao.example.test/api/v3/images/generations"

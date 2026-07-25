@@ -114,7 +114,7 @@ async def main() -> int:
         fail(f"Default sweep did not include model-specific targets: {default_results[:3]}")
     if not await monitor.get_cached_provider_health(
         "deepseek",
-        model_name="deepseek-reasoner",
+        model_name="deepseek-v4-pro",
         redis_client=default_redis,
     ):
         fail("Default sweep did not cache the deepseek model-specific row")

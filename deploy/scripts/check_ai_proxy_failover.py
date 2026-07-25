@@ -156,7 +156,7 @@ async def main() -> int:
             expected_health_scope=["gemini-text", "deepseek"],
             expected_url="https://api.deepseek.com/chat/completions",
             expected_provider="deepseek",
-            expected_model="deepseek-reasoner",
+            expected_model="deepseek-v4-pro",
             expected_auth="Bearer deepseek-key",
             expected_failover_active=True,
         )
@@ -199,7 +199,7 @@ async def main() -> int:
             expected_health_scope=["gemini-text", "deepseek"],
             expected_url="https://api.deepseek.com/chat/completions",
             expected_provider="deepseek",
-            expected_model="deepseek-reasoner",
+            expected_model="deepseek-v4-pro",
             expected_auth="Bearer deepseek-key",
             expected_failover_active=True,
         )
