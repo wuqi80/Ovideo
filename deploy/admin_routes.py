@@ -42,6 +42,11 @@ from dao_system_settings import SystemSettingsDAO
 from dao_task import TaskDAO
 from dao_workflow_template import WorkflowTemplateDAO
 from db_manager import get_db_manager
+from services.workflow_template_validation import (
+    workflow_executable_node_count,
+    workflow_invalid_reason,
+    workflow_is_executable,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,11 +139,15 @@ async def _get_workflow_template_by_key(workflow_key: str) -> Optional[Dict[str,
     return await WorkflowTemplateDAO.get_by_key(workflow_key)
 
 
+def _workflow_dir() -> Path:
+    return Path(__file__).resolve().parent / "workflows"
+
+
 def _sync_workflow_to_disk(workflow_key: str, workflow_json: dict):
     """将工作流 JSON 写回 workflows/ 目录的磁盘文件"""
     if not workflow_key:
         return
-    wf_dir = Path(__file__).resolve().parent / "workflows"
+    wf_dir = _workflow_dir()
     wf_dir.mkdir(exist_ok=True)
     file_path = wf_dir / f"{workflow_key}.json"
     try:
@@ -164,7 +173,7 @@ def _delete_workflow_from_disk(workflow_key: str):
     """从磁盘删除工作流 JSON 文件"""
     if not workflow_key:
         return
-    wf_dir = Path(__file__).resolve().parent / "workflows"
+    wf_dir = _workflow_dir()
     file_path = wf_dir / f"{workflow_key}.json"
     if file_path.is_file():
         try:
@@ -350,19 +359,11 @@ def _placeholder_names_from_workflow_json(workflow_json: Dict[str, Any]) -> List
 
 
 def _workflow_executable_node_count(workflow_json: Any) -> int:
-    if not isinstance(workflow_json, dict):
-        return 0
-    return sum(
-        1
-        for node in workflow_json.values()
-        if isinstance(node, dict)
-        and node.get("class_type")
-        and str(node.get("class_type")).lower() not in {"placeholder_node", "placeholdernode"}
-    )
+    return workflow_executable_node_count(workflow_json)
 
 
 def _workflow_is_executable(workflow_json: Any) -> bool:
-    return _workflow_executable_node_count(workflow_json) > 0
+    return workflow_is_executable(workflow_json)
 
 
 # --- Agents ---
@@ -478,7 +479,7 @@ async def admin_parse_workflow_json(request: Request):
 async def admin_scan_disk_workflows():
     """Return configured workflows plus disk-only JSON workflows with DB import status."""
     from workflow_config import WORKFLOW_CONFIGS
-    wf_dir = Path(__file__).resolve().parent / "workflows"
+    wf_dir = _workflow_dir()
 
     _require_db()
     db_templates = await WorkflowTemplateDAO.list_all()
@@ -560,7 +561,7 @@ async def admin_import_workflows():
     _require_db()
     from workflow_config import WORKFLOW_CONFIGS
 
-    wf_dir = Path(__file__).resolve().parent / "workflows"
+    wf_dir = _workflow_dir()
     imported = 0
     skipped = 0
     repaired = 0
@@ -590,6 +591,10 @@ async def admin_import_workflows():
                 continue
         except (OSError, json.JSONDecodeError) as e:
             errors.append(f"{name}: read/parse error: {e}")
+            continue
+        invalid_reason = workflow_invalid_reason(workflow_json)
+        if invalid_reason:
+            skipped += 1
             continue
 
         existing = await _get_workflow_template_by_key(str(category_key))
@@ -641,6 +646,19 @@ async def admin_import_workflows():
         if path.name in configured_files:
             continue
         key = path.stem
+        try:
+            workflow_json = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(workflow_json, dict):
+                errors.append(f"{key}: workflow JSON root must be object")
+                continue
+        except (OSError, json.JSONDecodeError) as e:
+            errors.append(f"{key}: read/parse error: {e}")
+            continue
+        invalid_reason = workflow_invalid_reason(workflow_json)
+        if invalid_reason:
+            skipped += 1
+            continue
+
         existing = await _get_workflow_template_by_key(key)
         if not existing:
             existing = await WorkflowTemplateDAO.get_by_name(key)
@@ -650,14 +668,6 @@ async def admin_import_workflows():
                 if updated:
                     repaired += 1
             skipped += 1
-            continue
-        try:
-            workflow_json = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(workflow_json, dict):
-                errors.append(f"{key}: workflow JSON root must be object")
-                continue
-        except (OSError, json.JSONDecodeError) as e:
-            errors.append(f"{key}: read/parse error: {e}")
             continue
 
         placeholder_names = _placeholder_names_from_workflow_json(workflow_json)
@@ -716,6 +726,7 @@ async def admin_import_workflows():
             _placeholder_names_from_workflow_json(workflow_json)
         )
 
+    removed_invalid = 0
     for row in await WorkflowTemplateDAO.list_all():
         key = row.get("workflow_key") or row.get("category") or row.get("name") or ""
         workflow_json = _jsonb_to_python(row.get("workflow_json")) or {}
@@ -731,11 +742,8 @@ async def admin_import_workflows():
             if updated:
                 repaired += 1
             continue
-        if bool(row.get("enabled", True)):
-            updated = await WorkflowTemplateDAO.update(row["template_id"], enabled=False)
-            if updated:
-                repaired += 1
-                disabled_empty += 1
+        if await WorkflowTemplateDAO.delete(row["template_id"]):
+            removed_invalid += 1
 
     return {
         "success": True,
@@ -743,6 +751,7 @@ async def admin_import_workflows():
         "skipped": skipped,
         "repaired": repaired,
         "disabled_empty": disabled_empty,
+        "removed_invalid": removed_invalid,
         "errors": errors,
     }
 
@@ -780,6 +789,12 @@ async def admin_list_workflows():
 @router.post("/workflows", status_code=status.HTTP_201_CREATED)
 async def admin_create_workflow(body: WorkflowCreateBody):
     _require_db()
+    invalid_reason = workflow_invalid_reason(body.workflow_json)
+    if invalid_reason:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid workflow template: {invalid_reason}",
+        )
     row = await WorkflowTemplateDAO.create(
         name=body.name.strip(),
         category=body.category.strip(),
@@ -831,6 +846,13 @@ async def admin_update_workflow(template_id: str, body: WorkflowUpdateBody):
         if not row:
             raise HTTPException(status_code=404, detail="Template not found")
         return {"success": True, "workflow": _row_to_jsonable(row)}
+    if "workflow_json" in data:
+        invalid_reason = workflow_invalid_reason(data["workflow_json"])
+        if invalid_reason:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid workflow template: {invalid_reason}",
+            )
     updated = await WorkflowTemplateDAO.update(template_id, **data)
     if not updated:
         raise HTTPException(status_code=404, detail="Template not found")

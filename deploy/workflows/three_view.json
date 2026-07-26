@@ -1,9 +1,0 @@
-{
-  "workflow_name": "three_view",
-  "description": "一键三视图工作流",
-  "placeholders": {
-    "image": "输入图片文件名",
-    "seed": "随机种子(15位数)"
-  }
-}
-

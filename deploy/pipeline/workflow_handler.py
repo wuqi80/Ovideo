@@ -182,6 +182,8 @@ class WorkflowHandler:
         if not (
             normalized_name.startswith('qwen_')
             or normalized_name.startswith('qwen_lora_')
+            or normalized_name.startswith('qwenn_')
+            or normalized_name.startswith('qwenn_lora_')
         ):
             return workflow
 

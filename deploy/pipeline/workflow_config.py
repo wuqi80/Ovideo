@@ -13,7 +13,7 @@ class WorkflowConfig:
     def __init__(
         self,
         name: str,
-        file: str,
+        file: Optional[str],
         description: str,
         placeholders: Optional[List[str]] = None,
         param_mapping: Optional[Dict[str, Any]] = None,
@@ -229,7 +229,7 @@ WORKFLOW_CONFIGS = {
     # 一阶（smooth）- Morph
     'smooth_morph': WorkflowConfig(
         name='一阶 首尾帧过渡',
-        file='smooth_morph.json',
+        file=None,
         description='使用 一阶(smooth) 模型生成首尾帧之间的过渡视频',
         placeholders=['start_image', 'end_image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
@@ -266,7 +266,7 @@ WORKFLOW_CONFIGS = {
     # 二阶（Dawasi）- Morph
     'dawasi_morph': WorkflowConfig(
         name='二阶 首尾帧过渡',
-        file='Dawasi_morph.json',
+        file=None,
         description='使用 二阶(Dawasi) 模型生成首尾帧之间的过渡视频',
         placeholders=['start_image', 'end_image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
@@ -285,7 +285,7 @@ WORKFLOW_CONFIGS = {
     # 三阶（hunyuan）- I2V（无首尾帧）
     'hunyuan_i2v': WorkflowConfig(
         name='三阶 图片转视频',
-        file='hunyuan_i2v.json',
+        file=None,
         description='使用 三阶(hunyuan) 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
@@ -321,7 +321,7 @@ WORKFLOW_CONFIGS = {
     # 五阶（Turbo2.2）- I2V（无首尾帧）
     'turbo22_i2v': WorkflowConfig(
         name='五阶 图片转视频',
-        file='Turbo2.2_i2v.json',
+        file=None,
         description='使用 五阶(Turbo2.2) 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
@@ -339,7 +339,7 @@ WORKFLOW_CONFIGS = {
     # 六阶（Turbo2.1）- I2V（无首尾帧）
     'turbo21_i2v': WorkflowConfig(
         name='六阶 图片转视频',
-        file='Turbo2.1_i2v.json',
+        file=None,
         description='使用 六阶(Turbo2.1) 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
@@ -357,7 +357,7 @@ WORKFLOW_CONFIGS = {
     # 七阶（SVD_WAN）- I2V（无首尾帧）
     'svdwan_i2v': WorkflowConfig(
         name='七阶 图片转视频',
-        file='SVD_WAN_i2v.json',
+        file=None,
         description='使用 七阶(SVD_WAN) 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
@@ -847,7 +847,7 @@ WORKFLOW_CONFIGS = {
     
     'three_view': WorkflowConfig(
         name='一键三视图',
-        file='three_view.json',
+        file=None,
         description='使用ComfyUI生成物体的三视图',
         placeholders=['image', 'seed'],
         param_mapping={
@@ -863,7 +863,7 @@ WORKFLOW_CONFIGS = {
     
     'matting_subject': WorkflowConfig(
         name='主体脱离',
-        file='matting_subject.json',
+        file=None,
         description='抠出图像主体，去除背景',
         placeholders=['image', 'seed'],
         param_mapping={
@@ -877,7 +877,7 @@ WORKFLOW_CONFIGS = {
     
     'matting_split': WorkflowConfig(
         name='主体背景分离',
-        file='matting_split.json',
+        file=None,
         description='分离图像主体和背景为两张图',
         placeholders=['image', 'seed'],
         param_mapping={
@@ -893,7 +893,7 @@ WORKFLOW_CONFIGS = {
     
     'image_fusion': WorkflowConfig(
         name='图像融合',
-        file='image_fusion.json',
+        file=None,
         description='将人物融合到底图中',
         placeholders=['image_BK', 'image_HU', 'seed'],
         param_mapping={
@@ -908,7 +908,7 @@ WORKFLOW_CONFIGS = {
     
     'image_transfer': WorkflowConfig(
         name='迁移学习',
-        file='image_transfer.json',
+        file=None,
         description='根据蒙版将人物迁移到底图指定位置',
         placeholders=['image_BK', 'image_HU', 'image_MB', 'seed'],
         param_mapping={
@@ -924,7 +924,7 @@ WORKFLOW_CONFIGS = {
     
     'pose_imitation': WorkflowConfig(
         name='模仿学习',
-        file='pose_imitation.json',
+        file=None,
         description='人物模仿另一图像中的姿势',
         placeholders=['image_BK', 'image_HU', 'seed'],
         param_mapping={
@@ -941,7 +941,7 @@ WORKFLOW_CONFIGS = {
     
     'qwenN_lora_1': WorkflowConfig(
         name='筑基二阶 1张参考图',
-        file='qwenN_lora_1.json',
+        file=None,
         description='使用K神LoRA模型生成图像（1张参考图）',
         placeholders=['image', 'prompt', 'seed'],
         param_mapping={
@@ -956,7 +956,7 @@ WORKFLOW_CONFIGS = {
     
     'qwenN_lora_2': WorkflowConfig(
         name='筑基二阶 2张参考图',
-        file='qwenN_lora_2.json',
+        file=None,
         description='使用K神LoRA模型生成图像（2张参考图）',
         placeholders=['image_1', 'image_2', 'prompt', 'seed'],
         param_mapping={
@@ -972,7 +972,7 @@ WORKFLOW_CONFIGS = {
     
     'qwenN_lora_3': WorkflowConfig(
         name='筑基二阶 3张参考图',
-        file='qwenN_lora_3.json',
+        file=None,
         description='使用K神LoRA模型生成图像（3张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'prompt', 'seed'],
         param_mapping={
@@ -989,7 +989,7 @@ WORKFLOW_CONFIGS = {
     
     'qwenN_lora_4': WorkflowConfig(
         name='筑基二阶 4张参考图',
-        file='qwenN_lora_4.json',
+        file=None,
         description='使用K神LoRA模型生成图像（4张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'image_4', 'prompt', 'seed'],
         param_mapping={
@@ -1007,7 +1007,7 @@ WORKFLOW_CONFIGS = {
     
     'qwenN_lora_5': WorkflowConfig(
         name='筑基二阶 5张参考图',
-        file='qwenN_lora_5.json',
+        file=None,
         description='使用K神LoRA模型生成图像（5张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'image_4', 'image_5', 'prompt', 'seed'],
         param_mapping={
@@ -1026,7 +1026,7 @@ WORKFLOW_CONFIGS = {
     
     'qwenN_lora_6': WorkflowConfig(
         name='筑基二阶 6张参考图',
-        file='qwenN_lora_6.json',
+        file=None,
         description='使用K神LoRA模型生成图像（6张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'image_4', 'image_5', 'image_6', 'prompt', 'seed'],
         param_mapping={
@@ -1048,7 +1048,7 @@ WORKFLOW_CONFIGS = {
     
     'panorama_360': WorkflowConfig(
         name='360度全景生成',
-        file='panorama_360.json',
+        file=None,
         description='基于场景素材生成360度全景照片',
         placeholders=['image', 'prompt', 'seed'],
         param_mapping={
@@ -1063,7 +1063,7 @@ WORKFLOW_CONFIGS = {
     
     'panorama_fusion_1': WorkflowConfig(
         name='全景融合(1张输入)',
-        file='panorama_fusion_1.json',
+        file=None,
         description='全景场景融合（1张人物/场景）',
         placeholders=['image_1', 'image_3', 'prompt', 'seed'],
         param_mapping={
@@ -1079,7 +1079,7 @@ WORKFLOW_CONFIGS = {
     
     'panorama_fusion_2': WorkflowConfig(
         name='全景融合(2张输入)',
-        file='panorama_fusion_2.json',
+        file=None,
         description='全景场景融合（2张人物）',
         placeholders=['image_1', 'image_2', 'image_3', 'prompt', 'seed'],
         param_mapping={
@@ -1096,7 +1096,7 @@ WORKFLOW_CONFIGS = {
     
     'panorama_fusion_3': WorkflowConfig(
         name='全景融合(3张输入)',
-        file='panorama_fusion_3.json',
+        file=None,
         description='全景场景融合（3张输入）',
         placeholders=['image_1', 'image_2', 'image_3', 'prompt', 'seed'],
         param_mapping={
@@ -1113,7 +1113,7 @@ WORKFLOW_CONFIGS = {
     
     'auto_storyboard': WorkflowConfig(
         name='自动分镜',
-        file='auto_storyboard.json',
+        file=None,
         description='自动生成分镜脚本并生成图像',
         placeholders=['image', 'prompt', 'seed'],
         param_mapping={

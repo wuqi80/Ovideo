@@ -85,6 +85,7 @@ def test_workflow_disk_fallback_is_case_insensitive_on_linux_style_names(tmp_pat
     "workflow_name",
     [
         *(f"qwen_{index}" for index in range(1, 7)),
+        *(f"qwenN_{index}" for index in range(1, 7)),
         *(f"qwen_lora_{index}" for index in range(1, 7)),
     ],
 )
