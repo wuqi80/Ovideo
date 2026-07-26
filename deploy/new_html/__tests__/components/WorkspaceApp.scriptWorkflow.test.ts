@@ -46,18 +46,21 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('handleConversationGenerateDesign(version, { autoSnapshot: false })');
   });
 
-  it('offers persistent writing and four-column quick modes on the unified generation pipeline', () => {
+  it('offers persistent writing and the master four-column quick pipeline', () => {
     expect(source).toContain("readScriptWorkspaceMode(localStorage, scriptWorkspaceUsername)");
     expect(source).toContain("writeScriptWorkspaceMode(localStorage, scriptWorkspaceUsername, mode)");
     expect(source).toContain("scriptWorkspaceMode === 'writing'");
     expect(source).toContain('data-testid="quick-script-workspace"');
     expect(source).toContain('<QuickScriptSourceColumn');
     expect(source).toContain('<QuickScriptVersionColumn');
-    expect(source).toContain('onSend={handleConversationSend}');
+    expect(source).toContain('onSplitScript={handleSplitScript}');
+    expect(source).toContain('onGenerateVideoScript={handleGenerateVideoScript}');
+    expect(source).toContain('onExtractStoryboardPrompts={handleExtractStoryboardPrompts}');
+    expect(source).toContain('onRunThreeStage={handleRunThreeStagePipeline}');
     expect(source).toContain('onEditVersion={handleConversationEditVersion}');
     expect(source).toContain('handleConversationGenerateDesign(version, { openDrawer: false })');
-    expect(source).toContain("snapshot.scriptVersionId === selectedConversationVersion.id");
-    expect(source).toContain('selectedFile={quickStoryboardFile}');
+    expect(source).toContain('version={quickPipelineVersion}');
+    expect(source).toContain('selectedFile={selectedFile}');
     expect(source).not.toContain('onSend={handleRewrite}');
     expect(source).not.toContain('onSend={handleIterateScript}');
   });
@@ -76,11 +79,13 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).not.toContain('assertValidVideoScript(normalizedContent)');
   });
 
-  it('runs quick three-step generation through the same version and design handlers', () => {
-    expect(source).toContain('const handleQuickThreeStageGenerate = useCallback');
-    expect(source).toContain('await handleConversationSend(content)');
-    expect(source).toContain('await handleConversationGenerateDesign(generatedVersion, { openDrawer: false })');
-    expect(source).toContain('onRunThreeStage={handleQuickThreeStageGenerate}');
+  it('runs quick generation through the retained master three-stage handlers', () => {
+    expect(source).toContain('const handleSplitScript = useCallback');
+    expect(source).toContain('const handleGenerateVideoScript = useCallback');
+    expect(source).toContain('const handleExtractStoryboardPrompts = useCallback');
+    expect(source).toContain('const handleRunThreeStagePipeline = useCallback');
+    expect(source).toContain('onRunThreeStage={handleRunThreeStagePipeline}');
+    expect(source).not.toContain('handleQuickThreeStageGenerate');
   });
 
   it('keeps the file rail fixed when switching between writing and quick mode', () => {

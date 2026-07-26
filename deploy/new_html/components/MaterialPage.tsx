@@ -2191,7 +2191,7 @@ const CameraModal: React.FC<{
 
     return (
         <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
-            <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6" onClick={(e) => e.stopPropagation()}>
+            <div className="max-h-[calc(100vh-2rem)] w-full max-w-5xl space-y-6 overflow-y-auto rounded-md border border-n40 bg-n0 p-6 shadow-bottom" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-bold text-n800">角度调整 - {config.tagName}</h3>
@@ -2222,6 +2222,7 @@ const CameraModal: React.FC<{
                                 </button>
                             ))}
                         </div>
+                        <GpuNodeSelector onSelectionChange={setGpuSelection} />
                     </div>
 
                     <div className="space-y-5">
@@ -2287,7 +2288,6 @@ const CameraModal: React.FC<{
                                 随机
                             </button>
                         </div>
-                        <GpuNodeSelector onSelectionChange={setGpuSelection} />
                     </div>
                 </div>
 

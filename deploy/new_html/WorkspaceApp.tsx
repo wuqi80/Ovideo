@@ -488,7 +488,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const loadedConversationKeysRef = useRef<Set<string>>(new Set());
   const conversationRequestsRef = useRef<Map<string, Promise<ScriptConversation>>>(new Map());
   const appliedConversationModelRef = useRef<string>('');
-  const latestGeneratedScriptVersionRef = useRef<Record<string, ScriptStoryboardVersion>>({});
   
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
@@ -504,6 +503,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const selectedConversationVersion = selectedConversation?.versions.find(
     version => version.id === selectedConversation.currentVersionId,
   ) || selectedConversation?.versions[selectedConversation.versions.length - 1];
+  const quickPipelineVersion = selectedFile?.scriptContent
+    ? buildLocalScriptConversation(selectedFile).versions[0]
+    : selectedConversationVersion;
   const selectedHistoryScopeKey = selectedFileId
     ? buildVersionHistoryScopeKey(selectedFileId, selectedConversationVersion?.id)
     : null;
@@ -512,30 +514,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     || selectedFile?.storyboard?.items
     || []
   ).filter(item => !item.isPlaceholder).length;
-  const selectedVersionStoryboardSnapshots = selectedConversationVersion
-    ? mergeStoryboardSnapshots(
-        getVersionStoryboardSnapshots(selectedConversationVersion),
-        (selectedFile?.versions || []).filter(snapshot => (
-          snapshot.scriptVersionId === selectedConversationVersion.id
-        )),
-      )
-    : [];
-  const latestSelectedVersionStoryboard = selectedVersionStoryboardSnapshots[
-    selectedVersionStoryboardSnapshots.length - 1
-  ];
-  const quickStoryboardFile = selectedFile
-    ? {
-        ...selectedFile,
-        // A newly generated script version must not display another version's design cards.
-        // Legacy records predate version-owned snapshots, so retain their persisted storyboard.
-        storyboard: selectedConversationVersion?.source === 'legacy'
-          ? selectedFile.storyboard
-          : selectedConversationVersion
-            ? latestSelectedVersionStoryboard?.data.storyboard || null
-            : selectedFile.storyboard,
-      }
-    : undefined;
-
   useEffect(() => {
     if (!selectedFileId || selectedFileId.startsWith('local_')) return;
     const cacheKey = `${propEpisodeId}:${selectedFileId}`;
@@ -1564,7 +1542,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const file = filesRef.current.find(item => item.id === fileId);
     if (!fileId || !file) throw new Error('请先选择剧本任务');
     if (fileId.startsWith('local_')) throw new Error('剧本任务尚未保存，请稍后重试');
-    delete latestGeneratedScriptVersionRef.current[fileId];
 
     const conversation = scriptConversations[fileId] || {
       scriptId: fileId,
@@ -1766,7 +1743,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           },
         };
       });
-      latestGeneratedScriptVersionRef.current[fileId] = version;
     } catch (error) {
       const message = error instanceof Error ? error.message : '生成分镜脚本失败';
       setConversationError(assistantMessageId ? null : message);
@@ -2053,15 +2029,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     updateFileWithHistory,
     urlProjectId,
   ]);
-
-  const handleQuickThreeStageGenerate = useCallback(async (content: string) => {
-    const fileId = selectedFileId;
-    if (!fileId) throw new Error('请先选择剧本任务');
-    await handleConversationSend(content);
-    const generatedVersion = latestGeneratedScriptVersionRef.current[fileId];
-    if (!generatedVersion) throw new Error('分镜脚本尚未生成，未继续执行镜头设计');
-    await handleConversationGenerateDesign(generatedVersion, { openDrawer: false });
-  }, [handleConversationGenerateDesign, handleConversationSend, selectedFileId]);
 
   const handleOpenStoryboardDrawer = useCallback(() => {
     if (!selectedFileId) return;
@@ -3965,7 +3932,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         <React.Suspense fallback={<LegacyColumnFallback label="source-script" />}>
                           <QuickScriptSourceColumn
                             selectedFile={selectedFile}
-                            currentVersionNo={selectedConversationVersion?.versionNo}
                             aiModel={aiModel}
                             modelOptions={scriptModelOptions}
                             isLoading={conversationLoadingId === selectedFileId}
@@ -3974,8 +3940,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                             onDismissError={() => setConversationError(null)}
                             onChangeModel={setAiModel}
                             onUpdateSource={handleUpdateContent}
-                            onSend={handleConversationSend}
-                            onRunThreeStage={handleQuickThreeStageGenerate}
+                            onSplitScript={handleSplitScript}
+                            onGenerateVideoScript={handleGenerateVideoScript}
+                            onExtractStoryboardPrompts={handleExtractStoryboardPrompts}
+                            onRunThreeStage={handleRunThreeStagePipeline}
                           />
                         </React.Suspense>
                       </div>
@@ -3994,7 +3962,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         <React.Suspense fallback={<LegacyColumnFallback label="video-script" />}>
                           <QuickScriptVersionColumn
                             selectedFile={selectedFile}
-                            version={selectedConversationVersion}
+                            version={quickPipelineVersion}
                             isSending={conversationSendingId === selectedFileId}
                             error={conversationError}
                             highlightedItemIds={highlightedStoryboardItemIds}
@@ -4020,7 +3988,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
                           <StoryboardColumn
-                            selectedFile={quickStoryboardFile}
+                            selectedFile={selectedFile}
                             onGenerateStoryboard={handleGenerateStoryboard}
                             isProcessing={isProcessing}
                             generationProgress={shotGenerationProgress}

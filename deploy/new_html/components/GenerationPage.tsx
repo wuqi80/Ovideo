@@ -4060,7 +4060,7 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
-            <div className="w-full max-w-4xl bg-n0 border border-n40 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+            <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-4xl space-y-6 overflow-y-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 
                 {/* 🆕 Loading覆盖层 - 处理中时显示 */}
                 {isProcessing && (
@@ -4091,6 +4091,40 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                     <div className="space-y-4">
                         <div className="relative rounded-2xl overflow-hidden border border-n40 h-80 bg-n30 flex items-center justify-center">
                             <img src={imageUrl} loading="lazy" decoding="async" className="w-full h-full object-contain" alt="预览" />
+                        </div>
+                        <div className="rounded-md border border-n40 bg-n20 p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-n700">处理 GPU</span>
+                                <button
+                                    type="button"
+                                    onClick={onRefreshClusterNodes}
+                                    disabled={clusterNodesLoading || isProcessing}
+                                    className="inline-flex items-center gap-1 text-[10px] text-primary disabled:opacity-50"
+                                >
+                                    <RefreshCw className={`h-3 w-3 ${clusterNodesLoading ? 'animate-spin' : ''}`} />
+                                    刷新
+                                </button>
+                            </div>
+                            <select
+                                value={selectedClusterNodeId}
+                                onChange={(event) => onSelectClusterNode(event.target.value)}
+                                disabled={clusterNodesLoading || clusterNodes.length === 0 || isProcessing}
+                                className="h-9 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none focus:border-primary disabled:bg-n20 disabled:text-n100"
+                            >
+                                {clusterNodes.length === 0 && (
+                                    <option value={DEFAULT_GPU_NODE_NAME}>{DEFAULT_GPU_NODE_NAME} · offline</option>
+                                )}
+                                {clusterNodes.map((node) => (
+                                    <option key={node.id} value={node.name} disabled={!isClusterNodeUsable(node)}>
+                                        {node.name} · {node.status}
+                                        {node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="mt-1.5 text-[10px] leading-4 text-n300">
+                                输出保持原图比例。所选节点不可用时优先由 GPU1 接管，再由其他在线低负载节点处理。
+                                {clusterNodeMessage ? ` ${clusterNodeMessage}` : ''}
+                            </p>
                         </div>
                     </div>
 
@@ -4161,40 +4195,6 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                             </button>
                         </div>
 
-                        <div className="rounded-md border border-n40 bg-n20 p-3">
-                            <div className="mb-2 flex items-center justify-between">
-                                <span className="text-xs font-semibold text-n700">处理 GPU</span>
-                                <button
-                                    type="button"
-                                    onClick={onRefreshClusterNodes}
-                                    disabled={clusterNodesLoading || isProcessing}
-                                    className="inline-flex items-center gap-1 text-[10px] text-primary disabled:opacity-50"
-                                >
-                                    <RefreshCw className={`h-3 w-3 ${clusterNodesLoading ? 'animate-spin' : ''}`} />
-                                    刷新
-                                </button>
-                            </div>
-                            <select
-                                value={selectedClusterNodeId}
-                                onChange={(event) => onSelectClusterNode(event.target.value)}
-                                disabled={clusterNodesLoading || clusterNodes.length === 0 || isProcessing}
-                                className="h-9 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none focus:border-primary disabled:bg-n20 disabled:text-n100"
-                            >
-                                {clusterNodes.length === 0 && (
-                                    <option value={DEFAULT_GPU_NODE_NAME}>{DEFAULT_GPU_NODE_NAME} · offline</option>
-                                )}
-                                {clusterNodes.map((node) => (
-                                    <option key={node.id} value={node.name} disabled={!isClusterNodeUsable(node)}>
-                                        {node.name} · {node.status}
-                                        {node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="mt-1.5 text-[10px] leading-4 text-n300">
-                                输出保持原图比例。所选节点不可用时优先由 GPU1 接管，再由其他在线低负载节点处理。
-                                {clusterNodeMessage ? ` ${clusterNodeMessage}` : ''}
-                            </p>
-                        </div>
                     </div>
                 </div>
 

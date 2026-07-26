@@ -1928,7 +1928,10 @@ const CameraModal: React.FC<{
       <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between"><div><h3 className="text-lg font-bold text-n800">角度调整 - {asset.name}</h3></div><button onClick={onClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button></div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <OperationMaterialPicker materials={materials} selectedId={cur?.id} onSelect={setSelId} />
+          <div className="space-y-4">
+            <OperationMaterialPicker materials={materials} selectedId={cur?.id} onSelect={setSelId} />
+            <GpuNodeSelector onSelectionChange={setGpuSelection} />
+          </div>
           <div className="space-y-4">
             <div className="bg-n30 border border-n40 rounded-lg p-4 space-y-4">
               <DiscreteChoiceControl
@@ -1976,7 +1979,6 @@ const CameraModal: React.FC<{
               <button type="button" onClick={() => setSeed(randomSeed())} className="px-3 py-1.5 rounded-lg border border-n40 hover:bg-n20 hover:text-n800">随机</button>
               <span className="min-w-52 flex-1 text-[11px] leading-5 text-n100">相同种子配合相同参数，更容易得到构图相近的结果；随机种子用于探索新的构图。</span>
             </div>
-            <GpuNodeSelector onSelectionChange={setGpuSelection} />
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">

@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, ChevronDown, LoaderCircle, Send, Wand2, X } from 'lucide-react';
+import { BookOpen, ChevronDown, LoaderCircle, Wand2, X } from 'lucide-react';
 import type { AiModel, ProjectFile } from '../types';
 import type { ScriptModelOption } from '../services/scriptModelCatalogService';
 
 interface QuickScriptSourceColumnProps {
   selectedFile: ProjectFile | undefined;
-  currentVersionNo?: number;
   aiModel: AiModel;
   modelOptions: readonly ScriptModelOption[];
   isLoading: boolean;
@@ -14,13 +13,14 @@ interface QuickScriptSourceColumnProps {
   onDismissError: () => void;
   onChangeModel: (model: AiModel) => void;
   onUpdateSource: (fileId: string, content: string) => void;
-  onSend: (content: string) => Promise<void>;
-  onRunThreeStage: (content: string) => Promise<void>;
+  onSplitScript: (fileId: string) => Promise<void>;
+  onGenerateVideoScript: (fileId: string) => Promise<boolean | void>;
+  onExtractStoryboardPrompts: (fileId: string) => Promise<boolean | void>;
+  onRunThreeStage: (fileId: string) => Promise<void>;
 }
 
 export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = ({
   selectedFile,
-  currentVersionNo,
   aiModel,
   modelOptions,
   isLoading,
@@ -29,42 +29,51 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   onDismissError,
   onChangeModel,
   onUpdateSource,
-  onSend,
+  onSplitScript,
+  onGenerateVideoScript,
+  onExtractStoryboardPrompts,
   onRunThreeStage,
 }) => {
-  const [instruction, setInstruction] = useState('');
   const [requestError, setRequestError] = useState('');
-  const hasVersion = currentVersionNo !== undefined;
 
   useEffect(() => {
-    setInstruction('');
     setRequestError('');
   }, [selectedFile?.id]);
 
-  const submit = async () => {
-    const content = (hasVersion ? instruction : selectedFile?.originalContent || '').trim();
-    if (!content || isSending) return;
+  const runAction = async (
+    action: (fileId: string) => Promise<unknown>,
+    fallbackMessage: string,
+  ) => {
+    if (!selectedFile || isSending) return;
     setRequestError('');
     try {
-      await onSend(content);
-      if (hasVersion) setInstruction('');
+      await action(selectedFile.id);
     } catch (submitError) {
-      setRequestError(submitError instanceof Error ? submitError.message : '生成失败，请稍后重试');
-    }
-  };
-
-  const runThreeStage = async () => {
-    const content = (selectedFile?.originalContent || '').trim();
-    if (!content || isSending || hasVersion) return;
-    setRequestError('');
-    try {
-      await onRunThreeStage(content);
-    } catch (submitError) {
-      setRequestError(submitError instanceof Error ? submitError.message : '一键三步生成失败，请稍后重试');
+      setRequestError(submitError instanceof Error ? submitError.message : fallbackMessage);
     }
   };
 
   const visibleError = requestError || error || '';
+  const stages = selectedFile?.generationStages;
+  const segmentCount = selectedFile?.scriptSegments?.length || 0;
+  const generatedSegmentCount = selectedFile?.scriptSegments?.filter(segment => segment.videoScript).length || 0;
+  const promptCount = selectedFile?.storyboard?.items?.filter(item => item.imagePrompt).length || 0;
+  const isStageRunning = Object.values(stages || {}).some(stage => stage?.status === 'running');
+  const isBusy = isLoading || isSending || isStageRunning;
+
+  const statusText = (stage: NonNullable<ProjectFile['generationStages']>[keyof NonNullable<ProjectFile['generationStages']>]) => {
+    if (stage?.status === 'running') return `进行中 ${stage.completed ?? 0}/${stage.total ?? '?'}`;
+    if (stage?.status === 'done') return '完成';
+    if (stage?.status === 'error') return '失败，可重试';
+    return '未开始';
+  };
+
+  const statusClass = (stage: NonNullable<ProjectFile['generationStages']>[keyof NonNullable<ProjectFile['generationStages']>]) => {
+    if (stage?.status === 'done') return 'text-success';
+    if (stage?.status === 'error') return 'text-danger';
+    if (stage?.status === 'running') return 'text-warning';
+    return 'text-n200';
+  };
 
   return (
     <section
@@ -92,52 +101,16 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
         </label>
       </header>
 
-      <div className="flex h-[52px] flex-shrink-0 items-center gap-2 border-b border-n40 px-3">
-        {hasVersion ? (
-          <div className="flex w-full items-center rounded border border-success/30 bg-g50 px-3 py-2 text-xs text-success">
-            当前已生成分镜脚本 V{currentVersionNo}
-            <span className="ml-auto text-[10px] text-n300">下方输入修改要求可生成新版</span>
-          </div>
-        ) : (
-          <>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={!selectedFile?.originalContent.trim() || isSending || isLoading}
-            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded border border-primary bg-n0 px-2 text-xs font-semibold text-primary hover:bg-b50 disabled:cursor-not-allowed disabled:border-n100 disabled:text-n100"
-          >
-            {isSending || isLoading
-              ? <LoaderCircle className="h-4 w-4 animate-spin" />
-              : <Wand2 className="h-4 w-4" />}
-            {isSending ? '生成中…' : isLoading ? '加载中…' : '生成分镜脚本'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void runThreeStage()}
-            disabled={!selectedFile?.originalContent.trim() || isSending || isLoading}
-            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded bg-primary px-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-n100"
-          >
-            {isSending || isLoading
-              ? <LoaderCircle className="h-4 w-4 animate-spin" />
-              : <Wand2 className="h-4 w-4" />}
-            {isSending ? '执行中…' : '一键三步生成'}
-          </button>
-          </>
-        )}
-      </div>
-
       <div className="relative min-h-0 flex-1 bg-n20">
         {selectedFile ? (
           <textarea
-            key={`${selectedFile.id}-${hasVersion ? 'readonly' : 'editable'}`}
-            readOnly={hasVersion || isSending}
+            key={selectedFile.id}
+            readOnly={isBusy}
             value={selectedFile.originalContent}
             onChange={event => onUpdateSource(selectedFile.id, event.target.value)}
             placeholder="在此输入文字剧本…"
             aria-label="文字剧本"
-            className={`h-full w-full resize-none bg-transparent p-5 font-serif text-sm leading-7 text-n700 outline-none custom-scrollbar ${
-              hasVersion ? 'cursor-default' : 'focus:bg-n0'
-            }`}
+            className="h-full w-full resize-none bg-transparent p-5 font-serif text-sm leading-7 text-n700 outline-none custom-scrollbar focus:bg-n0 read-only:cursor-default"
             spellCheck={false}
           />
         ) : (
@@ -148,8 +121,8 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
         )}
       </div>
 
-      {hasVersion && selectedFile && (
-        <div className="flex-shrink-0 border-t border-n40 bg-n0 p-3">
+      {selectedFile && (
+        <div className="flex-shrink-0 border-t border-n40 bg-n0 p-3" data-testid="quick-three-stage-panel">
           {visibleError && (
             <div className="mb-2 flex items-start gap-2 rounded border border-danger/30 bg-r50 px-2.5 py-2 text-[11px] leading-5 text-danger">
               <span className="min-w-0 flex-1">{visibleError}</span>
@@ -167,49 +140,57 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
               </button>
             </div>
           )}
-          <textarea
-            value={instruction}
-            onChange={event => setInstruction(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                event.preventDefault();
-                void submit();
-              }
-            }}
-            disabled={isSending}
-            placeholder="输入修改要求，例如：加强冲突，但保留原结局…"
-            aria-label="分镜脚本修改要求"
-            className="h-20 w-full resize-none rounded border border-n40 bg-n0 px-3 py-2 text-xs leading-5 text-n700 outline-none focus:border-primary disabled:opacity-60"
-          />
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-[10px] text-n200">Ctrl + Enter 发送</span>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold text-n700">三步生成</span>
             <button
               type="button"
-              onClick={() => void submit()}
-              disabled={!instruction.trim() || isSending}
-              className="ml-auto inline-flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-xs font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-n100"
+              onClick={() => void runAction(onRunThreeStage, '按三步生成失败，请稍后重试')}
+              disabled={!selectedFile.originalContent.trim() || isBusy}
+              className="inline-flex h-8 items-center gap-1.5 rounded bg-primary px-3 text-xs font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-n100"
             >
-              {isSending ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              {isSending ? '生成中…' : '生成新版'}
+              {isBusy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+              {isBusy ? '执行中…' : '按三步生成'}
             </button>
           </div>
-        </div>
-      )}
-
-      {!hasVersion && visibleError && (
-        <div className="flex flex-shrink-0 items-start gap-2 border-t border-danger/30 bg-r50 px-3 py-2 text-[11px] leading-5 text-danger">
-          <span className="min-w-0 flex-1">{visibleError}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setRequestError('');
-              onDismissError();
-            }}
-            aria-label="关闭错误提示"
-            className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded hover:bg-danger/10"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          {([
+            {
+              key: 'split',
+              label: '拆分剧本',
+              metric: `分段数：${segmentCount}`,
+              action: onSplitScript,
+              disabled: !selectedFile.originalContent.trim(),
+            },
+            {
+              key: 'videoScript',
+              label: '生成视频脚本',
+              metric: `已生成：${generatedSegmentCount}/${segmentCount}`,
+              action: onGenerateVideoScript,
+              disabled: segmentCount === 0,
+            },
+            {
+              key: 'storyboardPrompt',
+              label: '提取分镜提示词',
+              metric: `分镜提示词：${promptCount}`,
+              action: onExtractStoryboardPrompts,
+              disabled: generatedSegmentCount === 0,
+            },
+          ] as const).map(row => {
+            const stage = stages?.[row.key];
+            return (
+              <div key={row.key} className="flex min-w-0 items-center gap-2 border-t border-n40 py-1.5">
+                <button
+                  type="button"
+                  onClick={() => void runAction(row.action, `${row.label}失败，请稍后重试`)}
+                  disabled={row.disabled || isBusy}
+                  className="h-7 flex-shrink-0 rounded border border-n40 bg-n0 px-2 text-[11px] font-medium text-n700 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-n40 disabled:text-n100"
+                >
+                  {row.label}
+                </button>
+                <span className="min-w-0 flex-1 truncate text-[10px] text-n300">{row.metric}</span>
+                <span className={`flex-shrink-0 text-[10px] ${statusClass(stage)}`}>{statusText(stage)}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
