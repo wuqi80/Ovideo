@@ -329,7 +329,12 @@ BACKEND_SOURCE_HASH=$(
 )
 RELEASE_GIT_SHA=$(git rev-parse HEAD 2>/dev/null || printf 'unknown')
 RELEASE_GIT_DIRTY=false
-if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+# The Windows working tree is sometimes deployed from WSL/bash. In that view
+# git status can report hundreds of CRLF/LF-only changes even when Windows git
+# and the actual deploy source are clean. Release metadata should only mark a
+# build dirty for real tracked content changes, not line-ending noise.
+if ! git -c core.filemode=false diff --quiet --ignore-space-at-eol --no-ext-diff -- . 2>/dev/null || \
+   ! git -c core.filemode=false diff --cached --quiet --ignore-space-at-eol --no-ext-diff -- . 2>/dev/null; then
   RELEASE_GIT_DIRTY=true
 fi
 
