@@ -21,5 +21,6 @@ def test_workflow_template_recovery_only_replaces_known_placeholder_rows() -> No
     assert "('i2i_around', 'i2i_fj', 2)" in sql
     for index in range(1, 7):
         assert f"('qwenN_{index}', 'qwen_{index}', 0)" in sql
-    assert "jsonb_object_length(target.workflow_json) <= source.maximum_legacy_nodes" in sql
-    assert "jsonb_object_length(source.workflow_json) > 2" in sql
+    assert "FROM jsonb_object_keys(target.workflow_json)" in sql
+    assert "END <= source.maximum_legacy_nodes" in sql
+    assert "FROM jsonb_object_keys(source.workflow_json)" in sql

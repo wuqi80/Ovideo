@@ -21,7 +21,10 @@ executable_sources AS (
     JOIN workflow_templates AS source
       ON source.workflow_key = pairs.source_key
     WHERE jsonb_typeof(source.workflow_json) = 'object'
-      AND jsonb_object_length(source.workflow_json) > 2
+      AND (
+          SELECT COUNT(*)
+          FROM jsonb_object_keys(source.workflow_json)
+      ) > 2
 )
 UPDATE workflow_templates AS target
 SET workflow_json = source.workflow_json,
@@ -34,5 +37,11 @@ WHERE target.workflow_key = source.target_key
   AND (
       target.workflow_json IS NULL
       OR jsonb_typeof(target.workflow_json) <> 'object'
-      OR jsonb_object_length(target.workflow_json) <= source.maximum_legacy_nodes
+      OR CASE
+          WHEN jsonb_typeof(target.workflow_json) = 'object' THEN (
+              SELECT COUNT(*)
+              FROM jsonb_object_keys(target.workflow_json)
+          )
+          ELSE 0
+      END <= source.maximum_legacy_nodes
   );
