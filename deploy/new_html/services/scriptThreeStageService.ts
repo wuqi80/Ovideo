@@ -285,6 +285,20 @@ async function splitWithValidation(
   throw new Error(SAFE_SPLIT_REPLAN_FAILURE_MESSAGE);
 }
 
+export async function splitScriptIntoValidatedSegments(
+  model: AiModel,
+  originalContent: string,
+  options: {
+    taskContext?: TextTaskContext;
+    onProgress?: (progress: PipelineProgress) => void;
+  } = {},
+): Promise<ScriptSegment[]> {
+  options.onProgress?.({ stage: 'split', completed: 0, total: 1 });
+  const segments = await splitWithValidation(model, originalContent, options.taskContext);
+  options.onProgress?.({ stage: 'split', completed: 1, total: 1 });
+  return segments;
+}
+
 async function validateOrRepairGeneratedSegment(
   model: AiModel,
   segment: ScriptSegment,
@@ -322,9 +336,10 @@ async function validateOrRepairGeneratedSegment(
   });
 }
 
-export async function generateEpisodeVideoScript(
+export async function generateVideoScriptForSegments(
   model: AiModel,
   originalContent: string,
+  segments: ScriptSegment[],
   options: {
     taskContext?: TextTaskContext;
     onProgress?: (progress: PipelineProgress) => void;
@@ -333,12 +348,6 @@ export async function generateEpisodeVideoScript(
   const inputTexts: string[] = [];
   const outputTexts: string[] = [];
   inputTexts.push(originalContent);
-  options.onProgress?.({ stage: 'split', completed: 0, total: 1 });
-  const segments = await splitWithValidation(model, originalContent, options.taskContext);
-  outputTexts.push(segments.map(segment => (
-    `${segment.sourceText}\n时长：${segment.estimatedDurationSec}秒`
-  )).join('\n---\n'));
-  options.onProgress?.({ stage: 'split', completed: 1, total: 1 });
 
   const outputs: string[] = [];
   const orderedSegments = [...segments].sort((a, b) => a.order - b.order);
@@ -422,6 +431,27 @@ export async function generateEpisodeVideoScript(
   }));
   if (groups.length === 0) throw new Error(SAFE_REPLAN_FAILURE_MESSAGE);
   return { segments: completedSegments, content, inputTexts, outputTexts };
+}
+
+export async function generateEpisodeVideoScript(
+  model: AiModel,
+  originalContent: string,
+  options: {
+    taskContext?: TextTaskContext;
+    onProgress?: (progress: PipelineProgress) => void;
+  } = {},
+): Promise<EpisodeVideoScriptResult> {
+  const segments = await splitScriptIntoValidatedSegments(model, originalContent, options);
+  const result = await generateVideoScriptForSegments(model, originalContent, segments, options);
+  return {
+    ...result,
+    outputTexts: [
+      segments.map(segment => (
+        `${segment.sourceText}\n时长：${segment.estimatedDurationSec}秒`
+      )).join('\n---\n'),
+      ...result.outputTexts,
+    ],
+  };
 }
 
 export async function iterateEpisodeVideoScript(

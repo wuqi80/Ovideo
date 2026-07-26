@@ -10,10 +10,11 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('updateEpisodeScriptById(propEpisodeId, file.id');
   });
 
-  it('appends newly generated storyboard items without deleting existing items', () => {
-    expect(source).toContain("const newItems = realItems.filter(i => !i.id || !i.id.startsWith('sb_'))");
-    expect(source).toContain('batchCreateStoryboardItems(propEpisodeId, dbItems, file.id)');
-    expect(source).not.toContain('deleteAllStoryboardItems(propEpisodeId, file.id)');
+  it('replaces the active storyboard design only after archiving the previous current design', () => {
+    expect(source).toContain('const archiveActiveStoryboardIfPresent = useCallback');
+    expect(source).toContain('const replaceActiveStoryboardDesign = useCallback');
+    expect(source).toContain('await archiveActiveStoryboardIfPresent(fileId, { name: options.archiveName })');
+    expect(source).toContain('batchCreateStoryboardItems(');
     expect(source).toContain("(file.storyboard?.items || []).filter(item => !item.isPlaceholder)");
   });
 
@@ -77,7 +78,8 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('const quickPipelineVersion = quickAvailableVersions.find');
     expect(source).toContain('buildLocalScriptVersionStoryboardItems(file)');
     expect(source).toContain('const syncScriptConversationFromFile = useCallback');
-    expect(source).toContain('syncScriptConversationFromFile(file.id)');
+    expect(source).toContain('messages: [...current.messages.filter(item => item.id !== message.id), message]');
+    expect(source).toContain('versions: [...current.versions.filter(item => item.id !== selectedVersion.id), selectedVersion]');
     expect(source).toContain('mergeScriptConversationWithLocalFile(file, scriptConversations[fileId])');
   });
 
@@ -101,8 +103,15 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('const handleExtractStoryboardPrompts = useCallback');
     expect(source).toContain('const handleRunThreeStagePipeline = useCallback');
     expect(source).toContain('const splitOk = await handleSplitScript(file.id)');
+    expect(source).toContain('const videoScriptVersion = await handleGenerateVideoScript(file.id)');
+    expect(source).toContain('await handleExtractStoryboardPrompts(file.id, { sourceVersion: videoScriptVersion })');
     expect(source).toContain('if (!splitOk) return;');
     expect(source).toContain("throw new Error('模型未返回可用的剧本分段')");
+    expect(source).toContain('splitScriptIntoValidatedSegments(aiModel, file.originalContent');
+    expect(source).toContain('generateVideoScriptForSegments(');
+    expect(source).toContain('createScriptVersion(propEpisodeId, file.id');
+    expect(source).toContain('setCurrent: false');
+    expect(source).toContain('clearActiveStoryboardDesign(file.id');
     expect(source).toContain('onRunThreeStage={handleRunThreeStagePipeline}');
     expect(source).not.toContain('handleQuickThreeStageGenerate');
   });

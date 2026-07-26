@@ -30,11 +30,11 @@ describe('latest three-step script prompts', () => {
   });
 
   it('uses the latest stage-two rules and hierarchical numbering', () => {
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('每组中镜头数严禁大于5个');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('任何分段累计>15秒都必须重新拆分或重新分配镜头');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('每组中分镜数严禁大于5个');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('任何分段累计>15秒都必须重新拆分或重新分配分镜');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('1-2 日 内 浅浅家');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('镜头1-1');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('镜头2-1');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('分镜1-1');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('分镜2-1');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(`约${MIN_VISUAL_STYLE_CHARACTERS}字为完整度基准`);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(`约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准`);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('不足时继续增加约束细节');
@@ -52,8 +52,8 @@ describe('latest three-step script prompts', () => {
 
   it('merges revisions with both stage-one and full stage-two constraints', () => {
     expect(ITERATE_VIDEO_SCRIPT.user).toContain('14-15秒的段落必须占30%以上');
-    expect(ITERATE_VIDEO_SCRIPT.user).toContain('每组中镜头数严禁大于5个');
-    expect(ITERATE_VIDEO_SCRIPT.user).toContain('镜头1-1、镜头1-2、镜头2-1');
+    expect(ITERATE_VIDEO_SCRIPT.user).toContain('每组中分镜数严禁大于5个');
+    expect(ITERATE_VIDEO_SCRIPT.user).toContain('分镜1-1、分镜1-2、分镜2-1');
     expect(ITERATE_VIDEO_SCRIPT.user).toContain(
       `分别以约${MIN_VISUAL_STYLE_CHARACTERS}字、约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准`,
     );

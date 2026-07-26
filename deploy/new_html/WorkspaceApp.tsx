@@ -7,14 +7,13 @@ import { FileText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { SkeletonScreen } from './components/SkeletonScreen';
-import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock, ScriptConversation, ScriptStoryboardVersion, ExtractedStoryboardPrompt } from './types';
+import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, ScriptConversation, ScriptStoryboardVersion } from './types';
 import {
   combineVideoScriptOutputs,
   ensureVideoScriptPromptLengths,
   formatHierarchicalShotNumber,
   normalizeGeneratedVideoScript,
   parseHierarchicalShotNumber,
-  parseVideoScriptBlocks,
   parseVideoScriptGroups,
 } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
@@ -111,46 +110,6 @@ function buildScriptSegmentPayload(segments: ScriptSegment[]) {
   }));
 }
 const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
-
-function allocateExtractedStoryboardDurations(
-  extractions: ExtractedStoryboardPrompt[],
-  sourceDurationSec: number | null,
-): number[] {
-  if (extractions.length === 0) return [];
-  const target = normalizePositiveIntegerSeconds(sourceDurationSec);
-  const durations = extractions.map(extraction => normalizePositiveIntegerSeconds(extraction.durationSec));
-  if (!target) return durations.map(duration => duration || 1);
-  if (extractions.length === 1) return [target];
-
-  const allocated = durations.map(duration => duration || 0);
-  const missingIndexes = allocated
-    .map((duration, index) => (duration > 0 ? -1 : index))
-    .filter(index => index >= 0);
-  if (missingIndexes.length > 0) {
-    const knownTotal = allocated.reduce((total, duration) => total + Math.max(0, duration), 0);
-    let remaining = Math.max(target - knownTotal, missingIndexes.length);
-    missingIndexes.forEach((index, order) => {
-      const slotsLeft = missingIndexes.length - order;
-      const nextDuration = Math.max(1, Math.floor(remaining / slotsLeft));
-      allocated[index] = nextDuration;
-      remaining -= nextDuration;
-    });
-  }
-
-  let delta = target - allocated.reduce((sum, duration) => sum + duration, 0);
-  if (delta > 0) {
-    allocated[allocated.length - 1] += delta;
-  } else if (delta < 0) {
-    for (let index = allocated.length - 1; index >= 0 && delta < 0; index -= 1) {
-      const reducible = Math.max(0, allocated[index] - 1);
-      const reduction = Math.min(reducible, -delta);
-      allocated[index] -= reduction;
-      delta += reduction;
-    }
-  }
-
-  return allocated.map(duration => Math.max(1, Math.round(duration)));
-}
 
 function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
   return [
@@ -1495,6 +1454,100 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     });
   }, [loadWorkspaceStoryboardPage, selectedFileId]);
 
+  const ensureActiveStoryboardItemsLoaded = useCallback(async (fileId: string): Promise<StoryboardItem[]> => {
+    const currentFile = filesRef.current.find(file => file.id === fileId);
+    const currentItems = (currentFile?.storyboard?.items || []).filter(item => !item.isPlaceholder);
+    const knownTotal = Math.max(storyboardTotalsByFileId[fileId] ?? 0, currentItems.length);
+    if (!fileId.startsWith('local_') && knownTotal > currentItems.length) {
+      const loadedItems = await loadWorkspaceStoryboardPage(fileId, knownTotal);
+      return loadedItems.filter(item => !item.isPlaceholder);
+    }
+    return currentItems;
+  }, [loadWorkspaceStoryboardPage, storyboardTotalsByFileId]);
+
+  const archiveActiveStoryboardIfPresent = useCallback(async (
+    fileId: string,
+    options: {
+      name?: string;
+      source?: 'auto' | 'manual';
+      version?: ScriptStoryboardVersion;
+    } = {},
+  ): Promise<FileVersion | null> => {
+    const activeItems = await ensureActiveStoryboardItemsLoaded(fileId);
+    if (activeItems.length === 0) return null;
+    return persistStoryboardSnapshot(fileId, {
+      source: options.source || 'auto',
+      version: options.version,
+      name: options.name || `自动历史 · 当前镜头设计 · ${new Date().toLocaleString('zh-CN')}`,
+    });
+  }, [ensureActiveStoryboardItemsLoaded, persistStoryboardSnapshot]);
+
+  const replaceActiveStoryboardDesign = useCallback(async (
+    fileId: string,
+    items: StoryboardItem[],
+    options: {
+      archiveName?: string;
+      versionId?: string;
+      openDrawer?: boolean;
+    } = {},
+  ): Promise<StoryboardItem[]> => {
+    const normalizedItems = normalizeStoryboardItemsForWorkflow(items);
+    if (normalizedItems.filter(item => !item.isPlaceholder).length === 0) {
+      throw new Error('镜头设计生成成功，但没有可保存的镜头');
+    }
+    await archiveActiveStoryboardIfPresent(fileId, { name: options.archiveName });
+    const persisted = await batchCreateStoryboardItems(
+      propEpisodeId,
+      buildStoryboardDbPayload(normalizedItems),
+      fileId,
+    );
+    if (!persisted?.success || !Array.isArray(persisted.items) || persisted.items.length === 0) {
+      throw new Error('镜头设计生成成功，但正式镜头链路保存失败');
+    }
+    const persistedItems = normalizeStoryboardItemsForWorkflow(
+      mapWorkspaceStoryboardRowsToItems(persisted.items),
+    );
+    flushSync(() => {
+      updateFileWithHistory(fileId, current => ({
+        ...current,
+        storyboard: { items: persistedItems },
+        status: FileStatus.Completed,
+        lastUpdated: Date.now(),
+      }), {
+        recordHistory: false,
+        resetHistory: true,
+        versionId: options.versionId,
+      });
+      setStoryboardTotalsByFileId(prev => ({ ...prev, [fileId]: persistedItems.length }));
+      setHighlightedScriptSegments(new Set());
+      setHighlightedStoryboardItemIds(new Set());
+      if (options.openDrawer) setStoryboardDrawerOpen(true);
+    });
+    return persistedItems;
+  }, [archiveActiveStoryboardIfPresent, propEpisodeId, updateFileWithHistory]);
+
+  const clearActiveStoryboardDesign = useCallback(async (
+    fileId: string,
+    options: { archiveName?: string; versionId?: string } = {},
+  ): Promise<void> => {
+    await archiveActiveStoryboardIfPresent(fileId, { name: options.archiveName });
+    await batchCreateStoryboardItems(propEpisodeId, [], fileId);
+    flushSync(() => {
+      updateFileWithHistory(fileId, current => ({
+        ...current,
+        storyboard: null,
+        lastUpdated: Date.now(),
+      }), {
+        recordHistory: false,
+        resetHistory: true,
+        versionId: options.versionId,
+      });
+      setStoryboardTotalsByFileId(prev => ({ ...prev, [fileId]: 0 }));
+      setHighlightedScriptSegments(new Set());
+      setHighlightedStoryboardItemIds(new Set());
+    });
+  }, [archiveActiveStoryboardIfPresent, propEpisodeId, updateFileWithHistory]);
+
   const handleExportNext = async (data: any) => {
     try {
       const selectedItems: string[] = data.items.map((item: any) => item.shotId);
@@ -2094,17 +2147,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           },
         },
       );
-      const normalizedItems = normalizeStoryboardItemsForWorkflow(designResult.items);
-      const persisted = await batchCreateStoryboardItems(
-        propEpisodeId,
-        buildStoryboardDbPayload(normalizedItems),
+      const persistedItems = await replaceActiveStoryboardDesign(
         fileId,
-      );
-      if (!persisted?.success || !Array.isArray(persisted.items) || persisted.items.length === 0) {
-        throw new Error('镜头设计生成成功，但正式镜头链路保存失败');
-      }
-      const persistedItems = normalizeStoryboardItemsForWorkflow(
-        mapWorkspaceStoryboardRowsToItems(persisted.items),
+        designResult.items,
+        {
+          archiveName: `自动历史 · 生成分镜脚本 V${selectedVersion.versionNo} 镜头设计前 · ${new Date().toLocaleString('zh-CN')}`,
+          versionId: selectedVersion.id,
+          openDrawer: options.openDrawer !== false,
+        },
       );
       await updateEpisodeScriptById(propEpisodeId, fileId, { adapted_script: selectedVersion.content });
 
@@ -2112,22 +2162,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         updateFileWithHistory(fileId, current => ({
           ...current,
           scriptContent: selectedVersion.content,
-          storyboard: { items: persistedItems },
           status: FileStatus.Completed,
           lastUpdated: Date.now(),
         }), {
           recordHistory: false,
-          resetHistory: true,
           versionId: selectedVersion.id,
         });
-        setStoryboardTotalsByFileId(prev => ({ ...prev, [fileId]: persistedItems.length }));
         setScriptConversations(prev => prev[fileId] ? ({
           ...prev,
           [fileId]: { ...prev[fileId], currentVersionId: selectedVersion.id },
         }) : prev);
-        setHighlightedScriptSegments(new Set());
-        setHighlightedStoryboardItemIds(new Set());
-        if (options.openDrawer !== false) setStoryboardDrawerOpen(true);
       });
 
       await persistStoryboardSnapshot(fileId, {
@@ -2195,6 +2239,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     aiModel,
     persistStoryboardSnapshot,
     propEpisodeId,
+    replaceActiveStoryboardDesign,
     scriptModelOptions,
     selectedFileId,
     updateFileWithHistory,
@@ -3286,12 +3331,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     stage: 'split' | 'videoScript' | 'storyboardPrompt',
     patch: Partial<ScriptGenerationStageState>,
   ) => {
-    setFiles(prev => prev.map(f => {
-      if (f.id !== fileId) return f;
-      const stages = { ...(f.generationStages || {}) };
-      stages[stage] = { status: 'idle', ...(stages[stage] || {}), ...patch, updatedAt: Date.now() };
-      return { ...f, generationStages: stages };
-    }));
+    setFiles(prev => {
+      const next = prev.map(f => {
+        if (f.id !== fileId) return f;
+        const stages = { ...(f.generationStages || {}) };
+        stages[stage] = { status: 'idle', ...(stages[stage] || {}), ...patch, updatedAt: Date.now() };
+        return { ...f, generationStages: stages };
+      });
+      filesRef.current = next;
+      return next;
+    });
   }, []);
 
   /** Stage 1：拆分剧本 */
@@ -3303,19 +3352,39 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
     setStage(file.id, 'split', { status: 'running', errorMessage: '' });
     try {
-      const { aiSplitScriptIntoSegments } = await loadAiModelService();
-      const segments = await aiSplitScriptIntoSegments(aiModel, file.originalContent, undefined, {
-        projectId: urlProjectId,
-        episodeId: propEpisodeId,
-        sourcePage: 'script',
-        sourceItemId: file.id,
-        entityType: 'episode_script',
-        entityId: file.id,
+      const pipelineService = await loadScriptThreeStageService();
+      const segments = await pipelineService.splitScriptIntoValidatedSegments(aiModel, file.originalContent, {
+        taskContext: {
+          projectId: urlProjectId,
+          episodeId: propEpisodeId,
+          sourcePage: 'script',
+          sourceItemId: file.id,
+          entityType: 'episode_script',
+          entityId: file.id,
+        },
       });
       if (segments.length === 0) {
         throw new Error('模型未返回可用的剧本分段');
       }
-      const applySegs = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, scriptSegments: segments } : f);
+      const now = Date.now();
+      const applySegs = (arr: ProjectFile[]) => arr.map(f => {
+        if (f.id !== file.id) return f;
+        return {
+          ...f,
+          scriptSegments: segments.map(segment => ({
+            ...segment,
+            videoScript: '',
+            status: 'done' as const,
+            errorMessage: '',
+          })),
+          generationStages: {
+            ...(f.generationStages || {}),
+            split: { status: 'done', total: segments.length, completed: segments.length, updatedAt: now },
+            videoScript: { status: 'idle', total: segments.length, completed: 0, errorMessage: '', updatedAt: now },
+            storyboardPrompt: { status: 'idle', total: 0, completed: 0, errorMessage: '', updatedAt: now },
+          },
+        };
+      });
       setFiles(applySegs);
       filesRef.current = applySegs(filesRef.current); // 同步镜像，供下一阶段立即读取
       setStage(file.id, 'split', { status: 'done', total: segments.length, completed: segments.length });
@@ -3331,101 +3400,23 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     }
   }, [selectedFileId, aiModel, propEpisodeId, setStage, urlProjectId]);
 
-  /** Stage 2：逐段生成视频脚本，按 order 追加到 scriptContent */
+  /** Stage 2：基于当前拆分结果生成正式分镜脚本版本 */
   const handleGenerateVideoScript = useCallback(async (targetFileId?: string) => {
     const file = filesRef.current.find(f => f.id === (targetFileId || selectedFileId));
-    if (!file) return;
+    if (!file) return false;
     const segs = file.scriptSegments || [];
     if (segs.length === 0) { alert('请先拆分剧本'); return false; }
 
     setStage(file.id, 'videoScript', { status: 'running', total: segs.length, completed: 0, errorMessage: '' });
     const ordered = [...segs].sort((a, b) => a.order - b.order);
-    const updated: ScriptSegment[] = [...ordered];
-    let completed = 0;
     try {
-      for (let i = 0; i < ordered.length; i++) {
-        const seg = ordered[i];
-        if (seg.status === 'done' && seg.videoScript) { completed++; continue; } // 跳过已完成（失败恢复）
-        try {
-          const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
-          const text = await aiGenerateVideoScriptFromSegment(aiModel, seg, undefined, {
-            projectId: urlProjectId,
-            episodeId: propEpisodeId,
-            sourcePage: 'script',
-            sourceItemId: file.id,
-            entityType: 'episode_script',
-            entityId: file.id,
-          });
-          updated[i] = { ...seg, videoScript: text, status: 'done', errorMessage: '' };
-          completed++;
-          setStage(file.id, 'videoScript', { status: 'running', completed });
-        } catch (segErr) {
-          const errorSummary = summarizePipelineError(segErr);
-          updated[i] = { ...seg, status: 'error', errorMessage: errorSummary };
-          const partialScript = combineVideoScriptOutputs(updated.map(s => s.videoScript || ''));
-          const applyErr = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
-            ? { ...f, scriptSegments: updated, scriptContent: partialScript }
-            : f);
-          setFiles(applyErr);
-          filesRef.current = applyErr(filesRef.current);
-          syncScriptConversationFromFile(file.id);
-          setStage(file.id, 'videoScript', { status: 'error', completed, errorMessage: `第 ${i + 1} 段失败：${errorSummary}` });
-          await updateEpisodeScriptById(propEpisodeId, file.id, { adapted_script: partialScript }).catch(() => {});
-          await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
-          return false; // 保留已完成，下次从失败段继续
-        }
-      }
-      const fullScript = combineVideoScriptOutputs(updated.map(s => s.videoScript || ''));
-      const applyDone = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
-        ? { ...f, scriptSegments: updated, scriptContent: fullScript }
-        : f);
-      setFiles(applyDone);
-      filesRef.current = applyDone(filesRef.current); // 同步镜像，供 Stage3 立即读取
-      syncScriptConversationFromFile(file.id);
-      setStage(file.id, 'videoScript', { status: 'done', completed });
-      await updateEpisodeScriptById(propEpisodeId, file.id, { adapted_script: fullScript }).catch(() => {});
-      await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
-      return true;
-    } catch (e) {
-      setStage(file.id, 'videoScript', { status: 'error', errorMessage: summarizePipelineError(e) });
-      return false;
-    }
-  }, [selectedFileId, aiModel, propEpisodeId, setStage, syncScriptConversationFromFile, urlProjectId]);
-
-  /** Stage 3：对每个视频镜头块提取分镜提示词 → StoryboardItem[] */
-  const handleExtractStoryboardPrompts = useCallback(async (targetFileId?: string) => {
-    const file = filesRef.current.find(f => f.id === (targetFileId || selectedFileId));
-    if (!file) return false;
-    const segs = (file.scriptSegments || []).filter(s => s.videoScript);
-    if (segs.length === 0) { alert('请先生成视频脚本'); return false; }
-
-    // 收集所有镜头块（带 segmentId 关联）
-    const shots: Array<{ segmentId: string; segmentNo: number; block: VideoScriptBlock }> = [];
-    for (const [segmentIndex, seg] of segs.entries()) {
-      for (const block of parseVideoScriptBlocks(seg.videoScript!)) {
-        shots.push({ segmentId: seg.id, segmentNo: segmentIndex + 1, block });
-      }
-    }
-    if (shots.length === 0) { alert('未能从视频脚本解析出镜头'); return false; }
-
-    // total = 视频镜头数（AI 调用次数）；一个视频镜头可拆成多个分镜 item
-    setStage(file.id, 'storyboardPrompt', { status: 'running', total: shots.length, completed: 0, errorMessage: '' });
-    // 重跑生成一套新的当前镜头设计；旧设计由版本快照保留，不混入本次正式链路。
-    const items: StoryboardItem[] = [];
-    const localShotCountBySegment = new Map<number, number>();
-    // 把当前 items 写入 React state + filesRef（同步），供 Stage3 末尾的 saveEpisodeToBackend 立即看到
-    const applyItems = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, storyboard: { items } } : f);
-    for (let i = 0; i < shots.length; i++) {
-      const { segmentId, segmentNo, block } = shots[i];
-      try {
-        // 单个视频镜头 → 一个或多个更细的分镜
-        const { aiExtractStoryboardPromptFromVideoShot } = await loadAiModelService();
-        const nextLocalShotNo = (localShotCountBySegment.get(segmentNo) || 0) + 1;
-        const exList = await aiExtractStoryboardPromptFromVideoShot(
-          aiModel,
-          block.rawBlock,
-          formatHierarchicalShotNumber(segmentNo, nextLocalShotNo),
-          {
+      const pipelineService = await loadScriptThreeStageService();
+      const result = await pipelineService.generateVideoScriptForSegments(
+        aiModel,
+        file.originalContent,
+        ordered,
+        {
+          taskContext: {
             projectId: urlProjectId,
             episodeId: propEpisodeId,
             sourcePage: 'script',
@@ -3433,69 +3424,255 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             entityType: 'episode_script',
             entityId: file.id,
           },
-        );
-        if (exList.length === 0) {
-          throw new Error('AI 返回内容未解析出分镜提示词');
-        }
-        const extractedDurations = allocateExtractedStoryboardDurations(exList, block.durationSec);
-        for (const [extractionIndex, ex] of exList.entries()) {
-          const localShotNo = (localShotCountBySegment.get(segmentNo) || 0) + 1;
-          const shotNumber = formatHierarchicalShotNumber(segmentNo, localShotNo);
-          const durationSec = extractedDurations[extractionIndex]
-            || normalizePositiveIntegerSeconds(ex.durationSec)
-            || normalizePositiveIntegerSeconds(block.durationSec)
-            || 1;
-          localShotCountBySegment.set(segmentNo, localShotNo);
-          items.push({
-            id: uuidv4(),
-            shotNumber,
-            originalText: ex.sceneDescription || block.rawBlock.slice(0, 80),
-            scriptSegment: ex.sceneDescription || '',
-            characters: ex.characters || [],           // 人物 → bound_assets char:
-            scene: ex.scene || '',                     // 场景 → bound_assets scene:
-            props: ex.props || [],                     // 道具 → bound_assets prop:
-            imagePrompt: ex.imagePrompt || '',
-            // Stage 2 单镜头块原文 → video_prompt（视频页消费）
-            videoPrompt: block.rawBlock,
-            dialogue: ex.dialogue || '',
-            cameraMovement: [ex.shotSize, ex.cameraAngle, ex.cameraMove].filter(Boolean).join(' / '),
-            plannedDurationMs: durationSec * 1000,
-            duration: `${durationSec}秒`,
-            scriptSegmentId: segmentId,
-            sourceVideoShotNo: block.shotNo || shotNumber,
-            videoScriptBlock: block.rawBlock,
-            shotSize: ex.shotSize || '',
-            cameraAngle: ex.cameraAngle || '',
-            timestamp: Date.now(),
-          });
-        }
-        setStage(file.id, 'storyboardPrompt', { status: 'running', completed: i + 1 });
-      } catch (shotErr) {
-        const errorSummary = summarizePipelineError(shotErr);
-        setFiles(applyItems);
-        filesRef.current = applyItems(filesRef.current);
-        syncScriptConversationFromFile(file.id);
-        setStage(file.id, 'storyboardPrompt', { status: 'error', completed: i, errorMessage: `第 ${i + 1} 个镜头失败：${errorSummary}` });
-        if (items.length > 0) {
-          await saveEpisodeToBackend().catch(() => {});
-        }
-        return false; // 保留已提取
-      }
+          onProgress: progress => {
+            if (progress.stage === 'videoScript') {
+              setStage(file.id, 'videoScript', { status: 'running', total: progress.total, completed: progress.completed });
+            }
+          },
+        },
+      );
+      const fullScript = normalizeGeneratedVideoScript(result.content);
+      const parsedItems = parseStoryboardVersionContent(fullScript);
+      const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
+      const requestId = `quick_video_script_${uuidv4()}`;
+      const metadata = {
+        requestId,
+        scriptPipeline: {
+          version: 3,
+          mode: 'quick',
+          stage: 'videoScript',
+          shotNumberFormat: 'segment-local',
+          sourceSegmentCount: ordered.length,
+        },
+      };
+      const message = await createScriptMessage(propEpisodeId, file.id, {
+        role: 'assistant',
+        content: fullScript,
+        status: 'completed',
+        modelAlias: modelInfo.alias,
+        provider: modelInfo.provider,
+        modelName: modelInfo.runtime,
+        requestId,
+        metadata,
+      });
+      const draftVersion = await createScriptVersion(propEpisodeId, file.id, {
+        messageId: message.id,
+        content: fullScript,
+        storyboardItems: parsedItems,
+        source: 'ai',
+        status: 'ready',
+        modelAlias: modelInfo.alias,
+        provider: modelInfo.provider,
+        modelName: modelInfo.runtime,
+        metadata,
+        setCurrent: false,
+      });
+      await clearActiveStoryboardDesign(file.id, {
+        archiveName: `自动历史 · 生成分镜脚本 V${draftVersion.versionNo} 前 · ${new Date().toLocaleString('zh-CN')}`,
+        versionId: draftVersion.id,
+      });
+      const selectedVersion = await selectScriptVersion(propEpisodeId, file.id, draftVersion.id);
+      const updated = result.segments.map(segment => ({
+        ...segment,
+        status: 'done' as const,
+        errorMessage: '',
+      }));
+      const applyDone = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
+        ? {
+            ...f,
+            scriptSegments: updated,
+            scriptContent: fullScript,
+            storyboard: null,
+            status: FileStatus.Completed,
+            lastUpdated: Date.now(),
+          }
+        : f);
+      setFiles(applyDone);
+      filesRef.current = applyDone(filesRef.current); // 同步镜像，供 Stage3 立即读取
+      setScriptConversations(prev => {
+        const current = prev[file.id] || { scriptId: file.id, messages: [], versions: [] };
+        return {
+          ...prev,
+          [file.id]: {
+            ...current,
+            currentVersionId: selectedVersion.id,
+            defaultModel: modelInfo.runtime,
+            messages: [...current.messages.filter(item => item.id !== message.id), message],
+            versions: [...current.versions.filter(item => item.id !== selectedVersion.id), selectedVersion],
+          },
+        };
+      });
+      setQuickSelectedVersionIds(prev => ({ ...prev, [file.id]: selectedVersion.id }));
+      setStage(file.id, 'videoScript', { status: 'done', total: updated.length, completed: updated.length });
+      await updateEpisodeScriptById(propEpisodeId, file.id, { adapted_script: fullScript }).catch(() => {});
+      await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
+      return selectedVersion;
+    } catch (e) {
+      setStage(file.id, 'videoScript', { status: 'error', errorMessage: summarizePipelineError(e) });
+      return false;
     }
-    const normalizedItems = normalizeStoryboardItemsForWorkflow(items, segs);
-    const applyNormalizedItems = (arr: ProjectFile[]) => arr.map(f => f.id === file.id
-      ? { ...f, storyboard: { items: normalizedItems } }
-      : f);
-    setFiles(applyNormalizedItems);
-    filesRef.current = applyNormalizedItems(filesRef.current); // 关键：保证下面的 save 读到刚生成的 items
-    syncScriptConversationFromFile(file.id);
-    setStage(file.id, 'storyboardPrompt', { status: 'done', completed: shots.length });
-    await saveEpisodeToBackend();
-    window.alert(`生成镜头设计完成，已拆为 ${normalizedItems.filter(item => !item.isPlaceholder).length} 个镜头`);
-    return true;
-  }, [selectedFileId, aiModel, propEpisodeId, setStage, syncScriptConversationFromFile, saveEpisodeToBackend, urlProjectId]);
+  }, [
+    aiModel,
+    clearActiveStoryboardDesign,
+    propEpisodeId,
+    scriptModelOptions,
+    selectedFileId,
+    setStage,
+    urlProjectId,
+  ]);
 
-  /** 主按钮：按三步顺序执行，从未完成的阶段开始 */
+  /** Stage 3：基于当前分镜脚本版本生成镜头设计 */
+  const handleExtractStoryboardPrompts = useCallback(async (
+    targetFileId?: string,
+    options: { sourceVersion?: ScriptStoryboardVersion } = {},
+  ) => {
+    const file = filesRef.current.find(f => f.id === (targetFileId || selectedFileId));
+    if (!file) return false;
+    const segs = (file.scriptSegments || []).filter(s => s.videoScript);
+    if (segs.length === 0) { alert('请先生成视频脚本'); return false; }
+    const conversation = mergeScriptConversationWithLocalFile(file, scriptConversations[file.id]);
+    const sourceVersion = options.sourceVersion
+      || conversation?.versions.find(version => version.id === conversation.currentVersionId)
+      || conversation?.versions[conversation.versions.length - 1];
+    const videoScript = sourceVersion?.content || file.scriptContent || combineVideoScriptOutputs(segs.map(segment => segment.videoScript || ''));
+    if (!videoScript.trim()) { alert('请先生成视频脚本'); return false; }
+
+    const groups = parseVideoScriptGroups(videoScript);
+    const sourceShotCount = groups.reduce((total, group) => total + group.blocks.length, 0);
+    if (sourceShotCount === 0) { alert('未能从视频脚本解析出分镜'); return false; }
+
+    const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
+    const billingTaskId = `storyboard_design_${uuidv4()}`;
+    try {
+      await assertEnoughCredits('storyboard_design_generation', {
+        shot_count: sourceShotCount,
+        input_tokens: estimateTextTokens(videoScript),
+        output_tokens: Math.max(500, sourceShotCount * 500),
+        model: modelInfo.runtime,
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '积分校验失败');
+      return false;
+    }
+
+    setStage(file.id, 'storyboardPrompt', { status: 'running', total: sourceShotCount, completed: 0, errorMessage: '' });
+    try {
+      const pipelineService = await loadScriptThreeStageService();
+      const designResult = await pipelineService.generateStoryboardDesignForVersion(
+        aiModel,
+        videoScript,
+        {
+          taskContext: {
+            projectId: urlProjectId,
+            episodeId: propEpisodeId,
+            sourcePage: 'script',
+            sourceItemId: file.id,
+            entityType: sourceVersion ? 'episode_script_version' : 'episode_script',
+            entityId: sourceVersion?.id || file.id,
+          },
+          onProgress: progress => {
+            setStage(file.id, 'storyboardPrompt', {
+              status: 'running',
+              total: progress.total,
+              completed: progress.completed,
+            });
+          },
+        },
+      );
+      const persistedItems = await replaceActiveStoryboardDesign(
+        file.id,
+        designResult.items,
+        {
+          archiveName: sourceVersion
+            ? `自动历史 · 生成分镜脚本 V${sourceVersion.versionNo} 镜头设计前 · ${new Date().toLocaleString('zh-CN')}`
+            : `自动历史 · 生成镜头设计前 · ${new Date().toLocaleString('zh-CN')}`,
+          versionId: sourceVersion?.id,
+          openDrawer: false,
+        },
+      );
+      if (sourceVersion && !sourceVersion.id.startsWith('legacy_')) {
+        setScriptConversations(prev => prev[file.id] ? ({
+          ...prev,
+          [file.id]: { ...prev[file.id], currentVersionId: sourceVersion.id },
+        }) : prev);
+        setQuickSelectedVersionIds(prev => ({ ...prev, [file.id]: sourceVersion.id }));
+      }
+      try {
+        await persistStoryboardSnapshot(file.id, {
+          source: 'auto',
+          version: sourceVersion,
+          name: sourceVersion
+            ? `自动存档 · 分镜脚本 V${sourceVersion.versionNo} · ${new Date().toLocaleString('zh-CN')}`
+            : `自动存档 · 快速版镜头设计 · ${new Date().toLocaleString('zh-CN')}`,
+        });
+      } catch (snapshotError) {
+        console.error('自动保存镜头设计失败:', snapshotError);
+        throw new Error(`镜头设计已生成，但自动存档失败：${summarizePipelineError(snapshotError)}`);
+      }
+
+      const billingParams = {
+        shot_count: persistedItems.length,
+        input_tokens: estimateTextTokens(designResult.inputTexts.join('\n')),
+        output_tokens: estimateTextTokens(designResult.outputTexts.join('\n')),
+        model: modelInfo.runtime,
+      };
+      const credit = await consumeCredits({
+        featureKey: 'storyboard_design_generation',
+        taskId: billingTaskId,
+        params: billingParams,
+        projectId: urlProjectId,
+        metadata: {
+          episode_id: propEpisodeId,
+          script_id: file.id,
+          script_version_id: sourceVersion?.id,
+          operation: 'quick_extract_storyboard_design',
+        },
+      });
+      if (sourceVersion && !sourceVersion.id.startsWith('legacy_')) {
+        const previousBillings = Array.isArray(sourceVersion.metadata?.storyboardDesignBillings)
+          ? sourceVersion.metadata.storyboardDesignBillings
+          : [];
+        const updatedVersion = await updateScriptVersionMetadata(propEpisodeId, file.id, sourceVersion.id, {
+          storyboardDesignCreditCost: credit.charged_credits,
+          storyboardDesignCreditTransactionId: credit.transaction_id,
+          storyboardDesignCreditTaskId: billingTaskId,
+          storyboardDesignUsage: billingParams,
+          storyboardDesignGeneratedAt: Date.now(),
+          storyboardDesignBillings: [
+            ...previousBillings,
+            { taskId: billingTaskId, cost: credit.charged_credits, usage: billingParams, createdAt: Date.now() },
+          ].slice(-20),
+        });
+        setScriptConversations(prev => prev[file.id] ? ({
+          ...prev,
+          [file.id]: {
+            ...prev[file.id],
+            versions: prev[file.id].versions.map(version => version.id === updatedVersion.id ? updatedVersion : version),
+          },
+        }) : prev);
+      }
+      setStage(file.id, 'storyboardPrompt', { status: 'done', total: sourceShotCount, completed: sourceShotCount });
+      window.alert(`生成镜头设计完成，已拆为 ${persistedItems.length} 个镜头`);
+      return true;
+    } catch (shotErr) {
+      const errorSummary = summarizePipelineError(shotErr);
+      setStage(file.id, 'storyboardPrompt', { status: 'error', errorMessage: errorSummary });
+      setConversationError(`生成镜头设计失败：${errorSummary}`);
+      return false;
+    }
+  }, [
+    aiModel,
+    persistStoryboardSnapshot,
+    propEpisodeId,
+    replaceActiveStoryboardDesign,
+    scriptConversations,
+    scriptModelOptions,
+    selectedFileId,
+    setStage,
+    urlProjectId,
+  ]);
+
+  /** 主按钮：按三步顺序全量执行；再次点击会完整循环并归档旧版本 */
   const handleRunThreeStagePipeline = useCallback(async (targetFileId?: string) => {
     const file = filesRef.current.find(f => f.id === (targetFileId || selectedFileId));
     if (!file) return;
@@ -3508,13 +3685,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     }
     // 各阶段内部已改为读取 filesRef.current，并在 setFiles 后同步镜像，
     // 因此同一异步运行内 Stage1→2→3 能看到上一阶段写入的 scriptSegments / videoScript。
-    if (!hasSegments) {
-      const splitOk = await handleSplitScript(file.id);
-      if (!splitOk) return;
-    }
-    const videoScriptOk = await handleGenerateVideoScript(file.id);
-    if (!videoScriptOk) return;
-    await handleExtractStoryboardPrompts(file.id);
+    const splitOk = await handleSplitScript(file.id);
+    if (!splitOk) return;
+    const videoScriptVersion = await handleGenerateVideoScript(file.id);
+    if (!videoScriptVersion) return;
+    await handleExtractStoryboardPrompts(file.id, { sourceVersion: videoScriptVersion });
   }, [selectedFileId, handleSplitScript, handleGenerateVideoScript, handleExtractStoryboardPrompts]);
 
   /**

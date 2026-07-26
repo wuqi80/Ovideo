@@ -139,6 +139,14 @@ describe('parseVideoScriptBlocks', () => {
         expect(blocks[0].durationSec).toBe(6);
     });
 
+    it('accepts 分镜 headings while keeping canonical downstream shot numbers', () => {
+        const blocks = parseVideoScriptBlocks('分段1\n分镜1-1\n时间：6秒\n画面描述：主角抬头。');
+        expect(blocks[0].shotNo).toBe('镜头1-1');
+        expect(blocks[0].rawBlock).toContain('分镜1-1');
+        expect(findVideoScriptShotBlock('分段1\n分镜1-1\n画面描述：主角抬头。', '镜头1-1'))
+            .toContain('主角抬头');
+    });
+
     it('returns [] for empty', () => {
         expect(parseVideoScriptBlocks('')).toEqual([]);
     });

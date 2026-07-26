@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronDown, LoaderCircle, Wand2, X } from 'lucide-react';
-import type { AiModel, ProjectFile } from '../types';
+import type { AiModel, ProjectFile, ScriptStoryboardVersion } from '../types';
 import type { ScriptModelOption } from '../services/scriptModelCatalogService';
 
 interface QuickScriptSourceColumnProps {
@@ -14,7 +14,7 @@ interface QuickScriptSourceColumnProps {
   onChangeModel: (model: AiModel) => void;
   onUpdateSource: (fileId: string, content: string) => void;
   onSplitScript: (fileId: string) => Promise<boolean | void>;
-  onGenerateVideoScript: (fileId: string) => Promise<boolean | void>;
+  onGenerateVideoScript: (fileId: string) => Promise<boolean | ScriptStoryboardVersion | void>;
   onExtractStoryboardPrompts: (fileId: string) => Promise<boolean | void>;
   onRunThreeStage: (fileId: string) => Promise<void>;
 }

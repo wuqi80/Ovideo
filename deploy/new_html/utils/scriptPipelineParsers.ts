@@ -66,8 +66,8 @@ export function parseScriptSegments(text: string): ScriptSegment[] {
     return segments;
 }
 
-const SHOT_HEADER_PATTERN = /^\s*镜头\s*(\d+)(?:\s*[-－—]\s*(\d+))?\s*[:：]?\s*$/;
-const SHOT_HEADER_WITH_CONTENT_PATTERN = /^\s*镜头\s*(\d+)(?:\s*[-－—]\s*(\d+))?\s*[:：]/;
+const SHOT_HEADER_PATTERN = /^\s*(?:镜头|分镜)\s*(\d+)(?:\s*[-－—]\s*(\d+))?\s*[:：]?\s*$/;
+const SHOT_HEADER_WITH_CONTENT_PATTERN = /^\s*(?:镜头|分镜)\s*(\d+)(?:\s*[-－—]\s*(\d+))?\s*[:：]/;
 
 export interface HierarchicalShotNumber {
     segmentNo: number | null;
@@ -76,7 +76,7 @@ export interface HierarchicalShotNumber {
 
 /** 兼容历史“镜头1”，并解析新标准“镜头1-2”。 */
 export function parseHierarchicalShotNumber(value: string): HierarchicalShotNumber | null {
-    const match = String(value || '').match(/镜头\s*(\d+)(?:\s*[-－—]\s*(\d+))?/);
+    const match = String(value || '').match(/(?:镜头|分镜)\s*(\d+)(?:\s*[-－—]\s*(\d+))?/);
     if (!match) return null;
     const first = Number.parseInt(match[1], 10);
     const second = match[2] ? Number.parseInt(match[2], 10) : null;
@@ -106,7 +106,7 @@ export function findVideoScriptShotBlock(content: string, shotNumber: string): s
     const shotToken = parsed.segmentNo === null
         ? `0*${parsed.localShotNo}(?!\\d)(?!\\s*[-－—]\\s*\\d)`
         : `0*${parsed.segmentNo}\\s*[-－—]\\s*0*${parsed.localShotNo}(?!\\d)`;
-    const headerPattern = new RegExp(`^[ \\t]*镜头\\s*${shotToken}`, 'm');
+    const headerPattern = new RegExp(`^[ \\t]*(?:镜头|分镜)\\s*${shotToken}`, 'm');
     const match = headerPattern.exec(content);
     if (!match) return null;
 
@@ -235,7 +235,7 @@ function splitVideoScriptOutputGroups(output: string): string[] {
 function renumberVideoScriptGroup(rawGroup: string, segmentNo: number): string {
     let localShotNo = 0;
     const body = rawGroup.replace(
-        /^(\s*)镜头\s*\d+(?:\s*[-－—]\s*\d+)?(\s*[:：]?\s*.*)$/gm,
+        /^(\s*)(?:镜头|分镜)\s*\d+(?:\s*[-－—]\s*\d+)?(\s*[:：]?\s*.*)$/gm,
         (_full, indent: string, suffix: string) => {
             localShotNo += 1;
             return `${indent}${formatHierarchicalShotNumber(segmentNo, localShotNo)}${suffix}`;
