@@ -71,6 +71,7 @@ FILES=(
   "external_api/audio/minimax_audio.py"
   "scripts/live_deploy_mvc2.sh"
   "scripts/apply_migrations.py"
+  "scripts/repair_verified_workflow_templates.py"
   "scripts/smoke_test.py"
   "scripts/audit_storage_manifest.py"
   "scripts/build_clean_migration_package.py"
@@ -276,6 +277,13 @@ run_remote_db_migrations() {
       '$REMOTE_DIR'/.venv/bin/python scripts/apply_migrations.py \
         --root . \
         --manifest db_build/manifest.txt
+    sudo -u postgres env \
+      DB_HOST=/tmp \
+      DB_PORT=\"\${DB_PORT:-5432}\" \
+      DB_NAME=\"\${DB_NAME:-my2_db}\" \
+      DB_USER=postgres \
+      DB_PASSWORD= \
+      '$REMOTE_DIR'/.venv/bin/python scripts/repair_verified_workflow_templates.py
   "
 }
 
