@@ -11,4 +11,13 @@ describe('AdminSettingsPage category-specific model checks', () => {
     expect(source).toContain('const modelNameHint = categoryBinding?.model_name || config.model_name || null');
     expect(source).toContain('const categoryRuntime = runtimeForProviderModel(provider, modelNameHint) || runtime');
   });
+
+  it('keeps API config cards compact with a details modal and adaptive actions', () => {
+    expect(source).toContain('setDetailsOpen(true)');
+    expect(source).toContain('aria-label={`${cardTitle} 详情`}');
+    expect(source).toContain("const effectiveActionLabel = config.enabled === false ? '启用' : !isRuntimeActive ? '设为生效' : '禁用'");
+    expect(source).toContain('onClick={handleEffectiveAction}');
+    expect(source).toContain("min-w-[4.5rem]");
+    expect(source).not.toContain('w-36 shrink-0');
+  });
 });

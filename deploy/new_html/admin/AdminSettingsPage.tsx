@@ -2009,7 +2009,7 @@ const ApiConfigEditorModal: React.FC<{
     );
 };
 
-const API_CARD_ACTION_BUTTON_BASE = 'inline-flex h-8 w-36 shrink-0 items-center justify-center gap-1.5 rounded px-3 text-[11px] font-medium leading-none whitespace-nowrap';
+const API_CARD_ACTION_BUTTON_BASE = 'inline-flex h-8 min-w-[4.5rem] shrink-0 items-center justify-center gap-1.5 rounded px-2.5 text-[11px] font-medium leading-none whitespace-nowrap';
 const API_CARD_ACTION_BUTTON_SECONDARY = `${API_CARD_ACTION_BUTTON_BASE} border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60`;
 const API_CARD_ACTION_BUTTON_SUCCESS = `${API_CARD_ACTION_BUTTON_BASE} border border-g75 bg-g50 text-g400 hover:bg-g50 disabled:opacity-60`;
 const API_CARD_ACTION_BUTTON_PRIMARY = `${API_CARD_ACTION_BUTTON_BASE} text-white bg-primary hover:bg-primary-hover disabled:opacity-60`;
@@ -2131,95 +2131,134 @@ const ApiConfigCard: React.FC<{
                     ? '未配置 Key'
                     : configTest.key_source || '';
     const configTestEndpoint = configTestEndpointText(configTest);
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const effectiveActionLabel = config.enabled === false ? '启用' : !isRuntimeActive ? '设为生效' : '禁用';
+    const effectiveActionTitle = config.enabled === false
+        ? '启用此 Key 并设为当前生效配置'
+        : !isRuntimeActive
+            ? '设为当前生效配置'
+            : '禁用当前生效配置';
+    const handleEffectiveAction = () => {
+        if (!isRuntimeActive) {
+            onActivate(config);
+            return;
+        }
+        onToggle(config);
+    };
 
     return (
-        <article className="bg-n0 border border-n40 rounded-md shadow-card p-4 min-w-0">
-            <div className="flex items-start gap-3 min-w-0">
-                <div className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${view.dot}`} title={view.text} />
-                <div className="flex-1 min-w-0">
-                    <div className="flex flex-col gap-3 min-w-0 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="min-w-0 xl:min-w-[18rem] xl:flex-1">
-                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                <h3 className="text-sm font-semibold text-n800 leading-snug break-words">{cardTitle}</h3>
-                                {isRuntimeActive && (
-                                    <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">当前生效 Key</span>
-                                )}
-                                {accessModeMeta && (
-                                    <span className="rounded border border-n40 bg-n20 px-1.5 py-0.5 text-[10px] font-semibold text-n700">
-                                        {accessModeMeta.label || accessMode}
-                                    </span>
-                                )}
-                                {config.api_key_preview && (
-                                    <span className="rounded bg-n20 text-n300 px-1.5 py-0.5 text-[10px] font-mono">{config.api_key_preview}</span>
-                                )}
-                                {!config.enabled && (
-                                    <span className="rounded bg-r50 text-danger px-1.5 py-0.5 text-[10px] font-semibold">禁用</span>
-                                )}
-                                {!configHasKey && !runtimeHasKey && (
-                                    <span className="rounded bg-r50 text-r400 px-1.5 py-0.5 text-[10px] font-semibold">DB 未保存 Key</span>
-                                )}
-                                {!configHasKey && runtimeHasKey && (
-                                    <span className="rounded bg-y50 text-y400 px-1.5 py-0.5 text-[10px] font-semibold">DB 未保存 Key</span>
-                                )}
-                                {runtimeHasKey && !configHasKey && (
-                                    <span className="rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">运行时 Key 可用</span>
-                                )}
-                            </div>
-                            <div className="mt-1 flex items-center gap-2 text-[11px] text-n100 flex-wrap">
-                                <span className="font-mono">{provider}</span>
-                                <span>{modelBindings.length} 个{categoryView ? `${CATEGORY_LABELS[categoryView] || categoryView}` : '操作'}绑定</span>
-                                <span>{meta?.vendor || '-'}</span>
-                            </div>
-                        </div>
+        <>
+        <article className="bg-n0 border border-n40 rounded-md shadow-card px-3 py-2 min-w-0 hover:shadow-atlas hover:border-primary transition-colors">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${view.dot}`} title={view.text} />
+                    <h3 className="truncate text-sm font-semibold text-n800 leading-snug" title={cardTitle}>{cardTitle}</h3>
+                    <HealthBadge status={status} />
+                    {isRuntimeActive && (
+                        <span className="shrink-0 rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold">当前生效 Key</span>
+                    )}
+                    {accessModeMeta && (
+                        <span className="hidden shrink-0 rounded border border-n40 bg-n20 px-1.5 py-0.5 text-[10px] font-semibold text-n700 md:inline-flex">
+                            {accessModeMeta.label || accessMode}
+                        </span>
+                    )}
+                    {config.api_key_preview && (
+                        <span className="hidden shrink-0 rounded bg-n20 text-n300 px-1.5 py-0.5 text-[10px] font-mono md:inline-flex">{config.api_key_preview}</span>
+                    )}
+                    {!config.enabled && (
+                        <span className="shrink-0 rounded bg-r50 text-danger px-1.5 py-0.5 text-[10px] font-semibold">禁用</span>
+                    )}
+                    {!configHasKey && (
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${runtimeHasKey ? 'bg-y50 text-y400' : 'bg-r50 text-r400'}`}>
+                            DB 未保存 Key
+                        </span>
+                    )}
+                    {runtimeHasKey && !configHasKey && (
+                        <span className="hidden shrink-0 rounded bg-g50 text-g400 px-1.5 py-0.5 text-[10px] font-semibold xl:inline-flex">运行时 Key 可用</span>
+                    )}
+                    <span className="hidden shrink-0 text-[11px] text-n100 lg:inline">
+                        {modelBindings.length} 个{categoryView ? `${CATEGORY_LABELS[categoryView] || categoryView}` : '操作'}绑定
+                    </span>
+                    <span className="hidden min-w-0 truncate font-mono text-[11px] text-n100 xl:inline" title={provider}>{provider}</span>
+                </div>
 
-                        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-[repeat(2,9rem)] xl:flex xl:max-w-[48rem] xl:flex-[0_1_48rem] xl:flex-wrap xl:justify-end">
-                            <button
-                                type="button"
-                                onClick={() => onCheck(provider, categoryModelName)}
-                                disabled={checking || !provider}
-                                className={API_CARD_ACTION_BUTTON_SECONDARY}
-                                title="检测当前实际生效的 Key、Endpoint 和模型是否连通"
-                            >
-                                {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                                连通性检测
-                            </button>
-                            {!isRuntimeActive && (
-                                <button
-                                    type="button"
-                                    onClick={() => onActivate(config)}
-                                    disabled={!configHasKey || !config.config_id}
-                                    className={API_CARD_ACTION_BUTTON_SUCCESS}
-                                >
-                                    <KeyRound className="w-3.5 h-3.5" />
-                                    设为生效
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => onEdit(config)}
-                                className={API_CARD_ACTION_BUTTON_PRIMARY}
-                            >
-                                <Edit3 className="w-3.5 h-3.5" />
-                                配置 / 修改 API Key
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => onToggle(config)}
-                                className={API_CARD_ACTION_BUTTON_SECONDARY}
-                            >
-                                {config.enabled === false ? '启用' : '禁用'}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => onDelete(config)}
-                                className={API_CARD_ACTION_BUTTON_DANGER}
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                删除
-                            </button>
+                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    <button
+                        type="button"
+                        onClick={() => setDetailsOpen(true)}
+                        className={API_CARD_ACTION_BUTTON_SECONDARY}
+                    >
+                        <ServerCog className="w-3.5 h-3.5" />
+                        详情
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onCheck(provider, categoryModelName)}
+                        disabled={checking || !provider}
+                        className={API_CARD_ACTION_BUTTON_SECONDARY}
+                        title="检测当前实际生效的 Key、Endpoint 和模型是否连通"
+                    >
+                        {checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        连通性检测
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onEdit(config)}
+                        className={API_CARD_ACTION_BUTTON_PRIMARY}
+                    >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        配置 / 修改 API Key
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleEffectiveAction}
+                        disabled={!config.config_id || (!isRuntimeActive && !configHasKey)}
+                        className={!isRuntimeActive ? API_CARD_ACTION_BUTTON_SUCCESS : API_CARD_ACTION_BUTTON_SECONDARY}
+                        title={effectiveActionTitle}
+                    >
+                        {!isRuntimeActive && <KeyRound className="w-3.5 h-3.5" />}
+                        {effectiveActionLabel}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onDelete(config)}
+                        className={API_CARD_ACTION_BUTTON_DANGER}
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        删除
+                    </button>
+                </div>
+            </div>
+        </article>
+
+        {detailsOpen && (
+            <div
+                className="fixed inset-0 z-[10002] flex items-center justify-center bg-n900/50 backdrop-blur-sm p-4"
+                onClick={() => setDetailsOpen(false)}
+            >
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`${cardTitle} 详情`}
+                    className="w-full max-w-5xl max-h-[86vh] overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between gap-3 border-b border-n40 bg-n30 px-4 py-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${view.dot}`} />
+                            <h3 className="truncate text-sm font-semibold text-n800">{cardTitle}</h3>
+                            <HealthBadge status={status} />
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setDetailsOpen(false)}
+                            className="rounded p-1 text-n100 hover:bg-n20 hover:text-n800"
+                            aria-label="关闭详情"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
                     </div>
-
+                    <div className="max-h-[calc(86vh-4rem)] overflow-y-auto p-4">
                     {compactInactive ? (
                         <div className="mt-2 rounded bg-n20 border border-n40 px-3 py-2 text-[11px] text-n100">
                             <span className="font-semibold text-n700">已折叠</span>
@@ -2435,9 +2474,11 @@ const ApiConfigCard: React.FC<{
                     <ProviderCredentialLinks meta={meta} endpoint={runtimeEndpoint || dbEndpoint} />
                         </>
                     )}
+                    </div>
                 </div>
             </div>
-        </article>
+        )}
+        </>
     );
 };
 
