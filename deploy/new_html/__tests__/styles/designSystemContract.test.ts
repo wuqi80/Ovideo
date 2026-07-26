@@ -137,7 +137,9 @@ describe('Webflow design-system contract', () => {
     expect(appHtml).toContain('/static/favicon.ico');
     expect(loginHtml).toContain('/static/favicon.ico');
     expect(loginHtml).toContain('/static/branding/mecha-one-mark.png');
-    expect(loginHtml).toContain('MECHA<span class="brand-dot">.</span>ONE');
+    expect(loginHtml).toContain('<div class="brand-name">MECHA</div>');
+    expect(loginHtml).toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');
+    expect(loginHtml).not.toContain('MECHA<span class="brand-dot">.</span>ONE');
   });
 
   it('keeps project and episode hubs on the shared centered media-library shell', () => {

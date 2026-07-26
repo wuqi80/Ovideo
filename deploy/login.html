@@ -6,7 +6,7 @@
     <link rel="icon" href="/static/favicon.ico" sizes="any" />
     <link rel="icon" href="/static/favicon-32x32.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
-    <title>MECHA.ONE - 登录</title>
+    <title>MECHA - 登录</title>
     <style>
         :root {
             --n0: #FFFFFF;
@@ -130,12 +130,16 @@
         }
 
         .brand-panel .logo {
-            filter: drop-shadow(0 0 1px rgba(255,255,255,0.95)) drop-shadow(0 2px 5px rgba(8,8,8,0.28));
-        }
-
-        .brand-panel .brand-dot {
-            -webkit-text-stroke: 1px rgba(255,255,255,0.95);
-            paint-order: stroke fill;
+            filter:
+                drop-shadow(2px 0 0 rgba(255,255,255,0.98))
+                drop-shadow(-2px 0 0 rgba(255,255,255,0.98))
+                drop-shadow(0 2px 0 rgba(255,255,255,0.98))
+                drop-shadow(0 -2px 0 rgba(255,255,255,0.98))
+                drop-shadow(1.4px 1.4px 0 rgba(255,255,255,0.98))
+                drop-shadow(-1.4px 1.4px 0 rgba(255,255,255,0.98))
+                drop-shadow(1.4px -1.4px 0 rgba(255,255,255,0.98))
+                drop-shadow(-1.4px -1.4px 0 rgba(255,255,255,0.98))
+                drop-shadow(0 2px 5px rgba(8,8,8,0.28));
         }
 
         .brand-content {
@@ -424,10 +428,10 @@
 </head>
 <body>
     <main class="shell">
-        <section class="brand-panel" aria-label="MECHA.ONE 创作平台">
+        <section class="brand-panel" aria-label="MECHA 创作平台">
             <div class="brand-top">
                 <img class="logo" src="/static/branding/mecha-one-mark.png" alt="" />
-                <div class="brand-name">MECHA<span class="brand-dot">.</span>ONE</div>
+                <div class="brand-name">MECHA</div>
             </div>
 
             <div class="brand-content">
@@ -464,14 +468,14 @@
                 </div>
             </div>
 
-            <div class="brand-footer">© 2026 MECHA.ONE · Innovative Technology &amp; Design</div>
+            <div class="brand-footer">© 2026 MECHA · Innovative Technology &amp; Design</div>
         </section>
 
         <section class="login-panel">
             <div class="login-card">
                 <div class="mobile-brand">
                     <img class="logo" src="/static/branding/mecha-one-mark.png" alt="" />
-                    <div class="brand-name">MECHA<span class="brand-dot">.</span>ONE</div>
+                    <div class="brand-name">MECHA</div>
                 </div>
 
                 <h2>欢迎回来</h2>
