@@ -6,6 +6,7 @@ import logging
 import queue
 import threading
 from typing import Any, Callable, Dict, Iterator, List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from services.ai_proxy_http_client import _ensure_stream_response_ok, _post_stream_request
 from services.ai_proxy_types import AIProxyConfigError, AIProxyError
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 MINIMAX_SYSTEM_PROMPT = "You are a helpful assistant for storyboard generation tasks."
 MINIMAX_KEEPALIVE_SECONDS = 5.0
+MINIMAX_MAX_OUTPUT_TOKENS = 16384
 
 
 def _resolve_minimax_config(model: Optional[str] = None) -> Any:
@@ -44,14 +46,12 @@ def build_minimax_payload(
 ) -> Dict[str, Any]:
     return {
         "model": model,
-        "messages": [
-            {"role": "system", "content": MINIMAX_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
+        "max_tokens": MINIMAX_MAX_OUTPUT_TOKENS,
+        "system": MINIMAX_SYSTEM_PROMPT,
+        "messages": [{"role": "user", "content": prompt}],
         "stream": stream,
         "temperature": temperature,
-        "thinking": {"type": "adaptive"},
-        "reasoning_split": True,
+        "thinking": {"type": "disabled"},
     }
 
 
@@ -59,12 +59,32 @@ def _sse_event(payload: Dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
+def minimax_anthropic_messages_url(endpoint: str) -> str:
+    """Normalize a MiniMax provider endpoint to the official Anthropic Messages API."""
+    raw = (endpoint or "").strip().rstrip("/")
+    parsed = urlsplit(raw)
+    path = parsed.path.rstrip("/")
+    for suffix in (
+        "/anthropic/v1/messages",
+        "/anthropic/v1",
+        "/anthropic",
+        "/v1/chat/completions",
+        "/v1",
+    ):
+        if path.lower().endswith(suffix):
+            path = path[: -len(suffix)]
+            break
+    normalized_path = f"{path}/anthropic/v1/messages"
+    return urlunsplit((parsed.scheme, parsed.netloc, normalized_path, parsed.query, ""))
+
+
 def _minimax_chat_url(model: Optional[str]) -> tuple[str, Dict[str, Any], str]:
     config = _resolve_minimax_config(model)
     resolved_model = config.model_name or MINIMAX_M3_MODEL
-    return config.url_for_operation("chat_completions"), {
+    return minimax_anthropic_messages_url(config.endpoint), {
         "headers": {
-            "Authorization": f"Bearer {config.api_key}",
+            "X-Api-Key": config.api_key,
+            "Anthropic-Version": "2023-06-01",
             "Content-Type": "application/json",
         },
         **config.requests_kwargs(),
@@ -132,8 +152,6 @@ def stream_minimax_chat(
                     break
                 try:
                     chunk = json.loads(data)
-                    choices = chunk.get("choices") or []
-                    delta = (choices[0].get("delta") or {}) if choices else {}
                 except Exception as exc:
                     logger.warning(
                         "MiniMax stream chunk parse failed: %s | data=%s",
@@ -142,15 +160,28 @@ def stream_minimax_chat(
                     )
                     continue
 
-                reasoning_content = delta.get("reasoning_content")
-                if isinstance(reasoning_content, str) and reasoning_content:
+                if chunk.get("type") == "error":
+                    error = chunk.get("error") or {}
+                    stream_error = str(
+                        error.get("message")
+                        if isinstance(error, dict)
+                        else error
+                    )[:200] or "MiniMax 返回错误"
+                    break
+                if chunk.get("type") == "message_stop":
+                    break
+
+                delta = chunk.get("delta") or {}
+                delta_type = str(delta.get("type") or "")
+                reasoning_content = delta.get("thinking")
+                if delta_type == "thinking_delta" and isinstance(reasoning_content, str) and reasoning_content:
                     event_queue.put((
                         "event",
                         _sse_event({"type": "reasoning", "content": reasoning_content}),
                     ))
 
-                content_piece = delta.get("content")
-                if isinstance(content_piece, str) and content_piece:
+                content_piece = delta.get("text")
+                if delta_type == "text_delta" and isinstance(content_piece, str) and content_piece:
                     full_content.append(content_piece)
                     event_queue.put((
                         "event",

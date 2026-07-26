@@ -329,7 +329,7 @@ def create_generation_router(
                 "requested_workflow_type": "i2i_around",
             }
             _attach_entity_fields(task_data, request)
-            effective_task_type = qwen_fallback_task_type(1)
+            effective_task_type = "i2i_around"
             task_id = await task_service_module.get().submit(effective_task_type, task_data, username)
             logger.info(
                 "✅ 创建全景角度生成任务: %s (图片: %s, 提示词: %s...)",
@@ -343,7 +343,7 @@ def create_generation_router(
                 "task_id": task_id,
                 "workflow_type": effective_task_type,
                 "requested_workflow_type": "i2i_around",
-                "fallback_applied": True,
+                "fallback_applied": False,
                 "message": "全景角度生成任务已提交",
             }
 

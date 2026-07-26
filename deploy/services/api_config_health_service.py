@@ -13,6 +13,7 @@ import aiohttp
 from services.ai_proxy_doubao_image_service import (
     parse_doubao_image_task_response,
 )
+from services.ai_proxy_minimax_text_service import minimax_anthropic_messages_url
 from dao.admin.system_settings import SystemSettingsDAO
 from services.api_provider_endpoints import dedupe_urls, derive_models_health_urls
 from services.api_provider_registry import (
@@ -283,7 +284,14 @@ def _headers_for_generation(provider: str, endpoint: str, api_key: str, extra_he
     if isinstance(raw, dict):
         headers.update({str(k): str(v) for k, v in raw.items()})
     headers.setdefault("Content-Type", "application/json")
-    if uses_google_api_key_header(provider, endpoint):
+    normalized = normalize_provider(provider)
+    if normalized == "minimax" and "/anthropic/" in endpoint.lower():
+        for key in list(headers.keys()):
+            if key.lower() in {"authorization", "x-api-key", "anthropic-version"}:
+                del headers[key]
+        headers["X-Api-Key"] = api_key
+        headers["Anthropic-Version"] = "2023-06-01"
+    elif uses_google_api_key_header(provider, endpoint):
         headers["x-goog-api-key"] = api_key
     else:
         for key in list(headers.keys()):
@@ -369,6 +377,20 @@ def _has_chat_content(payload: Any) -> bool:
         return False
     message = (choices[0] or {}).get("message") or {}
     return bool(message.get("content") or message.get("reasoning_content"))
+
+
+def _has_anthropic_text_content(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return False
+    return any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and bool(block.get("text"))
+        for block in content
+    )
 
 
 def _has_minimax_audio_data(payload: Any) -> bool:
@@ -575,7 +597,6 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
     if normalized in TEXT_GENERATION_TEST_PROVIDERS or (
         normalized == "minimax" and category == "text"
     ):
-        url = _join_api_url(endpoint, get_provider_api_path(normalized, "chat_completions"))
         requested_model = model or (
             "deepseek-reasoner"
             if normalized == "deepseek"
@@ -588,6 +609,17 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             if normalized == "deepseek"
             else requested_model
         )
+        if normalized == "minimax":
+            return minimax_anthropic_messages_url(endpoint), {
+                "model": resolved_model,
+                "max_tokens": 32,
+                "messages": [{"role": "user", "content": "Please reply with the word OK only."}],
+                "temperature": 0,
+                "stream": False,
+                "thinking": {"type": "disabled"},
+            }, "text"
+
+        url = _join_api_url(endpoint, get_provider_api_path(normalized, "chat_completions"))
         payload = {
             "model": resolved_model,
             "messages": [{"role": "user", "content": "Please reply with the word OK only."}],
@@ -601,10 +633,6 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             payload["thinking"] = {
                 "type": "enabled" if resolved_model == "deepseek-v4-pro" else "disabled"
             }
-        elif normalized == "minimax":
-            payload["max_completion_tokens"] = 32
-            payload["thinking"] = {"type": "disabled"}
-            payload["reasoning_split"] = True
         else:
             payload["max_tokens"] = 32
         return url, payload, "text"
@@ -697,7 +725,7 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
 
 def _real_generation_response_ok(output_type: str, payload: Any) -> bool:
     if output_type == "text":
-        return _has_chat_content(payload)
+        return _has_chat_content(payload) or _has_anthropic_text_content(payload)
     if output_type == "audio":
         return _has_gemini_inline_data(payload) or _has_minimax_audio_data(payload)
     if output_type == "image":
@@ -801,7 +829,7 @@ async def test_api_config_real_generation(
         )
     effective_model_name = str(body.get("model") or model_name) if isinstance(body, dict) else model_name
 
-    headers = _headers_for_generation(normalized, endpoint, api_key, row.get("headers"))
+    headers = _headers_for_generation(normalized, url, api_key, row.get("headers"))
     proxy = await resolve_proxy_for_request(
         str(row.get("proxy_mode") or "direct"),
         str(row.get("custom_proxy") or ""),

@@ -3117,8 +3117,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const handleSplitScript = useCallback(async (targetFileId?: string) => {
     // 🔧 通过 filesRef 读取，链式 pipeline 同一异步内可见上一阶段 setFiles 的结果
     const file = filesRef.current.find(f => f.id === (targetFileId || selectedFileId));
-    if (!file) return;
-    if (!file.originalContent?.trim()) { alert('请先在左栏粘贴原文文案'); return; }
+    if (!file) return false;
+    if (!file.originalContent?.trim()) { alert('请先在左栏粘贴原文文案'); return false; }
 
     setStage(file.id, 'split', { status: 'running', errorMessage: '' });
     try {
@@ -3131,6 +3131,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         entityType: 'episode_script',
         entityId: file.id,
       });
+      if (segments.length === 0) {
+        throw new Error('模型未返回可用的剧本分段');
+      }
       const applySegs = (arr: ProjectFile[]) => arr.map(f => f.id === file.id ? { ...f, scriptSegments: segments } : f);
       setFiles(applySegs);
       filesRef.current = applySegs(filesRef.current); // 同步镜像，供下一阶段立即读取
@@ -3139,9 +3142,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         segment_order: idx, source_text: s.sourceText,
         estimated_duration_sec: s.estimatedDurationSec, status: 'done',
       }))).catch(e => console.warn('保存分段失败:', e));
+      return true;
     } catch (e) {
       setStage(file.id, 'split', { status: 'error', errorMessage: (e as Error).message });
       alert(`拆分剧本失败: ${(e as Error).message}`);
+      return false;
     }
   }, [selectedFileId, aiModel, propEpisodeId, setStage, urlProjectId]);
 
@@ -3312,7 +3317,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     }
     // 各阶段内部已改为读取 filesRef.current，并在 setFiles 后同步镜像，
     // 因此同一异步运行内 Stage1→2→3 能看到上一阶段写入的 scriptSegments / videoScript。
-    if (!hasSegments) await handleSplitScript(file.id);
+    if (!hasSegments) {
+      const splitOk = await handleSplitScript(file.id);
+      if (!splitOk) return;
+    }
     const videoScriptOk = await handleGenerateVideoScript(file.id);
     if (!videoScriptOk) return;
     await handleExtractStoryboardPrompts(file.id);

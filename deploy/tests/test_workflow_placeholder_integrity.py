@@ -19,12 +19,6 @@ KNOWN_INCOMPLETE_WORKFLOWS = {
     "turbo22_i2v",
     "turbo21_i2v",
     "svdwan_i2v",
-    "qwenN_1",
-    "qwenN_2",
-    "qwenN_3",
-    "qwenN_4",
-    "qwenN_5",
-    "qwenN_6",
     "three_view",
 }
 
@@ -122,6 +116,21 @@ def test_gpu1_angle_template_uses_verified_models_and_safe_canvas_width():
         "Qwen/Qwen-Edit-2509-Multiple-angles.safetensors"
     )
     assert workflow["121"]["inputs"]["width"] == 1920
+
+
+def test_gpu1_around_template_is_a_full_angle_generation_workflow():
+    workflow_dir = Path(__file__).resolve().parents[1] / "workflows"
+    workflow = json.loads((workflow_dir / "I2I_Around.json").read_text(encoding="utf-8"))
+
+    assert workflow["37"]["inputs"]["unet_name"] == (
+        "qwen/qwen_image_edit_2509_fp8_e4m3fn.safetensors"
+    )
+    assert workflow["119"]["inputs"]["lora_name"] == (
+        "Qwen/Qwen-Edit-2509-Multiple-angles.safetensors"
+    )
+    assert workflow["78"]["inputs"]["image"] == "{image}"
+    assert workflow["111"]["inputs"]["prompt"] == "{prompt}"
+    assert workflow["3"]["inputs"]["seed"] == "{seed}"
 
 
 def test_gpu1_upscale_template_uses_verified_tiled_graph_and_4k_target():

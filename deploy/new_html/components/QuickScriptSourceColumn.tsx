@@ -13,7 +13,7 @@ interface QuickScriptSourceColumnProps {
   onDismissError: () => void;
   onChangeModel: (model: AiModel) => void;
   onUpdateSource: (fileId: string, content: string) => void;
-  onSplitScript: (fileId: string) => Promise<void>;
+  onSplitScript: (fileId: string) => Promise<boolean | void>;
   onGenerateVideoScript: (fileId: string) => Promise<boolean | void>;
   onExtractStoryboardPrompts: (fileId: string) => Promise<boolean | void>;
   onRunThreeStage: (fileId: string) => Promise<void>;

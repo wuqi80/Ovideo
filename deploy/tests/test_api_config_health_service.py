@@ -111,11 +111,11 @@ def test_minimax_m3_real_generation_uses_low_cost_text_probe() -> None:
         },
     )
 
-    assert url == "https://api.minimaxi.com/v1/chat/completions"
+    assert url == "https://api.minimaxi.com/anthropic/v1/messages"
     assert body["model"] == "MiniMax-M3"
     assert body["thinking"] == {"type": "disabled"}
-    assert body["reasoning_split"] is True
-    assert body["max_completion_tokens"] == 32
+    assert body["max_tokens"] == 32
+    assert body["messages"] == [{"role": "user", "content": "Please reply with the word OK only."}]
     assert body["stream"] is False
     assert output_type == "text"
 
@@ -383,6 +383,75 @@ def test_generation_headers_replace_stale_authorization() -> None:
     assert headers["Authorization"] == "Bearer fresh-key"
     assert headers["X-Custom"] == "1"
     assert "authorization" not in {key.lower(): key for key in headers if key != "Authorization"}
+
+
+def test_minimax_anthropic_generation_headers_use_x_api_key() -> None:
+    headers = _headers_for_generation(
+        "minimax",
+        "https://api.minimaxi.com/anthropic/v1/messages",
+        "fresh-key",
+        {"Authorization": "stale", "X-Api-Key": "stale"},
+    )
+
+    assert headers["X-Api-Key"] == "fresh-key"
+    assert headers["Anthropic-Version"] == "2023-06-01"
+    assert "authorization" not in {key.lower() for key in headers}
+
+
+def test_minimax_anthropic_generation_response_detection() -> None:
+    assert _real_generation_response_ok(
+        "text",
+        {"content": [{"type": "text", "text": "OK"}]},
+    )
+    assert not _real_generation_response_ok(
+        "text",
+        {"content": [{"type": "thinking", "thinking": "OK"}]},
+    )
+
+
+@pytest.mark.asyncio
+async def test_minimax_real_generation_posts_anthropic_request_and_accepts_text() -> None:
+    calls = []
+
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def text(self):
+            return '{"content":[{"type":"text","text":"OK"}]}'
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return FakeResponse()
+
+    result = await run_api_config_real_generation(
+        {
+            "provider": "minimax",
+            "endpoint": "https://api.minimaxi.com/v1",
+            "model_name": "MiniMax-M3",
+            "category": "text",
+        },
+        "test-key",
+        session_factory=lambda **_kwargs: FakeSession(),
+    )
+
+    assert result["test"]["ok"] is True
+    assert result["test"]["url"] == "https://api.minimaxi.com/anthropic/v1/messages"
+    assert calls[0][1]["headers"]["X-Api-Key"] == "test-key"
+    assert calls[0][1]["json"]["model"] == "MiniMax-M3"
+    assert calls[0][1]["json"]["stream"] is False
 
 
 def test_minimax_base_resp_error_is_actionable_for_token_plan() -> None:

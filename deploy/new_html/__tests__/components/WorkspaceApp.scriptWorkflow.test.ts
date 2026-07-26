@@ -84,6 +84,9 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('const handleGenerateVideoScript = useCallback');
     expect(source).toContain('const handleExtractStoryboardPrompts = useCallback');
     expect(source).toContain('const handleRunThreeStagePipeline = useCallback');
+    expect(source).toContain('const splitOk = await handleSplitScript(file.id)');
+    expect(source).toContain('if (!splitOk) return;');
+    expect(source).toContain("throw new Error('模型未返回可用的剧本分段')");
     expect(source).toContain('onRunThreeStage={handleRunThreeStagePipeline}');
     expect(source).not.toContain('handleQuickThreeStageGenerate');
   });

@@ -420,9 +420,14 @@ WORKFLOW_CONFIGS = {
         name='全景角度生成',
         file='I2I_Around.json',
         description='基于单张参考图生成全景/环绕角度结果',
-        placeholders=['image'],
+        placeholders=['image', 'prompt', 'seed'],
         param_mapping={
-            'image_data': 'image'
+            'image_data': 'image',
+            'prompt': 'prompt',
+            'seed': 'seed'
+        },
+        default_params={
+            'seed': -1
         }
     ),
 
@@ -576,9 +581,9 @@ WORKFLOW_CONFIGS = {
         name='K神图像生成(1张)',
         file='qwenN_1.json',
         description='基于K神模型的高质量图像生成(1张参考图)',
-        placeholders=['image', 'prompt', 'seed'],
+        placeholders=['image_1', 'prompt', 'seed'],
         param_mapping={
-            'image_data': 'image',
+            'image_1': 'image_1',
             'prompt': 'prompt',
             'seed': 'seed'
         },

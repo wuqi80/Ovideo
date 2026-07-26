@@ -104,7 +104,7 @@ def check_workflow_handler() -> None:
         ("qwen_1", {"image_path_1": "a.png", "uploaded_image_1": "a.png", "prompt": "make image", "seed": 1}, True),
         ("qwen_lora_1", {"image_path_1": "a.png", "uploaded_image_1": "a.png", "prompt": "make image", "seed": 1}, True),
         ("qwenN_lora_1", {"image_path_1": "a.png", "uploaded_image_1": "a.png", "prompt": "make image", "seed": 1}, False),
-        ("qwenN_1", {"image_path_1": "a.png", "uploaded_image_1": "a.png", "prompt": "make image", "seed": 1}, False),
+        ("qwenN_1", {"image_path_1": "a.png", "uploaded_image_1": "a.png", "prompt": "make image", "seed": 1}, True),
         ("three_view", {"image_path": "sample.png", "uploaded_image": "sample.png", "seed": 1}, False),
     ]
 

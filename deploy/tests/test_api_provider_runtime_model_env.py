@@ -388,6 +388,20 @@ class _DeepseekStreamResponse:
         self.closed = True
 
 
+class _AnthropicStreamResponse(_DeepseekStreamResponse):
+    def iter_lines(self, decode_unicode=True):
+        return iter(
+            [
+                'event: message_start',
+                'data: {"type":"message_start","message":{"id":"msg_test"}}',
+                'event: content_block_delta',
+                'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"stream ok"}}',
+                'event: message_stop',
+                'data: {"type":"message_stop"}',
+            ]
+        )
+
+
 class _DoubaoResponse:
     status_code = 200
     text = ""
@@ -1326,7 +1340,7 @@ def test_minimax_m3_stream_uses_token_plan_compatible_runtime_request(monkeypatc
     m3_env = get_minimax_operation_model_env_key("minimax-m3")
     calls = []
     completed = []
-    response = _DeepseekStreamResponse()
+    response = _AnthropicStreamResponse()
 
     monkeypatch.setenv(env_key, "test-minimax-plan-key")
     monkeypatch.setenv(endpoint_env, "https://api.minimaxi.com/v1")
@@ -1346,16 +1360,34 @@ def test_minimax_m3_stream_uses_token_plan_compatible_runtime_request(monkeypatc
         )
     )
 
-    assert calls[0]["url"] == "https://api.minimaxi.com/v1/chat/completions"
-    assert calls[0]["headers"]["Authorization"] == "Bearer test-minimax-plan-key"
+    assert calls[0]["url"] == "https://api.minimaxi.com/anthropic/v1/messages"
+    assert calls[0]["headers"]["X-Api-Key"] == "test-minimax-plan-key"
+    assert calls[0]["headers"]["Anthropic-Version"] == "2023-06-01"
     assert calls[0]["json"]["model"] == "MiniMax-M3"
-    assert calls[0]["json"]["thinking"] == {"type": "adaptive"}
-    assert calls[0]["json"]["reasoning_split"] is True
+    assert calls[0]["json"]["thinking"] == {"type": "disabled"}
+    assert calls[0]["json"]["max_tokens"] == 16384
+    assert calls[0]["json"]["system"] == ai_proxy_service.MINIMAX_SYSTEM_PROMPT
+    assert calls[0]["json"]["messages"] == [{"role": "user", "content": "hello"}]
     assert calls[0]["json"]["stream"] is True
     assert any('"content": "stream ok"' in event for event in events)
     assert events[-1] == "data: [DONE]\n\n"
     assert completed == ["stream ok"]
     assert response.closed is True
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://api.minimaxi.com/v1",
+        "https://api.minimaxi.com/anthropic",
+        "https://api.minimaxi.com/anthropic/v1",
+        "https://api.minimaxi.com/anthropic/v1/messages",
+    ],
+)
+def test_minimax_m3_anthropic_endpoint_normalization(endpoint):
+    assert ai_proxy_minimax_text_service.minimax_anthropic_messages_url(endpoint) == (
+        "https://api.minimaxi.com/anthropic/v1/messages"
+    )
 
 
 def test_minimax_m3_stream_sends_keepalive_while_waiting_for_first_upstream_byte(monkeypatch):
@@ -1365,7 +1397,7 @@ def test_minimax_m3_stream_sends_keepalive_while_waiting_for_first_upstream_byte
     m3_env = get_minimax_operation_model_env_key("minimax-m3")
     request_started = threading.Event()
     release_request = threading.Event()
-    response = _DeepseekStreamResponse()
+    response = _AnthropicStreamResponse()
 
     monkeypatch.setenv(env_key, "test-minimax-plan-key")
     monkeypatch.setenv(endpoint_env, "https://api.minimaxi.com/v1")
@@ -1398,10 +1430,10 @@ def test_minimax_m3_stream_does_not_complete_after_a_partial_upstream_failure(mo
     m3_env = get_minimax_operation_model_env_key("minimax-m3")
     completed = []
     failures = []
-    response = _DeepseekStreamResponse()
+    response = _AnthropicStreamResponse()
 
     def broken_lines(decode_unicode=True):
-        yield 'data: {"choices":[{"delta":{"content":"partial"}}]}'
+        yield 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}'
         raise RuntimeError("upstream disconnected")
 
     response.iter_lines = broken_lines

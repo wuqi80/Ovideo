@@ -444,6 +444,26 @@ def test_gpu2_angle_adjustment_does_not_require_private_angle_lora():
     assert lora_names == {GPU2_QWEN_MODEL_FILES["lora"]}
 
 
+def test_gpu2_around_angle_rewrites_canonical_task_to_low_vram_qwen():
+    prepared = prepare_gpu2_task(
+        {
+            "task_type": "i2i_around",
+            "params": {
+                "image_path": "scene.png",
+                "prompt": "rotate to the rear-right quarter view",
+                "seed": 123,
+            },
+        }
+    )
+
+    assert prepared["workflow_name"] == "gpu2_i2i_around_qwen_fp8"
+    assert prepared["workflow_json"]["37"]["inputs"]["unet_name"] == (
+        GPU2_QWEN_MODEL_FILES["diffusion"]
+    )
+    assert prepared["workflow_json"]["201"]["inputs"]["image"] == "scene.png"
+    assert "rear-right quarter view" in prepared["workflow_json"]["111"]["inputs"]["prompt"]
+
+
 def test_gpu2_qwen_workflow_uses_fp8_models_and_single_batch():
     original = {
         "37": {
