@@ -8,7 +8,12 @@ from external_api.video import seedance as seedance_video
 from external_api.video import sora2 as sora2_video
 from external_api.video import veo as veo_video
 from external_api.video import wan2 as wan2_video
-from services import ai_proxy_http_client, ai_proxy_service, video_reverse_service
+from services import (
+    ai_proxy_gemini_text_service,
+    ai_proxy_http_client,
+    ai_proxy_service,
+    video_reverse_service,
+)
 from services.ai_proxy_types import GptImageReferenceInput
 from services.api_provider_registry import (
     SEEDANCE_AGENT_PLAN_ENDPOINT,
@@ -1348,6 +1353,78 @@ def test_minimax_m3_stream_uses_token_plan_compatible_runtime_request(monkeypatc
     assert events[-1] == "data: [DONE]\n\n"
     assert completed == ["stream ok"]
     assert response.closed is True
+
+
+def test_gemini_text_stream_uses_shared_runtime_request(monkeypatch):
+    env_key = get_provider_env_key("gemini-text")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    calls = []
+    completed = []
+    response = _DeepseekStreamResponse()
+
+    monkeypatch.setenv(env_key, "test-gemini-key")
+    monkeypatch.setenv(endpoint_env, "https://text-runtime.example.test/v1")
+    monkeypatch.setenv(model_env, "gemini-stream-runtime-model")
+
+    def fake_post(url, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return response
+
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
+
+    events = list(
+        ai_proxy_service.stream_gemini_text(
+            prompt="hello",
+            system_prompt="system",
+            temperature=0.4,
+            on_complete=completed.append,
+        )
+    )
+
+    assert calls[0]["url"] == "https://text-runtime.example.test/v1/chat/completions"
+    assert calls[0]["headers"]["Authorization"] == "Bearer test-gemini-key"
+    assert calls[0]["json"]["model"] == "gemini-stream-runtime-model"
+    assert calls[0]["json"]["stream"] is True
+    assert calls[0]["json"]["messages"] == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "hello"},
+    ]
+    assert any('"content": "stream ok"' in event for event in events)
+    assert events[-1] == "data: [DONE]\n\n"
+    assert completed == ["stream ok"]
+    assert response.closed is True
+
+
+@pytest.mark.asyncio
+async def test_gemini_text_stream_resolver_preserves_provider_failover(monkeypatch):
+    env_key = get_provider_env_key("deepseek")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    monkeypatch.setenv(env_key, "fallback-deepseek-key")
+    monkeypatch.setenv(endpoint_env, "https://fallback.example.test/v1")
+    fallback_config = resolve_provider("deepseek", "deepseek-chat")
+
+    async def fake_resolve(provider, model=None):
+        assert provider == "gemini-text"
+        return fallback_config, {
+            "active": True,
+            "requested_provider": "gemini-text",
+            "selected_provider": "deepseek",
+        }
+
+    monkeypatch.setattr(
+        ai_proxy_gemini_text_service,
+        "resolve_ai_proxy_provider",
+        fake_resolve,
+    )
+
+    resolved = await ai_proxy_service.resolve_gemini_stream_config()
+
+    assert resolved.provider == "deepseek"
+    assert resolved.api_key == "fallback-deepseek-key"
+    assert resolved.endpoint == "https://fallback.example.test/v1"
 
 
 @pytest.mark.asyncio

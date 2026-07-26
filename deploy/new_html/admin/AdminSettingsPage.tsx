@@ -2061,6 +2061,10 @@ const ApiConfigCard: React.FC<{
         config.provider,
         categoryView,
     ) as ApiModelBinding[];
+    const categoryModelName = modelBindings[0]?.model_name
+        || config.model_name
+        || runtime?.runtime_model_name
+        || null;
     const runtimeHasKey = typeof runtime?.has_key === 'boolean' ? runtime.has_key : Boolean(config.has_key ?? config.api_key_encrypted);
     const configHasKey = Boolean(config.has_key ?? config.api_key_encrypted);
     const status = mergedHealthStatus(health, runtime, runtimeHasKey, configTest);
@@ -2171,7 +2175,7 @@ const ApiConfigCard: React.FC<{
                         <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-[repeat(2,9rem)] xl:flex xl:max-w-[48rem] xl:flex-[0_1_48rem] xl:flex-wrap xl:justify-end">
                             <button
                                 type="button"
-                                onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
+                                onClick={() => onCheck(provider, categoryModelName)}
                                 disabled={checking || !provider}
                                 className={API_CARD_ACTION_BUTTON_SECONDARY}
                                 title="检测当前实际生效的 Key、Endpoint 和模型是否连通"
@@ -2262,7 +2266,7 @@ const ApiConfigCard: React.FC<{
                                     Endpoint: <span className="font-mono text-n700 break-all">{sourceText(runtime?.endpoint_source, runtime?.endpoint_env)}</span>
                                 </div>
                                 <div className="min-w-0">
-                                    Model: <span className="font-mono text-n700 break-all">{runtime?.runtime_model_name || config.model_name || '-'}</span>
+                                    Model: <span className="font-mono text-n700 break-all">{runtime?.runtime_model_name || categoryModelName || '-'}</span>
                                 </div>
                                 <div className="min-w-0">
                                     Model source: <span className="font-mono text-n700 break-all">{sourceText(runtime?.model_source, runtime?.model_env || undefined)}</span>
@@ -2374,7 +2378,7 @@ const ApiConfigCard: React.FC<{
                             </button>
                             <button
                                 type="button"
-                                onClick={() => onCheck(provider, config.model_name || runtime?.runtime_model_name || null)}
+                                onClick={() => onCheck(provider, categoryModelName)}
                                 disabled={checking || !provider}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[11px] font-medium border border-n40 bg-n0 text-n700 hover:bg-n20 disabled:opacity-60"
                                 title="检测实际生成调用会使用的生效 Key、Endpoint 和模型"
@@ -4271,14 +4275,21 @@ const ApiConfigPanel: React.FC = () => {
                                             || bestConfigForProvider(providerConfigs, provider, providerRuntime)?.config_id
                                             || '';
                                         const runtime = runtimeForConfig(config);
-                                        const modelName = config.model_name || runtime?.runtime_model_name || null;
+                                        const categoryBinding = bindingsForCategory(
+                                            apiConfigModelBindings(config, providerMetaMap.get(provider)),
+                                            config.provider,
+                                            activeCategory,
+                                        )[0];
+                                        const modelNameHint = categoryBinding?.model_name || config.model_name || null;
+                                        const categoryRuntime = runtimeForProviderModel(provider, modelNameHint) || runtime;
+                                        const modelName = modelNameHint || categoryRuntime?.runtime_model_name || null;
                                         return (
                                             <ApiConfigCard
                                                 key={`${activeCategory}:${config.config_id}`}
                                                 config={config}
                                                 categoryView={activeCategory}
                                                 meta={providerMetaMap.get(provider)}
-                                                runtime={runtime}
+                                                runtime={categoryRuntime}
                                                 health={providerHealthFrom(healthMap, provider, modelName)}
                                                 configTest={configTestMap[config.config_id]}
                                                 checking={Boolean(checking[providerHealthKey(provider, modelName)])}

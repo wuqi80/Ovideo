@@ -22,6 +22,8 @@ from services.ai_proxy_gemini_text_service import (
     generate_gemini_chat_result,
     generate_gemini_text,
     generate_gemini_text_result,
+    resolve_gemini_stream_config,
+    stream_gemini_text,
 )
 from services.ai_proxy_minimax_text_service import (
     MINIMAX_M3_OPERATION,

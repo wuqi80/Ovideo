@@ -1,16 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiJson = vi.fn();
+const apiFetch = vi.fn();
 
 vi.mock('../../services/httpClient', () => ({
+  apiFetch: (...args: any[]) => apiFetch(...args),
   apiJson: (...args: any[]) => apiJson(...args),
 }));
 
-import { callGeminiProxy } from '../../services/geminiProxyService';
+import { callGeminiProxy, callGeminiProxyStream } from '../../services/geminiProxyService';
+
+const makeSseResponse = (body: string) => new Response(body, {
+  status: 200,
+  headers: { 'content-type': 'text/event-stream' },
+});
 
 describe('geminiProxyService task context', () => {
   beforeEach(() => {
     apiJson.mockReset();
+    apiFetch.mockReset();
     apiJson.mockResolvedValue({ content: 'ok' });
   });
 
@@ -34,5 +42,29 @@ describe('geminiProxyService task context', () => {
       source_item_id: 'script_1',
       model: 'gemini-model',
     });
+  });
+
+  it('streams script text from the dedicated Gemini endpoint without full-request retries', async () => {
+    apiFetch.mockResolvedValue(makeSseResponse([
+      'data: {"type":"content","content":"分段01"}',
+      '',
+      'data: {"type":"content","content":"\\n镜头01"}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n')));
+    const chunks: string[] = [];
+
+    await expect(callGeminiProxyStream(
+      'prompt',
+      'system',
+      undefined,
+      { operation: 'storyboard_script_generate', sourceItemId: 'script_1' },
+      chunk => chunks.push(chunk),
+    )).resolves.toBe('分段01\n镜头01');
+
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+    expect(apiFetch.mock.calls[0][0]).toBe('/api/gemini/text/stream');
+    expect(chunks).toEqual(['分段01', '\n镜头01']);
   });
 });

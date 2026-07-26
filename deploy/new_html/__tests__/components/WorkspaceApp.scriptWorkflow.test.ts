@@ -61,4 +61,21 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).not.toContain('onSend={handleRewrite}');
     expect(source).not.toContain('onSend={handleIterateScript}');
   });
+
+  it('uses one direct streaming prompt for both initial generation and revisions', () => {
+    expect(source).toContain('const { aiGenerateStoryboardScript } = await loadAiModelService()');
+    expect(source).toContain('result = await aiGenerateStoryboardScript(');
+    expect(source).toContain('appendStreamChunk');
+    expect(source).toContain("stage: 'directStoryboardScript'");
+    expect(source).toContain("const billingInput = isFirstTurn\n      ? content");
+    expect(source).not.toContain('pipelineService.generateEpisodeVideoScript');
+    expect(source).not.toContain('pipelineService.iterateEpisodeVideoScript');
+    expect(source).not.toContain('assertValidVideoScript(normalizedContent)');
+  });
+
+  it('keeps the file rail fixed when switching between writing and quick mode', () => {
+    expect(source).toContain('data-testid="quick-script-workspace"');
+    expect(source).toContain('className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40"');
+    expect(source).toContain('className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"');
+  });
 });

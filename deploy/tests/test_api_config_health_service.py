@@ -118,6 +118,32 @@ def test_minimax_m3_real_generation_uses_low_cost_text_probe() -> None:
     assert output_type == "text"
 
 
+def test_minimax_real_generation_defaults_to_text_binding_when_category_is_omitted() -> None:
+    _, body, output_type = _real_generation_request(
+        "minimax",
+        {
+            "endpoint": "https://api.minimaxi.com/v1",
+            "model_name": "MiniMax-Hailuo-2.3",
+            "model_bindings": [
+                {
+                    "operation": "video-standard",
+                    "label": "金丹 (Hailuo 2.3)",
+                    "model_name": "MiniMax-Hailuo-2.3",
+                },
+                {
+                    "operation": "minimax-m3",
+                    "label": "练气 (MiniMax M3 文本)",
+                    "model_name": "MiniMax-M3",
+                },
+            ],
+        },
+    )
+
+    assert body["model"] == "MiniMax-M3"
+    assert body["thinking"] == {"type": "disabled"}
+    assert output_type == "text"
+
+
 def test_doubao_real_generation_uses_minimum_cost_image_payload() -> None:
     _, body, output_type = _real_generation_request(
         "doubao",

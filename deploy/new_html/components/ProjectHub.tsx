@@ -250,7 +250,7 @@ const ProjectHub: React.FC = () => {
                                 localStorage.removeItem('username');
                                 window.location.href = '/login';
                             }}
-                            className="button-shift flex items-center gap-2 whitespace-nowrap px-3 py-2.5 rounded-lg text-sm text-n100 hover:text-danger hover:bg-r50 border border-n40 hover:border-n40 transition-all duration-200"
+                            className="flex items-center gap-2 whitespace-nowrap px-3 py-2.5 rounded-lg text-sm text-n100 hover:text-danger hover:bg-r50 border border-n40 hover:border-n40 transition-all duration-200"
                             title="退出登录"
                         >
                             退出

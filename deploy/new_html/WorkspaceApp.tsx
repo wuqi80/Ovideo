@@ -25,7 +25,6 @@ import { getAuthToken } from './services/httpClient';
 import { useScriptModelOptions } from './hooks/useScriptModelOptions';
 import {
   getScriptModelOption,
-  resolveScriptAiModel,
   type ScriptModelOption,
 } from './services/scriptModelCatalogService';
 import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
@@ -584,15 +583,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }, [propEpisodeId, selectedFileId]);
 
   useEffect(() => {
-    const selectionKey = `${selectedFileId || ''}:${selectedConversation?.defaultModel || ''}`;
+    const selectionKey = selectedFileId || '';
     if (!selectedFileId || appliedConversationModelRef.current === selectionKey) return;
-    const matchingModel = selectedConversation?.defaultModel
-      ? resolveScriptAiModel(selectedConversation.defaultModel, scriptModelOptions)
-      : AiModel.MinimaxM3;
-    if (!matchingModel) return;
     appliedConversationModelRef.current = selectionKey;
-    setAiModel(matchingModel);
-  }, [scriptModelOptions, selectedConversation?.defaultModel, selectedFileId]);
+    setAiModel(AiModel.MinimaxM3);
+  }, [selectedFileId]);
   
   // 保存定时器引用
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1571,7 +1566,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
     const billingInput = isFirstTurn
-      ? `${content}\n${content}`
+      ? content
       : [currentVersion?.content || file.scriptContent || file.originalContent, content, conversationContext].join('\n');
     const forecastOutputTokens = Math.max(
       1000,
@@ -1586,7 +1581,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     let chargedCreditCost = 0;
     let pipelineInputTexts: string[] = [];
     let pipelineOutputTexts: string[] = [];
-    let generatedSegments: ScriptSegment[] = [];
     try {
       const creditQuote = await assertEnoughCredits('script_model_call', {
         input_tokens: estimateTextTokens(billingInput),
@@ -1640,7 +1634,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         },
       }));
 
-      const pipelineService = await loadScriptThreeStageService();
       let result = '';
       const replaceStreamContent = (nextContent: string) => {
         streamedContent = nextContent;
@@ -1667,43 +1660,24 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         entityType: 'episode_script',
         entityId: fileId,
       };
-      if (isFirstTurn) {
-        const pipelineResult = await pipelineService.generateEpisodeVideoScript(
-          aiModel,
-          content,
-          {
-            taskContext,
-            onProgress: progress => {
-              if (progress.content) replaceStreamContent(progress.content);
-            },
-          },
-        );
-        result = pipelineResult.content;
-        generatedSegments = pipelineResult.segments;
-        pipelineInputTexts = pipelineResult.inputTexts;
-        pipelineOutputTexts = pipelineResult.outputTexts;
-      } else {
-        const pipelineResult = await pipelineService.iterateEpisodeVideoScript(
-          aiModel,
-          file.originalContent,
-          currentVersion?.content || file.scriptContent || file.originalContent,
-          content,
-          conversationContext || '（首次修改，无历史意见）',
-          {
-            taskContext,
-            onStream: appendStreamChunk,
-          },
-        );
-        result = pipelineResult.content;
-        pipelineInputTexts = pipelineResult.inputTexts;
-        pipelineOutputTexts = pipelineResult.outputTexts;
-      }
+      const generationSource = isFirstTurn
+        ? content
+        : currentVersion?.content || file.scriptContent || file.originalContent;
+      const generationRequirements = isFirstTurn ? '' : content;
+      const { aiGenerateStoryboardScript } = await loadAiModelService();
+      result = await aiGenerateStoryboardScript(
+        aiModel,
+        generationSource,
+        generationRequirements,
+        appendStreamChunk,
+        taskContext,
+      );
+      pipelineInputTexts = [generationSource, generationRequirements].filter(Boolean);
+      pipelineOutputTexts = [result];
 
       const rawFinalContent = (result || streamedContent).trim();
       const parsedItems = parseStoryboardVersionContent(rawFinalContent);
-      if (!rawFinalContent || parsedItems.length === 0) {
-        throw new Error('模型返回内容无法识别为分镜脚本，请重新描述要求后再试');
-      }
+      if (!rawFinalContent) throw new Error('模型未返回内容，请稍后重试');
       const finalContent = rawFinalContent;
       const billingParams = {
         input_tokens: estimateTextTokens(pipelineInputTexts.join('\n')),
@@ -1727,28 +1701,12 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         creditFeatureKey: credit.feature_key,
         creditUsage: billingParams,
       };
-      const step1Segments = isFirstTurn
-        ? generatedSegments.map(segment => ({
-            id: segment.id,
-            order: segment.order,
-            sourceText: segment.sourceText,
-            estimatedDurationSec: segment.estimatedDurationSec,
-          }))
-        : currentVersion?.metadata?.scriptPipeline?.step1Segments
-          || file.scriptSegments?.map(segment => ({
-            id: segment.id,
-            order: segment.order,
-            sourceText: segment.sourceText,
-            estimatedDurationSec: segment.estimatedDurationSec,
-          }))
-          || [];
       const versionMetadata = {
         ...billingMetadata,
         scriptPipeline: {
           version: 3,
-          stage: 'videoScript',
+          stage: 'directStoryboardScript',
           shotNumberFormat: 'segment-local',
-          step1Segments,
           sourceVersionId: isFirstTurn ? undefined : currentVersion?.id,
         },
       };
@@ -1773,18 +1731,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       await updateEpisodeScriptById(propEpisodeId, fileId, {
         adapted_script: finalContent,
       });
-      if (isFirstTurn) {
-        await batchSaveScriptSegments(
-          propEpisodeId,
-          fileId,
-          buildScriptSegmentPayload(generatedSegments),
-        );
-      }
       updateFileWithHistory(fileId, current => ({
         ...current,
         originalContent: isFirstTurn ? content : current.originalContent,
         scriptContent: finalContent,
-        scriptSegments: isFirstTurn ? generatedSegments : current.scriptSegments,
         status: FileStatus.Completed,
         lastUpdated: Date.now(),
       }), { recordHistory: false });
@@ -1843,9 +1793,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   ) => {
     const fileId = selectedFileId;
     if (!fileId) return;
-    const normalizedContent = ensureVideoScriptPromptLengths(combineVideoScriptOutputs([content]));
-    const { assertValidVideoScript } = await loadScriptThreeStageService();
-    assertValidVideoScript(normalizedContent);
+    const normalizedContent = content.trim();
+    if (!normalizedContent) throw new Error('分镜脚本内容不能为空');
     const parsedItems = parseStoryboardVersionContent(normalizedContent);
     const storyboardItems = parsedItems.length > 0 ? parsedItems : normalizeVersionStoryboardItems(sourceVersion.storyboardItems);
     const metadata = {
@@ -3936,65 +3885,57 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                 </>
               ) : (
                 <div
-                  className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-n0"
+                  className="flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-n0"
                   data-testid="quick-script-workspace"
                 >
-                  <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
-                    <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
-                    <div className="truncate text-sm font-semibold text-n800">
-                      {selectedFile?.name || '请选择剧本任务'}
-                    </div>
-                    <ScriptWorkspaceModeSwitch
-                      mode={scriptWorkspaceMode}
-                      onChange={handleScriptWorkspaceModeChange}
-                    />
-                    <span className="ml-auto text-[10px] text-n200">
-                      四列使用同一生成、版本、积分与镜头数据
-                    </span>
-                  </header>
+                  <div className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
+                    <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
+                      <FileColumn
+                        files={files}
+                        selectedFileId={selectedFileId}
+                        activeFileId={activeScriptId || null}
+                        checkedFileIds={checkedFileIds}
+                        onFileSelect={handleFileSelect}
+                        onActivateFile={activateWorkflowScript}
+                        onFileCheck={handleFileCheck}
+                        onCheckAll={handleCheckAll}
+                        onFileUpload={handleFileUpload}
+                        onCreateBlankFile={handleCreateBlankFile}
+                        onRenameFile={handleRenameFile}
+                        onDeleteFile={handleDeleteFile}
+                        onDownloadFile={handleDownloadFile}
+                        onMoveFile={handleMoveFile}
+                        onSaveVersion={handleSaveVersion}
+                        onRestoreVersion={handleRestoreVersion}
+                        isExpanded={false}
+                        onToggleExpand={() => {}}
+                        onReorderFiles={handleReorderFiles}
+                        onExportProject={handleExportProject}
+                      />
+                    </React.Suspense>
+                  </div>
 
-                  <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
-                    <div className="flex h-full min-w-[1180px] overflow-hidden">
-                      <div
-                        style={{ width: `${colWidths[0]}%` }}
-                        className="relative h-full flex-shrink-0 overflow-hidden"
-                      >
-                        <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
-                          <FileColumn
-                            files={files}
-                            selectedFileId={selectedFileId}
-                            activeFileId={activeScriptId || null}
-                            checkedFileIds={checkedFileIds}
-                            onFileSelect={handleFileSelect}
-                            onActivateFile={activateWorkflowScript}
-                            onFileCheck={handleFileCheck}
-                            onCheckAll={handleCheckAll}
-                            onFileUpload={handleFileUpload}
-                            onCreateBlankFile={handleCreateBlankFile}
-                            onRenameFile={handleRenameFile}
-                            onDeleteFile={handleDeleteFile}
-                            onDownloadFile={handleDownloadFile}
-                            onMoveFile={handleMoveFile}
-                            onSaveVersion={handleSaveVersion}
-                            onRestoreVersion={handleRestoreVersion}
-                            isExpanded={false}
-                            onToggleExpand={() => {}}
-                            onReorderFiles={handleReorderFiles}
-                            onExportProject={handleExportProject}
-                          />
-                        </React.Suspense>
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
+                      <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
+                      <div className="truncate text-sm font-semibold text-n800">
+                        {selectedFile?.name || '请选择剧本任务'}
                       </div>
+                      <ScriptWorkspaceModeSwitch
+                        mode={scriptWorkspaceMode}
+                        onChange={handleScriptWorkspaceModeChange}
+                      />
+                      <span className="ml-auto text-[10px] text-n200">
+                        四列使用同一生成、版本、积分与镜头数据
+                      </span>
+                    </header>
 
-                      {isFullView && (
-                        <div
-                          onMouseDown={() => startResizing(0)}
-                          className="z-20 w-1 flex-shrink-0 cursor-col-resize bg-n40 transition-colors hover:bg-primary"
-                        />
-                      )}
+                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+                      <div className="flex h-full min-w-[900px] overflow-hidden">
 
                       <div
-                        style={{ width: `${colWidths[1]}%` }}
-                        className="relative h-full flex-shrink-0 overflow-hidden"
+                        style={{ flex: `${colWidths[1]} 0 0%` }}
+                        className="relative h-full min-w-0 overflow-hidden"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="source-script" />}>
                           <QuickScriptSourceColumn
@@ -4021,8 +3962,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       )}
 
                       <div
-                        style={{ width: `${colWidths[2]}%` }}
-                        className="relative h-full flex-shrink-0 overflow-hidden"
+                        style={{ flex: `${colWidths[2]} 0 0%` }}
+                        className="relative h-full min-w-0 overflow-hidden"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="video-script" />}>
                           <QuickScriptVersionColumn
@@ -4048,8 +3989,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       )}
 
                       <div
-                        style={{ width: `${colWidths[3]}%` }}
-                        className="relative h-full flex-shrink-0 overflow-hidden"
+                        style={{ flex: `${colWidths[3]} 0 0%` }}
+                        className="relative h-full min-w-0 overflow-hidden"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
                           <StoryboardColumn
@@ -4090,6 +4031,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         </React.Suspense>
                       </div>
                     </div>
+                  </div>
                   </div>
                 </div>
               )}

@@ -3,13 +3,106 @@
  * 后端统一管理API Key，前端无需配置
  */
 
-import { apiJson } from './httpClient';
+import { apiFetch, apiJson } from './httpClient';
 import type { TextTaskContext } from './textTaskContext';
 import { toTextTaskPayload } from './textTaskContext';
 
 interface GeminiTextResponse {
   content?: string;
 }
+
+const GEMINI_STREAM_IDLE_TIMEOUT_MS = 45_000;
+
+export const callGeminiProxyStream = async (
+  prompt: string,
+  systemPrompt: string | undefined,
+  model: string | undefined,
+  taskContext: TextTaskContext | undefined,
+  onStream: (chunk: string) => void,
+): Promise<string> => {
+  const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let timedOut = false;
+  try {
+    const body: Record<string, unknown> = {
+      prompt,
+      system_prompt: systemPrompt,
+      temperature: 0.7,
+      ...toTextTaskPayload(taskContext),
+    };
+    if (model?.trim()) body.model = model.trim();
+
+    const response = await apiFetch('/api/gemini/text/stream', {
+      method: 'POST',
+      signal: controller.signal,
+      body: JSON.stringify(body),
+    }, {
+      apiName: 'Gemini 文本流式代理',
+      authErrorMessage: '未登录，无法调用 Gemini 服务',
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(detail || `Gemini 文本生成失败 (HTTP ${response.status})`);
+    }
+
+    reader = response.body?.getReader();
+    if (!reader) throw new Error('无法获取 Gemini 响应流');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+    let streamError = '';
+    let finished = false;
+    while (!finished) {
+      let idleTimer: number | undefined;
+      const readResult = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => {
+          idleTimer = window.setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+            reject(new Error('Gemini 长时间没有返回新内容'));
+          }, GEMINI_STREAM_IDLE_TIMEOUT_MS);
+        }),
+      ]).finally(() => {
+        if (idleTimer !== undefined) window.clearTimeout(idleTimer);
+      });
+      if (readResult.done) break;
+      buffer += decoder.decode(readResult.value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trimStart();
+        if (data === '[DONE]') {
+          finished = true;
+          break;
+        }
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.type === 'content' && parsed.content) {
+            fullContent += parsed.content;
+            onStream(parsed.content);
+          } else if (parsed.type === 'error') {
+            streamError = parsed.message || parsed.detail || 'Gemini 流式返回错误';
+          }
+        } catch {
+          // Ignore incomplete or non-JSON SSE lines.
+        }
+      }
+    }
+    if (streamError) throw new Error(streamError);
+    if (!fullContent.trim()) throw new Error('Gemini 返回空内容');
+    return fullContent;
+  } catch (error) {
+    if (timedOut || (error as { name?: string } | null)?.name === 'AbortError') {
+      throw new Error('Gemini 生成超时或连接中断，本次未扣积分，请手动重试');
+    }
+    throw error;
+  } finally {
+    if (timedOut) void reader?.cancel().catch(() => undefined);
+  }
+};
 
 /**
  * 通过后端代理调用Gemini文本生成

@@ -467,7 +467,7 @@ def _api_binding_category(binding: Dict[str, Any], provider: str = "") -> str:
         return "video"
     if any(token in haystack for token in ("image", "seedream", "picture", "photo", "图像", "图片", "生图")):
         return "image"
-    if any(token in haystack for token in ("text", "chat", "reason", "language", "文本", "推理", "对话")):
+    if any(token in haystack for token in ("text", "chat", "reason", "language", "minimax-m3", "文本", "推理", "对话")):
         return "text"
 
     provider_id = normalize_provider(provider)
@@ -499,9 +499,21 @@ def _model_for_generation_category(row: Dict[str, Any], provider: str, category:
 
 def _apply_generation_category_hint(row: Dict[str, Any]) -> Dict[str, Any]:
     category = str(row.get("_test_category") or row.get("category") or "").strip().lower()
+    provider = str(row.get("provider") or "")
+    if not category and normalize_provider(provider) == "minimax":
+        bindings = _jsonb_to_python(row.get("model_bindings")) or []
+        if isinstance(bindings, list) and any(
+            isinstance(binding, dict)
+            and _api_binding_category(binding, provider) == "text"
+            for binding in bindings
+        ):
+            # MiniMax cards commonly keep the Hailuo video model as their
+            # primary row model. The admin real-generation probe is a text
+            # chat request, so an omitted UI category must never send Hailuo
+            # to /chat/completions when a text binding exists on the card.
+            category = "text"
     if not category:
         return row
-    provider = str(row.get("provider") or "")
     model_name = _model_for_generation_category(row, provider, category)
     if model_name:
         next_row = dict(row)
@@ -547,7 +559,9 @@ def _append_query_param(url: str, params: Dict[str, str]) -> str:
 
 
 def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, Dict[str, Any], str]:
-    row = _apply_generation_category_hint(dict(row))
+    generation_row = dict(row)
+    generation_row.setdefault("provider", provider)
+    row = _apply_generation_category_hint(generation_row)
     normalized = normalize_provider(provider)
     endpoint = str(row.get("endpoint") or "").strip()
     model_name = str(row.get("model_name") or "").strip()

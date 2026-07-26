@@ -18,4 +18,8 @@ describe('WorkflowLayout account summary', () => {
     expect(source).toContain('<Coins');
     expect(source).toContain('availableCredits.toLocaleString()');
   });
+
+  it('does not translate the logout button on hover', () => {
+    expect(source).not.toContain('button-shift');
+  });
 });

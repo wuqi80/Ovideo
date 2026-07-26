@@ -33,6 +33,8 @@ from services.ai_proxy_gemini_image_service import (
 )
 from services.ai_proxy_gemini_text_service import (
     generate_gemini_text_result,
+    resolve_gemini_stream_config,
+    stream_gemini_text,
 )
 from services.ai_proxy_gpt_image_service import (
     generate_gpt_images as proxy_generate_gpt_images,
@@ -381,6 +383,53 @@ def create_ai_proxy_router(
             )
             logger.error("文本生成失败: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail="文本生成失败，请稍后重试")
+
+    @router.post("/api/gemini/text/stream")
+    async def gemini_text_stream(request: GeminiTextRequest, username: str = Depends(require_auth_dependency)):
+        """Gemini 文本流式生成接口，供需要首字实时展示的页面使用。"""
+        try:
+            stream_config = await resolve_gemini_stream_config(request.model)
+        except AIProxyError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+        task_context = _text_task_context(request, provider="gemini")
+        task_id = await create_gemini_text_task(
+            user_id=username,
+            prompt=request.prompt,
+            system_prompt=request.system_prompt,
+            temperature=request.temperature,
+            model=request.model,
+            logger=logger,
+            task_context=task_context,
+        )
+        return StreamingResponse(
+            stream_gemini_text(
+                prompt=request.prompt,
+                system_prompt=request.system_prompt,
+                temperature=request.temperature,
+                model=request.model,
+                config=stream_config,
+                on_complete=lambda text: _schedule_text_result_save(
+                    task_id,
+                    text,
+                    user_id=username,
+                    task_type="gemini_text",
+                    task_context=task_context,
+                ),
+                on_error=lambda error: _schedule_text_task_failure(
+                    task_id,
+                    error,
+                    user_id=username,
+                    task_type="gemini_text",
+                    task_context=task_context,
+                ),
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.post("/api/gemini/image")
     async def gemini_image_generate(request: GeminiImageRequest, username: str = Depends(require_auth_dependency)):

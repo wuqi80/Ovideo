@@ -99,7 +99,7 @@ export const AdminLayout: React.FC = () => {
                             </div>
                             <button
                                 onClick={handleLogout}
-                                className="button-shift flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-n300 hover:text-danger hover:bg-r50 border border-n40 hover:border-danger/30 transition-all"
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-n300 hover:text-danger hover:bg-r50 border border-n40 hover:border-danger/30 transition-all"
                                 title="退出管理后台"
                             >
                                 <LogOut className="w-3.5 h-3.5" /> 退出

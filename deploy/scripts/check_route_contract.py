@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 261
-DEFAULT_EXPECTED_OPERATIONS = 319
+DEFAULT_EXPECTED_PATHS = 262
+DEFAULT_EXPECTED_OPERATIONS = 320
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -44,6 +44,7 @@ EXPECTED_ENDPOINTS = {
     ("/api/video/crop", "POST"): ("routers.video", "crop_video"),
     ("/api/ai/text-models", "GET"): ("routers.ai_proxy", "get_text_models"),
     ("/api/minimax/chat", "POST"): ("routers.ai_proxy", "minimax_chat"),
+    ("/api/gemini/text/stream", "POST"): ("routers.ai_proxy", "gemini_text_stream"),
     ("/api/thumbnail", "GET"): ("routers.files", "get_thumbnail"),
     ("/api/upload", "POST"): ("routers.files", "upload_file"),
     ("/api/comfyui/upload", "POST"): ("routers.comfyui_files", "comfyui_upload_proxy"),
@@ -6800,7 +6801,8 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
         "setMonitorState(result.monitor_state || null)",
         "setHealthMap(buildProviderHealthMap(rows))",
         "query.set('model_name', model)",
-        "onCheck(provider, config.model_name || runtime?.runtime_model_name || null)",
+        "const categoryModelName = modelBindings[0]?.model_name",
+        "onCheck(provider, categoryModelName)",
         "onCheck(provider, model || null)",
         "body: JSON.stringify({ targets })",
         "putProviderHealth(next, item)",

@@ -127,7 +127,7 @@ export const WorkflowLayout: React.FC = () => {
               localStorage.removeItem('username');
               window.location.href = '/login';
             }}
-            className="button-shift flex items-center gap-1.5 px-2.5 py-2 ml-1 rounded text-sm text-n300 hover:text-danger hover:bg-r50 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-2 ml-1 rounded text-sm text-n300 hover:text-danger hover:bg-r50 transition-colors"
             title="退出登录"
           >
             <LogOut size={15} />

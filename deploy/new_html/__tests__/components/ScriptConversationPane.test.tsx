@@ -31,8 +31,10 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).not.toContain('细碎 + 合并');
     expect(source).not.toContain('shotDurationMode');
     expect(source).toContain('await onSend(content)');
-    expect(workspace).toContain('pipelineService.generateEpisodeVideoScript(');
-    expect(workspace).toContain('pipelineService.iterateEpisodeVideoScript(');
+    expect(workspace).toContain('result = await aiGenerateStoryboardScript(');
+    expect(workspace).toContain('appendStreamChunk');
+    expect(workspace).not.toContain('pipelineService.generateEpisodeVideoScript(');
+    expect(workspace).not.toContain('pipelineService.iterateEpisodeVideoScript(');
     expect(workspace).toContain('pipelineService.generateStoryboardDesignForVersion(');
     expect(workspace).not.toContain('buildShotDurationInstruction');
     expect(workspace).not.toContain('shotDurationMode');

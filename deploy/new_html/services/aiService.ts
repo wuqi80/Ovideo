@@ -6,7 +6,7 @@
  */
 
 import { AiModel } from '../types';
-import { callGeminiProxyWithRetry } from './geminiProxyService';
+import { callGeminiProxyStream, callGeminiProxyWithRetry } from './geminiProxyService';
 import { callDeepseekWithRetry, callDeepseekChatWithRetry } from './deepseekService';
 import { callMinimaxM3WithRetry } from './minimaxTextService';
 import { PromptTemplate, fillPrompt } from '../prompts';
@@ -40,6 +40,15 @@ export async function callAI(
   } else if (model === AiModel.DeepseekChat) {
     return await callDeepseekChatWithRetry(userPrompt, systemPrompt, onStream, taskContext);
   } else {
+    if (onStream) {
+      return await callGeminiProxyStream(
+        userPrompt,
+        systemPrompt,
+        undefined,
+        taskContext,
+        onStream,
+      );
+    }
     return await callGeminiProxyWithRetry(userPrompt, systemPrompt, 3, undefined, taskContext);
   }
 }
