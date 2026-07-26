@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Loader2, Cpu, Zap, Database, Layers, Sparkles } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 export const LoadingOverlay: React.FC = () => {
   const [message, setMessage] = useState('Initializing Studio...');
@@ -37,8 +38,9 @@ export const LoadingOverlay: React.FC = () => {
         {/* Central Logo/Spinner */}
         <div className="relative mb-8">
             <div className="absolute inset-0 bg-primary blur-xl opacity-20 animate-pulse rounded-full"></div>
-            <div className="relative bg-n0 border border-b75 p-6 rounded-2xl shadow-bottom flex items-center justify-center">
-                <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            <div className="relative bg-n0 border border-b75 p-5 rounded-2xl shadow-bottom flex items-center justify-center">
+                <BrandLogo variant="mark" className="h-14 w-14" />
+                <Loader2 className="absolute -inset-2 h-[72px] w-[72px] text-primary/35 animate-spin" />
                 <div className="absolute -top-2 -right-2">
                     <Sparkles className="w-6 h-6 text-cyan-400 animate-bounce" />
                 </div>
@@ -63,7 +65,7 @@ export const LoadingOverlay: React.FC = () => {
 
         {/* Text */}
         <h2 className="text-xl font-semibold text-n800 tracking-tight mb-2">
-            AnimeScript Studio
+            MECHA<span className="text-primary">.</span>ONE
         </h2>
         
         <div className="h-6 flex items-center justify-center">

@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <title>MECHA - 登录</title>
+    <link rel="icon" href="/static/favicon.ico" sizes="any" />
+    <link rel="icon" href="/static/favicon-32x32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+    <title>MECHA.ONE - 登录</title>
     <style>
         :root {
             --n0: #FFFFFF;
@@ -105,23 +107,15 @@
         .logo {
             width: 40px;
             height: 40px;
-            border-radius: 4px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-weight: 800;
-            font-size: 22px;
-            background: var(--n0);
-            color: var(--primary);
+            object-fit: contain;
         }
 
         .mobile-brand .logo {
             width: 36px;
             height: 36px;
-            border-radius: 4px;
-            background: var(--primary);
-            color: white;
-            font-size: 20px;
         }
 
         .brand-name {
@@ -129,6 +123,19 @@
             line-height: 1;
             font-weight: 600;
             letter-spacing: -0.2px;
+        }
+
+        .brand-dot {
+            color: #146EF5;
+        }
+
+        .brand-panel .logo {
+            filter: drop-shadow(0 0 1px rgba(255,255,255,0.95)) drop-shadow(0 2px 5px rgba(8,8,8,0.28));
+        }
+
+        .brand-panel .brand-dot {
+            -webkit-text-stroke: 1px rgba(255,255,255,0.95);
+            paint-order: stroke fill;
         }
 
         .brand-content {
@@ -417,10 +424,10 @@
 </head>
 <body>
     <main class="shell">
-        <section class="brand-panel" aria-label="MECHA 创作平台">
+        <section class="brand-panel" aria-label="MECHA.ONE 创作平台">
             <div class="brand-top">
-                <div class="logo">M</div>
-                <div class="brand-name">MECHA</div>
+                <img class="logo" src="/static/branding/mecha-one-mark.png" alt="" />
+                <div class="brand-name">MECHA<span class="brand-dot">.</span>ONE</div>
             </div>
 
             <div class="brand-content">
@@ -457,14 +464,14 @@
                 </div>
             </div>
 
-            <div class="brand-footer">© 2026 MECHA · Innovative Technology &amp; Design</div>
+            <div class="brand-footer">© 2026 MECHA.ONE · Innovative Technology &amp; Design</div>
         </section>
 
         <section class="login-panel">
             <div class="login-card">
                 <div class="mobile-brand">
-                    <div class="logo">M</div>
-                    <div class="brand-name">MECHA</div>
+                    <img class="logo" src="/static/branding/mecha-one-mark.png" alt="" />
+                    <div class="brand-name">MECHA<span class="brand-dot">.</span>ONE</div>
                 </div>
 
                 <h2>欢迎回来</h2>
@@ -503,6 +510,7 @@
     <script>
         const TOKEN_KEY = 'auth_token';
         const USERNAME_KEY = 'username';
+        const USER_ID_KEY = 'user_id';
         const defaultButtonContent = document.getElementById('loginBtn').innerHTML;
 
         if (localStorage.getItem(TOKEN_KEY)) {
@@ -530,7 +538,8 @@
 
             if (payload && payload.token) {
                 localStorage.setItem(TOKEN_KEY, payload.token);
-                localStorage.setItem(USERNAME_KEY, username);
+                localStorage.setItem(USERNAME_KEY, payload.username || username);
+                localStorage.setItem(USER_ID_KEY, payload.user_id || payload.username || username);
             }
 
             return payload || {};

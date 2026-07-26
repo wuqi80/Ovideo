@@ -19,6 +19,7 @@ import {
     getAndClearAdminPostLoginRedirect,
 } from './adminAuth';
 import { apiJson } from '../services/httpClient';
+import { BrandLogo } from '../components/BrandLogo';
 
 function getLoginRedirect(location: ReturnType<typeof useLocation>): string {
     const redirect = new URLSearchParams(location.search).get('redirect');
@@ -128,10 +129,8 @@ export const AdminLoginPage: React.FC = () => {
             <div className="relative z-10 w-full max-w-md mx-4">
                 {/* 顶部品牌 */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-md bg-primary-light border border-primary/40 mb-3 shadow-card">
-                        <ShieldCheck className="w-7 h-7 text-primary" />
-                    </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-n800">MECHA · ADMIN</h1>
+                    <BrandLogo variant="mark" className="mx-auto mb-3 h-14 w-14" />
+                    <h1 className="text-2xl font-bold tracking-tight text-n800">MECHA<span className="text-primary">.</span>ONE · ADMIN</h1>
                     <p className="text-xs text-n100 mt-1.5 tracking-wider uppercase"
                       style={{ fontFamily: 'var(--font-mono)' }}>
                         Restricted · Authentication Required

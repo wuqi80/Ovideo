@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { GlobalTask, RegisteredTask, SourcePage, TaskKind, TaskNotification } from '../types';
 import { taskRegistry, type RegisterInput } from '../services/taskRegistry';
 import type { ServerNotificationRow } from '../services/notificationMapping';
+import { getStoredUserId } from '../services/accountStorage';
 
 interface TaskContextValue {
   activeTasks: GlobalTask[];
@@ -103,11 +104,7 @@ export const useTaskManager = (): TaskContextValue => {
 };
 
 function currentTaskUserScope(): string {
-  try {
-    return localStorage.getItem('username')?.trim() || 'anonymous';
-  } catch {
-    return 'anonymous';
-  }
+  return getStoredUserId('anonymous');
 }
 
 export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

@@ -1,4 +1,6 @@
-<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-  <rect width="32" height="32" rx="7" fill="#0052CC"/>
-  <text x="16" y="23" font-family="system-ui,sans-serif" font-weight="800" font-size="20" fill="white" text-anchor="middle">M</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>MECHA.ONE</title>
+  <path fill="#146EF5" d="M7 9h15l10 10L42 9h15v17l-7 7 7 7v15H40l-8-8-8 8H7V40l7-7-7-7V9Zm8 8v7l8 8-8 8v7h6l11-11v-8L21 17h-6Z"/>
+  <path fill="#080808" d="M32 19 42 9h15v17l-7 7 7 7v15H40l-8-8V36l11 11h6v-7l-8-8 8-8v-7h-6L32 28v-9Z"/>
+  <path fill="#fff" d="m25 24 15 9-15 9z"/>
 </svg>

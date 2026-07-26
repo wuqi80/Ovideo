@@ -41,6 +41,7 @@ import ShareResourceDialog from '../components/ShareResourceDialog';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { LazyVideo } from '../components/LazyVideo';
+import { getStoredUserId } from '../services/accountStorage';
 
 type CategoryKey = 'all' | 'mine' | 'shared' | 'image' | 'video' | 'audio' | 'frame' | 'favorite';
 
@@ -81,7 +82,7 @@ export const MediaLibraryPage: React.FC = () => {
   const episodeId = episodeContext.episodeId || routeEpisodeId || '';
   const assetScopeMode = episodeId ? episodeContext.assetScopeMode : 'project';
   const setAssetScopeMode = episodeContext.setAssetScopeMode;
-  const myUserId = localStorage.getItem('username') || '';
+  const myUserId = getStoredUserId();
 
   const [items, setItems] = useState<MediaLibraryItem[]>([]);
   const [total, setTotal] = useState(0);

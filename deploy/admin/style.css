@@ -81,11 +81,9 @@ body {
 }
 .sidebar-logo .logo-icon {
   width: 32px; height: 32px;
-  border-radius: var(--radius);
-  background: var(--accent-muted);
   display: flex; align-items: center; justify-content: center;
-  color: var(--accent);
 }
+.sidebar-logo .logo-icon img { width: 32px; height: 32px; object-fit: contain; display: block; }
 .sidebar-logo .logo-text h1 {
   font-size: 13px; font-weight: 700; color: var(--text-0);
   letter-spacing: -0.01em;

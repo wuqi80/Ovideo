@@ -42,14 +42,17 @@ def create_frontend_pages_router() -> APIRouter:
 
     @router.get("/favicon.ico")
     async def favicon():
-        favicon_path = Path("static/image_1ca1c5.png")
+        favicon_path = Path("static/favicon.ico")
         if favicon_path.exists():
-            return FileResponse(favicon_path)
+            return FileResponse(favicon_path, media_type="image/x-icon")
         return Response(status_code=204)
 
     @router.get("/favicon.png")
     async def favicon_png():
-        return await favicon()
+        favicon_path = Path("static/favicon-32x32.png")
+        if favicon_path.exists():
+            return FileResponse(favicon_path, media_type="image/png")
+        return Response(status_code=204)
 
     @router.get("/editor")
     async def editor_page():
@@ -77,6 +80,14 @@ def create_frontend_pages_router() -> APIRouter:
 
     @router.get("/projects/{path:path}")
     async def projects_spa(path: str):
+        return _serve_spa()
+
+    @router.get("/profile")
+    async def profile_page():
+        return _serve_spa()
+
+    @router.get("/credits")
+    async def credits_page():
         return _serve_spa()
 
     @router.get("/canvas")

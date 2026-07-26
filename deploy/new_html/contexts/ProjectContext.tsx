@@ -6,6 +6,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { useParams } from 'react-router-dom';
 import type { ProjectInfo, ProjectMember, ProjectRole } from '../types';
 import { apiJson } from '../services/httpClient';
+import { getStoredUserId } from '../services/accountStorage';
 
 interface ProjectContextValue {
     projectId: string;
@@ -37,7 +38,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const currentUserId = localStorage.getItem('username') || '';
+    const currentUserId = getStoredUserId();
 
     const loadProject = useCallback(async () => {
         if (!projectId) return;

@@ -6,8 +6,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from dao_user import UserDAO
 from schemas.auth import LoginRequest
 from services.auth_user_service import ensure_login_user_record, verify_database_credentials
+from services.user_profile_service import resolve_authenticated_user_id
 
 
 def create_auth_router(
@@ -53,12 +55,14 @@ def create_auth_router(
         logger.info("User %s login succeeded", request.username)
 
         await ensure_login_user_record(request.username, request.password, logger=logger)
+        user_id = await resolve_authenticated_user_id(request.username, user_dao=UserDAO)
 
         return {
             "success": True,
             "message": "登录成功",
             "token": token,
             "username": request.username,
+            "user_id": user_id,
         }
 
     return router

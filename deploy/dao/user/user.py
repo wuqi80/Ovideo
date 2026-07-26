@@ -69,6 +69,99 @@ class UserDAO:
         return await db.fetchrow(query, user_id)
 
     @staticmethod
+    async def get_user_profile_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+        """Return current-user profile fields, including optional account columns."""
+        db = get_db_manager()
+        if not db:
+            logger.warning("get_user_profile_by_id skipped because database manager is unavailable: %s", user_id)
+            return None
+        try:
+            row = await db.fetchrow(
+                """
+                SELECT id, user_id, username, email, avatar_url,
+                       phone_number, phone_verified, phone_verified_at,
+                       storage_quota_gb, used_storage_bytes, created_at,
+                       updated_at, last_login_at, is_active
+                FROM users
+                WHERE user_id = $1 AND is_active = TRUE
+                """,
+                user_id,
+            )
+            return dict(row) if row else None
+        except Exception as exc:
+            logger.warning("get_user_profile_by_id fell back to base fields for %s: %s", user_id, exc)
+            row = await db.fetchrow(
+                """
+                SELECT id, user_id, username, email, avatar_url,
+                       storage_quota_gb, used_storage_bytes, created_at,
+                       updated_at, last_login_at, is_active
+                FROM users
+                WHERE user_id = $1 AND is_active = TRUE
+                """,
+                user_id,
+            )
+            if not row:
+                return None
+            data = dict(row)
+            data.setdefault("phone_number", None)
+            data.setdefault("phone_verified", False)
+            data.setdefault("phone_verified_at", None)
+            return data
+
+    @staticmethod
+    async def get_user_with_password_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+        """Return password hash for current-user password checks."""
+        db = get_db_manager()
+        if not db:
+            logger.warning("get_user_with_password_by_id skipped because database manager is unavailable: %s", user_id)
+            return None
+        row = await db.fetchrow(
+            """
+            SELECT user_id, username, password_hash
+            FROM users
+            WHERE user_id = $1 AND is_active = TRUE
+            """,
+            user_id,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def update_self_profile(user_id: str, **kwargs) -> bool:
+        """Update editable self-service account fields for the current user."""
+        db = get_db_manager()
+        if not db:
+            logger.warning("update_self_profile skipped because database manager is unavailable: %s", user_id)
+            return False
+
+        allowed = {
+            "username",
+            "phone_number",
+            "phone_verified",
+            "phone_verified_at",
+            "email",
+            "avatar_url",
+        }
+        fields = []
+        values = []
+        for key, value in kwargs.items():
+            if key not in allowed:
+                continue
+            fields.append(f"{key} = ${len(values) + 1}")
+            values.append(value)
+
+        if not fields:
+            return False
+
+        values.append(user_id)
+        query = f"""
+            UPDATE users
+            SET {', '.join(fields)}, updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ${len(values)}
+        """
+        result = await db.execute(query, *values)
+        return result == "UPDATE 1"
+
+    @staticmethod
     async def admin_get_user_detail(user_id: str) -> Optional[Dict[str, Any]]:
         """Return the admin detail shape for a user, falling back to base fields."""
         base_user = await UserDAO.get_user_by_id(user_id)

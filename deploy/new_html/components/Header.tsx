@@ -12,6 +12,7 @@ import {
   getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
+import { BrandLogo } from './BrandLogo';
 
 interface HeaderProps {
   visibleColumns: boolean[];
@@ -115,11 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
           <a href="/projects" className="flex items-center gap-1.5 text-n300 hover:text-primary transition-colors" title="返回项目列表">
             <FolderOpen className="w-4 h-4" />
           </a>
-          <svg width="28" height="28" viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-label="MECHA"><rect width="28" height="28" rx="4" fill="#146EF5"/><text x="14" y="20" fontFamily="Arial,sans-serif" fontWeight="600" fontSize="16" fill="white" textAnchor="middle">M</text></svg>
-          <div className="flex flex-col leading-tight">
-            <span className="font-bold text-lg tracking-tight text-n800">MECHA</span>
-            <span className="ui-eyebrow text-[10px] text-n100 uppercase">Storyboard AI</span>
-          </div>
+          <BrandLogo className="h-7 w-auto max-w-[132px]" />
         </div>
         
         {/* Navigation Tabs - 四个阶段 */}

@@ -108,6 +108,53 @@ describe('Webflow design-system contract', () => {
     expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D/i);
   });
 
+  it('uses one MECHA.ONE identity and favicon set across public shells', () => {
+    const appHtml = readProjectFile('index.html');
+    const loginHtml = readProjectFile('../login.html');
+    const header = readProjectFile('components/Header.tsx');
+    const brandLogo = readProjectFile('components/BrandLogo.tsx');
+
+    for (const assetPath of [
+      '../static/branding/mecha-one-logo.png',
+      '../static/branding/mecha-one-mark.png',
+      '../static/favicon.ico',
+      '../static/favicon-32x32.png',
+      '../static/apple-touch-icon.png',
+    ]) {
+      expect(fs.statSync(path.join(projectRoot, assetPath)).size, assetPath).toBeGreaterThan(0);
+    }
+
+    expect(brandLogo).toContain('/static/branding/mecha-one-logo.png');
+    expect(brandLogo).toContain('/static/branding/mecha-one-mark.png');
+    expect(header).toContain('<BrandLogo');
+    expect(header).not.toContain('<text x="14"');
+    expect(appHtml).toContain('/static/favicon.ico');
+    expect(loginHtml).toContain('/static/favicon.ico');
+    expect(loginHtml).toContain('/static/branding/mecha-one-mark.png');
+    expect(loginHtml).toContain('MECHA<span class="brand-dot">.</span>ONE');
+  });
+
+  it('keeps project and episode hubs on the shared centered media-library shell', () => {
+    const projectHub = readProjectFile('components/ProjectHub.tsx');
+    const episodeHub = readProjectFile('pages/EpisodeHubPage.tsx');
+
+    for (const source of [projectHub, episodeHub]) {
+      expect(source).toContain("max-w-[1320px]");
+      expect(source).toContain('min-h-screen bg-n20');
+      expect(source).toContain('<BrandLogo');
+      expect(source).toContain('border-y border-n40');
+      expect(source).toContain('shadow-atlas');
+    }
+
+    expect(projectHub).toContain('全部项目');
+    expect(projectHub).toContain('含已归档');
+    expect(episodeHub).toContain('全部分集');
+    expect(episodeHub).toContain('app-modal-backdrop');
+    expect(episodeHub).toContain('aria-modal="true"');
+    expect(episodeHub).toContain('流程化制作');
+    expect(episodeHub).toContain('自由创作');
+  });
+
   it('does not reintroduce dark neutral utilities into product source', () => {
     const sourceRoots = [
       'admin',

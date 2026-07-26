@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Archive, Trash2, Users, Clock, Tag, FolderOpen, MoreVertical, Star, ChevronDown, Share2, Maximize2, Minimize2 } from 'lucide-react';
+import { Plus, Search, Archive, Trash2, Users, Clock, FolderOpen, MoreVertical, Share2, Maximize2, Minimize2, LogOut } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import ShareResourceDialog from './ShareResourceDialog';
 import { createShare } from '../services/shareService';
 import type { ProjectInfo } from '../types';
 import { crmMessage, crmConfirm } from '../admin/crmUI';
+import { BrandLogo } from './BrandLogo';
 
 type SortKey = 'updated' | 'created' | 'name';
 
@@ -203,33 +204,38 @@ const ProjectHub: React.FC = () => {
         return d.toLocaleDateString('zh-CN');
     };
 
-    // Webflow 视觉系统：项目中心与创作工作台共享白色画布、锐利边界和主色。
-    // 逻辑/状态/handler 全部不变，仅替换样式（暗 gray/purple → 浅 n色阶/primary）。
-    const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-6xl';
+    // 项目中心只调整表现层；查询、组织共享、归档与删除链路保持原样。
+    const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-[1320px]';
     const projectGridClass = isWideLayout
-        ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
-        : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4';
+        ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5'
+        : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
     const currentUsername = localStorage.getItem('username') || '未登录';
 
     return (
-        <div className="layout-safe min-h-screen bg-n0 p-4 sm:p-6 md:p-10 text-n800" onClick={() => setContextMenu(null)}>
-            <div className={`w-full ${shellWidthClass} mx-auto`}>
-                {/* Header */}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 animate-slideDown">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-n0 border border-n40 text-primary">
-                            <FolderOpen size={18} />
+        <div className="layout-safe min-h-screen bg-n20 text-n800" onClick={() => setContextMenu(null)}>
+            <div className={`min-h-screen w-full ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
+                <header className="animate-slideDown">
+                    <div className="flex min-h-[84px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+                        <div className="flex min-w-0 items-center gap-4">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/projects')}
+                                className="shrink-0 rounded focus:outline-none focus:ring-2 focus:ring-primary/25"
+                                title="MECHA.ONE 项目"
+                            >
+                                <BrandLogo className="h-8 w-auto max-w-[156px]" />
+                            </button>
+                            <div className="h-8 w-px shrink-0 bg-n40" />
+                            <div className="min-w-0">
+                                <h1 className="truncate text-xl font-bold tracking-tight text-n800 sm:text-2xl">项目</h1>
+                                <p className="mt-0.5 text-xs text-n100 lg:hidden">{filteredProjects.length} 个项目</p>
+                            </div>
                         </div>
-                        <div className="min-w-0">
-                            <h1 className="text-2xl font-bold text-n800 tracking-tight">项目管理</h1>
-                            <p className="text-sm text-n100 mt-0.5">{filteredProjects.length} 个项目 · {currentUsername}</p>
-                        </div>
-                    </div>
-                    <div className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-2 sm:flex sm:w-auto sm:gap-3">
+                        <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:gap-3">
                         <button
                             type="button"
                             onClick={toggleLayoutWidth}
-                            className="flex items-center gap-2 whitespace-nowrap px-3 py-2.5 rounded-lg text-sm text-n300 hover:text-n800 hover:bg-n0 border border-n40 hover:border-primary transition-all duration-200"
+                            className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-n40 bg-n0 px-3 text-sm text-n300 transition-colors hover:border-n70 hover:text-n800"
                             title={isWideLayout ? '切回窄屏' : '切到宽屏'}
                         >
                             {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -237,11 +243,11 @@ const ProjectHub: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setShowCreateModal(true)}
-                            className="flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-card hover:shadow-atlas"
+                            className="inline-flex h-10 min-w-[128px] flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas sm:flex-none"
                         >
-                            <Plus size={18} /> 新建项目
+                            <Plus size={17} /> 新建项目
                         </button>
-                        <span className="hidden lg:block max-w-[160px] truncate text-sm font-medium text-n300" title={currentUsername}>
+                        <span className="hidden max-w-[140px] truncate text-sm text-n300 xl:block" title={currentUsername}>
                             {currentUsername}
                         </span>
                         <button
@@ -250,152 +256,153 @@ const ProjectHub: React.FC = () => {
                                 localStorage.removeItem('username');
                                 window.location.href = '/login';
                             }}
-                            className="flex items-center gap-2 whitespace-nowrap px-3 py-2.5 rounded-lg text-sm text-n100 hover:text-danger hover:bg-r50 border border-n40 hover:border-n40 transition-all duration-200"
+                            className="inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-lg border border-n40 px-3 text-sm text-n100 transition-colors hover:border-r75 hover:bg-r50 hover:text-danger"
                             title="退出登录"
                         >
-                            退出
+                            <LogOut size={15} /> <span className="hidden sm:inline">退出</span>
                         </button>
+                        </div>
                     </div>
-                </div>
-
-                {/* 工具栏 */}
-                <div className="grid grid-cols-2 items-center gap-3 sm:flex sm:flex-wrap sm:gap-4 mb-6">
-                    <div className="col-span-2 w-full sm:flex-1 relative sm:max-w-md min-w-0 sm:min-w-[220px]">
-                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-n100" />
-                    <input
-                        type="text"
-                        placeholder="搜索项目名称、描述或标签..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
-                    />
-                    </div>
-
-                    <div className="flex items-center gap-2 text-sm min-w-0">
-                        <span className="text-n200">排序:</span>
-                        <select
-                            value={sortBy}
-                            onChange={e => setSortBy(e.target.value as SortKey)}
-                            className="bg-n0 border border-n40 rounded px-2 py-1.5 text-sm text-n800 focus:outline-none focus:border-primary"
-                        >
-                            <option value="updated">最近更新</option>
-                            <option value="created">创建时间</option>
-                            <option value="name">名称</option>
-                        </select>
-                    </div>
-
-                    <label className="flex items-center gap-2 text-sm text-n300 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={showArchived}
-                            onChange={e => setShowArchived(e.target.checked)}
-                            className="rounded accent-primary"
-                        />
-                        显示已归档
-                    </label>
-                </div>
-
-                {/* 项目列表 */}
-                {loading ? (
-                    <div className={projectGridClass}>
-                        {[1, 2, 3, 4].map(i => (
-                            <div key={i} className="h-48 bg-n30 rounded-md animate-pulse" />
-                        ))}
-                    </div>
-                ) : filteredProjects.length === 0 ? (
-                    <div className={`flex flex-col items-center justify-center h-64 text-n100 ${shellWidthClass} mx-auto`}>
-                        <FolderOpen className="w-16 h-16 mb-4 opacity-30" />
-                        <p className="text-lg mb-2 text-n300">
-                            {searchQuery ? '未找到匹配的项目' : '还没有项目'}
-                        </p>
-                        <p className="text-sm">
-                            {searchQuery ? '尝试其他搜索词' : '点击「新建项目」开始创作'}
-                        </p>
-                    </div>
-                ) : (
-                    <div className={projectGridClass}>
-                        {filteredProjects.map(p => (
-                            <div
-                                key={p.projectId}
-                                className={`group relative bg-n0 border border-n40 hover:border-primary shadow-card hover:shadow-atlas rounded-md p-4 cursor-pointer transition-all ${p.isArchived ? 'opacity-60' : ''}`}
-                                onClick={() => navigate(`/projects/${p.projectId}`)}
+                    <div className="flex flex-col gap-3 border-y border-n40 px-4 py-3 sm:px-6 md:flex-row md:items-center md:justify-between md:py-0 lg:px-8">
+                        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+                            <button
+                                type="button"
+                                onClick={() => setShowArchived(false)}
+                                className={`relative h-12 shrink-0 px-1.5 text-sm transition-colors md:h-16 md:px-2 ${
+                                    !showArchived ? 'font-medium text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'
+                                }`}
                             >
-                                {/* 封面区域 */}
-                                <div className="h-24 bg-gradient-to-br from-primary-light to-p50 rounded mb-3 flex items-center justify-center overflow-hidden">
-                                    {p.coverUrl ? (
-                                        <img src={p.coverUrl} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <FolderOpen className="w-10 h-10 text-n50" />
-                                    )}
-                                </div>
-
-                                {/* 项目信息 */}
-                                <h3 className="font-medium text-sm truncate mb-1 flex items-center gap-1.5 text-n800">
-                                    <span className="truncate">{p.projectName}</span>
-                                    {/* 内容标识：一眼区分"有内容"和"空项目"，避免误删 */}
-                                    {(p.episodeCount ?? 0) > 0 ? (
-                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-300 font-semibold">
-                                            {p.episodeCount} 集
-                                        </span>
-                                    ) : (
-                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-n30 text-n200 border border-n40">
-                                            空
-                                        </span>
-                                    )}
-                                    {/* 2026-05-26 组织管理 MVP — Slice 5: visibility badge */}
-                                    {p.visibility && p.visibility !== 'private' && (
-                                        <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-b50 text-b400 border border-b75">
-                                            🌐 组
-                                        </span>
-                                    )}
-                                </h3>
-                                {p.description && (
-                                    <p className="text-xs text-n200 truncate mb-2">{p.description}</p>
-                                )}
-
-                                {/* 标签 */}
-                                {p.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mb-2">
-                                        {p.tags.slice(0, 3).map(t => (
-                                            <span key={t} className="text-[10px] px-1.5 py-0.5 bg-n30 text-n300 rounded">
-                                                {t}
-                                            </span>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* 底部元信息 */}
-                                <div className="flex items-center justify-between text-xs text-n100 mt-auto">
-                                    <div className="flex items-center gap-1">
-                                        <Users className="w-3 h-3" />
-                                        <span>{p.memberCount}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        <span>{formatTime(p.updatedAt)}</span>
-                                    </div>
-                                </div>
-
-                                {/* 右上角菜单 */}
-                                <button
-                                    className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-n20 transition-all"
-                                    onClick={e => {
-                                        e.stopPropagation();
-                                        setContextMenu({ projectId: p.projectId, x: e.clientX, y: e.clientY, isArchived: p.isArchived });
-                                    }}
+                                全部项目 <span className="ml-1 text-xs text-n100">{!showArchived ? filteredProjects.length : ''}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setShowArchived(true)}
+                                className={`relative h-12 shrink-0 px-3 text-sm transition-colors md:h-16 ${
+                                    showArchived ? 'font-medium text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'
+                                }`}
+                            >
+                                含已归档
+                            </button>
+                            <div className="ml-2 flex shrink-0 items-center gap-2 border-l border-n40 pl-3 text-sm">
+                                <span className="text-n100">排序</span>
+                                <select
+                                    value={sortBy}
+                                    onChange={e => setSortBy(e.target.value as SortKey)}
+                                    className="h-9 rounded border border-n40 bg-n0 px-2 text-sm text-n700 outline-none transition-colors focus:border-primary"
                                 >
-                                    <MoreVertical className="w-4 h-4 text-n200" />
-                                </button>
-
-                                {p.isArchived && (
-                                    <div className="absolute top-3 left-3">
-                                        <Archive className="w-4 h-4 text-warning" />
-                                    </div>
-                                )}
+                                    <option value="updated">最近更新</option>
+                                    <option value="created">创建时间</option>
+                                    <option value="name">名称</option>
+                                </select>
                             </div>
-                        ))}
+                        </div>
+                        <div className="relative w-full md:w-80">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
+                            <input
+                                type="search"
+                                placeholder="搜索项目"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="h-10 w-full rounded-lg border border-n40 bg-n0 pl-10 pr-4 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            />
+                        </div>
                     </div>
-                )}
+                </header>
+
+                <main className="px-4 py-7 sm:px-6 lg:px-8">
+                    <div className="mb-5 flex items-end justify-between gap-4">
+                        <div>
+                            <h2 className="text-xl font-bold tracking-tight text-n800">{showArchived ? '全部项目（含归档）' : '全部项目'}</h2>
+                            <p className="mt-1 text-xs text-n100">共 {filteredProjects.length} 个项目</p>
+                        </div>
+                    </div>
+
+                    {loading ? (
+                        <div className={projectGridClass}>
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className="aspect-[4/3] animate-pulse rounded-lg border border-n40 bg-n20" />
+                            ))}
+                        </div>
+                    ) : filteredProjects.length === 0 ? (
+                        <div className="flex min-h-[360px] flex-col items-center justify-center rounded-lg border border-dashed border-n40 bg-n10 px-6 text-center text-n100">
+                            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary-light text-primary">
+                                <FolderOpen className="h-7 w-7" />
+                            </div>
+                            <p className="mb-1 text-base font-medium text-n700">
+                                {searchQuery ? '未找到匹配的项目' : '还没有项目'}
+                            </p>
+                            <p className="text-sm">
+                                {searchQuery ? '尝试其他搜索词' : '点击「新建项目」开始创作'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className={projectGridClass}>
+                            {filteredProjects.map(p => (
+                                <article
+                                    key={p.projectId}
+                                    className={`group relative cursor-pointer overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas ${p.isArchived ? 'opacity-65' : ''}`}
+                                    onClick={() => navigate(`/projects/${p.projectId}`)}
+                                >
+                                    <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-n30 via-primary-light to-b75">
+                                        {p.coverUrl ? (
+                                            <img src={p.coverUrl} alt={`${p.projectName} 封面`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+                                        ) : (
+                                            <div className="flex h-full items-center justify-center">
+                                                <BrandLogo variant="mark" className="h-20 w-20 opacity-[0.12]" alt="" />
+                                            </div>
+                                        )}
+                                        {p.isArchived && (
+                                            <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded bg-n800/80 px-2 py-1 text-[11px] font-medium text-white">
+                                                <Archive className="h-3 w-3" /> 已归档
+                                            </div>
+                                        )}
+                                        <button
+                                            type="button"
+                                            aria-label={`${p.projectName} 更多操作`}
+                                            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-n40 bg-n0 text-n300 shadow-card transition-colors hover:text-n800"
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                setContextMenu({ projectId: p.projectId, x: e.clientX, y: e.clientY, isArchived: p.isArchived });
+                                            }}
+                                        >
+                                            <MoreVertical className="h-4 w-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="p-4">
+                                        <div className="mb-2 flex min-w-0 items-center gap-1.5">
+                                            <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-n800">{p.projectName}</h3>
+                                            {(p.episodeCount ?? 0) > 0 ? (
+                                                <span className="shrink-0 rounded bg-g50 px-1.5 py-0.5 text-[10px] font-semibold text-g400">{p.episodeCount} 集</span>
+                                            ) : (
+                                                <span className="shrink-0 rounded bg-n30 px-1.5 py-0.5 text-[10px] text-n200">空项目</span>
+                                            )}
+                                            {p.visibility && p.visibility !== 'private' && (
+                                                <span className="shrink-0 rounded bg-b50 px-1.5 py-0.5 text-[10px] text-b400">组织</span>
+                                            )}
+                                        </div>
+                                        <p className="mb-3 min-h-4 truncate text-xs text-n200">{p.description || '暂无项目描述'}</p>
+                                        {p.tags.length > 0 && (
+                                            <div className="mb-3 flex flex-wrap gap-1">
+                                                {p.tags.slice(0, 3).map(t => (
+                                                    <span key={t} className="rounded bg-n20 px-1.5 py-0.5 text-[10px] text-n300">{t}</span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex items-center justify-between gap-3 border-t border-n30 pt-3 text-xs text-n100">
+                                            <span className="flex min-w-0 items-center gap-1">
+                                                <Users className="h-3 w-3 shrink-0" /> {p.memberCount} 位成员
+                                            </span>
+                                            <span className="flex shrink-0 items-center gap-1">
+                                                <Clock className="h-3 w-3" /> {formatTime(p.updatedAt)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                </main>
             </div>
 
             {/* 右键菜单 */}

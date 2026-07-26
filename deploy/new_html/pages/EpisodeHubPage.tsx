@@ -4,6 +4,8 @@ import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2
 import { apiJson } from '../services/httpClient';
 import { duplicateEpisode as duplicateEpisodeRequest } from '../services/projectWorkflowService';
 import type { Episode } from '../types';
+import { BrandLogo } from '../components/BrandLogo';
+import { crmConfirm, crmMessage } from '../admin/crmUI';
 
 export const EpisodeHubPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -72,14 +74,24 @@ export const EpisodeHubPage: React.FC = () => {
   };
 
   const deleteEpisode = async (episodeId: string) => {
-    if (!confirm('确定要删除此分集吗？')) return;
+    const episode = episodes.find(item => item.episodeId === episodeId);
+    if (!await crmConfirm({
+      title: '删除分集',
+      message: `确定删除「${episode?.episodeName || '未命名分集'}」？该分集的剧本、分镜和生成结果将一并删除，且不可恢复。`,
+      type: 'danger',
+      confirmText: '删除分集',
+    })) return;
     try {
       const data = await apiJson<any>(`/api/episodes/${episodeId}`, {
         method: 'DELETE',
       }, '删除分集');
-      if (data.success) loadEpisodes();
+      if (data.success) {
+        crmMessage.success('分集已删除');
+        loadEpisodes();
+      }
     } catch (e) {
       console.error('Failed to delete episode:', e);
+      crmMessage.error('删除失败，请检查网络');
     }
     setMenuOpen(null);
   };
@@ -95,11 +107,11 @@ export const EpisodeHubPage: React.FC = () => {
       if (data.success) {
         await loadEpisodes();
       } else {
-        alert('复制失败：' + (data.detail || '未知错误'));
+        crmMessage.error('复制失败：' + (data.detail || '未知错误'));
       }
     } catch (e) {
       console.error('Failed to duplicate episode:', e);
-      alert('复制失败，请检查网络');
+      crmMessage.error('复制失败，请检查网络');
     } finally {
       setDuplicatingId(null);
     }
@@ -140,159 +152,141 @@ export const EpisodeHubPage: React.FC = () => {
     published: 'bg-g50 text-g400',
   };
 
-  const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-6xl';
+  const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-[1320px]';
   const episodeGridClass = isWideLayout
-    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4'
-    : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
+    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5'
+    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
+  const currentUsername = localStorage.getItem('username') || '未登录';
 
   return (
-    <div className="min-h-screen bg-n0 p-6 md:p-10">
-      <div className={`w-full ${shellWidthClass} mx-auto`}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 animate-slideDown">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/projects')}
-              className="flex items-center justify-center w-9 h-9 rounded-lg bg-n0 border border-n40 text-n300 hover:text-n800 hover:border-n40 transition-all duration-200"
-              title="返回项目列表"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-n800 tracking-tight">分集管理</h1>
-              <p className="text-sm text-n100 mt-0.5">{episodes.length} 个分集 · {localStorage.getItem('username') || '未登录'}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={toggleLayoutWidth}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-n300 hover:text-n800 hover:bg-n0 border border-n40 hover:border-primary transition-all duration-200"
-            title={isWideLayout ? '切回窄屏' : '切到宽屏'}
-          >
-            {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            {isWideLayout ? '窄屏' : '宽屏'}
-          </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-all duration-200 shadow-card hover:shadow-atlas"
-          >
-            <Plus size={18} /> 新建分集
-          </button>
-          <button
-            onClick={() => {
-              localStorage.removeItem('auth_token');
-              localStorage.removeItem('username');
-              window.location.href = '/login';
-            }}
-            className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-n100 hover:text-danger hover:bg-r50 border border-n40 hover:border-n40 transition-all duration-200"
-            title="退出登录"
-          >
-            <LogOut size={16} /> 退出
-          </button>
-          </div>
-        </div>
-
-        {/* Create Panel */}
-        {showCreate && (
-          <div className="bg-n0 rounded-md p-5 mb-6 border border-n40 shadow-card animate-slideUp">
-            <label className="block text-sm font-medium text-n700 mb-2">分集标题</label>
-            <input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="例如：第一集 - 序章"
-              className="w-full px-4 py-2.5 bg-n0 border border-n40 rounded-lg text-n800 placeholder:text-n100 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-              onKeyDown={(e) => e.key === 'Enter' && createEpisode()}
-              autoFocus
-            />
-            <div className="flex gap-3 mt-4">
+    <div className="layout-safe min-h-screen bg-n20 text-n800" onClick={() => setMenuOpen(null)}>
+      <div className={`min-h-screen w-full ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
+        <header className="animate-slideDown">
+          <div className="flex min-h-[84px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
               <button
-                onClick={createEpisode}
-                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors"
+                type="button"
+                onClick={() => navigate('/projects')}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-n40 bg-n0 text-n300 transition-colors hover:border-n70 hover:text-n800"
+                title="返回项目列表"
               >
-                创建
+                <ArrowLeft size={18} />
               </button>
               <button
-                onClick={() => { setShowCreate(false); setNewTitle(''); }}
-                className="px-4 py-2 bg-n0 hover:bg-n20 text-n700 rounded-lg text-sm font-medium transition-colors"
+                type="button"
+                onClick={() => navigate('/projects')}
+                className="hidden shrink-0 rounded focus:outline-none focus:ring-2 focus:ring-primary/25 sm:block"
+                title="MECHA.ONE 项目"
               >
-                取消
+                <BrandLogo className="h-8 w-auto max-w-[156px]" />
+              </button>
+              <div className="hidden h-8 w-px shrink-0 bg-n40 sm:block" />
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-bold tracking-tight text-n800 sm:text-2xl">分集</h1>
+                <p className="mt-0.5 text-xs text-n100 lg:hidden">{episodes.length} 个分集</p>
+              </div>
+            </div>
+
+            <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:gap-3">
+              <button
+                type="button"
+                onClick={toggleLayoutWidth}
+                className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-n40 bg-n0 px-3 text-sm text-n300 transition-colors hover:border-n70 hover:text-n800"
+                title={isWideLayout ? '切回窄屏' : '切到宽屏'}
+              >
+                {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                {isWideLayout ? '窄屏' : '宽屏'}
+              </button>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex h-10 min-w-[128px] flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas sm:flex-none"
+              >
+                <Plus size={17} /> 新建分集
+              </button>
+              <span className="hidden max-w-[140px] truncate text-sm text-n300 xl:block" title={currentUsername}>{currentUsername}</span>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('auth_token');
+                  localStorage.removeItem('username');
+                  window.location.href = '/login';
+                }}
+                className="inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-lg border border-n40 px-3 text-sm text-n100 transition-colors hover:border-r75 hover:bg-r50 hover:text-danger"
+                title="退出登录"
+              >
+                <LogOut size={15} /> <span className="hidden sm:inline">退出</span>
               </button>
             </div>
           </div>
-        )}
 
-        {/* Episode Grid */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-n100">
-            <div className="w-8 h-8 border-2 border-n40 border-t-primary rounded-full animate-spin mb-4" />
-            <span className="text-sm">加载中...</span>
+          <div className="flex h-14 items-end border-y border-n40 px-4 sm:px-6 lg:h-16 lg:px-8">
+            <div className="relative flex h-full items-center px-2 text-sm font-medium text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary">
+              全部分集
+              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-light px-1.5 py-0.5 text-[11px] text-primary">{episodes.length}</span>
+            </div>
           </div>
-        ) : episodes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-n100">
-            <Film size={48} className="mb-4 text-n100" />
-            <p className="text-lg font-medium text-n300 mb-2">暂无分集</p>
-            <p className="text-sm">点击上方「新建分集」开始创作</p>
+        </header>
+
+        <main className="px-4 py-7 sm:px-6 lg:px-8">
+          <div className="mb-5">
+            <h2 className="text-xl font-bold tracking-tight text-n800">全部分集</h2>
+            <p className="mt-1 text-xs text-n100">每个分集拥有独立生产链路，选择一种方式开始创作</p>
           </div>
-        ) : (
-          <div className={episodeGridClass}>
-            {episodes.map((ep, idx) => (
-              <div
-                key={ep.episodeId}
-                className="group bg-n0 rounded-md border border-n40 hover:border-n40 shadow-card hover:shadow-atlas transition-all duration-300 overflow-hidden animate-slideUp"
-                style={{ animationDelay: `${idx * 60}ms` }}
-              >
-                <div className="p-5">
-                  {/* Top row */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-mono text-primary bg-primary-light px-2 py-0.5 rounded">
-                          #{idx + 1}
-                        </span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${statusColors[ep.status] || statusColors.draft}`}>
-                          {ep.status === 'draft' ? '草稿' : ep.status === 'in_progress' ? '制作中' : ep.status === 'completed' ? '已完成' : ep.status === 'published' ? '已发布' : ep.status}
-                        </span>
-                      </div>
-                      {editingId === ep.episodeId ? (
-                        <input
-                          value={editingName}
-                          onChange={e => setEditingName(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') setEditingId(null); }}
-                          onBlur={submitRename}
-                          autoFocus
-                          className="w-full text-base font-semibold text-n800 bg-n0 border border-primary rounded px-2 py-0.5 focus:outline-none"
-                        />
-                      ) : (
-                        <h3 className="text-base font-semibold text-n800 truncate">{ep.episodeName || '未命名分集'}</h3>
-                      )}
+
+          {loading ? (
+            <div className={episodeGridClass}>
+              {[1, 2, 3, 4].map(item => (
+                <div key={item} className="aspect-[4/3] animate-pulse rounded-lg border border-n40 bg-n20" />
+              ))}
+            </div>
+          ) : episodes.length === 0 ? (
+            <div className="flex min-h-[360px] flex-col items-center justify-center rounded-lg border border-dashed border-n40 bg-n10 px-6 text-center text-n100">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary-light text-primary">
+                <Film className="h-7 w-7" />
+              </div>
+              <p className="mb-1 text-base font-medium text-n700">暂无分集</p>
+              <p className="text-sm">点击「新建分集」开始创作</p>
+            </div>
+          ) : (
+            <div className={episodeGridClass}>
+              {episodes.map((ep, idx) => (
+                <article
+                  key={ep.episodeId}
+                  className="group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp"
+                  style={{ animationDelay: `${idx * 60}ms` }}
+                  onClick={event => event.stopPropagation()}
+                >
+                  <div className="relative aspect-video overflow-visible bg-gradient-to-br from-n30 via-n20 to-primary-light">
+                    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+                      <BrandLogo variant="mark" className="h-24 w-24 opacity-[0.08]" alt="" />
                     </div>
-                    <div className="relative">
+                    <div className="absolute left-3 top-3 flex items-center gap-2">
+                      <span className="rounded bg-n800/85 px-2 py-1 text-[11px] font-semibold text-white">EP {String(idx + 1).padStart(2, '0')}</span>
+                      <span className={`rounded px-2 py-1 text-[11px] font-medium ${statusColors[ep.status] || statusColors.draft}`}>
+                        {ep.status === 'draft' ? '草稿' : ep.status === 'in_progress' ? '制作中' : ep.status === 'completed' ? '已完成' : ep.status === 'published' ? '已发布' : ep.status}
+                      </span>
+                    </div>
+                    <div className="absolute right-3 top-3 z-20">
                       <button
+                        type="button"
+                        aria-label={`${ep.episodeName || '未命名分集'} 更多操作`}
                         onClick={() => setMenuOpen(menuOpen === ep.episodeId ? null : ep.episodeId)}
-                        className="p-1 rounded text-n100 hover:text-n700 hover:bg-n20 transition-colors"
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-n40 bg-n0 text-n300 shadow-card transition-colors hover:text-n800"
                       >
                         <MoreVertical size={16} />
                       </button>
                       {menuOpen === ep.episodeId && (
-                        <div className="absolute right-0 top-8 z-10 bg-n0 border border-n40 rounded-lg shadow-bottom py-1 min-w-[120px] animate-scaleIn">
-                          <button
-                            onClick={() => startRename(ep)}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-n700 hover:bg-n20 transition-colors"
-                          >
+                        <div className="absolute right-0 top-10 z-30 min-w-[132px] overflow-hidden rounded-lg border border-n40 bg-n0 py-1 shadow-bottom animate-scaleIn">
+                          <button onClick={() => startRename(ep)} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-n700 transition-colors hover:bg-n20">
                             <Pencil size={14} /> 重命名
                           </button>
                           <button
                             onClick={() => duplicateEpisode(ep.episodeId)}
                             disabled={duplicatingId === ep.episodeId}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-n700 hover:bg-n20 transition-colors disabled:opacity-50"
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-n700 transition-colors hover:bg-n20 disabled:opacity-50"
                           >
                             <Copy size={14} /> {duplicatingId === ep.episodeId ? '复制中…' : '复制'}
                           </button>
-                          <button
-                            onClick={() => deleteEpisode(ep.episodeId)}
-                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-danger hover:bg-r50 transition-colors"
-                          >
+                          <button onClick={() => deleteEpisode(ep.episodeId)} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger transition-colors hover:bg-r50">
                             <Trash2 size={14} /> 删除
                           </button>
                         </div>
@@ -300,36 +294,81 @@ export const EpisodeHubPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {ep.description && (
-                    <p className="text-sm text-n100 mb-3 line-clamp-2">{ep.description}</p>
-                  )}
-
-                  <div className="flex items-center text-xs text-n100 mb-4">
-                    <Clock size={12} className="mr-1" />
-                    {ep.updatedAt ? new Date(ep.updatedAt).toLocaleDateString('zh-CN') : '未编辑'}
+                  <div className="p-4">
+                    {editingId === ep.episodeId ? (
+                      <input
+                        value={editingName}
+                        onChange={event => setEditingName(event.target.value)}
+                        onKeyDown={event => { if (event.key === 'Enter') submitRename(); if (event.key === 'Escape') setEditingId(null); }}
+                        onBlur={submitRename}
+                        autoFocus
+                        className="mb-2 w-full rounded border border-primary bg-n0 px-2 py-1 text-sm font-semibold text-n800 outline-none ring-2 ring-primary/15"
+                      />
+                    ) : (
+                      <h3 className="mb-2 truncate text-sm font-semibold text-n800">{ep.episodeName || '未命名分集'}</h3>
+                    )}
+                    {ep.description && <p className="mb-3 line-clamp-2 text-xs text-n200">{ep.description}</p>}
+                    <div className="mb-4 flex items-center text-xs text-n100">
+                      <Clock size={12} className="mr-1" />
+                      更新于 {ep.updatedAt ? new Date(ep.updatedAt).toLocaleDateString('zh-CN') : '未编辑'}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => goToWorkflow(ep.episodeId)}
+                        className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-b75 bg-primary-light px-2 text-sm font-medium text-primary transition-colors hover:border-primary"
+                      >
+                        <LayoutList size={15} /> 流程化制作
+                      </button>
+                      <button
+                        onClick={() => goToCanvas(ep.episodeId)}
+                        className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-n40 bg-n20 px-2 text-sm font-medium text-success transition-colors hover:border-g200"
+                      >
+                        <Grid3X3 size={15} /> 自由创作
+                      </button>
+                    </div>
                   </div>
-
-                  {/* Action buttons */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => goToWorkflow(ep.episodeId)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium bg-primary-light text-primary border border-primary/20 hover:bg-primary-light hover:border-primary transition-all duration-200"
-                    >
-                      <LayoutList size={15} /> 流程化制作
-                    </button>
-                    <button
-                      onClick={() => goToCanvas(ep.episodeId)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium bg-n30 text-success border border-n40 hover:bg-n30 hover:border-n40 transition-all duration-200"
-                    >
-                      <Grid3X3 size={15} /> 自由创作
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                </article>
+              ))}
+            </div>
+          )}
+        </main>
       </div>
+
+      {showCreate && (
+        <div
+          className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-episode-title"
+          onClick={() => { setShowCreate(false); setNewTitle(''); }}
+        >
+          <div className="app-modal-surface w-full max-w-md overflow-hidden" onClick={event => event.stopPropagation()}>
+            <div className="app-modal-header">
+              <h2 id="create-episode-title" className="text-lg font-semibold text-n800">新建分集</h2>
+            </div>
+            <div className="app-modal-body">
+              <label className="mb-1.5 block text-sm text-n300">分集标题</label>
+              <input
+                value={newTitle}
+                onChange={event => setNewTitle(event.target.value)}
+                placeholder="例如：第一集 - 序章"
+                className="w-full rounded-lg border border-n40 bg-n0 px-3 py-2.5 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/20"
+                onKeyDown={event => event.key === 'Enter' && createEpisode()}
+                autoFocus
+              />
+              <p className="mt-2 text-xs text-n100">创建后可选择流程化制作或自由创作。</p>
+            </div>
+            <div className="app-modal-footer">
+              <button onClick={() => { setShowCreate(false); setNewTitle(''); }} className="rounded-lg border border-n40 bg-n0 px-4 py-2 text-sm font-medium text-n700 transition-colors hover:bg-n20">
+                取消
+              </button>
+              <button onClick={createEpisode} disabled={!newTitle.trim()} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-n70">
+                创建分集
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

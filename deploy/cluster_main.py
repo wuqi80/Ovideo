@@ -70,6 +70,7 @@ from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO, Pr
 from dao_entity_file import EntityFileDAO
 from dao_storyboard import StoryboardDAO
 from dao_user import UserDAO
+from dao_credit import CreditAccountDAO
 from dao_organization import OrganizationDAO, OrganizationMemberDAO
 
 DB_AVAILABLE = True
@@ -90,6 +91,7 @@ from services.api_provider_health_monitor import (
 from services.ai_proxy_service import generate_gemini_images
 from services.ai_proxy_types import AIProxyError
 from services.auth_user_service import ensure_authenticated_user_record
+from services.user_profile_service import resolve_authenticated_user_id
 from services.api_provider_runtime import build_provider_runtime_status
 from routers.ai_proxy import create_ai_proxy_router
 from routers.admin_compat import create_admin_compat_router
@@ -823,7 +825,7 @@ async def require_auth(username: Optional[str] = Depends(verify_session)) -> str
 
     await ensure_authenticated_user_record(username, logger=logger)
 
-    return username
+    return await resolve_authenticated_user_id(username, user_dao=UserDAO)
 
 app.include_router(
     create_ai_proxy_router(
@@ -892,7 +894,12 @@ app.include_router(
         online_users=_online_users,
         organization_dao=OrganizationDAO,
         organization_member_dao=OrganizationMemberDAO,
+        user_dao=UserDAO,
+        project_dao=ProjectDAO,
+        project_member_dao=ProjectMemberDAO,
+        credit_account_dao=CreditAccountDAO,
         logger=logger,
+        create_session_token=create_session_token,
     )
 )
 logger.info("✅ User Session API 路由已注册 (/api/logout, /api/user/info, /api/me/organizations)")

@@ -56,6 +56,7 @@ from routers.storyboard_quality import create_storyboard_quality_router
 from routers.task_notifications import create_task_notifications_router
 from routers.video_capabilities import create_video_capabilities_router
 from routers.video_voice_references import create_video_voice_references_router
+from services.user_profile_service import resolve_authenticated_user_id
 
 # 2026-05-24：MiniMax TTS 改异步入队，handler 调 task_service.submit
 import task_service
@@ -85,7 +86,7 @@ async def get_current_user(request: Request) -> str:
     username = jwt_auth.verify_token(token)
     if not username:
         raise HTTPException(status_code=401, detail="Token已失效或不存在，请重新登录")
-    return username
+    return await resolve_authenticated_user_id(username, user_dao=UserDAO)
 
 
 def _require_minimax_client():

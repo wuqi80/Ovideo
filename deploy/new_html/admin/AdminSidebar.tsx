@@ -12,9 +12,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Coins, Image as ImageIcon, BarChart3, Settings,
-  ChevronDown, ChevronRight, ShieldCheck,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { ADMIN_MENU, isToActive, MenuSection, MenuItem } from './adminMenu';
+import { BrandLogo } from '../components/BrandLogo';
 
 const ICONS: Record<string, React.FC<{ className?: string }>> = {
   LayoutDashboard, Users, Coins, ImageIcon, BarChart3, Settings,
@@ -64,9 +65,7 @@ export const AdminSidebar: React.FC = () => {
     <aside className="w-60 shrink-0 bg-n0 border-r border-n40 flex flex-col min-h-0">
       {/* header cell */}
       <div className="h-14 flex items-center gap-2.5 px-4 border-b border-n40 min-w-0">
-        <div className="w-8 h-8 rounded-md bg-primary-light border border-primary/30 flex items-center justify-center">
-          <ShieldCheck className="w-4 h-4 text-primary" />
-        </div>
+        <BrandLogo variant="mark" className="h-8 w-8" />
         <div className="leading-tight min-w-0">
           <div className="text-sm font-bold tracking-tight text-n800">系统管理后台</div>
           <div className="text-[10px] uppercase tracking-widest text-n100"

@@ -41,6 +41,7 @@ sql/db_migration_timeline_tracks.sql        # REF episodes
 sql/db_migration_project_hub.sql            # 建 project_members/canvas_boards/canvas_nodes/...
 sql/db_migration_audio_tracks.sql           # REF episodes/storyboard_items; ALTER canvas_boards
 sql/db_migration_admin_users_groups.sql     # 建 project_groups; ALTER projects/users
+sql/db_migration_user_profile.sql           # ALTER users; self-service profile fields
 
 # ---- 4. 用户维度业务表 ----
 sql/db_migration_credits.sql                # REF users

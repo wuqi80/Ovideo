@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 262
-DEFAULT_EXPECTED_OPERATIONS = 320
+DEFAULT_EXPECTED_PATHS = 266
+DEFAULT_EXPECTED_OPERATIONS = 325
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -80,6 +80,8 @@ EXPECTED_ENDPOINTS = {
     ("/app", "GET"): ("routers.frontend_pages", "app_page"),
     ("/projects", "GET"): ("routers.frontend_pages", "projects_hub"),
     ("/projects/{path:path}", "GET"): ("routers.frontend_pages", "projects_spa"),
+    ("/profile", "GET"): ("routers.frontend_pages", "profile_page"),
+    ("/credits", "GET"): ("routers.frontend_pages", "credits_page"),
     ("/canvas", "GET"): ("routers.frontend_pages", "canvas_page"),
     ("/canvas/{path:path}", "GET"): ("routers.frontend_pages", "canvas_spa"),
     ("/admin", "GET"): ("routers.frontend_pages", "admin_spa_root"),
@@ -92,6 +94,9 @@ EXPECTED_ENDPOINTS = {
     ("/admin/settings/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
     ("/api/logout", "POST"): ("routers.user_session", "logout"),
     ("/api/user/info", "GET"): ("routers.user_session", "get_user_info"),
+    ("/api/me/profile", "GET"): ("routers.user_session", "get_my_profile"),
+    ("/api/me/profile", "PUT"): ("routers.user_session", "update_my_profile"),
+    ("/api/me/password", "POST"): ("routers.user_session", "change_my_password"),
     ("/api/me/organizations", "GET"): ("routers.user_session", "list_my_organizations"),
     ("/api/me/organizations/{org_id}/leave", "POST"): ("routers.user_session", "leave_organization"),
     ("/api/workspace/save-task", "POST"): ("routers.workspace", "save_video_task"),
@@ -756,8 +761,8 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 21:
-        fail(f"routers/frontend_pages.py should own 21 frontend route registrations, found {route_count}")
+    if route_count != 23:
+        fail(f"routers/frontend_pages.py should own 23 frontend route registrations, found {route_count}")
     return route_count
 
 
@@ -806,8 +811,8 @@ def check_user_session_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 4:
-        fail(f"routers/user_session.py should own 4 user session route registrations, found {route_count}")
+    if route_count != 7:
+        fail(f"routers/user_session.py should own 7 user session route registrations, found {route_count}")
 
     user_session_text = user_session_path.read_text(encoding="utf-8")
     cluster_main_text = cluster_main_path.read_text(encoding="utf-8")
