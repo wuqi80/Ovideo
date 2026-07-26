@@ -30,6 +30,11 @@ export interface StoryboardReferencePlan {
   maxReferences: number;
 }
 
+export interface DefaultReferenceMerge {
+  references: GenerationReference[];
+  exceedsLimit: boolean;
+}
+
 function normalizedAnchor(raw: unknown): CharacterIdentityAnchor {
   const anchor = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   return {
@@ -143,6 +148,25 @@ export function resolveShotReferences(
   maxReferences = 6,
 ): GenerationReference[] {
   return resolveShotReferencePlan(shot, materialLibrary, existing, maxReferences).references;
+}
+
+export function mergeDefaultShotReferences(
+  currentReferences: GenerationReference[],
+  defaultReferences: GenerationReference[],
+  maxReferences = 6,
+): DefaultReferenceMerge {
+  const merged = [...currentReferences];
+  const existingUrls = new Set(currentReferences.map(reference => reference.url).filter(Boolean));
+
+  for (const reference of defaultReferences) {
+    if (!reference.url || existingUrls.has(reference.url)) continue;
+    merged.push(reference);
+    existingUrls.add(reference.url);
+  }
+
+  return merged.length > maxReferences
+    ? { references: [...currentReferences], exceedsLimit: true }
+    : { references: merged, exceedsLimit: false };
 }
 
 export function resolveSelectedShotReferences(

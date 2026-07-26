@@ -39,6 +39,7 @@ import {
 import { fitAngleOutputDimensions } from '../utils/angleOutputSize';
 import {
   buildIdentityAnchoredPrompt,
+  mergeDefaultShotReferences,
   resolveSelectedShotReferences,
   resolveShotReferencePlan,
   resolveShotReferences,
@@ -939,9 +940,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   const handleAutoFill = () => {
       if (!selectedShot) return;
-      updateCurrentShotReferences(
+      const merged = mergeDefaultShotReferences(
+        referencesRef.current,
         resolveShotReferences(selectedShot, materialLibrary),
       );
+      if (merged.exceedsLimit) {
+          alert('无法恢复自动绑定，因为超过6张图');
+          return;
+      }
+      updateCurrentShotReferences(merged.references);
   };
 
   const handleAddProjectMaterial = (item: (typeof materialPickerItems)[number]) => {

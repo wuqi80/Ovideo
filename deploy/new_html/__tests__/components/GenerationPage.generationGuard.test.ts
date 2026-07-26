@@ -136,4 +136,10 @@ describe('GenerationPage reference actions', () => {
     expect(source).toContain('pb-24');
     expect(storyboardPageSource).toContain('layout-safe flex-1 min-h-0 overflow-hidden');
   });
+
+  it('restores defaults incrementally and blocks overflow without deleting current images', () => {
+    expect(source).toContain('mergeDefaultShotReferences(');
+    expect(source).toContain("alert('无法恢复自动绑定，因为超过6张图')");
+    expect(source).toContain('updateCurrentShotReferences(merged.references)');
+  });
 });

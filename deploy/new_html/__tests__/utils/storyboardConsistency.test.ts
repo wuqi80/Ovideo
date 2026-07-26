@@ -4,6 +4,7 @@ import type { MaterialLibrary, StoryboardItem } from '../../types';
 import {
   applyConfiguredReferenceDrafts,
   buildIdentityAnchoredPrompt,
+  mergeDefaultShotReferences,
   resolveSelectedShotReferences,
   resolveShotReferencePlan,
   resolveShotReferences,
@@ -84,6 +85,54 @@ describe('storyboard independent references', () => {
       type: 'pose',
       source: 'manual',
     }]);
+  });
+
+  it('restores missing defaults without deleting later-added references', () => {
+    const added = [{
+      id: 'later-added',
+      url: '/storage/later-added.png',
+      type: 'pose' as const,
+      source: 'manual' as const,
+    }];
+    const defaults = resolveShotReferences(shot, library);
+
+    expect(mergeDefaultShotReferences(added, defaults)).toEqual({
+      references: [
+        ...added,
+        ...defaults,
+      ],
+      exceedsLimit: false,
+    });
+  });
+
+  it('does not duplicate defaults already present in the current list', () => {
+    const defaults = resolveShotReferences(shot, library);
+    const added = {
+      id: 'later-added',
+      url: '/storage/later-added.png',
+      type: 'pose' as const,
+      source: 'manual' as const,
+    };
+
+    expect(mergeDefaultShotReferences([defaults[0], added], defaults)).toEqual({
+      references: [defaults[0], added, defaults[1]],
+      exceedsLimit: false,
+    });
+  });
+
+  it('keeps the current list unchanged when restoring defaults would exceed six images', () => {
+    const current = Array.from({ length: 5 }, (_, index) => ({
+      id: `later-${index}`,
+      url: `/storage/later-${index}.png`,
+      type: 'pose' as const,
+      source: 'manual' as const,
+    }));
+    const defaults = resolveShotReferences(shot, library);
+
+    expect(mergeDefaultShotReferences(current, defaults)).toEqual({
+      references: current,
+      exceedsLimit: true,
+    });
   });
 
   it('preserves current references while the active shot receives unrelated updates', () => {
