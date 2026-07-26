@@ -1,6 +1,6 @@
 
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { flushSync } from 'react-dom';
 import { v4 as uuidv4 } from 'uuid';
 import { FileText, ShieldCheck } from 'lucide-react';
@@ -244,6 +244,79 @@ function buildLocalScriptConversation(file: ProjectFile): ScriptConversation {
       }] : []),
     ],
     versions: fallbackVersion ? [fallbackVersion] : [],
+  };
+}
+
+function normalizeScriptContentForCompare(content?: string | null): string {
+  return (content || '').trim().replace(/\r\n/g, '\n');
+}
+
+function mergeScriptConversationWithLocalFile(
+  file: ProjectFile | undefined,
+  conversation?: ScriptConversation,
+): ScriptConversation | undefined {
+  const localContent = normalizeScriptContentForCompare(file?.scriptContent);
+  if (!file || !localContent) return conversation;
+
+  const localConversation = buildLocalScriptConversation(file);
+  const localVersion = localConversation.versions[0];
+  if (!localVersion) return conversation;
+  if (!conversation) return localConversation;
+
+  const existingVersions = conversation.versions || [];
+  const matchingVersion = [...existingVersions].reverse().find(
+    version => normalizeScriptContentForCompare(version.content) === localContent,
+  );
+
+  if (matchingVersion && !matchingVersion.id.startsWith('legacy_')) {
+    return {
+      ...conversation,
+      currentVersionId: matchingVersion.id,
+    };
+  }
+
+  const maxVersionNo = existingVersions.reduce(
+    (max, version) => Math.max(max, Number(version.versionNo) || 0),
+    0,
+  );
+  const localVersionNo = matchingVersion?.versionNo
+    || Math.max(localVersion.versionNo || 1, maxVersionNo + 1);
+  const mergedLocalVersion: ScriptStoryboardVersion = {
+    ...localVersion,
+    versionNo: localVersionNo,
+    createdAt: matchingVersion?.createdAt || localVersion.createdAt,
+    updatedAt: Math.max(matchingVersion?.updatedAt || 0, localVersion.updatedAt || 0),
+  };
+  const localAssistantMessage = localConversation.messages.find(
+    message => message.id === localVersion.messageId,
+  );
+  const localUserMessage = localConversation.messages.find(
+    message => message.id === `legacy_user_${file.id}`,
+  );
+  const hasUserMessage = conversation.messages.some(message => message.role === 'user');
+  const messagesWithoutLocal = conversation.messages.filter(
+    message => message.id !== localVersion.messageId && message.id !== `legacy_user_${file.id}`,
+  );
+
+  return {
+    ...conversation,
+    currentVersionId: localVersion.id,
+    messages: [
+      ...(localUserMessage && !hasUserMessage ? [localUserMessage] : []),
+      ...messagesWithoutLocal,
+      ...(localAssistantMessage
+        ? [{
+            ...localAssistantMessage,
+            content: mergedLocalVersion.content,
+            createdAt: mergedLocalVersion.createdAt,
+            updatedAt: mergedLocalVersion.updatedAt,
+          }]
+        : []),
+    ],
+    versions: [
+      ...existingVersions.filter(version => version.id !== localVersion.id),
+      mergedLocalVersion,
+    ],
   };
 }
 
@@ -499,13 +572,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }, [scriptWorkspaceUsername]);
 
   const selectedFile = files.find(f => f.id === selectedFileId);
-  const selectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined;
+  const rawSelectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined;
+  const selectedConversation = useMemo(
+    () => mergeScriptConversationWithLocalFile(selectedFile, rawSelectedConversation),
+    [rawSelectedConversation, selectedFile],
+  );
   const selectedConversationVersion = selectedConversation?.versions.find(
     version => version.id === selectedConversation.currentVersionId,
   ) || selectedConversation?.versions[selectedConversation.versions.length - 1];
-  const quickPipelineVersion = selectedFile?.scriptContent
-    ? buildLocalScriptConversation(selectedFile).versions[0]
-    : selectedConversationVersion;
+  const quickPipelineVersion = selectedConversationVersion
+    || (selectedFile?.scriptContent ? buildLocalScriptConversation(selectedFile).versions[0] : undefined);
   const selectedHistoryScopeKey = selectedFileId
     ? buildVersionHistoryScopeKey(selectedFileId, selectedConversationVersion?.id)
     : null;
@@ -514,6 +590,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     || selectedFile?.storyboard?.items
     || []
   ).filter(item => !item.isPlaceholder).length;
+
+  const syncScriptConversationFromFile = useCallback((fileId: string) => {
+    const file = filesRef.current.find(item => item.id === fileId);
+    if (!file) return;
+    setScriptConversations(prev => {
+      const merged = mergeScriptConversationWithLocalFile(file, prev[fileId]);
+      if (!merged) return prev;
+      return { ...prev, [fileId]: merged };
+    });
+  }, []);
   useEffect(() => {
     if (!selectedFileId || selectedFileId.startsWith('local_')) return;
     const cacheKey = `${propEpisodeId}:${selectedFileId}`;
@@ -540,8 +626,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       .then(conversation => {
         if (cancelled) return;
         loadedConversationKeysRef.current.add(cacheKey);
-        setScriptConversations(prev => ({ ...prev, [selectedFileId]: conversation }));
-        const persistedSnapshots = collectConversationStoryboardSnapshots(conversation);
+        const latestFile = filesRef.current.find(item => item.id === selectedFileId);
+        const mergedConversation = mergeScriptConversationWithLocalFile(latestFile, conversation) || conversation;
+        setScriptConversations(prev => ({ ...prev, [selectedFileId]: mergedConversation }));
+        const persistedSnapshots = collectConversationStoryboardSnapshots(mergedConversation);
         setFiles(prev => {
           const next = prev.map(file => (
             file.id === selectedFileId
@@ -1543,7 +1631,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     if (!fileId || !file) throw new Error('请先选择剧本任务');
     if (fileId.startsWith('local_')) throw new Error('剧本任务尚未保存，请稍后重试');
 
-    const conversation = scriptConversations[fileId] || {
+    const conversation = mergeScriptConversationWithLocalFile(file, scriptConversations[fileId]) || {
       scriptId: fileId,
       messages: [],
       versions: [],
@@ -3187,6 +3275,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             : f);
           setFiles(applyErr);
           filesRef.current = applyErr(filesRef.current);
+          syncScriptConversationFromFile(file.id);
           setStage(file.id, 'videoScript', { status: 'error', completed, errorMessage: `第 ${i + 1} 段失败：${errorSummary}` });
           await updateEpisodeScriptById(propEpisodeId, file.id, { adapted_script: partialScript }).catch(() => {});
           await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
@@ -3199,6 +3288,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         : f);
       setFiles(applyDone);
       filesRef.current = applyDone(filesRef.current); // 同步镜像，供 Stage3 立即读取
+      syncScriptConversationFromFile(file.id);
       setStage(file.id, 'videoScript', { status: 'done', completed });
       await updateEpisodeScriptById(propEpisodeId, file.id, { adapted_script: fullScript }).catch(() => {});
       await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
@@ -3207,7 +3297,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setStage(file.id, 'videoScript', { status: 'error', errorMessage: summarizePipelineError(e) });
       return false;
     }
-  }, [selectedFileId, aiModel, propEpisodeId, setStage, urlProjectId]);
+  }, [selectedFileId, aiModel, propEpisodeId, setStage, syncScriptConversationFromFile, urlProjectId]);
 
   /** Stage 3：对每个视频镜头块提取分镜提示词 → StoryboardItem[] */
   const handleExtractStoryboardPrompts = useCallback(async (targetFileId?: string) => {
@@ -3286,6 +3376,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         const errorSummary = summarizePipelineError(shotErr);
         setFiles(applyItems);
         filesRef.current = applyItems(filesRef.current);
+        syncScriptConversationFromFile(file.id);
         setStage(file.id, 'storyboardPrompt', { status: 'error', completed: i, errorMessage: `第 ${i + 1} 个镜头失败：${errorSummary}` });
         if (items.length > 0) {
           await saveEpisodeToBackend().catch(() => {});
@@ -3299,10 +3390,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       : f);
     setFiles(applyNormalizedItems);
     filesRef.current = applyNormalizedItems(filesRef.current); // 关键：保证下面的 save 读到刚生成的 items
+    syncScriptConversationFromFile(file.id);
     setStage(file.id, 'storyboardPrompt', { status: 'done', completed: shots.length });
     await saveEpisodeToBackend();
     return true;
-  }, [selectedFileId, aiModel, propEpisodeId, setStage, saveEpisodeToBackend, urlProjectId]);
+  }, [selectedFileId, aiModel, propEpisodeId, setStage, syncScriptConversationFromFile, saveEpisodeToBackend, urlProjectId]);
 
   /** 主按钮：按三步顺序执行，从未完成的阶段开始 */
   const handleRunThreeStagePipeline = useCallback(async (targetFileId?: string) => {

@@ -8,14 +8,21 @@ import { ScriptWorkspaceModeSwitch } from '../../components/ScriptWorkspaceModeS
 afterEach(cleanup);
 
 describe('ScriptWorkspaceModeSwitch', () => {
-  it('labels both modes and reports an explicit mode change', () => {
+  it('puts quick mode first, labels both modes, and reports an explicit mode change', () => {
     const onChange = vi.fn();
     render(<ScriptWorkspaceModeSwitch mode="writing" onChange={onChange} />);
+
+    const radios = screen.getAllByRole('radio');
+    expect(radios).toHaveLength(2);
+    expect(radios[0]).toHaveTextContent('快速版');
+    expect(radios[0]).toHaveAttribute('aria-checked', 'false');
+    expect(radios[1]).toHaveTextContent('写作版');
+    expect(radios[1]).toHaveAttribute('aria-checked', 'true');
 
     expect(screen.getByRole('radio', { name: '写作版' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('radio', { name: '快速版' })).toHaveAttribute('aria-checked', 'false');
 
-    fireEvent.click(screen.getByRole('radio', { name: '快速版' }));
+    fireEvent.click(radios[0]);
     expect(onChange).toHaveBeenCalledWith('quick');
   });
 });

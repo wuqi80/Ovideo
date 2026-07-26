@@ -42,7 +42,7 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('{ [STORYBOARD_SNAPSHOTS_METADATA_KEY]: snapshots }');
     expect(source).toContain("source: 'auto'");
     expect(source).toContain("source: 'manual'");
-    expect(source).toContain('collectConversationStoryboardSnapshots(conversation)');
+    expect(source).toContain('collectConversationStoryboardSnapshots(mergedConversation)');
     expect(source).toContain('handleConversationGenerateDesign(version, { autoSnapshot: false })');
   });
 
@@ -63,6 +63,19 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('selectedFile={selectedFile}');
     expect(source).not.toContain('onSend={handleRewrite}');
     expect(source).not.toContain('onSend={handleIterateScript}');
+  });
+
+  it('shares generated script content between writing and quick modes without overwriting history', () => {
+    expect(source).toContain('function mergeScriptConversationWithLocalFile');
+    expect(source).toContain('normalizeScriptContentForCompare(version.content) === localContent');
+    expect(source).toContain("!matchingVersion.id.startsWith('legacy_')");
+    expect(source).toContain('currentVersionId: localVersion.id');
+    expect(source).toContain('const rawSelectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined');
+    expect(source).toContain('() => mergeScriptConversationWithLocalFile(selectedFile, rawSelectedConversation)');
+    expect(source).toContain('const quickPipelineVersion = selectedConversationVersion');
+    expect(source).toContain('const syncScriptConversationFromFile = useCallback');
+    expect(source).toContain('syncScriptConversationFromFile(file.id)');
+    expect(source).toContain('mergeScriptConversationWithLocalFile(file, scriptConversations[fileId])');
   });
 
   it('uses one direct streaming prompt for both initial generation and revisions', () => {

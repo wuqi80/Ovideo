@@ -14,16 +14,16 @@ const OPTIONS: Array<{
   icon: React.ComponentType<{ className?: string }>;
 }> = [
   {
-    value: 'writing',
-    label: '写作版',
-    title: '写作版：通过对话持续生成和修改分镜脚本',
-    icon: MessagesSquare,
-  },
-  {
     value: 'quick',
     label: '快速版',
     title: '快速版：使用四列工作区查看同一份剧本和镜头数据',
     icon: LayoutGrid,
+  },
+  {
+    value: 'writing',
+    label: '写作版',
+    title: '写作版：通过对话持续生成和修改分镜脚本',
+    icon: MessagesSquare,
   },
 ];
 
