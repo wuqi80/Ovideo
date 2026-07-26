@@ -10,9 +10,13 @@ function componentSlice(source: string, start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
+function readSource(relativePath: string): string {
+  return readFileSync(resolve(__dirname, relativePath), 'utf-8').replace(/\r\n/g, '\n');
+}
+
 describe('angle adjustment modal responsive layout', () => {
   it('keeps the generation-page GPU selector below the left preview', () => {
-    const source = readFileSync(resolve(__dirname, '../../components/GenerationPage.tsx'), 'utf-8');
+    const source = readSource('../../components/GenerationPage.tsx');
     const modal = componentSlice(source, 'const CameraAngleModal', 'const HumanMultiAngleModal');
 
     expect(modal).toContain('max-h-[calc(100vh-2rem)]');
@@ -22,7 +26,7 @@ describe('angle adjustment modal responsive layout', () => {
   });
 
   it('keeps the design-page GPU selector with the left material preview', () => {
-    const source = readFileSync(resolve(__dirname, '../../pages/DesignPage.tsx'), 'utf-8');
+    const source = readSource('../../pages/DesignPage.tsx');
     const modal = componentSlice(source, 'const CameraModal', 'const ProcessModal');
 
     expect(modal).toContain(
@@ -32,7 +36,7 @@ describe('angle adjustment modal responsive layout', () => {
   });
 
   it('keeps the material-page GPU selector below the left thumbnail rail', () => {
-    const source = readFileSync(resolve(__dirname, '../../components/MaterialPage.tsx'), 'utf-8');
+    const source = readSource('../../components/MaterialPage.tsx');
     const modal = componentSlice(source, 'const CameraModal', 'const ProcessModal');
 
     expect(modal).toContain('max-h-[calc(100vh-2rem)]');

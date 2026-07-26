@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const source = readFileSync(resolve(__dirname, '../../components/FileColumn.tsx'), 'utf-8');
+const source = readFileSync(resolve(__dirname, '../../components/FileColumn.tsx'), 'utf-8')
+  .replace(/\r\n/g, '\n');
 
 describe('FileColumn workflow script control', () => {
   it('keeps the primary script action visible and explicit', () => {
