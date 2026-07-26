@@ -16,6 +16,8 @@ export interface UpdateEpisodePayload {
   episode_name?: string;
   description?: string;
   status?: string;
+  settings?: Record<string, any>;
+  sort_order?: number;
 }
 
 export async function saveProject(projectData: any): Promise<{ success: boolean; project_id: string }> {
@@ -106,6 +108,13 @@ export async function duplicateEpisode(episodeId: string) {
   return apiJson<any>(`/api/episodes/${episodeId}/duplicate`, {
     method: 'POST',
   }, 'duplicateEpisode');
+}
+
+export async function reorderEpisodes(projectId: string, episodeIds: string[]) {
+  return apiJson<any>(`/api/projects/${projectId}/episodes/reorder`, {
+    method: 'POST',
+    body: JSON.stringify({ episode_ids: episodeIds }),
+  }, 'reorderEpisodes');
 }
 
 export async function deleteEpisode(episodeId: string) {

@@ -1,24 +1,100 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, Pencil, Copy, Maximize2, Minimize2 } from 'lucide-react';
+import {
+  Plus,
+  ArrowLeft,
+  LayoutList,
+  Grid3X3,
+  Clock,
+  Film,
+  MoreVertical,
+  Trash2,
+  Pencil,
+  Copy,
+  Maximize2,
+  Minimize2,
+  GripVertical,
+  Upload,
+} from 'lucide-react';
 import { apiJson } from '../services/httpClient';
-import { duplicateEpisode as duplicateEpisodeRequest } from '../services/projectWorkflowService';
+import { secureApiUrl } from '../services/httpClient';
+import { uploadEntityFile } from '../services/entityFileService';
+import {
+  duplicateEpisode as duplicateEpisodeRequest,
+  reorderEpisodes,
+  updateEpisode,
+} from '../services/projectWorkflowService';
 import type { Episode } from '../types';
 import { BrandLogo } from '../components/BrandLogo';
 import AccountMenu from '../components/AccountMenu';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
 
+type EpisodeCard = Episode & { coverUrl?: string };
+
+function normalizeEpisodeSettings(value: any): Record<string, any> {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function orderValue(ep: EpisodeCard): number {
+  const sort = Number(ep.sortOrder);
+  if (Number.isFinite(sort)) return sort;
+  const number = Number(ep.episodeNumber);
+  return Number.isFinite(number) ? number : Number.MAX_SAFE_INTEGER;
+}
+
+function sortEpisodes(items: EpisodeCard[]): EpisodeCard[] {
+  return [...items].sort((a, b) => {
+    const bySort = orderValue(a) - orderValue(b);
+    if (bySort !== 0) return bySort;
+    const byEpisodeNumber = Number(a.episodeNumber || 0) - Number(b.episodeNumber || 0);
+    if (byEpisodeNumber !== 0) return byEpisodeNumber;
+    return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+  });
+}
+
+function mapEpisode(row: any): EpisodeCard {
+  const settings = normalizeEpisodeSettings(row.settings);
+  return {
+    episodeId: row.episode_id ?? row.episodeId,
+    projectId: row.project_id ?? row.projectId,
+    episodeNumber: Number(row.episode_number ?? row.episodeNumber ?? 0),
+    episodeName: row.episode_name ?? row.episodeName ?? '',
+    description: row.description || '',
+    coverUrl: row.cover_url ?? row.coverUrl ?? settings.cover_url ?? settings.coverUrl,
+    status: row.status || 'draft',
+    settings,
+    sortOrder: Number(row.sort_order ?? row.sortOrder ?? row.episode_number ?? 0),
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  };
+}
+
 export const EpisodeHubPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [episodes, setEpisodes] = useState<EpisodeCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [draggingEpisodeId, setDraggingEpisodeId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [coverUploadTargetId, setCoverUploadTargetId] = useState<string | null>(null);
+  const [uploadingCoverEpisodeId, setUploadingCoverEpisodeId] = useState<string | null>(null);
   const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('episode_hub_layout') === 'wide');
 
   const loadEpisodes = useCallback(async () => {
@@ -27,18 +103,7 @@ export const EpisodeHubPage: React.FC = () => {
     try {
       const data = await apiJson<any>(`/api/projects/${projectId}/episodes`, {}, '分集列表');
       if (data.success) {
-        setEpisodes((data.episodes || []).map((ep: any) => ({
-          episodeId: ep.episode_id,
-          projectId: ep.project_id,
-          episodeNumber: ep.episode_number,
-          episodeName: ep.episode_name,
-          description: ep.description || '',
-          status: ep.status || 'draft',
-          settings: ep.settings || {},
-          sortOrder: ep.sort_order ?? 0,
-          createdAt: ep.created_at,
-          updatedAt: ep.updated_at,
-        })));
+        setEpisodes(sortEpisodes((data.episodes || []).map(mapEpisode)));
       }
     } catch (e) {
       console.error('Failed to load episodes:', e);
@@ -55,6 +120,12 @@ export const EpisodeHubPage: React.FC = () => {
       localStorage.setItem('episode_hub_layout', next ? 'wide' : 'narrow');
       return next;
     });
+  }, []);
+
+  const coverImageSrc = useCallback((url: string) => {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url) && !url.startsWith(window.location.origin)) return url;
+    return secureApiUrl(url, { absolute: url.startsWith('/') });
   }, []);
 
   const createEpisode = async () => {
@@ -97,8 +168,6 @@ export const EpisodeHubPage: React.FC = () => {
     setMenuOpen(null);
   };
 
-  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
-
   const duplicateEpisode = async (episodeId: string) => {
     setMenuOpen(null);
     if (duplicatingId) return;
@@ -117,6 +186,54 @@ export const EpisodeHubPage: React.FC = () => {
       setDuplicatingId(null);
     }
   };
+
+  const openCoverUpload = useCallback((episodeId: string) => {
+    setMenuOpen(null);
+    setCoverUploadTargetId(episodeId);
+    window.setTimeout(() => coverInputRef.current?.click(), 0);
+  }, []);
+
+  const handleCoverFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
+    const episodeId = coverUploadTargetId;
+    setCoverUploadTargetId(null);
+    if (!file || !episodeId) return;
+
+    if (!file.type.startsWith('image/')) {
+      crmMessage.warning('请选择图片文件作为分集封面');
+      return;
+    }
+
+    const episode = episodes.find(item => item.episodeId === episodeId);
+    const nextSettings = {
+      ...(episode?.settings || {}),
+      cover_url: '',
+    };
+
+    setUploadingCoverEpisodeId(episodeId);
+    try {
+      const uploaded = await uploadEntityFile(file, 'episode', episodeId, 'cover');
+      nextSettings.cover_url = uploaded.fileUrl;
+      await updateEpisode(episodeId, { settings: nextSettings });
+      setEpisodes(prev => prev.map(item =>
+        item.episodeId === episodeId
+          ? {
+              ...item,
+              coverUrl: uploaded.fileUrl,
+              settings: nextSettings,
+              updatedAt: new Date().toISOString(),
+            }
+          : item
+      ));
+      crmMessage.success('分集封面已更新');
+    } catch (error) {
+      console.error('上传分集封面失败:', error);
+      crmMessage.error('上传分集封面失败，请检查图片格式或网络');
+    } finally {
+      setUploadingCoverEpisodeId(null);
+    }
+  }, [coverUploadTargetId, episodes]);
 
   const startRename = (ep: Episode) => {
     setEditingId(ep.episodeId);
@@ -137,6 +254,60 @@ export const EpisodeHubPage: React.FC = () => {
     }
     setEditingId(null);
   };
+
+  const persistEpisodeOrder = useCallback(async (nextEpisodes: EpisodeCard[], previousEpisodes: EpisodeCard[]) => {
+    if (!projectId) return;
+    setReordering(true);
+    try {
+      await reorderEpisodes(projectId, nextEpisodes.map(ep => ep.episodeId));
+      crmMessage.success('分集顺序已更新');
+    } catch (error) {
+      console.error('Failed to reorder episodes:', error);
+      setEpisodes(previousEpisodes);
+      crmMessage.error('分集排序保存失败，已恢复原顺序');
+    } finally {
+      setReordering(false);
+    }
+  }, [projectId]);
+
+  const handleDragStart = (event: React.DragEvent<HTMLElement>, episodeId: string) => {
+    if (reordering || editingId) {
+      event.preventDefault();
+      return;
+    }
+    setDraggingEpisodeId(episodeId);
+    setMenuOpen(null);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', episodeId);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLElement>, targetEpisodeId: string) => {
+    const sourceId = draggingEpisodeId || event.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetEpisodeId || reordering) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLElement>, targetEpisodeId: string) => {
+    event.preventDefault();
+    const sourceId = draggingEpisodeId || event.dataTransfer.getData('text/plain');
+    setDraggingEpisodeId(null);
+    if (!sourceId || sourceId === targetEpisodeId || reordering) return;
+
+    const sourceIndex = episodes.findIndex(ep => ep.episodeId === sourceId);
+    const targetIndex = episodes.findIndex(ep => ep.episodeId === targetEpisodeId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const previousEpisodes = episodes;
+    const nextEpisodes = [...episodes];
+    const [moved] = nextEpisodes.splice(sourceIndex, 1);
+    nextEpisodes.splice(targetIndex, 0, moved);
+    const renumbered = nextEpisodes.map((ep, index) => ({ ...ep, sortOrder: index }));
+    setEpisodes(renumbered);
+    void persistEpisodeOrder(renumbered, previousEpisodes);
+  };
+
+  const handleDragEnd = () => setDraggingEpisodeId(null);
 
   const goToWorkflow = (episodeId: string) => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script`);
@@ -160,27 +331,30 @@ export const EpisodeHubPage: React.FC = () => {
 
   return (
     <div className="layout-safe min-h-screen bg-n20 text-n800" onClick={() => setMenuOpen(null)}>
+      <input
+        ref={coverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        aria-label="选择分集封面图片"
+        onChange={handleCoverFileChange}
+      />
       <div className={`min-h-screen w-full ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
         <header className="animate-slideDown">
-          <div className="flex min-h-[84px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+            <div className="flex min-w-0 items-center gap-4">
               <button
                 type="button"
                 onClick={() => navigate('/projects')}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-n40 bg-n0 text-n300 transition-colors hover:border-n70 hover:text-n800"
-                title="返回项目列表"
+                className="flex shrink-0 items-center gap-2 rounded focus:outline-none focus:ring-2 focus:ring-primary/25"
+                title="MECHA · 漫剧创作平台"
               >
-                <ArrowLeft size={18} />
+                <BrandLogo variant="mark" className="h-7 w-7" />
+                <span className="hidden whitespace-nowrap text-sm font-semibold tracking-tight text-n800 sm:inline">
+                  MECHA <span className="text-primary">·</span> 漫剧创作平台
+                </span>
               </button>
-              <button
-                type="button"
-                onClick={() => navigate('/projects')}
-                className="hidden shrink-0 rounded focus:outline-none focus:ring-2 focus:ring-primary/25 sm:block"
-                title="MECHA.ONE 项目"
-              >
-                <BrandLogo className="h-8 w-auto max-w-[156px]" />
-              </button>
-              <div className="hidden h-8 w-px shrink-0 bg-n40 sm:block" />
+              <div className="h-8 w-px shrink-0 bg-n40" />
               <div className="min-w-0">
                 <h1 className="truncate text-xl font-bold tracking-tight text-n800 sm:text-2xl">分集</h1>
                 <p className="mt-0.5 text-xs text-n100 lg:hidden">{episodes.length} 个分集</p>
@@ -197,28 +371,40 @@ export const EpisodeHubPage: React.FC = () => {
                 {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                 {isWideLayout ? '窄屏' : '宽屏'}
               </button>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="inline-flex h-10 min-w-[128px] flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas sm:flex-none"
-              >
-                <Plus size={17} /> 新建分集
-              </button>
               <AccountMenu />
             </div>
           </div>
 
           <div className="flex h-14 items-end border-y border-n40 px-4 sm:px-6 lg:h-16 lg:px-8">
+            <button
+              type="button"
+              onClick={() => navigate('/projects')}
+              className="mb-2 mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-n40 bg-n0 text-n300 transition-colors hover:border-n70 hover:text-n800"
+              title="返回项目列表"
+              aria-label="返回项目列表"
+            >
+              <ArrowLeft size={18} />
+            </button>
             <div className="relative flex h-full items-center px-2 text-sm font-medium text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary">
               全部分集
-              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-primary-light px-1.5 py-0.5 text-[11px] text-primary">{episodes.length}</span>
+              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full border border-b75 bg-primary-light px-1.5 py-0.5 text-[11px] text-primary">{episodes.length}</span>
             </div>
           </div>
         </header>
 
         <main className="px-4 py-7 sm:px-6 lg:px-8">
-          <div className="mb-5">
-            <h2 className="text-xl font-bold tracking-tight text-n800">全部分集</h2>
-            <p className="mt-1 text-xs text-n100">每个分集拥有独立生产链路，选择一种方式开始创作</p>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-n800">全部分集</h2>
+              <p className="mt-1 text-xs text-n100">每个分集拥有独立生产链路；拖动卡片可调整顺序，EP 编号会按当前顺序自动刷新。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas sm:w-auto sm:min-w-[128px]"
+            >
+              <Plus size={17} /> 新建分集
+            </button>
           </div>
 
           {loading ? (
@@ -240,17 +426,44 @@ export const EpisodeHubPage: React.FC = () => {
               {episodes.map((ep, idx) => (
                 <article
                   key={ep.episodeId}
-                  className="group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp"
+                  data-testid={`episode-card-${ep.episodeId}`}
+                  className={`group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp ${draggingEpisodeId === ep.episodeId ? 'opacity-55 ring-2 ring-primary/25' : ''}`}
                   style={{ animationDelay: `${idx * 60}ms` }}
                   onClick={event => event.stopPropagation()}
+                  onDragOver={event => handleDragOver(event, ep.episodeId)}
+                  onDrop={event => handleDrop(event, ep.episodeId)}
                 >
                   <div className="relative aspect-video overflow-visible bg-gradient-to-br from-n30 via-n20 to-primary-light">
-                    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-                      <BrandLogo variant="mark" className="h-24 w-24 opacity-[0.08]" alt="" />
-                    </div>
+                    {ep.coverUrl ? (
+                      <img src={coverImageSrc(ep.coverUrl)} alt={`${ep.episodeName || '未命名分集'} 封面`} className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]" />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+                        <BrandLogo variant="mark" className="h-24 w-24 opacity-[0.08]" alt="" />
+                      </div>
+                    )}
+                    {uploadingCoverEpisodeId === ep.episodeId && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-n800/45 text-sm font-medium text-white">
+                        封面上传中...
+                      </div>
+                    )}
                     <div className="absolute left-3 top-3 flex items-center gap-2">
-                      <span className="rounded bg-n800/85 px-2 py-1 text-[11px] font-semibold text-white">EP {String(idx + 1).padStart(2, '0')}</span>
-                      <span className={`rounded px-2 py-1 text-[11px] font-medium ${statusColors[ep.status] || statusColors.draft}`}>
+                      <span className="inline-flex overflow-hidden rounded bg-n800/85 text-[11px] font-semibold text-white shadow-card">
+                        <span className="flex h-7 items-center px-2">EP {String(idx + 1).padStart(2, '0')}</span>
+                        <button
+                          type="button"
+                          draggable={!reordering && !editingId}
+                          aria-label={`${ep.episodeName || '未命名分集'} 拖动排序`}
+                          title="拖动调整分集顺序"
+                          onDragStart={event => handleDragStart(event, ep.episodeId)}
+                          onDragEnd={handleDragEnd}
+                          onClick={event => event.stopPropagation()}
+                          className="flex h-7 w-7 cursor-grab items-center justify-center border-l border-white/15 text-white/80 transition-colors hover:bg-white/10 hover:text-white active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={reordering || !!editingId}
+                        >
+                          <GripVertical size={14} />
+                        </button>
+                      </span>
+                      <span className={`rounded px-2 py-1 text-[11px] font-medium shadow-card ${statusColors[ep.status] || statusColors.draft}`}>
                         {ep.status === 'draft' ? '草稿' : ep.status === 'in_progress' ? '制作中' : ep.status === 'completed' ? '已完成' : ep.status === 'published' ? '已发布' : ep.status}
                       </span>
                     </div>
@@ -264,16 +477,24 @@ export const EpisodeHubPage: React.FC = () => {
                         <MoreVertical size={16} />
                       </button>
                       {menuOpen === ep.episodeId && (
-                        <div className="absolute right-0 top-10 z-30 min-w-[132px] overflow-hidden rounded-lg border border-n40 bg-n0 py-1 shadow-bottom animate-scaleIn">
+                        <div className="absolute right-0 top-10 z-30 min-w-[144px] overflow-hidden rounded-lg border border-n40 bg-n0 py-1 shadow-bottom animate-scaleIn">
                           <button onClick={() => startRename(ep)} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-n700 transition-colors hover:bg-n20">
                             <Pencil size={14} /> 重命名
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openCoverUpload(ep.episodeId)}
+                            disabled={uploadingCoverEpisodeId === ep.episodeId}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-n700 transition-colors hover:bg-n20 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Upload size={14} /> 上传封面
                           </button>
                           <button
                             onClick={() => duplicateEpisode(ep.episodeId)}
                             disabled={duplicatingId === ep.episodeId}
                             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-n700 transition-colors hover:bg-n20 disabled:opacity-50"
                           >
-                            <Copy size={14} /> {duplicatingId === ep.episodeId ? '复制中…' : '复制'}
+                            <Copy size={14} /> {duplicatingId === ep.episodeId ? '复制中...' : '复制'}
                           </button>
                           <button onClick={() => deleteEpisode(ep.episodeId)} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger transition-colors hover:bg-r50">
                             <Trash2 size={14} /> 删除

@@ -11,6 +11,7 @@ import {
   getProjectMembers,
   listProjects,
   removeProjectMember,
+  reorderEpisodes,
   saveProject,
   updateEpisode,
   updateProject,
@@ -110,12 +111,14 @@ describe('project workflow service', () => {
       .mockResolvedValueOnce(mockJsonResponse({ success: true, episode_id: 'ep_1' }))
       .mockResolvedValueOnce(mockJsonResponse({ success: true }))
       .mockResolvedValueOnce(mockJsonResponse({ success: true, episode: { episode_id: 'ep_copy' } }))
+      .mockResolvedValueOnce(mockJsonResponse({ success: true }))
       .mockResolvedValueOnce(mockJsonResponse({ success: true }));
 
     await getEpisodes('proj_1');
     await createEpisode('proj_1', 'Episode 1', 'Intro');
-    await updateEpisode('ep_1', { status: 'ready' });
+    await updateEpisode('ep_1', { status: 'ready', settings: { cover_url: '/cover.png' } });
     await duplicateEpisode('ep_1');
+    await reorderEpisodes('proj_1', ['ep_2', 'ep_1']);
     await deleteEpisode('ep_1');
 
     expect(mockFetch.mock.calls[0][0]).toBe('/api/projects/proj_1/episodes');
@@ -125,9 +128,13 @@ describe('project workflow service', () => {
     expect(JSON.parse(mockFetch.mock.calls[1][1].body).episode_name).toBe('Episode 1');
     expect(mockFetch.mock.calls[2][0]).toBe('/api/episodes/ep_1');
     expect(mockFetch.mock.calls[2][1].method).toBe('PUT');
+    expect(JSON.parse(mockFetch.mock.calls[2][1].body).settings.cover_url).toBe('/cover.png');
     expect(mockFetch.mock.calls[3][0]).toBe('/api/episodes/ep_1/duplicate');
     expect(mockFetch.mock.calls[3][1].method).toBe('POST');
-    expect(mockFetch.mock.calls[4][0]).toBe('/api/episodes/ep_1');
-    expect(mockFetch.mock.calls[4][1].method).toBe('DELETE');
+    expect(mockFetch.mock.calls[4][0]).toBe('/api/projects/proj_1/episodes/reorder');
+    expect(mockFetch.mock.calls[4][1].method).toBe('POST');
+    expect(JSON.parse(mockFetch.mock.calls[4][1].body).episode_ids).toEqual(['ep_2', 'ep_1']);
+    expect(mockFetch.mock.calls[5][0]).toBe('/api/episodes/ep_1');
+    expect(mockFetch.mock.calls[5][1].method).toBe('DELETE');
   });
 });
