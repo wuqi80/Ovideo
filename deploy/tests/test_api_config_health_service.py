@@ -1,3 +1,5 @@
+import json
+
 from services.api_config_health_service import (
     ProviderHealthNotFound,
     _has_chat_content,
@@ -136,6 +138,37 @@ def test_minimax_real_generation_defaults_to_text_binding_when_category_is_omitt
                     "model_name": "MiniMax-M3",
                 },
             ],
+        },
+    )
+
+    assert body["model"] == "MiniMax-M3"
+    assert body["thinking"] == {"type": "disabled"}
+    assert output_type == "text"
+
+
+def test_minimax_text_real_generation_normalizes_legacy_json_string_bindings() -> None:
+    _, body, output_type = _real_generation_request(
+        "minimax",
+        {
+            "endpoint": "https://api.minimaxi.com/v1",
+            "model_name": "MiniMax-Hailuo-2.3",
+            "model_bindings": json.dumps(
+                [
+                    {
+                        "operation": "video-standard",
+                        "label": "金丹 (Hailuo 2.3)",
+                        "model_name": "MiniMax-Hailuo-2.3",
+                    },
+                    {
+                        "operation": "speech-hd",
+                        "label": "语音生成 (Speech 2.8 HD)",
+                        "model_name": "speech-2.8-hd",
+                    },
+                ],
+                ensure_ascii=False,
+            ),
+            "category": "video",
+            "_test_category": "text",
         },
     )
 

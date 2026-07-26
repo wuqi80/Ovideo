@@ -26,6 +26,7 @@ from services.api_provider_registry import (
     normalize_deepseek_model_name,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
+    normalize_model_bindings,
     normalize_provider,
     normalize_seedance_endpoint,
     normalize_seedance_model_for_endpoint,
@@ -484,9 +485,11 @@ def _model_for_generation_category(row: Dict[str, Any], provider: str, category:
     normalized_category = (category or "").strip().lower()
     if normalized_category not in {"text", "image", "video", "audio"}:
         return str(row.get("model_name") or "").strip()
-    bindings = _jsonb_to_python(row.get("model_bindings")) or []
-    if not isinstance(bindings, list):
-        bindings = []
+    bindings = normalize_model_bindings(
+        provider,
+        _jsonb_to_python(row.get("model_bindings")) or [],
+        str(row.get("model_name") or "").strip(),
+    )
     for binding in bindings:
         if not isinstance(binding, dict):
             continue
